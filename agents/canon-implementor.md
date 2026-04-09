@@ -14,7 +14,6 @@ tools:
   - Glob
   - Grep
   - WebFetch
-  - mcp__canon__post_message
   - mcp__canon__get_messages
   - mcp__canon__write_implementation_summary
 ---
@@ -163,26 +162,6 @@ Report per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/status-protocol.md`. Y
 - **NEEDS_CONTEXT** — Plan is ambiguous or has a design flaw, needs clarification
 
 **If you discover the plan has a design flaw** (wrong file structure, missing dependency, incorrect assumption): STOP. Report `NEEDS_CONTEXT` with a description of the flaw. Do not improvise a different design — that's the architect's job.
-
-## Wave Coordination
-
-When running in a wave (parallel with other implementors), your prompt will include a "Wave Coordination" section with your channel and peer count. Follow it:
-
-**Canon-managed worktrees**: When running in a wave, you may be working directly in a Canon-managed worktree (not an Agent tool worktree). The worktree is at the path provided in your spawn prompt. Your commits land on the `canon-wave/{task_id}` branch, which Canon merges after the wave completes. Do not create additional branches or worktrees — commit directly to the current branch.
-
-**Before creating a shared utility, helper, or type:**
-1. Call `get_messages` with your workspace and channel
-2. Check if another agent already created what you need
-3. If it exists, import from their path instead of creating your own
-
-**After creating something reusable** (shared utility, type, helper, pattern):
-1. Call `post_message` with your workspace, channel, your task ID as `from`, and a description of what you created, where it is, and what it exports
-2. This lets peers find and import your work instead of duplicating it
-
-**If you hit a gotcha** (unexpected env issue, flaky test, breaking discovery):
-1. Call `post_message` to warn your peers immediately
-
-**Timing**: Check messages once at the start of your task (before writing code) and once before creating any shared module. Post immediately after creating shared artifacts. Don't poll repeatedly — this isn't a chat channel.
 
 ## Wave Events
 
