@@ -8,7 +8,7 @@
  * Stale locks (mtime + staleAfterMs < now) are reclaimed atomically.
  */
 
-import { stat, unlink, utimes, writeFile } from "node:fs/promises";
+import { readFile, stat, unlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 type LockAcquireResult =
@@ -23,6 +23,24 @@ const lockPath = (canonDir: string): string => join(canonDir, lockFileName);
  * Acquire learn lock. Body = PID, mtime = last successful run.
  * Reclaims stale locks (mtime older than staleAfterMs).
  * Returns { acquired: false, reason } for expected failure cases.
+ *
+ * ## TOCTOU note (Advisory 2)
+ *
+ * The stale-lock reclaim path has an inherent TOCTOU window between the `unlink`
+ * and the subsequent exclusive `writeFile(..., { flag: "wx" })`:
+ *
+ *   1. Process A: reads lock, detects stale → calls unlink
+ *   2. Process B: also detects stale → calls unlink (may get ENOENT, returns stale_reclaim_failed)
+ *   3. Process A: calls writeFile with O_EXCL → succeeds
+ *   4. Process B: calls writeFile with O_EXCL → gets EEXIST → returns stale_reclaim_failed
+ *
+ * Mitigation: O_EXCL on the re-create step ensures only one racer wins; the loser
+ * receives EEXIST and returns `stale_reclaim_failed` (fail-safe, not fail-open).
+ * The 1-hour default stale threshold makes the window vanishingly unlikely in practice.
+ *
+ * Acceptable risk: Canon is a single-process CLI tool. Multi-process deployments
+ * (e.g. multiple MCP server instances) would require advisory file locks (fcntl/flock)
+ * for stronger guarantees, which are outside the scope of this implementation.
  */
 export const acquireLearnLock = async (
   canonDir: string,
@@ -40,18 +58,51 @@ export const acquireLearnLock = async (
     }
   }
 
-  // Lock exists — check staleness
+  // Lock exists — read PID for liveness check, then check staleness
   let previousMtime: number;
   try {
-    const st = await stat(path);
+    const [st, body] = await Promise.all([stat(path), readFile(path, "utf-8")]);
     previousMtime = st.mtime.getTime();
+
+    // Advisory 3: check PID liveness before falling through to stale-time check.
+    // process.kill(pid, 0) is a no-op existence probe — it does not send a signal.
+    const pid = parseInt(body.trim(), 10);
+    if (!isNaN(pid) && pid > 0) {
+      let processAlive = true;
+      try {
+        process.kill(pid, 0);
+        // No error = process is alive; fall through to stale-time check below
+      } catch (killErr: unknown) {
+        const code = (killErr as NodeJS.ErrnoException).code;
+        if (code === "ESRCH") {
+          // ESRCH = No such process — lock holder is dead; immediately reclaimable
+          processAlive = false;
+        }
+        // EPERM = process exists but we cannot signal it (different uid) — treat as alive
+      }
+      if (!processAlive) {
+        // Dead process — skip stale-time check and go straight to reclaim
+        try {
+          await unlink(path);
+        } catch {
+          return { acquired: false, reason: "stale_reclaim_failed" };
+        }
+        try {
+          await writeFile(path, String(process.pid), { flag: "wx" });
+          return { acquired: true, previousMtime };
+        } catch {
+          return { acquired: false, reason: "stale_reclaim_failed" };
+        }
+      }
+    }
+
     const age = Date.now() - previousMtime;
     if (age <= staleAfterMs) {
       // Not stale — another process holds the lock
       return { acquired: false, reason: "already_locked" };
     }
   } catch {
-    // stat failed — lock may have been released concurrently; report locked
+    // stat/readFile failed — lock may have been released concurrently; report locked
     return { acquired: false, reason: "already_locked" };
   }
 

@@ -173,7 +173,7 @@ describe("evaluateLearnGate — gate 4: flow gate", () => {
     expect(writeFile).toHaveBeenCalledWith(
       `${CANON_DIR}/learn-throttle`,
       "",
-      { flag: "w" },
+      { flag: "w", mode: 0o600 },
     );
   });
 

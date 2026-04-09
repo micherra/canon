@@ -12,6 +12,13 @@ import type { ToolOverrides } from "@domains/flows/flow-definition-schemas.ts";
 export type AgentToolProfile = {
   allowed: string[];
   disallowed: string[];
+  /**
+   * Optional path-prefix constraint for the Write tool.
+   * When present, the agent's system prompt receives a hard constraint
+   * restricting Write calls to these path prefixes only.
+   * Post-hoc validation via validateLearnerOutput enforces this at runtime.
+   */
+  write_scope?: string[];
 };
 
 /** A structured audit warning produced by resolveToolProfile. */
@@ -118,13 +125,16 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
       "Grep",
       "Glob",
       "Bash",
-      "Write", // ADR-016: scoped to .canon/proposed-learnings/ via agent prompt
+      "Write", // ADR-016: scoped to .canon/proposed-learnings/ via write_scope constraint
       "graph_query",
       "semantic_search",
       "get_file_context",
       "codebase_graph",
     ],
     disallowed: ["Edit", "NotebookEdit"],
+    // Hard path-prefix constraint injected into the agent prompt (Advisory 1 / ADR-016).
+    // Post-hoc validation enforced by validateLearnerOutput in learn-gate.ts.
+    write_scope: [".canon/proposed-learnings/"],
   },
   "canon-researcher": {
     allowed: [

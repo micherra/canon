@@ -8,7 +8,7 @@
 import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   acquireLearnLock,
   commitLearnLock,
@@ -50,8 +50,9 @@ describe("acquireLearnLock", () => {
   });
 
   test("fails when lock already exists and is not stale", async () => {
-    // Write a lock that is not stale (mtime = now)
-    await writeFile(join(canonDir, "learn.lock"), "99999");
+    // Write a lock with the current process PID — it is guaranteed alive,
+    // so the PID liveness check will not reclaim it.
+    await writeFile(join(canonDir, "learn.lock"), String(process.pid));
 
     const result = await acquireLearnLock(canonDir, STALE_AFTER_MS);
     expect(result.acquired).toBe(false);
@@ -101,6 +102,72 @@ describe("acquireLearnLock", () => {
     expect(r2.acquired).toBe(false);
     if (!r2.acquired) {
       expect(r2.reason).toBe("already_locked");
+    }
+  });
+
+  // Advisory 3: PID liveness tests
+
+  test("dead PID (ESRCH) — lock is immediately reclaimable regardless of age", async () => {
+    const lockPath = join(canonDir, "learn.lock");
+    // Write a lock with a fake PID that does not exist
+    const deadPid = 99999999;
+    await writeFile(lockPath, String(deadPid));
+
+    // mtime = now (not stale) — without PID check this would block
+    // With PID liveness check: ESRCH → immediately reclaimable
+    const killSpy = vi.spyOn(process, "kill").mockImplementation((pid) => {
+      if (pid === deadPid) {
+        const err = Object.assign(new Error("No such process"), { code: "ESRCH" });
+        throw err;
+      }
+      return true;
+    });
+
+    try {
+      const result = await acquireLearnLock(canonDir, STALE_AFTER_MS);
+      expect(result.acquired).toBe(true);
+    } finally {
+      killSpy.mockRestore();
+    }
+  });
+
+  test("alive PID within stale threshold — lock is not reclaimable", async () => {
+    const lockPath = join(canonDir, "learn.lock");
+    const alivePid = process.pid; // current process is definitely alive
+    await writeFile(lockPath, String(alivePid));
+    // mtime = now (not stale)
+
+    // process.kill(pid, 0) will succeed for own PID — no mock needed
+    const result = await acquireLearnLock(canonDir, STALE_AFTER_MS);
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.reason).toBe("already_locked");
+    }
+  });
+
+  test("EPERM on kill — treated as alive (conservative), lock not reclaimable", async () => {
+    const lockPath = join(canonDir, "learn.lock");
+    const somePid = 1; // PID 1 (init/launchd) — we can't kill it but it exists
+    await writeFile(lockPath, String(somePid));
+    // mtime = now (not stale)
+
+    const killSpy = vi.spyOn(process, "kill").mockImplementation((pid) => {
+      if (pid === somePid) {
+        const err = Object.assign(new Error("Operation not permitted"), { code: "EPERM" });
+        throw err;
+      }
+      return true;
+    });
+
+    try {
+      const result = await acquireLearnLock(canonDir, STALE_AFTER_MS);
+      // EPERM means process exists but we can't signal it — treated as alive
+      expect(result.acquired).toBe(false);
+      if (!result.acquired) {
+        expect(result.reason).toBe("already_locked");
+      }
+    } finally {
+      killSpy.mockRestore();
     }
   });
 });

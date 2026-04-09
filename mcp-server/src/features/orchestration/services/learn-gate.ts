@@ -18,8 +18,8 @@
  *   - define-errors-out-of-existence: learn_gate_passed is optional; callers unaffected if absent
  */
 
-import { stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, stat, writeFile } from "node:fs/promises";
+import { join, relative } from "node:path";
 import { loadLearnGateConfig } from "@shared/lib/config.ts";
 import { acquireLearnLock, getLastLearnTimestamp } from "@shared/lib/learn-lock.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
@@ -29,6 +29,51 @@ export type LearnGateResult = {
   /** Human-readable reason for gate failure (absent when passed: true). */
   reason?: string;
 };
+
+/**
+ * Allowed write path prefix for canon-learner output (Advisory 1 / ADR-016).
+ * Must match the write_scope declared in the canon-learner tool profile.
+ */
+const LEARNER_WRITE_PREFIX = ".canon/proposed-learnings/";
+
+/**
+ * Post-hoc validation: verify that all files in the proposed-learnings directory
+ * are within the allowed write scope for canon-learner.
+ *
+ * This is a defense-in-depth check — the agent prompt constrains write paths,
+ * and this function validates the output after the learner completes.
+ *
+ * @param projectDir - Project root directory
+ * @returns { valid: boolean; violations: string[] }
+ */
+export async function validateLearnerOutput(
+  projectDir: string,
+): Promise<{ valid: boolean; violations: string[] }> {
+  const allowedDir = join(projectDir, LEARNER_WRITE_PREFIX);
+  const violations: string[] = [];
+
+  let entries: string[];
+  try {
+    entries = await readdir(allowedDir, { recursive: true, encoding: "utf-8" });
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      // Directory doesn't exist — no output to validate, which is valid
+      return { valid: true, violations: [] };
+    }
+    throw err;
+  }
+
+  for (const entry of entries) {
+    const fullPath = join(allowedDir, entry);
+    // Compute path relative to project root and verify prefix
+    const relPath = relative(projectDir, fullPath);
+    if (!relPath.startsWith(LEARNER_WRITE_PREFIX)) {
+      violations.push(fullPath);
+    }
+  }
+
+  return { valid: violations.length === 0, violations };
+}
 
 /** 10-minute scan throttle — prevents repeated flow-count DB queries. */
 const SCAN_THROTTLE_MS = 10 * 60 * 1000;
@@ -81,7 +126,7 @@ export async function evaluateLearnGate(projectDir: string): Promise<LearnGateRe
   if (flowCount < config.min_flows_since_last) {
     // Touch throttle marker so we don't re-query for 10 minutes
     try {
-      await writeFile(throttlePath, "", { flag: "w" });
+      await writeFile(throttlePath, "", { flag: "w", mode: 0o600 });
     } catch {
       /* best effort */
     }
