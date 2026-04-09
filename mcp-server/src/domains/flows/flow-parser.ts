@@ -473,6 +473,8 @@ export function validateSpawnCoverage(flow: ResolvedFlow): string[] {
   const errors: string[] = [];
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
     if (stateDef.type === "terminal") continue;
+    // Gate-only states (gates declared, no agent) don't need spawn instructions
+    if (stateDef.gates?.length && !stateDef.agent) continue;
     if (!flow.spawn_instructions[stateId]) {
       errors.push(`State "${stateId}" (type: ${stateDef.type}) has no spawn instruction heading`);
     }
