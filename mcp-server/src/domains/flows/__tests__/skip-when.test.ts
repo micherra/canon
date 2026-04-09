@@ -2,6 +2,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Board } from "../board-state-schemas.ts";
 import { evaluateSkipWhen, matchGlob } from "../skip-when.ts";
 
+// Mock evaluateLearnGate from learn-gate.ts for learn_gate_not_passed tests
+vi.mock(
+  "@features/orchestration/services/learn-gate.ts",
+  () => ({
+    evaluateLearnGate: vi.fn(),
+  }),
+);
+
+// Mock getProjectDir from wave-lifecycle.ts
+vi.mock(
+  "@domains/workspaces/wave-lifecycle.ts",
+  () => ({
+    getProjectDir: vi.fn().mockReturnValue("/project"),
+  }),
+);
+
 // Hoist the mock factory so it runs before module import.
 // gitExecImpl is a mutable reference we swap per test.
 type GitExecResult = {
@@ -436,5 +452,84 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
     expect(result.skip).toBe(true);
+  });
+});
+
+// evaluateSkipWhen — learn_gate_not_passed
+
+describe("evaluateSkipWhen — learn_gate_not_passed", () => {
+  let evaluateLearnGate: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    const mod = await import("@features/orchestration/services/learn-gate.ts");
+    evaluateLearnGate = vi.mocked(mod.evaluateLearnGate);
+    evaluateLearnGate.mockReset();
+  });
+
+  it("returns skip: false when all 5 gates pass", async () => {
+    evaluateLearnGate.mockResolvedValue({ passed: true });
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("returns skip: true when auto-learn disabled in config (gate 1)", async () => {
+    evaluateLearnGate.mockResolvedValue({ passed: false, reason: "auto-learn disabled" });
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("auto-learn disabled");
+  });
+
+  it("returns skip: true when time gate fails (gate 2)", async () => {
+    evaluateLearnGate.mockResolvedValue({ passed: false, reason: "time gate: 2.0h < 48h" });
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("time gate");
+  });
+
+  it("returns skip: true when flow gate fails (gate 4)", async () => {
+    evaluateLearnGate.mockResolvedValue({ passed: false, reason: "flow gate: 2 < 5" });
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("flow gate");
+  });
+
+  it("returns skip: true when lock gate fails (gate 5)", async () => {
+    evaluateLearnGate.mockResolvedValue({ passed: false, reason: "lock gate: already_locked" });
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("lock gate");
+  });
+
+  it("returns skip: true with reason when evaluateLearnGate throws (fail-open)", async () => {
+    evaluateLearnGate.mockRejectedValue(new Error("unexpected db error"));
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("Learn gate evaluation failed");
+  });
+
+  it("unknown skip_when condition still returns skip: false (existing behavior preserved)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {
+      // noop
+    });
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("totally_unknown_condition", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+    errorSpy.mockRestore();
+  });
+});
+
+// SkipWhenSchema — learn_gate_not_passed value
+
+describe("SkipWhenSchema — learn_gate_not_passed", () => {
+  it("accepts learn_gate_not_passed as a valid value", async () => {
+    const { SkipWhenSchema } = await import("../flow-definition-schemas.ts");
+    expect(() => SkipWhenSchema.parse("learn_gate_not_passed")).not.toThrow();
+    expect(SkipWhenSchema.parse("learn_gate_not_passed")).toBe("learn_gate_not_passed");
   });
 });

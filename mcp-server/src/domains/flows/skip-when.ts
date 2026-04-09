@@ -1,4 +1,6 @@
 import { gitExec } from "@platform/adapters/git-adapter.ts";
+import { evaluateLearnGate } from "@features/orchestration/services/learn-gate.ts";
+import { getProjectDir } from "@domains/workspaces/wave-lifecycle.ts";
 import type { Board } from "./board-state-schemas.ts";
 
 type SkipResult = {
@@ -31,6 +33,8 @@ export async function evaluateSkipWhen(
       return evaluateAutoApproved(board);
     case "no_open_questions":
       return evaluateNoOpenQuestions(board);
+    case "learn_gate_not_passed":
+      return evaluateLearnGateNotPassed(_workspace);
     default:
       console.error(`Warning: Unknown skip_when condition "${condition}" — not skipping`);
       return { skip: false };
@@ -99,6 +103,25 @@ function evaluateNoOpenQuestions(board: Board): SkipResult {
     reason: "No open questions from pattern-check — targeted research skipped",
     skip: true,
   };
+}
+
+/**
+ * ADR-016: Evaluate learn gate by delegating to the existing evaluateLearnGate service.
+ * Returns skip: false only when all 5 gates pass.
+ * Fail-open: any error → skip: true (learner never blocks flow completion).
+ */
+async function evaluateLearnGateNotPassed(workspace: string): Promise<SkipResult> {
+  try {
+    const projectDir = getProjectDir(workspace);
+    const result = await evaluateLearnGate(projectDir);
+    if (result.passed) {
+      return { skip: false };
+    }
+    return { skip: true, reason: result.reason };
+  } catch {
+    // Fail-open: any error means skip the learner (never block flow completion)
+    return { skip: true, reason: "Learn gate evaluation failed — skipping learner" };
+  }
 }
 
 /** Simple glob matching for contract patterns. */

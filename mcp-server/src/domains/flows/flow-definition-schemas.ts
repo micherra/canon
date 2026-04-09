@@ -67,6 +67,7 @@ export const SkipWhenSchema = z.enum([
   "no_fix_requested",
   "auto_approved",
   "no_open_questions", // NEW: skip targeted-research when no open questions from pattern-check
+  "learn_gate_not_passed", // ADR-016: skip learn state when any gate fails
 ]);
 
 export const ContextInjectionSchema = z.object({
