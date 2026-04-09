@@ -14,7 +14,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // shouldApprovalGate and shouldApprovalGateWaveBoundary (pure functions)
 
@@ -381,9 +381,17 @@ vi.mock("../tools/enter-and-prepare-state.ts", () => ({
 vi.mock("../tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
+// Mock wave-lifecycle to prevent real git operations when write agents are spawned in single states
+vi.mock("@domains/workspaces/wave-lifecycle.ts", () => ({
+  cleanupWorktrees: vi.fn(),
+  createWaveWorktrees: vi.fn(),
+  getProjectDir: vi.fn().mockReturnValue("/fake/project"),
+  mergeWaveResults: vi.fn(),
+}));
 
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { createWaveWorktrees } from "@domains/workspaces/wave-lifecycle.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
@@ -499,6 +507,17 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
     ...overrides,
   };
 }
+
+// Default mock for createWaveWorktrees used when write agents appear in single states.
+beforeEach(() => {
+  vi.mocked(createWaveWorktrees).mockResolvedValue([
+    {
+      branch: "canon-wave/test-slug-implement",
+      task_id: "test-slug-implement",
+      worktree_path: "/fake/project/.canon/worktrees/test-slug-implement",
+    },
+  ]);
+});
 
 afterEach(() => {
   clearStoreCache();

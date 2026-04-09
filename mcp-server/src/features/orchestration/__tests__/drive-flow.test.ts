@@ -37,16 +37,25 @@ vi.mock("../tools/enter-and-prepare-state.ts", () => ({
 vi.mock("../tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
+// Mock wave-lifecycle to prevent real git operations when write agents are spawned in single states
+vi.mock("@domains/workspaces/wave-lifecycle.ts", () => ({
+  cleanupWorktrees: vi.fn(),
+  createWaveWorktrees: vi.fn(),
+  getProjectDir: vi.fn().mockReturnValue("/fake/project"),
+  mergeWaveResults: vi.fn(),
+}));
 
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { createWaveWorktrees } from "@domains/workspaces/wave-lifecycle.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { beforeEach } from "vitest";
 
 let tmpDirs: string[] = [];
 
@@ -156,6 +165,18 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
     ...overrides,
   };
 }
+
+// Default mock for createWaveWorktrees used when write agents appear in single states.
+// Individual tests can override with mockResolvedValueOnce for more specific behavior.
+beforeEach(() => {
+  vi.mocked(createWaveWorktrees).mockResolvedValue([
+    {
+      branch: "canon-wave/test-slug-implement",
+      task_id: "test-slug-implement",
+      worktree_path: "/fake/project/.canon/worktrees/test-slug-implement",
+    },
+  ]);
+});
 
 afterEach(() => {
   clearStoreCache();

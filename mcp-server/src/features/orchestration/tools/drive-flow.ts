@@ -58,6 +58,16 @@ export type { DriveFlowAction, DriveFlowInput, SpawnRequest };
 
 const AGENT_SESSION_EVICTION_MS = 600_000; // 10 minutes
 
+// Write agents — these agents commit code and require Canon-managed worktrees
+// so that git operations work correctly (Agent tool isolation blocks git commits).
+// Both bare names and "canon:" prefixed names are stored; detection normalizes the prefix.
+export const WRITE_AGENTS: ReadonlySet<string> = new Set([
+  "canon-implementor",
+  "canon-fixer",
+  "canon-tester",
+  "canon-scribe",
+]);
+
 // Approval gate helpers (ADR-017)
 
 /**
@@ -1340,6 +1350,72 @@ async function handleGateOnlyState(
   return enterStateAndBuildSpawn(ctx, reportOut.next_state);
 }
 
+/**
+ * Determine if an agent type is a write agent (commits code) requiring a Canon-managed worktree.
+ * Strips the "canon:" prefix before checking against WRITE_AGENTS.
+ */
+function isWriteAgent(agentType: string): boolean {
+  const normalized = agentType.startsWith("canon:") ? agentType.slice("canon:".length) : agentType;
+  return WRITE_AGENTS.has(normalized);
+}
+
+/**
+ * Create Canon-managed worktrees for write-agent spawn requests.
+ *
+ * For each request whose agent_type is a write agent, creates a git worktree
+ * using createWaveWorktrees and sets worktree_path + isolation: "none" on the request.
+ * Read-only agents are left unchanged (isolation: "worktree", no worktree_path).
+ *
+ * The task_id convention is "{slug}-{stateId}" to produce deterministic, non-colliding
+ * branch names across multiple flow executions.
+ *
+ * @throws when git worktree creation fails — callers catch and convert to ToolResult
+ */
+async function attachSingleStateWorktrees(
+  requests: SpawnRequest[],
+  stateId: string,
+  store: ReturnType<typeof getExecutionStore>,
+  projectDir: string,
+  baseCwd: string,
+): Promise<SpawnRequest[]> {
+  // Collect unique write-agent requests that need worktrees.
+  // In single states there is typically only one request, but we handle the general case.
+  const writeAgentIndices: number[] = [];
+  for (let i = 0; i < requests.length; i++) {
+    if (isWriteAgent(requests[i].agent_type)) {
+      writeAgentIndices.push(i);
+    }
+  }
+
+  if (writeAgentIndices.length === 0) return requests;
+
+  // Build a task_id per write-agent request using slug + stateId.
+  // For multiple write agents in the same state (rare), append the index.
+  const session = store.getSession();
+  const slug = session?.slug ?? "state";
+
+  const tasks = writeAgentIndices.map((idx, ordinal) => {
+    const suffix = writeAgentIndices.length > 1 ? `-${ordinal}` : "";
+    return { task_id: `${slug}-${stateId}${suffix}` };
+  });
+
+  // createWaveWorktrees creates branches named canon-wave/{task_id} in
+  // {projectDir}/.canon/worktrees/{task_id} — same convention as wave tasks.
+  const worktreeResults = await createWaveWorktrees(tasks, projectDir, baseCwd);
+
+  const result = [...requests];
+  for (let i = 0; i < writeAgentIndices.length; i++) {
+    const idx = writeAgentIndices[i];
+    const wt = worktreeResults[i];
+    result[idx] = {
+      ...result[idx],
+      isolation: "none" as const,
+      worktree_path: wt.worktree_path,
+    };
+  }
+  return result;
+}
+
 /** Try to enter a single state. Returns a final action, or { nextStateId } to continue the skip loop. */
 async function tryEnterSingleState(
   ctx: DriveCtx,
@@ -1370,8 +1446,30 @@ async function tryEnterSingleState(
   persistToolScopeWarnings(enterOut.prompts, currentStateId, store);
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
   const requestsWithSession = await applySessionContinuation(requests, currentStateId, store);
-  await injectSettingsIntoRequests(requestsWithSession);
-  return { action: "spawn", ok: true as const, requests: requestsWithSession };
+
+  // Create Canon-managed worktrees for write agents so they can commit code.
+  // Read-only agents keep their Agent-tool isolation (isolation: "worktree").
+  const execution = store.getExecution();
+  const baseCwd = execution?.worktree_path ?? projectDir;
+  let requestsWithWorktrees: SpawnRequest[];
+  try {
+    requestsWithWorktrees = await attachSingleStateWorktrees(
+      requestsWithSession,
+      currentStateId,
+      store,
+      projectDir,
+      baseCwd,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return toolError(
+      "UNEXPECTED",
+      `Failed to create worktree for write agent in state '${currentStateId}': ${msg}`,
+    );
+  }
+
+  await injectSettingsIntoRequests(requestsWithWorktrees);
+  return { action: "spawn", ok: true as const, requests: requestsWithWorktrees };
 }
 
 async function enterStateAndBuildSpawn(

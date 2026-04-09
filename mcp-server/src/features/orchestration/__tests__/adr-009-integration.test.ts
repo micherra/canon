@@ -21,7 +21,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isToolError } from "@shared/lib/tool-result.ts";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock I/O boundaries
 vi.mock("../services/learn-gate.ts", () => ({
@@ -54,6 +54,7 @@ import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { createWaveWorktrees } from "@domains/workspaces/wave-lifecycle.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
@@ -141,6 +142,17 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
     ...overrides,
   };
 }
+
+// Default mock for createWaveWorktrees used when write agents appear in single states.
+beforeEach(() => {
+  vi.mocked(createWaveWorktrees).mockResolvedValue([
+    {
+      branch: "canon-wave/test-slug-implement",
+      task_id: "test-slug-implement",
+      worktree_path: "/fake/project/.canon/worktrees/test-slug-implement",
+    },
+  ]);
+});
 
 afterEach(() => {
   clearStoreCache();

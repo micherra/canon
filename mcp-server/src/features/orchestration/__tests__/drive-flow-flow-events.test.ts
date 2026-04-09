@@ -18,7 +18,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock heavy dependencies — same pattern as other drive-flow tests
 vi.mock("../services/learn-gate.ts", () => ({
@@ -53,6 +53,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { createWaveWorktrees } from "@domains/workspaces/wave-lifecycle.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
@@ -188,6 +189,17 @@ function makeReportResult(
     ...overrides,
   };
 }
+
+// Default mock for createWaveWorktrees used when write agents appear in single states.
+beforeEach(() => {
+  vi.mocked(createWaveWorktrees).mockResolvedValue([
+    {
+      branch: "canon-wave/test-slug-implement",
+      task_id: "test-slug-implement",
+      worktree_path: "/fake/project/.canon/worktrees/test-slug-implement",
+    },
+  ]);
+});
 
 afterEach(() => {
   clearStoreCache();
