@@ -5,15 +5,12 @@
  * Integration tests use real flow files via simulateFlowTool.
  */
 
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { describe, expect, it } from "vitest";
 import { simulateFlow, simulateFlowTool } from "../tools/simulate-flow.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 const pluginDir = resolve(process.cwd(), ".."); // mcp-server/ → project root
 
 // ---------------------------------------------------------------------------

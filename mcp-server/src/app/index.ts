@@ -387,7 +387,13 @@ server.registerTool(
       "Simulate a Canon flow execution with mocked agent results. Walks the state machine deterministically using a provided scenario of (state_id, status) pairs. Returns the full execution path, terminal/stuck/dead-end detection, and iteration tracking. No agents spawned, no workspace needed.",
     inputSchema: {
       flow: z.string().describe("Name of the flow file (without .md extension)"),
-      max_steps: z.number().optional().describe("Maximum simulation steps (default 50)"),
+      max_steps: z
+        .number()
+        .int()
+        .min(1)
+        .max(1000)
+        .optional()
+        .describe("Maximum simulation steps (default 50, max 1000)"),
       scenario: z
         .array(
           z.object({
@@ -395,7 +401,8 @@ server.registerTool(
             status: z.string().describe("Status keyword (e.g. done, blocked, has_failures)"),
           }),
         )
-        .describe("Sequence of mocked agent results"),
+        .max(1000)
+        .describe("Sequence of mocked agent results (max 1000 entries)"),
     },
   },
   gatedWrapHandler(async (input) => {

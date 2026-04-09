@@ -14,8 +14,7 @@
  *   - errors-are-values: no throws from simulateFlow for any input combination
  */
 
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import {
   analyzeReachability,
@@ -28,8 +27,6 @@ import { isToolError } from "@shared/lib/tool-result.ts";
 import { describe, expect, it } from "vitest";
 import { simulateFlow, simulateFlowTool } from "../tools/simulate-flow.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 const pluginDir = resolve(process.cwd(), "..");
 
 // ---------------------------------------------------------------------------
@@ -243,7 +240,7 @@ describe("simulateFlow — wave state with skip_when", () => {
       {
         done: { type: "terminal" },
         wave_with_skip: {
-          skip_when: "no_changes",
+          skip_when: "no_contract_changes",
           transitions: { done: "done" },
           type: "wave",
         },
