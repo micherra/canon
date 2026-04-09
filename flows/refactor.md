@@ -49,6 +49,8 @@ states:
     inject_context:
       - from: file_context
         as: file_context
+      - from: wave_summaries
+        as: wave_summaries
     transitions:
       done: verify
       blocked: hitl
@@ -67,6 +69,8 @@ Refactoring task from ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. CRITICAL: p
 ${wave_briefing}
 
 ${enrichment}
+
+${wave_summaries}
 
 ### verify
 Run the full test suite to verify refactoring preserved behavior. Check ${WORKSPACE}/plans/${slug}/*-SUMMARY.md for what changed. Compare test results against pre-refactor baseline. Save report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Report all_passing or implementation_issue.

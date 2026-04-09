@@ -58,6 +58,8 @@ states:
         as: file_context
       - from: handoff
         as: design_handoff
+      - from: wave_summaries
+        as: wave_summaries
     transitions:
       done: context-sync
       blocked: hitl
@@ -76,3 +78,5 @@ ${design_handoff}
 ${wave_briefing}
 
 ${enrichment}
+
+${wave_summaries}

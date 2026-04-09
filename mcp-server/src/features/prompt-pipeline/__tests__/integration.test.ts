@@ -757,7 +757,7 @@ describe("integration — stage ordering preserved end-to-end", () => {
     expect(instrIdx).toBeLessThan(metricsIdx);
   });
 
-  it("for wave state: prefix < instruction < wave briefing < coordination < metrics", async () => {
+  it("for wave state: prefix < instruction < wave briefing < metrics (no wave coordination messaging)", async () => {
     const workspace = seedWorkspace();
     const store = getExecutionStore(workspace);
     store.setCachePrefix("## CACHE_PREFIX_MARKER ##\n\n");
@@ -788,11 +788,13 @@ describe("integration — stage ordering preserved end-to-end", () => {
     const coordIdx = prompt.indexOf("## Wave Coordination");
     const metricsIdx = prompt.indexOf("## Performance Metrics");
 
-    // Full ordering validation
+    // Wave coordination messaging removed from Stage 8 — should not appear
+    expect(coordIdx).toBe(-1);
+
+    // Full ordering validation (without coordination step)
     expect(prefixIdx).toBeLessThan(instrIdx);
     expect(instrIdx).toBeLessThan(briefingIdx);
-    expect(briefingIdx).toBeLessThan(coordIdx);
-    expect(coordIdx).toBeLessThan(metricsIdx);
+    expect(briefingIdx).toBeLessThan(metricsIdx);
   });
 });
 

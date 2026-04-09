@@ -533,7 +533,6 @@ describe("assembleWaveBriefing — consultation section and summary contract", (
           summary: "Use parameterized queries to prevent injection.",
         },
       },
-      summaries: [],
       wave: 1,
     });
 
@@ -554,7 +553,6 @@ describe("assembleWaveBriefing — consultation section and summary contract", (
           summary: "Validated all endpoints.",
         },
       },
-      summaries: [],
       wave: 2,
     });
 
@@ -572,7 +570,6 @@ describe("assembleWaveBriefing — consultation section and summary contract", (
           summary: "Use dry-run mode for destructive operations.",
         },
       },
-      summaries: [],
       wave: 1,
     });
 
@@ -595,7 +592,6 @@ describe("assembleWaveBriefing — consultation section and summary contract", (
           summary: escapedSummary,
         },
       },
-      summaries: [],
       wave: 1,
     });
 

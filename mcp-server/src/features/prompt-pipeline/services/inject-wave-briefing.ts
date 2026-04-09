@@ -169,7 +169,6 @@ function injectConsultationBriefing(
   const escapedOutputs = escapeConsultationOutputs(outputs);
   const briefing = assembleWaveBriefing({
     consultationOutputs: escapedOutputs,
-    summaries: [],
     wave,
   });
   return briefing ? `${basePrompt}\n\n${briefing}` : basePrompt;

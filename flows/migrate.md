@@ -73,6 +73,8 @@ states:
         as: file_context
       - from: handoff
         as: design_handoff
+      - from: wave_summaries
+        as: wave_summaries
     transitions:
       done: verify
       blocked: hitl
@@ -100,6 +102,8 @@ ${design_handoff}
 ${wave_briefing}
 
 ${enrichment}
+
+${wave_summaries}
 
 ### verify
 Verify migration correctness. Run full test suite plus migration-specific checks: data integrity, schema compatibility, backward compatibility where required. Check ${WORKSPACE}/plans/${slug}/*-SUMMARY.md for what changed. Save report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md.

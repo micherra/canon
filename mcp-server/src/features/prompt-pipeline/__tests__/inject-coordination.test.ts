@@ -4,8 +4,8 @@
  * Covers:
  * - Role substitution for single states with ctx.role set
  * - Role substitution NOT applied for non-single states
- * - Messaging instructions appended for wave states with wave set
- * - Messaging instructions appended for parallel-per states with wave set
+ * - Messaging instructions NOT appended for wave states (removed — debate flows use buildDebatePrompt)
+ * - Messaging instructions NOT appended for parallel-per states
  * - Messaging instructions NOT appended when wave is null/undefined
  * - Metrics footer appended to every prompt entry
  * - Metrics footer contains correct workspace and state_id values
@@ -220,9 +220,10 @@ describe("injectCoordination — role substitution", () => {
 });
 
 // Messaging instructions
+// Stage 8 no longer injects wave coordination messaging — debate flows use buildDebatePrompt directly.
 
 describe("injectCoordination — messaging instructions", () => {
-  it("appends messaging instructions to each prompt for wave state with wave set", async () => {
+  it("does NOT append messaging instructions for wave state with wave set", async () => {
     const ctx = makeCtx({
       prompts: [
         makeEntry({ prompt: "Implement task A" }),
@@ -234,12 +235,12 @@ describe("injectCoordination — messaging instructions", () => {
 
     const result = await injectCoordination(ctx);
 
-    expect(buildMessageInstructions).toHaveBeenCalledOnce();
-    expect(result.prompts[0].prompt).toContain("## Wave Coordination");
-    expect(result.prompts[1].prompt).toContain("## Wave Coordination");
+    expect(buildMessageInstructions).not.toHaveBeenCalled();
+    expect(result.prompts[0].prompt).not.toContain("## Wave Coordination");
+    expect(result.prompts[1].prompt).not.toContain("## Wave Coordination");
   });
 
-  it("appends messaging instructions for parallel-per state with wave set", async () => {
+  it("does NOT append messaging instructions for parallel-per state with wave set", async () => {
     const ctx = makeCtx({
       prompts: [makeEntry()],
       state: { agent: "canon-implementor", type: "parallel-per" } as StateDefinition,
@@ -248,8 +249,8 @@ describe("injectCoordination — messaging instructions", () => {
 
     const result = await injectCoordination(ctx);
 
-    expect(buildMessageInstructions).toHaveBeenCalledOnce();
-    expect(result.prompts[0].prompt).toContain("## Wave Coordination");
+    expect(buildMessageInstructions).not.toHaveBeenCalled();
+    expect(result.prompts[0].prompt).not.toContain("## Wave Coordination");
   });
 
   it("does NOT append messaging instructions when wave is null/undefined", async () => {
@@ -275,56 +276,6 @@ describe("injectCoordination — messaging instructions", () => {
     const _result = await injectCoordination(ctx);
 
     expect(buildMessageInstructions).not.toHaveBeenCalled();
-  });
-
-  it("uses peer_count from ctx when provided", async () => {
-    const ctx = makeCtx({
-      peer_count: 5,
-      prompts: [makeEntry(), makeEntry()],
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
-      wave: 1,
-    });
-
-    await injectCoordination(ctx);
-
-    expect(buildMessageInstructions).toHaveBeenCalledWith(
-      "wave-001",
-      5, // peer_count from ctx
-      "/tmp/test-workspace",
-    );
-  });
-
-  it("defaults peer_count to prompts.length - 1 when not provided", async () => {
-    const ctx = makeCtx({
-      peer_count: undefined,
-      prompts: [makeEntry(), makeEntry(), makeEntry()],
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
-      wave: 1,
-    });
-
-    await injectCoordination(ctx);
-
-    expect(buildMessageInstructions).toHaveBeenCalledWith(
-      "wave-001",
-      2, // prompts.length - 1 = 3 - 1 = 2
-      "/tmp/test-workspace",
-    );
-  });
-
-  it("formats wave channel with zero-padding (wave-001, wave-002)", async () => {
-    const ctx = makeCtx({
-      prompts: [makeEntry()],
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
-      wave: 12,
-    });
-
-    await injectCoordination(ctx);
-
-    expect(buildMessageInstructions).toHaveBeenCalledWith(
-      "wave-012",
-      expect.any(Number),
-      expect.any(String),
-    );
   });
 });
 
@@ -593,7 +544,7 @@ describe("injectCoordination — tool scope injection", () => {
     expect(result.prompts[0].tools).toEqual(["Read", "Grep"]);
   });
 
-  it("existing behavior preserved: messaging instructions still injected with tool scope", async () => {
+  it("existing behavior preserved: messaging instructions NOT injected (removed from Stage 8), tool scope still applied", async () => {
     const ctx = makeCtx({
       prompts: [makeEntry()],
       state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
@@ -602,7 +553,7 @@ describe("injectCoordination — tool scope injection", () => {
 
     const result = await injectCoordination(ctx);
 
-    expect(result.prompts[0].prompt).toContain("## Wave Coordination");
+    expect(result.prompts[0].prompt).not.toContain("## Wave Coordination");
     expect(result.prompts[0].tools).toEqual(["Read", "Grep"]);
   });
 

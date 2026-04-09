@@ -1,24 +1,25 @@
 /**
  * Stage 8: inject-coordination
  *
- * Applies four types of coordination injection to fanned-out prompts:
+ * Applies three types of coordination injection to fanned-out prompts:
  *
  * 1. **Role substitution** (single states only): when ctx.role is set,
  *    substitutes `${role}` in all prompt entries and sets entry.role.
  *
- * 2. **Messaging instructions** (wave/parallel-per with wave set): injects
- *    wave coordination instructions so agents can communicate via post_message
- *    / get_messages.
- *
- * 3. **Metrics footer** (all prompts, unconditional): appends the
+ * 2. **Metrics footer** (all prompts, unconditional): appends the
  *    record_agent_metrics instruction with concrete workspace and state_id
  *    values. Every prompt entry receives this footer regardless of state type.
  *
- * 4. **Tool scope metadata** (ADR-014, all prompts, unconditional): resolves
+ * 3. **Tool scope metadata** (ADR-014, all prompts, unconditional): resolves
  *    and sets `tools`, `disallowed_tools`, and `permission_mode` on every
  *    prompt entry based on the agent type, optional per-state tool_overrides,
  *    and whether the entry has a worktree_path (the sole permission mode signal).
  *    Permission mode is informed by the KG trust resolver when available.
+ *
+ * Note: Wave coordination messaging (post_message/get_messages for peer agents)
+ * was removed from Stage 8. Debate/compete flows build their own prompts via
+ * buildDebatePrompt in debate.ts. Wave events from the orchestrator are still
+ * received by agents via get_messages(include_events: true).
  *
  * Canon: functions-do-one-thing — four related but distinct injection
  * operations, all concerning coordination and observability metadata.
@@ -28,7 +29,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ToolOverrides } from "@domains/flows/flow-definition-schemas.ts";
-import { buildMessageInstructions } from "@domains/messages/messages.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
@@ -191,11 +191,11 @@ record_agent_metrics({
 }
 
 /**
- * Stage 8: Inject role substitution, messaging instructions, and metrics footer.
+ * Stage 8: Inject role substitution, metrics footer, and tool scope metadata.
  */
 export async function injectCoordination(ctx: PromptContext): Promise<PromptContext> {
   const { state } = ctx;
-  const { state_id, workspace, wave, peer_count, role } = ctx.input;
+  const { state_id, workspace, role } = ctx.input;
   let prompts = [...ctx.prompts];
 
   // 1. Role substitution for single-role states
@@ -207,16 +207,9 @@ export async function injectCoordination(ctx: PromptContext): Promise<PromptCont
     }));
   }
 
-  // 2. Inject messaging coordination instructions for wave/parallel-per states
-  if ((state.type === "wave" || state.type === "parallel-per") && wave != null) {
-    const peerCount = peer_count ?? prompts.length - 1;
-    const channel = `wave-${String(wave).padStart(3, "0")}`;
-    const messageInstr = buildMessageInstructions(channel, peerCount, workspace);
-    prompts = prompts.map((entry) => ({
-      ...entry,
-      prompt: `${entry.prompt}\n\n${messageInstr}`,
-    }));
-  }
+  // 2. (Removed) Messaging coordination instructions were previously injected here for
+  // wave/parallel-per states. Debate/compete flows use buildDebatePrompt in debate.ts instead.
+  // Wave events (orchestrator-injected) are still handled via get_messages(include_events: true).
 
   // 3. Append metrics instruction footer to all prompts (unconditional)
   const metricsFooter = buildMetricsFooter(workspace, state_id);
