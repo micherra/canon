@@ -2,9 +2,8 @@
  * Refactoring verification tests — coverage gaps for the following fixes:
  *
  * 1. flow-parser.ts — path traversal validation on flow name
- * 2. wave-variables.ts — cwd passed to git spawnSync
- * 3. update-board.ts — once() listener cleanup (no leak)
- * 4. report-result.ts — once() listener cleanup on enter_state sub-event
+ * 2. update-board.ts — once() listener cleanup (no leak)
+ * 3. report-result.ts — once() listener cleanup on enter_state sub-event
  *
  * These tests verify the contract of the refactoring without coupling
  * to internal implementation details.
@@ -15,31 +14,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Hoist spawnSync mock so vitest can use it before module imports
-
-vi.mock("node:child_process", () => ({
-  spawnSync: vi.fn(() => ({
-    error: undefined,
-    output: [],
-    pid: 1,
-    signal: null,
-    status: 0,
-    stderr: "",
-    stdout: "",
-  })),
-}));
-
-import { spawnSync } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { resolveWaveVariables } from "@domains/workspaces/wave-variables.ts";
+
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
-
-const mockSpawnSync = vi.mocked(spawnSync);
 
 let tmpDirs: string[] = [];
 
@@ -134,89 +115,6 @@ describe("loadAndResolveFlow — flow name path traversal validation", () => {
     const err = await loadAndResolveFlow("/nonexistent/dir", "deep_build").catch((e: Error) => e);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).not.toMatch(/invalid flow name/i);
-  });
-});
-
-// Fix 3: wave-variables.ts — cwd passed to git spawnSync call
-
-describe("resolveWaveVariables — cwd is passed to git spawnSync", () => {
-  it("passes projectDir as cwd to spawnSync for wave_diff", async () => {
-    const tmpDir = makeTmpDir();
-    const plansDir = join(tmpDir, "plans", "my-slug");
-    await mkdir(plansDir, { recursive: true });
-
-    // Write a minimal INDEX.md so readWavePlans does not short-circuit
-    await writeFile(
-      join(plansDir, "INDEX.md"),
-      "## Plan Index\n\n| Task | Wave | Depends on | Files | Principles |\n|------|------|------------|-------|------------|\n| t-01 | 1 | -- | file.ts | some-principle |\n",
-    );
-
-    const customProjectDir = "/custom/project/root";
-
-    await resolveWaveVariables(tmpDir, {
-      projectDir: customProjectDir,
-      slug: "my-slug",
-      totalWaves: 1,
-      wave: 1,
-    });
-
-    // Verify spawnSync was called with the correct cwd
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      "git",
-      ["diff", "HEAD~1"],
-      expect.objectContaining({ cwd: customProjectDir }),
-    );
-  });
-
-  it("uses process.cwd() as fallback cwd when projectDir is not provided", async () => {
-    const tmpDir = makeTmpDir();
-    const plansDir = join(tmpDir, "plans", "my-slug");
-    await mkdir(plansDir, { recursive: true });
-
-    await writeFile(
-      join(plansDir, "INDEX.md"),
-      "## Plan Index\n\n| Task | Wave | Depends on | Files | Principles |\n|------|------|------------|-------|------------|\n| t-01 | 1 | -- | file.ts | some-principle |\n",
-    );
-
-    // No projectDir passed → should fall back to process.cwd() or CANON_PROJECT_DIR
-    const originalEnv = process.env.CANON_PROJECT_DIR;
-    delete process.env.CANON_PROJECT_DIR;
-
-    await resolveWaveVariables(tmpDir, { slug: "my-slug", totalWaves: 1, wave: 1 });
-
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      "git",
-      ["diff", "HEAD~1"],
-      expect.objectContaining({ cwd: process.cwd() }),
-    );
-
-    if (originalEnv !== undefined) {
-      process.env.CANON_PROJECT_DIR = originalEnv;
-    }
-  });
-
-  it("uses CANON_PROJECT_DIR env var as cwd when projectDir is not provided", async () => {
-    const tmpDir = makeTmpDir();
-    const plansDir = join(tmpDir, "plans", "my-slug");
-    await mkdir(plansDir, { recursive: true });
-
-    await writeFile(
-      join(plansDir, "INDEX.md"),
-      "## Plan Index\n\n| Task | Wave | Depends on | Files | Principles |\n|------|------|------------|-------|------------|\n| t-01 | 1 | -- | file.ts | some-principle |\n",
-    );
-
-    const envProjectDir = "/env/project/root";
-    process.env.CANON_PROJECT_DIR = envProjectDir;
-
-    await resolveWaveVariables(tmpDir, { slug: "my-slug", totalWaves: 1, wave: 1 });
-
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      "git",
-      ["diff", "HEAD~1"],
-      expect.objectContaining({ cwd: envProjectDir }),
-    );
-
-    process.env.CANON_PROJECT_DIR = undefined;
   });
 });
 

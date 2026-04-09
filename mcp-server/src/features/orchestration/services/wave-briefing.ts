@@ -20,14 +20,16 @@ const MAX_BRIEFING_CHARS = 2000;
 
 export type WaveBriefingInput = {
   wave: number;
-  summaries: string[]; // Previous wave's summary texts (pre-escaped by caller or stage 6)
   consultationOutputs: Record<string, { section?: string; summary: string }>;
   // section = heading from ConsultationFragment.section (pre-escaped by caller or stage 6)
 };
 
 /**
- * Assemble a wave briefing string from pre-processed wave summaries and
- * consultation outputs.
+ * Assemble a wave briefing string from consultation outputs.
+ *
+ * Wave summaries now flow through inject_context events rather than being
+ * parsed here. This function focuses on consultation outputs from architects
+ * and advisors that ran before the wave.
  *
  * Sections that contain no matching content are omitted entirely.
  * The final output is truncated to ~2000 characters (~500 tokens) if needed.
@@ -37,29 +39,10 @@ export type WaveBriefingInput = {
  * sanitise ${...} patterns in input.
  */
 export function assembleWaveBriefing(input: WaveBriefingInput): string {
-  const { wave, summaries, consultationOutputs } = input;
-
-  // Collect all lines from all summaries for pattern extraction
-  const allLines = summaries.flatMap((s) => s.split("\n"));
-
-  const newSharedCode = extractLines(allLines, isNewSharedCodeLine);
-  const patternsEstablished = extractLines(allLines, isPatternLine);
-  const gotchas = extractLines(allLines, isGotchaLine);
+  const { wave, consultationOutputs } = input;
 
   const sections: string[] = [];
   sections.push(`## Wave Briefing (from wave ${wave})`);
-
-  if (newSharedCode.length > 0) {
-    sections.push(`\n### New shared code\n${newSharedCode.join("\n")}`);
-  }
-
-  if (patternsEstablished.length > 0) {
-    sections.push(`\n### Patterns established\n${patternsEstablished.join("\n")}`);
-  }
-
-  if (gotchas.length > 0) {
-    sections.push(`\n### Gotchas\n${gotchas.join("\n")}`);
-  }
 
   // Append consultation output sections
   for (const output of Object.values(consultationOutputs)) {
@@ -75,51 +58,6 @@ export function assembleWaveBriefing(input: WaveBriefingInput): string {
   }
 
   return result;
-}
-
-// Line-classification helpers
-
-/**
- * Returns lines from `allLines` that satisfy the predicate.
- * Empty or whitespace-only lines are always skipped.
- */
-function extractLines(allLines: string[], predicate: (line: string) => boolean): string[] {
-  return allLines.filter((line) => line.trim() !== "" && predicate(line));
-}
-
-/**
- * True if the line mentions creating or adding shared code (file paths or keywords).
- */
-function isNewSharedCodeLine(line: string): boolean {
-  const lower = line.toLowerCase();
-  // "created" / "added" keywords OR presence of a file-path-like pattern
-  return (
-    lower.includes("created") ||
-    lower.includes("added") ||
-    /\bsrc\//.test(line) ||
-    /\.\w{2,4}/.test(line)
-  );
-}
-
-/**
- * True if the line mentions a pattern or convention.
- */
-function isPatternLine(line: string): boolean {
-  const lower = line.toLowerCase();
-  return lower.includes("pattern") || lower.includes("convention") || lower.includes("approach");
-}
-
-/**
- * True if the line mentions a concern, gotcha, or warning.
- */
-function isGotchaLine(line: string): boolean {
-  const lower = line.toLowerCase();
-  return (
-    lower.includes("concern") ||
-    lower.includes("gotcha") ||
-    lower.includes("warning") ||
-    lower.includes("unexpected")
-  );
 }
 
 // Wave guidance persistence

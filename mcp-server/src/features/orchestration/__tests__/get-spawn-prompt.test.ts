@@ -259,7 +259,6 @@ describe("getSpawnPrompt — wave briefing injection", () => {
       consultationOutputs: {
         security: { section: "Security", summary: "Use parameterized queries." },
       },
-      summaries: [],
       wave: 1,
     });
 

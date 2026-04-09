@@ -111,30 +111,10 @@ afterEach(() => {
 });
 
 // 1. Cross-module integration: wave-variables escaping → assembleWaveBriefing
-//    This is the declared gap from iwc-05 Coverage Notes.
+//    Tests that escaped ${...} in consultation outputs passes through unchanged.
 
 describe("integration: wave-variables escapeDollarBrace → assembleWaveBriefing", () => {
-  it("escaped ${...} from wave-variables passes through wave-briefing without double-escaping", () => {
-    // Simulate what resolveWaveVariables produces: text with \${...} patterns
-    const rawSummaryFromAgent = "Pattern: use ${template_name} in all new files";
-    const escapedSummary = escapeDollarBrace(rawSummaryFromAgent);
-    // escapeDollarBrace turns ${template_name} into \${template_name}
-    expect(escapedSummary).toBe("Pattern: use \\${template_name} in all new files");
-
-    const result = assembleWaveBriefing({
-      consultationOutputs: {},
-      summaries: [escapedSummary],
-      wave: 2,
-    });
-
-    // The escaped pattern must survive wave-briefing unchanged — no double-escape
-    expect(result).toContain("\\${template_name}");
-    expect(result).not.toContain("\\\\${template_name}");
-    // Also must not contain unescaped ${
-    expect(result).not.toMatch(/(^|[^\\])\$\{template_name\}/m);
-  });
-
-  it("consultation output with escaped ${...} also passes through without double-escaping", () => {
+  it("consultation output with escaped ${...} passes through wave-briefing without double-escaping", () => {
     const rawConsultation = "Security: validate ${user_input} before processing";
     const escapedConsultation = escapeDollarBrace(rawConsultation);
 
@@ -145,7 +125,6 @@ describe("integration: wave-variables escapeDollarBrace → assembleWaveBriefing
           summary: escapedConsultation,
         },
       },
-      summaries: [],
       wave: 3,
     });
 
@@ -153,17 +132,19 @@ describe("integration: wave-variables escapeDollarBrace → assembleWaveBriefing
     expect(result).not.toContain("\\\\${user_input}");
   });
 
-  it("multiple summaries with injection patterns are all escaped once", () => {
-    const summary1 = escapeDollarBrace("created src/util.ts — replaces ${OLD_VAR}");
-    const summary2 = escapeDollarBrace("pattern: always escape ${env_var} in templates");
+  it("multiple consultation outputs with injection patterns pass through escaped once", () => {
+    const rawOutput1 = escapeDollarBrace("Use ${OLD_VAR} carefully");
+    const rawOutput2 = escapeDollarBrace("Always escape ${env_var} in templates");
 
     const result = assembleWaveBriefing({
-      consultationOutputs: {},
-      summaries: [summary1, summary2],
+      consultationOutputs: {
+        c1: { section: "Notes 1", summary: rawOutput1 },
+        c2: { section: "Notes 2", summary: rawOutput2 },
+      },
       wave: 2,
     });
 
-    // Each escaped pattern present exactly once (no duplication in escaping)
+    // Each escaped pattern present exactly once (no double-escape from assembleWaveBriefing)
     expect(result).toContain("\\${OLD_VAR}");
     expect(result).toContain("\\${env_var}");
     // No double backslash from assembleWaveBriefing re-processing
@@ -449,76 +430,35 @@ describe("board — recordConsultationResult on a state not in board.states", ()
   });
 });
 
-// 6. wave-briefing: line matching multiple section classifiers
+// 6. wave-briefing: consultation outputs with wave number
 
-describe("wave-briefing — lines matching multiple classifiers", () => {
-  it("a line matching both 'created' and 'pattern' appears in both sections", () => {
-    // Line contains both keywords — both classifiers should fire
-    const input = {
-      consultationOutputs: {},
-      summaries: ["created a pattern for barrel exports in src/index.ts"],
-      wave: 2,
-    };
-
-    const result = assembleWaveBriefing(input);
-
-    // The line should appear in New shared code (has "created", file path)
-    expect(result).toContain("### New shared code");
-    // The line should ALSO appear in Patterns established (has "pattern")
-    expect(result).toContain("### Patterns established");
-  });
-
-  it("a line matching 'concern' and file path appears in both Gotchas and New shared code", () => {
-    const input = {
-      consultationOutputs: {},
-      summaries: ["concern: src/parser.ts may have edge case with empty input"],
-      wave: 1,
-    };
-
-    const result = assembleWaveBriefing(input);
-
-    expect(result).toContain("### Gotchas");
-    // "src/parser.ts" matches isNewSharedCodeLine
-    expect(result).toContain("### New shared code");
-  });
-});
-
-describe("wave-briefing — multiple summaries aggregate correctly", () => {
-  it("sections from different summaries are merged into one briefing", () => {
+describe("wave-briefing — consultation outputs", () => {
+  it("multiple consultation outputs are all included in the briefing", () => {
     const input = {
       consultationOutputs: {
         "perf-review": {
           section: "Performance notes",
           summary: "Gate timeout is 300s — acceptable for CI.",
         },
+        "sec-review": {
+          section: "Security notes",
+          summary: "All inputs must be validated.",
+        },
       },
-      summaries: [
-        "created src/gate-runner.ts with runGate export",
-        "pattern: all gate commands resolved via lookup, never raw string",
-        "added mcp-server/src/tools/check-gate.ts",
-        "concern: spawnSync blocks the event loop",
-      ],
       wave: 3,
     };
 
     const result = assembleWaveBriefing(input);
 
-    // All sections present
-    expect(result).toContain("### New shared code");
-    expect(result).toContain("src/gate-runner.ts");
-    expect(result).toContain("mcp-server/src/tools/check-gate.ts");
-    expect(result).toContain("### Patterns established");
-    expect(result).toContain("gate commands resolved via lookup");
-    expect(result).toContain("### Gotchas");
-    expect(result).toContain("blocks the event loop");
     expect(result).toContain("### Performance notes");
     expect(result).toContain("Gate timeout is 300s");
+    expect(result).toContain("### Security notes");
+    expect(result).toContain("All inputs must be validated.");
   });
 
   it("wave number is correct in briefing header when wave > 1", () => {
     const result = assembleWaveBriefing({
       consultationOutputs: {},
-      summaries: ["added src/module.ts"],
       wave: 5,
     });
 

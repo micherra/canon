@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { assembleWaveBriefing, type WaveBriefingInput } from "../services/wave-briefing.ts";
 
 describe("assembleWaveBriefing", () => {
-  it("assembles briefing with all sections populated", () => {
+  it("assembles briefing with consultation outputs", () => {
     const input: WaveBriefingInput = {
       consultationOutputs: {
         "advisor-1": {
@@ -10,40 +10,27 @@ describe("assembleWaveBriefing", () => {
           summary: "Sanitise all user input before passing to the template engine.",
         },
       },
-      summaries: [
-        "created src/utils/formatter.ts with formatDate helper",
-        "established a pattern of barrel exports via index.ts",
-        "found a gotcha: unexpected empty-string edge case in parser",
-      ],
       wave: 2,
     };
 
     const result = assembleWaveBriefing(input);
 
     expect(result).toContain("## Wave Briefing (from wave 2)");
-    expect(result).toContain("### New shared code");
-    expect(result).toContain("src/utils/formatter.ts");
-    expect(result).toContain("### Patterns established");
-    expect(result).toContain("barrel exports");
-    expect(result).toContain("### Gotchas");
-    expect(result).toContain("unexpected empty-string");
     expect(result).toContain("### Security notes");
     expect(result).toContain("Sanitise all user input");
   });
 
-  it("omits empty sections when no matching lines are found", () => {
+  it("produces minimal briefing with header only when no consultation outputs", () => {
     const input: WaveBriefingInput = {
       consultationOutputs: {},
-      summaries: ["Did some work, everything went smoothly."],
       wave: 1,
     };
 
     const result = assembleWaveBriefing(input);
 
     expect(result).toContain("## Wave Briefing (from wave 1)");
-    expect(result).not.toContain("### New shared code");
-    expect(result).not.toContain("### Patterns established");
-    expect(result).not.toContain("### Gotchas");
+    // No body sections
+    expect(result).not.toContain("###");
   });
 
   it("includes consultation output under its declared section heading", () => {
@@ -58,7 +45,6 @@ describe("assembleWaveBriefing", () => {
           summary: "Cache query results for 60 seconds.",
         },
       },
-      summaries: [],
       wave: 3,
     };
 
@@ -70,43 +56,28 @@ describe("assembleWaveBriefing", () => {
     expect(result).toContain("Cache query results");
   });
 
-  it("handles empty summaries array — produces minimal briefing with header only", () => {
+  it("handles empty consultationOutputs — produces briefing header only", () => {
     const input: WaveBriefingInput = {
       consultationOutputs: {},
-      summaries: [],
       wave: 4,
     };
 
     const result = assembleWaveBriefing(input);
 
     expect(result).toContain("## Wave Briefing (from wave 4)");
-    // No body sections
     expect(result).not.toContain("###");
   });
 
-  it("handles empty consultationOutputs — produces briefing without consultation sections", () => {
-    const input: WaveBriefingInput = {
-      consultationOutputs: {},
-      summaries: ["added src/helpers/math.ts with add and multiply"],
-      wave: 5,
-    };
-
-    const result = assembleWaveBriefing(input);
-
-    expect(result).toContain("### New shared code");
-    expect(result).not.toContain("### API");
-    expect(result).not.toContain("### Performance");
-  });
-
   it("truncates output exceeding ~2000 characters and appends truncation marker", () => {
-    // Generate a very long summary well over 2000 chars
-    const longLine = "created src/shared/very-long-module.ts with exports and helpers — ".repeat(
-      50,
-    );
+    // Generate a very long consultation summary well over 2000 chars
+    const longSummary = "Architecture decision: ".repeat(100);
     const input: WaveBriefingInput = {
-      consultationOutputs: {},
-      summaries: [longLine],
-      wave: 6,
+      consultationOutputs: {
+        c1: { section: "Architecture", summary: longSummary },
+        c2: { section: "Performance", summary: longSummary },
+        c3: { section: "Security", summary: longSummary },
+      },
+      wave: 5,
     };
 
     const result = assembleWaveBriefing(input);
@@ -115,8 +86,7 @@ describe("assembleWaveBriefing", () => {
     expect(result).toContain("[Briefing truncated]");
   });
 
-  it("preserves pre-escaped \\${...} in input without double-escaping or stripping", () => {
-    // The caller is responsible for escaping. Simulate already-escaped input.
+  it("preserves pre-escaped \\${...} in consultation output without double-escaping", () => {
     const input: WaveBriefingInput = {
       consultationOutputs: {
         c1: {
@@ -124,16 +94,12 @@ describe("assembleWaveBriefing", () => {
           summary: "Variable \\${user_input} is safely escaped.",
         },
       },
-      summaries: ["created src/template.ts — value is \\${foo} not expanded"],
-      wave: 7,
+      wave: 6,
     };
 
     const result = assembleWaveBriefing(input);
 
-    // The escaped pattern must survive unchanged
-    expect(result).toContain("\\${foo}");
     expect(result).toContain("\\${user_input}");
-    // Must NOT double-escape (i.e., \\\\${...} should not appear)
     expect(result).not.toContain("\\\\${");
   });
 
@@ -145,13 +111,26 @@ describe("assembleWaveBriefing", () => {
           summary: "This output has no section heading.",
         },
       },
-      summaries: [],
-      wave: 8,
+      wave: 7,
     };
 
     const result = assembleWaveBriefing(input);
 
     // The summary text should not appear as a floating section
     expect(result).not.toContain("This output has no section heading.");
+  });
+
+  it("does not have summary-parsing sections (newSharedCode, patternsEstablished, gotchas)", () => {
+    // These sections were removed when dead summary-parsing logic was cleaned up
+    const input: WaveBriefingInput = {
+      consultationOutputs: {},
+      wave: 8,
+    };
+
+    const result = assembleWaveBriefing(input);
+
+    expect(result).not.toContain("### New shared code");
+    expect(result).not.toContain("### Patterns established");
+    expect(result).not.toContain("### Gotchas");
   });
 });

@@ -1,17 +1,14 @@
 /**
- * Wave variable resolution for inter-wave communication.
+ * Wave variable utilities for inter-wave communication.
  *
- * Reads plan files, summaries, and diffs to populate the variables map
- * that is injected into agent spawn prompts at wave boundaries.
+ * Exports:
+ * - escapeDollarBrace: trust-boundary sanitizer for agent-sourced text
+ * - parseTaskIdsForWave: parse task IDs for a given wave from INDEX.md content
+ * - extractFilePaths: extract file paths from summary/artifact text
  *
- * All values sourced from agent output pass through escapeDollarBrace
- * before entering the variables map to prevent unintended prompt injection.
+ * Note: resolveWaveVariables was removed — wave summaries now flow through
+ * inject_context events rather than being read and injected here.
  */
-
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { gitExec } from "@platform/adapters/git-adapter.ts";
 
 /**
  * Escapes `${` patterns in agent-sourced text to prevent unintended
@@ -23,210 +20,6 @@ import { gitExec } from "@platform/adapters/git-adapter.ts";
  */
 export function escapeDollarBrace(text: string): string {
   return text.replace(/\$\{/g, "\\${");
-}
-
-/**
- * Resolve wave variables for injection into agent spawn prompts.
- *
- * Returns a map with five keys:
- * - wave_plans: concatenated plan files for the current wave
- * - wave_summaries: concatenated summary files from the previous wave
- * - wave_files: file paths extracted from previous wave summaries
- * - wave_diff: output of git diff HEAD~1
- * - all_summaries: all summary files across all completed waves
- *
- * Follows graceful degradation: missing files emit warnings and return
- * partial data. Never throws.
- */
-export type WaveVariableOpts = {
-  wave: number;
-  slug: string;
-  totalWaves: number;
-  projectDir?: string;
-};
-
-export async function resolveWaveVariables(
-  workspace: string,
-  opts: WaveVariableOpts,
-): Promise<Record<string, string>> {
-  const { wave, slug, projectDir } = opts;
-  const plansDir = path.join(workspace, "plans", slug);
-
-  const [wave_plans, wave_summaries, wave_files, all_summaries] = await Promise.all([
-    readWavePlans(plansDir, wave),
-    readWaveSummaries(plansDir, wave),
-    readWaveFiles(plansDir, wave),
-    readAllSummaries(plansDir),
-  ]);
-
-  const resolvedProjectDir = projectDir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
-  const wave_diff = readWaveDiff(resolvedProjectDir);
-
-  return {
-    all_summaries,
-    wave_diff,
-    wave_files,
-    wave_plans,
-    wave_summaries,
-  };
-}
-
-// Private helpers — each resolves one variable
-
-/**
- * Read and concatenate plan files for the current wave.
- * Parses INDEX.md to find which task IDs belong to the current wave.
- */
-async function readWavePlans(plansDir: string, wave: number): Promise<string> {
-  const taskIds = await parseIndexForWave(plansDir, wave);
-  if (taskIds.length === 0) {
-    console.error(
-      `parseIndexForWave: zero tasks found for wave ${wave} — this may indicate an INDEX.md formatting issue`,
-    );
-    return "";
-  }
-
-  const contents = await Promise.all(
-    taskIds.map((taskId) =>
-      safeReadFile(path.join(plansDir, `${taskId}-PLAN.md`), `wave_plans: plan file for ${taskId}`),
-    ),
-  );
-
-  return escapeDollarBrace(contents.filter((c): c is string => c !== null).join("\n\n"));
-}
-
-/**
- * Read and concatenate summary files from the previous wave (wave - 1).
- * Returns empty string for wave 1 (no prior wave).
- */
-async function readWaveSummaries(plansDir: string, wave: number): Promise<string> {
-  if (wave <= 1) {
-    return "";
-  }
-
-  const taskIds = await parseIndexForWave(plansDir, wave - 1);
-  if (taskIds.length === 0) {
-    return "";
-  }
-
-  const contents = await Promise.all(
-    taskIds.map((taskId) =>
-      safeReadFile(
-        path.join(plansDir, `${taskId}-SUMMARY.md`),
-        `wave_summaries: summary for ${taskId}`,
-      ),
-    ),
-  );
-
-  return escapeDollarBrace(contents.filter((c): c is string => c !== null).join("\n\n"));
-}
-
-/**
- * Extract file paths mentioned in previous wave summaries.
- * Looks for lines that match common path patterns (src/..., mcp-server/..., etc.).
- * Returns empty string for wave 1.
- */
-async function readWaveFiles(plansDir: string, wave: number): Promise<string> {
-  if (wave <= 1) {
-    return "";
-  }
-
-  const taskIds = await parseIndexForWave(plansDir, wave - 1);
-  if (taskIds.length === 0) {
-    return "";
-  }
-
-  const allPaths = new Set<string>();
-
-  const contents = await Promise.all(
-    taskIds.map((taskId) =>
-      safeReadFile(
-        path.join(plansDir, `${taskId}-SUMMARY.md`),
-        `wave_files: summary for ${taskId}`,
-      ),
-    ),
-  );
-
-  for (const content of contents) {
-    if (content !== null) {
-      for (const p of extractFilePaths(content)) {
-        allPaths.add(p);
-      }
-    }
-  }
-
-  return escapeDollarBrace(Array.from(allPaths).join("\n"));
-}
-
-/**
- * Run git diff HEAD~1 and return the output.
- * Returns empty string on failure (git not available, no prior commit, etc.).
- * cwd is set to projectDir to ensure we diff the correct repository when the
- * MCP server process cwd differs from the project root.
- */
-function readWaveDiff(cwd: string): string {
-  const result = gitExec(["diff", "HEAD~1"], cwd);
-  if (!result.ok) {
-    console.error(`wave_diff: git diff failed — exitCode=${result.exitCode}`);
-    return "";
-  }
-  return escapeDollarBrace(result.stdout);
-}
-
-/**
- * Read all *-SUMMARY.md files across all completed waves.
- * Concatenates them in task-ID order.
- */
-async function readAllSummaries(plansDir: string): Promise<string> {
-  const indexPath = path.join(plansDir, "INDEX.md");
-  if (!existsSync(indexPath)) {
-    console.error(`all_summaries: INDEX.md not found at ${indexPath}`);
-    return "";
-  }
-
-  let indexContent: string;
-  try {
-    indexContent = await readFile(indexPath, "utf-8");
-  } catch (err) {
-    console.error(`all_summaries: failed to read INDEX.md — ${String(err)}`);
-    return "";
-  }
-
-  // Parse all task IDs from the index regardless of wave
-  const taskIds = parseAllTaskIds(indexContent);
-  if (taskIds.length === 0) {
-    return "";
-  }
-
-  const summaryResults = await Promise.all(
-    taskIds.map((taskId) => safeReadFile(path.join(plansDir, `${taskId}-SUMMARY.md`), null)),
-  );
-  const contents = summaryResults.filter((c): c is string => c !== null);
-
-  return escapeDollarBrace(contents.join("\n\n"));
-}
-
-// INDEX.md parsing helpers
-
-/**
- * Parse INDEX.md and return task IDs that belong to the given wave number.
- */
-async function parseIndexForWave(plansDir: string, wave: number): Promise<string[]> {
-  const indexPath = path.join(plansDir, "INDEX.md");
-  if (!existsSync(indexPath)) {
-    console.error(`parseIndexForWave: INDEX.md not found at ${indexPath}`);
-    return [];
-  }
-
-  let content: string;
-  try {
-    content = await readFile(indexPath, "utf-8");
-  } catch (err) {
-    console.error(`parseIndexForWave: failed to read INDEX.md — ${String(err)}`);
-    return [];
-  }
-
-  return parseTaskIdsForWave(content, wave);
 }
 
 /**
@@ -260,29 +53,6 @@ export function parseTaskIdsForWave(indexContent: string, wave: number): string[
 
   return taskIds;
 }
-
-/**
- * Parse all task IDs from INDEX.md content (any wave).
- * Handles both plain and backtick-wrapped IDs (same regex as parseTaskIdsForWave).
- */
-function parseAllTaskIds(indexContent: string): string[] {
-  const taskIds: string[] = [];
-  const lines = indexContent.split("\n");
-
-  for (const line of lines) {
-    const match = line.match(/^\|\s*`?([a-zA-Z0-9_-]+)`?\s*\|\s*(\d+)\s*\|/);
-    if (!match) continue;
-
-    const taskId = match[1].trim();
-    if (taskId === "Task" || taskId === "---") continue;
-
-    taskIds.push(taskId);
-  }
-
-  return taskIds;
-}
-
-// File path extraction
 
 /**
  * Extract file paths from summary content.
@@ -319,31 +89,4 @@ export function extractFilePaths(content: string): string[] {
 function looksLikeFilePath(s: string): boolean {
   // Must contain a slash or look like a relative path with an extension
   return (s.includes("/") || s.includes("\\")) && s.includes(".");
-}
-
-// Safe file read
-
-/**
- * Read a file, returning null if it doesn't exist or can't be read.
- * Logs a warning only if warningPrefix is provided.
- */
-async function safeReadFile(
-  filePath: string,
-  warningPrefix: string | null,
-): Promise<string | null> {
-  if (!existsSync(filePath)) {
-    if (warningPrefix) {
-      console.error(`${warningPrefix}: file not found — ${filePath}`);
-    }
-    return null;
-  }
-
-  try {
-    return await readFile(filePath, "utf-8");
-  } catch (err) {
-    if (warningPrefix) {
-      console.error(`${warningPrefix}: failed to read ${filePath} — ${String(err)}`);
-    }
-    return null;
-  }
 }
