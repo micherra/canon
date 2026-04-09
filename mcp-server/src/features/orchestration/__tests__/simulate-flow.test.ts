@@ -8,6 +8,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
+import { isToolError } from "@shared/lib/tool-result.ts";
 import { describe, expect, it } from "vitest";
 import { simulateFlow, simulateFlowTool } from "../tools/simulate-flow.ts";
 
@@ -200,7 +201,6 @@ describe("simulateFlow — wave state warning", () => {
       states: {
         end: { type: "terminal" },
         wave_state: {
-          tasks: [],
           transitions: { done: "end" },
           type: "wave",
         },
@@ -237,7 +237,6 @@ describe("simulateFlow — wave state warning", () => {
       states: {
         end: { type: "terminal" },
         ppar_state: {
-          items: [],
           roles: ["role-a"],
           transitions: { done: "end" },
           type: "parallel-per",
@@ -258,7 +257,7 @@ describe("simulateFlow — skip_when warning", () => {
         end: { type: "terminal" },
         start: {
           agent: "agent-a",
-          skip_when: "no_changes",
+          skip_when: "no_contract_changes",
           transitions: { done: "end" },
           type: "single",
         },
@@ -416,7 +415,7 @@ describe("simulateFlowTool — integration with real flow file", () => {
       pluginDir,
     );
     // Tool should not return a FLOW_NOT_FOUND or FLOW_PARSE_ERROR
-    if (!result.ok && result.error_code) {
+    if (isToolError(result)) {
       // Unexpected tool-level error
       expect(result.error_code).not.toBe("FLOW_NOT_FOUND");
       expect(result.error_code).not.toBe("FLOW_PARSE_ERROR");
@@ -457,7 +456,8 @@ describe("simulateFlowTool — ToolResult contract", () => {
     // SimulateFlowOutput fields are spread flat on result (not nested)
     // ok: false here because empty scenario → stuck (simulation didn't reach terminal)
     // — this is distinct from a tool error (which would have error_code)
-    expect("error_code" in result).toBe(false); // not a tool-level error
+    expect(isToolError(result)).toBe(false); // not a tool-level error
+    if (isToolError(result)) return; // narrow for TypeScript
     expect(Array.isArray(result.path)).toBe(true);
     expect(Array.isArray(result.warnings)).toBe(true);
     expect(typeof result.iterations_consumed).toBe("object");
