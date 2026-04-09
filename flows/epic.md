@@ -5,6 +5,15 @@ tier: large
 entry: research
 progress: ${WORKSPACE}/progress.md
 
+debate:
+  teams: 3
+  composition: [canon-researcher, canon-architect]
+  min_rounds: 2
+  max_rounds: 5
+  convergence_check_after: 3
+  hitl_checkpoint: true
+  continue_to_build: true
+
 includes:
   - fragment: user-checkpoint
     with:
@@ -57,6 +66,10 @@ states:
   design:
     type: single
     agent: canon-architect
+    compete:
+      count: 3
+      strategy: synthesize
+      lenses: [performance, simplicity, extensibility]
     template: [design-decision, session-context]
     approval_gate: true
     max_revisions: 3
@@ -91,6 +104,8 @@ states:
     inject_context:
       - from: file_context
         as: file_context
+      - from: handoff
+        as: design_handoff
     transitions:
       done: context-sync
       epic_complete: pre-launch-check
@@ -115,6 +130,8 @@ After producing plans, write affected files to board metadata: call `update_boar
 
 ### implement
 Execute task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
+
+${design_handoff}
 
 ${wave_briefing}
 
