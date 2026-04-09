@@ -320,7 +320,9 @@ describe("learn-gate integration: lock gate → learn-lock stale reclaim", () =>
     // no lock = skip, and 5min → ~0.08h which is >= 0h so time gate passes),
     // and (b) the lock is not stale (5min < 1h stale threshold).
     const lockPath = join(canonDir, "learn.lock");
-    writeFileSync(lockPath, "99999");
+    // Use current process PID so the PID liveness check treats the lock as alive
+    // (rather than immediately reclaiming it as a dead-PID lock).
+    writeFileSync(lockPath, String(process.pid));
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
     await utimes(lockPath, new Date(), fiveMinAgo);
     // 5min ago → 0.08h, min_hours_since_last=0 → 0.08 >= 0 → time gate passes
