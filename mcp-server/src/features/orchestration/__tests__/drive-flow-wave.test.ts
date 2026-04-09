@@ -248,12 +248,15 @@ describe("driveFlow — wave entry", () => {
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
 
-    // Both tasks should have worktree_path populated
+    // Both tasks should have worktree_path populated and isolation: "none"
     expect(result.requests).toHaveLength(2);
     const task01Req = result.requests.find((r) => r.task_id === "task-01");
     const task02Req = result.requests.find((r) => r.task_id === "task-02");
     expect(task01Req?.worktree_path).toBe("/project/.canon/worktrees/task-01");
     expect(task02Req?.worktree_path).toBe("/project/.canon/worktrees/task-02");
+    // worktree_path presence → isolation: "none" (Canon owns the worktree; no Agent tool worktree)
+    expect(task01Req?.isolation).toBe("none");
+    expect(task02Req?.isolation).toBe("none");
     expect(createWaveWorktrees).toHaveBeenCalledWith(
       [{ task_id: "task-01" }, { task_id: "task-02" }],
       "/project",
@@ -739,6 +742,73 @@ describe("driveFlow — merge conflict handling", () => {
     if (result.action !== "spawn") return;
     expect(result.requests).toHaveLength(1);
     expect(result.requests[0].task_id).toBe("task-01");
+    // persistWaveTaskResult always stores convention worktree_path → isolation: "none"
+    // (agent works in the existing Canon worktree on retry)
+    expect(result.requests[0].isolation).toBe("none");
+  });
+
+  it("conflict retry uses isolation: 'none' when worktree_path is present in wave_results", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
+
+    store.upsertState("implement", {
+      entries: 1,
+      status: "in_progress",
+      wave: 1,
+      wave_results: {
+        "task-01": {
+          status: "done",
+          tasks: ["task-01"],
+          worktree_entries: [
+            { branch: "canon-wave/task-01", status: "merged", task_id: "task-01", worktree_path: "/project/.canon/worktrees/task-01" },
+          ],
+        },
+      },
+      wave_total: 1,
+    });
+
+    vi.mocked(getProjectDir).mockReturnValue("/project");
+    vi.mocked(mergeWaveResults).mockResolvedValue({
+      conflict_detail: "Conflict in src/foo.ts",
+      conflict_task: "task-01",
+      merged_count: 0,
+      ok: false,
+    });
+
+    const flow = makeWaveFlow({
+      states: {
+        implement: {
+          transitions: { done: "terminal" },
+          type: "wave",
+          wave_policy: {
+            isolation: "worktree",
+            merge_strategy: "sequential",
+            on_conflict: "retry-single",
+          },
+        },
+        terminal: { type: "terminal" },
+      },
+    });
+
+    const result = await driveFlow({
+      flow,
+      result: {
+        state_id: "implement",
+        status: "done",
+        task_id: "task-01",
+      },
+      workspace,
+    }, "/fake/project");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).toBe("spawn");
+    if (result.action !== "spawn") return;
+    expect(result.requests).toHaveLength(1);
+    // worktree_path present in wave_results → isolation: "none" (agent uses existing Canon worktree)
+    expect(result.requests[0].isolation).toBe("none");
+    expect(result.requests[0].worktree_path).toBe("/project/.canon/worktrees/task-01");
   });
 });
 
@@ -1259,7 +1329,10 @@ describe("driveFlow — epic checkpoint", () => {
 // 9. Bug fixes: worktree_branch tracking and merge cwd
 
 describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
-  it("stores the provided worktree_branch on the wave result instead of the convention branch", async () => {
+  it("persistWaveTaskResult uses convention branch (worktree_branch ignored)", async () => {
+    // Canon creates wave worktrees on convention branches (canon-wave/{task_id}).
+    // The convention branch is the authoritative merge target — agents commit to it.
+    // worktree_branch is ignored; only conventionBranch is stored.
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
@@ -1285,18 +1358,18 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
         state_id: "implement",
         status: "done",
         task_id: "task-01",
-        worktree_branch: "worktree-agent-a4915c84",
+        worktree_branch: "worktree-agent-a4915c84", // ignored — convention branch wins
       },
       workspace,
     }, "/fake/project");
 
     const stateEntry = store.getState("implement");
     const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
-    // Should prefer the actual agent branch, not "canon-wave/task-01"
-    expect(waveResults?.["task-01"]?.branch).toBe("worktree-agent-a4915c84");
+    // Always convention branch — agents work in Canon's worktrees on convention branches
+    expect(waveResults?.["task-01"]?.branch).toBe("canon-wave/task-01");
   });
 
-  it("falls back to convention branch when worktree_branch is not provided", async () => {
+  it("convention branch is used even when worktree_branch is not provided", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-02", wave: 1 }]);
@@ -1329,7 +1402,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
 
     const stateEntry = store.getState("implement");
     const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
-    // Should fall back to convention branch
+    // Convention branch is always used
     expect(waveResults?.["task-02"]?.branch).toBe("canon-wave/task-02");
   });
 });

@@ -66,7 +66,10 @@ export async function evaluateLearnGate(projectDir: string): Promise<LearnGateRe
       return { passed: false, reason: "scan throttle: checked recently" };
     }
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      // Non-ENOENT stat error (e.g. permissions) — fail closed rather than block flow completion.
+      return { passed: false, reason: `scan throttle: stat error` };
+    }
     // No throttle file = never throttled, continue
   }
 
