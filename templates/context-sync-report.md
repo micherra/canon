@@ -31,6 +31,7 @@ timestamp: "{ISO-8601}"
 - **CLAUDE.md**: {sections updated, or "No updates needed"}
 - **context.md**: {what changed, or "No updates needed"}
 - **CONVENTIONS.md**: {what added, or "No updates needed"}
+- **README.md**: {sections updated, or "No updates needed" or "Skipped — no structure changes"}
 
 ### Freshness
 | Document | Section | Last Updated |

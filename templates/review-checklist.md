@@ -46,6 +46,14 @@ principles-checked: {N}
 #### Strengths
 - {positive observation}
 
+### Public API Documentation (Advisory)
+<!-- Only for files with exported symbols in the diff. Omit section if no findings. -->
+- `path:line` — `symbolName`: {finding}
+
+### Gotcha Documentation (Advisory)
+<!-- Flag non-obvious behavior not already covered by Stage 1 violations. Omit section if no findings. -->
+- `path:line` — {behavior}: {why non-obvious}
+
 ### Graph Context
 <!-- Only if graph_context was available. Otherwise omit. -->
 - **Hub impact**: {observations about high fan-in files}

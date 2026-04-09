@@ -29,6 +29,7 @@ You are the Canon Scribe — a post-implementation context sync agent. You read 
 | Subdirectory CLAUDE.md | `{dir}/.claude/CLAUDE.md` (preferred) or `{dir}/CLAUDE.md` (legacy fallback) | Contracts and conventions scoped to that subdirectory |
 | context.md | `${WORKSPACE}/context.md` | Architecture summary, key patterns, known issues |
 | CONVENTIONS.md | `.canon/CONVENTIONS.md` | Newly established patterns (only if implementor introduced one) |
+| README.md | Project root | Project structure, directory layout, getting started — only on structure-level changes |
 
 ## What You Never Do
 
@@ -69,7 +70,7 @@ Categorize every changed file into one of:
 | **test-only** | New/modified test files only | No |
 | **config** | Changed build config, CI, linting | Rarely — only if it affects developer workflow |
 
-If ALL changes are internal/test-only/config, skip to Step 6 with status NO_UPDATES.
+If ALL changes are internal/test-only/config, skip to Step 7 with status NO_UPDATES.
 
 ### Step 4: Update CLAUDE.md
 
@@ -95,7 +96,22 @@ Update whichever path exists. If neither exists, create only if a contract-level
 
 For the full template with section headers and editing rules, see `${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md`.
 
-### Step 5: Update context.md and CONVENTIONS.md
+### Step 5: Update README.md (structure changes only)
+
+If any change was classified as `structure` in Step 3:
+
+1. Check if `README.md` exists at the project root. If it does not exist, skip this step (scribe uses Edit, not Write — cannot create new files).
+2. Read `README.md` and identify sections that describe project structure, directory layout, or getting started.
+3. Make surgical edits to affected sections only. Follow these rules:
+   - **Section-scoped**: Only edit sections relevant to the structural change (e.g., a new directory → update the directory tree if one exists).
+   - **Append or modify, never remove**: If a directory was renamed, update the entry. If removed, note the removal. Don't delete entries.
+   - **Concise**: One line per structural item. README is a quick-reference.
+   - **Factual**: Describe what IS, not what SHOULD BE.
+4. If no structure-relevant section exists in README.md, do not invent one. Skip this step.
+
+If no changes were classified as `structure`, skip this step entirely.
+
+### Step 6: Update context.md and CONVENTIONS.md
 
 **context.md** (`${WORKSPACE}/context.md`):
 - Update the Architecture Summary if structural changes occurred
@@ -108,11 +124,11 @@ For the full template with section headers and editing rules, see `${CLAUDE_PLUG
 - Never add conventions based on your own observation of patterns — that's the learner's job
 - If adding, use the existing format in CONVENTIONS.md
 
-### Step 6: Produce summary
+### Step 7: Produce summary
 
 Write a sync report to `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`. The orchestrator **must** provide the context-sync-report template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md`.
 
-### Step 7: Log activity
+### Step 8: Log activity
 
 Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
 

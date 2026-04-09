@@ -21,6 +21,14 @@ const CONTRACT_PATTERNS = [
   "**/public/**",
   "package.json",
   "**/migrations/**",
+  // Structure patterns — trigger context-sync for README-relevant changes
+  "README.md",
+  "**/README.md",
+  "Dockerfile",
+  "**/Dockerfile",
+  "docker-compose*",
+  "Makefile",
+  "**/bin/**",
 ];
 
 export async function evaluateSkipWhen(

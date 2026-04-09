@@ -323,4 +323,10 @@ describe("resolveToolProfile", () => {
     expect(withNoOptions.tools).toEqual(withEmptyOptions.tools);
     expect(withNoOptions.disallowed_tools).toEqual(withEmptyOptions.disallowed_tools);
   });
+
+  it("canon-shipper has Edit in allowed (for CHANGELOG.md writing)", () => {
+    const result = resolveToolProfile("canon-shipper");
+    expect(result.tools).toContain("Edit");
+    expect(result.disallowed_tools).not.toContain("Edit");
+  });
 });

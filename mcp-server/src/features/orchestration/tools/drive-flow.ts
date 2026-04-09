@@ -1068,18 +1068,6 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
     worktreeResults.map((r) => [r.task_id, r.worktree_path]),
   );
 
-  // Update state with new wave tracking (sqlite-transactions)
-  store.transaction(() => {
-    const existing = store.getState(state_id);
-    store.upsertState(state_id, {
-      entries: (existing?.entries ?? 0) + 1,
-      status: "in_progress",
-      wave: nextWave,
-      wave_results: {}, // reset for new wave
-      wave_total: nextWaveTaskIds.length,
-    });
-  });
-
   const enterOut = await enterAndPrepareState({
     flow,
     items: nextWaveTaskIds.map((tid) => ({ task_id: tid })),
@@ -1104,6 +1092,18 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
       ok: true as const,
     };
   }
+
+  // Write wave metadata AFTER enterAndPrepareState succeeds — prevents partial state
+  store.transaction(() => {
+    const existing = store.getState(state_id);
+    store.upsertState(state_id, {
+      entries: (existing?.entries ?? 0) + 1,
+      status: "in_progress",
+      wave: nextWave,
+      wave_results: {}, // reset for new wave
+      wave_total: nextWaveTaskIds.length,
+    });
+  });
 
   persistToolScopeWarnings(enterOut.prompts, state_id, store);
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
@@ -1522,16 +1522,6 @@ async function enterWaveState(
   );
   const worktreeMap = buildWorktreeMap(worktreeResults, existingWaveResults);
 
-  store.transaction(() => {
-    store.upsertState(stateId, {
-      entries: (existingState?.entries ?? 0) + 1,
-      status: "in_progress",
-      wave: currentWave,
-      wave_results: existingState?.wave_results ?? {},
-      wave_total: waveTaskIds.length,
-    });
-  });
-
   const enterOut = await enterAndPrepareState({
     flow,
     items: unfinishedTaskIds.map((tid) => ({ task_id: tid })),
@@ -1543,6 +1533,19 @@ async function enterWaveState(
   });
   if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
   if (!enterOut.can_enter) return buildConvergenceHitl(stateId, enterOut);
+
+  // Write wave metadata AFTER enterAndPrepareState succeeds — prevents partial state
+  // if the prompt pipeline throws (the state entry itself is already persisted by
+  // enterAndPrepareState; this adds the wave-specific fields).
+  store.transaction(() => {
+    store.upsertState(stateId, {
+      entries: (existingState?.entries ?? 0) + 1,
+      status: "in_progress",
+      wave: currentWave,
+      wave_results: existingState?.wave_results ?? {},
+      wave_total: waveTaskIds.length,
+    });
+  });
 
   persistToolScopeWarnings(enterOut.prompts, stateId, store);
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);

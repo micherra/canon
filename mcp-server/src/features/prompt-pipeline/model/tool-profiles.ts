@@ -195,8 +195,8 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
   "canon-shipper": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "post_event"],
-    disallowed: ["Edit", "Write", "NotebookEdit"],
+    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "post_event"],
+    disallowed: ["Write", "NotebookEdit"],
   },
   "canon-tester": {
     allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "write_test_report", "graph_query", "post_event"],

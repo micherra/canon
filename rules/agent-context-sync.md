@@ -9,7 +9,7 @@ tags:
   - scribe
 ---
 
-The scribe agent updates documentation only when the contract surface of the codebase changes. It reads git diffs and implementor summaries, classifies changes as contract-level or internal, and makes surgical edits to CLAUDE.md, context.md, and CONVENTIONS.md. It never rewrites documents from scratch, never proposes new principles, and exits immediately with NO_UPDATES when all changes are internal.
+The scribe agent updates documentation only when the contract surface of the codebase changes. It reads git diffs and implementor summaries, classifies changes as contract-level or internal, and makes surgical edits to CLAUDE.md, context.md, CONVENTIONS.md, and README.md (on structure changes). It never rewrites documents from scratch, never proposes new principles, and exits immediately with NO_UPDATES when all changes are internal.
 
 ## Rationale
 

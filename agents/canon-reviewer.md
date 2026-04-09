@@ -115,6 +115,37 @@ This stage is **advisory** by default — suggestions, not violations. Only incl
 
 **Example that does NOT qualify**: Code uses `var` instead of `const`. Even though `explicit-contracts` is loaded, this is still a generic style issue unless the reviewer can tie it to a specific principle expectation and a concrete risk beyond preference. Without that, it stays advisory.
 
+### Stage 2 Sub-Axes
+
+#### Public API Documentation
+
+For every exported symbol (function, class, type, constant) visible in the diff:
+1. Check whether the symbol has a JSDoc/TSDoc comment block
+2. Check whether the comment describes parameters, return type, and purpose
+3. Flag exported symbols missing documentation or with stale docs (parameter name mismatch, missing @returns)
+
+Output format — list findings as advisory items:
+- `path:line` — `exportedName`: {what is missing — e.g., "no JSDoc", "missing @param description for `options`", "@returns absent"}
+
+Skip this axis for:
+- Re-exports and barrel files (index.ts that only re-exports)
+- Type-only exports where the type name is self-documenting
+- Test files
+
+#### Gotcha Documentation
+
+Scan the diff for non-obvious behavior that could surprise a caller or future maintainer:
+- Silent coercions or fallbacks (e.g., `?? defaultValue` that changes behavior)
+- Implicit ordering dependencies (must call A before B)
+- Error swallowing (catch blocks that don't re-throw or log)
+- Side effects in functions whose names suggest purity
+- Magic numbers or strings without explanatory comments
+
+Output format — list findings as advisory items:
+- `path:line` — {behavior}: {why it is non-obvious}
+
+**Deduplication rule**: If a gotcha is already flagged as a Stage 1 principle violation (e.g., `explicit-contracts`, `errors-are-values`, `naming-reveals-intent`), do NOT duplicate it here. This axis covers behavior that falls outside loaded principle scope.
+
 ### Recommendations array
 
 After completing Stages 1 and 2, produce a `recommendations` array for the `store_pr_review` call. This is the top-5 most actionable suggestions, mixing principle violations with holistic observations:

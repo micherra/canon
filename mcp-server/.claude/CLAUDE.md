@@ -33,7 +33,7 @@ src/
 - **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-04-07 (post_event tool added; agent_activity FlowEventType added) -->
+<!-- last-updated: 2026-04-08 (git-intel Phase 1: new git-intel submodule; KG SCHEMA_VERSION=4; FileContextOutput+UnifiedPrOutput+PrReviewDataOutput gained git-intel fields; auto-approve: worktree-settings.ts + injectSettingsIntoRequests) -->
 
 **Tool error types** (`src/utils/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -76,6 +76,11 @@ src/
 - Pure `isStuck` functions in `transitions.ts` are deprecated; prefer `ExecutionStore.isStuck`
 - `ExecutionStore.updateStateMetrics(stateId, metrics: Record<string, number|string>): boolean` — added 2026-04-01 (ADR-003a); merges provided fields into existing `metrics` JSON via targeted SQL `UPDATE`; preserves orchestrator-written fields (`duration_ms`, `spawns`, `model`); returns `true` when row found and updated, `false` when state not found
 
+**KG schema** (`src/graph/kg-schema.ts`) — updated 2026-04-08 (git-intel Phase 1):
+- `SCHEMA_VERSION = "4"` — bumped from `"3"`; migration v4 adds `hotspot_scores` and `co_change_edges` tables to all DBs initialized via `initDatabase()`
+- `hotspot_scores` table — columns: `file_path TEXT PRIMARY KEY`, `churn_raw`, `churn_percentile`, `complexity_raw`, `complexity_pctile`, `score`, `is_hotspot INTEGER`, `computed_at_commit TEXT`
+- `co_change_edges` table — columns: `file_a TEXT`, `file_b TEXT`, `co_count INTEGER`, `jaccard REAL`, `computed_at_commit TEXT`; indexes on both `file_a` and `file_b`; pair keys normalized alphabetically (`file_a <= file_b`)
+
 **Execution schema** (`src/orchestration/execution-schema.ts`) — updated 2026-04-01 (ADR-004):
 - `SCHEMA_VERSION = '3'` — new export; current DB schema version
 - `runMigrations(db)` — new export; runs pending migrations against the given database; version-gated; each migration wrapped in a transaction for atomicity; safe to call repeatedly
@@ -101,7 +106,8 @@ src/
 - Unified tool — merges `show_pr_impact` and `get_pr_review_data` (removed 2026-03-25)
 - Accepts optional `options?: { branch?: string; pr_number?: number; diff_base?: string; incremental?: boolean }` — all four exposed as top-level MCP input fields
 - Always calls `getPrReviewData` internally for live diff analysis; optionally overlays stored review impact data when a Canon review exists in DriftStore
-- Returns `UnifiedPrOutput` — `prep: PrReviewDataOutput` (always present), `has_review: boolean` (UI layout signal; `true` when a stored Canon review exists in DriftStore, `false` otherwise), plus `review?`, `blastRadius?`, `hotspots`, `subgraph` (populated when stored review exists)
+- Returns `UnifiedPrOutput` — `prep: PrReviewDataOutput` (always present), `has_review: boolean` (UI layout signal; `true` when a stored Canon review exists in DriftStore, `false` otherwise), plus `review?`, `blastRadius?`, `hotspots`, `subgraph` (populated when stored review exists), `co_change_warnings: Array<{ file, missing_partner, jaccard }>` (git-intel, 2026-04-08)
+- `computeKgData(db, changedFiles, projectDir)` — exported for testing; `projectDir` param triggers git-intel freshness check and co-change warning computation; warnings sorted by jaccard desc, limited to 10; uses existing `db` handle (no second connection)
 - `status` is always `"ok"` — no more `"no_review"` status; review field being absent signals no stored review
 - Resource URI: `ui://canon/pr-review` (was `ui://canon/pr-impact`); HTML entry: `pr-review.html`
 
@@ -123,6 +129,16 @@ src/
 - `KgQuery.getKgFreshnessMs()` → `number | null` — ms since oldest `last_indexed_at`; `null` when DB empty
 - `KgQuery.getSubgraph(filePaths)` → `{ nodes, edges }` — subgraph for PR impact UI; nodes include `file_id` and `layer`
 
+**Git Intelligence Layer** (`src/features/knowledge-graph/git-intel/`) — added 2026-04-08 (Phase 1):
+<!-- last-updated: 2026-04-08 (git-intel Phase 1: types, config, parser, scorer, detector, pipeline) -->
+
+- **`git-intel-types.ts`** — pure type declarations: `GitCommitRecord { hash, timestamp, files }`, `ChurnEntry { filePath, rawChurn }`, `CoChangePair { fileA, fileB, coCount, jaccard }`, `HotspotRow`, `CoChangeRow`, `HotspotScoreOutput { churn_percentile, complexity_pctile, score, is_hotspot }`, `CoChangePartner { filePath, jaccard }`
+- **`git-intel-config.ts`** — `GitIntelConfig { lookbackDays, halfLifeDays, hotspotScoreThreshold, excludePatterns, maxFilesPerCommit }`; `DEFAULT_GIT_INTEL_CONFIG` constant; `isExcluded(filePath, patterns): boolean` — matches glob against basename only (not full path)
+- **`git-log-parser.ts`** — `parseGitLog(stdout: string): GitCommitRecord[]` — pure, never throws; skips malformed/empty commits; parses `COMMIT:<hash> <unix-timestamp>` format with `--name-only` file listing
+- **`hotspot-scorer.ts`** — `computeChurn(commits, config): ChurnEntry[]`; `computePercentiles(entries, getValue): number[]`; `buildHotspotRows(churnEntries, complexityMap, config, commitSha): HotspotRow[]`; `persistHotspots(db, rows): void` (bare DELETE+INSERT, no transaction); `getComplexityMap(db): Map<string, number>` (LEFT JOIN files+entities; 0 for files with no entities)
+- **`co-change-detector.ts`** — `computeCoChangePairs(commits, config): CoChangePair[]` (skips commits > `maxFilesPerCommit` files; Jaccard similarity; pair keys normalized alphabetically); `persistCoChangeEdges(db, pairs): void` (bare DELETE+INSERT, no transaction)
+- **`git-intel-pipeline.ts`** — `getCurrentHead(cwd): string | null`; `isGitIntelStale(db, cwd): boolean` (reads `computed_at_commit` from `hotspot_scores`; true when no rows or SHA mismatch); `runGitIntelPipeline(db, cwd, config?): void` (full orchestration: git log → parse → filter excluded → score → detect → single atomic `db.transaction()` wrapping both persist calls); `ensureGitIntelFresh(db, cwd, config?): void` (no-op when fresh); `computeGitIntel(dbPath, repoRoot, config?): void` (standalone entry point: `initDatabase` → `ensureGitIntelFresh` → `db.close()`)
+
 **`store-summaries.ts`** (`src/tools/store-summaries.ts`) — updated ADR-005 2026-04-01:
 - `inferLanguageFromExtension(filePath)` → `string` — new export; maps `.ts`/`.tsx` → `"typescript"`, `.js`/`.jsx` → `"javascript"`, `.py` → `"python"`, `.md` → `"markdown"`, default `"unknown"`
 - `loadSummariesFile` — REMOVED 2026-04-01 (ADR-005); DB is sole summary read path
@@ -137,13 +153,14 @@ src/
 - Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 
 **File Context** (`src/tools/get-file-context.ts`):
-- `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`
+- `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`, `hotspot_score?: HotspotScoreOutput`, `co_change_partners?: Array<CoChangePartner>` — git-intel fields added 2026-04-08
+- `loadKgData(dbPath, filePath, projectDir?)` — exported for testing; third `projectDir` param triggers `ensureGitIntelFresh` and populates `hotspot_score` and `co_change_partners`; co-change query uses UNION across both edge directions
 - `imported_by_layer: Record<string, string[]>` — mirrors `imports_by_layer`; groups reverse-dependency paths by their inferred layer
 - `shape: { label: string; description: string }` — derived by `deriveShape(metrics)`: Sink (`in_degree>8, out_degree<4`), High fan-out hub (`in_degree<3, out_degree>8`), Central hub (`in_degree>5, out_degree>5`), Leaf (`in_degree===0`), Internal (default); label prefixed with `"Cycle member — "` when `in_cycle` is true
 - `project_max_impact: number` — max `computeImpactScore()` across all graph nodes; `0` when no cached graph
 - `FileBlastRadiusEntry` interface — fields: `name`, `qualified_name`, `kind`, `depth`, `file_path` (path of the file containing the entity; `""` if lookup fails)
 
-**PR Review Data** (`src/tools/pr-review-data.ts`) — pure function module; `get_pr_review_data` MCP tool removed 2026-03-25 (absorbed into `show_pr_impact`); `getPrReviewData` function called internally by `showPrImpact`:
+**PR Review Data** (`src/tools/pr-review-data.ts`) — pure function module; `get_pr_review_data` MCP tool removed 2026-03-25 (absorbed into `show_pr_impact`); `getPrReviewData` function called internally by `showPrImpact`; `PrReviewDataOutput` gained `hotspot_files?: string[]` (git-intel, 2026-04-08):
 - `PrViolation` interface — `{ principle_id: string; severity: "rule"|"strong-opinion"|"convention"; message?: string }`
 - `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`, `violations?: PrViolation[]`
 - `PrFileSummary` interface — `{ path: string; layer: string; status: "added"|"modified"|"deleted"|"renamed" }` — lightweight entry for clustering
@@ -281,7 +298,7 @@ src/
 | `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status and stale sessions before creating; when preflight finds issues, returns `workspace: ""` (empty string) and puts the candidate path in `candidate_workspace` — callers must check `preflight_issues` before using `workspace` |
 | `load_flow` | Load and resolve a flow definition; throws (hard-blocking) on validation errors since ADR-004; reachability issues emit non-blocking warnings |
 | `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
-| `drive_flow` | Drive the flow state machine for a single state; returns a `SpawnRequest` or `HitlBreakpoint` for the orchestrator to process |
+| `drive_flow` | Drive the flow state machine for a single state; returns a `SpawnRequest` or `HitlBreakpoint` for the orchestrator to process; `{ action: "done" }` response includes optional `learn_gate_passed?: boolean` (ADR-016, 2026-04-08) — true only when auto-learn gates all pass at flow completion; absent when gate not evaluated or any gate failed |
 | `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress); at `complete_flow` aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
 | `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
@@ -303,8 +320,16 @@ src/
 | `tsx` | TypeScript execution (dev) |
 | `vitest` | Unit testing (dev) |
 
+**Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — added 2026-04-08:
+- `profileToAllowRules(tools: string[]): string[]` — filters tool names to the `BUILTIN_CLAUDE_TOOLS` set (`Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `NotebookEdit`, `WebFetch`); MCP tools are excluded (already covered by project-level `settings.json`)
+- `buildWorktreeSettings(allowRules: string[]): { permissions: { allow: string[] } }` — builds the `settings.local.json` structure; empty rules produce `{ permissions: { allow: [] } }` (no extra permissions)
+- `injectWorktreeSettings(worktreePath: string, tools: string[]): Promise<boolean>` — atomically writes `.claude/settings.local.json` into the worktree (write-to-temp + rename); validates absolute path; returns `false` on any failure without throwing; creates `.claude/` dir if absent; idempotent (second call overwrites first)
+
+**`injectSettingsIntoRequests`** (`src/features/orchestration/tools/drive-flow.ts`) — exported helper added 2026-04-08:
+- `injectSettingsIntoRequests(requests: SpawnRequest[]): Promise<void>` — iterates spawn requests sequentially; calls `injectWorktreeSettings(req.worktree_path, req.tools)` when `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools` are all present; sequential (not `Promise.all`) for error isolation — one failure does not abort others; never throws
+
 ## Invariants
-<!-- last-updated: 2026-04-01 (ADR-005: KG sole data source, computeFileInsightMaps call pattern) -->
+<!-- last-updated: 2026-04-08 (worktree_path sole isolation signal; learn_gate_passed on done action; auto-approve injection fail-closed) -->
 
 - **ADR-002 subprocess isolation**: Only files in `src/adapters/` may import `node:child_process`; all `tools/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
@@ -327,6 +352,8 @@ src/
 - **ADR-004 fragment typed params**: `state_id`-typed params in fragment `with:` maps are validated against real state IDs at load time; supplying a non-existent state ID is a hard error — added 2026-04-01
 - **ADR-005 KG sole data source**: `graph/query.ts` and `graph/view-materializer.ts` deleted; SQLite KG (via `KgQuery`/`KgStore`) is the exclusive store for graph and summary data; no JSON artifacts are written for graph or summary data — added 2026-04-01
 - **ADR-005 computeFileInsightMaps call pattern**: call `computeFileInsightMaps(db)` once per request and pass the `FileInsightMaps` result into `KgQuery.getFileMetrics()`; do not call `getFileMetrics()` in a loop without pre-computing insight maps — added 2026-04-01
+- **worktree_path is the sole isolation signal** (2026-04-08): `SpawnPromptEntry` no longer carries `isolation`; `resolveToolProfile` permission_mode fallback uses `worktreePath ? "auto" : "prompt"` (not `isolation`); wave SpawnRequests with `worktree_path` are emitted with `isolation: "none"` — Canon owns the worktree lifecycle; `persistWaveTaskResult` stores the convention branch (`canon-wave/{task_id}`) unconditionally
+- **auto-approve settings injection** (2026-04-08): `injectSettingsIntoRequests` is called in all three spawn paths (`startNextWave`, `enterWaveState`, `tryEnterSingleState`) before returning `{ action: "spawn" }`; injection is conditional on `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools`; `injectWorktreeSettings` failure returns `false` and never blocks spawn (fail-closed); agents that would have received auto-approve simply fall back to standard prompting
 
 ## Development
 <!-- last-updated: 2026-03-22 -->

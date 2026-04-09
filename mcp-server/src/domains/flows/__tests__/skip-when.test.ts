@@ -571,6 +571,95 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
   });
 });
 
+// matchGlob — new structure patterns
+
+describe("matchGlob — structure patterns", () => {
+  it("matches README.md at root", () => {
+    expect(matchGlob("README.md", "README.md")).toBe(true);
+  });
+
+  it("matches README.md in subdirectories", () => {
+    expect(matchGlob("**/README.md", "src/README.md")).toBe(true);
+    expect(matchGlob("**/README.md", "packages/core/README.md")).toBe(true);
+    expect(matchGlob("**/README.md", "deep/nested/dir/README.md")).toBe(true);
+  });
+
+  it("does not match non-README files with README pattern", () => {
+    expect(matchGlob("README.md", "READMENOT.md")).toBe(false);
+    expect(matchGlob("**/README.md", "src/notes.md")).toBe(false);
+  });
+
+  it("matches Dockerfile at root", () => {
+    expect(matchGlob("Dockerfile", "Dockerfile")).toBe(true);
+  });
+
+  it("matches Dockerfile in subdirectories", () => {
+    expect(matchGlob("**/Dockerfile", "services/api/Dockerfile")).toBe(true);
+    expect(matchGlob("**/Dockerfile", "docker/Dockerfile")).toBe(true);
+  });
+
+  it("matches docker-compose files with wildcard suffix", () => {
+    expect(matchGlob("docker-compose*", "docker-compose.yml")).toBe(true);
+    expect(matchGlob("docker-compose*", "docker-compose.override.yml")).toBe(true);
+    expect(matchGlob("docker-compose*", "docker-compose.prod.yml")).toBe(true);
+  });
+
+  it("does not match unrelated files with docker-compose pattern", () => {
+    expect(matchGlob("docker-compose*", "Dockerfile")).toBe(false);
+    expect(matchGlob("docker-compose*", "src/docker-config.ts")).toBe(false);
+  });
+
+  it("matches Makefile at root", () => {
+    expect(matchGlob("Makefile", "Makefile")).toBe(true);
+  });
+
+  it("does not match non-Makefile files", () => {
+    expect(matchGlob("Makefile", "makefile")).toBe(false);
+    expect(matchGlob("Makefile", "GNUmakefile")).toBe(false);
+  });
+
+  it("matches files in bin directories (with path prefix)", () => {
+    expect(matchGlob("**/bin/**", "scripts/bin/deploy.sh")).toBe(true);
+    expect(matchGlob("**/bin/**", "src/bin/cli.ts")).toBe(true);
+    expect(matchGlob("**/bin/**", "packages/app/bin/start")).toBe(true);
+  });
+
+  it("does not match files outside bin directories", () => {
+    expect(matchGlob("**/bin/**", "src/binary-utils.ts")).toBe(false);
+    expect(matchGlob("**/bin/**", "bin-tools/runner.ts")).toBe(false);
+  });
+});
+
+// evaluateSkipWhen — no_contract_changes with structure patterns
+
+describe("evaluateSkipWhen — no_contract_changes with structure patterns", () => {
+  it("returns skip: false when README.md changed", async () => {
+    gitExecImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "README.md\n",
+      timedOut: false,
+    });
+    const board = makeBoard({ base_commit: "abc1234" });
+    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("returns skip: false when Dockerfile changed", async () => {
+    gitExecImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "Dockerfile\n",
+      timedOut: false,
+    });
+    const board = makeBoard({ base_commit: "abc1234" });
+    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+});
+
 // SkipWhenSchema — learn_gate_not_passed value
 
 describe("SkipWhenSchema — learn_gate_not_passed", () => {

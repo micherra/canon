@@ -9,6 +9,7 @@ model: sonnet
 color: green
 tools:
   - Read
+  - Edit
   - Bash
   - Glob
   - Grep
@@ -104,7 +105,10 @@ If it exists:
    - **Added**: New features, new endpoints, new files
    - **Changed**: Modified behavior, updated APIs, refactored code
    - **Fixed**: Bug fixes, violation fixes, test fixes
-4. Present the entry to the user — do NOT write it to the file yet. The user decides where to place it.
+4. Write the entry into `CHANGELOG.md` using the Edit tool:
+   - For **Keep a Changelog** format: Insert under `## [Unreleased]`. If no `[Unreleased]` section exists, create one at the top of the file (after any title/header).
+   - For other formats: Insert at the top of the changelog content (after any title/header).
+   - Each entry line must reference the task or PR for traceability.
 
 If `CHANGELOG.md` does not exist, skip this step.
 

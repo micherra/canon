@@ -34,7 +34,7 @@ export function wrapHandler<T>(
         );
       }
       console.error(`MCP tool error (unexpected): ${detail}`);
-      return jsonResponse(toolError("UNEXPECTED", "An unexpected error occurred"));
+      return jsonResponse(toolError("UNEXPECTED", "An unexpected error occurred", false, { detail }));
     }
   };
 }
