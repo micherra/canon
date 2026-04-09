@@ -55,6 +55,8 @@ states:
     inject_context:
       - from: file_context
         as: file_context
+      - from: wave_summaries
+        as: wave_summaries
     transitions:
       done: context-sync
       blocked: hitl
@@ -71,3 +73,5 @@ Execute task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Save summary
 ${wave_briefing}
 
 ${enrichment}
+
+${wave_summaries}

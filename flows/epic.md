@@ -91,6 +91,8 @@ states:
     inject_context:
       - from: file_context
         as: file_context
+      - from: wave_summaries
+        as: wave_summaries
     transitions:
       done: context-sync
       epic_complete: pre-launch-check
@@ -119,6 +121,8 @@ Execute task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Save summary
 ${wave_briefing}
 
 ${enrichment}
+
+${wave_summaries}
 
 ### security
 Scan implemented code for vulnerabilities. File list from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save to ${WORKSPACE}/plans/${slug}/SECURITY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md.
