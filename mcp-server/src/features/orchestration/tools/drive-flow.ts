@@ -1256,7 +1256,8 @@ async function handleGateOnlyState(
       flow,
       gate_results: gateResults,
       progress_line: `Pre-launch check passed (${gateResults.length} gates)`,
-      result: { state_id: stateId, status: "done" },
+      state_id: stateId,
+      status_keyword: "done",
       workspace,
     });
     if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;
@@ -1284,7 +1285,8 @@ async function handleGateOnlyState(
     flow,
     gate_results: gateResults,
     progress_line: `Pre-launch check failed (${failedGates.length}/${gateResults.length} gates failed)`,
-    result: { state_id: stateId, status: "blocked" },
+    state_id: stateId,
+    status_keyword: "blocked",
     workspace,
   });
   if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;

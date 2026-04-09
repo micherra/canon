@@ -194,11 +194,11 @@ describe("gate-only state: all gates pass", () => {
         expect(result.requests[0].agent_type).toBe("canon:canon-reviewer");
       }
     }
-    // reportResult should have been called with gate_results and status "done"
+    // reportResult should have been called with gate_results and status_keyword "done"
     expect(vi.mocked(reportResult)).toHaveBeenCalledWith(
       expect.objectContaining({
         gate_results: expect.arrayContaining([expect.objectContaining({ passed: true })]),
-        result: expect.objectContaining({ status: "done" }),
+        status_keyword: "done",
       }),
     );
   });
@@ -259,10 +259,10 @@ describe("gate-only state: gate fails", () => {
         expect(result.breakpoint.reason).toContain("src/index.ts(10,5): error TS2345");
       }
     }
-    // reportResult should have been called with status "blocked"
+    // reportResult should have been called with status_keyword "blocked"
     expect(vi.mocked(reportResult)).toHaveBeenCalledWith(
       expect.objectContaining({
-        result: expect.objectContaining({ status: "blocked" }),
+        status_keyword: "blocked",
       }),
     );
   });
