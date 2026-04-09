@@ -166,7 +166,7 @@ function getSchemaVersion(db: ReturnType<typeof initExecutionDb>): string {
 
 describe("SCHEMA_VERSION", () => {
   test('is "9"', () => {
-    expect(SCHEMA_VERSION).toBe("9");
+    expect(SCHEMA_VERSION).toBe("10");
   });
 });
 
@@ -219,7 +219,7 @@ describe("agent session columns migration", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("9");
+    expect(row?.value).toBe("10");
 
     db.close();
   });
@@ -277,7 +277,7 @@ describe("worktree columns migration", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("9");
+    expect(row?.value).toBe("10");
 
     db.close();
   });
@@ -460,7 +460,7 @@ describe("migration v8 — job_cache table", () => {
 describe("migration v8 — schema version", () => {
   test('schema_version is "9" after init', () => {
     const db = initExecutionDb(":memory:");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 });
 
@@ -475,7 +475,7 @@ describe("migration v8 — upgrade from v6", () => {
     const tables = getTableNames(db);
     expect(tables).toContain("jobs");
     expect(tables).toContain("job_cache");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 
   test("runMigrations is idempotent — safe to call twice", () => {
@@ -488,7 +488,7 @@ describe("migration v8 — upgrade from v6", () => {
     const tables = getTableNames(db);
     expect(tables).toContain("jobs");
     expect(tables).toContain("job_cache");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 
   test("can insert a row into jobs table", () => {
@@ -529,7 +529,7 @@ describe("migration v9 — inserted_return_to column", () => {
 
   test("schema_version is '9' after init", () => {
     const db = initExecutionDb(":memory:");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 
   test("runMigrations is idempotent after v9", () => {
@@ -537,7 +537,7 @@ describe("migration v9 — inserted_return_to column", () => {
     expect(() => runMigrations(db)).not.toThrow();
     const columns = getColumnNames(db, "execution_states");
     expect(columns).toContain("inserted_return_to");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 
   test("inserted_return_to accepts TEXT value", () => {

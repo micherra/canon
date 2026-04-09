@@ -354,14 +354,26 @@ design:
 
 | Field | Description |
 |-------|-------------|
-| `from` | Source: a state ID or `user` |
-| `section` | Optional — heading name from the state's primary artifact (e.g., `risk` reads `### Risk` from the artifact). If omitted, includes the full artifact. |
+| `from` | Source: a state ID, `user`, or `prior_workspace` |
+| `section` | Optional — heading name from the state's primary artifact (e.g., `risk` reads `### Risk` from the artifact). If omitted, includes the full artifact. For `from: prior_workspace`, use `section: research` to read seeded research instead of handoffs. |
 | `as` | Variable name available in the spawn instruction via `${variable}` |
 | `prompt` | For `from: user` — question to ask |
 
 **Resolution rules:**
 - `from: <state-id>`: The orchestrator reads the artifact(s) listed in `board.json` under `states.{id}.artifacts`. If `section` is specified, extracts the content under that heading. The result is included in the spawn instruction as `${as}`.
 - `from: user`: The orchestrator pauses and asks the user the `prompt` question. The user's response is available as `${as}`.
+- `from: prior_workspace`: Reads artifacts seeded from a prior flow's workspace. When `init_workspace` is called with `seed_from`, prior handoffs and research are copied into `seeded/`. This injection source reads those seeded artifacts. Use `section: research` to read seeded research instead of handoffs. Returns empty with a warning if no seeded content exists.
+
+**Example using `prior_workspace`:**
+
+```yaml
+inject_context:
+  - from: prior_workspace
+    as: prior_context
+  - from: prior_workspace
+    as: prior_research
+    section: research
+```
 
 **Artifact validation**: When resolving `from: <state-id>`, the orchestrator checks that each artifact path in `states.{id}.artifacts` exists on disk:
 - **Some missing**: Log a warning for each missing file and inject only the available artifacts.

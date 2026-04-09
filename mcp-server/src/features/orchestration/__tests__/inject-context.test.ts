@@ -938,3 +938,137 @@ describe("resolveContextInjections — wave_summaries source", () => {
     expect(result.variables.wave_summaries).not.toMatch(/(?<!\\)\$\{variable\}/);
   });
 });
+
+// prior_workspace injection source
+
+describe("resolveContextInjections — prior_workspace source", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "inject-prior-workspace-test-"));
+    // Restore real existsSync for fs-based tests
+    const { existsSync: realExistsSync } =
+      await vi.importActual<typeof import("node:fs")>("node:fs");
+    vi.mocked(existsSync).mockImplementation(realExistsSync);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { force: true, recursive: true });
+    vi.clearAllMocks();
+  });
+
+  it("reads .md files from seeded/handoffs/ and returns concatenated content", async () => {
+    const handoffsDir = join(tmpDir, "seeded", "handoffs");
+    await mkdir(handoffsDir, { recursive: true });
+    await writeFile(join(handoffsDir, "alpha.md"), "Alpha handoff content.");
+    await writeFile(join(handoffsDir, "beta.md"), "Beta handoff content.");
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "PRIOR_CONTEXT", from: "prior_workspace" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings).toHaveLength(0);
+    expect(result.variables.PRIOR_CONTEXT).toContain("Alpha handoff content.");
+    expect(result.variables.PRIOR_CONTEXT).toContain("Beta handoff content.");
+    expect(result.variables.PRIOR_CONTEXT).toContain("## alpha");
+    expect(result.variables.PRIOR_CONTEXT).toContain("## beta");
+  });
+
+  it("reads from seeded/research/ when section is 'research'", async () => {
+    const researchDir = join(tmpDir, "seeded", "research");
+    const handoffsDir = join(tmpDir, "seeded", "handoffs");
+    await mkdir(researchDir, { recursive: true });
+    await mkdir(handoffsDir, { recursive: true });
+    await writeFile(join(researchDir, "findings.md"), "Research findings.");
+    await writeFile(join(handoffsDir, "handoff.md"), "Handoff content.");
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [
+      { as: "PRIOR_RESEARCH", from: "prior_workspace", section: "research" },
+    ];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings).toHaveLength(0);
+    expect(result.variables.PRIOR_RESEARCH).toContain("Research findings.");
+    expect(result.variables.PRIOR_RESEARCH).not.toContain("Handoff content.");
+  });
+
+  it("returns warning when seeded/ directory does not exist", async () => {
+    // No seeded/ dir created
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "PRIOR_CONTEXT", from: "prior_workspace" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.some((w) => w.includes("prior_workspace"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("seeded"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("PRIOR_CONTEXT");
+  });
+
+  it("returns warning when seeded/handoffs/ directory has no .md files", async () => {
+    const handoffsDir = join(tmpDir, "seeded", "handoffs");
+    await mkdir(handoffsDir, { recursive: true });
+    // No .md files
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "PRIOR_CONTEXT", from: "prior_workspace" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.variables).not.toHaveProperty("PRIOR_CONTEXT");
+  });
+
+  it("enforces the 50KB cap via readAndCapHandoffFiles", async () => {
+    const handoffsDir = join(tmpDir, "seeded", "handoffs");
+    await mkdir(handoffsDir, { recursive: true });
+    // Write a file that fills ~49KB
+    const bigContent = "x".repeat(49 * 1024);
+    await writeFile(join(handoffsDir, "big.md"), bigContent);
+    // Write a second file that would push it over 50KB
+    const smallContent = "y".repeat(2 * 1024);
+    await writeFile(join(handoffsDir, "overflow.md"), smallContent);
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "PRIOR_CONTEXT", from: "prior_workspace" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    // big.md is included (fits under 50KB with its header)
+    expect(result.variables.PRIOR_CONTEXT).toContain(bigContent.slice(0, 10));
+    // overflow.md is skipped
+    expect(result.variables.PRIOR_CONTEXT).not.toContain("y".repeat(10));
+    // Warning emitted for skipped file
+    expect(result.warnings.some((w) => w.includes("overflow") && w.includes("50KB"))).toBe(true);
+  });
+
+  it("wraps content with '# Prior Flow Context' header", async () => {
+    const handoffsDir = join(tmpDir, "seeded", "handoffs");
+    await mkdir(handoffsDir, { recursive: true });
+    await writeFile(join(handoffsDir, "context.md"), "Prior flow details.");
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "PRIOR_CONTEXT", from: "prior_workspace" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.variables.PRIOR_CONTEXT).toMatch(/^# Prior Flow Context\n\n/);
+    expect(result.variables.PRIOR_CONTEXT).toContain("Prior flow details.");
+  });
+
+  it("escapes dollar-brace patterns in seeded content", async () => {
+    const handoffsDir = join(tmpDir, "seeded", "handoffs");
+    await mkdir(handoffsDir, { recursive: true });
+    await writeFile(join(handoffsDir, "context.md"), "Use ${variable} here.");
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "PRIOR_CONTEXT", from: "prior_workspace" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.variables.PRIOR_CONTEXT).toContain("\\${variable}");
+    expect(result.variables.PRIOR_CONTEXT).not.toMatch(/(?<!\\)\$\{variable\}/);
+  });
+});

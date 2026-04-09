@@ -20,7 +20,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const SCHEMA_VERSION = "9";
+export const SCHEMA_VERSION = "10";
 
 // DDL statements — v1 base tables (no correlation_id)
 //
@@ -330,6 +330,26 @@ const MIGRATIONS: Migration[] = [
     },
     // inserted_return_to column on execution_states (ADR-012)
     version: "9",
+  },
+  {
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS flow_lineage (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_path TEXT NOT NULL,
+          flow_name TEXT NOT NULL,
+          branch TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'completed',
+          completed_at TEXT NOT NULL,
+          task TEXT,
+          slug TEXT
+        )
+      `);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_flow_lineage_branch ON flow_lineage(branch)`);
+      db.exec(`UPDATE meta SET value = '10' WHERE key = 'schema_version'`);
+    },
+    // flow_lineage table — tracks completed flows per branch for cross-flow context passing
+    version: "10",
   },
 ];
 

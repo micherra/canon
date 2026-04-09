@@ -69,6 +69,13 @@ export async function resolveContextInjections(
       continue;
     }
 
+    if (injection.from === "prior_workspace") {
+      // biome-ignore lint/performance/noAwaitInLoops: each injection resolves independently
+      const resolved = await resolvePriorWorkspaceInjection(injection, workspace);
+      applyInjectionResult(resolved, injection.as, variables, warnings);
+      continue;
+    }
+
     const resolved = await resolveStateInjection(injection, board, workspace);
     applyInjectionResult(resolved, injection.as, variables, warnings);
   }
@@ -408,6 +415,74 @@ async function resolveHandoffInjection(
   }
 
   return readAndCapHandoffFiles(entries, handoffsDir, warnings);
+}
+
+/**
+ * Resolve a prior_workspace injection by reading .md files from {workspace}/seeded/.
+ *
+ * When `injection.section === "research"`, reads from `seeded/research/`.
+ * Otherwise defaults to `seeded/handoffs/`.
+ *
+ * If the seeded/ directory does not exist, returns a warning and no value —
+ * this is expected for workspaces not seeded from a prior flow.
+ *
+ * Content is wrapped with a "# Prior Flow Context" header and passed through
+ * readAndCapHandoffFiles for the 50KB cap and file-level error handling.
+ * Dollar-brace patterns are escaped before returning.
+ *
+ * All fs errors produce warnings; never throws.
+ */
+async function resolvePriorWorkspaceInjection(
+  injection: ContextInjection,
+  workspace: string,
+): Promise<{ value?: string; warnings: string[] }> {
+  const warnings: string[] = [];
+  const seededDir = path.resolve(workspace, "seeded");
+
+  // Validate path is inside workspace
+  if (!isPathContained(workspace, seededDir)) {
+    warnings.push("prior_workspace: seeded/ path escapes workspace — skipping injection");
+    return { warnings };
+  }
+
+  // Check seeded/ directory exists
+  if (!existsSync(seededDir)) {
+    warnings.push("prior_workspace: no seeded content found — skipping injection");
+    return { warnings };
+  }
+
+  // Determine subdirectory based on section
+  const subdir = injection.section === "research" ? "research" : "handoffs";
+  const targetDir = path.join(seededDir, subdir);
+
+  // Check subdirectory exists
+  if (!existsSync(targetDir)) {
+    warnings.push(`prior_workspace: seeded/${subdir}/ not found — skipping injection`);
+    return { warnings };
+  }
+
+  // Read directory entries, filtering to .md files only
+  let entries: string[];
+  try {
+    const all = await readdir(targetDir);
+    entries = all.filter((f) => f.endsWith(".md")).sort();
+  } catch {
+    warnings.push(`prior_workspace: failed to read seeded/${subdir}/ — skipping injection`);
+    return { warnings };
+  }
+
+  if (entries.length === 0) {
+    warnings.push(`prior_workspace: no .md files in seeded/${subdir}/ — skipping injection`);
+    return { warnings };
+  }
+
+  const result = await readAndCapHandoffFiles(entries, targetDir, warnings);
+  if (result.value === undefined) {
+    return { warnings };
+  }
+
+  const value = escapeDollarBrace(`# Prior Flow Context\n\n${result.value}`);
+  return { value, warnings };
 }
 
 async function resolveStateInjection(
