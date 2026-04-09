@@ -1,5 +1,5 @@
 /**
- * Drift DB DAO — project-scoped CRUD for reviews and flow runs
+ * Drift DB DAO — project-scoped CRUD for reviews, flow runs, and decisions
  *
  * Wraps a better-sqlite3 Database instance initialized by initDriftDb().
  * All statements are prepared once at construction time.
@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 import { CANON_DIR } from "@shared/constants.ts";
 import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
-import type { FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
+import type { DecisionEntry, FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
 import { initDriftDb } from "./drift-schema.ts";
 
 // Re-export WeeklyTrendPoint so callers can import from drift-db
@@ -71,6 +71,32 @@ type FlowRunRow = {
   total_violations: number | null;
   total_test_results: string | null;
   total_files_changed: number | null;
+  commits: string | null;
+  diff_stat: string | null;
+};
+
+type DecisionRow = {
+  id: number;
+  decision_id: string;
+  run_id: string | null;
+  flow: string | null;
+  task: string | null;
+  title: string;
+  content: string;
+  file_path: string | null;
+  timestamp: string;
+  decision_type: string | null;
+  summary: string | null;
+  rationale: string | null;
+  alternatives: string | null;
+  evidence_ref: string | null;
+  files_affected: string | null;
+};
+
+type HistoryFtsRow = {
+  entity_type: string;
+  entity_id: string;
+  rank: number;
 };
 
 /**
@@ -161,6 +187,31 @@ function _rowToFlowRunEntry(row: FlowRunRow): FlowRunEntry {
       row.total_test_results,
     ) as FlowRunEntry["total_test_results"];
   if (row.total_files_changed !== null) entry.total_files_changed = row.total_files_changed;
+  if (row.commits !== null) entry.commits = JSON.parse(row.commits) as string[];
+  if (row.diff_stat !== null) entry.diff_stat = row.diff_stat;
+  return entry;
+}
+
+/** Deserialize a DecisionRow into a DecisionEntry. */
+function _rowToDecisionEntry(row: DecisionRow): DecisionEntry {
+  const entry: DecisionEntry = {
+    content: row.content,
+    decision_id: row.decision_id,
+    timestamp: row.timestamp,
+    title: row.title,
+  };
+  if (row.run_id !== null) entry.run_id = row.run_id;
+  if (row.flow !== null) entry.flow = row.flow;
+  if (row.task !== null) entry.task = row.task;
+  if (row.file_path !== null) entry.file_path = row.file_path;
+  if (row.decision_type !== null) entry.decision_type = row.decision_type;
+  if (row.summary !== null) entry.summary = row.summary;
+  if (row.rationale !== null) entry.rationale = row.rationale;
+  if (row.alternatives !== null)
+    entry.alternatives = JSON.parse(row.alternatives) as string[];
+  if (row.evidence_ref !== null) entry.evidence_ref = row.evidence_ref;
+  if (row.files_affected !== null)
+    entry.files_affected = JSON.parse(row.files_affected) as string[];
   return entry;
 }
 
@@ -186,6 +237,19 @@ export class DriftDb {
   private readonly stmtGetAllFlowRuns: Database.Statement;
   private readonly stmtCountFlowRunsSince: Database.Statement;
   private readonly stmtGetLastFlowRunCompletedAt: Database.Statement;
+  private readonly stmtGetFlowRunsLimit: Database.Statement;
+  private readonly stmtGetFlowRunsSince: Database.Statement;
+  private readonly stmtGetFlowRunsSinceLimit: Database.Statement;
+
+  // ---- Decision statements ----
+  private readonly stmtInsertDecision: Database.Statement;
+  private readonly stmtGetDecisionsByRunId: Database.Statement;
+  private readonly stmtGetRecentDecisions: Database.Statement;
+  private readonly stmtGetDecisionsByFilesAffected: Database.Statement;
+
+  // ---- FTS5 statements ----
+  private readonly stmtInsertHistoryFts: Database.Statement;
+  private readonly stmtSearchHistory: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -247,17 +311,17 @@ export class DriftDb {
         run_id, flow, tier, task, started, completed, total_duration_ms,
         state_durations, state_iterations, skipped_states, total_spawns,
         gate_pass_rate, postcondition_pass_rate, total_violations,
-        total_test_results, total_files_changed
+        total_test_results, total_files_changed, commits, diff_stat
       ) VALUES (
         @run_id, @flow, @tier, @task, @started, @completed, @total_duration_ms,
         @state_durations, @state_iterations, @skipped_states, @total_spawns,
         @gate_pass_rate, @postcondition_pass_rate, @total_violations,
-        @total_test_results, @total_files_changed
+        @total_test_results, @total_files_changed, @commits, @diff_stat
       )
     `);
 
     this.stmtGetAllFlowRuns = db.prepare(`
-      SELECT * FROM flow_runs ORDER BY started ASC
+      SELECT * FROM flow_runs ORDER BY completed DESC
     `);
 
     this.stmtCountFlowRunsSince = db.prepare(`
@@ -266,6 +330,55 @@ export class DriftDb {
 
     this.stmtGetLastFlowRunCompletedAt = db.prepare(`
       SELECT completed FROM flow_runs ORDER BY completed DESC LIMIT 1
+    `);
+
+    this.stmtGetFlowRunsLimit = db.prepare(`
+      SELECT * FROM flow_runs ORDER BY completed DESC LIMIT ?
+    `);
+
+    this.stmtGetFlowRunsSince = db.prepare(`
+      SELECT * FROM flow_runs WHERE completed >= ? ORDER BY completed DESC
+    `);
+
+    this.stmtGetFlowRunsSinceLimit = db.prepare(`
+      SELECT * FROM flow_runs WHERE completed >= ? ORDER BY completed DESC LIMIT ?
+    `);
+
+    // Decisions
+    this.stmtInsertDecision = db.prepare(`
+      INSERT OR IGNORE INTO decisions (
+        decision_id, run_id, flow, task, title, content, file_path, timestamp,
+        decision_type, summary, rationale, alternatives, evidence_ref, files_affected
+      ) VALUES (
+        @decision_id, @run_id, @flow, @task, @title, @content, @file_path, @timestamp,
+        @decision_type, @summary, @rationale, @alternatives, @evidence_ref, @files_affected
+      )
+    `);
+
+    this.stmtGetDecisionsByRunId = db.prepare(`
+      SELECT * FROM decisions WHERE run_id = ? ORDER BY timestamp ASC
+    `);
+
+    this.stmtGetRecentDecisions = db.prepare(`
+      SELECT * FROM decisions ORDER BY timestamp DESC LIMIT ?
+    `);
+
+    this.stmtGetDecisionsByFilesAffected = db.prepare(`
+      SELECT * FROM decisions WHERE files_affected LIKE ? ORDER BY timestamp DESC
+    `);
+
+    // FTS5
+    this.stmtInsertHistoryFts = db.prepare(`
+      INSERT INTO history_fts (entity_type, entity_id, content)
+      VALUES (@entity_type, @entity_id, @content)
+    `);
+
+    this.stmtSearchHistory = db.prepare(`
+      SELECT entity_type, entity_id, rank
+      FROM history_fts
+      WHERE history_fts MATCH ?
+      ORDER BY rank
+      LIMIT ?
     `);
   }
 
@@ -491,7 +604,9 @@ export class DriftDb {
    */
   appendFlowRun(entry: FlowRunEntry): void {
     this.stmtInsertFlowRun.run({
+      commits: entry.commits != null ? JSON.stringify(entry.commits) : null,
       completed: entry.completed,
+      diff_stat: entry.diff_stat ?? null,
       flow: entry.flow,
       gate_pass_rate: entry.gate_pass_rate ?? null,
       postcondition_pass_rate: entry.postcondition_pass_rate ?? null,
@@ -567,6 +682,125 @@ export class DriftDb {
   getLastFlowRunCompletedAt(): string | null {
     const row = this.stmtGetLastFlowRunCompletedAt.get() as { completed: string } | undefined;
     return row?.completed ?? null;
+  }
+
+  /**
+   * Returns flow runs ordered by completed DESC, with optional since (ISO date) filter
+   * and limit. Returns empty array for empty DB (define-errors-out-of-existence).
+   */
+  getFlowRuns(options?: { limit?: number; since?: string }): FlowRunEntry[] {
+    const { limit, since } = options ?? {};
+
+    let rows: FlowRunRow[];
+
+    if (since !== undefined && limit !== undefined) {
+      rows = this.stmtGetFlowRunsSinceLimit.all(since, limit) as FlowRunRow[];
+    } else if (since !== undefined) {
+      rows = this.stmtGetFlowRunsSince.all(since) as FlowRunRow[];
+    } else if (limit !== undefined) {
+      rows = this.stmtGetFlowRunsLimit.all(limit) as FlowRunRow[];
+    } else {
+      rows = this.stmtGetAllFlowRuns.all() as FlowRunRow[];
+    }
+
+    return rows.map(_rowToFlowRunEntry);
+  }
+
+  /**
+   * Returns flow runs where diff_stat LIKE '%path%'. Used to find runs
+   * that touched a specific file path.
+   * Returns empty array when no matches found (define-errors-out-of-existence).
+   */
+  getFlowRunsByFilePath(filePath: string, limit: number): FlowRunEntry[] {
+    const pattern = `%${filePath}%`;
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM flow_runs WHERE diff_stat LIKE ? ORDER BY completed DESC LIMIT ?`,
+      )
+      .all(pattern, limit) as FlowRunRow[];
+    return rows.map(_rowToFlowRunEntry);
+  }
+
+  // Decisions
+
+  /**
+   * INSERT a DecisionEntry into the decisions table.
+   * Uses INSERT OR IGNORE — duplicate decision_ids are silently skipped.
+   */
+  appendDecision(entry: DecisionEntry): void {
+    this.stmtInsertDecision.run({
+      alternatives:
+        entry.alternatives != null ? JSON.stringify(entry.alternatives) : null,
+      content: entry.content,
+      decision_id: entry.decision_id,
+      decision_type: entry.decision_type ?? null,
+      evidence_ref: entry.evidence_ref ?? null,
+      file_path: entry.file_path ?? null,
+      files_affected:
+        entry.files_affected != null ? JSON.stringify(entry.files_affected) : null,
+      flow: entry.flow ?? null,
+      rationale: entry.rationale ?? null,
+      run_id: entry.run_id ?? null,
+      summary: entry.summary ?? null,
+      task: entry.task ?? null,
+      timestamp: entry.timestamp,
+      title: entry.title,
+    });
+  }
+
+  /**
+   * Returns decisions for a given run_id, ordered by timestamp ASC.
+   * Returns empty array when no decisions exist (define-errors-out-of-existence).
+   */
+  getDecisionsByRun(runId: string): DecisionEntry[] {
+    const rows = this.stmtGetDecisionsByRunId.all(runId) as DecisionRow[];
+    return rows.map(_rowToDecisionEntry);
+  }
+
+  /**
+   * Returns the N most recent decisions, ordered by timestamp DESC.
+   * Returns empty array when no decisions exist (define-errors-out-of-existence).
+   */
+  getRecentDecisions(limit: number): DecisionEntry[] {
+    const rows = this.stmtGetRecentDecisions.all(limit) as DecisionRow[];
+    return rows.map(_rowToDecisionEntry);
+  }
+
+  /**
+   * Returns decisions where files_affected contains the given file path.
+   * Uses LIKE '%path%' for substring matching on the JSON column.
+   * Returns empty array when no matches found (define-errors-out-of-existence).
+   */
+  getDecisionsByFilesAffected(filePath: string): DecisionEntry[] {
+    const pattern = `%${filePath}%`;
+    const rows = this.stmtGetDecisionsByFilesAffected.all(pattern) as DecisionRow[];
+    return rows.map(_rowToDecisionEntry);
+  }
+
+  // FTS5
+
+  /**
+   * Index an entity into the history_fts virtual table for full-text search.
+   */
+  indexHistoryEntry(entityType: string, entityId: string, content: string): void {
+    this.stmtInsertHistoryFts.run({ content, entity_id: entityId, entity_type: entityType });
+  }
+
+  /**
+   * Search the history_fts virtual table using FTS5 MATCH syntax.
+   * Returns ranked results with entity_type, entity_id, and rank.
+   * Returns empty array when no matches found (define-errors-out-of-existence).
+   */
+  searchHistory(
+    query: string,
+    limit = 20,
+  ): Array<{ entity_type: string; entity_id: string; rank: number }> {
+    const rows = this.stmtSearchHistory.all(query, limit) as HistoryFtsRow[];
+    return rows.map((r) => ({
+      entity_id: r.entity_id,
+      entity_type: r.entity_type,
+      rank: r.rank,
+    }));
   }
 
   // Lifecycle
