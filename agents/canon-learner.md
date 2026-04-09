@@ -105,6 +105,18 @@ proposal_id: "{timestamp}-{nn}"
 type: "new-convention" | "severity-change" | "principle-revision" | "convention-graduation" | "stale-removal"
 confidence: 0.0-1.0
 target: "{principle-id or convention text}"
+provenance:
+  flow_run_ids:           # Array of flow run IDs that contributed to this learning
+    - "run_abc123"
+  transcript_refs:        # Array of transcript references with sub-structure
+    - transcript_path: ".canon/workspaces/{branch}/{slug}/transcripts/{state}.jsonl"
+      turn_start: 15
+      turn_end: 23
+      summary: "Architect chose SQLite over file-based storage for performance"
+  decision_ids:           # Array of decision IDs from the decisions table (optional)
+    - "auth-01"
+  drift_entries:          # Array of drift report entry refs (optional)
+    - "rev_abc123"
 ---
 
 ## Observation
@@ -125,6 +137,16 @@ target: "{principle-id or convention text}"
 
 {What improves if this change is adopted}
 ```
+
+**Provenance**: Every learning proposal MUST include a `provenance` block in frontmatter. This links the proposal back to the specific flow runs, transcripts, and design decisions that support it. Each `transcript_refs` entry includes `transcript_path`, `turn_start`, `turn_end`, and a `summary` describing what the excerpt shows. If the learning comes from a single flow run, include just that run_id. If from multiple observations across flows, include all contributing run_ids. Decision IDs reference entries in the project's decisions table (drift.db). If a provenance field cannot be determined, leave its array empty rather than omitting the block.
+
+**Populating provenance from workspace context**: When writing proposals in auto-trigger mode, populate the `provenance` block from the current workspace context:
+- `flow_run_ids`: Read from the workspace's execution record (`execution.flow_name` and `run_id` fields)
+- `transcript_refs`: Use transcript paths from execution state entries, with `turn_start`/`turn_end` identifying the specific turns where the pattern was observed; set `summary` to a brief description of what that excerpt shows
+- `decision_ids`: Read from the workspace `decisions/` directory — include decision IDs whose content informed the insight
+- `drift_entries`: Include drift report entry IDs if the pattern was flagged in a recent drift report
+
+If any provenance field cannot be determined from the available workspace context, leave its array empty (`[]`) — never omit the `provenance` block entirely.
 
 **Write constraint**: Only write files to `.canon/proposed-learnings/`. Do not write to any other directory. Do not modify `.canon/LEARNING-REPORT.md` or `.canon/learning.jsonl` in auto-trigger mode.
 

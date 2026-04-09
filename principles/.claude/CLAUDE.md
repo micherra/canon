@@ -19,6 +19,10 @@ principles/
 
 Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `layers`, `file_patterns`, `description`. The body contains rationale, examples, and counter-examples.
 
+**Optional frontmatter fields:**
+
+- `learned_from`: (optional) ID of the learning proposal that led to this principle being created or updated. Format: `"learning_{timestamp}_{slug}"`. When a learner proposal is accepted and becomes a principle, the `canon-writer` agent sets this field to link the principle back to its origin. This enables traceability from any principle back to the evidence that motivated it.
+
 **Severity levels:**
 
 | Level | Directory | Enforcement |
