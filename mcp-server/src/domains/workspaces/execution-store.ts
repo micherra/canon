@@ -192,6 +192,16 @@ export type EventOutput = {
   timestamp: string;
 };
 
+export type FlowLineageEntry = {
+  workspace_path: string;
+  flow_name: string;
+  branch: string;
+  status: string;
+  completed_at: string;
+  task?: string;
+  slug?: string;
+};
+
 // Helper — parse nullable JSON column
 
 function parseJson<T>(value: string | null | undefined): T | undefined {
@@ -279,6 +289,11 @@ export class ExecutionStore {
   private stmtUpdateAgentSession!: Database.Statement;
   private stmtGetAgentSession!: Database.Statement;
 
+  // ---- Flow lineage statements ----
+  private stmtRecordLineage!: Database.Statement;
+  private stmtGetLineage!: Database.Statement;
+  private stmtGetLatestLineage!: Database.Statement;
+
   constructor(db: Database.Database) {
     this.db = db;
     this.prepareExecutionStmts(db);
@@ -290,6 +305,7 @@ export class ExecutionStore {
     this.prepareEventStmts(db);
     this.prepareIterationResultStmts(db);
     this.prepareMiscStmts(db);
+    this.prepareLineageStmts(db);
   }
 
   private prepareExecutionStmts(db: Database.Database): void {
@@ -460,6 +476,26 @@ export class ExecutionStore {
     this.stmtGetAgentSession = db.prepare(
       `SELECT agent_session_id, last_agent_activity FROM execution_states WHERE state_id = ?`,
     );
+  }
+
+  private prepareLineageStmts(db: Database.Database): void {
+    this.stmtRecordLineage = db.prepare(`
+      INSERT INTO flow_lineage (workspace_path, flow_name, branch, status, completed_at, task, slug)
+      VALUES (@workspace_path, @flow_name, @branch, @status, @completed_at, @task, @slug)
+    `);
+    this.stmtGetLineage = db.prepare(`
+      SELECT workspace_path, flow_name, branch, status, completed_at, task, slug
+      FROM flow_lineage
+      WHERE branch = ?
+      ORDER BY completed_at DESC
+    `);
+    this.stmtGetLatestLineage = db.prepare(`
+      SELECT workspace_path, flow_name, branch, status, completed_at, task, slug
+      FROM flow_lineage
+      WHERE branch = ?
+      ORDER BY completed_at DESC
+      LIMIT 1
+    `);
   }
 
   // Execution (board + session singleton)
@@ -1132,6 +1168,83 @@ export class ExecutionStore {
    */
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)();
+  }
+
+  // Flow lineage
+
+  /**
+   * Record a completed flow run in the flow_lineage table.
+   *
+   * errors-are-values: wraps INSERT in try/catch and logs a warning on failure
+   * rather than throwing, so a lineage write error never aborts the caller.
+   */
+  recordFlowLineage(entry: FlowLineageEntry): void {
+    try {
+      this.stmtRecordLineage.run({
+        branch: entry.branch,
+        completed_at: entry.completed_at,
+        flow_name: entry.flow_name,
+        slug: entry.slug ?? null,
+        status: entry.status,
+        task: entry.task ?? null,
+        workspace_path: entry.workspace_path,
+      });
+    } catch (err) {
+      console.warn("[canon] recordFlowLineage: failed to insert lineage entry:", err);
+    }
+  }
+
+  /**
+   * Retrieve all flow lineage entries for a branch, ordered by completed_at DESC.
+   * Returns an empty array when no entries exist for the branch.
+   */
+  getFlowLineage(branch: string): FlowLineageEntry[] {
+    type LineageRow = {
+      workspace_path: string;
+      flow_name: string;
+      branch: string;
+      status: string;
+      completed_at: string;
+      task: string | null;
+      slug: string | null;
+    };
+    const rows = this.stmtGetLineage.all(branch) as LineageRow[];
+    return rows.map((r) => ({
+      branch: r.branch,
+      completed_at: r.completed_at,
+      flow_name: r.flow_name,
+      ...(r.slug !== null ? { slug: r.slug } : {}),
+      status: r.status,
+      ...(r.task !== null ? { task: r.task } : {}),
+      workspace_path: r.workspace_path,
+    }));
+  }
+
+  /**
+   * Retrieve the most recent flow lineage entry for a branch.
+   * Returns null when no entries exist for the branch.
+   */
+  getLatestFlowForBranch(branch: string): FlowLineageEntry | null {
+    type LineageRow = {
+      workspace_path: string;
+      flow_name: string;
+      branch: string;
+      status: string;
+      completed_at: string;
+      task: string | null;
+      slug: string | null;
+    };
+    const row = this.stmtGetLatestLineage.get(branch) as LineageRow | undefined;
+    if (!row) return null;
+    return {
+      branch: row.branch,
+      completed_at: row.completed_at,
+      flow_name: row.flow_name,
+      ...(row.slug !== null ? { slug: row.slug } : {}),
+      status: row.status,
+      ...(row.task !== null ? { task: row.task } : {}),
+      workspace_path: row.workspace_path,
+    };
   }
 
   // Lifecycle
