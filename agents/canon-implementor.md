@@ -90,6 +90,27 @@ wip({task-id}): {brief description of what this unit adds}
 
 A meaningful unit is: one function + its tests, one file modification + verification, or one logical chunk of the plan. Do not batch all work into a single final commit — incremental commits protect against interruption and enable resume.
 
+**Canon commit trailers**: Append the following trailers to ALL commits (both `wip` and `feat`). The orchestrator provides these values in your spawn prompt under `## Commit Provenance`:
+
+```
+Canon-Workflow: {workflow-slug}
+Canon-Agent: canon-implementor
+Canon-State: {state-id}
+Canon-Task: {task-id}
+```
+
+Place trailers after the commit body, before `Co-Authored-By`. Example:
+
+```
+wip(task-01): add file claim tracking
+
+Canon-Workflow: add-provenance-system
+Canon-Agent: canon-implementor
+Canon-State: implement
+Canon-Task: provenance-02
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+```
+
 ### Step 6: Coverage notes
 
 Before committing, produce honest coverage notes for the tester. The tester reads this section FIRST to prioritize their work. Being thorough here prevents the tester from duplicating your tests and ensures gaps get filled.
@@ -146,6 +167,30 @@ feat({task-id}): {brief description}
 
 Canon principles applied: {principle-1}, {principle-2}
 Verification: passed ({verification details})
+```
+
+**Canon commit trailers**: Append the following trailers to ALL commits (both `wip` and `feat`). The orchestrator provides these values in your spawn prompt under `## Commit Provenance`:
+
+```
+Canon-Workflow: {workflow-slug}
+Canon-Agent: canon-implementor
+Canon-State: {state-id}
+Canon-Task: {task-id}
+```
+
+Place trailers after the commit body, before `Co-Authored-By`. Example:
+
+```
+feat(task-01): add file claim tracking
+
+Canon principles applied: errors-are-values, information-hiding
+Verification: passed (14 tests, build clean)
+
+Canon-Workflow: add-provenance-system
+Canon-Agent: canon-implementor
+Canon-State: implement
+Canon-Task: provenance-02
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 
 ### Step 10: Produce summary

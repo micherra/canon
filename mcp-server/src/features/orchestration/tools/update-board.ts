@@ -198,6 +198,17 @@ async function handleCompleteFlow(
     console.warn("[canon] handleCompleteFlow: failed to record flow lineage");
   }
 
+  // Release file claims for this workflow — best-effort, never blocks flow completion
+  try {
+    const { releaseClaims } = await import("@shared/lib/file-claims.ts");
+    const releaseSession = store.getSession();
+    if (releaseSession) {
+      releaseClaims(projectDir, releaseSession.slug);
+    }
+  } catch {
+    // Claims release failure is non-blocking
+  }
+
   try {
     const agg = aggregateFlowRunMetrics(updatedBoard);
     const flowRun: FlowRunEntry = {
@@ -354,12 +365,12 @@ function handleSetWaveProgress(
 }
 
 /** Handle block/unblock/set_metadata inline actions. */
-function handleInlineAction(
+async function handleInlineAction(
   store: ReturnType<typeof getExecutionStore>,
   board: Board,
   input: UpdateBoardInput,
   now: string,
-): ActionResult | ToolResult<UpdateBoardResult> {
+): Promise<ActionResult | ToolResult<UpdateBoardResult>> {
   switch (input.action) {
     case "block": {
       if (!input.state_id) return toolError("INVALID_INPUT", "block requires state_id");
@@ -402,7 +413,7 @@ function handleInlineAction(
     }
     case "set_metadata": {
       if (!input.metadata) return toolError("INVALID_INPUT", "set_metadata requires metadata");
-      const updated = {
+      let updated = {
         ...board,
         last_updated: now,
         metadata: { ...(board.metadata ?? {}), ...input.metadata },
@@ -410,6 +421,37 @@ function handleInlineAction(
       store.transaction(() => {
         store.updateExecution({ last_updated: now, metadata: updated.metadata });
       });
+
+      // If affected_files metadata was set, register file claims and check for overlaps
+      if (input.metadata.affected_files && typeof input.metadata.affected_files === "string") {
+        try {
+          const { registerClaims, checkClaimOverlaps } = await import(
+            "@shared/lib/file-claims.ts"
+          );
+          const projectDir =
+            input.project_dir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
+          const filePaths: string[] = JSON.parse(input.metadata.affected_files);
+          const session = store.getSession();
+          if (session) {
+            registerClaims(projectDir, session.slug, filePaths);
+            const overlaps = checkClaimOverlaps(projectDir, session.slug, filePaths);
+            if (overlaps.length > 0) {
+              const warningLines = overlaps.map(
+                (o) => `${o.file_path} also claimed by: ${o.workflows.join(", ")}`,
+              );
+              const updatedMetadata = {
+                ...(updated.metadata ?? {}),
+                claim_warnings: warningLines.join("; "),
+              };
+              updated = { ...updated, metadata: updatedMetadata };
+              store.updateExecution({ metadata: updatedMetadata });
+            }
+          }
+        } catch {
+          // Claims registration failure is non-blocking
+        }
+      }
+
       return { board: updated };
     }
     default:
@@ -449,7 +491,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
       result = handleSetWaveProgress(store, board, input, now);
       break;
     default:
-      result = handleInlineAction(store, board, input, now);
+      result = await handleInlineAction(store, board, input, now);
       break;
   }
 

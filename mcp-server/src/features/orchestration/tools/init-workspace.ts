@@ -96,7 +96,7 @@ export async function listBranchWorkspaces(
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
 /**
- * Run pre-flight checks: git status, lock, and stale sessions.
+ * Run pre-flight checks: git status, lock, stale sessions, and active file claims.
  * Returns an array of issue descriptions (empty if clean).
  */
 async function runPreflightChecks(
@@ -131,8 +131,32 @@ async function runPreflightChecks(
     // Scan failure — skip
   }
 
+  // 3. Check for active file claims
+  try {
+    const { readClaims } = await import("@shared/lib/file-claims.ts");
+    const claims = readClaims(projectDir);
+    const totalClaimed = Object.keys(claims.claims).length;
+    if (totalClaimed > 0) {
+      const workflows = new Set<string>();
+      for (const entries of Object.values(claims.claims)) {
+        for (const e of entries) workflows.add(e.workflow);
+      }
+      issues.push(
+        `Active file claims: ${totalClaimed} file(s) claimed by workflow(s): ${[...workflows].join(", ")}`,
+      );
+    }
+  } catch {
+    // Claims check failure — non-blocking
+  }
+
   return issues;
 }
+
+/**
+ * Exported for testing — delegates to runPreflightChecks.
+ * Allows unit tests to exercise preflight logic without a full workspace.
+ */
+export const runPreflightChecksForTest = runPreflightChecks;
 
 /** Check if an error is an expected "no existing DB" error. */
 function isExpectedNoDbError(err: unknown): boolean {

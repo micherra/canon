@@ -35,8 +35,9 @@ import { resolveTaskScope } from "@features/orchestration/services/scope-resolve
 import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { formatCommitTrailers } from "@shared/lib/commit-trailers.ts";
 import { AGENT_TOOL_PROFILES, EMPTY_PROFILE, resolveToolProfile } from "../model/tool-profiles.ts";
-import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
+import type { PromptContext, SpawnPromptEntry, TaskItem } from "../model/types.ts";
 import {
   buildScopeMetrics,
   computeTrustLevel,
@@ -166,6 +167,48 @@ function computeTrustForEntries(
 }
 
 /**
+ * Extract task_id from an item, if the item is a structured record containing task_id.
+ */
+function extractTaskId(item: TaskItem | undefined): string | undefined {
+  if (item === undefined || typeof item === "string") return undefined;
+  const val = (item as Record<string, unknown>).task_id;
+  return typeof val === "string" ? val : undefined;
+}
+
+/**
+ * Build the commit provenance section injected into every spawn prompt.
+ * Agents must append these trailers to all commits (wip and feat).
+ *
+ * Returns empty string when the session slug is unavailable.
+ */
+function buildProvenanceSection(
+  workspace: string,
+  agent: string,
+  stateId: string,
+  taskId: string | undefined,
+): string {
+  let slug: string;
+  try {
+    const session = getExecutionStore(workspace).getSession();
+    if (!session?.slug) return "";
+    slug = session.slug;
+  } catch {
+    return "";
+  }
+
+  const trailerBlock = formatCommitTrailers({ agent, state: stateId, taskId, workflow: slug });
+  if (!trailerBlock) return "";
+
+  return `## Commit Provenance
+
+Append these git trailers to ALL commit messages (both \`wip\` and \`feat\`). Place them after the commit body, before \`Co-Authored-By\`:
+
+\`\`\`
+${trailerBlock}
+\`\`\``;
+}
+
+/**
  * Build the metrics footer to append to every prompt entry.
  * Contains a concrete record_agent_metrics invocation example with the
  * real workspace and state_id so agents receive a runnable example.
@@ -217,6 +260,15 @@ export async function injectCoordination(ctx: PromptContext): Promise<PromptCont
     ...entry,
     prompt: `${entry.prompt}\n\n${metricsFooter}`,
   }));
+
+  // 3.5. Inject commit provenance section into all prompts (unconditional)
+  // Each prompt entry may have a different task_id (wave tasks), so compute per-entry.
+  prompts = prompts.map((entry) => {
+    const taskId = extractTaskId(entry.item);
+    const provenanceSection = buildProvenanceSection(workspace, entry.agent, state_id, taskId);
+    if (!provenanceSection) return entry;
+    return { ...entry, prompt: `${entry.prompt}\n\n${provenanceSection}` };
+  });
 
   // 4. Inject tool scope metadata (ADR-014)
   // tool_overrides is present on all StateDefinition variants via BaseStateFields —
