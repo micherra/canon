@@ -24,6 +24,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { analyzeBlastRadius } from "@graph/kg-blast-radius.ts";
 import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
+import { ensureGitIntelFresh } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
@@ -143,6 +144,12 @@ export type UnifiedPrOutput = {
   blast_radius_by_file: BlastRadiusFileEntry[];
   /** Holistic recommendations from the reviewer — mixed principle and code quality suggestions */
   recommendations?: PrRecommendation[];
+  /** Co-change warnings: files in the diff whose frequent co-change partners are NOT in the diff. */
+  co_change_warnings: Array<{
+    file: string;
+    missing_partner: string;
+    jaccard: number;
+  }>;
   empty_state?: string;
 };
 
@@ -389,13 +396,20 @@ function buildSubgraph(
  *
  * Returns structured empty states for missing data — never throws to the caller.
  */
-function computeKgData(
+/** Exported for unit testing. Not part of the tool's public interface. */
+export function computeKgData(
   dbPath: string,
   files: string[],
   violations: ReviewViolation[],
-): { blastRadius: PrImpactOutput["blastRadius"]; subgraph: PrImpactSubgraph } {
+  projectDir: string,
+): {
+  blastRadius: PrImpactOutput["blastRadius"];
+  subgraph: PrImpactSubgraph;
+  co_change_warnings: Array<{ file: string; missing_partner: string; jaccard: number }>;
+} {
   let blastRadius: PrImpactOutput["blastRadius"];
   let subgraph: PrImpactSubgraph = { edges: [], layers: [], nodes: [] };
+  const co_change_warnings: Array<{ file: string; missing_partner: string; jaccard: number }> = [];
 
   const db = initDatabase(dbPath);
   try {
@@ -427,11 +441,35 @@ function computeKgData(
     } catch {
       // Subgraph build failed — continue with empty subgraph
     }
+
+    // Co-change warnings: using the already-open db handle (M6: no second DB connection)
+    try {
+      ensureGitIntelFresh(db, projectDir);
+      const changedSet = new Set(files);
+      for (const file of files) {
+        const partners = db
+          .prepare(
+            `SELECT file_b AS partner, jaccard FROM co_change_edges WHERE file_a = ?
+             UNION
+             SELECT file_a AS partner, jaccard FROM co_change_edges WHERE file_b = ?`,
+          )
+          .all(file, file) as Array<{ partner: string; jaccard: number }>;
+        for (const p of partners) {
+          if (!changedSet.has(p.partner)) {
+            co_change_warnings.push({ file, jaccard: p.jaccard, missing_partner: p.partner });
+          }
+        }
+      }
+      co_change_warnings.sort((a, b) => b.jaccard - a.jaccard);
+      co_change_warnings.splice(10); // limit to top 10
+    } catch {
+      // Git intel unavailable — skip co-change warnings gracefully
+    }
   } finally {
     db.close();
   }
 
-  return { blastRadius, subgraph };
+  return { blastRadius, co_change_warnings, subgraph };
 }
 
 function buildStatusMap(files: Array<{ path: string; status: string }>): Map<string, string> {
@@ -471,10 +509,11 @@ function buildReviewOutput(
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   const hasKg = existsSync(dbPath);
 
-  const { blastRadius, subgraph } = hasKg
-    ? computeKgData(dbPath, latestReview.files, latestReview.violations)
+  const { blastRadius, subgraph, co_change_warnings } = hasKg
+    ? computeKgData(dbPath, latestReview.files, latestReview.violations, projectDir)
     : {
         blastRadius: undefined,
+        co_change_warnings: [],
         subgraph: { edges: [], layers: [], nodes: [] } as PrImpactSubgraph,
       };
 
@@ -485,6 +524,7 @@ function buildReviewOutput(
   return {
     blast_radius_by_file,
     blastRadius,
+    co_change_warnings,
     has_review: true,
     hotspots,
     prep: prepResult,
@@ -525,6 +565,7 @@ export async function showPrImpact(
   if (!latestReview) {
     return {
       blast_radius_by_file: [],
+      co_change_warnings: [],
       has_review: false,
       hotspots: [],
       prep: prepResult,

@@ -2339,34 +2339,34 @@ ADR-023 (complementary — golden fixtures for post-hoc regression, scenarios fo
 
 ## Adoption Order
 
-| Order | ADR | Rationale |
-|-------|-----|-----------|
-| 1 | 001 SQLite Store | Foundation — everything reads/writes through this |
-| 2 | 002 Adapters | Low risk, prerequisite for diagnostics |
-| 3 | 004 Flow Revamp | Parallel with 002, high impact on authoring quality |
-| 4 | 003+003a Diagnostics | Builds on adapter seam (002) + SQLite events (001); 003a metrics land with schema |
-| 5 | 005 KG Consolidation | Extends 001 to the graph layer |
-| 6 | 015 Transcripts | Low effort, needs only 001 (transcript_path column); unblocks 016 |
-| 7 | 009+009a Server-Side Loop | Needs SQLite state (001), typed errors (002), validated flows (004); unblocks 014, 017, 012; 009a continue-vs-spawn lands here |
-| 8 | 006+006a Prompt Pipeline | Needs stable flow schema (004) and SQLite reads (001); 006a cache prefix lands here |
-| 9 | 014+014a Tool Scoping + Permission Bypass | Needs SpawnRequest from 009 + prompt pipeline from 006; 014a worktree_path lands with 009 |
-| 10 | 008 Context Assembly | Needs pipeline stages (006) + KG (005) + SQLite (001) |
-| 11 | 018 Workspace Structure | Parallel with 008; formalizes handoff paths for pipeline injection |
-| 12 | 007 Background Jobs | Prerequisite for 016; KG freshness (005) mitigates stale-context risk from 008 |
-| 13 | 010 Output Contracts | Parallel with 007; needs typed errors (002), validated flow schema (004) |
-| 14 | 017 Approval Gates | Extends drive_flow (009) with approval breakpoints; needs validated flow schema (004) |
-| 15 | 011 Flow Composition | Needs load-time validation (004); parallel with 010, 017 |
-| 16 | 013 Flow Simulation | Builds on validateFlow (004); parallel with 010, 011, 017 |
-| 17 | 016 Auto-Learn | After 007 (background jobs) + 015 (transcripts) + 014 (learner tool restrictions) |
-| 18 | 012 Conditional States | After 009 (server driver evaluates conditions); needs validated flow schema (004) |
-| 19 | 019 Execution History | After 001 (SQLite), 010 (structured output for decision extraction), 015 (transcripts), 016 (learner provenance) |
-| 20 | 020 Background Janitor | After 007 (background jobs), 014 (tool scoping), 019 (decision extraction task); subsumes inline housekeeping from 016 and 019 |
-| 21 | 009b Orchestrator Consolidation | Completes 009; removes deprecated manual tools; shrinks orchestrator instructions |
-| 22 | 021 Agent Memory | After 005 (KG database), 006 (prompt pipeline), 008 (file affinity), 010 (structured output); soft dep on 020 (janitor for TTL expiry) |
-| 23 | 022 Cost Budgets | After 003a (agent metrics), 009 (drive_flow), 004 (flow validation for budget schema) |
-| 24 | 023 Agent Evaluation | After 010 (structured output), 013 (simulation), 015 (transcripts) |
-| 25 | 024 Fragment Testing | After 004 (fragment schema), 013 (simulate_flow), 011 (typed ports) |
-| 26 | 025 Eval Scenario Library | After 023 (evaluation baseline), 004 (flow validation for scenario targets), 014 (worktree isolation for seed repo runs); soft dep on 001 (SQLite for results), 015 (transcripts for debugging) |
+| Order | ADR | Status | Rationale |
+|-------|-----|--------|-----------|
+| 1 | 001 SQLite Store | [x] | Foundation — everything reads/writes through this |
+| 2 | 002 Adapters | [x] | Low risk, prerequisite for diagnostics |
+| 3 | 004 Flow Revamp | [x] | Parallel with 002, high impact on authoring quality |
+| 4 | 003+003a Diagnostics | [x] | Builds on adapter seam (002) + SQLite events (001); 003a metrics land with schema |
+| 5 | 005 KG Consolidation | [x] | Extends 001 to the graph layer |
+| 6 | 015 Transcripts | [x] | Low effort, needs only 001 (transcript_path column); unblocks 016 |
+| 7 | 009+009a Server-Side Loop | [x] | Needs SQLite state (001), typed errors (002), validated flows (004); unblocks 014, 017, 012; 009a continue-vs-spawn lands here |
+| 8 | 006+006a Prompt Pipeline | [x] | Needs stable flow schema (004) and SQLite reads (001); 006a cache prefix lands here |
+| 9 | 014+014a Tool Scoping + Permission Bypass | [x] | Needs SpawnRequest from 009 + prompt pipeline from 006; 014a worktree_path lands with 009 |
+| 10 | 008 Context Assembly | [x] | Needs pipeline stages (006) + KG (005) + SQLite (001) |
+| 11 | 018 Workspace Structure | [x] | Parallel with 008; formalizes handoff paths for pipeline injection |
+| 12 | 007 Background Jobs | [x] | Prerequisite for 016; KG freshness (005) mitigates stale-context risk from 008 |
+| 13 | 010 Output Contracts | [x] | Parallel with 007; needs typed errors (002), validated flow schema (004) |
+| 14 | 017 Approval Gates | [x] | Extends drive_flow (009) with approval breakpoints; needs validated flow schema (004) |
+| 15 | 011 Flow Composition | [x] | Needs load-time validation (004); parallel with 010, 017 |
+| 16 | 013 Flow Simulation | [ ] | Builds on validateFlow (004); parallel with 010, 011, 017 |
+| 17 | 016 Auto-Learn | [~] | After 007 (background jobs) + 015 (transcripts) + 014 (learner tool restrictions) |
+| 18 | 012 Conditional States | [x] | After 009 (server driver evaluates conditions); needs validated flow schema (004) |
+| 19 | 019 Execution History | [~] | After 001 (SQLite), 010 (structured output for decision extraction), 015 (transcripts), 016 (learner provenance) |
+| 20 | 020 Background Janitor | [ ] | After 007 (background jobs), 014 (tool scoping), 019 (decision extraction task); subsumes inline housekeeping from 016 and 019 |
+| 21 | 009b Orchestrator Consolidation | [x] | Completes 009; removes deprecated manual tools; shrinks orchestrator instructions |
+| 22 | 021 Agent Memory | [ ] | After 005 (KG database), 006 (prompt pipeline), 008 (file affinity), 010 (structured output); soft dep on 020 (janitor for TTL expiry) |
+| 23 | 022 Cost Budgets | [ ] | After 003a (agent metrics), 009 (drive_flow), 004 (flow validation for budget schema) |
+| 24 | 023 Agent Evaluation | [ ] | After 010 (structured output), 013 (simulation), 015 (transcripts) |
+| 25 | 024 Fragment Testing | [ ] | After 004 (fragment schema), 013 (simulate_flow), 011 (typed ports) |
+| 26 | 025 Eval Scenario Library | [ ] | After 023 (evaluation baseline), 004 (flow validation for scenario targets), 014 (worktree isolation for seed repo runs); soft dep on 001 (SQLite for results), 015 (transcripts for debugging) |
 
 **First cohort (foundation):** ADRs 001, 002, 003, 004, 005, 015 — can progress in parallel once 001 schema is defined. ADR 015 (transcripts) slots in early because it's low-effort and unblocks the learning pipeline.
 

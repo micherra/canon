@@ -15,6 +15,8 @@ import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { EntityKind, FileMetrics } from "@graph/kg-types.ts";
 import { scanSourceFiles } from "@graph/scanner.ts";
+import { ensureGitIntelFresh } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
+import type { HotspotRow, HotspotScoreOutput, CoChangePartner } from "@features/knowledge-graph/git-intel/git-intel-types.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "@shared/constants.ts";
 import {
@@ -85,6 +87,10 @@ export type FileContextOutput = {
   graph_metrics?: FileGraphMetrics;
   entities?: FileEntitySummary[];
   blast_radius?: UnifiedBlastRadiusReport;
+  /** Git-history-derived hotspot score. Present when git intel data is available. */
+  hotspot_score?: HotspotScoreOutput;
+  /** Co-change partners from git history. Present when git intel data is available. */
+  co_change_partners?: Array<CoChangePartner>;
 };
 
 // Module-level cache for project_max_impact
@@ -239,10 +245,20 @@ async function loadComplianceData(
   return { last_verdict, violation_count, violations };
 }
 
-/** Load graph data from the KG database. */
-function loadKgData(
+/** Load graph data from the KG database.
+ *
+ * @param dbPath     - absolute path to the knowledge-graph.db file
+ * @param filePath   - project-relative file path to query
+ * @param projectDir - when provided, triggers git-intel freshness check and
+ *                     populates hotspot_score / co_change_partners fields.
+ *                     Omit for the import-resolution call to avoid double spawnSync.
+ *
+ * Exported for unit testing. Not part of the tool's public interface.
+ */
+export function loadKgData(
   dbPath: string,
   filePath: string,
+  projectDir?: string,
 ): {
   graph_metrics?: FileGraphMetrics;
   project_max_impact: number;
@@ -250,6 +266,8 @@ function loadKgData(
   blast_radius?: UnifiedBlastRadiusReport;
   summary: string | null;
   imported_by: string[];
+  hotspot_score?: HotspotScoreOutput;
+  co_change_partners?: Array<CoChangePartner>;
 } {
   const result = {
     imported_by: [] as string[],
@@ -285,6 +303,46 @@ function loadKgData(
     loadEntitiesAndSummary(store, filePath, result);
     result.imported_by = loadImportedByFromDb(db, store, filePath);
     result.blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2 });
+
+    // Git-intel: only when projectDir is provided (second loadKgData call in getFileContext).
+    // The first call (inside resolveFileRelationships) intentionally omits projectDir
+    // to avoid triggering two spawnSync calls to `git rev-parse HEAD` per tool invocation.
+    if (projectDir) {
+      try {
+        ensureGitIntelFresh(db, projectDir);
+
+        // Hotspot score
+        const hotspot = db
+          .prepare("SELECT * FROM hotspot_scores WHERE file_path = ?")
+          .get(filePath) as HotspotRow | undefined;
+        if (hotspot) {
+          result.hotspot_score = {
+            churn_percentile: hotspot.churn_percentile,
+            complexity_percentile: hotspot.complexity_pctile,
+            is_hotspot: Boolean(hotspot.is_hotspot),
+            score: hotspot.score,
+          };
+        }
+
+        // Co-change partners — query both edge directions
+        const partners = db
+          .prepare(
+            `SELECT file_b AS partner, jaccard FROM co_change_edges WHERE file_a = ?
+             UNION
+             SELECT file_a AS partner, jaccard FROM co_change_edges WHERE file_b = ?`,
+          )
+          .all(filePath, filePath) as Array<{ partner: string; jaccard: number }>;
+
+        if (partners.length > 0) {
+          result.co_change_partners = partners
+            .sort((a, b) => b.jaccard - a.jaccard)
+            .slice(0, 10)
+            .map((p) => ({ jaccard: p.jaccard, path: p.partner }));
+        }
+      } catch {
+        // Git intel unavailable — skip gracefully
+      }
+    }
   } catch {
     // KG unavailable — skip graph data gracefully
   } finally {
@@ -494,7 +552,7 @@ export async function getFileContext(
 
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   const kgData = existsSync(dbPath)
-    ? loadKgData(dbPath, filePath)
+    ? loadKgData(dbPath, filePath, projectDir)
     : ({
         blast_radius: undefined,
         entities: undefined,
@@ -522,5 +580,7 @@ export async function getFileContext(
     summary: kgData.summary,
     ...(kgData.entities !== undefined && { entities: kgData.entities }),
     ...(kgData.blast_radius !== undefined && { blast_radius: kgData.blast_radius }),
+    ...(kgData.hotspot_score !== undefined && { hotspot_score: kgData.hotspot_score }),
+    ...(kgData.co_change_partners !== undefined && { co_change_partners: kgData.co_change_partners }),
   });
 }

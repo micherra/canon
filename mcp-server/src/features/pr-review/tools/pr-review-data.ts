@@ -4,6 +4,7 @@ import { computeUnifiedBlastRadius } from "@graph/kg-blast-radius.ts";
 import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import type { FilePriorityScore } from "@graph/priority.ts";
+import { ensureGitIntelFresh } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
 import { gitExecAsync } from "@platform/adapters/git-adapter-async.ts";
 import { runShell } from "@platform/adapters/process-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
@@ -64,6 +65,8 @@ export type PrReviewDataOutput = {
   error?: string;
   narrative: string;
   blast_radius: BlastRadiusEntry[];
+  /** Files identified as hotspots by git history analysis. Present when git intel data is available. */
+  hotspot_files?: string[];
 };
 
 /**
@@ -434,6 +437,24 @@ export async function getPrReviewData(
   const added = files.filter((f) => f.status === "added").length;
   const deleted = files.filter((f) => f.status === "deleted").length;
 
+  // Git-intel: identify hotspot files in the diff using the already-open kgDb handle
+  let hotspot_files: string[] | undefined;
+  if (kgDb) {
+    try {
+      ensureGitIntelFresh(kgDb, projectDir);
+      const hotspots = kgDb
+        .prepare("SELECT file_path FROM hotspot_scores WHERE is_hotspot = 1")
+        .all() as Array<{ file_path: string }>;
+      const hotspotSet = new Set(hotspots.map((h) => h.file_path));
+      const changedHotspots = files.filter((f) => hotspotSet.has(f.path)).map((f) => f.path);
+      if (changedHotspots.length > 0) {
+        hotspot_files = changedHotspots;
+      }
+    } catch {
+      // Git intel unavailable — skip gracefully
+    }
+  }
+
   kgDb?.close();
 
   return {
@@ -455,6 +476,7 @@ export async function getPrReviewData(
     total_files: files.length,
     total_violations: totalViolations,
     ...(execError ? { error: execError } : {}),
+    ...(hotspot_files !== undefined ? { hotspot_files } : {}),
   };
 }
 
