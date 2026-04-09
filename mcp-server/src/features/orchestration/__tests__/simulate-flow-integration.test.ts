@@ -22,7 +22,7 @@ import {
   buildStateGraph,
   detectDeadEnds,
   detectStuckLoops,
-} from "@domains/flows/flow-parser.ts";
+} from "@domains/flows/flow-parser-validation.ts";
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { describe, expect, it } from "vitest";
 import { simulateFlow, simulateFlowTool } from "../tools/simulate-flow.ts";

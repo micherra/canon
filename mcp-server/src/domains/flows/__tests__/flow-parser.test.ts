@@ -10,9 +10,8 @@ import {
   loadAndResolveFlow,
   parseFlowContent,
   resolveFragments,
-  validateFlow,
-  validateStateIdParams,
 } from "../flow-parser.ts";
+import { validateFlow, validateStateIdParams } from "../flow-parser-validation.ts";
 
 const pluginDir = resolve(process.cwd(), "..");
 

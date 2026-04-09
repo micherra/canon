@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
-import { validateSpawnCoverage } from "../flow-parser.ts";
+import { validateSpawnCoverage } from "../flow-parser-validation.ts";
 
 function makeBaseFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {

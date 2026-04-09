@@ -1,5 +1,6 @@
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
-import { buildStateGraph, loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
+import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
+import { buildStateGraph } from "@domains/flows/flow-parser-validation.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 export type LoadFlowInput = {

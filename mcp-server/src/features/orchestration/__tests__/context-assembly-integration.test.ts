@@ -47,7 +47,7 @@ describe("context-budget: shared cap values match expected tier bounds", () => {
 
 describe("PIPELINE_ALLOWED_VARIABLES superset relationship", () => {
   it("contains all RUNTIME_VARIABLES entries (superset contract)", async () => {
-    const { RUNTIME_VARIABLES } = await import("@domains/flows/flow-parser.ts");
+    const { RUNTIME_VARIABLES } = await import("@domains/flows/flow-parser-validation.ts");
     const { PIPELINE_ALLOWED_VARIABLES } = await import(
       "@features/prompt-pipeline/tools/validate.ts"
     );
@@ -58,7 +58,7 @@ describe("PIPELINE_ALLOWED_VARIABLES superset relationship", () => {
   });
 
   it("enrichment is in RUNTIME_VARIABLES (ctx-05 ancillary fix)", async () => {
-    const { RUNTIME_VARIABLES } = await import("@domains/flows/flow-parser.ts");
+    const { RUNTIME_VARIABLES } = await import("@domains/flows/flow-parser-validation.ts");
     expect(RUNTIME_VARIABLES.has("enrichment")).toBe(true);
   });
 

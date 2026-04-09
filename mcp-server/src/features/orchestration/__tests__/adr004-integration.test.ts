@@ -27,15 +27,15 @@ import {
   FragmentStateDefinitionSchema,
   StateDefinitionSchema,
 } from "@domains/flows/flow-definition-schemas.ts";
+import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import {
   checkUnresolvedRefs,
-  loadAndResolveFlow,
   RUNTIME_VARIABLES,
   VIRTUAL_SINKS,
   validateFlow,
   validateSpawnCoverage,
   validateStateIdParams,
-} from "@domains/flows/flow-parser.ts";
+} from "@domains/flows/flow-parser-validation.ts";
 import { initExecutionDb, runMigrations } from "@domains/workspaces/execution-schema.ts";
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type Database from "better-sqlite3";
