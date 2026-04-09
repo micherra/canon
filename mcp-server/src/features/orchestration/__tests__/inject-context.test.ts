@@ -750,3 +750,191 @@ describe("resolveContextInjections — handoff source", () => {
     expect(result.warnings.some((w) => w.includes("overflow") && w.includes("50KB"))).toBe(true);
   });
 });
+
+// wave_summaries injection source
+
+describe("resolveContextInjections — wave_summaries source", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "inject-wave-summaries-test-"));
+    // Restore real existsSync for fs-based tests
+    const { existsSync: realExistsSync } =
+      await vi.importActual<typeof import("node:fs")>("node:fs");
+    vi.mocked(existsSync).mockImplementation(realExistsSync);
+    // Reset getExecutionStore mock: return session with slug
+    mockStore.getSession.mockReturnValue({ slug: "my-slug", tier: "medium" });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { force: true, recursive: true });
+    vi.clearAllMocks();
+  });
+
+  async function makeIndexMd(
+    plansDir: string,
+    tasks: Array<{ task_id: string; wave: number }>,
+  ): Promise<void> {
+    await mkdir(plansDir, { recursive: true });
+    const rows = tasks
+      .map((t) => `| ${t.task_id} | ${t.wave} | - | - | - |`)
+      .join("\n");
+    const content = `| Task | Wave | Deps | Files | Principles |\n|------|------|------|-------|------------|\n${rows}\n`;
+    const { writeFile: wf } = await import("node:fs/promises");
+    await wf(join(plansDir, "INDEX.md"), content);
+  }
+
+  it("returns concatenated prior-wave summaries when summaries exist", async () => {
+    const plansDir = join(tmpDir, "plans", "my-slug");
+    await makeIndexMd(plansDir, [
+      { task_id: "task-a", wave: 1 },
+      { task_id: "task-b", wave: 1 },
+      { task_id: "task-c", wave: 2 },
+    ]);
+    await writeFile(join(plansDir, "task-a-SUMMARY.md"), "## Task A Summary\nDone A.");
+    await writeFile(join(plansDir, "task-b-SUMMARY.md"), "## Task B Summary\nDone B.");
+    // task-c is wave 2 (current wave) — should be excluded
+
+    // Board current_state is wave 2
+    const board = makeBoard({
+      implement: { entries: 1, status: "in_progress", wave: 2 },
+    });
+    board.current_state = "implement";
+    const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings).toHaveLength(0);
+    expect(result.variables.wave_summaries).toContain("Task A Summary");
+    expect(result.variables.wave_summaries).toContain("Done A.");
+    expect(result.variables.wave_summaries).toContain("Task B Summary");
+    expect(result.variables.wave_summaries).toContain("Done B.");
+  });
+
+  it("returns warning and no value when no prior-wave summaries exist (wave 1)", async () => {
+    const plansDir = join(tmpDir, "plans", "my-slug");
+    await makeIndexMd(plansDir, [{ task_id: "task-a", wave: 1 }]);
+    // No summaries — this is wave 1
+
+    const board = makeBoard({
+      implement: { entries: 1, status: "in_progress", wave: 1 },
+    });
+    board.current_state = "implement";
+    const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings.some((w) => w.includes("wave_summaries"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("wave_summaries");
+  });
+
+  it("returns warning and no value when summaries directory has no summary files", async () => {
+    const plansDir = join(tmpDir, "plans", "my-slug");
+    await makeIndexMd(plansDir, [
+      { task_id: "task-a", wave: 1 },
+      { task_id: "task-b", wave: 2 },
+    ]);
+    // No summary files created for wave 1
+
+    const board = makeBoard({
+      implement: { entries: 1, status: "in_progress", wave: 2 },
+    });
+    board.current_state = "implement";
+    const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings.some((w) => w.includes("wave_summaries"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("wave_summaries");
+  });
+
+  it("excludes current-wave summaries and only includes prior-wave summaries", async () => {
+    const plansDir = join(tmpDir, "plans", "my-slug");
+    await makeIndexMd(plansDir, [
+      { task_id: "wave1-task", wave: 1 },
+      { task_id: "wave2-task", wave: 2 },
+    ]);
+    await writeFile(join(plansDir, "wave1-task-SUMMARY.md"), "Wave 1 output.");
+    await writeFile(join(plansDir, "wave2-task-SUMMARY.md"), "Wave 2 output (current).");
+
+    const board = makeBoard({
+      implement: { entries: 1, status: "in_progress", wave: 2 },
+    });
+    board.current_state = "implement";
+    const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.variables.wave_summaries).toContain("Wave 1 output.");
+    expect(result.variables.wave_summaries).not.toContain("Wave 2 output (current).");
+  });
+
+  it("respects the 50KB byte cap and emits warning when exceeded", async () => {
+    const plansDir = join(tmpDir, "plans", "my-slug");
+    await makeIndexMd(plansDir, [
+      { task_id: "big-task", wave: 1 },
+      { task_id: "small-task", wave: 1 },
+      { task_id: "current-task", wave: 2 },
+    ]);
+    // Write a big summary that fills ~49KB
+    const bigContent = "x".repeat(49 * 1024);
+    await writeFile(join(plansDir, "big-task-SUMMARY.md"), bigContent);
+    // Write a small summary that would overflow 50KB
+    const overflowContent = "y".repeat(2 * 1024);
+    await writeFile(join(plansDir, "small-task-SUMMARY.md"), overflowContent);
+
+    const board = makeBoard({
+      implement: { entries: 1, status: "in_progress", wave: 2 },
+    });
+    board.current_state = "implement";
+    const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    // Should include big task content
+    expect(result.variables.wave_summaries).toContain("x".repeat(10));
+    // Overflow file should be skipped
+    expect(result.variables.wave_summaries).not.toContain("y".repeat(10));
+    // Warning for skipped file
+    expect(result.warnings.some((w) => w.includes("50KB"))).toBe(true);
+  });
+
+  it("returns warning when session is unavailable", async () => {
+    mockStore.getSession.mockReturnValue(null);
+
+    const board = makeBoard({
+      implement: { entries: 1, status: "in_progress", wave: 2 },
+    });
+    board.current_state = "implement";
+    const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.some((w) => w.includes("wave_summaries"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("wave_summaries");
+  });
+
+  it("escapes dollar-brace patterns in summary content", async () => {
+    const plansDir = join(tmpDir, "plans", "my-slug");
+    await makeIndexMd(plansDir, [
+      { task_id: "task-a", wave: 1 },
+      { task_id: "task-b", wave: 2 },
+    ]);
+    await writeFile(join(plansDir, "task-a-SUMMARY.md"), "Use ${variable} here.");
+
+    const board = makeBoard({
+      implement: { entries: 1, status: "in_progress", wave: 2 },
+    });
+    board.current_state = "implement";
+    const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    // Dollar-braces should be escaped: the literal \${ must appear, not an unescaped ${
+    expect(result.variables.wave_summaries).toContain("\\${variable}");
+    // The unescaped form (dollar immediately followed by open-brace without backslash) must not appear
+    expect(result.variables.wave_summaries).not.toMatch(/(?<!\\)\$\{variable\}/);
+  });
+});
