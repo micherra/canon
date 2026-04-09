@@ -32,11 +32,15 @@ includes:
 
   - fragment: review-fix-loop
     with:
-      after_clean: ship
-      after_warning: ship
+      after_clean: pre-launch-check
+      after_warning: pre-launch-check
     overrides:
       review:
         large_diff_threshold: 500
+
+  - fragment: pre-launch-check
+    with:
+      after_passing: ship
 
   - fragment: ship-done
 
@@ -89,7 +93,7 @@ states:
         as: file_context
     transitions:
       done: context-sync
-      epic_complete: ship
+      epic_complete: pre-launch-check
       blocked: hitl
 ---
 

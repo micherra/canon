@@ -276,10 +276,10 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
     expect((flow.states.implement as Record<string, unknown>).max_waves).toBeUndefined();
   });
 
-  it("epic implement state has epic_complete transition to ship", async () => {
+  it("epic implement state has epic_complete transition to pre-launch-check", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states.implement.transitions?.epic_complete).toBe("ship");
+    expect(flow.states.implement.transitions?.epic_complete).toBe("pre-launch-check");
   });
 
   it("epic flow has tier: large", async () => {
@@ -345,13 +345,13 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
     expect(researchEdges).toContain("design");
   });
 
-  it("loadFlow state_graph for epic includes implement → ship edge (epic_complete)", async () => {
+  it("loadFlow state_graph for epic includes implement → pre-launch-check edge (epic_complete)", async () => {
     const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir);
     if (!result.ok) throw new Error(result.message);
 
     const implementEdges = result.state_graph.implement;
     expect(implementEdges).toBeDefined();
-    expect(implementEdges).toContain("ship");
+    expect(implementEdges).toContain("pre-launch-check");
   });
 });
 

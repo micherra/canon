@@ -21,9 +21,13 @@ includes:
 
   - fragment: review-fix-loop
     with:
-      after_clean: ship
-      after_warning: ship
+      after_clean: pre-launch-check
+      after_warning: pre-launch-check
       max_iterations: 2
+
+  - fragment: pre-launch-check
+    with:
+      after_passing: ship
 
   - fragment: ship-done
 
