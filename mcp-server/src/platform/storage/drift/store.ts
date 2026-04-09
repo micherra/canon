@@ -10,6 +10,7 @@
  */
 
 import type { ReviewEntry } from "@shared/schema.ts";
+import type { FlowRunEntry } from "./drift-analytics-types.ts";
 import { getDriftDb, type WeeklyTrendPoint } from "./drift-db.ts";
 
 // Re-export WeeklyTrendPoint so callers can `import { WeeklyTrendPoint } from "@platform/storage/drift/store.ts"` (unchanged interface).
@@ -53,5 +54,22 @@ export class DriftStore {
    */
   async getReviewsForFiles(filePaths: string[]): Promise<ReviewEntry[]> {
     return getDriftDb(this.projectDir).getReviewsByFiles(filePaths);
+  }
+
+  /**
+   * INSERT a FlowRunEntry into the flow_runs table.
+   * Wraps the synchronous DriftDb method for interface compatibility.
+   */
+  async appendFlowRun(entry: FlowRunEntry): Promise<void> {
+    getDriftDb(this.projectDir).appendFlowRun(entry);
+  }
+
+  /**
+   * Count flow runs completed after the given ISO timestamp.
+   * Returns 0 for empty DB (define-errors-out-of-existence).
+   * Synchronous — delegates directly to DriftDb (better-sqlite3 is sync).
+   */
+  countFlowRunsSince(sinceIso: string): number {
+    return getDriftDb(this.projectDir).countFlowRunsSince(sinceIso);
   }
 }

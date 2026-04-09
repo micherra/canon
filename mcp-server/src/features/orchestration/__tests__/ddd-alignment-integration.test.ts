@@ -158,9 +158,11 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
   it("executeEffects short-circuits with no effects and does not call the injected store", async () => {
     const calls: string[] = [];
     const mockStore = {
+      appendFlowRun: async () => {},
       appendReview: async () => {
         calls.push("appendReview");
       },
+      countFlowRunsSince: () => 0,
       getComplianceTrend: async () => [],
       getLastReviewForBranch: async () => null,
       getLastReviewForPr: async () => null,
@@ -189,9 +191,11 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
   it("executeEffects uses the injected driftStore.appendReview when persist_review effect is declared", async () => {
     const appendedReviews: unknown[] = [];
     const mockStore = {
+      appendFlowRun: async () => {},
       appendReview: async (entry: unknown) => {
         appendedReviews.push(entry);
       },
+      countFlowRunsSince: () => 0,
       getComplianceTrend: async () => [],
       getLastReviewForBranch: async () => null,
       getLastReviewForPr: async () => null,
@@ -234,9 +238,11 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
   it("executeEffects empty-effects array also short-circuits without calling the store", async () => {
     const calls: string[] = [];
     const mockStore = {
+      appendFlowRun: async () => {},
       appendReview: async () => {
         calls.push("appendReview");
       },
+      countFlowRunsSince: () => 0,
       getComplianceTrend: async () => [],
       getLastReviewForBranch: async () => null,
       getLastReviewForPr: async () => null,
