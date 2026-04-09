@@ -26,7 +26,7 @@ Flows use YAML frontmatter (defining states, transitions, loops, constraints) fo
 | `adopt.md` | Adoption | Scan for violations + auto-fix (invoked by `init` as final step, not a standalone user command) |
 
 **Fragments** (`fragments/`) — Reusable state groups included in flows:
-- `context-sync.md`, `review-fix-loop.md`, `implement-verify.md`, `verify-fix-loop.md`, `security-scan.md`, `user-checkpoint.md`, `plan-review.md`, `pattern-check.md`, `early-scan.md`, `impl-handoff.md`, `targeted-research.md`, `test-fix-loop.md`, `ship-done.md`
+- `context-sync.md`, `review-fix-loop.md`, `implement-verify.md`, `verify-fix-loop.md`, `security-scan.md`, `user-checkpoint.md`, `plan-review.md`, `pattern-check.md`, `early-scan.md`, `impl-handoff.md`, `targeted-research.md`, `test-fix-loop.md`, `pre-launch-check.md`, `ship-done.md`
 
 ## Conventions
 <!-- last-updated: 2026-03-22 -->

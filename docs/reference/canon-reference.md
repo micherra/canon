@@ -45,7 +45,7 @@ Flows are state machines in `flows/`. Format: YAML frontmatter (states, transiti
 | `adopt` | Adoption | Scan for principle violations and auto-fix (invoked by `init` as final step) |
 
 **Flow Fragments** (`flows/fragments/`) — Reusable state groups included into flows via `includes:`:
-`context-sync`, `test-fix-loop`, `review-fix-loop`, `implement-verify`, `verify-fix-loop`, `security-scan`, `user-checkpoint`, `plan-review`, `pattern-check`, `early-scan`, `impl-handoff`, `ship-done`
+`context-sync`, `test-fix-loop`, `review-fix-loop`, `implement-verify`, `verify-fix-loop`, `security-scan`, `user-checkpoint`, `plan-review`, `pattern-check`, `early-scan`, `impl-handoff`, `pre-launch-check`, `ship-done`
 
 **State types**: `single` (one agent), `parallel` (concurrent agents), `wave` (parallel agents in git worktrees with gates between waves), `parallel-per` (fan-out over items from prior state), `terminal`.
 
