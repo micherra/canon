@@ -1,6 +1,6 @@
 ---
 fragment: pre-launch-check
-description: Deterministic gate that verifies build and test pass before shipping
+description: Deterministic gate that verifies build, test, and lint pass before shipping
 entry: pre-launch-check
 
 params:
@@ -13,6 +13,7 @@ states:
     gates:
       - "npm run build"
       - "npm test"
+      - "npm run lint"
     transitions:
       done: ${after_passing}
       blocked: hitl
