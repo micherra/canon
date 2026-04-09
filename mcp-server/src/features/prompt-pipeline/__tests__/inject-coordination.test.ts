@@ -550,7 +550,7 @@ describe("injectCoordination — tool scope injection", () => {
     expect(result.prompts[0].permission_mode).toBe("deny_unknown");
   });
 
-  it("passes isolation and worktree_path to resolveToolProfile — auto for worktree entries", async () => {
+  it("passes worktree_path to resolveToolProfile — auto for entries with worktree_path", async () => {
     vi.mocked(resolveToolProfile).mockReturnValue({
       disallowed_tools: [],
       permission_mode: "auto",
@@ -558,29 +558,29 @@ describe("injectCoordination — tool scope injection", () => {
     });
 
     const ctx = makeCtx({
-      prompts: [makeEntry({ isolation: "worktree", worktree_path: "/path/to/worktree" })],
+      prompts: [makeEntry({ worktree_path: "/path/to/worktree" })],
     });
 
     await injectCoordination(ctx);
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ isolation: "worktree", worktreePath: "/path/to/worktree" }),
+      expect.objectContaining({ worktreePath: "/path/to/worktree" }),
     );
     const result = await injectCoordination(ctx);
     expect(result.prompts[0].permission_mode).toBe("auto");
   });
 
-  it("passes undefined isolation and worktree_path for non-worktree entries — prompt mode", async () => {
+  it("passes undefined worktree_path for entries without worktree — prompt mode", async () => {
     const ctx = makeCtx({
-      prompts: [makeEntry({ isolation: undefined, worktree_path: undefined })],
+      prompts: [makeEntry({ worktree_path: undefined })],
     });
 
     await injectCoordination(ctx);
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ isolation: undefined, worktreePath: undefined }),
+      expect.objectContaining({ worktreePath: undefined }),
     );
   });
 
@@ -712,7 +712,7 @@ describe("injectCoordination — trust integration", () => {
     vi.mocked(trustLevelToPermissionMode).mockReturnValue("auto");
 
     const ctx = makeCtx({
-      prompts: [makeEntry({ agent: "canon-implementor", isolation: "worktree" })],
+      prompts: [makeEntry({ agent: "canon-implementor" })],
       board: {
         base_commit: "abc",
         blocked: null,
@@ -737,11 +737,11 @@ describe("injectCoordination — trust integration", () => {
     );
   });
 
-  it("graceful degradation: KG DB does not exist → static isolation fallback", async () => {
+  it("graceful degradation: KG DB does not exist → worktreePath fallback", async () => {
     vi.mocked(existsSync).mockReturnValue(false); // No KG DB
 
     const ctx = makeCtx({
-      prompts: [makeEntry({ isolation: "worktree" })],
+      prompts: [makeEntry()],
     });
 
     await injectCoordination(ctx);
@@ -766,7 +766,7 @@ describe("injectCoordination — trust integration", () => {
     });
 
     const ctx = makeCtx({
-      prompts: [makeEntry({ isolation: "worktree" })],
+      prompts: [makeEntry()],
     });
 
     // Should not throw
@@ -861,14 +861,14 @@ describe("injectCoordination — trust integration", () => {
     vi.mocked(existsSync).mockReturnValue(false); // No KG
 
     const ctx = makeCtx({
-      prompts: [makeEntry({ isolation: "worktree" })],
+      prompts: [makeEntry()],
     });
 
     await injectCoordination(ctx);
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ isolation: "worktree", trustPermissionMode: undefined }),
+      expect.objectContaining({ trustPermissionMode: undefined }),
     );
   });
 });

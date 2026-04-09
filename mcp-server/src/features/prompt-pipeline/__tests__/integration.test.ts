@@ -260,7 +260,7 @@ describe("integration — wave state produces N prompts with items substituted",
     expect(result.prompts[2].prompt).toContain("Build task-3");
   });
 
-  it("wave prompts have isolation: worktree set", async () => {
+  it("wave prompts do not have isolation field (worktree_path is the sole signal)", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
@@ -278,7 +278,7 @@ describe("integration — wave state produces N prompts with items substituted",
 
     const result = await getSpawnPrompt(input);
 
-    expect(result.prompts[0].isolation).toBe("worktree");
+    expect(result.prompts[0]).not.toHaveProperty("isolation");
   });
 
   it("wave state with no items produces zero prompts (graceful)", async () => {

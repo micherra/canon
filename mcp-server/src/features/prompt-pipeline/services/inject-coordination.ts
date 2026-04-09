@@ -17,8 +17,8 @@
  * 4. **Tool scope metadata** (ADR-014, all prompts, unconditional): resolves
  *    and sets `tools`, `disallowed_tools`, and `permission_mode` on every
  *    prompt entry based on the agent type, optional per-state tool_overrides,
- *    and whether the entry uses worktree isolation.
- *    Permission mode is now informed by the KG trust resolver when available.
+ *    and whether the entry has a worktree_path (the sole permission mode signal).
+ *    Permission mode is informed by the KG trust resolver when available.
  *
  * Canon: functions-do-one-thing — four related but distinct injection
  * operations, all concerning coordination and observability metadata.
@@ -102,7 +102,7 @@ function computeTrustForEntries(
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
 
   // If KG DB does not exist, skip trust computation entirely.
-  // The static isolation fallback in resolveToolProfile handles this case.
+  // The worktreePath fallback in resolveToolProfile handles this case.
   if (!existsSync(dbPath)) {
     return trustPermissionModes;
   }
@@ -166,7 +166,7 @@ function computeTrustForEntries(
       trustPermissionModes.set(agentName, trustLevelToPermissionMode(trustResult.level));
     }
   } catch {
-    // Any KG error falls through to empty map → static isolation fallback (fail-closed)
+    // Any KG error falls through to empty map → worktreePath fallback (fail-closed)
     trustPermissionModes.clear();
   } finally {
     closeDb(db);
@@ -247,7 +247,6 @@ export async function injectCoordination(ctx: PromptContext): Promise<PromptCont
   prompts = prompts.map((entry) => {
     const resolved = resolveToolProfile(entry.agent, {
       overrides: toolOverrides,
-      isolation: entry.isolation,
       worktreePath: entry.worktree_path,
       trustPermissionMode: trustPermissionModes.get(entry.agent),
     });

@@ -169,30 +169,27 @@ describe("resolveToolProfile", () => {
     expect(result.disallowed_tools).toContain("ConflictTool");
   });
 
-  it("permission mode defaults to auto when isolation=worktree and worktreePath provided", () => {
+  it("permission mode defaults to auto when worktreePath is provided", () => {
     const result = resolveToolProfile("canon-implementor", {
-      isolation: "worktree",
       worktreePath: "/some/path",
     });
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("permission mode defaults to prompt when no worktree isolation", () => {
+  it("permission mode defaults to prompt when no worktreePath provided", () => {
     const result = resolveToolProfile("canon-implementor");
     expect(result.permission_mode).toBe("prompt");
   });
 
-  it("permission mode defaults to auto when isolation=worktree even without worktreePath", () => {
-    // worktree_path is not available at pipeline time (injected after assemblePrompt returns),
-    // so isolation alone is the correct signal for auto mode.
-    const result = resolveToolProfile("canon-implementor", { isolation: "worktree" });
-    expect(result.permission_mode).toBe("auto");
+  it("permission mode defaults to prompt when worktreePath is undefined", () => {
+    // worktree_path absent means no sandboxed directory — fall back to prompt
+    const result = resolveToolProfile("canon-implementor", { worktreePath: undefined });
+    expect(result.permission_mode).toBe("prompt");
   });
 
-  it("permission_mode override from ToolOverrides takes precedence", () => {
+  it("permission_mode override from ToolOverrides takes precedence over worktreePath", () => {
     const result = resolveToolProfile("canon-implementor", {
       overrides: { permission_mode: "deny_unknown" },
-      isolation: "worktree",
       worktreePath: "/some/path",
     });
     expect(result.permission_mode).toBe("deny_unknown");
@@ -299,20 +296,20 @@ describe("resolveToolProfile", () => {
     expect(result.permission_mode).toBe("deny_unknown");
   });
 
-  it("trustPermissionMode takes precedence over isolation fallback", () => {
-    // Without isolation=worktree, the fallback would be "prompt".
+  it("trustPermissionMode takes precedence over worktreePath fallback", () => {
+    // Without worktreePath, the fallback would be "prompt".
     // trustPermissionMode="auto" should override that.
     const result = resolveToolProfile("canon-implementor", {
-      isolation: undefined,
+      worktreePath: undefined,
       trustPermissionMode: "auto",
     });
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("falls back to isolation check when trustPermissionMode is undefined", () => {
-    // No trustPermissionMode, isolation=worktree → static fallback applies
+  it("falls back to worktreePath check when trustPermissionMode is undefined", () => {
+    // No trustPermissionMode, worktreePath present → worktreePath fallback applies → "auto"
     const result = resolveToolProfile("canon-implementor", {
-      isolation: "worktree",
+      worktreePath: "/some/path",
       trustPermissionMode: undefined,
     });
     expect(result.permission_mode).toBe("auto");

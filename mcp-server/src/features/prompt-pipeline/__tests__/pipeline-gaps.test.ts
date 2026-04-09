@@ -848,16 +848,15 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     // Fail-closed: unknown agents get an empty tools list
     expect(entry.tools).toEqual([]);
     expect(entry.disallowed_tools).toEqual(["Edit", "Write", "Bash", "NotebookEdit"]);
-    // fanout sets isolation: "worktree" on all single-state entries, so permission_mode is "auto"
-    expect(entry.permission_mode).toBe("auto");
+    // No worktree_path on single-state entries without worktree, no KG DB → prompt mode
+    expect(entry.permission_mode).toBe("prompt");
   });
 
-  it("permission_mode is auto for entries that have both isolation:worktree and a worktree_path", async () => {
-    // The inject-coordination stage sets permission_mode: "auto" only when BOTH
-    // isolation === "worktree" AND worktree_path is set. worktree_path is populated
-    // externally by the orchestrator (buildSpawnRequests/driveFlow), not inside the
-    // pipeline itself. So we verify the rule through the unit-tested resolveToolProfile
-    // function and confirm pipeline entries carry isolation: "worktree" (the prerequisite).
+  it("permission_mode is prompt for wave entries inside the pipeline (worktree_path set post-pipeline)", async () => {
+    // worktree_path is the sole signal for permission_mode auto.
+    // worktree_path is populated externally by the orchestrator (requestsWithWorktrees in drive-flow),
+    // not inside the pipeline itself. So inside the pipeline, wave entries have no worktree_path
+    // and get permission_mode "prompt" unless KG trust computation returns "auto".
     const workspace = seedWorkspace();
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
@@ -873,13 +872,12 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
 
     expect(result.prompts).toHaveLength(1);
     const entry = result.prompts[0];
-    // Wave entries get isolation: "worktree" set by fanout stage
-    expect(entry.isolation).toBe("worktree");
+    // No isolation field — worktree_path is the sole signal
+    expect(entry).not.toHaveProperty("isolation");
     // worktree_path is set by orchestrator post-pipeline; inside the pipeline it is undefined
     expect(entry.worktree_path).toBeUndefined();
-    // isolation: "worktree" is sufficient for auto mode — worktree_path is not required
-    // (it is injected after assemblePrompt returns, so requiring it would always fall back to "prompt")
-    expect(entry.permission_mode).toBe("auto");
+    // No worktree_path and no KG DB (seedWorkspace creates no KG) → prompt mode
+    expect(entry.permission_mode).toBe("prompt");
   });
 
   it("full pipeline produces entries with all three tool scope fields present", async () => {
@@ -895,15 +893,16 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     expect(entry.permission_mode).toBeDefined();
   });
 
-  it("canon-implementor single state has permission_mode: auto (isolation:worktree set by fanout)", async () => {
+  it("canon-implementor single state has permission_mode: prompt without worktree_path (set post-pipeline)", async () => {
     const workspace = seedWorkspace();
 
     const result = await assemblePrompt(makeInput(workspace));
 
     expect(result.prompts).toHaveLength(1);
     const entry = result.prompts[0];
-    // isolation: "worktree" (set by fanout) is sufficient for auto mode
-    expect(entry.permission_mode).toBe("auto");
+    // No worktree_path set by pipeline, no KG DB → prompt mode
+    // (worktree_path is set by orchestrator post-pipeline for non-wave, Agent tool creates worktree)
+    expect(entry.permission_mode).toBe("prompt");
     // canon-implementor can write
     expect(entry.tools).toContain("Edit");
     expect(entry.tools).toContain("Write");

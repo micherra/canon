@@ -193,13 +193,12 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
  */
 export type ResolveToolProfileOptions = {
   overrides?: ToolOverrides;
-  isolation?: string;
   worktreePath?: string;
   /**
    * Trust-derived permission mode from the KG-informed trust resolver.
    * Only "auto" | "prompt" (not "deny_unknown") because the trust resolver
    * only produces these two values. Precedence: overrides.permission_mode >
-   * trustPermissionMode > isolation fallback.
+   * trustPermissionMode > worktreePath fallback.
    */
   trustPermissionMode?: "auto" | "prompt";
 };
@@ -219,7 +218,7 @@ export const resolveToolProfile = (
   options?: ResolveToolProfileOptions,
 ): ResolvedProfile => {
   const overrides = options?.overrides;
-  const isolation = options?.isolation;
+  const worktreePath = options?.worktreePath;
   const normalizedAgent = agent.startsWith("canon:") ? agent.slice("canon:".length) : agent;
   const base = AGENT_TOOL_PROFILES[normalizedAgent] ?? EMPTY_PROFILE;
 
@@ -259,16 +258,12 @@ export const resolveToolProfile = (
   // Precedence chain:
   //   1. overrides.permission_mode — explicit flow override always wins
   //   2. trustPermissionMode — KG-informed trust resolver result
-  //   3. isolation fallback — isolation === "worktree" ? "auto" : "prompt"
-  //
-  // isolation === "worktree" is sufficient for the fallback — worktree_path is not available at
-  // pipeline time (it is injected into SpawnRequests after assemblePrompt returns), so requiring
-  // it would cause all worktree-isolated tasks to fall back to "prompt" mode. The isolation value
-  // alone is the correct signal for whether auto mode applies when trust is not computed.
+  //   3. worktreePath fallback — worktree_path signals agent works in a sandboxed directory
+  //      (Canon worktree or Agent tool worktree). When present, auto permission mode is safe.
   const permissionMode: "auto" | "prompt" | "deny_unknown" =
     overrides?.permission_mode ??
     options?.trustPermissionMode ??
-    (isolation === "worktree" ? "auto" : "prompt");
+    (worktreePath ? "auto" : "prompt");
 
   const result: ResolvedProfile = {
     disallowed_tools: effectiveDisallowed,

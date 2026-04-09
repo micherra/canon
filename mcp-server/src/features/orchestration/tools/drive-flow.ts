@@ -509,7 +509,7 @@ function persistWaveTaskResult(
   conventionWorktreePath: string,
   conventionBranch: string,
 ): void {
-  const { state_id, task_id, task_status, task_artifacts, worktree_branch } = input;
+  const { state_id, task_id, task_status, task_artifacts } = input;
   store.transaction(() => {
     const existing = store.getState(state_id);
     const waveResults: Record<
@@ -522,9 +522,7 @@ function persistWaveTaskResult(
       >) ?? {};
     const existingEntry = waveResults[task_id];
     waveResults[task_id] = {
-      // Prefer the actual agent branch (e.g. "worktree-agent-*") over the
-      // convention branch ("canon-wave/{task_id}") which may not carry commits.
-      branch: worktree_branch ?? existingEntry?.branch ?? conventionBranch,
+      branch: conventionBranch,
       status: task_status,
       tasks: [task_id],
       worktree_path: existingEntry?.worktree_path ?? conventionWorktreePath,
@@ -959,7 +957,7 @@ async function handleMergeConflict(
     requests: [
       {
         agent_type: stateDef?.agent ?? "canon:canon-implementor",
-        isolation: "worktree",
+        isolation: worktreePath ? "none" : "worktree",
         prompt: `${spawnInstruction}\n\nNote: This is a retry for task '${conflictTask}' after a merge conflict. Conflict detail:\n${conflictDetail}`,
         task_id: conflictTask,
         ...(worktreePath ? { worktree_path: worktreePath } : {}),
@@ -1110,7 +1108,7 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
   const requestsWithWorktrees = requests.map((req) => {
     if (req.task_id && worktreeMap.has(req.task_id)) {
-      return { ...req, worktree_path: worktreeMap.get(req.task_id) };
+      return { ...req, worktree_path: worktreeMap.get(req.task_id), isolation: "none" as const };
     }
     return req;
   });
@@ -1361,7 +1359,10 @@ function attachWorktreeAndResumeContext(
 ): SpawnRequest[] {
   return requests.map((req) => {
     const worktreePath = req.task_id ? worktreeMap.get(req.task_id) : undefined;
-    const withWorktree = worktreePath ? { ...req, worktree_path: worktreePath } : req;
+    // worktree_path presence → isolation: "none" (Canon owns the worktree; no Agent tool worktree)
+    const withWorktree = worktreePath
+      ? { ...req, worktree_path: worktreePath, isolation: "none" as const }
+      : req;
     if (!withWorktree.task_id) return withWorktree;
     const existing = existingWaveResults[withWorktree.task_id];
     if (!existing || !hasExistingWaveTaskProgress(existing)) return withWorktree;
@@ -1449,7 +1450,7 @@ async function enterWaveState(
 function entryToSpawnRequest(entry: SpawnPromptEntry): SpawnRequest {
   const req: SpawnRequest = {
     agent_type: entry.agent,
-    isolation: (entry.isolation ?? "worktree") as SpawnRequest["isolation"],
+    isolation: "worktree",
     prompt: entry.prompt,
   };
   if (entry.role !== undefined) req.role = entry.role;

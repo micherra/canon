@@ -4,11 +4,11 @@
  * Expands a single base prompt into N fanned-out prompt entries based on
  * the state type.
  *
- * State type dispatch (all types get isolation: "worktree"; consultations remain "none"):
- * - single: clusters, compete, or single prompt — isolation: "worktree"
- * - parallel: agents-based or roles-based fanout — isolation: "worktree"
- * - wave: iterate items with ${item} substitution — isolation: "worktree"
- * - parallel-per: clusters or items — isolation: "worktree"
+ * State type dispatch:
+ * - single: clusters, compete, or single prompt
+ * - parallel: agents-based or roles-based fanout
+ * - wave: iterate items with ${item} substitution
+ * - parallel-per: clusters or items
  *
  * Also handles debate detection (when flow.debate is set on the entry state):
  * - Active debate: produces per-team prompts and marks ctx.fanned_out = true
@@ -199,7 +199,6 @@ function buildClusterPrompts(
     };
     return {
       agent,
-      isolation: "worktree" as const,
       item: clusterItem,
       prompt: substituteItem(basePrompt, clusterItem),
       template_paths: paths,
@@ -230,13 +229,12 @@ function fanoutSingle(
     );
     return expanded.map((entry) => ({
       agent: entry.agent,
-      isolation: "worktree" as const,
       prompt: entry.prompt,
       template_paths: entry.template_paths,
     }));
   }
 
-  return [{ agent, isolation: "worktree" as const, prompt: basePrompt, template_paths: paths }];
+  return [{ agent, prompt: basePrompt, template_paths: paths }];
 }
 
 /** Build prompts for a parallel state type. */
@@ -254,7 +252,6 @@ function fanoutParallel(
       const rName = roleName(roleEntry as string | { name: string; optional?: boolean });
       return {
         agent,
-        isolation: "worktree" as const,
         prompt: substituteVariables(basePrompt, { role: rName }),
         role: rName,
         template_paths: paths,
@@ -264,7 +261,6 @@ function fanoutParallel(
 
   return agents.map((agent) => ({
     agent,
-    isolation: "worktree" as const,
     prompt: basePrompt,
     template_paths: paths,
   }));
@@ -280,7 +276,6 @@ function fanoutWave(
   const agent = ("agent" in state ? state.agent : undefined) ?? "unknown";
   return (items ?? []).map((item) => ({
     agent,
-    isolation: "worktree" as const,
     item,
     prompt: substituteItem(basePrompt, item),
     template_paths: paths,
@@ -304,7 +299,6 @@ function fanoutParallelPer(
   }
   return (items ?? []).map((item) => ({
     agent,
-    isolation: "worktree" as const,
     item,
     prompt: substituteItem(basePrompt, item),
     template_paths: paths,

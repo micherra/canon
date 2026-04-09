@@ -18,7 +18,6 @@ export type SpawnPromptEntry = {
   role?: string;
   item?: TaskItem;
   template_paths: string[];
-  isolation?: "worktree";
   worktree_path?: string;
   // ADR-014: tool scoping metadata
   tools?: string[];

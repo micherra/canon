@@ -264,7 +264,7 @@ describe("assemblePrompt — wave state with items", () => {
     expect(result.prompts[2].prompt).toContain("Build task-3");
   });
 
-  it("sets isolation=worktree on wave prompt entries", async () => {
+  it("wave prompt entries do not have isolation field (worktree_path is the sole signal)", async () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
@@ -280,7 +280,7 @@ describe("assemblePrompt — wave state with items", () => {
     });
     const result = await assemblePrompt(input);
 
-    expect(result.prompts[0].isolation).toBe("worktree");
+    expect(result.prompts[0]).not.toHaveProperty("isolation");
   });
 });
 

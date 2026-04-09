@@ -11,7 +11,7 @@
  * - Wave state: one prompt per item with item substitution
  * - Wave state with empty items: zero prompts, no warning
  * - Wave state with undefined items: zero prompts, no warning
- * - Parallel-per state: items with worktree isolation
+ * - Parallel-per state: items fanout (no isolation field — worktree_path is sole signal)
  * - Parallel-per state with clusters: cluster items override
  * - Debate: active debate produces fanned_out prompts
  * - Debate: completed debate appends summary
@@ -304,7 +304,7 @@ describe("fanout — wave state", () => {
     expect(result.prompts[2].prompt).toBe("Implement task-c");
   });
 
-  it("sets isolation: worktree on wave prompts", async () => {
+  it("does not set isolation field on wave prompts (worktree_path is the sole signal)", async () => {
     const ctx = makeCtx({
       items: ["task-a"],
       state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
@@ -312,7 +312,7 @@ describe("fanout — wave state", () => {
 
     const result = await fanout(ctx);
 
-    expect(result.prompts[0].isolation).toBe("worktree");
+    expect(result.prompts[0]).not.toHaveProperty("isolation");
   });
 
   it("produces zero prompts when items is empty array", async () => {
@@ -356,7 +356,7 @@ describe("fanout — wave state", () => {
 // Parallel-per state
 
 describe("fanout — parallel-per state", () => {
-  it("produces one prompt per item with worktree isolation", async () => {
+  it("produces one prompt per item (no isolation field set)", async () => {
     const ctx = makeCtx({
       items: ["item-1", "item-2"],
       state: { agent: "canon-implementor", type: "parallel-per" } as StateDefinition,
@@ -365,8 +365,8 @@ describe("fanout — parallel-per state", () => {
     const result = await fanout(ctx);
 
     expect(result.prompts).toHaveLength(2);
-    expect(result.prompts[0].isolation).toBe("worktree");
-    expect(result.prompts[1].isolation).toBe("worktree");
+    expect(result.prompts[0]).not.toHaveProperty("isolation");
+    expect(result.prompts[1]).not.toHaveProperty("isolation");
   });
 
   it("uses cluster items instead of original items when clusters present", async () => {

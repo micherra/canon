@@ -1,11 +1,12 @@
 /**
- * Tests for isolation field on SpawnPromptEntry in get-spawn-prompt.ts
+ * Tests for SpawnPromptEntry structure from getSpawnPrompt.
  *
  * Covers:
- * - Wave state prompts include isolation: "worktree" on all entries
- * - Single state prompts include isolation: "worktree" on all entries
- * - parallel-per state prompts include isolation: "worktree"
+ * - Wave state prompts have correct item structure and count
+ * - Single state prompts have correct structure
+ * - parallel-per state prompts have correct structure
  * - SpawnPromptEntry.worktree_path field is present as optional (not set by getSpawnPrompt itself)
+ * - No isolation field on SpawnPromptEntry (removed — worktree_path is the sole signal)
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -103,8 +104,8 @@ function makeParallelPerFlow(): ResolvedFlow {
   } as ResolvedFlow;
 }
 
-describe("getSpawnPrompt — wave state isolation", () => {
-  it("sets isolation: 'worktree' on all wave state prompt entries", async () => {
+describe("getSpawnPrompt — wave state entries", () => {
+  it("produces one entry per item for wave state", async () => {
     const workspace = makeTmpDir();
     const flow = makeWaveFlow();
 
@@ -118,11 +119,12 @@ describe("getSpawnPrompt — wave state isolation", () => {
 
     expect(result.prompts).toHaveLength(3);
     for (const entry of result.prompts) {
-      expect(entry.isolation).toBe("worktree");
+      expect(entry.agent).toBe("canon-implementor");
+      expect(entry.prompt).toBeDefined();
     }
   });
 
-  it("sets isolation: 'worktree' even for a single wave item", async () => {
+  it("produces one entry for a single wave item", async () => {
     const workspace = makeTmpDir();
     const flow = makeWaveFlow();
 
@@ -135,7 +137,7 @@ describe("getSpawnPrompt — wave state isolation", () => {
     });
 
     expect(result.prompts).toHaveLength(1);
-    expect(result.prompts[0].isolation).toBe("worktree");
+    expect(result.prompts[0].item).toBe("task-01");
   });
 
   it("wave entries have undefined worktree_path by default (caller sets it)", async () => {
@@ -152,10 +154,25 @@ describe("getSpawnPrompt — wave state isolation", () => {
 
     expect(result.prompts[0].worktree_path).toBeUndefined();
   });
+
+  it("wave entries do not have an isolation field (removed — worktree_path is the sole signal)", async () => {
+    const workspace = makeTmpDir();
+    const flow = makeWaveFlow();
+
+    const result = await getSpawnPrompt({
+      flow,
+      items: ["task-01"],
+      state_id: "implement",
+      variables: {},
+      workspace,
+    });
+
+    expect(result.prompts[0]).not.toHaveProperty("isolation");
+  });
 });
 
-describe("getSpawnPrompt — single state isolation", () => {
-  it("sets isolation: 'worktree' on single state prompt entries", async () => {
+describe("getSpawnPrompt — single state entries", () => {
+  it("produces one entry for single state", async () => {
     const workspace = makeTmpDir();
     const flow = makeSingleFlow();
 
@@ -167,12 +184,26 @@ describe("getSpawnPrompt — single state isolation", () => {
     });
 
     expect(result.prompts).toHaveLength(1);
-    expect(result.prompts[0].isolation).toBe("worktree");
+    expect(result.prompts[0].agent).toBe("canon-researcher");
+  });
+
+  it("single state entries do not have an isolation field", async () => {
+    const workspace = makeTmpDir();
+    const flow = makeSingleFlow();
+
+    const result = await getSpawnPrompt({
+      flow,
+      state_id: "research",
+      variables: {},
+      workspace,
+    });
+
+    expect(result.prompts[0]).not.toHaveProperty("isolation");
   });
 });
 
-describe("getSpawnPrompt — parallel-per state isolation", () => {
-  it("sets isolation: 'worktree' on all parallel-per state prompt entries", async () => {
+describe("getSpawnPrompt — parallel-per state entries", () => {
+  it("produces one entry per item for parallel-per state", async () => {
     const workspace = makeTmpDir();
     const flow = makeParallelPerFlow();
 
@@ -186,7 +217,22 @@ describe("getSpawnPrompt — parallel-per state isolation", () => {
 
     expect(result.prompts).toHaveLength(2);
     for (const entry of result.prompts) {
-      expect(entry.isolation).toBe("worktree");
+      expect(entry.agent).toBe("canon-implementor");
     }
+  });
+
+  it("parallel-per entries do not have an isolation field", async () => {
+    const workspace = makeTmpDir();
+    const flow = makeParallelPerFlow();
+
+    const result = await getSpawnPrompt({
+      flow,
+      items: ["file-a.ts"],
+      state_id: "implement",
+      variables: {},
+      workspace,
+    });
+
+    expect(result.prompts[0]).not.toHaveProperty("isolation");
   });
 });
