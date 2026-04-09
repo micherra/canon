@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 import { CANON_DIR } from "@shared/constants.ts";
 import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
-import type { FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
+import type { DecisionEntry, FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
 import { initDriftDb } from "./drift-schema.ts";
 
 // Re-export WeeklyTrendPoint so callers can import from drift-db
@@ -71,6 +71,20 @@ type FlowRunRow = {
   total_violations: number | null;
   total_test_results: string | null;
   total_files_changed: number | null;
+  commits: string | null;
+  diff_stat: string | null;
+};
+
+type DecisionRow = {
+  id: number;
+  decision_id: string;
+  run_id: string | null;
+  flow: string | null;
+  task: string | null;
+  title: string;
+  content: string;
+  file_path: string | null;
+  timestamp: string;
 };
 
 /**
@@ -161,6 +175,23 @@ function _rowToFlowRunEntry(row: FlowRunRow): FlowRunEntry {
       row.total_test_results,
     ) as FlowRunEntry["total_test_results"];
   if (row.total_files_changed !== null) entry.total_files_changed = row.total_files_changed;
+  if (row.commits !== null) entry.commits = JSON.parse(row.commits) as string[];
+  if (row.diff_stat !== null) entry.diff_stat = row.diff_stat;
+  return entry;
+}
+
+/** Deserialize a DecisionRow into a DecisionEntry. */
+function _rowToDecisionEntry(row: DecisionRow): DecisionEntry {
+  const entry: DecisionEntry = {
+    content: row.content,
+    decision_id: row.decision_id,
+    timestamp: row.timestamp,
+    title: row.title,
+  };
+  if (row.run_id !== null) entry.run_id = row.run_id;
+  if (row.flow !== null) entry.flow = row.flow;
+  if (row.task !== null) entry.task = row.task;
+  if (row.file_path !== null) entry.file_path = row.file_path;
   return entry;
 }
 
@@ -186,6 +217,11 @@ export class DriftDb {
   private readonly stmtGetAllFlowRuns: Database.Statement;
   private readonly stmtCountFlowRunsSince: Database.Statement;
   private readonly stmtGetLastFlowRunCompletedAt: Database.Statement;
+
+  // ---- Decision statements ----
+  private readonly stmtInsertDecision: Database.Statement;
+  private readonly stmtGetDecisionsByRun: Database.Statement;
+  private readonly stmtGetRecentDecisions: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -247,12 +283,12 @@ export class DriftDb {
         run_id, flow, tier, task, started, completed, total_duration_ms,
         state_durations, state_iterations, skipped_states, total_spawns,
         gate_pass_rate, postcondition_pass_rate, total_violations,
-        total_test_results, total_files_changed
+        total_test_results, total_files_changed, commits, diff_stat
       ) VALUES (
         @run_id, @flow, @tier, @task, @started, @completed, @total_duration_ms,
         @state_durations, @state_iterations, @skipped_states, @total_spawns,
         @gate_pass_rate, @postcondition_pass_rate, @total_violations,
-        @total_test_results, @total_files_changed
+        @total_test_results, @total_files_changed, @commits, @diff_stat
       )
     `);
 
@@ -267,6 +303,23 @@ export class DriftDb {
     this.stmtGetLastFlowRunCompletedAt = db.prepare(`
       SELECT completed FROM flow_runs ORDER BY completed DESC LIMIT 1
     `);
+
+    // Decisions
+    this.stmtInsertDecision = db.prepare(`
+      INSERT OR IGNORE INTO decisions (
+        decision_id, run_id, flow, task, title, content, file_path, timestamp
+      ) VALUES (
+        @decision_id, @run_id, @flow, @task, @title, @content, @file_path, @timestamp
+      )
+    `);
+
+    this.stmtGetDecisionsByRun = db.prepare(
+      `SELECT * FROM decisions WHERE run_id = ? ORDER BY timestamp ASC`,
+    );
+
+    this.stmtGetRecentDecisions = db.prepare(
+      `SELECT * FROM decisions ORDER BY timestamp DESC LIMIT ?`,
+    );
   }
 
   // Reviews
@@ -491,7 +544,9 @@ export class DriftDb {
    */
   appendFlowRun(entry: FlowRunEntry): void {
     this.stmtInsertFlowRun.run({
+      commits: entry.commits != null ? JSON.stringify(entry.commits) : null,
       completed: entry.completed,
+      diff_stat: entry.diff_stat ?? null,
       flow: entry.flow,
       gate_pass_rate: entry.gate_pass_rate ?? null,
       postcondition_pass_rate: entry.postcondition_pass_rate ?? null,
@@ -567,6 +622,45 @@ export class DriftDb {
   getLastFlowRunCompletedAt(): string | null {
     const row = this.stmtGetLastFlowRunCompletedAt.get() as { completed: string } | undefined;
     return row?.completed ?? null;
+  }
+
+  // Decisions
+
+  /**
+   * INSERT a DecisionEntry into the decisions table.
+   * Uses INSERT OR IGNORE — duplicate decision_id is a no-op (idempotent).
+   * (no-silent-failures: the duplicate is intentional, not an error)
+   */
+  appendDecision(entry: DecisionEntry): void {
+    this.stmtInsertDecision.run({
+      content: entry.content,
+      decision_id: entry.decision_id,
+      file_path: entry.file_path ?? null,
+      flow: entry.flow ?? null,
+      run_id: entry.run_id ?? null,
+      task: entry.task ?? null,
+      timestamp: entry.timestamp,
+      title: entry.title,
+    });
+  }
+
+  /**
+   * Fetch all decisions for a given run_id, ordered by timestamp ASC.
+   * Returns empty array when no decisions exist for the run
+   * (define-errors-out-of-existence).
+   */
+  getDecisionsByRun(runId: string): DecisionEntry[] {
+    const rows = this.stmtGetDecisionsByRun.all(runId) as DecisionRow[];
+    return rows.map(_rowToDecisionEntry);
+  }
+
+  /**
+   * Fetch the most recent N decisions across all runs, ordered by timestamp DESC.
+   * Returns empty array when no decisions exist (define-errors-out-of-existence).
+   */
+  getRecentDecisions(limit: number): DecisionEntry[] {
+    const rows = this.stmtGetRecentDecisions.all(limit) as DecisionRow[];
+    return rows.map(_rowToDecisionEntry);
   }
 
   // Lifecycle
