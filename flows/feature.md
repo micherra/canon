@@ -35,6 +35,7 @@ states:
   design:
     type: single
     agent: canon-architect
+    compete: "auto"
     template: [design-decision, session-context]
     approval_gate: true
     max_revisions: 3
@@ -55,6 +56,8 @@ states:
     inject_context:
       - from: file_context
         as: file_context
+      - from: handoff
+        as: design_handoff
     transitions:
       done: context-sync
       blocked: hitl
@@ -67,6 +70,8 @@ Design the technical approach for: ${task}. Save design to ${WORKSPACE}/plans/${
 
 ### implement
 Execute task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
+
+${design_handoff}
 
 ${wave_briefing}
 
