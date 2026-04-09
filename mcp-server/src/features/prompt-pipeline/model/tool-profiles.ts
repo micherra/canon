@@ -59,6 +59,8 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
       "get_file_context",
       "semantic_search",
       "codebase_graph",
+      "load_flow",
+      "simulate_flow",
       "write_plan_index",
       "update_board",
       "write_design_brief",

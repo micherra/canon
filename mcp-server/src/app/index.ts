@@ -23,6 +23,7 @@ import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
 import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
 import { injectWaveEvent } from "@features/orchestration/tools/inject-wave-event.ts";
 import { loadFlow } from "@features/orchestration/tools/load-flow.ts";
+import { simulateFlowTool } from "@features/orchestration/tools/simulate-flow.ts";
 import { postEvent } from "@features/orchestration/tools/post-event.ts";
 import { postMessage } from "@features/orchestration/tools/post-message.ts";
 import { report } from "@features/orchestration/tools/report.ts";
@@ -402,6 +403,36 @@ server.registerTool(
   },
   gatedWrapHandler(async (input) => {
     return loadFlow(input, pluginDir, projectDir);
+  }),
+);
+
+server.registerTool(
+  "simulate_flow",
+  {
+    description:
+      "Simulate a Canon flow execution with mocked agent results. Walks the state machine deterministically using a provided scenario of (state_id, status) pairs. Returns the full execution path, terminal/stuck/dead-end detection, and iteration tracking. No agents spawned, no workspace needed.",
+    inputSchema: {
+      flow: z.string().describe("Name of the flow file (without .md extension)"),
+      max_steps: z
+        .number()
+        .int()
+        .min(1)
+        .max(1000)
+        .optional()
+        .describe("Maximum simulation steps (default 50, max 1000)"),
+      scenario: z
+        .array(
+          z.object({
+            state_id: z.string().describe("State ID to provide a result for"),
+            status: z.string().describe("Status keyword (e.g. done, blocked, has_failures)"),
+          }),
+        )
+        .max(1000)
+        .describe("Sequence of mocked agent results (max 1000 entries)"),
+    },
+  },
+  gatedWrapHandler(async (input) => {
+    return simulateFlowTool(input, pluginDir, projectDir);
   }),
 );
 
