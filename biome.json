@@ -118,6 +118,13 @@
         "useTemplate": "error"
       },
 
+      "nursery": {
+        "noExcessiveLinesPerFile": {
+          "level": "error",
+          "options": { "maxLines": 400 }
+        }
+      },
+
       "suspicious": {
         "noAssignInExpressions": "on",
         "noConsole": "off",
