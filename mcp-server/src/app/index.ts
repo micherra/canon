@@ -7,6 +7,7 @@ import { ResolvedFlowSchema } from "@domains/flows/flow-definition-schemas.ts";
 import type { FailureEntry } from "@features/diagnostics/tools/categorize-failures.ts";
 import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
+import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { recordAgentMetrics } from "@features/diagnostics/tools/record-agent-metrics.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
@@ -366,6 +367,42 @@ server.registerTool(
 );
 
 server.registerTool(
+  "get_history",
+  {
+    description:
+      "Query project execution history — flow runs, design decisions, regressions, and reviews. Filter by file path, principle ID, topic keyword, or date. Returns a reverse-chronological timeline.",
+    inputSchema: {
+      file_path: z
+        .string()
+        .optional()
+        .describe("Filter to history entries touching this file path"),
+      limit: z
+        .number()
+        .optional()
+        .default(20)
+        .describe("Maximum entries to return (default 20)"),
+      principle_id: z
+        .string()
+        .optional()
+        .describe("Filter to entries involving this principle (reviews + decisions)"),
+      since: z
+        .string()
+        .optional()
+        .describe("ISO date filter — only return entries after this date"),
+      topic: z
+        .string()
+        .optional()
+        .describe(
+          "Free-text keyword search across flow run tasks and decisions (uses FTS5)",
+        ),
+    },
+  },
+  gatedWrapHandler(async (input) => {
+    return getHistory(input, projectDir);
+  }),
+);
+
+server.registerTool(
   "load_flow",
   {
     description:
@@ -420,6 +457,14 @@ server.registerTool(
         .string()
         .optional()
         .describe("Current commit SHA for no_progress stuck detection"),
+      commit_shas: z
+        .array(z.string())
+        .optional()
+        .describe("Merge commit SHAs from worktree merge (ADR-019)"),
+      files_changed_paths: z
+        .array(z.string())
+        .optional()
+        .describe("File paths changed in this state (ADR-019)"),
       compete_results: z
         .array(
           z.object({
