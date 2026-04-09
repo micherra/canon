@@ -362,7 +362,7 @@ describe("loadAndResolveFlow() plugin-level resolution — pre-launch-check", ()
     const flow = await loadAndResolveFlow(pluginCacheDir, "feature");
     expect(flow.states["pre-launch-check"]).toBeDefined();
     expect(flow.states["pre-launch-check"].type).toBe("single");
-    expect(flow.states["pre-launch-check"].gates).toEqual(["npm run build", "npm test"]);
+    expect(flow.states["pre-launch-check"].gates).toBeUndefined();
     expect(flow.states["pre-launch-check"].agent).toBeUndefined();
   });
 

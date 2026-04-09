@@ -24,7 +24,7 @@ import { join, resolve } from "node:path";
 import type { Board, WaveResult } from "@domains/flows/board-state-schemas.ts";
 import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
-import { runGates } from "@domains/flows/gate-runner.ts";
+import { type GateResult, runGates } from "@domains/flows/gate-runner.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { WaveWorktreeResult } from "@domains/workspaces/wave-lifecycle.ts";
 import {
@@ -1221,12 +1221,16 @@ function buildConvergenceHitl(
 }
 
 /**
- * Handle a gate-only state: a single state with gates declared but no agent.
+ * Handle a gate-only state: a single state with no agent.
  *
  * Enters the state on the board (for convergence tracking), runs gates deterministically,
  * then either auto-advances (all gates pass) or returns a HITL breakpoint (any gate fails).
  *
- * Fail-closed: empty gate results (no gates resolved) are treated as failure.
+ * Gate resolution: if the state declares explicit `gates: [...]`, those run. Otherwise,
+ * discovered gates from all prior board states are collected and executed. This makes the
+ * pre-launch-check language-agnostic — agents discover the right commands during the build.
+ *
+ * Fail-closed: empty gate results (no gates resolved/discovered) are treated as failure.
  */
 async function handleGateOnlyState(
   workspace: string,
@@ -1246,8 +1250,25 @@ async function handleGateOnlyState(
   if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
   if (!enterOut.can_enter) return buildConvergenceHitl(stateId, enterOut);
 
-  // Run gates synchronously — fail-closed: empty result array is treated as failure
-  const gateResults = runGates(stateDef, flow, projectDir);
+  // Run gates: explicit gates on the state take priority; otherwise collect discovered gates
+  // from all prior board states (language-agnostic — agents discover the right commands)
+  let gateResults: GateResult[];
+  if (stateDef.gates?.length) {
+    gateResults = runGates(stateDef, flow, projectDir);
+  } else {
+    const allStates = store.getAllStates();
+    const discoveredCommands = allStates
+      .flatMap((s) => s.discovered_gates ?? [])
+      .map((g) => g.command)
+      .filter((cmd, i, arr) => arr.indexOf(cmd) === i); // deduplicate
+    if (discoveredCommands.length > 0) {
+      // Build a synthetic state def with the discovered commands as explicit gates
+      const syntheticDef = { ...stateDef, gates: discoveredCommands };
+      gateResults = runGates(syntheticDef, flow, projectDir);
+    } else {
+      gateResults = [];
+    }
+  }
   const allPassed = gateResults.length > 0 && gateResults.every((g) => g.passed);
 
   if (allPassed) {
@@ -1313,8 +1334,8 @@ async function tryEnterSingleState(
   if (stateDef?.type === "terminal") return buildTerminalAction(workspace, currentStateId, store, projectDir);
   if (stateDef?.type === "wave") return enterWaveState(workspace, flow, currentStateId, store);
 
-  // Gate-only state: has gates but no agent — run gates deterministically, skip agent spawn
-  if (stateDef?.type === "single" && stateDef.gates?.length && !stateDef.agent) {
+  // Gate-only state: no agent — run explicit or discovered gates deterministically, skip agent spawn
+  if (stateDef?.type === "single" && !stateDef.agent) {
     return handleGateOnlyState(workspace, flow, currentStateId, stateDef, store, projectDir);
   }
 

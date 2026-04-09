@@ -1,6 +1,6 @@
 ---
 fragment: pre-launch-check
-description: Deterministic gate that verifies build, test, and lint pass before shipping
+description: Deterministic gate that runs discovered quality checks before shipping
 entry: pre-launch-check
 
 params:
@@ -10,10 +10,6 @@ params:
 states:
   pre-launch-check:
     type: single
-    gates:
-      - "npm run build"
-      - "npm test"
-      - "npm run lint"
     transitions:
       done: ${after_passing}
       blocked: hitl
@@ -21,9 +17,11 @@ states:
 
 ## Description
 
-Gate-only state — no agent is spawned. The runtime executes each command in `gates` sequentially. If all commands pass, transitions to `${after_passing}`. If any command fails, transitions to `hitl` for manual resolution.
+Gate-only state — no agent is spawned. The runtime collects all quality-check commands that agents discovered during the build (test commands from the tester, lint commands from the reviewer, build commands from the implementor) and executes them deterministically. Language-agnostic: works with any project regardless of toolchain.
 
-Flows can override the default gates via the `overrides` mechanism:
+If all discovered gates pass, transitions to `${after_passing}`. If any gate fails, transitions to `hitl` for manual resolution. If no gates were discovered, fails closed.
+
+Flows can override with explicit gates via the `overrides` mechanism if needed:
 
 ```yaml
 - fragment: pre-launch-check

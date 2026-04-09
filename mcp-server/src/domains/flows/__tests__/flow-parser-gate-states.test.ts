@@ -131,15 +131,15 @@ describe("validateSpawnCoverage: agent + gates states still need spawn instructi
   });
 });
 
-// Test 3: States without gates and without agent require spawn instructions
+// Test 3: Agentless single states are exempt (gate-only — may use discovered gates at runtime)
 
-describe("validateSpawnCoverage: states without gates or agent require spawn instructions", () => {
-  it("requires spawn instruction for states that have no gates and no agent", () => {
+describe("validateSpawnCoverage: agentless single states are exempt", () => {
+  it("exempts single states with no agent (gate-only, may use discovered gates)", () => {
     const flow = makeBaseFlow({
       spawn_instructions: {},
       states: {
-        research: {
-          // No agent, no gates — should still require spawn instruction
+        check: {
+          // No agent, no explicit gates — exempt as gate-only state (discovered gates at runtime)
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -150,8 +150,27 @@ describe("validateSpawnCoverage: states without gates or agent require spawn ins
     });
 
     const errors = validateSpawnCoverage(flow);
+    expect(errors).toHaveLength(0);
+  });
+
+  it("still requires spawn instruction for non-single agentless states (e.g. parallel)", () => {
+    const flow = makeBaseFlow({
+      spawn_instructions: {},
+      states: {
+        work: {
+          // No agent, but type is parallel — not exempt
+          transitions: { done: "terminal" },
+          type: "parallel",
+        },
+        terminal: {
+          type: "terminal",
+        },
+      },
+    });
+
+    const errors = validateSpawnCoverage(flow);
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toContain('"research"');
+    expect(errors[0]).toContain('"work"');
   });
 
   it("terminal states are always exempt (baseline regression)", () => {

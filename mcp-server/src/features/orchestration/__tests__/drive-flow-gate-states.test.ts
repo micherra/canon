@@ -268,10 +268,10 @@ describe("gate-only state: gate fails", () => {
   });
 });
 
-// Test 3: Gate-only state with no gates resolved (empty array) → HITL (fail-closed)
+// Test 3: Gate-only state with no gates resolved and no discovered gates → HITL (fail-closed)
 
 describe("gate-only state: no gates resolved", () => {
-  it("returns HITL breakpoint when runGates returns empty array (fail-closed)", async () => {
+  it("returns HITL breakpoint when no explicit or discovered gates exist (fail-closed)", async () => {
     const workspace = makeTmpWorkspace();
     makeStore(workspace, "check");
 
@@ -284,7 +284,7 @@ describe("gate-only state: no gates resolved", () => {
       },
       states: {
         check: {
-          gates: ["unresolved-gate"],
+          // No gates, no agent — gate-only state that relies on discovered gates
           transitions: { done: "review" },
           type: "single",
         },
@@ -300,8 +300,6 @@ describe("gate-only state: no gates resolved", () => {
     };
 
     vi.mocked(getProjectDir).mockReturnValue(workspace);
-    // Simulate no gates resolved
-    vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(makeEnterResult({ prompts: [], state_type: "single" }));
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("check") as never);
 
@@ -312,10 +310,83 @@ describe("gate-only state: no gates resolved", () => {
       expect(result.action).toBe("hitl");
       if (result.action === "hitl") {
         expect(result.breakpoint.reason).toContain("Pre-launch gates failed");
-        // Should mention no gates resolved
         expect(result.breakpoint.reason).toContain("No gates were resolved");
       }
     }
+  });
+});
+
+// Test 3b: Gate-only state discovers gates from prior board states → runs them
+
+describe("gate-only state: discovered gates from prior states", () => {
+  it("collects and runs discovered gates when no explicit gates declared", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace, "check");
+    // Seed a prior state with discovered gates (simulating what agents reported earlier)
+    store.upsertState("implement", {
+      discovered_gates: [
+        { command: "pytest", source: "tester" },
+        { command: "ruff check .", source: "reviewer" },
+      ],
+      entries: 1,
+      status: "done",
+    });
+
+    const flow: ResolvedFlow = {
+      description: "flow with gate-only state using discovered gates",
+      entry: "check",
+      name: "test-flow",
+      spawn_instructions: {
+        review: "Do review",
+      },
+      states: {
+        check: {
+          // No explicit gates — should use discovered gates from board
+          transitions: { done: "review" },
+          type: "single",
+        },
+        review: {
+          agent: "canon:canon-reviewer",
+          transitions: { done: "terminal" },
+          type: "single",
+        },
+        terminal: {
+          type: "terminal",
+        },
+      },
+    };
+
+    vi.mocked(getProjectDir).mockReturnValue(workspace);
+    vi.mocked(runGates).mockReturnValue([
+      { command: "pytest", exitCode: 0, gate: "pytest", output: "4 passed", passed: true },
+      { command: "ruff check .", exitCode: 0, gate: "ruff check .", output: "All clean", passed: true },
+    ]);
+    vi.mocked(enterAndPrepareState)
+      .mockResolvedValueOnce(makeEnterResult({ prompts: [], state_type: "single" }))
+      .mockResolvedValueOnce(
+        makeEnterResult({
+          prompts: [
+            { agent: "canon:canon-reviewer", prompt: "Review code", role: "main", template_paths: [] },
+          ],
+          state_type: "single",
+        }),
+      );
+    vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("review") as never);
+
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.action).toBe("spawn");
+    }
+    // runGates should have been called with a synthetic state def containing discovered gates
+    expect(vi.mocked(runGates)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gates: ["pytest", "ruff check ."],
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });
 
