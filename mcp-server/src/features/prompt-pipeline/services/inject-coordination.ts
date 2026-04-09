@@ -82,7 +82,7 @@ function lazyLoadBoard(workspace: string): Board | null {
  *
  * Opens the KG DB once, computes file insight maps once, then iterates entries.
  * If the KG DB does not exist or any query throws, returns an empty map so that
- * the static isolation fallback in resolveToolProfile handles all entries.
+ * the worktreePath fallback in resolveToolProfile handles all entries.
  *
  * Known Phase 1 limitation: The trust map is keyed by agent name.
  * In wave states, multiple entries may share the same agent type but target
@@ -241,7 +241,7 @@ export async function injectCoordination(ctx: PromptContext): Promise<PromptCont
   const toolOverrides: ToolOverrides | undefined = state.tool_overrides;
 
   // Compute trust-derived permission modes from KG when available.
-  // Returns empty map on KG absence/error — resolveToolProfile falls back to static isolation check.
+  // Returns empty map on KG absence/error — resolveToolProfile falls back to worktreePath check.
   const trustPermissionModes = computeTrustForEntries(prompts, ctx);
 
   prompts = prompts.map((entry) => {
