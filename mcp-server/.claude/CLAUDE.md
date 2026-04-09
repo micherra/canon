@@ -6,36 +6,46 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-04-01 (ADR-005: query.ts + view-materializer.ts deleted; KgQuery is sole graph query path) -->
+<!-- last-updated: 2026-04-09 (bounded-context refactor: directory tree updated to reflect new layout under app/, domains/, features/, platform/, shared/) -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
 ```
 src/
-├── index.ts              # Entry point — registers all MCP tools (all handlers wrapped via wrapHandler)
-├── parser.ts             # Frontmatter parsing for principle markdown files
-├── matcher.ts            # Principle matching (layer/file_pattern/tags filtering)
-├── schema.ts             # Zod schemas for report input
-├── constants.ts          # Shared constants (layers, extensions, CANON_DIR)
-├── tools/                # Tool implementations (one file per tool)
-├── adapters/             # Privileged subprocess adapters (ADR-002): git-adapter.ts, git-adapter-async.ts, process-adapter.ts
-├── drift/                # Drift tracking — reviews (JSONL persistence)
-├── graph/                # Dependency graph — scanner, import/export parsing, priority scoring
-├── orchestration/        # Flow execution — board, messaging, variables, gates, consultations, compete, debate
-├── utils/                # Config loading, path handling, atomic writes, ID generation, tool-result.ts, wrap-handler.ts
-└── __tests__/            # Vitest unit tests
+├── app/                  # Entry point — tool registration (index.ts, all handlers via wrapHandler)
+├── domains/              # Shared domain types and persistence
+│   ├── board/            # Board mutation logic (pure functions)
+│   ├── drift/            # Drift/review type definitions
+│   ├── flows/            # Flow and board-state type definitions, schemas
+│   ├── knowledge-graph/  # KG type definitions (FileMetrics, LayerViolation)
+│   ├── messages/         # Message persistence for agent collaboration
+│   └── workspaces/       # Workspace and execution store (SQLite persistence)
+├── features/             # Tool implementations grouped by bounded context
+│   ├── diagnostics/      # Drift reports, agent metrics, summary storage
+│   ├── file-context/     # get_file_context tool
+│   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
+│   ├── orchestration/    # Flow engine, drive_flow, init_workspace, report_result, all orchestration tools
+│   ├── pr-review/        # show_pr_impact, review_code, store_pr_review
+│   ├── principles/       # get_principles, list_principles, get_compliance
+│   └── prompt-pipeline/  # Prompt assembly, context enrichment, consultation pipeline
+├── graph/                # Legacy graph scanner — import/export parsing (being migrated to features/knowledge-graph)
+├── orchestration/        # Legacy orchestration — flow parser, execution store, schemas (being migrated to features/orchestration)
+├── platform/             # Infrastructure: adapters (git, process), job manager, workers, storage
+├── shared/               # Shared kernel: constants, parser, matcher, schema, lib/ utilities
+├── tests/                # Cross-cutting test helpers
+└── ui/                   # Svelte frontend — MCP App (Sigma.js graph, PR review UI)
 ```
 
 **Key subsystems:**
-- **Drift tracking** (`drift/`) — JSONL-backed store for reviews with auto-rotation
- - **Dependency graph** (`graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs; `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01)
-- **Principle matching** (`matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity
-- **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
+- **Drift tracking** (`platform/storage/drift/`) — JSONL-backed store for reviews with auto-rotation
+- **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs; `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01)
+- **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity
+- **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-04-08 (git-intel Phase 1: new git-intel submodule; KG SCHEMA_VERSION=4; FileContextOutput+UnifiedPrOutput+PrReviewDataOutput gained git-intel fields; auto-approve: worktree-settings.ts + injectSettingsIntoRequests) -->
+<!-- last-updated: 2026-04-09 (bounded-context refactor: all contract path references updated to bounded-context layout; features/, platform/, shared/lib/ replace legacy flat directories) -->
 
-**Tool error types** (`src/utils/tool-result.ts`) — added 2026-03-31 (ADR-002):
+**Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
 - `CanonToolError` — `{ ok: false; error_code: CanonErrorCode; message: string; recoverable: boolean; context?: Record<string, unknown> }`
 - `ToolResult<T>` — discriminated union `({ ok: true } & T) | CanonToolError`; all tool functions now return this type instead of throwing for expected errors
@@ -45,10 +55,10 @@ src/
 - `isToolError(result)` — type guard; returns `true` when `ok === false` and `error_code` present
 - `assertOk<T>(result)` — asserts `result is { ok: true } & T`; throws if error; intended for tests and callers that know the call must succeed
 
-**Top-level MCP catch-all** (`src/utils/wrap-handler.ts`) — added 2026-03-31 (ADR-002):
+**Top-level MCP catch-all** (`src/shared/lib/wrap-handler.ts`) — added 2026-03-31 (ADR-002):
 - `wrapHandler<T>(handler)` — wraps any tool handler; catches unexpected throws and returns them as typed `UNEXPECTED` `CanonToolError`; all tool registrations in `index.ts` use this wrapper
 
-**Subprocess adapters** (`src/adapters/`) — added 2026-03-31 (ADR-002); only files in this directory may import `node:child_process`:
+**Subprocess adapters** (`src/platform/adapters/`) — added 2026-03-31 (ADR-002); only files in this directory may import `node:child_process`:
 - `git-adapter.ts`: `gitExec(args, cwd, timeout?)` → `ProcessResult` (sync, `shell` never `true`); `gitDiff(args, cwd, timeout?)` → `ProcessResult`; `gitStatus(cwd, timeout?)` → `ProcessResult`; default 30s timeout
 - `git-adapter-async.ts`: `gitExecAsync(args, cwd, timeout?)` → `Promise<ProcessResult>`; never rejects; default 30s timeout
 - `process-adapter.ts`: `runShell(command, cwd, timeout?)` → `ProcessResult` (sync, `shell: true`); 512KB maxBuffer; default 30s timeout
@@ -91,7 +101,7 @@ src/
 - Old null-marker `~` format still accepted by `FragmentParamValueSchema` (backward compat); new typed format is canonical going forward
 - `state_id`-typed params are validated against real state names by `validateStateIdParams` during `loadAndResolveFlow`
 
-**Drift Store** (`src/drift/store.ts`):
+**Drift Store** (`src/platform/storage/drift/store.ts`):
 - `ReviewEntry` — unified type for all reviews (principle and PR); optional PR fields: `pr_number?: number`, `branch?: string`, `last_reviewed_sha?: string`, `file_priorities?: Array<{ path: string; priority_score: number }>`
 - `PrReviewEntry` — DELETED 2026-03-25; callers use `ReviewEntry` with optional PR fields
 - `DriftStore.getReviews(options?: { principleId?: string; branch?: string; prNumber?: number }): Promise<ReviewEntry[]>` — all options AND-filter; old positional-string signature removed
@@ -99,10 +109,10 @@ src/
 - `DriftStore.getLastReviewForBranch(branch: string): Promise<ReviewEntry | null>` — returns last matching entry or null
 - `PrStore` class — DELETED 2026-03-25; all review persistence unified under `DriftStore` via `reviews.jsonl`
 
-**`store_pr_review` tool** (`src/tools/store-pr-review.ts`):
+**`store_pr_review` tool** (`src/features/pr-review/tools/store-pr-review.ts`):
 - Output field: `review_id` (was `pr_review_id` until 2026-03-25); ID prefix is `rev_`
 
-**`show_pr_impact` tool** (`src/tools/show-pr-impact.ts`):
+**`show_pr_impact` tool** (`src/features/pr-review/tools/show-pr-impact.ts`):
 - Unified tool — merges `show_pr_impact` and `get_pr_review_data` (removed 2026-03-25)
 - Accepts optional `options?: { branch?: string; pr_number?: number; diff_base?: string; incremental?: boolean }` — all four exposed as top-level MCP input fields
 - Always calls `getPrReviewData` internally for live diff analysis; optionally overlays stored review impact data when a Canon review exists in DriftStore
@@ -111,7 +121,7 @@ src/
 - `status` is always `"ok"` — no more `"no_review"` status; review field being absent signals no stored review
 - Resource URI: `ui://canon/pr-review` (was `ui://canon/pr-impact`); HTML entry: `pr-review.html`
 
-**`get_drift_report` tool** (`src/tools/get-drift-report.ts`):
+**`get_drift_report` tool** (`src/features/diagnostics/tools/get-drift-report.ts`):
 - Output field `pr_reviews` is `ReviewEntry[]` (was `PrReviewEntry[]` until 2026-03-25); entries are filtered by `pr_number !== undefined || branch !== undefined`
 
 **Knowledge Graph types** (`src/graph/kg-types.ts`) — updated ADR-005 2026-04-01:
@@ -139,20 +149,20 @@ src/
 - **`co-change-detector.ts`** — `computeCoChangePairs(commits, config): CoChangePair[]` (skips commits > `maxFilesPerCommit` files; Jaccard similarity; pair keys normalized alphabetically); `persistCoChangeEdges(db, pairs): void` (bare DELETE+INSERT, no transaction)
 - **`git-intel-pipeline.ts`** — `getCurrentHead(cwd): string | null`; `isGitIntelStale(db, cwd): boolean` (reads `computed_at_commit` from `hotspot_scores`; true when no rows or SHA mismatch); `runGitIntelPipeline(db, cwd, config?): void` (full orchestration: git log → parse → filter excluded → score → detect → single atomic `db.transaction()` wrapping both persist calls); `ensureGitIntelFresh(db, cwd, config?): void` (no-op when fresh); `computeGitIntel(dbPath, repoRoot, config?): void` (standalone entry point: `initDatabase` → `ensureGitIntelFresh` → `db.close()`)
 
-**`store-summaries.ts`** (`src/tools/store-summaries.ts`) — updated ADR-005 2026-04-01:
+**`store-summaries.ts`** (`src/features/diagnostics/tools/store-summaries.ts`) — updated ADR-005 2026-04-01:
 - `inferLanguageFromExtension(filePath)` → `string` — new export; maps `.ts`/`.tsx` → `"typescript"`, `.js`/`.jsx` → `"javascript"`, `.py` → `"python"`, `.md` → `"markdown"`, default `"unknown"`
 - `loadSummariesFile` — REMOVED 2026-04-01 (ADR-005); DB is sole summary read path
 - `flattenSummaries` — REMOVED 2026-04-01 (ADR-005); no longer needed
 - `StoreSummariesOutput.path` — now returns SQLite DB path (was `summaries.json` path)
 - `storeSummaries` — DB-only write; auto-stubs missing file rows via `upsertFile`; inits DB if absent; no JSON fallback
 
-**`CANON_FILES` constants** (`src/constants.ts`) — updated ADR-005 2026-04-01:
+**`CANON_FILES` constants** (`src/shared/constants.ts`) — updated ADR-005 2026-04-01:
 - `CANON_FILES.GRAPH_DATA` — REMOVED; `graph-data.json` no longer written
 - `CANON_FILES.REVERSE_DEPS` — REMOVED; `reverse-deps.json` no longer written
 - `CANON_FILES.SUMMARIES` — REMOVED; `summaries.json` no longer written
 - Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 
-**File Context** (`src/tools/get-file-context.ts`):
+**File Context** (`src/features/file-context/tools/get-file-context.ts`):
 - `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`, `hotspot_score?: HotspotScoreOutput`, `co_change_partners?: Array<CoChangePartner>` — git-intel fields added 2026-04-08
 - `loadKgData(dbPath, filePath, projectDir?)` — exported for testing; third `projectDir` param triggers `ensureGitIntelFresh` and populates `hotspot_score` and `co_change_partners`; co-change query uses UNION across both edge directions
 - `imported_by_layer: Record<string, string[]>` — mirrors `imports_by_layer`; groups reverse-dependency paths by their inferred layer
@@ -160,7 +170,7 @@ src/
 - `project_max_impact: number` — max `computeImpactScore()` across all graph nodes; `0` when no cached graph
 - `FileBlastRadiusEntry` interface — fields: `name`, `qualified_name`, `kind`, `depth`, `file_path` (path of the file containing the entity; `""` if lookup fails)
 
-**PR Review Data** (`src/tools/pr-review-data.ts`) — pure function module; `get_pr_review_data` MCP tool removed 2026-03-25 (absorbed into `show_pr_impact`); `getPrReviewData` function called internally by `showPrImpact`; `PrReviewDataOutput` gained `hotspot_files?: string[]` (git-intel, 2026-04-08):
+**PR Review Data** (`src/features/pr-review/tools/pr-review-data.ts`) — pure function module; `get_pr_review_data` MCP tool removed 2026-03-25 (absorbed into `show_pr_impact`); `getPrReviewData` function called internally by `showPrImpact`; `PrReviewDataOutput` gained `hotspot_files?: string[]` (git-intel, 2026-04-08):
 - `PrViolation` interface — `{ principle_id: string; severity: "rule"|"strong-opinion"|"convention"; message?: string }`
 - `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`, `violations?: PrViolation[]`
 - `PrFileSummary` interface — `{ path: string; layer: string; status: "added"|"modified"|"deleted"|"renamed" }` — lightweight entry for clustering
@@ -198,7 +208,7 @@ src/
 - `PrReviewPrep.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
 - `PrImpact.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
 
-**Config utilities** (`src/utils/config.ts`):
+**Config utilities** (`src/shared/lib/config.ts`):
 - `buildLayerInferrer(mappings)` — now supports glob patterns (`*`, `**`, `?`) in addition to plain directory name segments; globs are anchored to path start
 - `loadLayerMappingsStrict(projectDir)` — throws if no layer mappings configured in `.canon/config.json` (strict variant of `loadLayerMappings`)
 - `loadGraphCompositionConfig(projectDir)` — reads `config.graph.composition` block; returns typed `GraphCompositionConfig` with defaults (`enabled: false`, `min_confidence: 0.5`, `max_refs_per_file: 50`)
@@ -225,7 +235,7 @@ src/
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result for drift tracking |
 
-**`resolve_after_consultations` tool** (`src/tools/resolve-after-consultations.ts`) — added 2026-03-26:
+**`resolve_after_consultations` tool** (`src/features/orchestration/tools/resolve-after-consultations.ts`) — added 2026-03-26:
 - Input: `ResolveAfterConsultationsInput` — `{ workspace: string; state_id: string; flow: ResolvedFlow; variables: Record<string, string> }`
 - Output: `ResolveAfterConsultationsResult` — `{ consultation_prompts: ConsultationPromptEntry[]; warnings: string[] }`
 - Pure resolution function — no board reads, no state entry, no convergence check; runs at the post-wave lifecycle breakpoint
@@ -233,7 +243,7 @@ src/
 - Call after the last wave completes and before `report_result`; orchestrator spawns the returned consultation agents, records results with breakpoint `"after"`, then proceeds to `report_result`
 - After-consultation summaries are automatically picked up by the next state's `enterAndPrepareState` via the briefing injection pipeline
 
-**`resolve_wave_event` tool** (`src/tools/resolve-wave-event.ts`) — added 2026-03-26:
+**`resolve_wave_event` tool** (`src/features/orchestration/tools/resolve-wave-event.ts`) — added 2026-03-26:
 - Input: `ResolveWaveEventInput` — `{ workspace: string; event_id: string; action: "apply"|"reject"; resolution?: Record<string, unknown>; reason?: string }`
 - Output: `ResolveWaveEventResult` — `{ event_id, action, agents: string[], descriptions: Record<string, string>, pending_count: number }`
 - Validates: `action === "reject"` requires `reason`; throws `"Event not found"` if `event_id` absent; throws `"Event {id} is already {status}"` if event is not pending
@@ -274,12 +284,12 @@ src/
 - `FragmentParamValueSchema` / `FragmentParamValue` — accepts both old null-marker format and new typed format; backward compatible
 - `FragmentStateDefinitionSchema` — discriminated union mirroring `StateDefinitionSchema` with relaxed fields for fragment substitution
 
-**Analytics** (`src/drift/analytics.ts`) — added 2026-03-26:
+**Analytics** (`src/platform/storage/drift/analytics.ts`) — added 2026-03-26:
 - `FlowAnalytics` interface — `{ avg_gate_pass_rate?, avg_postcondition_pass_rate?, total_runs, runs_with_gate_data }`
 - `computeAnalytics(entries: FlowRunEntry[])` — pure function; aggregates metrics across flow run entries; skips entries without gate data when computing averages
 - `FlowRunEntry` new optional fields: `gate_pass_rate`, `postcondition_pass_rate`, `total_violations`, `total_test_results`, `total_files_changed`
 
-**`report_result` tool** (`src/tools/report-result.ts`) — new optional input fields added 2026-03-26:
+**`report_result` tool** (`src/features/orchestration/tools/report-result.ts`) — new optional input fields added 2026-03-26:
 - Quality signal fields: `gate_results?: GateResult[]`, `postcondition_results?: PostconditionResult[]`, `violation_count?: number`, `violation_severities?: ViolationSeverities`, `test_results?: TestResults`, `files_changed?: number`
 - Discovery fields: `discovered_gates?: DiscoveredGate[]`, `discovered_postconditions?: PostconditionAssertion[]` — accumulated (append, not replace) on `BoardStateEntry`
 - `gate_results` and `postcondition_results` stored both in `metrics` and top-level `BoardStateEntry` for quick access
@@ -331,7 +341,7 @@ src/
 ## Invariants
 <!-- last-updated: 2026-04-08 (worktree_path sole isolation signal; learn_gate_passed on done action; auto-approve injection fail-closed) -->
 
-- **ADR-002 subprocess isolation**: Only files in `src/adapters/` may import `node:child_process`; all `tools/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
+- **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
 - **ADR-002 security boundary**: `git-adapter.ts` never sets `shell: true`; `process-adapter.ts` sets `shell: true` for arbitrary shell commands; the two adapters must not be interchanged for git operations — added 2026-03-31
 - All subprocess adapters enforce a default 30s timeout; callers may pass an explicit timeout override — added 2026-03-31
