@@ -2,14 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Board } from "../board-state-schemas.ts";
 import { evaluateSkipWhen, matchGlob } from "../skip-when.ts";
 
-// Mock evaluateLearnGate from learn-gate.ts for learn_gate_not_passed tests
-vi.mock(
-  "@features/orchestration/services/learn-gate.ts",
-  () => ({
-    evaluateLearnGate: vi.fn(),
-  }),
-);
-
 // Mock getProjectDir from wave-lifecycle.ts
 vi.mock(
   "@domains/workspaces/wave-lifecycle.ts",
@@ -17,6 +9,33 @@ vi.mock(
     getProjectDir: vi.fn().mockReturnValue("/project"),
   }),
 );
+
+// Mock platform drift-db for learn gate tests
+vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+  getDriftDb: vi.fn().mockReturnValue({ countFlowRunsSince: vi.fn().mockReturnValue(10) }),
+}));
+
+// Mock shared learn-lock for learn gate tests
+vi.mock("@shared/lib/learn-lock.ts", () => ({
+  acquireLearnLock: vi.fn().mockResolvedValue({ acquired: true, previousMtime: null }),
+  getLastLearnTimestamp: vi.fn().mockResolvedValue(null),
+}));
+
+// Mock shared config for learn gate tests
+vi.mock("@shared/lib/config.ts", () => ({
+  loadLearnGateConfig: vi.fn().mockResolvedValue({
+    enabled: true,
+    lock_stale_after_hours: 1,
+    min_flows_since_last: 5,
+    min_hours_since_last: 48,
+  }),
+}));
+
+// Mock node:fs/promises stat and writeFile for throttle gate
+vi.mock("node:fs/promises", () => ({
+  stat: vi.fn().mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" })),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Hoist the mock factory so it runs before module import.
 // gitExecImpl is a mutable reference we swap per test.
@@ -458,23 +477,50 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
 // evaluateSkipWhen — learn_gate_not_passed
 
 describe("evaluateSkipWhen — learn_gate_not_passed", () => {
-  let evaluateLearnGate: ReturnType<typeof vi.fn>;
+  let loadLearnGateConfig: ReturnType<typeof vi.fn>;
+  let getLastLearnTimestamp: ReturnType<typeof vi.fn>;
+  let acquireLearnLock: ReturnType<typeof vi.fn>;
+  let getDriftDb: ReturnType<typeof vi.fn>;
+  let statMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    const mod = await import("@features/orchestration/services/learn-gate.ts");
-    evaluateLearnGate = vi.mocked(mod.evaluateLearnGate);
-    evaluateLearnGate.mockReset();
+    const configMod = await import("@shared/lib/config.ts");
+    loadLearnGateConfig = vi.mocked(configMod.loadLearnGateConfig);
+    loadLearnGateConfig.mockResolvedValue({
+      enabled: true,
+      lock_stale_after_hours: 1,
+      min_flows_since_last: 5,
+      min_hours_since_last: 48,
+    });
+
+    const lockMod = await import("@shared/lib/learn-lock.ts");
+    getLastLearnTimestamp = vi.mocked(lockMod.getLastLearnTimestamp);
+    acquireLearnLock = vi.mocked(lockMod.acquireLearnLock);
+    getLastLearnTimestamp.mockResolvedValue(null); // no prior learn
+    acquireLearnLock.mockResolvedValue({ acquired: true, previousMtime: null });
+
+    const driftMod = await import("@platform/storage/drift/drift-db.ts");
+    getDriftDb = vi.mocked(driftMod.getDriftDb);
+    getDriftDb.mockReturnValue({ countFlowRunsSince: vi.fn().mockReturnValue(10) });
+
+    const fsMod = await import("node:fs/promises");
+    statMock = vi.mocked(fsMod.stat as ReturnType<typeof vi.fn>);
+    statMock.mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
   });
 
   it("returns skip: false when all 5 gates pass", async () => {
-    evaluateLearnGate.mockResolvedValue({ passed: true });
     const board = makeBoard();
     const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
     expect(result.skip).toBe(false);
   });
 
   it("returns skip: true when auto-learn disabled in config (gate 1)", async () => {
-    evaluateLearnGate.mockResolvedValue({ passed: false, reason: "auto-learn disabled" });
+    loadLearnGateConfig.mockResolvedValue({
+      enabled: false,
+      lock_stale_after_hours: 1,
+      min_flows_since_last: 5,
+      min_hours_since_last: 48,
+    });
     const board = makeBoard();
     const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
     expect(result.skip).toBe(true);
@@ -482,7 +528,8 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
   });
 
   it("returns skip: true when time gate fails (gate 2)", async () => {
-    evaluateLearnGate.mockResolvedValue({ passed: false, reason: "time gate: 2.0h < 48h" });
+    // last learn was 1 hour ago, min is 48h
+    getLastLearnTimestamp.mockResolvedValue(Date.now() - 1 * 60 * 60 * 1000);
     const board = makeBoard();
     const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
     expect(result.skip).toBe(true);
@@ -490,7 +537,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
   });
 
   it("returns skip: true when flow gate fails (gate 4)", async () => {
-    evaluateLearnGate.mockResolvedValue({ passed: false, reason: "flow gate: 2 < 5" });
+    getDriftDb.mockReturnValue({ countFlowRunsSince: vi.fn().mockReturnValue(2) }); // < 5
     const board = makeBoard();
     const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
     expect(result.skip).toBe(true);
@@ -498,15 +545,15 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
   });
 
   it("returns skip: true when lock gate fails (gate 5)", async () => {
-    evaluateLearnGate.mockResolvedValue({ passed: false, reason: "lock gate: already_locked" });
+    acquireLearnLock.mockResolvedValue({ acquired: false, reason: "already_locked" });
     const board = makeBoard();
     const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("lock gate");
   });
 
-  it("returns skip: true with reason when evaluateLearnGate throws (fail-open)", async () => {
-    evaluateLearnGate.mockRejectedValue(new Error("unexpected db error"));
+  it("returns skip: true with reason when config loading throws (fail-open)", async () => {
+    loadLearnGateConfig.mockRejectedValue(new Error("unexpected config error"));
     const board = makeBoard();
     const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
     expect(result.skip).toBe(true);

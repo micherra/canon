@@ -129,6 +129,8 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
       "Glob",
       "Bash",
       "Write", // ADR-016: scoped to .canon/proposed-learnings/ via write_scope constraint
+      "get_history",     // ADR-019: query execution history during pattern analysis
+      "get_drift_report", // Query drift data for principle health
       "graph_query",
       "semantic_search",
       "get_file_context",
