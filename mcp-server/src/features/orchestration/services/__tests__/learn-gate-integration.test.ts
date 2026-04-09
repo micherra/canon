@@ -185,11 +185,10 @@ describe("learn-gate integration: flow gate → drift-db cross-module", () => {
     const { getDriftDb } = await import("@platform/storage/drift/drift-db.ts");
     const driftDb = getDriftDb(projectDir);
     const baseRun = {
-      branch: "main",
       completed: new Date().toISOString(),
       flow: "fast-path",
-      gate_pass_rate: null,
-      postcondition_pass_rate: null,
+      gate_pass_rate: undefined,
+      postcondition_pass_rate: undefined,
       skipped_states: [],
       started: new Date(Date.now() - 60000).toISOString(),
       state_durations: {},
@@ -197,10 +196,10 @@ describe("learn-gate integration: flow gate → drift-db cross-module", () => {
       task: "fix bug",
       tier: "small",
       total_duration_ms: 60000,
-      total_files_changed: null,
+      total_files_changed: undefined,
       total_spawns: 2,
-      total_test_results: null,
-      total_violations: null,
+      total_test_results: undefined,
+      total_violations: undefined,
     };
     driftDb.appendFlowRun({ ...baseRun, run_id: "run-01" });
     driftDb.appendFlowRun({ ...baseRun, run_id: "run-02" });
@@ -237,11 +236,10 @@ describe("learn-gate integration: lock gate → learn-lock stale reclaim", () =>
     const { getDriftDb } = await import("@platform/storage/drift/drift-db.ts");
     const driftDb = getDriftDb(projectDir);
     driftDb.appendFlowRun({
-      branch: "main",
       completed: new Date().toISOString(),
       flow: "fast-path",
-      gate_pass_rate: null,
-      postcondition_pass_rate: null,
+      gate_pass_rate: undefined,
+      postcondition_pass_rate: undefined,
       run_id: "run-01",
       skipped_states: [],
       started: new Date(Date.now() - 60000).toISOString(),
@@ -250,10 +248,10 @@ describe("learn-gate integration: lock gate → learn-lock stale reclaim", () =>
       task: "fix bug",
       tier: "small",
       total_duration_ms: 60000,
-      total_files_changed: null,
+      total_files_changed: undefined,
       total_spawns: 2,
-      total_test_results: null,
-      total_violations: null,
+      total_test_results: undefined,
+      total_violations: undefined,
     });
 
     // Write a stale lock (2h old, stale threshold = 1h)
@@ -299,11 +297,10 @@ describe("learn-gate integration: lock gate → learn-lock stale reclaim", () =>
     const { getDriftDb } = await import("@platform/storage/drift/drift-db.ts");
     const driftDb = getDriftDb(projectDir);
     driftDb.appendFlowRun({
-      branch: "main",
       completed: new Date().toISOString(),
       flow: "fast-path",
-      gate_pass_rate: null,
-      postcondition_pass_rate: null,
+      gate_pass_rate: undefined,
+      postcondition_pass_rate: undefined,
       run_id: "run-01",
       skipped_states: [],
       started: new Date(Date.now() - 60000).toISOString(),
@@ -312,10 +309,10 @@ describe("learn-gate integration: lock gate → learn-lock stale reclaim", () =>
       task: "fix bug",
       tier: "small",
       total_duration_ms: 60000,
-      total_files_changed: null,
+      total_files_changed: undefined,
       total_spawns: 1,
-      total_test_results: null,
-      total_violations: null,
+      total_test_results: undefined,
+      total_violations: undefined,
     });
 
     // Write a FRESH lock (not stale) — simulates another learner running

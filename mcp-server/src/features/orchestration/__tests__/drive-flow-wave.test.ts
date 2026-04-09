@@ -758,10 +758,11 @@ describe("driveFlow — merge conflict handling", () => {
       wave: 1,
       wave_results: {
         "task-01": {
-          branch: "canon-wave/task-01",
           status: "done",
           tasks: ["task-01"],
-          worktree_path: "/project/.canon/worktrees/task-01",
+          worktree_entries: [
+            { branch: "canon-wave/task-01", status: "merged", task_id: "task-01", worktree_path: "/project/.canon/worktrees/task-01" },
+          ],
         },
       },
       wave_total: 1,

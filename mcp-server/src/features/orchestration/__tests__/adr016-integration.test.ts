@@ -349,7 +349,8 @@ describe("ADR-016: learn-lock stale_reclaim_failed concurrent reclaim race", () 
 
     const failed = results.find((r) => !r.acquired);
     expect(failed?.acquired).toBe(false);
-    if (!failed?.acquired) {
+    if (!failed) return;
+    if (!failed.acquired) {
       // The losing caller gets either:
       // - "stale_reclaim_failed" — its unlink failed because winner already unlinked
       // - "already_locked" — winner's wx completed before loser's stat saw fresh lock

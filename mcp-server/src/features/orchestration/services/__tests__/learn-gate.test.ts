@@ -144,10 +144,14 @@ describe("evaluateLearnGate — gate 3: scan throttle", () => {
     expect(result.passed).toBe(true);
   });
 
-  test("rethrows unexpected stat errors", async () => {
+  test("returns passed: false for unexpected stat errors (fail-closed, never blocks)", async () => {
+    // Gate evaluation must never block flow completion — non-ENOENT errors return passed: false
+    // rather than rethrowing (contradicts the old rethrow behavior documented in the docstring).
     vi.mocked(stat).mockRejectedValue(Object.assign(new Error("EPERM"), { code: "EPERM" }));
 
-    await expect(evaluateLearnGate(PROJECT_DIR)).rejects.toThrow("EPERM");
+    const result = await evaluateLearnGate(PROJECT_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.reason).toBe("scan throttle: stat error");
   });
 });
 
