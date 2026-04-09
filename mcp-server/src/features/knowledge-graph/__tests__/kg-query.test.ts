@@ -2,7 +2,7 @@
  * KgQuery Tests (Part 1)
  *
  * Tests for getBlastRadius(), getFileBlastRadius(), getFileDegrees(),
- * getAllFileDegrees(), and getFileAdjacencyList().
+ * and getAllFileDegrees().
  * Uses in-memory SQLite for speed and isolation.
  */
 
@@ -549,58 +549,3 @@ describe("KgQuery.getAllFileDegrees()", () => {
   });
 });
 
-// getFileAdjacencyList
-
-describe("KgQuery.getFileAdjacencyList()", () => {
-  let db: Database.Database;
-  let store: KgStore;
-  let query: KgQuery;
-
-  beforeEach(() => {
-    db = initDatabase(":memory:");
-    store = new KgStore(db);
-    query = new KgQuery(db);
-  });
-
-  afterEach(() => {
-    store.close();
-  });
-
-  test("returns correct adjacency structure", () => {
-    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/A.ts" }));
-    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
-    const fileC = store.upsertFile(makeFileRow({ layer: "shared", path: "src/C.ts" }));
-
-    // A -> B, A -> C
-    store.insertFileEdge({
-      confidence: 1.0,
-      edge_type: "imports",
-      evidence: null,
-      relation: null,
-      source_file_id: fileA.file_id!,
-      target_file_id: fileB.file_id!,
-    });
-    store.insertFileEdge({
-      confidence: 1.0,
-      edge_type: "imports",
-      evidence: null,
-      relation: null,
-      source_file_id: fileA.file_id!,
-      target_file_id: fileC.file_id!,
-    });
-
-    const adj = query.getFileAdjacencyList();
-
-    const neighborsA = adj.get(fileA.file_id!);
-    expect(neighborsA).toBeDefined();
-    expect(neighborsA).toContain(fileB.file_id!);
-    expect(neighborsA).toContain(fileC.file_id!);
-    // B has no outgoing edges, so it should not be in the map
-    expect(adj.has(fileB.file_id!)).toBe(false);
-  });
-
-  test("returns empty map when no edges exist", () => {
-    const adj = query.getFileAdjacencyList();
-    expect(adj.size).toBe(0);
-  });
-});

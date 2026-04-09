@@ -14,7 +14,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist spawnSync mock to file level so vitest can hoist it before module imports.
 // Controls git diff output for skip_when integration tests.
@@ -30,7 +30,6 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { canEnterState } from "@domains/board/board.ts";
-import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import type { FlowEventMap } from "@domains/messages/events.ts";

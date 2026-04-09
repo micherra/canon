@@ -34,7 +34,7 @@ vi.mock("../engine/effects.ts", () => ({
 
 import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { appendFlowRun, computeAnalytics } from "@platform/storage/drift/analytics.ts";
+import { computeAnalytics } from "@platform/storage/drift/analytics.ts";
 import { CANON_DIR } from "@shared/constants.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";

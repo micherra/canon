@@ -11,12 +11,9 @@ import { KgStore } from "@graph/kg-store.ts";
 import type { EntityRow } from "@graph/kg-types.ts";
 import { KgVectorStore } from "@graph/kg-vector-store.ts";
 import { EMBEDDING_MODEL_ID } from "@shared/constants.ts";
-import { MockEmbeddingService, randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
+import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-
-// Suppress unused import
-void MockEmbeddingService;
 
 function makeDb(): Database.Database {
   return initDatabase(":memory:");

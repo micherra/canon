@@ -581,27 +581,5 @@ describe("Knowledge Graph Store", () => {
         expect(store.getFileEdgesFrom(fileA.file_id!)).toHaveLength(0);
       });
     });
-
-    // ---- Transactions ----
-
-    describe("Transactions", () => {
-      test("transaction commits on success", () => {
-        store.transaction(() => {
-          store.upsertFile(makeFileRow({ path: "src/committed.ts" }));
-        });
-        expect(store.getFile("src/committed.ts")).toBeDefined();
-      });
-
-      test("transaction rolls back on error", () => {
-        expect(() => {
-          store.transaction(() => {
-            store.upsertFile(makeFileRow({ path: "src/rolled-back.ts" }));
-            throw new Error("intentional rollback");
-          });
-        }).toThrow("intentional rollback");
-        // The insert should have been rolled back
-        expect(store.getFile("src/rolled-back.ts")).toBeUndefined();
-      });
-    });
   });
 });

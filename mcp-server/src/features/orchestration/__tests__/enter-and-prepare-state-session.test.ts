@@ -272,13 +272,21 @@ describe("enterAndPrepareState — consultation_prompts", () => {
 
     const waveResults = {
       "wave-0": {
-        consultations: { before: { "risk-assessment": { status: "done", summary: "Risk: ${evil} injection attempt" } } },
+        consultations: {
+          before: {
+            "risk-assessment": { status: "done", summary: "Risk: ${evil} injection attempt" },
+          },
+        },
         status: "done",
         tasks: [],
       },
     };
 
-    store.upsertState("implement", { entries: 1, status: "in_progress", wave_results: waveResults });
+    store.upsertState("implement", {
+      entries: 1,
+      status: "in_progress",
+      wave_results: waveResults,
+    });
     store.upsertState("done", { entries: 0, status: "pending" });
 
     vi.mocked(escapeDollarBrace).mockImplementation((s: string) => s.replace(/\$\{/g, "\\${"));

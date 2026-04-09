@@ -52,51 +52,6 @@ afterEach(() => {
   execSyncImpl = null; // reset git mock after each test
 });
 
-function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
-  return {
-    description: "Integration test flow",
-    entry: "implement",
-    name: "test-flow",
-    spawn_instructions: {
-      fix: "Fix the issues.",
-      implement: "Implement the feature.",
-      review: "Review the implementation.",
-    },
-    states: {
-      fix: {
-        agent: "canon-fixer",
-        transitions: {
-          cannot_fix: "hitl",
-          done: "review",
-        },
-        type: "single",
-      },
-      hitl: { type: "terminal" },
-      implement: {
-        agent: "canon-implementor",
-        max_iterations: 3,
-        transitions: {
-          blocked: "hitl",
-          cannot_fix: "hitl",
-          done: "review",
-        },
-        type: "single",
-      },
-      review: {
-        agent: "canon-reviewer",
-        max_iterations: 2,
-        transitions: {
-          cannot_fix: "hitl",
-          done: "ship",
-        },
-        type: "single",
-      },
-      ship: { type: "terminal" },
-    },
-    ...overrides,
-  };
-}
-
 function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
