@@ -298,12 +298,16 @@ describe("index.ts tool registrations", () => {
 
   it("show_pr_impact is registered with resource URI ui://canon/pr-review", async () => {
     const { readFile } = await import("node:fs/promises");
-    const indexSrc = await readFile(new URL("../../../app/index.ts", import.meta.url), "utf-8");
+    // After the split, show_pr_impact is registered in register-principles.ts
+    const src = await readFile(
+      new URL("../../../app/register-principles.ts", import.meta.url),
+      "utf-8",
+    );
 
     // Must contain the new URI
-    expect(indexSrc).toContain("ui://canon/pr-review");
+    expect(src).toContain("ui://canon/pr-review");
     // Must NOT contain the old URI
-    expect(indexSrc).not.toContain("ui://canon/pr-impact");
+    expect(src).not.toContain("ui://canon/pr-impact");
   });
 });
 
