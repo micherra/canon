@@ -23,13 +23,13 @@ import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
 import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
 import { injectWaveEvent } from "@features/orchestration/tools/inject-wave-event.ts";
 import { loadFlow } from "@features/orchestration/tools/load-flow.ts";
-import { simulateFlowTool } from "@features/orchestration/tools/simulate-flow.ts";
 import { postEvent } from "@features/orchestration/tools/post-event.ts";
 import { postMessage } from "@features/orchestration/tools/post-message.ts";
 import { report } from "@features/orchestration/tools/report.ts";
 import { reportResult } from "@features/orchestration/tools/report-result.ts";
 import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
 import { resolveWaveEvent } from "@features/orchestration/tools/resolve-wave-event.ts";
+import { simulateFlowTool } from "@features/orchestration/tools/simulate-flow.ts";
 import { updateBoard } from "@features/orchestration/tools/update-board.ts";
 import { writeDesignBrief } from "@features/orchestration/tools/write-design-brief.ts";
 import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
@@ -373,10 +373,7 @@ server.registerTool(
     description:
       "Query flow execution history with associated decisions and commit data. Returns recent flow runs enriched with decision records from the project's drift store.",
     inputSchema: {
-      flow: z
-        .string()
-        .optional()
-        .describe("Filter by flow name (e.g., 'feature', 'fast-path')"),
+      flow: z.string().optional().describe("Filter by flow name (e.g., 'feature', 'fast-path')"),
       limit: z
         .number()
         .int()
@@ -800,7 +797,9 @@ server.registerTool(
     description:
       "Log a structured agent activity event (start or complete) to the workspace event store. Agents call this instead of writing to log.jsonl. Events are stored in SQLite for cross-build analysis.",
     inputSchema: {
-      action: z.enum(["start", "complete"]).describe("Whether the agent is starting or completing work"),
+      action: z
+        .enum(["start", "complete"])
+        .describe("Whether the agent is starting or completing work"),
       agent: z.string().describe("Agent name (e.g. 'canon-researcher', 'canon-implementor')"),
       artifacts: z
         .array(z.string())

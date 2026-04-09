@@ -39,18 +39,17 @@ vi.mock("node:fs/promises", () => ({
 
 import { stat, writeFile } from "node:fs/promises";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import type { LearnGateConfig } from "@shared/lib/config.ts";
 import { loadLearnGateConfig } from "@shared/lib/config.ts";
 import { acquireLearnLock, getLastLearnTimestamp } from "@shared/lib/learn-lock.ts";
 import { evaluateLearnGate } from "../learn-gate.ts";
 
-import type { LearnGateConfig } from "@shared/lib/config.ts";
-
 // Helper: build a minimal LearnGateConfig
 const makeConfig = (overrides: Partial<LearnGateConfig> = {}): LearnGateConfig => ({
   enabled: true,
+  lock_stale_after_hours: 1,
   min_flows_since_last: 5,
   min_hours_since_last: 48,
-  lock_stale_after_hours: 1,
   ...overrides,
 });
 
@@ -170,11 +169,10 @@ describe("evaluateLearnGate — gate 4: flow gate", () => {
 
     await evaluateLearnGate(PROJECT_DIR);
 
-    expect(writeFile).toHaveBeenCalledWith(
-      `${CANON_DIR}/learn-throttle`,
-      "",
-      { flag: "w", mode: 0o600 },
-    );
+    expect(writeFile).toHaveBeenCalledWith(`${CANON_DIR}/learn-throttle`, "", {
+      flag: "w",
+      mode: 0o600,
+    });
   });
 
   test("proceeds when throttle marker write fails (best-effort)", async () => {

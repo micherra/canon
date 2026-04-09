@@ -31,7 +31,7 @@ const COMMIT_HEADER_RE = /^COMMIT:([0-9a-f]+)\s+(\d+)$/;
 export const parseGitLog = (stdout: string): GitCommitRecord[] => {
   const results: GitCommitRecord[] = [];
 
-  if (!stdout || !stdout.trim()) {
+  if (!stdout?.trim()) {
     return results;
   }
 
@@ -68,7 +68,7 @@ export const parseGitLog = (stdout: string): GitCommitRecord[] => {
       continue;
     }
 
-    results.push({ sha, timestamp, files });
+    results.push({ files, sha, timestamp });
   }
 
   return results;

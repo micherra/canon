@@ -13,10 +13,9 @@
  * - injectWorktreeSettings: file contents match expected JSON for a known profile
  */
 
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { mkdtemp } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildWorktreeSettings,

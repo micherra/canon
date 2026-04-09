@@ -492,15 +492,18 @@ describe("driveFlow — wave result accumulation", () => {
 
     // Submit result for task-01 only
     const flow = makeWaveFlow();
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -536,15 +539,18 @@ describe("driveFlow — wave result accumulation", () => {
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
 
     const flow = makeWaveFlow();
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-02",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-02",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -575,15 +581,18 @@ describe("driveFlow — wave result accumulation", () => {
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
 
     const flow = makeWaveFlow();
-    await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // After processing, wave_results should contain task-01
     const stateEntry = store.getState("implement");
@@ -619,15 +628,18 @@ describe("driveFlow — merge conflict handling", () => {
     });
 
     const flow = makeWaveFlow(); // on_conflict: "hitl"
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -673,15 +685,18 @@ describe("driveFlow — merge conflict handling", () => {
       },
     });
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -726,15 +741,18 @@ describe("driveFlow — merge conflict handling", () => {
       },
     });
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -761,7 +779,12 @@ describe("driveFlow — merge conflict handling", () => {
           status: "done",
           tasks: ["task-01"],
           worktree_entries: [
-            { branch: "canon-wave/task-01", status: "merged", task_id: "task-01", worktree_path: "/project/.canon/worktrees/task-01" },
+            {
+              branch: "canon-wave/task-01",
+              status: "merged",
+              task_id: "task-01",
+              worktree_path: "/project/.canon/worktrees/task-01",
+            },
           ],
         },
       },
@@ -791,15 +814,18 @@ describe("driveFlow — merge conflict handling", () => {
       },
     });
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -868,15 +894,18 @@ describe("driveFlow — gate failure after merge", () => {
       },
     });
 
-    await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // Should call reportResult with gate_failed condition or advance to fix state
     expect(reportResult).toHaveBeenCalled();
@@ -927,15 +956,18 @@ describe("driveFlow — gate failure after merge", () => {
       },
     });
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -993,15 +1025,18 @@ describe("driveFlow — wave-to-wave advancement", () => {
     );
 
     const flow = makeWaveFlow();
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1056,15 +1091,18 @@ describe("driveFlow — wave-to-wave advancement", () => {
     );
 
     const flow = makeWaveFlow();
-    await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     const stateEntry = store.getState("implement");
     expect(stateEntry?.wave).toBe(2);
@@ -1103,15 +1141,18 @@ describe("driveFlow — wave event handling", () => {
     vi.mocked(runGates).mockReturnValue([]);
 
     const flow = makeWaveFlow();
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1156,15 +1197,18 @@ describe("driveFlow — wave event handling", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult({ prompts: [] }));
 
     const flow = makeWaveFlow();
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // Should not spawn task-02 — it was skipped
     expect(result.ok).toBe(true);
@@ -1224,15 +1268,18 @@ describe("driveFlow — after-consultation handling", () => {
       },
     });
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1308,15 +1355,18 @@ describe("driveFlow — epic checkpoint", () => {
       },
     });
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1352,16 +1402,19 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
 
     const flow = makeWaveFlow();
-    await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
-        worktree_branch: "worktree-agent-a4915c84", // ignored — convention branch wins
+    await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+          worktree_branch: "worktree-agent-a4915c84", // ignored — convention branch wins
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     const stateEntry = store.getState("implement");
     const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
@@ -1389,16 +1442,19 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
 
     const flow = makeWaveFlow();
-    await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-02",
-        // no worktree_branch provided
+    await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-02",
+          // no worktree_branch provided
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     const stateEntry = store.getState("implement");
     const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
@@ -1431,15 +1487,18 @@ describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () =>
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
 
     const flow = makeWaveFlow();
-    await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // mergeWaveResults should be called with the build worktree path, not projectDir
     expect(mergeWaveResults).toHaveBeenCalledWith(
@@ -1470,15 +1529,18 @@ describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () =>
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
 
     const flow = makeWaveFlow();
-    await driveFlow({
-      flow,
-      result: {
-        state_id: "implement",
-        status: "done",
-        task_id: "task-01",
+    await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "implement",
+          status: "done",
+          task_id: "task-01",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // mergeWaveResults should fall back to projectDir
     expect(mergeWaveResults).toHaveBeenCalledWith(expect.any(Array), "/project", "sequential");

@@ -1,10 +1,10 @@
 import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { getProjectDir } from "@domains/workspaces/wave-lifecycle.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { loadLearnGateConfig } from "@shared/lib/config.ts";
 import { acquireLearnLock, getLastLearnTimestamp } from "@shared/lib/learn-lock.ts";
-import { getProjectDir } from "@domains/workspaces/wave-lifecycle.ts";
 import type { Board } from "./board-state-schemas.ts";
 
 type SkipResult = {
@@ -128,6 +128,18 @@ const SCAN_THROTTLE_MS = 10 * 60 * 1000;
  * Uses the same shared helpers as learn-gate.ts (config, lock) to avoid
  * importing from @features/orchestration/ — which would cross the DDD boundary.
  */
+/** Check scan throttle gate. Returns a skip reason or null to continue. */
+async function checkScanThrottle(throttlePath: string): Promise<string | null> {
+  try {
+    const throttleStat = await stat(throttlePath);
+    const msSinceThrottle = Date.now() - throttleStat.mtime.getTime();
+    if (msSinceThrottle < SCAN_THROTTLE_MS) return "scan throttle: checked recently";
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") return "scan throttle: stat error";
+  }
+  return null;
+}
+
 async function evaluateLearnGateNotPassed(workspace: string): Promise<SkipResult> {
   try {
     const projectDir = getProjectDir(workspace);
@@ -136,7 +148,7 @@ async function evaluateLearnGateNotPassed(workspace: string): Promise<SkipResult
     // Gate 1: Config check — auto-learn enabled
     const config = await loadLearnGateConfig(projectDir);
     if (!config.enabled) {
-      return { skip: true, reason: "auto-learn disabled" };
+      return { reason: "auto-learn disabled", skip: true };
     }
 
     // Gate 2: Time gate — hours since last learn
@@ -145,26 +157,16 @@ async function evaluateLearnGateNotPassed(workspace: string): Promise<SkipResult
       const hoursSinceLast = (Date.now() - lastLearnTs) / (1000 * 60 * 60);
       if (hoursSinceLast < config.min_hours_since_last) {
         return {
-          skip: true,
           reason: `time gate: ${hoursSinceLast.toFixed(1)}h < ${config.min_hours_since_last}h`,
+          skip: true,
         };
       }
     }
 
     // Gate 3: Scan throttle — prevent repeated flow-count queries
     const throttlePath = join(canonDir, "learn-throttle");
-    try {
-      const throttleStat = await stat(throttlePath);
-      const msSinceThrottle = Date.now() - throttleStat.mtime.getTime();
-      if (msSinceThrottle < SCAN_THROTTLE_MS) {
-        return { skip: true, reason: "scan throttle: checked recently" };
-      }
-    } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        return { skip: true, reason: "scan throttle: stat error" };
-      }
-      // No throttle file = never throttled, continue
-    }
+    const throttleReason = await checkScanThrottle(throttlePath);
+    if (throttleReason) return { reason: throttleReason, skip: true };
 
     // Gate 4: Flow gate — enough flows since last learn
     const driftDb = getDriftDb(projectDir);
@@ -178,8 +180,8 @@ async function evaluateLearnGateNotPassed(workspace: string): Promise<SkipResult
         /* best effort */
       }
       return {
-        skip: true,
         reason: `flow gate: ${flowCount} < ${config.min_flows_since_last}`,
+        skip: true,
       };
     }
 
@@ -187,14 +189,14 @@ async function evaluateLearnGateNotPassed(workspace: string): Promise<SkipResult
     const staleAfterMs = config.lock_stale_after_hours * 60 * 60 * 1000;
     const lockResult = await acquireLearnLock(canonDir, staleAfterMs);
     if (!lockResult.acquired) {
-      return { skip: true, reason: `lock gate: ${lockResult.reason}` };
+      return { reason: `lock gate: ${lockResult.reason}`, skip: true };
     }
 
     // All gates passed — do NOT skip (learner will run)
     return { skip: false };
   } catch {
     // Fail-open: any error means skip the learner (never block flow completion)
-    return { skip: true, reason: "Learn gate evaluation failed — skipping learner" };
+    return { reason: "Learn gate evaluation failed — skipping learner", skip: true };
   }
 }
 

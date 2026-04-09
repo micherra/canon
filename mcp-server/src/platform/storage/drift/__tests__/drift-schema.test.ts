@@ -106,9 +106,7 @@ describe("columnExists", () => {
 
   test("throws for a table name with invalid characters (SQL injection guard)", () => {
     const db = new Database(":memory:");
-    expect(() => columnExists(db, "bad; DROP TABLE meta; --", "col")).toThrow(
-      /invalid table name/,
-    );
+    expect(() => columnExists(db, "bad; DROP TABLE meta; --", "col")).toThrow(/invalid table name/);
     db.close();
   });
 });
@@ -232,9 +230,9 @@ describe("runDriftMigrations — v1 to v2 upgrade", () => {
 
     runDriftMigrations(db);
 
-    const row = db
-      .prepare(`SELECT run_id FROM flow_runs WHERE run_id = 'run_v1_001'`)
-      .get() as { run_id: string } | undefined;
+    const row = db.prepare(`SELECT run_id FROM flow_runs WHERE run_id = 'run_v1_001'`).get() as
+      | { run_id: string }
+      | undefined;
     expect(row?.run_id).toBe("run_v1_001");
     db.close();
   });

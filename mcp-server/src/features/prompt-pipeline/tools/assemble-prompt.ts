@@ -113,24 +113,21 @@ function buildPipelineResult(ctx: PromptContext): SpawnPromptResult {
   };
 }
 
-export async function assemblePrompt(input: SpawnPromptInput): Promise<SpawnPromptResult> {
+/** Validate preconditions for prompt assembly. Returns a skip result or null. */
+async function validatePreconditions(input: SpawnPromptInput): Promise<SpawnPromptResult | null> {
   const { state_id, flow } = input;
-
   const state = flow.states[state_id];
-  if (!state) {
+
+  if (!state)
     return {
       prompts: [],
       skip_reason: `State "${state_id}" not found in flow`,
       state_type: "unknown",
     };
-  }
-  if (state.type === "terminal") {
-    return { prompts: [], state_type: "terminal" };
-  }
+  if (state.type === "terminal") return { prompts: [], state_type: "terminal" };
 
   const needsBoard = stateNeedsBoard(state);
   const board = resolveBoard(input, needsBoard);
-
   if (needsBoard && !board) {
     return {
       prompts: [],
@@ -144,14 +141,23 @@ export async function assemblePrompt(input: SpawnPromptInput): Promise<SpawnProm
     if (skipResult) return skipResult;
   }
 
-  const rawInstruction = flow.spawn_instructions[state_id];
-  if (!rawInstruction) {
+  if (!flow.spawn_instructions[state_id]) {
     return {
       prompts: [],
       skip_reason: `No spawn instruction for state "${state_id}"`,
       state_type: state.type,
     };
   }
+  return null;
+}
+
+export async function assemblePrompt(input: SpawnPromptInput): Promise<SpawnPromptResult> {
+  const earlyExit = await validatePreconditions(input);
+  if (earlyExit) return earlyExit;
+
+  const { state_id, flow } = input;
+  const state = flow.states[state_id];
+  const board = resolveBoard(input, stateNeedsBoard(state));
 
   let ctx: PromptContext = {
     basePrompt: "",
@@ -159,7 +165,7 @@ export async function assemblePrompt(input: SpawnPromptInput): Promise<SpawnProm
     input,
     mergedVariables: { ...input.variables },
     prompts: [],
-    rawInstruction,
+    rawInstruction: flow.spawn_instructions[state_id],
     state,
     warnings: [],
   };

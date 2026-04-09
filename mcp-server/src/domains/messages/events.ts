@@ -148,6 +148,14 @@ export type FlowEventMap = {
 const correlationId = z.string().optional();
 
 export const EventPayloadSchemas = {
+  agent_activity: z.object({
+    action: z.enum(["start", "complete"]),
+    agent: z.string(),
+    artifacts: z.array(z.string()).optional(),
+    correlation_id: correlationId,
+    detail: z.string(),
+    timestamp: z.string(),
+  }),
   agent_spawned: z.object({
     agent: z.string(),
     correlation_id: correlationId,
@@ -263,15 +271,6 @@ export const EventPayloadSchemas = {
     eventType: z.string(),
     timestamp: z.string(),
     workspace: z.string(),
-  }),
-
-  agent_activity: z.object({
-    action: z.enum(["start", "complete"]),
-    agent: z.string(),
-    artifacts: z.array(z.string()).optional(),
-    correlation_id: correlationId,
-    detail: z.string(),
-    timestamp: z.string(),
   }),
 } satisfies Record<FlowEventType, z.ZodTypeAny>;
 

@@ -267,11 +267,14 @@ describe("driveFlow — call with result", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(reportResult).toHaveBeenCalledWith(
       expect.objectContaining({ state_id: "research", status_keyword: "done" }),
@@ -291,11 +294,14 @@ describe("driveFlow — call with result", () => {
     // enterAndPrepareState for terminal should not be called — we detect terminal type
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: { state_id: "implement", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { state_id: "implement", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -311,11 +317,14 @@ describe("driveFlow — call with result", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult(null) as any);
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -363,11 +372,14 @@ describe("driveFlow — HITL breakpoints", () => {
     } as any);
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -691,15 +703,18 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
     );
 
     const flow = makeFlow();
-    await driveFlow({
-      flow,
-      result: {
-        agent_session_id: "session-xyz-456",
-        state_id: "research",
-        status: "done",
+    await driveFlow(
+      {
+        flow,
+        result: {
+          agent_session_id: "session-xyz-456",
+          state_id: "research",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     const session = store.getAgentSession("research");
     expect(session?.agent_session_id).toBe("session-xyz-456");
@@ -788,15 +803,18 @@ describe("driveFlow — parallel state", () => {
       next_state: "review", // not done yet — still in review
     } as any);
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        parallel_results: [{ item: "reviewer-a", status: "done" }],
-        state_id: "review",
-        status: "done",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          parallel_results: [{ item: "reviewer-a", status: "done" }],
+          state_id: "review",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -812,10 +830,13 @@ describe("driveFlow — parallel state", () => {
 describe("driveFlow — error handling", () => {
   it("returns WORKSPACE_NOT_FOUND error when workspace does not exist", async () => {
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      workspace: "/nonexistent/path/workspace",
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        workspace: "/nonexistent/path/workspace",
+      },
+      "/fake/project",
+    );
 
     expect(isToolError(result)).toBe(true);
     if (!isToolError(result)) return;
@@ -853,11 +874,14 @@ describe("driveFlow — error handling", () => {
     });
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(isToolError(result)).toBe(true);
     if (!isToolError(result)) return;

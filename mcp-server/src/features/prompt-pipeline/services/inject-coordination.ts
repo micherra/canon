@@ -36,12 +36,12 @@ import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { AGENT_TOOL_PROFILES, EMPTY_PROFILE, resolveToolProfile } from "../model/tool-profiles.ts";
+import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 import {
   buildScopeMetrics,
   computeTrustLevel,
   trustLevelToPermissionMode,
 } from "./trust-resolver.ts";
-import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 
 /**
  * Check whether an agent has write capability (Edit or Write in base profile).
@@ -91,88 +91,78 @@ function lazyLoadBoard(workspace: string): Board | null {
  *
  * @returns Map<agentName, "auto" | "prompt"> — empty when trust computation is unavailable.
  */
+/** Compute trust for each unique agent using KG metrics. */
+function computeAgentTrust(
+  entries: SpawnPromptEntry[],
+  kgCtx: {
+    kgQuery: KgQuery;
+    insightMaps: ReturnType<typeof computeFileInsightMaps>;
+    taskScope: string[];
+    kgFreshnessMs: number | null;
+  },
+): Map<string, "auto" | "prompt"> {
+  const result = new Map<string, "auto" | "prompt">();
+  const uniqueAgents = new Set(entries.map((e) => e.agent));
+
+  for (const agentName of uniqueAgents) {
+    const fileMetrics = kgCtx.taskScope.map((filePath) =>
+      kgCtx.kgQuery.getFileMetrics(filePath, kgCtx.insightMaps),
+    );
+    const scopeMetrics = buildScopeMetrics(
+      fileMetrics.map((m) =>
+        m === null ? null : { inCycle: m.in_cycle, inDegree: m.in_degree, isHub: m.is_hub },
+      ),
+    );
+    const trustResult = computeTrustLevel({
+      agent: agentName,
+      agentCanWrite: agentHasWriteCapability(agentName),
+      kgFreshnessMs: kgCtx.kgFreshnessMs,
+      scopeMetrics,
+      taskScope: kgCtx.taskScope,
+    });
+    result.set(agentName, trustLevelToPermissionMode(trustResult.level));
+  }
+  return result;
+}
+
 function computeTrustForEntries(
   entries: SpawnPromptEntry[],
   ctx: PromptContext,
 ): Map<string, "auto" | "prompt"> {
-  const trustPermissionModes = new Map<string, "auto" | "prompt">();
-
-  const projectDir =
-    ctx.input.project_dir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
+  const projectDir = ctx.input.project_dir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
 
-  // If KG DB does not exist, skip trust computation entirely.
-  // The worktreePath fallback in resolveToolProfile handles this case.
-  if (!existsSync(dbPath)) {
-    return trustPermissionModes;
-  }
+  if (!existsSync(dbPath)) return new Map();
 
-  // Resolve board lazily if not present in context
   let board: Board | null = ctx.board ?? null;
-  if (board === null) {
-    board = lazyLoadBoard(ctx.input.workspace);
-    // If board still null, proceed with empty scope → LOW → prompt (fail-closed)
-  }
+  if (board === null) board = lazyLoadBoard(ctx.input.workspace);
 
   let db: ReturnType<typeof initDatabase> | undefined;
   try {
     db = initDatabase(dbPath);
     const kgQuery = new KgQuery(db);
-
-    // Compute insight maps once — avoid N+1 queries across entries
     const insightMaps = computeFileInsightMaps(db);
     const kgFreshnessMs = kgQuery.getKgFreshnessMs();
 
-    // Resolve task scope once — used for all entries (Phase 1 uniform trust)
-    const planSlug = ctx.input.variables["${plan_slug}"] ?? ctx.input.variables["plan_slug"];
-    const taskId = ctx.input.variables["${task_id}"] ?? ctx.input.variables["task_id"];
+    const planSlug = ctx.input.variables["${plan_slug}"] ?? ctx.input.variables.plan_slug;
+    const taskId = ctx.input.variables["${task_id}"] ?? ctx.input.variables.task_id;
     const taskScope =
       board !== null
         ? resolveTaskScope({
-            workspace: ctx.input.workspace,
-            stateId: ctx.input.state_id,
             board,
             planSlug,
+            stateId: ctx.input.state_id,
             taskId,
+            workspace: ctx.input.workspace,
           })
         : [];
 
-    // Deduplicate agent names — Phase 1: all entries with the same agent get the same trust
-    const uniqueAgents = new Set(entries.map((e) => e.agent));
-
-    for (const agentName of uniqueAgents) {
-      const agentCanWrite = agentHasWriteCapability(agentName);
-
-      // Get file metrics for each scope file
-      const fileMetrics = taskScope.map((filePath) =>
-        kgQuery.getFileMetrics(filePath, insightMaps),
-      );
-      const scopeMetrics = buildScopeMetrics(
-        fileMetrics.map((m) =>
-          m === null
-            ? null
-            : { isHub: m.is_hub, inDegree: m.in_degree, inCycle: m.in_cycle },
-        ),
-      );
-
-      const trustResult = computeTrustLevel({
-        agent: agentName,
-        agentCanWrite,
-        taskScope,
-        scopeMetrics,
-        kgFreshnessMs,
-      });
-
-      trustPermissionModes.set(agentName, trustLevelToPermissionMode(trustResult.level));
-    }
+    return computeAgentTrust(entries, { insightMaps, kgFreshnessMs, kgQuery, taskScope });
   } catch {
-    // Any KG error falls through to empty map → worktreePath fallback (fail-closed)
-    trustPermissionModes.clear();
+    return new Map();
   } finally {
     closeDb(db);
   }
-
-  return trustPermissionModes;
 }
 
 /**
@@ -247,8 +237,8 @@ export async function injectCoordination(ctx: PromptContext): Promise<PromptCont
   prompts = prompts.map((entry) => {
     const resolved = resolveToolProfile(entry.agent, {
       overrides: toolOverrides,
-      worktreePath: entry.worktree_path,
       trustPermissionMode: trustPermissionModes.get(entry.agent),
+      worktreePath: entry.worktree_path,
     });
     const updated: typeof entry = {
       ...entry,

@@ -16,10 +16,6 @@ export type GitIntelConfig = {
 };
 
 export const DEFAULT_GIT_INTEL_CONFIG: GitIntelConfig = {
-  lookbackDays: 90,
-  halfLifeDays: 45,
-  jaccardThreshold: 0.3,
-  hotspotScoreThreshold: 0.75,
   excludePatterns: [
     "package-lock.json",
     "yarn.lock",
@@ -31,6 +27,10 @@ export const DEFAULT_GIT_INTEL_CONFIG: GitIntelConfig = {
     ".prettierrc*",
     "tsconfig*.json",
   ],
+  halfLifeDays: 45,
+  hotspotScoreThreshold: 0.75,
+  jaccardThreshold: 0.3,
+  lookbackDays: 90,
 };
 
 /**
@@ -43,7 +43,7 @@ export const isExcluded = (filePath: string, patterns: string[]): boolean => {
   const name = basename(filePath);
   return patterns.some((pattern) => {
     const regex = new RegExp(
-      "^" + pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$",
+      `^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`,
     );
     return regex.test(name);
   });

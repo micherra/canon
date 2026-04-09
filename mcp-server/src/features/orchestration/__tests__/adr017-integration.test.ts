@@ -449,15 +449,18 @@ describe("driveFlow — reject status routes to HITL, not approval gate", () => 
       }) as any,
     );
 
-    const result = await driveFlow({
-      flow: makeApprovalFlow(),
-      result: {
-        artifacts: ["/workspace/design.md"],
-        state_id: "design",
-        status: "reject",
+    const result = await driveFlow(
+      {
+        flow: makeApprovalFlow(),
+        result: {
+          artifacts: ["/workspace/design.md"],
+          state_id: "design",
+          status: "reject",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -479,14 +482,17 @@ describe("driveFlow — reject status routes to HITL, not approval gate", () => 
       }) as any,
     );
 
-    const result = await driveFlow({
-      flow: makeApprovalFlow(),
-      result: {
-        state_id: "design",
-        status: "reject",
+    const result = await driveFlow(
+      {
+        flow: makeApprovalFlow(),
+        result: {
+          state_id: "design",
+          status: "reject",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -501,11 +507,14 @@ describe("driveFlow Branch B — no result, approval gate does NOT fire on initi
 
     vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult());
 
-    const result = await driveFlow({
-      flow: makeApprovalFlow(),
-      workspace,
-      // No result — Branch B
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow: makeApprovalFlow(),
+        workspace,
+        // No result — Branch B
+      },
+      "/fake/project",
+    );
 
     // Should spawn (enter state), not produce approval breakpoint
     expect(result.ok).toBe(true);
@@ -522,10 +531,13 @@ describe("driveFlow Branch B — no result, approval gate does NOT fire on initi
 
     vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult());
 
-    await driveFlow({
-      flow: makeApprovalFlow(),
-      workspace,
-    }, "/fake/project");
+    await driveFlow(
+      {
+        flow: makeApprovalFlow(),
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(vi.mocked(reportResult)).not.toHaveBeenCalled();
   });
@@ -570,14 +582,17 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
       tier: "medium",
     } as unknown as ResolvedFlow;
 
-    const result = await driveFlow({
-      flow: flowNoGate,
-      result: {
-        state_id: "implement",
-        status: "done",
+    const result = await driveFlow(
+      {
+        flow: flowNoGate,
+        result: {
+          state_id: "implement",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -612,15 +627,18 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
       tier: "medium",
     } as unknown as ResolvedFlow;
 
-    const result = await driveFlow({
-      flow: flowGatedToTerminal,
-      result: {
-        artifacts: ["/workspace/design.md"],
-        state_id: "design",
-        status: "done",
+    const result = await driveFlow(
+      {
+        flow: flowGatedToTerminal,
+        result: {
+          artifacts: ["/workspace/design.md"],
+          state_id: "design",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

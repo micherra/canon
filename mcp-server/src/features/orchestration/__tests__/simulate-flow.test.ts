@@ -105,6 +105,7 @@ describe("simulateFlow — scenario mismatch", () => {
 describe("simulateFlow — stuck at max_iterations", () => {
   it("returns ok: false and stuck_at when max_iterations exceeded", () => {
     const flow = makeFlow({
+      entry: "looping",
       states: {
         end: { type: "terminal" },
         looping: {
@@ -114,7 +115,6 @@ describe("simulateFlow — stuck at max_iterations", () => {
           type: "single",
         },
       },
-      entry: "looping",
     });
     // Visit looping 3 times (exceeds max_iterations: 2)
     const result = simulateFlow(
@@ -135,12 +135,16 @@ describe("simulateFlow — stuck at max_iterations", () => {
 describe("simulateFlow — max_steps exceeded", () => {
   it("returns ok: false with stuck_at and warning when max_steps reached", () => {
     const flow = makeFlow({
+      entry: "looping",
       states: {
         end: { type: "terminal" },
         // self-loop state (no max_iterations)
-        looping: { agent: "agent-a", transitions: { done: "end", loop: "looping" }, type: "single" },
+        looping: {
+          agent: "agent-a",
+          transitions: { done: "end", loop: "looping" },
+          type: "single",
+        },
       },
-      entry: "looping",
     });
     // Very long scenario that would loop forever without max_steps
     const scenario = Array.from({ length: 100 }, () => ({ state_id: "looping", status: "loop" }));
@@ -155,12 +159,12 @@ describe("simulateFlow — hitl exit (virtual sink)", () => {
   it("treats hitl as terminal success (ok: true)", () => {
     const flow = makeFlow({
       states: {
+        end: { type: "terminal" },
         start: {
           agent: "agent-a",
           transitions: { blocked: "hitl", done: "end" },
           type: "single",
         },
-        end: { type: "terminal" },
       },
     });
     const result = simulateFlow(flow, [{ state_id: "start", status: "blocked" }], 50);
@@ -176,12 +180,12 @@ describe("simulateFlow — no_items exit (virtual sink)", () => {
   it("treats no_items as terminal success (ok: true)", () => {
     const flow = makeFlow({
       states: {
+        end: { type: "terminal" },
         start: {
           agent: "agent-a",
           transitions: { done: "end", no_items: "no_items" },
           type: "single",
         },
-        end: { type: "terminal" },
       },
     });
     const result = simulateFlow(flow, [{ state_id: "start", status: "no_items" }], 50);
@@ -241,9 +245,9 @@ describe("simulateFlow — wave state warning", () => {
       },
     });
     const result = simulateFlow(flow, [{ state_id: "ppar_state", status: "done" }], 50);
-    expect(result.warnings.some((w) => w.includes("ppar_state") && w.includes("parallel-per"))).toBe(
-      true,
-    );
+    expect(
+      result.warnings.some((w) => w.includes("ppar_state") && w.includes("parallel-per")),
+    ).toBe(true);
   });
 });
 
@@ -270,11 +274,15 @@ describe("simulateFlow — skip_when warning", () => {
 describe("simulateFlow — iteration tracking", () => {
   it("counts iterations_consumed correctly for looping states", () => {
     const flow = makeFlow({
+      entry: "looping",
       states: {
         end: { type: "terminal" },
-        looping: { agent: "agent-a", transitions: { done: "end", loop: "looping" }, type: "single" },
+        looping: {
+          agent: "agent-a",
+          transitions: { done: "end", loop: "looping" },
+          type: "single",
+        },
       },
-      entry: "looping",
     });
     const result = simulateFlow(
       flow,
@@ -286,7 +294,7 @@ describe("simulateFlow — iteration tracking", () => {
       50,
     );
     expect(result.ok).toBe(true);
-    expect(result.iterations_consumed["looping"]).toBe(3);
+    expect(result.iterations_consumed.looping).toBe(3);
   });
 });
 
@@ -320,7 +328,11 @@ describe("simulateFlow — cycle traversal with iterations_consumed > 1", () => 
       entry: "stateA",
       states: {
         end: { type: "terminal" },
-        stateA: { agent: "agent-a", transitions: { continue: "stateB", done: "end" }, type: "single" },
+        stateA: {
+          agent: "agent-a",
+          transitions: { continue: "stateB", done: "end" },
+          type: "single",
+        },
         stateB: { agent: "agent-b", transitions: { back: "stateA" }, type: "single" },
       },
     });
@@ -336,8 +348,8 @@ describe("simulateFlow — cycle traversal with iterations_consumed > 1", () => 
       50,
     );
     expect(result.ok).toBe(true);
-    expect(result.iterations_consumed["stateA"]).toBe(3);
-    expect(result.iterations_consumed["stateB"]).toBe(2);
+    expect(result.iterations_consumed.stateA).toBe(3);
+    expect(result.iterations_consumed.stateB).toBe(2);
   });
 });
 
@@ -368,6 +380,7 @@ describe("simulateFlow — status alias normalization", () => {
 describe("simulateFlow — max_iterations non-trigger", () => {
   it("does NOT produce stuck warning when state visits < max_iterations", () => {
     const flow = makeFlow({
+      entry: "looping",
       states: {
         end: { type: "terminal" },
         looping: {
@@ -377,7 +390,6 @@ describe("simulateFlow — max_iterations non-trigger", () => {
           type: "single",
         },
       },
-      entry: "looping",
     });
     // Visit looping exactly 2 times then exit — under max_iterations: 3
     const result = simulateFlow(
@@ -391,7 +403,7 @@ describe("simulateFlow — max_iterations non-trigger", () => {
     expect(result.ok).toBe(true);
     expect(result.stuck_at).toBeUndefined();
     expect(result.warnings.some((w) => w.includes("max_iterations"))).toBe(false);
-    expect(result.iterations_consumed["looping"]).toBe(2);
+    expect(result.iterations_consumed.looping).toBe(2);
   });
 });
 
@@ -404,10 +416,8 @@ describe("simulateFlowTool — integration with real flow file", () => {
     const result = await simulateFlowTool(
       {
         flow: "fast-path",
-        scenario: [
-          { state_id: "implement", status: "done" },
-        ],
         max_steps: 50,
+        scenario: [{ state_id: "implement", status: "done" }],
       },
       pluginDir,
     );
@@ -445,8 +455,8 @@ describe("simulateFlowTool — ToolResult contract", () => {
     const result = await simulateFlowTool(
       {
         flow: "fast-path",
-        scenario: [],
         max_steps: 50,
+        scenario: [],
       },
       pluginDir,
     );

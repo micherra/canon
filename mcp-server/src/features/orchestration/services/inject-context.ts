@@ -177,6 +177,47 @@ const HANDOFF_CAP_BYTES = 50 * 1024; // 50KB
  *
  * All fs errors produce warnings; never throws.
  */
+/** Read handoff .md files with a 50KB total cap. */
+async function readAndCapHandoffFiles(
+  entries: string[],
+  handoffsDir: string,
+  warnings: string[],
+): Promise<{ value?: string; warnings: string[] }> {
+  type ReadResult = { filename: string; chunk: string } | { filename: string; error: true };
+
+  const readResults = await Promise.all(
+    entries.map(async (filename): Promise<ReadResult> => {
+      const filePath = path.join(handoffsDir, filename);
+      try {
+        const content = await readFile(filePath, "utf-8");
+        const basename = path.basename(filename, ".md");
+        return { chunk: `## ${basename}\n\n${content}`, filename };
+      } catch {
+        return { error: true, filename };
+      }
+    }),
+  );
+
+  const parts: string[] = [];
+  let totalBytes = 0;
+  for (const result of readResults) {
+    if ("error" in result) {
+      warnings.push(`handoff: failed to read "${result.filename}" — skipping`);
+      continue;
+    }
+    const chunkBytes = Buffer.byteLength(result.chunk, "utf-8");
+    if (totalBytes + chunkBytes > HANDOFF_CAP_BYTES) {
+      warnings.push(`handoff: ${result.filename} skipped — 50KB injection cap reached`);
+      continue;
+    }
+    parts.push(result.chunk);
+    totalBytes += chunkBytes;
+  }
+
+  if (parts.length === 0) return { warnings };
+  return { value: parts.join("\n\n"), warnings };
+}
+
 async function resolveHandoffInjection(
   injection: ContextInjection,
   workspace: string,
@@ -218,49 +259,7 @@ async function resolveHandoffInjection(
     return { warnings };
   }
 
-  // Read all files in parallel, then apply the 50KB whole-file cap sequentially
-  // in sorted order. Reads are independent; the cap accumulation is not.
-  type ReadResult = { filename: string; chunk: string } | { filename: string; error: true };
-
-  const readResults = await Promise.all(
-    entries.map(async (filename): Promise<ReadResult> => {
-      const filePath = path.join(handoffsDir, filename);
-      try {
-        const content = await readFile(filePath, "utf-8");
-        const basename = path.basename(filename, ".md");
-        return { chunk: `## ${basename}\n\n${content}`, filename };
-      } catch {
-        return { error: true, filename };
-      }
-    }),
-  );
-
-  // Apply the 50KB cap in the original sorted order (entries is already sorted).
-  const parts: string[] = [];
-  let totalBytes = 0;
-
-  for (const result of readResults) {
-    if ("error" in result) {
-      warnings.push(`handoff: failed to read "${result.filename}" — skipping`);
-      continue;
-    }
-
-    const chunkBytes = Buffer.byteLength(result.chunk, "utf-8");
-
-    if (totalBytes + chunkBytes > HANDOFF_CAP_BYTES) {
-      warnings.push(`handoff: ${result.filename} skipped — 50KB injection cap reached`);
-      continue;
-    }
-
-    parts.push(result.chunk);
-    totalBytes += chunkBytes;
-  }
-
-  if (parts.length === 0) {
-    return { warnings };
-  }
-
-  return { value: parts.join("\n\n"), warnings };
+  return readAndCapHandoffFiles(entries, handoffsDir, warnings);
 }
 
 async function resolveStateInjection(

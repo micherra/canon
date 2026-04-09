@@ -15,8 +15,8 @@
  *   - define-errors-out-of-existence: learn_gate_passed absent = gate not passed (not an error)
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { utimes, writeFile } from "node:fs/promises";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -40,14 +40,13 @@ vi.mock("../tools/report-result.ts", () => ({
 
 // ── Imports after mock declarations ──────────────────────────────────────────
 
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { driveFlow } from "../tools/drive-flow.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
-import { reportResult } from "../tools/report-result.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
-import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
+import { driveFlow } from "../tools/drive-flow.ts";
+import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -111,32 +110,6 @@ function makeEnterResult(
       { agent: "canon:canon-researcher", prompt: "Research", role: "main", template_paths: [] },
     ],
     state_type: "single",
-    ...overrides,
-  };
-}
-
-function makeReportResult(nextState: string | null, overrides: Record<string, unknown> = {}) {
-  return {
-    board: {
-      base_commit: "abc123",
-      blocked: null,
-      concerns: [],
-      current_state: nextState ?? "terminal",
-      entry: "research",
-      flow: "test-flow",
-      iterations: {},
-      last_updated: new Date().toISOString(),
-      skipped: [],
-      started: new Date().toISOString(),
-      states: {},
-      task: "build feature",
-    },
-    hitl_required: false,
-    log_entry: {},
-    next_state: nextState,
-    ok: true,
-    stuck: false,
-    transition_condition: "done",
     ...overrides,
   };
 }
@@ -258,7 +231,9 @@ describe("ADR-016: projectDir threaded to evaluateLearnGate", () => {
     // Verifies the 'projectDir vs workspace confusion' risk mitigation from DESIGN.md:
     // projectDir comes from MCP roots (index.ts) — not workspace (subdirectory under .canon/workspaces/)
     const learnGateMod = await import("../services/learn-gate.ts");
-    const spy = vi.spyOn(learnGateMod, "evaluateLearnGate").mockResolvedValue({ passed: false, reason: "disabled" });
+    const spy = vi
+      .spyOn(learnGateMod, "evaluateLearnGate")
+      .mockResolvedValue({ passed: false, reason: "disabled" });
 
     const workspace = makeTmpWorkspace();
     makeStore(workspace);
@@ -275,7 +250,9 @@ describe("ADR-016: projectDir threaded to evaluateLearnGate", () => {
 
   it("does not call evaluateLearnGate when current state is non-terminal (spawn path)", async () => {
     const learnGateMod = await import("../services/learn-gate.ts");
-    const spy = vi.spyOn(learnGateMod, "evaluateLearnGate").mockResolvedValue({ passed: false, reason: "disabled" });
+    const spy = vi
+      .spyOn(learnGateMod, "evaluateLearnGate")
+      .mockResolvedValue({ passed: false, reason: "disabled" });
 
     const workspace = makeTmpWorkspace();
     // Store starts at 'research' (entry), not terminal

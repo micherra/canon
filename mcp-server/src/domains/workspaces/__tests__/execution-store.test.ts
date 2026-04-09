@@ -1225,9 +1225,9 @@ describe("recordIterationAttempt", () => {
 
   test("records iteration result and returns recorded:true stuck:false when no stuckWhen", () => {
     const result = store.recordIterationAttempt("implement", {
+      data: { failing_files: ["src/foo.ts"] },
       iteration: 1,
       status: "blocked",
-      data: { failing_files: ["src/foo.ts"] },
     });
     expect(result.recorded).toBe(true);
     expect(result.stuck).toBe(false);
@@ -1235,9 +1235,9 @@ describe("recordIterationAttempt", () => {
 
   test("returns stuck:false when fewer than 2 iteration results exist", () => {
     const result = store.recordIterationAttempt("implement", {
+      data: { status: "blocked" },
       iteration: 1,
       status: "blocked",
-      data: { status: "blocked" },
       stuckWhen: "same_status",
     });
     expect(result.recorded).toBe(true);
@@ -1246,15 +1246,15 @@ describe("recordIterationAttempt", () => {
 
   test("returns stuck:true when same_status repeats across two iterations", () => {
     store.recordIterationAttempt("implement", {
+      data: { status: "blocked" },
       iteration: 1,
       status: "blocked",
-      data: { status: "blocked" },
       stuckWhen: "same_status",
     });
     const result = store.recordIterationAttempt("implement", {
+      data: { status: "blocked" },
       iteration: 2,
       status: "blocked",
-      data: { status: "blocked" },
       stuckWhen: "same_status",
     });
     expect(result.recorded).toBe(true);
@@ -1264,9 +1264,9 @@ describe("recordIterationAttempt", () => {
   test("returns stuck:false when no stuckWhen provided even with repeated statuses", () => {
     store.recordIterationResult("implement", 1, "blocked", { status: "blocked" });
     const result = store.recordIterationAttempt("implement", {
+      data: { status: "blocked" },
       iteration: 2,
       status: "blocked",
-      data: { status: "blocked" },
     });
     expect(result.stuck).toBe(false);
   });

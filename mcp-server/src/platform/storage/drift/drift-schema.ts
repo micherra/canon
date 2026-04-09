@@ -136,7 +136,6 @@ type Migration = {
  */
 const MIGRATIONS: Migration[] = [
   {
-    version: "2",
     up: (db) => {
       // decisions table (ADR-019)
       db.exec(`CREATE TABLE IF NOT EXISTS decisions (
@@ -162,12 +161,11 @@ const MIGRATIONS: Migration[] = [
       }
 
       // Index on completed for time-range queries
-      db.exec(
-        `CREATE INDEX IF NOT EXISTS idx_flow_runs_completed ON flow_runs(completed)`,
-      );
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_flow_runs_completed ON flow_runs(completed)`);
 
       db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
     },
+    version: "2",
   },
 ];
 

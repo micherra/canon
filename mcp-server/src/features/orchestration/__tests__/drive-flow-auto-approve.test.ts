@@ -19,9 +19,9 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { injectSettingsIntoRequests } from "../tools/drive-flow.ts";
+import { describe, expect, it } from "vitest";
 import type { SpawnRequest } from "../services/drive-flow-types.ts";
+import { injectSettingsIntoRequests } from "../tools/drive-flow.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,8 +52,8 @@ describe("injectSettingsIntoRequests — conditional injection logic", () => {
     const dir2 = await mkdtemp(join(tmpdir(), "auto-approve-test-"));
 
     const requests: SpawnRequest[] = [
-      makeAutoRequest({ worktree_path: dir1, tools: ["Read", "Bash"] }),
-      makeAutoRequest({ worktree_path: dir2, tools: ["Read", "Edit", "Write"] }),
+      makeAutoRequest({ tools: ["Read", "Bash"], worktree_path: dir1 }),
+      makeAutoRequest({ tools: ["Read", "Edit", "Write"], worktree_path: dir2 }),
     ];
 
     // Should not throw
@@ -141,8 +141,8 @@ describe("injectSettingsIntoRequests — conditional injection logic", () => {
     const dir2 = await mkdtemp(join(tmpdir(), "auto-approve-test-"));
 
     const requests: SpawnRequest[] = [
-      makeAutoRequest({ permission_mode: "auto", worktree_path: dir1, tools: ["Read"] }),
-      makeAutoRequest({ permission_mode: "prompt", worktree_path: dir2, tools: ["Read", "Bash"] }),
+      makeAutoRequest({ permission_mode: "auto", tools: ["Read"], worktree_path: dir1 }),
+      makeAutoRequest({ permission_mode: "prompt", tools: ["Read", "Bash"], worktree_path: dir2 }),
     ];
 
     await injectSettingsIntoRequests(requests);
@@ -162,11 +162,9 @@ describe("injectSettingsIntoRequests — conditional injection logic", () => {
     const dir = await mkdtemp(join(tmpdir(), "auto-approve-test-"));
 
     const requests1: SpawnRequest[] = [
-      makeAutoRequest({ worktree_path: dir, tools: ["Read", "Bash"] }),
+      makeAutoRequest({ tools: ["Read", "Bash"], worktree_path: dir }),
     ];
-    const requests2: SpawnRequest[] = [
-      makeAutoRequest({ worktree_path: dir, tools: ["Read"] }),
-    ];
+    const requests2: SpawnRequest[] = [makeAutoRequest({ tools: ["Read"], worktree_path: dir })];
 
     await injectSettingsIntoRequests(requests1);
     await injectSettingsIntoRequests(requests2);
@@ -202,7 +200,7 @@ describe("injectSettingsIntoRequests — settings file contents for known agent 
     ];
 
     const requests: SpawnRequest[] = [
-      makeAutoRequest({ worktree_path: dir, tools: implementorTools }),
+      makeAutoRequest({ tools: implementorTools, worktree_path: dir }),
     ];
 
     await injectSettingsIntoRequests(requests);
@@ -238,7 +236,11 @@ describe("injectSettingsIntoRequests — settings file contents for known agent 
     ];
 
     const requests: SpawnRequest[] = [
-      makeAutoRequest({ agent_type: "canon:canon-researcher", worktree_path: dir, tools: researcherTools }),
+      makeAutoRequest({
+        agent_type: "canon:canon-researcher",
+        tools: researcherTools,
+        worktree_path: dir,
+      }),
     ];
 
     await injectSettingsIntoRequests(requests);
@@ -257,9 +259,7 @@ describe("injectSettingsIntoRequests — settings file contents for known agent 
     // Tools list with only MCP tools (no built-in tools)
     const mcpOnlyTools = ["graph_query", "semantic_search", "get_file_context"];
 
-    const requests: SpawnRequest[] = [
-      makeAutoRequest({ worktree_path: dir, tools: mcpOnlyTools }),
-    ];
+    const requests: SpawnRequest[] = [makeAutoRequest({ tools: mcpOnlyTools, worktree_path: dir })];
 
     await injectSettingsIntoRequests(requests);
 

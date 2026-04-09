@@ -227,17 +227,13 @@ describe("buildScopeMetrics", () => {
   });
 
   it("detects hasHighDegreeFile when inDegree > 8 (HIGH_DEGREE_THRESHOLD)", () => {
-    const result = buildScopeMetrics([
-      { inCycle: false, inDegree: 9, isHub: false },
-    ]);
+    const result = buildScopeMetrics([{ inCycle: false, inDegree: 9, isHub: false }]);
     expect(result.hasHighDegreeFile).toBe(true);
     expect(result.hasHubFile).toBe(false);
   });
 
   it("does NOT set hasHighDegreeFile when inDegree is exactly 8 (threshold is > 8, not >= 8)", () => {
-    const result = buildScopeMetrics([
-      { inCycle: false, inDegree: 8, isHub: false },
-    ]);
+    const result = buildScopeMetrics([{ inCycle: false, inDegree: 8, isHub: false }]);
     expect(result.hasHighDegreeFile).toBe(false);
   });
 
@@ -250,21 +246,14 @@ describe("buildScopeMetrics", () => {
   });
 
   it("treats null entries as low-risk (unindexed files)", () => {
-    const result = buildScopeMetrics([
-      null,
-      null,
-      { inCycle: false, inDegree: 1, isHub: false },
-    ]);
+    const result = buildScopeMetrics([null, null, { inCycle: false, inDegree: 1, isHub: false }]);
     expect(result.hasHubFile).toBe(false);
     expect(result.hasHighDegreeFile).toBe(false);
     expect(result.hasCycleFile).toBe(false);
   });
 
   it("handles mixed null and real entries — real entries' flags are still detected", () => {
-    const result = buildScopeMetrics([
-      null,
-      { inCycle: false, inDegree: 2, isHub: true },
-    ]);
+    const result = buildScopeMetrics([null, { inCycle: false, inDegree: 2, isHub: true }]);
     expect(result.hasHubFile).toBe(true);
   });
 

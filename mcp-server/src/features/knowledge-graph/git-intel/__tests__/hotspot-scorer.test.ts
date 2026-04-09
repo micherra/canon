@@ -5,16 +5,16 @@
  * persistHotspots, and getComplexityMap.
  */
 
-import { describe, expect, test, beforeEach } from "vitest";
 import Database from "better-sqlite3";
+import { describe, expect, test } from "vitest";
+import type { GitCommitRecord } from "../git-intel-types.ts";
 import {
+  buildHotspotRows,
   computeChurn,
   computePercentiles,
-  buildHotspotRows,
-  persistHotspots,
   getComplexityMap,
+  persistHotspots,
 } from "../hotspot-scorer.ts";
-import type { GitCommitRecord } from "../git-intel-types.ts";
 
 // ---------------------------------------------------------------------------
 // computeChurn
@@ -31,7 +31,7 @@ describe("computeChurn", () => {
   test("returns single file entry for single commit", () => {
     const nowEpochSec = 1700000000;
     const commits: GitCommitRecord[] = [
-      { sha: "abc", timestamp: nowEpochSec, files: ["src/foo.ts"] },
+      { files: ["src/foo.ts"], sha: "abc", timestamp: nowEpochSec },
     ];
     const result = computeChurn(commits, { halfLifeDays }, nowEpochSec);
     expect(result).toHaveLength(1);
@@ -46,9 +46,9 @@ describe("computeChurn", () => {
     const oneDayInSec = 86400;
     const commits: GitCommitRecord[] = [
       // recent file: modified 1 day ago
-      { sha: "recent", timestamp: nowEpochSec - oneDayInSec, files: ["src/recent.ts"] },
+      { files: ["src/recent.ts"], sha: "recent", timestamp: nowEpochSec - oneDayInSec },
       // old file: modified 90 days ago
-      { sha: "old", timestamp: nowEpochSec - 90 * oneDayInSec, files: ["src/old.ts"] },
+      { files: ["src/old.ts"], sha: "old", timestamp: nowEpochSec - 90 * oneDayInSec },
     ];
     const result = computeChurn(commits, { halfLifeDays }, nowEpochSec);
     const recentEntry = result.find((e) => e.filePath === "src/recent.ts");
@@ -61,8 +61,8 @@ describe("computeChurn", () => {
   test("accumulates churn across multiple commits for the same file", () => {
     const nowEpochSec = 1700000000;
     const commits: GitCommitRecord[] = [
-      { sha: "c1", timestamp: nowEpochSec, files: ["src/foo.ts"] },
-      { sha: "c2", timestamp: nowEpochSec, files: ["src/foo.ts"] },
+      { files: ["src/foo.ts"], sha: "c1", timestamp: nowEpochSec },
+      { files: ["src/foo.ts"], sha: "c2", timestamp: nowEpochSec },
     ];
     const result = computeChurn(commits, { halfLifeDays }, nowEpochSec);
     expect(result).toHaveLength(1);
@@ -76,9 +76,9 @@ describe("computeChurn", () => {
     const ageDays = 45; // one half-life
     const commits: GitCommitRecord[] = [
       {
+        files: ["src/foo.ts"],
         sha: "c1",
         timestamp: nowEpochSec - ageDays * 86400,
-        files: ["src/foo.ts"],
       },
     ];
     const result = computeChurn(commits, { halfLifeDays }, nowEpochSec);
@@ -89,9 +89,9 @@ describe("computeChurn", () => {
   test("returns results sorted descending by rawChurn", () => {
     const nowEpochSec = 1700000000;
     const commits: GitCommitRecord[] = [
-      { sha: "c1", timestamp: nowEpochSec - 10 * 86400, files: ["src/a.ts"] },
-      { sha: "c2", timestamp: nowEpochSec, files: ["src/b.ts"] },
-      { sha: "c3", timestamp: nowEpochSec, files: ["src/b.ts"] },
+      { files: ["src/a.ts"], sha: "c1", timestamp: nowEpochSec - 10 * 86400 },
+      { files: ["src/b.ts"], sha: "c2", timestamp: nowEpochSec },
+      { files: ["src/b.ts"], sha: "c3", timestamp: nowEpochSec },
     ];
     const result = computeChurn(commits, { halfLifeDays }, nowEpochSec);
     // b.ts appears twice at age 0, a.ts once at age 10 → b.ts should be first
@@ -112,7 +112,7 @@ describe("computePercentiles", () => {
   test("all identical values return all 1.0 (inclusive rank — all <= x)", () => {
     const result = computePercentiles([5, 5, 5, 5]);
     expect(result).toHaveLength(4);
-    result.forEach((r) => expect(r).toBeCloseTo(1.0, 5));
+    for (const r of result) expect(r).toBeCloseTo(1.0, 5);
   });
 
   test("distinct values produce correct inclusive percentile ranks", () => {
@@ -160,12 +160,12 @@ describe("buildHotspotRows", () => {
   test("marks files above hotspotScoreThreshold as is_hotspot=1", () => {
     // Provide files where some will score above 0.75
     const churnEntries = [
-      { filePath: "src/high.ts", rawChurn: 100, commitCount: 10 },
-      { filePath: "src/low.ts", rawChurn: 1, commitCount: 1 },
+      { commitCount: 10, filePath: "src/high.ts", rawChurn: 100 },
+      { commitCount: 1, filePath: "src/low.ts", rawChurn: 1 },
     ];
     const complexityByFile = new Map([
       ["src/high.ts", 50], // high complexity
-      ["src/low.ts", 1],   // low complexity
+      ["src/low.ts", 1], // low complexity
     ]);
     const config = { hotspotScoreThreshold: 0.75 };
     const rows = buildHotspotRows(churnEntries, complexityByFile, config, commitSha);
@@ -182,7 +182,7 @@ describe("buildHotspotRows", () => {
   });
 
   test("handles files with zero complexity", () => {
-    const churnEntries = [{ filePath: "src/foo.ts", rawChurn: 10, commitCount: 1 }];
+    const churnEntries = [{ commitCount: 1, filePath: "src/foo.ts", rawChurn: 10 }];
     const complexityByFile = new Map<string, number>(); // no complexity data
     const config = { hotspotScoreThreshold: 0.75 };
     const rows = buildHotspotRows(churnEntries, complexityByFile, config, commitSha);
@@ -199,8 +199,8 @@ describe("buildHotspotRows", () => {
 
   test("computes score as product of churn_percentile and complexity_pctile", () => {
     const churnEntries = [
-      { filePath: "src/a.ts", rawChurn: 10, commitCount: 2 },
-      { filePath: "src/b.ts", rawChurn: 5, commitCount: 1 },
+      { commitCount: 2, filePath: "src/a.ts", rawChurn: 10 },
+      { commitCount: 1, filePath: "src/b.ts", rawChurn: 5 },
     ];
     const complexityByFile = new Map([
       ["src/a.ts", 20],
@@ -214,7 +214,7 @@ describe("buildHotspotRows", () => {
   });
 
   test("sets computed_at_commit from commitSha parameter", () => {
-    const churnEntries = [{ filePath: "src/foo.ts", rawChurn: 1, commitCount: 1 }];
+    const churnEntries = [{ commitCount: 1, filePath: "src/foo.ts", rawChurn: 1 }];
     const rows = buildHotspotRows(churnEntries, new Map(), { hotspotScoreThreshold: 0 }, "sha123");
     expect(rows[0].computed_at_commit).toBe("sha123");
   });
@@ -247,15 +247,15 @@ describe("persistHotspots", () => {
     const db = makeDb();
     const rows = [
       {
-        file_path: "src/foo.ts",
-        churn_raw: 5.0,
         churn_percentile: 1.0,
-        complexity_raw: 3,
+        churn_raw: 5.0,
         complexity_pctile: 1.0,
-        score: 1.0,
-        is_hotspot: 1,
-        computed_at_commit: "abc",
+        complexity_raw: 3,
         computed_at: new Date().toISOString(),
+        computed_at_commit: "abc",
+        file_path: "src/foo.ts",
+        is_hotspot: 1,
+        score: 1.0,
       },
     ];
     // Caller provides transaction
@@ -268,25 +268,27 @@ describe("persistHotspots", () => {
   test("replaces existing data when called again", () => {
     const db = makeDb();
     const makeRow = (path: string) => ({
-      file_path: path,
-      churn_raw: 1.0,
       churn_percentile: 1.0,
-      complexity_raw: 1,
+      churn_raw: 1.0,
       complexity_pctile: 1.0,
-      score: 1.0,
-      is_hotspot: 0,
-      computed_at_commit: "sha1",
+      complexity_raw: 1,
       computed_at: new Date().toISOString(),
+      computed_at_commit: "sha1",
+      file_path: path,
+      is_hotspot: 0,
+      score: 1.0,
     });
 
     // First write
     db.transaction(() => persistHotspots(db, [makeRow("src/a.ts"), makeRow("src/b.ts")]))();
-    const count1 = (db.prepare("SELECT COUNT(*) as c FROM hotspot_scores").get() as { c: number }).c;
+    const count1 = (db.prepare("SELECT COUNT(*) as c FROM hotspot_scores").get() as { c: number })
+      .c;
     expect(count1).toBe(2);
 
     // Second write with different rows — should replace
     db.transaction(() => persistHotspots(db, [makeRow("src/c.ts")]))();
-    const count2 = (db.prepare("SELECT COUNT(*) as c FROM hotspot_scores").get() as { c: number }).c;
+    const count2 = (db.prepare("SELECT COUNT(*) as c FROM hotspot_scores").get() as { c: number })
+      .c;
     expect(count2).toBe(1);
     const row = db.prepare("SELECT file_path FROM hotspot_scores").get() as { file_path: string };
     expect(row.file_path).toBe("src/c.ts");
@@ -299,17 +301,17 @@ describe("persistHotspots", () => {
     expect(() =>
       persistHotspots(db, [
         {
-          file_path: "src/foo.ts",
-          churn_raw: 1.0,
           churn_percentile: 1.0,
-          complexity_raw: 1,
+          churn_raw: 1.0,
           complexity_pctile: 1.0,
-          score: 1.0,
-          is_hotspot: 0,
-          computed_at_commit: "sha",
+          complexity_raw: 1,
           computed_at: new Date().toISOString(),
+          computed_at_commit: "sha",
+          file_path: "src/foo.ts",
+          is_hotspot: 0,
+          score: 1.0,
         },
-      ])
+      ]),
     ).not.toThrow();
   });
 });
@@ -346,11 +348,21 @@ describe("getComplexityMap", () => {
 
   test("returns entity count per file path", () => {
     const db = makeDb();
-    db.exec(`INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at) VALUES ('src/a.ts', 0, '', 'ts', 'unknown', '')`);
-    db.exec(`INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at) VALUES ('src/b.ts', 0, '', 'ts', 'unknown', '')`);
-    db.exec(`INSERT INTO entities (file_id, name, qualified_name, kind) VALUES (1, 'foo', 'foo', 'function')`);
-    db.exec(`INSERT INTO entities (file_id, name, qualified_name, kind) VALUES (1, 'bar', 'bar', 'function')`);
-    db.exec(`INSERT INTO entities (file_id, name, qualified_name, kind) VALUES (2, 'baz', 'baz', 'function')`);
+    db.exec(
+      `INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at) VALUES ('src/a.ts', 0, '', 'ts', 'unknown', '')`,
+    );
+    db.exec(
+      `INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at) VALUES ('src/b.ts', 0, '', 'ts', 'unknown', '')`,
+    );
+    db.exec(
+      `INSERT INTO entities (file_id, name, qualified_name, kind) VALUES (1, 'foo', 'foo', 'function')`,
+    );
+    db.exec(
+      `INSERT INTO entities (file_id, name, qualified_name, kind) VALUES (1, 'bar', 'bar', 'function')`,
+    );
+    db.exec(
+      `INSERT INTO entities (file_id, name, qualified_name, kind) VALUES (2, 'baz', 'baz', 'function')`,
+    );
 
     const map = getComplexityMap(db);
     expect(map.get("src/a.ts")).toBe(2);
@@ -359,7 +371,9 @@ describe("getComplexityMap", () => {
 
   test("returns 0 count for files with no entities (LEFT JOIN)", () => {
     const db = makeDb();
-    db.exec(`INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at) VALUES ('src/empty.ts', 0, '', 'ts', 'unknown', '')`);
+    db.exec(
+      `INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at) VALUES ('src/empty.ts', 0, '', 'ts', 'unknown', '')`,
+    );
     const map = getComplexityMap(db);
     expect(map.get("src/empty.ts")).toBe(0);
   });

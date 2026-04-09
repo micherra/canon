@@ -15,7 +15,9 @@
 import { z } from "zod";
 
 export const LearningProposalSchema = z.object({
+  confidence: z.number().min(0).max(1),
   proposal_id: z.string(),
+  target: z.string(),
   type: z.enum([
     "new-convention",
     "severity-change",
@@ -23,8 +25,6 @@ export const LearningProposalSchema = z.object({
     "convention-graduation",
     "stale-removal",
   ]),
-  confidence: z.number().min(0).max(1),
-  target: z.string(),
 });
 
 export type LearningProposal = z.infer<typeof LearningProposalSchema>;

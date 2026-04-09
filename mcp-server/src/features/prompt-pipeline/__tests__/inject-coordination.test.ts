@@ -55,12 +55,12 @@ vi.mock("@graph/kg-schema.ts", () => ({
 }));
 
 vi.mock("@graph/kg-query.ts", () => ({
-  KgQuery: vi.fn(),
   computeFileInsightMaps: vi.fn().mockReturnValue({
-    hubPaths: new Set(),
     cycleMemberPaths: new Map(),
+    hubPaths: new Set(),
     layerViolationsByPath: new Map(),
   }),
+  KgQuery: vi.fn(),
 }));
 
 vi.mock("@domains/workspaces/execution-store.ts", () => ({
@@ -75,9 +75,9 @@ vi.mock("@features/orchestration/services/scope-resolver.ts", () => ({
 
 vi.mock("../services/trust-resolver.ts", () => ({
   buildScopeMetrics: vi.fn().mockReturnValue({
-    hasHubFile: false,
-    hasHighDegreeFile: false,
     hasCycleFile: false,
+    hasHighDegreeFile: false,
+    hasHubFile: false,
   }),
   computeTrustLevel: vi.fn().mockReturnValue({ level: "HIGH", reason: "All scope files low-risk" }),
   trustLevelToPermissionMode: vi.fn().mockReturnValue("auto"),
@@ -88,21 +88,17 @@ vi.mock("@shared/constants.ts", () => ({
   CANON_FILES: { KNOWLEDGE_DB: "knowledge-graph.db" },
 }));
 
-import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { existsSync } from "node:fs";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { KgQuery, computeFileInsightMaps } from "@graph/kg-query.ts";
-import { initDatabase } from "@graph/kg-schema.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
+import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
 import { resolveToolProfile } from "../model/tool-profiles.ts";
-import {
-  buildScopeMetrics,
-  computeTrustLevel,
-  trustLevelToPermissionMode,
-} from "../services/trust-resolver.ts"; // import for vi.mocked() access
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 import { injectCoordination } from "../services/inject-coordination.ts";
+import { computeTrustLevel, trustLevelToPermissionMode } from "../services/trust-resolver.ts"; // import for vi.mocked() access
 
 function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry {
   return {
@@ -677,11 +673,14 @@ describe("injectCoordination — trust integration", () => {
     vi.mocked(initDatabase).mockReset();
     vi.mocked(KgQuery).mockReset();
     vi.mocked(computeFileInsightMaps).mockReturnValue({
-      hubPaths: new Set(),
       cycleMemberPaths: new Map(),
+      hubPaths: new Set(),
       layerViolationsByPath: new Map(),
     });
-    vi.mocked(computeTrustLevel).mockReturnValue({ level: "HIGH", reason: "All scope files low-risk" });
+    vi.mocked(computeTrustLevel).mockReturnValue({
+      level: "HIGH",
+      reason: "All scope files low-risk",
+    });
     vi.mocked(trustLevelToPermissionMode).mockReturnValue("auto");
     vi.mocked(resolveTaskScope).mockReturnValue([]);
     vi.mocked(getExecutionStore).mockReturnValue({
@@ -697,22 +696,24 @@ describe("injectCoordination — trust integration", () => {
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as unknown as ReturnType<typeof initDatabase>);
     const mockKgQuery = {
-      getKgFreshnessMs: vi.fn().mockReturnValue(60_000), // 1 min — fresh
       getFileMetrics: vi.fn().mockReturnValue(null),
+      getKgFreshnessMs: vi.fn().mockReturnValue(60_000), // 1 min — fresh
     };
     vi.mocked(KgQuery).mockImplementation(function () {
       return mockKgQuery as unknown as KgQuery;
     });
     vi.mocked(computeFileInsightMaps).mockReturnValue({
-      hubPaths: new Set(),
       cycleMemberPaths: new Map(),
+      hubPaths: new Set(),
       layerViolationsByPath: new Map(),
     });
-    vi.mocked(computeTrustLevel).mockReturnValue({ level: "HIGH", reason: "All scope files low-risk" });
+    vi.mocked(computeTrustLevel).mockReturnValue({
+      level: "HIGH",
+      reason: "All scope files low-risk",
+    });
     vi.mocked(trustLevelToPermissionMode).mockReturnValue("auto");
 
     const ctx = makeCtx({
-      prompts: [makeEntry({ agent: "canon-implementor" })],
       board: {
         base_commit: "abc",
         blocked: null,
@@ -727,6 +728,7 @@ describe("injectCoordination — trust integration", () => {
         states: { implement: { entries: 1, status: "in_progress" } },
         task: "test",
       },
+      prompts: [makeEntry({ agent: "canon-implementor" })],
     });
 
     await injectCoordination(ctx);
@@ -785,13 +787,13 @@ describe("injectCoordination — trust integration", () => {
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as unknown as ReturnType<typeof initDatabase>);
     const mockKgQuery = {
-      getKgFreshnessMs: vi.fn().mockReturnValue(60_000),
       getFileMetrics: vi.fn().mockReturnValue(null),
+      getKgFreshnessMs: vi.fn().mockReturnValue(60_000),
     };
     vi.mocked(KgQuery).mockImplementation(() => mockKgQuery as unknown as KgQuery);
     vi.mocked(computeFileInsightMaps).mockReturnValue({
-      hubPaths: new Set(),
       cycleMemberPaths: new Map(),
+      hubPaths: new Set(),
       layerViolationsByPath: new Map(),
     });
 
@@ -830,13 +832,13 @@ describe("injectCoordination — trust integration", () => {
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as unknown as ReturnType<typeof initDatabase>);
     const mockKgQuery = {
-      getKgFreshnessMs: vi.fn().mockReturnValue(60_000),
       getFileMetrics: vi.fn().mockReturnValue(null),
+      getKgFreshnessMs: vi.fn().mockReturnValue(60_000),
     };
     vi.mocked(KgQuery).mockImplementation(() => mockKgQuery as unknown as KgQuery);
     vi.mocked(computeFileInsightMaps).mockReturnValue({
-      hubPaths: new Set(),
       cycleMemberPaths: new Map(),
+      hubPaths: new Set(),
       layerViolationsByPath: new Map(),
     });
 

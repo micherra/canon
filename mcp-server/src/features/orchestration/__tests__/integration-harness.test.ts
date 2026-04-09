@@ -29,13 +29,13 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
+import { canEnterState } from "@domains/board/board.ts";
 import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import type { FlowEventMap } from "@domains/messages/events.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
-import { canEnterState } from "@domains/board/board.ts";
 import { filterCannotFix } from "../engine/convergence.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { reportResult } from "../tools/report-result.ts";

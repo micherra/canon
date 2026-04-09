@@ -5,9 +5,9 @@
  * All computation functions are pure; only persist/query functions touch the DB.
  */
 
-import type { GitCommitRecord, ChurnEntry, HotspotRow } from "./git-intel-types.ts";
-import type { GitIntelConfig } from "./git-intel-config.ts";
 import type Database from "better-sqlite3";
+import type { GitIntelConfig } from "./git-intel-config.ts";
+import type { ChurnEntry, GitCommitRecord, HotspotRow } from "./git-intel-types.ts";
 
 /**
  * Compute recency-weighted churn per file from commit records.
@@ -33,14 +33,14 @@ export const computeChurn = (
         existing.rawChurn += weight;
         existing.commitCount += 1;
       } else {
-        churnMap.set(filePath, { rawChurn: weight, commitCount: 1 });
+        churnMap.set(filePath, { commitCount: 1, rawChurn: weight });
       }
     }
   }
 
   const entries: ChurnEntry[] = [];
   for (const [filePath, { rawChurn, commitCount }] of churnMap) {
-    entries.push({ filePath, rawChurn, commitCount });
+    entries.push({ commitCount, filePath, rawChurn });
   }
 
   entries.sort((a, b) => b.rawChurn - a.rawChurn);
@@ -115,15 +115,15 @@ export const buildHotspotRows = (
     const score = churnPctile * complexityPctile;
 
     return {
-      file_path: entry.filePath,
-      churn_raw: entry.rawChurn,
       churn_percentile: churnPctile,
-      complexity_raw: complexityValues[i],
+      churn_raw: entry.rawChurn,
       complexity_pctile: complexityPctile,
-      score,
-      is_hotspot: score >= config.hotspotScoreThreshold ? 1 : 0,
-      computed_at_commit: commitSha,
+      complexity_raw: complexityValues[i],
       computed_at: now,
+      computed_at_commit: commitSha,
+      file_path: entry.filePath,
+      is_hotspot: score >= config.hotspotScoreThreshold ? 1 : 0,
+      score,
     };
   });
 };

@@ -234,7 +234,6 @@ const MIGRATIONS: Migration[] = [
     version: "3",
   },
   {
-    version: "4",
     up: (db) => {
       db.exec(`CREATE TABLE IF NOT EXISTS hotspot_scores (
         file_path TEXT PRIMARY KEY,
@@ -260,6 +259,7 @@ const MIGRATIONS: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_co_change_b ON co_change_edges(file_b)`);
       db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
     },
+    version: "4",
   },
 ];
 

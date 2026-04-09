@@ -81,7 +81,10 @@ describe("simulateFlowTool — full simulation to terminal with explore flow", (
   it("simulates explore flow to terminal and returns ok: true with terminal_state set", async () => {
     // explore flow: entry state is typically 'research' or 'explore', terminal is 'done'
     // We provide an empty scenario first to find the entry state name
-    const probe = await simulateFlowTool({ flow: "explore", scenario: [], max_steps: 1 }, pluginDir);
+    const probe = await simulateFlowTool(
+      { flow: "explore", max_steps: 1, scenario: [] },
+      pluginDir,
+    );
     expect(isToolError(probe)).toBe(false);
     if (isToolError(probe)) return;
 
@@ -93,8 +96,8 @@ describe("simulateFlowTool — full simulation to terminal with explore flow", (
     const result = await simulateFlowTool(
       {
         flow: "explore",
-        scenario: [{ state_id: entryState, status: "done" }],
         max_steps: 50,
+        scenario: [{ state_id: entryState, status: "done" }],
       },
       pluginDir,
     );
@@ -198,13 +201,13 @@ describe("buildReverseGraph with virtual sink keys", () => {
     );
     const forwardGraph = buildStateGraph(flow);
     // 'hitl' should appear as a target but NOT as a key (it's not a flow state)
-    expect(forwardGraph["state_a"]).toContain("hitl");
-    expect(forwardGraph["hitl"]).toBeUndefined();
+    expect(forwardGraph.state_a).toContain("hitl");
+    expect(forwardGraph.hitl).toBeUndefined();
 
     // Reverse graph: 'hitl' is added as a key when buildReverseGraph processes the hitl target
     const reverseGraph = buildReverseGraph(forwardGraph);
     // 'hitl' key should appear with state_a as predecessor
-    expect(reverseGraph["hitl"]).toContain("state_a");
+    expect(reverseGraph.hitl).toContain("state_a");
 
     // detectDeadEnds must NOT flag state_a as a dead-end (hitl is a valid exit)
     const warnings = detectDeadEnds(flow);
@@ -220,10 +223,10 @@ describe("buildReverseGraph with virtual sink keys", () => {
       "processor",
     );
     const forwardGraph = buildStateGraph(flow);
-    expect(forwardGraph["processor"]).toContain("no_items");
+    expect(forwardGraph.processor).toContain("no_items");
 
     const reverseGraph = buildReverseGraph(forwardGraph);
-    expect(reverseGraph["no_items"]).toContain("processor");
+    expect(reverseGraph.no_items).toContain("processor");
 
     // detectDeadEnds must NOT flag processor
     expect(detectDeadEnds(flow)).toEqual([]);
@@ -312,9 +315,7 @@ describe("simulateFlow — errors-are-values: no throws for adversarial inputs",
       },
     };
     // Normal scenario — just verify it returns, doesn't throw
-    expect(() =>
-      simulateFlow(flow, [{ state_id: "start", status: "done" }], 50),
-    ).not.toThrow();
+    expect(() => simulateFlow(flow, [{ state_id: "start", status: "done" }], 50)).not.toThrow();
     const result = simulateFlow(flow, [{ state_id: "start", status: "done" }], 50);
     expect(result.ok).toBe(true);
   });
@@ -394,7 +395,7 @@ describe("simulateFlow — path entry recorded for virtual sink transitions", ()
       transition_matched: "blocked",
     });
     // iterations_consumed should include the virtual sink visit
-    expect(result.iterations_consumed["review"]).toBe(1);
+    expect(result.iterations_consumed.review).toBe(1);
   });
 
   it("path entry exists for the state that exits to no_items", () => {
@@ -409,7 +410,7 @@ describe("simulateFlow — path entry recorded for virtual sink transitions", ()
     expect(result.ok).toBe(true);
     expect(result.path).toHaveLength(1);
     expect(result.path[0].next_state).toBe("no_items");
-    expect(result.iterations_consumed["process"]).toBe(1);
+    expect(result.iterations_consumed.process).toBe(1);
   });
 });
 
@@ -445,7 +446,7 @@ describe("simulateFlow — max_iterations boundary: exactly at limit", () => {
     expect(result.ok).toBe(true);
     expect(result.stuck_at).toBeUndefined();
     expect(result.warnings.some((w) => w.includes("max_iterations"))).toBe(false);
-    expect(result.iterations_consumed["looping"]).toBe(2);
+    expect(result.iterations_consumed.looping).toBe(2);
   });
 
   it("flags stuck when iterations_consumed exceeds max_iterations by 1", () => {

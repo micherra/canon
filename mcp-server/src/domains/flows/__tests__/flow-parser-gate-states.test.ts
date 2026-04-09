@@ -157,13 +157,13 @@ describe("validateSpawnCoverage: agentless single states are exempt", () => {
     const flow = makeBaseFlow({
       spawn_instructions: {},
       states: {
+        terminal: {
+          type: "terminal",
+        },
         work: {
           // No agent, but type is parallel — not exempt
           transitions: { done: "terminal" },
           type: "parallel",
-        },
-        terminal: {
-          type: "terminal",
         },
       },
     });

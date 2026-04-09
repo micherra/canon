@@ -519,15 +519,18 @@ describe("driveFlow Branch A — approval gate intercept", () => {
 
     const flow = makeApprovalFlow("medium");
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        artifacts: ["/workspace/plan.md"],
-        state_id: "design",
-        status: "done",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          artifacts: ["/workspace/plan.md"],
+          state_id: "design",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -563,14 +566,17 @@ describe("driveFlow Branch A — approval gate intercept", () => {
       tier: "medium",
     } as unknown as ResolvedFlow;
 
-    const result = await driveFlow({
-      flow: flowWithParallel,
-      result: {
-        state_id: "parallel-review",
-        status: "done",
+    const result = await driveFlow(
+      {
+        flow: flowWithParallel,
+        result: {
+          state_id: "parallel-review",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // parallel wait — should return empty spawn, not approval
     expect(result.ok).toBe(true);
@@ -621,14 +627,17 @@ describe("driveFlow Branch A — approval gate intercept", () => {
       },
     } as unknown as ResolvedFlow;
 
-    const result = await driveFlow({
-      flow: flowWithoutGate,
-      result: {
-        state_id: "design",
-        status: "approved",
+    const result = await driveFlow(
+      {
+        flow: flowWithoutGate,
+        result: {
+          state_id: "design",
+          status: "approved",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // Should advance to implement state
     expect(result.ok).toBe(true);
@@ -677,14 +686,17 @@ describe("driveFlow Branch A — approval gate intercept", () => {
       },
     } as unknown as ResolvedFlow;
 
-    const result = await driveFlow({
-      flow: flowWithRevise,
-      result: {
-        state_id: "design",
-        status: "revise",
+    const result = await driveFlow(
+      {
+        flow: flowWithRevise,
+        result: {
+          state_id: "design",
+          status: "revise",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // No approval gate on design (not architect, no explicit gate) — should advance to implement
     expect(result.ok).toBe(true);
@@ -733,14 +745,17 @@ describe("driveFlow Branch A — approval gate intercept", () => {
       tier: "small",
     } as unknown as ResolvedFlow;
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "design",
-        status: "done",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "design",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // No approval gate on small tier — should advance to implement
     expect(result.ok).toBe(true);
@@ -777,14 +792,17 @@ describe("driveFlow — approval decision statuses do NOT re-trigger the gate", 
     // approval_gate: true on design — but status is "approved", so gate must NOT fire again
     const flow = makeApprovalFlow("medium");
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "design",
-        status: "approved",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "design",
+          status: "approved",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // Must advance to implement — NOT produce another "approval" breakpoint
     expect(result.ok).toBe(true);
@@ -806,14 +824,17 @@ describe("driveFlow — approval decision statuses do NOT re-trigger the gate", 
 
     const flow = makeApprovalFlow("medium");
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "design",
-        status: "revise",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "design",
+          status: "revise",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // "revise" is an approval decision — gate must not re-fire
     expect(result.ok).toBe(true);
@@ -835,14 +856,17 @@ describe("driveFlow — approval decision statuses do NOT re-trigger the gate", 
 
     const flow = makeApprovalFlow("medium");
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        state_id: "design",
-        status: "reject",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          state_id: "design",
+          status: "reject",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // "reject" is an approval decision — gate must not re-fire (hitl comes from report_result)
     expect(result.ok).toBe(true);
@@ -886,14 +910,17 @@ describe("driveFlow — self-transition on single state (revise: design)", () =>
       tier: "medium",
     } as unknown as ResolvedFlow;
 
-    const result = await driveFlow({
-      flow: flowWithSelfTransition,
-      result: {
-        state_id: "design",
-        status: "revise",
+    const result = await driveFlow(
+      {
+        flow: flowWithSelfTransition,
+        result: {
+          state_id: "design",
+          status: "revise",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     // Self-transition on a single state should re-enter and spawn (not return empty [])
     expect(result.ok).toBe(true);

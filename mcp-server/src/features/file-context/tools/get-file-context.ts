@@ -4,6 +4,12 @@
 import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
+import { ensureGitIntelFresh } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
+import type {
+  CoChangePartner,
+  HotspotRow,
+  HotspotScoreOutput,
+} from "@features/knowledge-graph/git-intel/git-intel-types.ts";
 import { extractExports } from "@graph/export-parser.ts";
 import { extractImports, resolveImport } from "@graph/import-parser.ts";
 import {
@@ -15,8 +21,6 @@ import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { EntityKind, FileMetrics } from "@graph/kg-types.ts";
 import { scanSourceFiles } from "@graph/scanner.ts";
-import { ensureGitIntelFresh } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
-import type { HotspotRow, HotspotScoreOutput, CoChangePartner } from "@features/knowledge-graph/git-intel/git-intel-types.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "@shared/constants.ts";
 import {
@@ -245,6 +249,47 @@ async function loadComplianceData(
   return { last_verdict, violation_count, violations };
 }
 
+/** Load git-intel hotspot and co-change data into the result. */
+function loadGitIntelData(
+  db: ReturnType<typeof initDatabase>,
+  filePath: string,
+  projectDir: string,
+  result: ReturnType<typeof loadKgData>,
+): void {
+  try {
+    ensureGitIntelFresh(db, projectDir);
+
+    const hotspot = db.prepare("SELECT * FROM hotspot_scores WHERE file_path = ?").get(filePath) as
+      | HotspotRow
+      | undefined;
+    if (hotspot) {
+      result.hotspot_score = {
+        churn_percentile: hotspot.churn_percentile,
+        complexity_percentile: hotspot.complexity_pctile,
+        is_hotspot: Boolean(hotspot.is_hotspot),
+        score: hotspot.score,
+      };
+    }
+
+    const partners = db
+      .prepare(
+        `SELECT file_b AS partner, jaccard FROM co_change_edges WHERE file_a = ?
+         UNION
+         SELECT file_a AS partner, jaccard FROM co_change_edges WHERE file_b = ?`,
+      )
+      .all(filePath, filePath) as Array<{ partner: string; jaccard: number }>;
+
+    if (partners.length > 0) {
+      result.co_change_partners = partners
+        .sort((a, b) => b.jaccard - a.jaccard)
+        .slice(0, 10)
+        .map((p) => ({ jaccard: p.jaccard, path: p.partner }));
+    }
+  } catch {
+    // Git intel unavailable — skip gracefully
+  }
+}
+
 /** Load graph data from the KG database.
  *
  * @param dbPath     - absolute path to the knowledge-graph.db file
@@ -308,40 +353,7 @@ export function loadKgData(
     // The first call (inside resolveFileRelationships) intentionally omits projectDir
     // to avoid triggering two spawnSync calls to `git rev-parse HEAD` per tool invocation.
     if (projectDir) {
-      try {
-        ensureGitIntelFresh(db, projectDir);
-
-        // Hotspot score
-        const hotspot = db
-          .prepare("SELECT * FROM hotspot_scores WHERE file_path = ?")
-          .get(filePath) as HotspotRow | undefined;
-        if (hotspot) {
-          result.hotspot_score = {
-            churn_percentile: hotspot.churn_percentile,
-            complexity_percentile: hotspot.complexity_pctile,
-            is_hotspot: Boolean(hotspot.is_hotspot),
-            score: hotspot.score,
-          };
-        }
-
-        // Co-change partners — query both edge directions
-        const partners = db
-          .prepare(
-            `SELECT file_b AS partner, jaccard FROM co_change_edges WHERE file_a = ?
-             UNION
-             SELECT file_a AS partner, jaccard FROM co_change_edges WHERE file_b = ?`,
-          )
-          .all(filePath, filePath) as Array<{ partner: string; jaccard: number }>;
-
-        if (partners.length > 0) {
-          result.co_change_partners = partners
-            .sort((a, b) => b.jaccard - a.jaccard)
-            .slice(0, 10)
-            .map((p) => ({ jaccard: p.jaccard, path: p.partner }));
-        }
-      } catch {
-        // Git intel unavailable — skip gracefully
-      }
+      loadGitIntelData(db, filePath, projectDir, result);
     }
   } catch {
     // KG unavailable — skip graph data gracefully
@@ -581,6 +593,8 @@ export async function getFileContext(
     ...(kgData.entities !== undefined && { entities: kgData.entities }),
     ...(kgData.blast_radius !== undefined && { blast_radius: kgData.blast_radius }),
     ...(kgData.hotspot_score !== undefined && { hotspot_score: kgData.hotspot_score }),
-    ...(kgData.co_change_partners !== undefined && { co_change_partners: kgData.co_change_partners }),
+    ...(kgData.co_change_partners !== undefined && {
+      co_change_partners: kgData.co_change_partners,
+    }),
   });
 }

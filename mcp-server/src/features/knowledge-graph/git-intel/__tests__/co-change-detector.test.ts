@@ -4,12 +4,9 @@
  * Tests for computeCoChangePairs and persistCoChangeEdges.
  */
 
-import { describe, expect, test } from "vitest";
 import Database from "better-sqlite3";
-import {
-  computeCoChangePairs,
-  persistCoChangeEdges,
-} from "../co-change-detector.ts";
+import { describe, expect, test } from "vitest";
+import { computeCoChangePairs, persistCoChangeEdges } from "../co-change-detector.ts";
 import type { GitCommitRecord } from "../git-intel-types.ts";
 
 // ---------------------------------------------------------------------------
@@ -26,8 +23,8 @@ describe("computeCoChangePairs", () => {
 
   test("returns empty array for single-file commits only", () => {
     const commits: GitCommitRecord[] = [
-      { sha: "c1", timestamp: 1000, files: ["src/a.ts"] },
-      { sha: "c2", timestamp: 2000, files: ["src/b.ts"] },
+      { files: ["src/a.ts"], sha: "c1", timestamp: 1000 },
+      { files: ["src/b.ts"], sha: "c2", timestamp: 2000 },
     ];
     const result = computeCoChangePairs(commits, config);
     expect(result).toEqual([]);
@@ -37,8 +34,8 @@ describe("computeCoChangePairs", () => {
     // a.ts and b.ts co-change in 2 commits; each appears in those 2 commits only
     // |A ∩ B| = 2, |A ∪ B| = |A| + |B| - |A ∩ B| = 2 + 2 - 2 = 2 → Jaccard = 1.0
     const commits: GitCommitRecord[] = [
-      { sha: "c1", timestamp: 1000, files: ["src/a.ts", "src/b.ts"] },
-      { sha: "c2", timestamp: 2000, files: ["src/a.ts", "src/b.ts"] },
+      { files: ["src/a.ts", "src/b.ts"], sha: "c1", timestamp: 1000 },
+      { files: ["src/a.ts", "src/b.ts"], sha: "c2", timestamp: 2000 },
     ];
     const result = computeCoChangePairs(commits, { jaccardThreshold: 0.0 });
     expect(result).toHaveLength(1);
@@ -52,9 +49,9 @@ describe("computeCoChangePairs", () => {
     // co-commit count = 2
     // |A| = 3, |B| = 2, |A ∩ B| = 2 → Jaccard = 2 / (3 + 2 - 2) = 2/3
     const commits: GitCommitRecord[] = [
-      { sha: "c1", timestamp: 1000, files: ["src/a.ts", "src/b.ts"] },
-      { sha: "c2", timestamp: 2000, files: ["src/a.ts", "src/b.ts"] },
-      { sha: "c3", timestamp: 3000, files: ["src/a.ts"] },
+      { files: ["src/a.ts", "src/b.ts"], sha: "c1", timestamp: 1000 },
+      { files: ["src/a.ts", "src/b.ts"], sha: "c2", timestamp: 2000 },
+      { files: ["src/a.ts"], sha: "c3", timestamp: 3000 },
     ];
     const result = computeCoChangePairs(commits, { jaccardThreshold: 0.0 });
     expect(result).toHaveLength(1);
@@ -65,20 +62,20 @@ describe("computeCoChangePairs", () => {
     // Low overlap: a.ts appears in 4 commits, b.ts in 4 commits, they co-appear in 1
     // |A| = 4, |B| = 4, |A ∩ B| = 1 → Jaccard = 1/(4+4-1) = 1/7 ≈ 0.143
     const commits: GitCommitRecord[] = [
-      { sha: "c1", timestamp: 1000, files: ["src/a.ts", "src/b.ts"] },
-      { sha: "c2", timestamp: 2000, files: ["src/a.ts", "src/c.ts"] },
-      { sha: "c3", timestamp: 3000, files: ["src/a.ts", "src/d.ts"] },
-      { sha: "c4", timestamp: 4000, files: ["src/a.ts", "src/e.ts"] },
-      { sha: "c5", timestamp: 5000, files: ["src/b.ts", "src/f.ts"] },
-      { sha: "c6", timestamp: 6000, files: ["src/b.ts", "src/g.ts"] },
-      { sha: "c7", timestamp: 7000, files: ["src/b.ts", "src/h.ts"] },
+      { files: ["src/a.ts", "src/b.ts"], sha: "c1", timestamp: 1000 },
+      { files: ["src/a.ts", "src/c.ts"], sha: "c2", timestamp: 2000 },
+      { files: ["src/a.ts", "src/d.ts"], sha: "c3", timestamp: 3000 },
+      { files: ["src/a.ts", "src/e.ts"], sha: "c4", timestamp: 4000 },
+      { files: ["src/b.ts", "src/f.ts"], sha: "c5", timestamp: 5000 },
+      { files: ["src/b.ts", "src/g.ts"], sha: "c6", timestamp: 6000 },
+      { files: ["src/b.ts", "src/h.ts"], sha: "c7", timestamp: 7000 },
     ];
     // With threshold 0.3, pair (a,b) with Jaccard ≈ 0.143 should be filtered out
     const result = computeCoChangePairs(commits, { jaccardThreshold: 0.3 });
     const abPair = result.find(
       (p) =>
         (p.fileA === "src/a.ts" && p.fileB === "src/b.ts") ||
-        (p.fileA === "src/b.ts" && p.fileB === "src/a.ts")
+        (p.fileA === "src/b.ts" && p.fileB === "src/a.ts"),
     );
     expect(abPair).toBeUndefined();
   });
@@ -86,8 +83,8 @@ describe("computeCoChangePairs", () => {
   test("normalizes pair ordering so (a,b) and (b,a) are treated the same", () => {
     // Two commits each with both files — order varies
     const commits: GitCommitRecord[] = [
-      { sha: "c1", timestamp: 1000, files: ["src/b.ts", "src/a.ts"] },
-      { sha: "c2", timestamp: 2000, files: ["src/a.ts", "src/b.ts"] },
+      { files: ["src/b.ts", "src/a.ts"], sha: "c1", timestamp: 1000 },
+      { files: ["src/a.ts", "src/b.ts"], sha: "c2", timestamp: 2000 },
     ];
     const result = computeCoChangePairs(commits, { jaccardThreshold: 0.0 });
     // Should produce exactly one pair
@@ -101,8 +98,8 @@ describe("computeCoChangePairs", () => {
     // Create a commit with 51 files plus a normal commit
     const manyFiles = Array.from({ length: 51 }, (_, i) => `src/file${i}.ts`);
     const commits: GitCommitRecord[] = [
-      { sha: "huge", timestamp: 1000, files: manyFiles },
-      { sha: "normal", timestamp: 2000, files: ["src/a.ts", "src/b.ts"] },
+      { files: manyFiles, sha: "huge", timestamp: 1000 },
+      { files: ["src/a.ts", "src/b.ts"], sha: "normal", timestamp: 2000 },
     ];
     const result = computeCoChangePairs(commits, { jaccardThreshold: 0.0 });
     // Only the normal commit contributes; Jaccard = 1.0 for (a,b)
@@ -114,12 +111,10 @@ describe("computeCoChangePairs", () => {
 
   test("handles exactly 50 files commit (boundary — should NOT be skipped)", () => {
     const exactlyFifty = Array.from({ length: 50 }, (_, i) => `src/file${i}.ts`);
-    const commits: GitCommitRecord[] = [
-      { sha: "boundary", timestamp: 1000, files: exactlyFifty },
-    ];
+    const commits: GitCommitRecord[] = [{ files: exactlyFifty, sha: "boundary", timestamp: 1000 }];
     const result = computeCoChangePairs(commits, { jaccardThreshold: 0.0 });
     // C(50, 2) = 1225 pairs; all should be present with Jaccard 1.0
-    expect(result).toHaveLength(50 * 49 / 2);
+    expect(result).toHaveLength((50 * 49) / 2);
   });
 });
 
@@ -146,46 +141,48 @@ describe("persistCoChangeEdges", () => {
 
   test("inserts co-change pairs", () => {
     const db = makeDb();
-    const pairs = [
-      { fileA: "src/a.ts", fileB: "src/b.ts", coCommitCount: 3, jaccard: 0.75 },
-    ];
+    const pairs = [{ coCommitCount: 3, fileA: "src/a.ts", fileB: "src/b.ts", jaccard: 0.75 }];
     const tx = db.transaction(() => persistCoChangeEdges(db, pairs, "sha1"));
     tx();
-    const count = (db.prepare("SELECT COUNT(*) as c FROM co_change_edges").get() as { c: number }).c;
+    const count = (db.prepare("SELECT COUNT(*) as c FROM co_change_edges").get() as { c: number })
+      .c;
     expect(count).toBe(1);
   });
 
   test("replaces existing data when called again", () => {
     const db = makeDb();
     const pairsV1 = [
-      { fileA: "src/a.ts", fileB: "src/b.ts", coCommitCount: 2, jaccard: 0.5 },
-      { fileA: "src/b.ts", fileB: "src/c.ts", coCommitCount: 1, jaccard: 0.33 },
+      { coCommitCount: 2, fileA: "src/a.ts", fileB: "src/b.ts", jaccard: 0.5 },
+      { coCommitCount: 1, fileA: "src/b.ts", fileB: "src/c.ts", jaccard: 0.33 },
     ];
     db.transaction(() => persistCoChangeEdges(db, pairsV1, "sha1"))();
 
-    const count1 = (db.prepare("SELECT COUNT(*) as c FROM co_change_edges").get() as { c: number }).c;
+    const count1 = (db.prepare("SELECT COUNT(*) as c FROM co_change_edges").get() as { c: number })
+      .c;
     expect(count1).toBe(2);
 
     // Replace with different data
-    const pairsV2 = [
-      { fileA: "src/x.ts", fileB: "src/y.ts", coCommitCount: 5, jaccard: 0.8 },
-    ];
+    const pairsV2 = [{ coCommitCount: 5, fileA: "src/x.ts", fileB: "src/y.ts", jaccard: 0.8 }];
     db.transaction(() => persistCoChangeEdges(db, pairsV2, "sha2"))();
 
-    const count2 = (db.prepare("SELECT COUNT(*) as c FROM co_change_edges").get() as { c: number }).c;
+    const count2 = (db.prepare("SELECT COUNT(*) as c FROM co_change_edges").get() as { c: number })
+      .c;
     expect(count2).toBe(1);
-    const row = db.prepare("SELECT file_a, file_b FROM co_change_edges").get() as { file_a: string; file_b: string };
+    const row = db.prepare("SELECT file_a, file_b FROM co_change_edges").get() as {
+      file_a: string;
+      file_b: string;
+    };
     expect(row.file_a).toBe("src/x.ts");
     expect(row.file_b).toBe("src/y.ts");
   });
 
   test("stores computed_at_commit from parameter", () => {
     const db = makeDb();
-    const pairs = [
-      { fileA: "src/a.ts", fileB: "src/b.ts", coCommitCount: 1, jaccard: 0.5 },
-    ];
+    const pairs = [{ coCommitCount: 1, fileA: "src/a.ts", fileB: "src/b.ts", jaccard: 0.5 }];
     db.transaction(() => persistCoChangeEdges(db, pairs, "commit-sha-xyz"))();
-    const row = db.prepare("SELECT computed_at_commit FROM co_change_edges").get() as { computed_at_commit: string };
+    const row = db.prepare("SELECT computed_at_commit FROM co_change_edges").get() as {
+      computed_at_commit: string;
+    };
     expect(row.computed_at_commit).toBe("commit-sha-xyz");
   });
 
@@ -195,9 +192,9 @@ describe("persistCoChangeEdges", () => {
     expect(() =>
       persistCoChangeEdges(
         db,
-        [{ fileA: "src/a.ts", fileB: "src/b.ts", coCommitCount: 1, jaccard: 0.5 }],
-        "sha"
-      )
+        [{ coCommitCount: 1, fileA: "src/a.ts", fileB: "src/b.ts", jaccard: 0.5 }],
+        "sha",
+      ),
     ).not.toThrow();
   });
 
@@ -206,7 +203,8 @@ describe("persistCoChangeEdges", () => {
     // Insert some data first
     db.exec(`INSERT INTO co_change_edges VALUES ('a', 'b', 1, 0.5, 'sha', '2024-01-01')`);
     db.transaction(() => persistCoChangeEdges(db, [], "sha2"))();
-    const count = (db.prepare("SELECT COUNT(*) as c FROM co_change_edges").get() as { c: number }).c;
+    const count = (db.prepare("SELECT COUNT(*) as c FROM co_change_edges").get() as { c: number })
+      .c;
     expect(count).toBe(0);
   });
 });

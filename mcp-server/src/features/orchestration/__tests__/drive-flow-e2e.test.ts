@@ -318,11 +318,14 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       }),
     );
 
-    const turn2 = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "DONE" },
-      workspace,
-    }, "/fake/project");
+    const turn2 = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "DONE" },
+        workspace,
+      },
+      "/fake/project",
+    );
     expect(turn2.ok).toBe(true);
     if (turn2.ok) {
       expect(turn2.action).toBe("spawn");
@@ -333,11 +336,14 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
     }
 
     // Turn 3: task-01 done → still waiting for task-02
-    const turn3 = await driveFlow({
-      flow,
-      result: { state_id: "implement", status: "DONE", task_id: "task-01" },
-      workspace,
-    }, "/fake/project");
+    const turn3 = await driveFlow(
+      {
+        flow,
+        result: { state_id: "implement", status: "DONE", task_id: "task-01" },
+        workspace,
+      },
+      "/fake/project",
+    );
     expect(turn3.ok).toBe(true);
     if (turn3.ok) {
       expect(turn3.action).toBe("spawn");
@@ -358,11 +364,14 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       }),
     );
 
-    const turn4 = await driveFlow({
-      flow,
-      result: { state_id: "implement", status: "DONE", task_id: "task-02" },
-      workspace,
-    }, "/fake/project");
+    const turn4 = await driveFlow(
+      {
+        flow,
+        result: { state_id: "implement", status: "DONE", task_id: "task-02" },
+        workspace,
+      },
+      "/fake/project",
+    );
     expect(turn4.ok).toBe(true);
     if (turn4.ok) {
       expect(turn4.action).toBe("spawn");
@@ -375,11 +384,14 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
     // Turn 5: review done → terminal → done
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("terminal") as never);
 
-    const turn5 = await driveFlow({
-      flow,
-      result: { state_id: "review", status: "DONE" },
-      workspace,
-    }, "/fake/project");
+    const turn5 = await driveFlow(
+      {
+        flow,
+        result: { state_id: "review", status: "DONE" },
+        workspace,
+      },
+      "/fake/project",
+    );
     expect(turn5.ok).toBe(true);
     if (turn5.ok) {
       expect(turn5.action).toBe("done");
@@ -446,11 +458,14 @@ describe("e2e: HITL flow (stuck detection → hitl breakpoint)", () => {
       transition_condition: "done_with_concerns",
     } as never);
 
-    const turn2 = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "DONE_WITH_CONCERNS" },
-      workspace,
-    }, "/fake/project");
+    const turn2 = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "DONE_WITH_CONCERNS" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(turn2.ok).toBe(true);
     if (turn2.ok) {
@@ -571,11 +586,14 @@ describe("e2e: skip-state flow (research → skip(test-state) → review → don
       }),
     );
 
-    const turn2 = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "DONE" },
-      workspace,
-    }, "/fake/project");
+    const turn2 = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "DONE" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     // Should land on review (not test-state) — skip happened transparently
     expect(turn2.ok).toBe(true);
@@ -631,12 +649,15 @@ describe("result.status defaults to 'done' when omitted (HITL resume defense)", 
 
     // Simulate the bug: orchestrator calls drive_flow with result.status omitted
     // This previously caused MCP error -32602 "expected string, received undefined"
-    const result = await driveFlow({
-      flow,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result: { state_id: "research" } as any, // status intentionally omitted
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        result: { state_id: "research" } as any, // status intentionally omitted
+        workspace,
+      },
+      "/fake/project",
+    );
 
     // Should not throw; should treat missing status as "done"
     expect(result.ok).toBe(true);
@@ -718,11 +739,14 @@ describe("e2e: wave with gate failure", () => {
       transition_condition: "gate_failed",
     } as never);
 
-    const turn2 = await driveFlow({
-      flow,
-      result: { state_id: "implement", status: "DONE", task_id: "task-01" },
-      workspace,
-    }, "/fake/project");
+    const turn2 = await driveFlow(
+      {
+        flow,
+        result: { state_id: "implement", status: "DONE", task_id: "task-01" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(turn2.ok).toBe(true);
     if (turn2.ok) {
@@ -783,11 +807,14 @@ describe("e2e: wave with gate failure", () => {
       }),
     );
 
-    const turn2 = await driveFlow({
-      flow,
-      result: { state_id: "implement", status: "DONE", task_id: "task-01" },
-      workspace,
-    }, "/fake/project");
+    const turn2 = await driveFlow(
+      {
+        flow,
+        result: { state_id: "implement", status: "DONE", task_id: "task-01" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(turn2.ok).toBe(true);
     if (turn2.ok) {

@@ -16,10 +16,7 @@ import { toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 
 export const GetHistoryInputSchema = z.object({
-  flow: z
-    .string()
-    .optional()
-    .describe("Filter by flow name (e.g., 'feature', 'fast-path')"),
+  flow: z.string().optional().describe("Filter by flow name (e.g., 'feature', 'fast-path')"),
   limit: z
     .number()
     .int()

@@ -3,11 +3,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import {
-  AGENT_TOOL_PROFILES,
-  EMPTY_PROFILE,
-  resolveToolProfile,
-} from "../model/tool-profiles.ts";
+import { AGENT_TOOL_PROFILES, EMPTY_PROFILE, resolveToolProfile } from "../model/tool-profiles.ts";
 
 const ALL_AGENTS = [
   "canon-researcher",
@@ -300,8 +296,8 @@ describe("resolveToolProfile", () => {
     // Without worktreePath, the fallback would be "prompt".
     // trustPermissionMode="auto" should override that.
     const result = resolveToolProfile("canon-implementor", {
-      worktreePath: undefined,
       trustPermissionMode: "auto",
+      worktreePath: undefined,
     });
     expect(result.permission_mode).toBe("auto");
   });
@@ -309,8 +305,8 @@ describe("resolveToolProfile", () => {
   it("falls back to worktreePath check when trustPermissionMode is undefined", () => {
     // No trustPermissionMode, worktreePath present → worktreePath fallback applies → "auto"
     const result = resolveToolProfile("canon-implementor", {
-      worktreePath: "/some/path",
       trustPermissionMode: undefined,
+      worktreePath: "/some/path",
     });
     expect(result.permission_mode).toBe("auto");
   });

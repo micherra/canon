@@ -48,7 +48,6 @@ import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-s
 import { getProjectDir } from "@domains/workspaces/wave-lifecycle.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
-import type { DriveFlowAction } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
@@ -167,7 +166,13 @@ describe("gate-only state: all gates pass", () => {
 
     vi.mocked(getProjectDir).mockReturnValue(workspace);
     vi.mocked(runGates).mockReturnValue([
-      { command: "npm run build", exitCode: 0, gate: "npm run build", output: "Build succeeded", passed: true },
+      {
+        command: "npm run build",
+        exitCode: 0,
+        gate: "npm run build",
+        output: "Build succeeded",
+        passed: true,
+      },
     ]);
     vi.mocked(enterAndPrepareState)
       // Gate state enter
@@ -176,7 +181,12 @@ describe("gate-only state: all gates pass", () => {
       .mockResolvedValueOnce(
         makeEnterResult({
           prompts: [
-            { agent: "canon:canon-reviewer", prompt: "Review code", role: "main", template_paths: [] },
+            {
+              agent: "canon:canon-reviewer",
+              prompt: "Review code",
+              role: "main",
+              template_paths: [],
+            },
           ],
           state_type: "single",
         }),
@@ -245,7 +255,9 @@ describe("gate-only state: gate fails", () => {
         passed: false,
       },
     ]);
-    vi.mocked(enterAndPrepareState).mockResolvedValueOnce(makeEnterResult({ prompts: [], state_type: "single" }));
+    vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
+      makeEnterResult({ prompts: [], state_type: "single" }),
+    );
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("check") as never);
 
     const result = await driveFlow({ flow, workspace }, "/fake/project");
@@ -300,7 +312,9 @@ describe("gate-only state: no gates resolved", () => {
     };
 
     vi.mocked(getProjectDir).mockReturnValue(workspace);
-    vi.mocked(enterAndPrepareState).mockResolvedValueOnce(makeEnterResult({ prompts: [], state_type: "single" }));
+    vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
+      makeEnterResult({ prompts: [], state_type: "single" }),
+    );
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("check") as never);
 
     const result = await driveFlow({ flow, workspace }, "/fake/project");
@@ -359,14 +373,25 @@ describe("gate-only state: discovered gates from prior states", () => {
     vi.mocked(getProjectDir).mockReturnValue(workspace);
     vi.mocked(runGates).mockReturnValue([
       { command: "pytest", exitCode: 0, gate: "pytest", output: "4 passed", passed: true },
-      { command: "ruff check .", exitCode: 0, gate: "ruff check .", output: "All clean", passed: true },
+      {
+        command: "ruff check .",
+        exitCode: 0,
+        gate: "ruff check .",
+        output: "All clean",
+        passed: true,
+      },
     ]);
     vi.mocked(enterAndPrepareState)
       .mockResolvedValueOnce(makeEnterResult({ prompts: [], state_type: "single" }))
       .mockResolvedValueOnce(
         makeEnterResult({
           prompts: [
-            { agent: "canon:canon-reviewer", prompt: "Review code", role: "main", template_paths: [] },
+            {
+              agent: "canon:canon-reviewer",
+              prompt: "Review code",
+              role: "main",
+              template_paths: [],
+            },
           ],
           state_type: "single",
         }),
@@ -421,7 +446,12 @@ describe("normal single state with agent and gates", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-implementor", prompt: "Implement", role: "main", template_paths: [] },
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
         ],
         state_type: "single",
       }),

@@ -386,8 +386,12 @@ describe("loadAndResolveFlow() plugin-level resolution — pre-launch-check", ()
   });
 
   it("all shipping flows include pre-launch-check", async () => {
-    for (const flowName of ["feature", "fast-path", "refactor", "epic", "migrate"]) {
-      const flow = await loadAndResolveFlow(pluginCacheDir, flowName);
+    const flows = await Promise.all(
+      ["feature", "fast-path", "refactor", "epic", "migrate"].map((name) =>
+        loadAndResolveFlow(pluginCacheDir, name).then((flow) => ({ flow, name })),
+      ),
+    );
+    for (const { flow } of flows) {
       expect(flow.states["pre-launch-check"]).toBeDefined();
     }
   });

@@ -21,10 +21,10 @@
 
 import { existsSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { ensureGitIntelFresh } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
 import { analyzeBlastRadius } from "@graph/kg-blast-radius.ts";
 import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
-import { ensureGitIntelFresh } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
@@ -396,6 +396,34 @@ function buildSubgraph(
  *
  * Returns structured empty states for missing data — never throws to the caller.
  */
+/** Compute co-change warnings for changed files missing co-change partners. */
+function computeCoChangeWarnings(
+  db: ReturnType<typeof initDatabase>,
+  files: string[],
+  projectDir: string,
+): Array<{ file: string; missing_partner: string; jaccard: number }> {
+  const warnings: Array<{ file: string; missing_partner: string; jaccard: number }> = [];
+  ensureGitIntelFresh(db, projectDir);
+  const changedSet = new Set(files);
+  for (const file of files) {
+    const partners = db
+      .prepare(
+        `SELECT file_b AS partner, jaccard FROM co_change_edges WHERE file_a = ?
+         UNION
+         SELECT file_a AS partner, jaccard FROM co_change_edges WHERE file_b = ?`,
+      )
+      .all(file, file) as Array<{ partner: string; jaccard: number }>;
+    for (const p of partners) {
+      if (!changedSet.has(p.partner)) {
+        warnings.push({ file, jaccard: p.jaccard, missing_partner: p.partner });
+      }
+    }
+  }
+  warnings.sort((a, b) => b.jaccard - a.jaccard);
+  warnings.splice(10);
+  return warnings;
+}
+
 /** Exported for unit testing. Not part of the tool's public interface. */
 export function computeKgData(
   dbPath: string,
@@ -409,7 +437,7 @@ export function computeKgData(
 } {
   let blastRadius: PrImpactOutput["blastRadius"];
   let subgraph: PrImpactSubgraph = { edges: [], layers: [], nodes: [] };
-  const co_change_warnings: Array<{ file: string; missing_partner: string; jaccard: number }> = [];
+  let co_change_warnings: Array<{ file: string; missing_partner: string; jaccard: number }> = [];
 
   const db = initDatabase(dbPath);
   try {
@@ -442,26 +470,8 @@ export function computeKgData(
       // Subgraph build failed — continue with empty subgraph
     }
 
-    // Co-change warnings: using the already-open db handle (M6: no second DB connection)
     try {
-      ensureGitIntelFresh(db, projectDir);
-      const changedSet = new Set(files);
-      for (const file of files) {
-        const partners = db
-          .prepare(
-            `SELECT file_b AS partner, jaccard FROM co_change_edges WHERE file_a = ?
-             UNION
-             SELECT file_a AS partner, jaccard FROM co_change_edges WHERE file_b = ?`,
-          )
-          .all(file, file) as Array<{ partner: string; jaccard: number }>;
-        for (const p of partners) {
-          if (!changedSet.has(p.partner)) {
-            co_change_warnings.push({ file, jaccard: p.jaccard, missing_partner: p.partner });
-          }
-        }
-      }
-      co_change_warnings.sort((a, b) => b.jaccard - a.jaccard);
-      co_change_warnings.splice(10); // limit to top 10
+      co_change_warnings = computeCoChangeWarnings(db, files, projectDir);
     } catch {
       // Git intel unavailable — skip co-change warnings gracefully
     }

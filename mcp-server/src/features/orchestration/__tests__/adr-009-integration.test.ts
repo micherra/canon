@@ -252,11 +252,14 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
       }),
     );
 
-    const result = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -315,11 +318,14 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
     // After skip, next_state = terminal
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("terminal") as never);
 
-    const result = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -740,11 +746,14 @@ describe("driveFlow — result without agent_session_id", () => {
     };
 
     // result has no agent_session_id field
-    const result = await driveFlow({
-      flow,
-      result: { state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

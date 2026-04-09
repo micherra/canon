@@ -239,8 +239,7 @@ export async function loadLearnGateConfig(projectDir: string): Promise<LearnGate
   const raw = config?.learn_gate as Record<string, unknown> | undefined;
   if (!raw) return DEFAULT_LEARN_GATE_CONFIG;
   return {
-    enabled:
-      typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_LEARN_GATE_CONFIG.enabled,
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_LEARN_GATE_CONFIG.enabled,
     lock_stale_after_hours:
       typeof raw.lock_stale_after_hours === "number" && raw.lock_stale_after_hours > 0
         ? raw.lock_stale_after_hours

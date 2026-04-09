@@ -13,21 +13,21 @@
  * - getPrReviewData hotspot_files populated from git intel
  */
 
-import { describe, expect, test, vi, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import fs from "node:fs";
 import { initDatabase } from "@graph/kg-schema.ts";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before imports that use them
 // ---------------------------------------------------------------------------
 
 vi.mock("@platform/adapters/git-adapter.ts", () => ({
-  gitExec: vi.fn(),
   gitDiff: vi.fn(),
-  gitStatus: vi.fn(),
+  gitExec: vi.fn(),
   gitLog: vi.fn(),
+  gitStatus: vi.fn(),
   gitWorktreeAdd: vi.fn(),
 }));
 
@@ -126,7 +126,7 @@ describe("loadKgData — git-intel integration", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { force: true, recursive: true });
     vi.clearAllMocks();
   });
 
@@ -215,7 +215,7 @@ describe("computeKgData — co_change_warnings", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { force: true, recursive: true });
     vi.clearAllMocks();
   });
 
@@ -312,7 +312,7 @@ describe("hotspot_files detection via git-intel", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { force: true, recursive: true });
     vi.clearAllMocks();
   });
 

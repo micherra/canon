@@ -9,35 +9,35 @@
  * - computeGitIntel
  */
 
-import { describe, expect, test, vi, beforeEach } from "vitest";
-import Database from "better-sqlite3";
-import { initDatabase } from "@graph/kg-schema.ts";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import fs from "node:fs";
+import { initDatabase } from "@graph/kg-schema.ts";
+import Database from "better-sqlite3";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock git-adapter at module level
 // ---------------------------------------------------------------------------
 
 vi.mock("@platform/adapters/git-adapter.ts", () => ({
-  gitExec: vi.fn(),
   gitDiff: vi.fn(),
-  gitStatus: vi.fn(),
+  gitExec: vi.fn(),
   gitLog: vi.fn(),
+  gitStatus: vi.fn(),
   gitWorktreeAdd: vi.fn(),
 }));
 
 // Import after mocking
 import { gitExec } from "@platform/adapters/git-adapter.ts";
-import {
-  isGitIntelStale,
-  getCurrentHead,
-  runGitIntelPipeline,
-  ensureGitIntelFresh,
-  computeGitIntel,
-} from "../git-intel-pipeline.ts";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
+import {
+  computeGitIntel,
+  ensureGitIntelFresh,
+  getCurrentHead,
+  isGitIntelStale,
+  runGitIntelPipeline,
+} from "../git-intel-pipeline.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,21 +118,21 @@ const seedHotspot = (db: Database.Database, sha: string): void => {
 };
 
 const makeOkResult = (stdout: string): ProcessResult => ({
-  ok: true,
-  stdout,
-  stderr: "",
-  exitCode: 0,
-  timedOut: false,
   duration_ms: 1,
+  exitCode: 0,
+  ok: true,
+  stderr: "",
+  stdout,
+  timedOut: false,
 });
 
 const makeFailResult = (): ProcessResult => ({
-  ok: false,
-  stdout: "",
-  stderr: "not a git repository",
-  exitCode: 128,
-  timedOut: false,
   duration_ms: 1,
+  exitCode: 128,
+  ok: false,
+  stderr: "not a git repository",
+  stdout: "",
+  timedOut: false,
 });
 
 // ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ describe("isGitIntelStale", () => {
 
   beforeEach(() => {
     vi.mocked(gitExec).mockReset();
-    vi.mocked(gitExec).mockReturnValue(makeOkResult(FAKE_HEAD + "\n"));
+    vi.mocked(gitExec).mockReturnValue(makeOkResult(`${FAKE_HEAD}\n`));
   });
 
   test("returns true when no data exists (empty hotspot_scores table)", () => {
@@ -225,7 +225,7 @@ describe("runGitIntelPipeline", () => {
     const now = Math.floor(Date.now() / 1000);
 
     vi.mocked(gitExec)
-      .mockReturnValueOnce(makeOkResult(HEAD_SHA + "\n"))
+      .mockReturnValueOnce(makeOkResult(`${HEAD_SHA}\n`))
       .mockReturnValueOnce(
         makeOkResult(`COMMIT:${HEAD_SHA} ${now}\n\nsrc/foo.ts\npackage-lock.json\n`),
       );
@@ -260,7 +260,7 @@ describe("runGitIntelPipeline", () => {
     ].join("\n");
 
     vi.mocked(gitExec)
-      .mockReturnValueOnce(makeOkResult(HEAD_SHA + "\n"))
+      .mockReturnValueOnce(makeOkResult(`${HEAD_SHA}\n`))
       .mockReturnValueOnce(makeOkResult(gitLogOutput));
 
     const db = makeDb();
@@ -282,7 +282,7 @@ describe("runGitIntelPipeline", () => {
     const HEAD_SHA = "feedface00000000000000000000000000000000";
 
     vi.mocked(gitExec)
-      .mockReturnValueOnce(makeOkResult(HEAD_SHA + "\n"))
+      .mockReturnValueOnce(makeOkResult(`${HEAD_SHA}\n`))
       .mockReturnValueOnce(makeOkResult("")); // Empty git log
 
     const db = makeDb();
@@ -313,9 +313,9 @@ describe("ensureGitIntelFresh", () => {
 
     vi.mocked(gitExec)
       // isGitIntelStale: rev-parse HEAD
-      .mockReturnValueOnce(makeOkResult(HEAD_SHA + "\n"))
+      .mockReturnValueOnce(makeOkResult(`${HEAD_SHA}\n`))
       // runGitIntelPipeline: rev-parse HEAD
-      .mockReturnValueOnce(makeOkResult(HEAD_SHA + "\n"))
+      .mockReturnValueOnce(makeOkResult(`${HEAD_SHA}\n`))
       // runGitIntelPipeline: git log
       .mockReturnValueOnce(makeOkResult(`COMMIT:${HEAD_SHA} ${now}\n\nsrc/app.ts\n`));
 
@@ -334,7 +334,7 @@ describe("ensureGitIntelFresh", () => {
 
     vi.mocked(gitExec)
       // Only called once for isGitIntelStale's rev-parse
-      .mockReturnValueOnce(makeOkResult(HEAD_SHA + "\n"));
+      .mockReturnValueOnce(makeOkResult(`${HEAD_SHA}\n`));
 
     const db = makeDb();
     seedHotspot(db, HEAD_SHA); // Data is fresh
@@ -362,9 +362,9 @@ describe("computeGitIntel", () => {
 
     vi.mocked(gitExec)
       // isGitIntelStale: rev-parse HEAD
-      .mockReturnValueOnce(makeOkResult(HEAD_SHA + "\n"))
+      .mockReturnValueOnce(makeOkResult(`${HEAD_SHA}\n`))
       // runGitIntelPipeline: rev-parse HEAD
-      .mockReturnValueOnce(makeOkResult(HEAD_SHA + "\n"))
+      .mockReturnValueOnce(makeOkResult(`${HEAD_SHA}\n`))
       // runGitIntelPipeline: git log
       .mockReturnValueOnce(makeOkResult(`COMMIT:${HEAD_SHA} ${now}\n\nsrc/main.ts\n`));
 
@@ -424,7 +424,7 @@ describe("Full end-to-end pipeline", () => {
     ].join("\n");
 
     vi.mocked(gitExec)
-      .mockReturnValueOnce(makeOkResult(HEAD_SHA + "\n"))
+      .mockReturnValueOnce(makeOkResult(`${HEAD_SHA}\n`))
       .mockReturnValueOnce(makeOkResult(gitLogOutput));
 
     const db = makeDb();

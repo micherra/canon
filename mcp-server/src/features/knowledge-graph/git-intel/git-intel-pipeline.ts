@@ -12,23 +12,19 @@
  * KG indexer or build pipeline to pre-compute data and make the lazy path rare.
  */
 
-import type Database from "better-sqlite3";
+import { initDatabase } from "@graph/kg-schema.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
+import type Database from "better-sqlite3";
+import { computeCoChangePairs, persistCoChangeEdges } from "./co-change-detector.ts";
+import { DEFAULT_GIT_INTEL_CONFIG, type GitIntelConfig, isExcluded } from "./git-intel-config.ts";
+import type { GitCommitRecord } from "./git-intel-types.ts";
 import { parseGitLog } from "./git-log-parser.ts";
 import {
-  computeChurn,
   buildHotspotRows,
-  persistHotspots,
+  computeChurn,
   getComplexityMap,
+  persistHotspots,
 } from "./hotspot-scorer.ts";
-import { computeCoChangePairs, persistCoChangeEdges } from "./co-change-detector.ts";
-import {
-  DEFAULT_GIT_INTEL_CONFIG,
-  isExcluded,
-  type GitIntelConfig,
-} from "./git-intel-config.ts";
-import { initDatabase } from "@graph/kg-schema.ts";
-import type { GitCommitRecord } from "./git-intel-types.ts";
 
 // ---------------------------------------------------------------------------
 // getCurrentHead
@@ -65,9 +61,9 @@ export const isGitIntelStale = (db: Database.Database, cwd: string): boolean => 
     return true;
   }
 
-  const row = db
-    .prepare("SELECT computed_at_commit FROM hotspot_scores LIMIT 1")
-    .get() as { computed_at_commit: string } | undefined;
+  const row = db.prepare("SELECT computed_at_commit FROM hotspot_scores LIMIT 1").get() as
+    | { computed_at_commit: string }
+    | undefined;
 
   if (!row) {
     // No data exists yet

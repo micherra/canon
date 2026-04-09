@@ -27,10 +27,10 @@ export async function postEvent(input: PostEventInput): Promise<ToolResult<PostE
   const { workspace, agent, action, detail, artifacts } = input;
 
   // Validate required fields
-  if (!agent || !agent.trim()) {
+  if (!agent?.trim()) {
     return toolError("INVALID_INPUT", "agent must be a non-empty string", false);
   }
-  if (!detail || !detail.trim()) {
+  if (!detail?.trim()) {
     return toolError("INVALID_INPUT", "detail must be a non-empty string", false);
   }
 
@@ -56,5 +56,5 @@ export async function postEvent(input: PostEventInput): Promise<ToolResult<PostE
 
   store.appendEvent("agent_activity", payload);
 
-  return toolOk({ logged: true as const, event_type: "agent_activity" as const });
+  return toolOk({ event_type: "agent_activity" as const, logged: true as const });
 }

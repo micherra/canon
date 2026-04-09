@@ -22,7 +22,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { evaluateLearnGate } from "../learn-gate.ts";
 
 let tmpDirs: string[] = [];
@@ -37,16 +37,13 @@ function makeTmpProjectDir(): string {
  * Write a minimal config.json that bypasses the time gate and flow gate,
  * so tests can focus on specific gate behavior.
  */
-function writePassingConfig(
-  canonDir: string,
-  overrides: Record<string, unknown> = {},
-): void {
+function writePassingConfig(canonDir: string, overrides: Record<string, unknown> = {}): void {
   const config = {
     learn_gate: {
       enabled: true,
+      lock_stale_after_hours: 1,
       min_flows_since_last: 1, // min valid value per schema (>= 1)
       min_hours_since_last: 0, // skip time gate
-      lock_stale_after_hours: 1,
       ...overrides,
     },
   };
@@ -176,9 +173,9 @@ describe("learn-gate integration: flow gate → drift-db cross-module", () => {
 
     // Config: min_flows=2, no time gate, stale lock after 1h
     writePassingConfig(canonDir, {
+      lock_stale_after_hours: 1,
       min_flows_since_last: 2,
       min_hours_since_last: 0,
-      lock_stale_after_hours: 1,
     });
 
     // Seed drift.db with enough flow runs
@@ -227,9 +224,9 @@ describe("learn-gate integration: lock gate → learn-lock stale reclaim", () =>
 
     // Config: min_flows=1, no time gate, stale after 1h
     writePassingConfig(canonDir, {
+      lock_stale_after_hours: 1,
       min_flows_since_last: 1,
       min_hours_since_last: 0,
-      lock_stale_after_hours: 1,
     });
 
     // Seed drift.db with 1 flow run (meets min_flows=1)
@@ -283,6 +280,7 @@ describe("learn-gate integration: lock gate → learn-lock stale reclaim", () =>
     mkdirSync(canonDir, { recursive: true });
 
     writePassingConfig(canonDir, {
+      lock_stale_after_hours: 1,
       min_flows_since_last: 1,
       // Set min_hours to a large value so we can write a lock with mtime=5min ago
       // and still pass the time gate (5min ago is fine for 0h threshold, but we need
@@ -291,7 +289,6 @@ describe("learn-gate integration: lock gate → learn-lock stale reclaim", () =>
       // then create it fresh right before calling evaluateLearnGate.
       // Actually simpler: create the lock with mtime 5 minutes ago (past the 0h gate)
       min_hours_since_last: 0,
-      lock_stale_after_hours: 1,
     });
 
     const { getDriftDb } = await import("@platform/storage/drift/drift-db.ts");

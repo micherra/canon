@@ -15,8 +15,7 @@
  */
 
 import { mkdir, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { isAbsolute } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -70,7 +69,9 @@ export const profileToAllowRules = (tools: string[]): string[] => {
  * @param allowRules - Array of Claude Code allow rule strings
  * @returns settings.local.json-compatible object
  */
-export const buildWorktreeSettings = (allowRules: string[]): { permissions: { allow: string[] } } => {
+export const buildWorktreeSettings = (
+  allowRules: string[],
+): { permissions: { allow: string[] } } => {
   return {
     permissions: {
       allow: allowRules,

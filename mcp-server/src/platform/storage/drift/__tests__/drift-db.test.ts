@@ -699,15 +699,9 @@ describe("countFlowRunsSince", () => {
   });
 
   test("returns correct count after inserting flow runs", () => {
-    store.appendFlowRun(
-      makeFlowRunEntry({ completed: "2026-01-10T12:00:00.000Z", run_id: "r1" }),
-    );
-    store.appendFlowRun(
-      makeFlowRunEntry({ completed: "2026-01-11T12:00:00.000Z", run_id: "r2" }),
-    );
-    store.appendFlowRun(
-      makeFlowRunEntry({ completed: "2026-01-12T12:00:00.000Z", run_id: "r3" }),
-    );
+    store.appendFlowRun(makeFlowRunEntry({ completed: "2026-01-10T12:00:00.000Z", run_id: "r1" }));
+    store.appendFlowRun(makeFlowRunEntry({ completed: "2026-01-11T12:00:00.000Z", run_id: "r2" }));
+    store.appendFlowRun(makeFlowRunEntry({ completed: "2026-01-12T12:00:00.000Z", run_id: "r3" }));
 
     const count = store.countFlowRunsSince("2026-01-10T00:00:00.000Z");
     expect(count).toBe(3);

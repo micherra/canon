@@ -4,9 +4,9 @@
  * Tests for migration v4: hotspot_scores and co_change_edges tables.
  */
 
-import Database from "better-sqlite3";
-import { describe, expect, test } from "vitest";
 import { initDatabase, runMigrations } from "@graph/kg-schema.ts";
+import type Database from "better-sqlite3";
+import { describe, expect, test } from "vitest";
 
 // Helper to check if a table exists in a SQLite DB
 function tableExists(db: Database.Database, tableName: string): boolean {
@@ -46,9 +46,9 @@ describe("migration v4 — hotspot_scores and co_change_edges", () => {
 
   test("schema_version is 4 after initDatabase", () => {
     const db = initDatabase(":memory:");
-    const row = db
-      .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-      .get() as { value: string };
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+      value: string;
+    };
     expect(row.value).toBe("4");
     db.close();
   });
@@ -61,9 +61,10 @@ describe("migration v4 — hotspot_scores and co_change_edges", () => {
       VALUES
         ('src/foo.ts', 1.5, 0.8, 10.0, 0.75, 0.77, 1, 'abc123', '2026-01-01T00:00:00Z')
     `).run();
-    const row = db
-      .prepare(`SELECT * FROM hotspot_scores WHERE file_path = 'src/foo.ts'`)
-      .get() as { score: number; is_hotspot: number };
+    const row = db.prepare(`SELECT * FROM hotspot_scores WHERE file_path = 'src/foo.ts'`).get() as {
+      score: number;
+      is_hotspot: number;
+    };
     expect(row.score).toBeCloseTo(0.77);
     expect(row.is_hotspot).toBe(1);
     db.close();
@@ -77,9 +78,10 @@ describe("migration v4 — hotspot_scores and co_change_edges", () => {
       VALUES
         ('src/a.ts', 'src/b.ts', 5, 0.42, 'abc123', '2026-01-01T00:00:00Z')
     `).run();
-    const row = db
-      .prepare(`SELECT * FROM co_change_edges WHERE file_a = 'src/a.ts'`)
-      .get() as { file_b: string; jaccard: number };
+    const row = db.prepare(`SELECT * FROM co_change_edges WHERE file_a = 'src/a.ts'`).get() as {
+      file_b: string;
+      jaccard: number;
+    };
     expect(row.file_b).toBe("src/b.ts");
     expect(row.jaccard).toBeCloseTo(0.42);
     db.close();
@@ -113,9 +115,9 @@ describe("migration v4 — hotspot_scores and co_change_edges", () => {
     runMigrations(db);
 
     // Verify upgrade
-    const row = db
-      .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-      .get() as { value: string };
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+      value: string;
+    };
     expect(row.value).toBe("4");
     expect(tableExists(db, "hotspot_scores")).toBe(true);
     expect(tableExists(db, "co_change_edges")).toBe(true);

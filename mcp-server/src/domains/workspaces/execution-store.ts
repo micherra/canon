@@ -761,10 +761,7 @@ export class ExecutionStore {
         (currData.principle_ids as string[]) ?? [],
         (prevData.principle_ids as string[]) ?? [],
       ) &&
-      setsEqual(
-        (currData.file_paths as string[]) ?? [],
-        (prevData.file_paths as string[]) ?? [],
-      )
+      setsEqual((currData.file_paths as string[]) ?? [], (prevData.file_paths as string[]) ?? [])
     );
   }
 

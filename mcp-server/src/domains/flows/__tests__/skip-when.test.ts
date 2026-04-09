@@ -3,12 +3,9 @@ import type { Board } from "../board-state-schemas.ts";
 import { evaluateSkipWhen, matchGlob } from "../skip-when.ts";
 
 // Mock getProjectDir from wave-lifecycle.ts
-vi.mock(
-  "@domains/workspaces/wave-lifecycle.ts",
-  () => ({
-    getProjectDir: vi.fn().mockReturnValue("/project"),
-  }),
-);
+vi.mock("@domains/workspaces/wave-lifecycle.ts", () => ({
+  getProjectDir: vi.fn().mockReturnValue("/project"),
+}));
 
 // Mock platform drift-db for learn gate tests
 vi.mock("@platform/storage/drift/drift-db.ts", () => ({

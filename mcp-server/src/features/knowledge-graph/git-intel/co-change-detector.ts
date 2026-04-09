@@ -7,9 +7,9 @@
  * All computation functions are pure; only persist functions touch the DB.
  */
 
-import type { GitCommitRecord, CoChangePair } from "./git-intel-types.ts";
-import type { GitIntelConfig } from "./git-intel-config.ts";
 import type Database from "better-sqlite3";
+import type { GitIntelConfig } from "./git-intel-config.ts";
+import type { CoChangePair, GitCommitRecord } from "./git-intel-types.ts";
 
 /** Maximum number of files in a single commit before we skip it.
  * Commits touching > MAX_COMMIT_FILES files are ignored to avoid O(n^2) explosion. */
@@ -26,19 +26,11 @@ const MAX_COMMIT_FILES = 50;
  * 3. For each pair, compute Jaccard = coCount / (|set_a| + |set_b| - coCount).
  * 4. Filter by jaccardThreshold.
  */
-export const computeCoChangePairs = (
-  commits: GitCommitRecord[],
-  config: Pick<GitIntelConfig, "jaccardThreshold">,
-): CoChangePair[] => {
-  // Step 1: Build per-file commit sets
+/** Build per-file commit sets, skipping large commits. */
+function buildCommitSets(commits: GitCommitRecord[]): Map<string, Set<string>> {
   const commitSets = new Map<string, Set<string>>();
-
   for (const commit of commits) {
-    if (commit.files.length > MAX_COMMIT_FILES) {
-      // Skip large commits to avoid O(n^2) pair explosion
-      continue;
-    }
-
+    if (commit.files.length > MAX_COMMIT_FILES) continue;
     for (const filePath of commit.files) {
       let set = commitSets.get(filePath);
       if (!set) {
@@ -48,44 +40,49 @@ export const computeCoChangePairs = (
       set.add(commit.sha);
     }
   }
+  return commitSets;
+}
 
-  // Step 2: Count co-occurrences per pair
+/** Normalize a file pair key alphabetically. */
+function pairKey(a: string, b: string): string {
+  return a <= b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+/** Count co-occurrences per normalized file pair across commits. */
+function countPairCoOccurrences(commits: GitCommitRecord[]): Map<string, number> {
   const pairCounts = new Map<string, number>();
-
   for (const commit of commits) {
     if (commit.files.length > MAX_COMMIT_FILES) continue;
-
     const files = commit.files;
     for (let i = 0; i < files.length; i++) {
       for (let j = i + 1; j < files.length; j++) {
-        // Normalize alphabetically so (a,b) == (b,a)
-        const [fileA, fileB] = files[i] <= files[j]
-          ? [files[i], files[j]]
-          : [files[j], files[i]];
-        const key = `${fileA}|${fileB}`;
+        const key = pairKey(files[i], files[j]);
         pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
       }
     }
   }
+  return pairCounts;
+}
 
-  // Step 3: Compute Jaccard and filter
+export const computeCoChangePairs = (
+  commits: GitCommitRecord[],
+  config: Pick<GitIntelConfig, "jaccardThreshold">,
+): CoChangePair[] => {
+  const commitSets = buildCommitSets(commits);
+  const pairCounts = countPairCoOccurrences(commits);
   const results: CoChangePair[] = [];
 
   for (const [key, coCount] of pairCounts) {
     const separatorIdx = key.indexOf("|");
     const fileA = key.slice(0, separatorIdx);
     const fileB = key.slice(separatorIdx + 1);
-
     const sizeA = commitSets.get(fileA)?.size ?? 0;
     const sizeB = commitSets.get(fileB)?.size ?? 0;
-
-    // Union size = |A| + |B| - |A ∩ B|
-    // Division by zero impossible: coCount >= 1, so union >= 1
     const unionSize = sizeA + sizeB - coCount;
     const jaccard = coCount / unionSize;
 
     if (jaccard >= config.jaccardThreshold) {
-      results.push({ fileA, fileB, coCommitCount: coCount, jaccard });
+      results.push({ coCommitCount: coCount, fileA, fileB, jaccard });
     }
   }
 
@@ -115,12 +112,12 @@ export const persistCoChangeEdges = (
 
   for (const pair of pairs) {
     insert.run({
+      co_commit_count: pair.coCommitCount,
+      computed_at: now,
+      computed_at_commit: commitSha,
       file_a: pair.fileA,
       file_b: pair.fileB,
-      co_commit_count: pair.coCommitCount,
       jaccard: pair.jaccard,
-      computed_at_commit: commitSha,
-      computed_at: now,
     });
   }
 };

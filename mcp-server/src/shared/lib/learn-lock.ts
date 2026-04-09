@@ -42,6 +42,33 @@ const lockPath = (canonDir: string): string => join(canonDir, lockFileName);
  * (e.g. multiple MCP server instances) would require advisory file locks (fcntl/flock)
  * for stronger guarantees, which are outside the scope of this implementation.
  */
+/** Check if a PID is alive via process.kill(pid, 0) probe. */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ESRCH") return false;
+    // EPERM = process exists but we cannot signal it — treat as alive
+    return true;
+  }
+}
+
+/** Attempt to reclaim a lock: unlink then exclusive create. */
+async function reclaimLock(path: string, previousMtime: number): Promise<LockAcquireResult> {
+  try {
+    await unlink(path);
+  } catch {
+    return { acquired: false, reason: "stale_reclaim_failed" };
+  }
+  try {
+    await writeFile(path, String(process.pid), { flag: "wx" });
+    return { acquired: true, previousMtime };
+  } catch {
+    return { acquired: false, reason: "stale_reclaim_failed" };
+  }
+}
+
 export const acquireLearnLock = async (
   canonDir: string,
   staleAfterMs: number,
@@ -53,9 +80,7 @@ export const acquireLearnLock = async (
     await writeFile(path, String(process.pid), { flag: "wx" });
     return { acquired: true, previousMtime: null };
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw err;
-    }
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
   }
 
   // Lock exists — read PID for liveness check, then check staleness
@@ -64,63 +89,21 @@ export const acquireLearnLock = async (
     const [st, body] = await Promise.all([stat(path), readFile(path, "utf-8")]);
     previousMtime = st.mtime.getTime();
 
-    // Advisory 3: check PID liveness before falling through to stale-time check.
-    // process.kill(pid, 0) is a no-op existence probe — it does not send a signal.
+    // Check PID liveness — dead process means immediately reclaimable
     const pid = parseInt(body.trim(), 10);
-    if (!isNaN(pid) && pid > 0) {
-      let processAlive = true;
-      try {
-        process.kill(pid, 0);
-        // No error = process is alive; fall through to stale-time check below
-      } catch (killErr: unknown) {
-        const code = (killErr as NodeJS.ErrnoException).code;
-        if (code === "ESRCH") {
-          // ESRCH = No such process — lock holder is dead; immediately reclaimable
-          processAlive = false;
-        }
-        // EPERM = process exists but we cannot signal it (different uid) — treat as alive
-      }
-      if (!processAlive) {
-        // Dead process — skip stale-time check and go straight to reclaim
-        try {
-          await unlink(path);
-        } catch {
-          return { acquired: false, reason: "stale_reclaim_failed" };
-        }
-        try {
-          await writeFile(path, String(process.pid), { flag: "wx" });
-          return { acquired: true, previousMtime };
-        } catch {
-          return { acquired: false, reason: "stale_reclaim_failed" };
-        }
-      }
+    if (!Number.isNaN(pid) && pid > 0 && !isPidAlive(pid)) {
+      return reclaimLock(path, previousMtime);
     }
 
-    const age = Date.now() - previousMtime;
-    if (age <= staleAfterMs) {
-      // Not stale — another process holds the lock
+    if (Date.now() - previousMtime <= staleAfterMs) {
       return { acquired: false, reason: "already_locked" };
     }
   } catch {
-    // stat/readFile failed — lock may have been released concurrently; report locked
     return { acquired: false, reason: "already_locked" };
   }
 
-  // Lock is stale — unlink and retry exclusive create
-  try {
-    await unlink(path);
-  } catch {
-    // Someone else reclaimed it first
-    return { acquired: false, reason: "stale_reclaim_failed" };
-  }
-
-  try {
-    await writeFile(path, String(process.pid), { flag: "wx" });
-    return { acquired: true, previousMtime };
-  } catch {
-    // Lost the race to reclaim
-    return { acquired: false, reason: "stale_reclaim_failed" };
-  }
+  // Lock is stale — reclaim
+  return reclaimLock(path, previousMtime);
 };
 
 /**

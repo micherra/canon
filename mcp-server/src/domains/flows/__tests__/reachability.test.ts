@@ -13,7 +13,6 @@ import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import {
   analyzeReachability,
   buildReverseGraph,
-  buildStateGraph,
   collectReachableStates,
   detectDeadEnds,
   detectStuckLoops,
@@ -53,11 +52,11 @@ describe("buildReverseGraph", () => {
     const reversed = buildReverseGraph(graph);
 
     // a has no incoming edges, so reversed["a"] should be []
-    expect(reversed["a"]).toEqual([]);
+    expect(reversed.a).toEqual([]);
     // b is reachable from a only
-    expect(reversed["b"]).toEqual(["a"]);
+    expect(reversed.b).toEqual(["a"]);
     // c is reachable from a and b
-    expect(reversed["c"].sort()).toEqual(["a", "b"]);
+    expect(reversed.c.sort()).toEqual(["a", "b"]);
   });
 
   it("includes all state IDs as keys even if they have no incoming edges", () => {
@@ -68,7 +67,7 @@ describe("buildReverseGraph", () => {
     };
     const reversed = buildReverseGraph(graph);
     expect(Object.keys(reversed).sort()).toEqual(["entry", "middle", "terminal"]);
-    expect(reversed["entry"]).toEqual([]);
+    expect(reversed.entry).toEqual([]);
   });
 
   it("handles self-loops", () => {
@@ -77,8 +76,8 @@ describe("buildReverseGraph", () => {
       b: [],
     };
     const reversed = buildReverseGraph(graph);
-    expect(reversed["a"]).toContain("a");
-    expect(reversed["b"]).toContain("a");
+    expect(reversed.a).toContain("a");
+    expect(reversed.b).toContain("a");
   });
 });
 
@@ -283,12 +282,12 @@ describe("detectStuckLoops", () => {
       {
         done: { type: "terminal" },
         fix: { agent: "fixer", transitions: { done: "test" }, type: "single" },
+        start: { agent: "s", transitions: { go: "test" }, type: "single" },
         test: {
           agent: "tester",
           transitions: { fail: "fix", pass: "done" },
           type: "single",
         },
-        start: { agent: "s", transitions: { go: "test" }, type: "single" },
       },
       "start",
     );

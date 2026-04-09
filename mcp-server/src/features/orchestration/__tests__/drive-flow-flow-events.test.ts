@@ -219,15 +219,18 @@ describe("driveFlow — flow events: effect none", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: {
-        artifacts: [],
-        state_id: "research",
-        status: "done",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          artifacts: [],
+          state_id: "research",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -282,15 +285,18 @@ describe("driveFlow — flow events: effect insert", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: {
-        artifacts: [],
-        state_id: "research",
-        status: "done",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          artifacts: [],
+          state_id: "research",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -322,11 +328,14 @@ describe("driveFlow — flow events: effect insert", () => {
     );
 
     const flow = makeFlow();
-    await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     const board = store.getBoard();
     expect(board?.metadata?.flow_events_watermark).toBe(7);
@@ -345,11 +354,14 @@ describe("driveFlow — flow events: effect skip", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -375,11 +387,14 @@ describe("driveFlow — flow events: effect skip", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -402,11 +417,14 @@ describe("driveFlow — flow events: effect skip", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
 
     const flow = makeFlow();
-    await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     const board = store.getBoard();
     expect(board?.metadata?.flow_events_watermark).toBe(9);
@@ -428,11 +446,14 @@ describe("driveFlow — flow events: effect escalate", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -456,11 +477,14 @@ describe("driveFlow — flow events: effect escalate", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    const result = await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -483,11 +507,14 @@ describe("driveFlow — flow events: effect escalate", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
 
     const flow = makeFlow();
-    await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     const board = store.getBoard();
     expect(board?.metadata?.flow_events_watermark).toBe(11);
@@ -538,15 +565,18 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({
-      flow,
-      result: {
-        artifacts: [],
-        state_id: "review",
-        status: "done",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          artifacts: [],
+          state_id: "review",
+          status: "done",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -609,15 +639,18 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
       }),
     );
 
-    const result = await driveFlow({
-      flow,
-      result: {
-        artifacts: [],
-        state_id: "review",
-        status: "needs_revision",
+    const result = await driveFlow(
+      {
+        flow,
+        result: {
+          artifacts: [],
+          state_id: "review",
+          status: "needs_revision",
+        },
+        workspace,
       },
-      workspace,
-    }, "/fake/project");
+      "/fake/project",
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -653,11 +686,14 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
     );
 
     const flow = makeFlow();
-    await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     // The inserted state "review" should have inserted_return_to = "implement" (the normal next state)
     const reviewState = store.getState("review");
@@ -709,11 +745,14 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
     );
 
     const flow = makeFlow();
-    await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     // inserted_return_to should be null/undefined since next_state was null
     const reviewState = store.getState("review");
@@ -745,11 +784,14 @@ describe("driveFlow — flow events: watermark reading", () => {
     );
 
     const flow = makeFlow();
-    await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     const drainCall = vi.mocked(drainFlowEvents).mock.calls[0][0];
     expect(drainCall.watermark).toBe(42);
@@ -775,11 +817,14 @@ describe("driveFlow — flow events: watermark reading", () => {
     );
 
     const flow = makeFlow();
-    await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     const drainCall = vi.mocked(drainFlowEvents).mock.calls[0][0];
     expect(drainCall.watermark).toBe(0);
@@ -794,11 +839,14 @@ describe("driveFlow — flow events: watermark reading", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(makeEnterResult());
 
     const flow = makeFlow();
-    await driveFlow({
-      flow,
-      result: { artifacts: [], state_id: "research", status: "done" },
-      workspace,
-    }, "/fake/project");
+    await driveFlow(
+      {
+        flow,
+        result: { artifacts: [], state_id: "research", status: "done" },
+        workspace,
+      },
+      "/fake/project",
+    );
 
     const drainCall = vi.mocked(drainFlowEvents).mock.calls[0][0];
     expect(drainCall.currentStateId).toBe("research");

@@ -20,9 +20,9 @@
 
 import { readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { loadLearnGateConfig } from "@shared/lib/config.ts";
 import { acquireLearnLock, getLastLearnTimestamp } from "@shared/lib/learn-lock.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 
 export type LearnGateResult = {
   passed: boolean;
@@ -54,7 +54,7 @@ export async function validateLearnerOutput(
 
   let entries: string[];
   try {
-    entries = await readdir(allowedDir, { recursive: true, encoding: "utf-8" });
+    entries = await readdir(allowedDir, { encoding: "utf-8", recursive: true });
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       // Directory doesn't exist — no output to validate, which is valid
@@ -77,6 +77,18 @@ export async function validateLearnerOutput(
 
 /** 10-minute scan throttle — prevents repeated flow-count DB queries. */
 const SCAN_THROTTLE_MS = 10 * 60 * 1000;
+
+/** Check scan throttle gate. Returns failure reason or null to continue. */
+async function checkScanThrottle(throttlePath: string): Promise<string | null> {
+  try {
+    const throttleStat = await stat(throttlePath);
+    const msSinceThrottle = Date.now() - throttleStat.mtime.getTime();
+    if (msSinceThrottle < SCAN_THROTTLE_MS) return "scan throttle: checked recently";
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") return "scan throttle: stat error";
+  }
+  return null;
+}
 
 /**
  * Evaluate all learn gates in cheapest-first order.
@@ -104,19 +116,8 @@ export async function evaluateLearnGate(projectDir: string): Promise<LearnGateRe
 
   // Gate 3: Scan throttle — prevent repeated flow-count queries
   const throttlePath = join(canonDir, "learn-throttle");
-  try {
-    const throttleStat = await stat(throttlePath);
-    const msSinceThrottle = Date.now() - throttleStat.mtime.getTime();
-    if (msSinceThrottle < SCAN_THROTTLE_MS) {
-      return { passed: false, reason: "scan throttle: checked recently" };
-    }
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      // Non-ENOENT stat error (e.g. permissions) — fail closed rather than block flow completion.
-      return { passed: false, reason: `scan throttle: stat error` };
-    }
-    // No throttle file = never throttled, continue
-  }
+  const throttleReason = await checkScanThrottle(throttlePath);
+  if (throttleReason) return { passed: false, reason: throttleReason };
 
   // Gate 4: Flow gate — enough flows since last learn
   const driftDb = getDriftDb(projectDir);
@@ -124,7 +125,6 @@ export async function evaluateLearnGate(projectDir: string): Promise<LearnGateRe
     lastLearnTs !== null ? new Date(lastLearnTs).toISOString() : "1970-01-01T00:00:00.000Z";
   const flowCount = driftDb.countFlowRunsSince(sinceIso);
   if (flowCount < config.min_flows_since_last) {
-    // Touch throttle marker so we don't re-query for 10 minutes
     try {
       await writeFile(throttlePath, "", { flag: "w", mode: 0o600 });
     } catch {

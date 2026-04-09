@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, test } from "vitest";
-import { parseGitLog } from "../git-log-parser.ts";
 import { isExcluded } from "../git-intel-config.ts";
+import { parseGitLog } from "../git-log-parser.ts";
 
 // parseGitLog
 
@@ -27,14 +27,14 @@ describe("parseGitLog", () => {
 
     expect(records).toHaveLength(2);
     expect(records[0]).toEqual({
+      files: ["src/foo.ts", "src/bar.ts"],
       sha: "abc123",
       timestamp: 1700000000,
-      files: ["src/foo.ts", "src/bar.ts"],
     });
     expect(records[1]).toEqual({
+      files: ["src/baz.ts"],
       sha: "def456",
       timestamp: 1700001000,
-      files: ["src/baz.ts"],
     });
   });
 
