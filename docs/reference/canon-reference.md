@@ -83,9 +83,9 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | Tool | Purpose |
 |------|---------|
 | `load_flow` | Load and resolve a flow definition (fragments, spawn instructions, state graph) |
-| `init_workspace` | Create or resume a workspace (`board.json`, `session.json`, `progress.md`); seeds `progress.md` with task header on creation |
+| `init_workspace` | Create or resume a workspace (`board.json`, `session.json`, `progress.md`); seeds `progress.md` with task header on creation; runs file claim overlap preflight check (warns if other workflows target the same files) |
 | `drive_flow` | Advance the state machine one step: resolves spawn prompt, checks convergence, enters state; returns `SpawnRequest` or `HitlBreakpoint` |
-| `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress |
+| `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress; registers file claims on `set_metadata` with `affected_files`, releases claims on `complete_flow` |
 | `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state`; accepts optional `transcript_path` (best-effort write to execution state) |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
 | `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
@@ -99,3 +99,42 @@ This project uses Canon for engineering principles. Before writing or modifying 
 ## Hooks
 
 Hooks are pre/post tool-use interceptor scripts in `hooks/`. Key hooks: `destructive-guard.sh` (blocks dangerous git ops), `workspace-lock-guard.sh` (prevents concurrent builds), `pre-commit-check.sh` (secrets + compliance), `principle-inject.sh` (injects principle summaries into prompts).
+
+## Agent Provenance
+
+### Commit Trailers
+
+All Canon-managed commits include git trailers for traceability:
+
+```
+Canon-Workflow: {workflow-slug}
+Canon-Agent: {agent-type}
+Canon-State: {state-id}
+Canon-Task: {task-id}          # wave tasks only
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+```
+
+Query commits by workflow: `git log --grep='Canon-Workflow: my-slug'`
+Query commits by agent: `git log --grep='Canon-Agent: canon-implementor'`
+
+### File Claims
+
+`.canon/claims.json` tracks which files are targeted by active workflows. This enables early conflict detection when multiple workflows run concurrently.
+
+- **Registration**: Claims are registered automatically when the architect sets `affected_files` metadata via `update_board`
+- **Overlap detection**: `init_workspace` preflight warns about files claimed by other active workflows
+- **Release**: Claims are released when `update_board({ action: "complete_flow" })` is called
+- **Staleness**: Claims older than 24 hours are automatically pruned on every read
+- **Advisory only**: Claim overlaps produce warnings, never block workspace creation
+
+Claims file format:
+```json
+{
+  "version": 1,
+  "claims": {
+    "path/to/file.ts": [
+      { "workflow": "slug", "claimed_at": "2026-04-09T00:00:00Z" }
+    ]
+  }
+}
+```
