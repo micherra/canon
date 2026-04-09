@@ -35,6 +35,7 @@ import {
 } from "@domains/workspaces/wave-lifecycle.ts";
 import { parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
 import { resolveToolProfile } from "@features/prompt-pipeline/model/tool-profiles.ts";
+import { injectWorktreeSettings } from "@features/prompt-pipeline/services/worktree-settings.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";
 import { evaluateLearnGate } from "../services/learn-gate.ts";
@@ -1113,6 +1114,9 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
     return req;
   });
 
+  // Inject auto-approve settings into wave worktrees (fail-closed: never blocks spawn on failure)
+  await injectSettingsIntoRequests(requestsWithWorktrees);
+
   return {
     action: "spawn",
     ok: true as const,
@@ -1242,6 +1246,8 @@ async function tryEnterSingleState(
   persistToolScopeWarnings(enterOut.prompts, currentStateId, store);
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
   const requestsWithSession = await applySessionContinuation(requests, currentStateId, store);
+  // Inject auto-approve settings for session worktrees (fail-closed: never blocks spawn on failure)
+  await injectSettingsIntoRequests(requestsWithSession);
   return { action: "spawn", ok: true as const, requests: requestsWithSession };
 }
 
@@ -1439,6 +1445,9 @@ async function enterWaveState(
     existingWaveResults,
   );
 
+  // Inject auto-approve settings into wave worktrees (fail-closed: never blocks spawn on failure)
+  await injectSettingsIntoRequests(requestsWithResume);
+
   return { action: "spawn", ok: true as const, requests: requestsWithResume };
 }
 
@@ -1448,9 +1457,12 @@ async function enterWaveState(
  * Convert SpawnPromptEntry[] and consultation prompts into SpawnRequest[].
  */
 function entryToSpawnRequest(entry: SpawnPromptEntry): SpawnRequest {
+  // Wave entries have worktree_path (Canon-managed worktree, isolation: "none").
+  // Non-wave entries get isolation: "worktree" (Agent tool creates its own worktree).
+  const isolation: SpawnRequest["isolation"] = entry.worktree_path ? "none" : "worktree";
   const req: SpawnRequest = {
     agent_type: entry.agent,
-    isolation: "worktree",
+    isolation,
     prompt: entry.prompt,
   };
   if (entry.role !== undefined) req.role = entry.role;
@@ -1463,7 +1475,10 @@ function entryToSpawnRequest(entry: SpawnPromptEntry): SpawnRequest {
   if (entry.worktree_path !== undefined) req.worktree_path = entry.worktree_path;
   if (entry.tools !== undefined) req.tools = entry.tools;
   if (entry.disallowed_tools !== undefined) req.disallowed_tools = entry.disallowed_tools;
-  if (entry.permission_mode !== undefined) req.permission_mode = entry.permission_mode;
+  // Permission mode safety net: all drive_flow-spawned agents run in worktrees
+  // (either Canon-managed or Agent-tool-managed), so auto mode is always safe.
+  // Explicit permission_mode from the profile takes precedence; otherwise default to "auto".
+  req.permission_mode = entry.permission_mode ?? "auto";
   return req;
 }
 
@@ -1490,6 +1505,24 @@ export function buildSpawnRequests(
   }
 
   return requests;
+}
+
+/**
+ * Inject worktree settings into spawn requests that have a worktree_path and auto permission_mode.
+ *
+ * Called after building spawn requests for wave and session worktrees. Runs settings injection
+ * sequentially (not Promise.all) to keep error isolation simple — one failure doesn't affect others.
+ *
+ * fail-closed-by-default: injection failure returns false (logged by injectWorktreeSettings) but
+ * never blocks the spawn. The agent simply gets standard prompting instead of auto-approval.
+ */
+export async function injectSettingsIntoRequests(requests: SpawnRequest[]): Promise<void> {
+  for (const req of requests) {
+    if (req.worktree_path && req.permission_mode === "auto" && req.tools) {
+      // biome-ignore lint/performance/noAwaitInLoops: sequential injection for error isolation — one failure must not abort others
+      await injectWorktreeSettings(req.worktree_path, req.tools);
+    }
+  }
 }
 
 /**

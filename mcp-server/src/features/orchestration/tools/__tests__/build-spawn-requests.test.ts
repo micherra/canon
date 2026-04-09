@@ -58,10 +58,12 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
     expect(Object.hasOwn(req, "disallowed_tools")).toBe(false);
   });
 
-  test("omits permission_mode key entirely when not present in entry", () => {
+  test("sets permission_mode to auto when isolation is worktree and no explicit override", () => {
+    // Option C safety net: buildSpawnRequests defaults to "auto" for worktree-isolated agents.
+    // The base entry has no isolation field; entryToSpawnRequest defaults to "worktree".
     const entry: SpawnPromptEntry = baseEntry();
     const [req] = buildSpawnRequests([entry]);
-    expect(Object.hasOwn(req, "permission_mode")).toBe(false);
+    expect(req.permission_mode).toBe("auto");
   });
 
   test("forwards all three fields together when all are present", () => {
@@ -77,7 +79,9 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
     expect(req.permission_mode).toBe("auto");
   });
 
-  test("backward compat: entries without new fields produce requests without them", () => {
+  test("backward compat: entries without tool scope fields get worktree auto-mode", () => {
+    // Entries that haven't passed through injectCoordination (no tools/disallowed_tools set)
+    // still get permission_mode: "auto" from the Option C safety net when isolation is "worktree".
     const entry: SpawnPromptEntry = {
       agent: "canon:canon-researcher",
       prompt: "Research the codebase",
@@ -89,7 +93,26 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
     expect(req.role).toBe("researcher");
     expect(Object.hasOwn(req, "tools")).toBe(false);
     expect(Object.hasOwn(req, "disallowed_tools")).toBe(false);
-    expect(Object.hasOwn(req, "permission_mode")).toBe(false);
+    // Option C: even without explicit permission_mode in entry, worktree isolation gets "auto"
+    expect(req.permission_mode).toBe("auto");
+  });
+
+  test("non-wave SpawnRequests with isolation:worktree get permission_mode:auto (Option C safety net)", () => {
+    // Verifies the orchestrator-layer safety net: all agents spawned with isolation: "worktree"
+    // by drive_flow get permission_mode: "auto" regardless of the pipeline's resolveToolProfile
+    // outcome. This ensures non-wave agents (researcher, architect, tester, etc.) always run in
+    // auto mode since the orchestrator always spawns them with isolation: "worktree" (CLAUDE.md).
+    const entries: SpawnPromptEntry[] = [
+      { agent: "canon:canon-researcher", prompt: "Research", template_paths: [] },
+      { agent: "canon:canon-architect", prompt: "Design", template_paths: [] },
+      { agent: "canon:canon-tester", prompt: "Test", template_paths: [] },
+      { agent: "canon:canon-reviewer", prompt: "Review", template_paths: [] },
+    ];
+    const requests = buildSpawnRequests(entries);
+    for (const req of requests) {
+      expect(req.isolation).toBe("worktree");
+      expect(req.permission_mode).toBe("auto");
+    }
   });
 
   test("consultation spawns get tool scope from their agent profile", () => {
