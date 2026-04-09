@@ -2,7 +2,9 @@ import { enterState, setBlocked } from "@domains/board/board.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
+import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { generateId } from "@shared/lib/id.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
@@ -208,7 +210,40 @@ async function handleCompleteFlow(
         ? { total_test_results: agg.aggregateTestResults }
         : {}),
     };
+    // Aggregate commit SHAs from all execution states (ADR-019)
+    const allCommits = store.getAllStateCommits();
+    if (allCommits.length > 0) {
+      flowRun.commits = allCommits;
+    }
+
+    // Capture diff_stat between base_commit and HEAD (ADR-019, best-effort)
+    try {
+      const baseCommit = updatedBoard.base_commit;
+      if (baseCommit) {
+        const diffResult = gitExec(["diff", "--stat", baseCommit, "HEAD"], projectDir);
+        if (diffResult.ok && diffResult.stdout.trim()) {
+          // Truncate to first 100 lines to guard against unbounded output
+          const lines = diffResult.stdout.trim().split("\n");
+          flowRun.diff_stat = lines.slice(0, 100).join("\n");
+        }
+      }
+    } catch {
+      // Best-effort — diff_stat is not critical
+    }
+
     await appendFlowRun(projectDir, flowRun);
+
+    // Index the flow run in FTS5 for history search (ADR-019, best-effort)
+    try {
+      const driftDb = getDriftDb(projectDir);
+      driftDb.indexHistoryEntry(
+        "flow_run",
+        flowRun.run_id,
+        `${flowRun.task} ${flowRun.flow} ${flowRun.diff_stat ?? ""}`,
+      );
+    } catch {
+      // Best-effort
+    }
   } catch {
     // Best-effort — analytics should never block flow completion
   }

@@ -530,7 +530,7 @@ describe("driveFlow — wave result accumulation", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 2, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 2, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 2 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
@@ -569,7 +569,7 @@ describe("driveFlow — wave result accumulation", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
@@ -829,7 +829,7 @@ describe("driveFlow — gate failure after merge", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([
       {
@@ -898,7 +898,7 @@ describe("driveFlow — gate failure after merge", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([
       { command: "npm test", exitCode: 0, gate: "test-suite", output: "All passing", passed: true },
@@ -969,7 +969,7 @@ describe("driveFlow — wave-to-wave advancement", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(createWaveWorktrees).mockResolvedValue([
@@ -1032,7 +1032,7 @@ describe("driveFlow — wave-to-wave advancement", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(createWaveWorktrees).mockResolvedValue([
@@ -1098,7 +1098,7 @@ describe("driveFlow — wave event handling", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
 
@@ -1148,7 +1148,7 @@ describe("driveFlow — wave event handling", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
@@ -1193,7 +1193,7 @@ describe("driveFlow — after-consultation handling", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(resolveAfterConsultations).mockReturnValue({
@@ -1267,7 +1267,7 @@ describe("driveFlow — epic checkpoint", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(createWaveWorktrees).mockResolvedValue([
@@ -1346,7 +1346,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
@@ -1383,7 +1383,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
@@ -1425,7 +1425,7 @@ describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () =>
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
@@ -1464,7 +1464,7 @@ describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () =>
     });
 
     vi.mocked(getProjectDir).mockReturnValue("/project");
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);

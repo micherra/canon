@@ -1311,3 +1311,147 @@ describe("concurrent writes", () => {
     }
   });
 });
+
+// ExecutionStore — state commits (ADR-019)
+
+describe("ExecutionStore — getStateCommits / getAllStateCommits / updateStateCommits", () => {
+  function makeStoreWithState(): { store: ExecutionStore; stateId: string } {
+    const store = makeStore();
+    const now = new Date().toISOString();
+    store.initExecution({
+      ...BASE_INIT_PARAMS,
+      current_state: "implement",
+    });
+    store.upsertState("implement", { entries: 1, status: "in_progress" });
+    return { stateId: "implement", store };
+  }
+
+  test("getStateCommits returns null when state has no commits column set", () => {
+    const { store, stateId } = makeStoreWithState();
+    const result = store.getStateCommits(stateId);
+    expect(result).toBeNull();
+  });
+
+  test("getStateCommits returns null when state does not exist", () => {
+    const { store } = makeStoreWithState();
+    const result = store.getStateCommits("nonexistent-state");
+    expect(result).toBeNull();
+  });
+
+  test("updateStateCommits persists and getStateCommits reads back correctly", () => {
+    const { store, stateId } = makeStoreWithState();
+
+    const commits = {
+      files_changed: ["src/a.ts", "src/b.ts"],
+      shas: ["sha-abc", "sha-def"],
+    };
+    const updated = store.updateStateCommits(stateId, commits);
+    expect(updated).toBe(true);
+
+    const result = store.getStateCommits(stateId);
+    expect(result).not.toBeNull();
+    expect(result?.shas).toEqual(["sha-abc", "sha-def"]);
+    expect(result?.files_changed).toEqual(["src/a.ts", "src/b.ts"]);
+  });
+
+  test("updateStateCommits returns false when state does not exist", () => {
+    const { store } = makeStoreWithState();
+    const updated = store.updateStateCommits("nonexistent", {
+      files_changed: [],
+      shas: ["sha-xyz"],
+    });
+    expect(updated).toBe(false);
+  });
+
+  test("updateStateCommits overwrites previous value", () => {
+    const { store, stateId } = makeStoreWithState();
+
+    store.updateStateCommits(stateId, {
+      files_changed: ["old-file.ts"],
+      shas: ["old-sha"],
+    });
+    store.updateStateCommits(stateId, {
+      files_changed: ["new-file.ts"],
+      shas: ["new-sha-1", "new-sha-2"],
+    });
+
+    const result = store.getStateCommits(stateId);
+    expect(result?.shas).toEqual(["new-sha-1", "new-sha-2"]);
+    expect(result?.files_changed).toEqual(["new-file.ts"]);
+  });
+
+  test("getAllStateCommits returns empty array when no states have commits", () => {
+    const { store } = makeStoreWithState();
+    const result = store.getAllStateCommits();
+    expect(result).toEqual([]);
+  });
+
+  test("getAllStateCommits returns flat deduplicated SHA array across all states", () => {
+    const store = makeStore();
+    const now = new Date().toISOString();
+    store.initExecution({ ...BASE_INIT_PARAMS, current_state: "research" });
+
+    store.upsertState("research", { entries: 1, status: "done" });
+    store.upsertState("implement", { entries: 1, status: "in_progress" });
+
+    store.updateStateCommits("research", {
+      files_changed: [],
+      shas: ["sha-001", "sha-002"],
+    });
+    store.updateStateCommits("implement", {
+      files_changed: [],
+      shas: ["sha-002", "sha-003"], // sha-002 is a duplicate
+    });
+
+    const result = store.getAllStateCommits();
+    expect(result).toHaveLength(3); // deduplicated: sha-001, sha-002, sha-003
+    expect(result).toContain("sha-001");
+    expect(result).toContain("sha-002");
+    expect(result).toContain("sha-003");
+  });
+
+  test("getAllStateCommits skips states with no commits", () => {
+    const store = makeStore();
+    store.initExecution({ ...BASE_INIT_PARAMS, current_state: "research" });
+
+    store.upsertState("research", { entries: 1, status: "done" });
+    store.upsertState("implement", { entries: 1, status: "in_progress" });
+    // Only 'research' has commits; 'implement' has none
+
+    store.updateStateCommits("research", {
+      files_changed: [],
+      shas: ["sha-only-in-research"],
+    });
+
+    const result = store.getAllStateCommits();
+    expect(result).toEqual(["sha-only-in-research"]);
+  });
+
+  test("round-trip: upsertState with commits preserves commits field", () => {
+    const { store, stateId } = makeStoreWithState();
+
+    // Set commits via updateStateCommits first
+    store.updateStateCommits(stateId, {
+      files_changed: ["a.ts"],
+      shas: ["sha-round-trip"],
+    });
+
+    // Upsert the state with a different field — should not clear commits
+    // unless the caller explicitly passes commits in the upsert
+    const existingState = store.getState(stateId);
+    if (existingState) {
+      store.upsertState(stateId, {
+        ...existingState,
+        // commits is preserved from existing state
+        entries: existingState.entries,
+        result: "done",
+        status: "done",
+      });
+    }
+
+    // commits set via updateStateCommits should survive the upsert
+    // (because buildUpsertStateParams reads commits from the existingState spread)
+    const afterUpsert = store.getState(stateId);
+    expect(afterUpsert?.commits).toBeDefined();
+  });
+});

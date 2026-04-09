@@ -1197,6 +1197,58 @@ export class ExecutionStore {
     };
   }
 
+  // State commits (ADR-019)
+
+  /**
+   * Read the `commits` JSON column for a given state.
+   * Returns parsed StateCommits object or null when the column is NULL / state missing.
+   */
+  getStateCommits(stateId: string): { shas: string[]; files_changed: string[] } | null {
+    const row = this.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
+    if (!row || row.commits === null) return null;
+    try {
+      return JSON.parse(row.commits) as { shas: string[]; files_changed: string[] };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Aggregate all non-null `commits` columns across all execution_states rows.
+   * Returns a flat deduplicated array of commit SHAs.
+   */
+  getAllStateCommits(): string[] {
+    const rows = this.stmtGetAllStates.all() as ExecutionStateRow[];
+    const seen = new Set<string>();
+    for (const row of rows) {
+      if (!row.commits) continue;
+      try {
+        const parsed = JSON.parse(row.commits) as { shas?: string[] };
+        for (const sha of parsed.shas ?? []) {
+          seen.add(sha);
+        }
+      } catch {
+        // Malformed JSON — skip row silently
+      }
+    }
+    return [...seen];
+  }
+
+  /**
+   * Targeted UPDATE on the commits column for a specific state.
+   * JSON.stringifies the commits object.
+   * Returns true when the row was found and updated, false otherwise.
+   */
+  updateStateCommits(
+    stateId: string,
+    commits: { shas: string[]; files_changed: string[] },
+  ): boolean {
+    const info = this.db
+      .prepare(`UPDATE execution_states SET commits = ? WHERE state_id = ?`)
+      .run(JSON.stringify(commits), stateId);
+    return info.changes > 0;
+  }
+
   // Targeted metrics update (ADR-003a agent performance metrics)
 
   /**

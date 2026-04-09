@@ -393,3 +393,75 @@ describe("Integration — create, modify, merge, cleanup", () => {
     }
   });
 });
+
+// mergeWaveResults — commit_shas capture (ADR-019)
+
+describe("mergeWaveResults — commit_shas capture", () => {
+  it("returns commit_shas with one SHA per successfully merged branch", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    const tasks = [{ task_id: "sha-task-a" }, { task_id: "sha-task-b" }];
+    const worktrees = await createWaveWorktrees(tasks, projectDir);
+
+    writeFileSync(join(worktrees[0].worktree_path, "sha-a.txt"), "sha task a content");
+    spawnSync("git", ["add", "."], { cwd: worktrees[0].worktree_path });
+    spawnSync("git", ["commit", "-m", "sha-task-a change"], { cwd: worktrees[0].worktree_path });
+
+    writeFileSync(join(worktrees[1].worktree_path, "sha-b.txt"), "sha task b content");
+    spawnSync("git", ["add", "."], { cwd: worktrees[1].worktree_path });
+    spawnSync("git", ["commit", "-m", "sha-task-b change"], { cwd: worktrees[1].worktree_path });
+
+    const result = await mergeWaveResults(worktrees, projectDir, "sequential");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.commit_shas).toHaveLength(2);
+      // Each SHA must be a valid 40-char hex string
+      for (const sha of result.commit_shas) {
+        expect(sha).toMatch(/^[0-9a-f]{40}$/);
+      }
+      // SHAs must be distinct (two different merge commits)
+      expect(new Set(result.commit_shas).size).toBe(2);
+    }
+  });
+
+  it("returns empty commit_shas when no tasks are provided", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    const result = await mergeWaveResults([], projectDir, "sequential");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.commit_shas).toEqual([]);
+      expect(result.merged_count).toBe(0);
+    }
+  });
+
+  it("returns partial commit_shas when second task conflicts (only first was merged)", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    const tasks = [{ task_id: "partial-ok" }, { task_id: "partial-conflict" }];
+    const worktrees = await createWaveWorktrees(tasks, projectDir);
+
+    // First task: clean merge
+    writeFileSync(join(worktrees[0].worktree_path, "clean.txt"), "clean content");
+    spawnSync("git", ["add", "."], { cwd: worktrees[0].worktree_path });
+    spawnSync("git", ["commit", "-m", "partial-ok change"], { cwd: worktrees[0].worktree_path });
+
+    // Second task: conflicting change on same file
+    writeFileSync(join(worktrees[1].worktree_path, "clean.txt"), "conflicting content");
+    spawnSync("git", ["add", "."], { cwd: worktrees[1].worktree_path });
+    spawnSync("git", ["commit", "-m", "partial-conflict change"], { cwd: worktrees[1].worktree_path });
+
+    const result = await mergeWaveResults(worktrees, projectDir, "sequential");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // merged_count should be 1 (first task merged before conflict)
+      expect(result.merged_count).toBe(1);
+    }
+  });
+});

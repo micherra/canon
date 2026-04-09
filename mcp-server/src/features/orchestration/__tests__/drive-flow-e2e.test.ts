@@ -266,7 +266,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       { branch: "canon-wave/task-01", task_id: "task-01", worktree_path: join(workspace, "wt-01") },
       { branch: "canon-wave/task-02", task_id: "task-02", worktree_path: join(workspace, "wt-02") },
     ]);
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([]);
     vi.mocked(resolveAfterConsultations).mockReturnValue({
@@ -660,7 +660,7 @@ describe("e2e: wave with gate failure", () => {
     vi.mocked(createWaveWorktrees).mockResolvedValue([
       { branch: "canon-wave/task-01", task_id: "task-01", worktree_path: join(workspace, "wt-01") },
     ]);
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     // Gate failure: one gate does not pass
     vi.mocked(runGates).mockReturnValue([
@@ -745,7 +745,7 @@ describe("e2e: wave with gate failure", () => {
     vi.mocked(createWaveWorktrees).mockResolvedValue([
       { branch: "canon-wave/task-01", task_id: "task-01", worktree_path: join(workspace, "wt-01") },
     ]);
-    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(mergeWaveResults).mockResolvedValue({ commit_shas: [], merged_count: 1, ok: true as const });
     vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
     vi.mocked(runGates).mockReturnValue([
       { command: "npm test", exitCode: 0, gate: "npm test", output: "all pass", passed: true },

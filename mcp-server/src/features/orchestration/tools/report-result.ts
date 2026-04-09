@@ -696,6 +696,9 @@ type ReportResultInput = {
   project_dir?: string;
   // ADR-015: path to the agent transcript JSONL file (best-effort persistence)
   transcript_path?: string;
+  // ADR-019: merge commit SHAs from worktree merge, and file paths changed in this state
+  commit_shas?: string[];
+  files_changed_paths?: string[];
 };
 
 export type LogEntry = {
@@ -1064,6 +1067,7 @@ async function postTransactionSideEffects({
 
   persistTranscriptPath(store, input);
   persistProgressLine(store, input.progress_line);
+  persistCommitShas(store, input);
   await runDriftEffects(stateDef, input);
   emitStuckEvent(store, { board, input, stateDef, stuck, stuck_reason });
   emitReportEvents(store, { condition, hitl_reason, hitl_required, input, nextState });
@@ -1115,6 +1119,28 @@ function persistProgressLine(store: ReturnType<typeof getExecutionStore>, line?:
     store.appendProgress(line);
   } catch {
     /* best-effort */
+  }
+}
+
+/**
+ * Persist commit SHAs and changed file paths to execution_states.commits (ADR-019).
+ * Merges with any existing commits for this state (idempotent/accumulative).
+ * Best-effort — never throws; commit persistence must not block state reporting.
+ */
+function persistCommitShas(
+  store: ReturnType<typeof getExecutionStore>,
+  input: ReportResultInput,
+): void {
+  if (!input.commit_shas?.length && !input.files_changed_paths?.length) return;
+  try {
+    const existing = store.getStateCommits(input.state_id);
+    const mergedShas = [...new Set([...(existing?.shas ?? []), ...(input.commit_shas ?? [])])];
+    const mergedFiles = [
+      ...new Set([...(existing?.files_changed ?? []), ...(input.files_changed_paths ?? [])]),
+    ];
+    store.updateStateCommits(input.state_id, { files_changed: mergedFiles, shas: mergedShas });
+  } catch {
+    /* best-effort — commit persistence must not block state reporting */
   }
 }
 

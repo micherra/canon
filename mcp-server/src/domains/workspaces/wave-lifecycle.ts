@@ -25,7 +25,7 @@ export type WaveWorktreeResult = {
 export type MergeStrategy = "sequential" | "rebase" | "squash";
 
 export type MergeWaveResult =
-  | { ok: true; merged_count: number }
+  | { ok: true; merged_count: number; commit_shas: string[] }
   | {
       ok: false;
       merged_count: number;
@@ -160,11 +160,18 @@ export async function mergeWaveResults(
   }
 
   let mergedCount = 0;
+  const commitShas: string[] = [];
 
   for (const task of tasks) {
     // biome-ignore lint/performance/noAwaitInLoops: git merges must be sequential; each merge updates HEAD which subsequent merges build on
     const mergeResult = await gitExecAsync(["merge", "--no-ff", task.branch], projectDir);
     if (mergeResult.ok) {
+      // Capture the merge commit SHA (best-effort — never blocks merge progress)
+      // biome-ignore lint/performance/noAwaitInLoops: sequential SHA capture after each merge to build ordered list
+      const shaResult = await gitExecAsync(["rev-parse", "HEAD"], projectDir);
+      if (shaResult.ok) {
+        commitShas.push(shaResult.stdout.trim());
+      }
       mergedCount++;
       continue;
     }
@@ -182,7 +189,7 @@ export async function mergeWaveResults(
     };
   }
 
-  return { merged_count: mergedCount, ok: true };
+  return { commit_shas: commitShas, merged_count: mergedCount, ok: true };
 }
 
 // cleanupWorktrees

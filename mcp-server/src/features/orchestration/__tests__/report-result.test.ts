@@ -1376,3 +1376,76 @@ describe("reportResult — required_handoffs validation", () => {
     expect(Object.hasOwn(result, "warnings")).toBe(false);
   });
 });
+
+// report_result — commit_shas persistence (ADR-019)
+
+describe("reportResult — commit_shas persistence", () => {
+  it("persists commit_shas to execution_states when provided", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      commit_shas: ["sha-aaa", "sha-bbb"],
+      files_changed_paths: ["src/foo.ts"],
+      flow,
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
+    });
+
+    assertOk(result);
+
+    const store = getExecutionStore(workspace);
+    const commits = store.getStateCommits("build");
+    expect(commits).not.toBeNull();
+    expect(commits?.shas).toContain("sha-aaa");
+    expect(commits?.shas).toContain("sha-bbb");
+    expect(commits?.files_changed).toContain("src/foo.ts");
+  });
+
+  it("accumulates commit_shas across multiple persistCommitShas calls (same state)", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    setupWorkspace(workspace, flow);
+
+    const store = getExecutionStore(workspace);
+
+    // Simulate first wave: set commits on the state
+    store.updateStateCommits("build", { files_changed: [], shas: ["sha-first"] });
+
+    // Simulate second wave: report_result persists more commits and merges with existing
+    await reportResult({
+      commit_shas: ["sha-second"],
+      flow,
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
+    });
+
+    const commits = store.getStateCommits("build");
+    expect(commits?.shas).toContain("sha-first");
+    expect(commits?.shas).toContain("sha-second");
+  });
+
+  it("is a no-op when commit_shas is undefined (backward compat)", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      flow,
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
+      // no commit_shas
+    });
+
+    assertOk(result);
+
+    const store = getExecutionStore(workspace);
+    const commits = store.getStateCommits("build");
+    // No commits were provided — column stays null
+    expect(commits).toBeNull();
+  });
+});
