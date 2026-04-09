@@ -67,6 +67,8 @@ states:
     inject_context:
       - from: file_context
         as: file_context
+      - from: wave_summaries
+        as: wave_summaries
     transitions:
       done: verify
       blocked: hitl
@@ -92,6 +94,8 @@ Execute migration stage from ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Veri
 ${wave_briefing}
 
 ${enrichment}
+
+${wave_summaries}
 
 ### verify
 Verify migration correctness. Run full test suite plus migration-specific checks: data integrity, schema compatibility, backward compatibility where required. Check ${WORKSPACE}/plans/${slug}/*-SUMMARY.md for what changed. Save report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md.
