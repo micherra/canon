@@ -490,7 +490,7 @@ export function validateSpawnCoverage(flow: ResolvedFlow): string[] {
  * These are warnings only — they do NOT block flow loading per ADR-004.
  */
 /** BFS from entry to collect all reachable state IDs. */
-function collectReachableStates(flow: ResolvedFlow): Set<string> {
+export function collectReachableStates(flow: ResolvedFlow): Set<string> {
   const visited = new Set<string>();
   const queue = [flow.entry];
 
@@ -517,6 +517,8 @@ export function analyzeReachability(flow: ResolvedFlow): string[] {
       warnings.push(`Warning: state "${stateId}" is unreachable from entry "${flow.entry}"`);
     }
   }
+  warnings.push(...detectDeadEnds(flow));
+  warnings.push(...detectStuckLoops(flow));
   return warnings;
 }
 
@@ -713,6 +715,251 @@ export function buildStateGraph(flow: ResolvedFlow): Record<string, string[]> {
   }
 
   return graph;
+}
+
+// buildReverseGraph / detectDeadEnds / detectStuckLoops
+
+/**
+ * Invert an adjacency list: for each a -> b edge, add b -> a in the reverse graph.
+ * All source keys from the input graph appear as keys in the result (even with no
+ * incoming edges), so callers can iterate the same key set.
+ */
+export function buildReverseGraph(graph: Record<string, string[]>): Record<string, string[]> {
+  const reversed: Record<string, string[]> = {};
+  // Seed all keys with empty arrays
+  for (const key of Object.keys(graph)) {
+    reversed[key] = [];
+  }
+  // For each a -> b edge, add a as an incoming neighbor of b
+  for (const [source, targets] of Object.entries(graph)) {
+    for (const target of targets) {
+      if (!reversed[target]) {
+        reversed[target] = [];
+      }
+      reversed[target].push(source);
+    }
+  }
+  return reversed;
+}
+
+/**
+ * Detect dead-end states: forward-reachable from entry but with no path to any
+ * terminal or virtual-sink (hitl / no_items).
+ *
+ * Algorithm: reverse-BFS from the seed set (terminals ∪ hitl-adjacent states).
+ * Any forward-reachable state not in the reverse-BFS result is a dead-end.
+ *
+ * Returns Warning-prefixed strings, one per dead-end state.
+ */
+export function detectDeadEnds(flow: ResolvedFlow): string[] {
+  const forwardGraph = buildStateGraph(flow);
+  const reverseGraph = buildReverseGraph(forwardGraph);
+
+  // Collect terminal states and hitl-adjacent states as seed for reverse BFS
+  const seed = new Set<string>();
+  for (const [stateId, stateDef] of Object.entries(flow.states)) {
+    if (stateDef.type === "terminal") {
+      seed.add(stateId);
+      continue;
+    }
+    if (stateDef.transitions) {
+      for (const target of Object.values(stateDef.transitions)) {
+        if (VIRTUAL_SINKS.has(target)) {
+          seed.add(stateId);
+          break;
+        }
+      }
+    }
+  }
+
+  // Reverse BFS: find all states that can reach the seed set
+  const canReachTerminal = new Set<string>(seed);
+  const queue = [...seed];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const predecessors = reverseGraph[current] ?? [];
+    for (const pred of predecessors) {
+      if (!canReachTerminal.has(pred)) {
+        canReachTerminal.add(pred);
+        queue.push(pred);
+      }
+    }
+  }
+
+  // Forward-reachable states (only real flow states, not virtual sinks)
+  const forwardReachable = collectReachableStates(flow);
+  const flowStateIds = new Set(Object.keys(flow.states));
+  const realForwardReachable = new Set([...forwardReachable].filter((s) => flowStateIds.has(s)));
+
+  // Dead-ends = forward-reachable real states NOT in canReachTerminal AND NOT terminal
+  const warnings: string[] = [];
+  for (const stateId of realForwardReachable) {
+    const stateDef = flow.states[stateId];
+    if (stateDef?.type === "terminal") continue;
+    if (!canReachTerminal.has(stateId)) {
+      warnings.push(
+        `Warning: state "${stateId}" is a dead-end — reachable from entry but no path to terminal or hitl`,
+      );
+    }
+  }
+  return warnings;
+}
+
+/**
+ * Find all strongly connected components (SCCs) using iterative Tarjan's algorithm.
+ * Returns an array of SCCs, each represented as an array of state IDs.
+ */
+function findSCCs(graph: Record<string, string[]>): string[][] {
+  const nodes = Object.keys(graph);
+  const index = new Map<string, number>();
+  const lowlink = new Map<string, number>();
+  const onStack = new Map<string, boolean>();
+  const stack: string[] = [];
+  const sccs: string[][] = [];
+  let counter = 0;
+
+  // Iterative Tarjan's using an explicit call stack
+  for (const startNode of nodes) {
+    if (index.has(startNode)) continue;
+
+    // Each entry: [node, neighborIndex, isFirstVisit]
+    const callStack: Array<{ node: string; neighborIdx: number }> = [
+      { node: startNode, neighborIdx: 0 },
+    ];
+
+    while (callStack.length > 0) {
+      const frame = callStack[callStack.length - 1];
+      const { node } = frame;
+
+      if (!index.has(node)) {
+        // First visit: initialize
+        index.set(node, counter);
+        lowlink.set(node, counter);
+        counter++;
+        onStack.set(node, true);
+        stack.push(node);
+      }
+
+      const neighbors = graph[node] ?? [];
+      let advanced = false;
+
+      while (frame.neighborIdx < neighbors.length) {
+        const neighbor = neighbors[frame.neighborIdx];
+        frame.neighborIdx++;
+
+        if (!index.has(neighbor)) {
+          // Tree edge: recurse
+          callStack.push({ node: neighbor, neighborIdx: 0 });
+          advanced = true;
+          break;
+        } else if (onStack.get(neighbor)) {
+          // Back edge: update lowlink
+          const nl = lowlink.get(node)!;
+          const ni = index.get(neighbor)!;
+          if (ni < nl) lowlink.set(node, ni);
+        }
+      }
+
+      if (!advanced) {
+        // All neighbors processed: check if root of SCC
+        callStack.pop();
+        if (callStack.length > 0) {
+          const parent = callStack[callStack.length - 1].node;
+          const pl = lowlink.get(parent)!;
+          const nl = lowlink.get(node)!;
+          if (nl < pl) lowlink.set(parent, nl);
+        }
+
+        if (lowlink.get(node) === index.get(node)) {
+          // Pop SCC
+          const scc: string[] = [];
+          let w: string;
+          do {
+            w = stack.pop()!;
+            onStack.set(w, false);
+            scc.push(w);
+          } while (w !== node);
+          sccs.push(scc);
+        }
+      }
+    }
+  }
+
+  return sccs;
+}
+
+/**
+ * Detect stuck loops: cycles (SCCs with 2+ members) where no member can exit
+ * to a terminal-reachable state or virtual sink.
+ *
+ * Returns Warning-prefixed strings, one per stuck loop.
+ */
+export function detectStuckLoops(flow: ResolvedFlow): string[] {
+  const forwardGraph = buildStateGraph(flow);
+
+  // Compute the can-reach-terminal set (same as in detectDeadEnds)
+  const reverseGraph = buildReverseGraph(forwardGraph);
+  const seed = new Set<string>();
+  for (const [stateId, stateDef] of Object.entries(flow.states)) {
+    if (stateDef.type === "terminal") {
+      seed.add(stateId);
+      continue;
+    }
+    if (stateDef.transitions) {
+      for (const target of Object.values(stateDef.transitions)) {
+        if (VIRTUAL_SINKS.has(target)) {
+          seed.add(stateId);
+          break;
+        }
+      }
+    }
+  }
+  const canReachTerminal = new Set<string>(seed);
+  const queue = [...seed];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const pred of reverseGraph[current] ?? []) {
+      if (!canReachTerminal.has(pred)) {
+        canReachTerminal.add(pred);
+        queue.push(pred);
+      }
+    }
+  }
+
+  const sccs = findSCCs(forwardGraph);
+  const warnings: string[] = [];
+
+  for (const scc of sccs) {
+    // Only analyze multi-member SCCs
+    if (scc.length < 2) continue;
+
+    // Check if any member exits the SCC to a terminal-reachable state or virtual sink
+    const sccSet = new Set(scc);
+    let hasExit = false;
+
+    for (const member of scc) {
+      const neighbors = forwardGraph[member] ?? [];
+      for (const neighbor of neighbors) {
+        if (!sccSet.has(neighbor)) {
+          // Exits the SCC — check if neighbor can reach terminal or is a virtual sink
+          if (canReachTerminal.has(neighbor) || VIRTUAL_SINKS.has(neighbor)) {
+            hasExit = true;
+            break;
+          }
+        }
+      }
+      if (hasExit) break;
+    }
+
+    if (!hasExit) {
+      const ids = [...scc].sort().join(", ");
+      warnings.push(
+        `Warning: states [${ids}] form a stuck loop — cycle with no exit to terminal or hitl`,
+      );
+    }
+  }
+
+  return warnings;
 }
 
 // loadAndResolveFlow
