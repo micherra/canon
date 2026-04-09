@@ -194,6 +194,28 @@ Wave boundary approvals (epic flows) use the same three options. Present wave pr
 
 ## Workspace Ownership
 
+Keep the presentation natural — no Canon jargon:
+- "Here's what was designed. Want to proceed, or should I revise anything?"
+- "Wave 1 complete (3 tasks done). Wave 2 has 4 tasks. Ready to continue?"
+- Present artifacts as bullet points, not raw file paths
+
+## Phase 5: Completion
+
+When `drive_flow` returns `{ action: "done" }`:
+
+1. `update_board({ workspace, operation: "complete_flow" })`
+2. Update `session.json`: status → `completed`, add `completed_at`
+3. Remove `.lock`
+4. Present summary:
+   - States executed and results
+   - Concerns accumulated
+   - States skipped
+   - Key artifacts produced
+   - Safe rollback point: `base_commit`
+   - Build metrics from board state entries
+
+## Workspace Permissions
+
 You own: `board.json`, `session.json`, `progress.md`, `log.jsonl`.
 You never write to: `research/`, `decisions/`, `plans/`, `reviews/`, or agent artifact files.
 

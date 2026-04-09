@@ -22,6 +22,7 @@ import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
 import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
 import { injectWaveEvent } from "@features/orchestration/tools/inject-wave-event.ts";
 import { loadFlow } from "@features/orchestration/tools/load-flow.ts";
+import { postEvent } from "@features/orchestration/tools/post-event.ts";
 import { postMessage } from "@features/orchestration/tools/post-message.ts";
 import { report } from "@features/orchestration/tools/report.ts";
 import { reportResult } from "@features/orchestration/tools/report-result.ts";
@@ -733,6 +734,27 @@ server.registerTool(
   },
   gatedWrapHandler(async (input) => {
     return postMessage(input);
+  }),
+);
+
+server.registerTool(
+  "post_event",
+  {
+    description:
+      "Log a structured agent activity event (start or complete) to the workspace event store. Agents call this instead of writing to log.jsonl. Events are stored in SQLite for cross-build analysis.",
+    inputSchema: {
+      action: z.enum(["start", "complete"]).describe("Whether the agent is starting or completing work"),
+      agent: z.string().describe("Agent name (e.g. 'canon-researcher', 'canon-implementor')"),
+      artifacts: z
+        .array(z.string())
+        .optional()
+        .describe("Relative artifact paths produced (e.g. 'plans/add-auth/DESIGN.md')"),
+      detail: z.string().describe("What the agent is beginning or completed"),
+      workspace: z.string().describe("Workspace path"),
+    },
+  },
+  wrapHandler(async (input) => {
+    return postEvent(input);
   }),
 );
 

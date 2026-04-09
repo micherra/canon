@@ -20,7 +20,8 @@ export type FlowEventType =
   | "wave_event_injected"
   | "wave_event_resolved"
   | "stuck_detected"
-  | "tool_scope_audit";
+  | "tool_scope_audit"
+  | "agent_activity";
 
 export type FlowEventMap = {
   state_entered: {
@@ -128,6 +129,14 @@ export type FlowEventMap = {
     /** Tools granted by a replace override that appeared in the base disallowed list. */
     granted_disallowed: string[];
     stateId: string;
+    timestamp: string;
+    correlation_id?: string;
+  };
+  agent_activity: {
+    agent: string;
+    action: "start" | "complete";
+    detail: string;
+    artifacts?: string[];
     timestamp: string;
     correlation_id?: string;
   };
@@ -254,6 +263,15 @@ export const EventPayloadSchemas = {
     eventType: z.string(),
     timestamp: z.string(),
     workspace: z.string(),
+  }),
+
+  agent_activity: z.object({
+    action: z.enum(["start", "complete"]),
+    agent: z.string(),
+    artifacts: z.array(z.string()).optional(),
+    correlation_id: correlationId,
+    detail: z.string(),
+    timestamp: z.string(),
   }),
 } satisfies Record<FlowEventType, z.ZodTypeAny>;
 
