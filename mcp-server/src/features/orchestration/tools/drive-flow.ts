@@ -24,7 +24,7 @@ import { join, resolve } from "node:path";
 import type { Board, WaveResult } from "@domains/flows/board-state-schemas.ts";
 import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
-import { runGates } from "@domains/flows/gate-runner.ts";
+import { type GateResult, runGates } from "@domains/flows/gate-runner.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { WaveWorktreeResult } from "@domains/workspaces/wave-lifecycle.ts";
 import {
@@ -1220,6 +1220,108 @@ function buildConvergenceHitl(
   };
 }
 
+/**
+ * Handle a gate-only state: a single state with no agent.
+ *
+ * Enters the state on the board (for convergence tracking), runs gates deterministically,
+ * then either auto-advances (all gates pass) or returns a HITL breakpoint (any gate fails).
+ *
+ * Gate resolution: if the state declares explicit `gates: [...]`, those run. Otherwise,
+ * discovered gates from all prior board states are collected and executed. This makes the
+ * pre-launch-check language-agnostic — agents discover the right commands during the build.
+ *
+ * Fail-closed: empty gate results (no gates resolved/discovered) are treated as failure.
+ */
+async function handleGateOnlyState(
+  workspace: string,
+  flow: DriveFlowInput["flow"],
+  stateId: string,
+  stateDef: StateDefinition,
+  store: ReturnType<typeof getExecutionStore>,
+  projectDir: string,
+): Promise<ToolResult<DriveFlowAction>> {
+  // Enter the state on the board (convergence check)
+  const enterOut = await enterAndPrepareState({
+    flow,
+    state_id: stateId,
+    variables: {},
+    workspace,
+  });
+  if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
+  if (!enterOut.can_enter) return buildConvergenceHitl(stateId, enterOut);
+
+  // Run gates: explicit gates on the state take priority; otherwise collect discovered gates
+  // from all prior board states (language-agnostic — agents discover the right commands)
+  let gateResults: GateResult[];
+  if (stateDef.gates?.length) {
+    gateResults = runGates(stateDef, flow, projectDir);
+  } else {
+    const allStates = store.getAllStates();
+    const discoveredCommands = allStates
+      .flatMap((s) => s.discovered_gates ?? [])
+      .map((g) => g.command)
+      .filter((cmd, i, arr) => arr.indexOf(cmd) === i); // deduplicate
+    if (discoveredCommands.length > 0) {
+      // Build a synthetic state def with the discovered commands as explicit gates
+      const syntheticDef = { ...stateDef, gates: discoveredCommands };
+      gateResults = runGates(syntheticDef, flow, projectDir);
+    } else {
+      gateResults = [];
+    }
+  }
+  const allPassed = gateResults.length > 0 && gateResults.every((g) => g.passed);
+
+  if (allPassed) {
+    // Auto-report done and advance to the next state
+    const reportOut = await reportResult({
+      flow,
+      gate_results: gateResults,
+      progress_line: `Pre-launch check passed (${gateResults.length} gates)`,
+      state_id: stateId,
+      status_keyword: "done",
+      workspace,
+    });
+    if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;
+    // Advance to the next state (null next_state means this gate-only state is terminal)
+    if (!reportOut.next_state) {
+      const board = store.getBoard();
+      if (!board) return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
+      const doneSummary = await buildDoneSummary(board, stateId, projectDir);
+      return { action: "done", ok: true as const, terminal_state: stateId, ...doneSummary };
+    }
+    return enterStateAndBuildSpawn(workspace, flow, reportOut.next_state, store, projectDir);
+  }
+
+  // Gate failure — build HITL breakpoint with gate output
+  const failedGates = gateResults.filter((g) => !g.passed);
+  const gateOutput =
+    gateResults.length === 0
+      ? "No gates were resolved — failing closed."
+      : failedGates
+          .map((g) => `Gate "${g.gate}" failed (exit ${g.exitCode}):\n${g.output}`)
+          .join("\n\n");
+
+  // Report as blocked so the board tracks the failure
+  const reportOut = await reportResult({
+    flow,
+    gate_results: gateResults,
+    progress_line: `Pre-launch check failed (${failedGates.length}/${gateResults.length} gates failed)`,
+    state_id: stateId,
+    status_keyword: "blocked",
+    workspace,
+  });
+  if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;
+
+  return {
+    action: "hitl",
+    breakpoint: {
+      context: `State: ${stateId}`,
+      reason: `Pre-launch gates failed:\n\n${gateOutput}`,
+    },
+    ok: true as const,
+  };
+}
+
 /** Try to enter a single state. Returns a final action, or { nextStateId } to continue the skip loop. */
 async function tryEnterSingleState(
   workspace: string,
@@ -1231,6 +1333,11 @@ async function tryEnterSingleState(
   const stateDef = flow.states[currentStateId];
   if (stateDef?.type === "terminal") return buildTerminalAction(workspace, currentStateId, store, projectDir);
   if (stateDef?.type === "wave") return enterWaveState(workspace, flow, currentStateId, store);
+
+  // Gate-only state: no agent — run explicit or discovered gates deterministically, skip agent spawn
+  if (stateDef?.type === "single" && !stateDef.agent) {
+    return handleGateOnlyState(workspace, flow, currentStateId, stateDef, store, projectDir);
+  }
 
   const enterOut = await enterAndPrepareState({
     flow,

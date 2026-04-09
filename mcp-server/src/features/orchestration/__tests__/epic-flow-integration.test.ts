@@ -276,10 +276,10 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
     expect((flow.states.implement as Record<string, unknown>).max_waves).toBeUndefined();
   });
 
-  it("epic implement state has epic_complete transition to ship", async () => {
+  it("epic implement state has epic_complete transition to pre-launch-check", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states.implement.transitions?.epic_complete).toBe("ship");
+    expect(flow.states.implement.transitions?.epic_complete).toBe("pre-launch-check");
   });
 
   it("epic flow has tier: large", async () => {
@@ -345,13 +345,51 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
     expect(researchEdges).toContain("design");
   });
 
-  it("loadFlow state_graph for epic includes implement → ship edge (epic_complete)", async () => {
+  it("loadFlow state_graph for epic includes implement → pre-launch-check edge (epic_complete)", async () => {
     const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir);
     if (!result.ok) throw new Error(result.message);
 
     const implementEdges = result.state_graph.implement;
     expect(implementEdges).toBeDefined();
-    expect(implementEdges).toContain("ship");
+    expect(implementEdges).toContain("pre-launch-check");
+  });
+});
+
+// pre-launch-check fragment integration — plc-03
+
+describe("loadAndResolveFlow() plugin-level resolution — pre-launch-check", () => {
+  it("feature flow pre-launch-check state is present (from pre-launch-check fragment)", async () => {
+    const flow = await loadAndResolveFlow(pluginCacheDir, "feature");
+    expect(flow.states["pre-launch-check"]).toBeDefined();
+    expect(flow.states["pre-launch-check"].type).toBe("single");
+    expect(flow.states["pre-launch-check"].gates).toBeUndefined();
+    expect(flow.states["pre-launch-check"].agent).toBeUndefined();
+  });
+
+  it("feature flow review-fix-loop exits to pre-launch-check not ship", async () => {
+    const flow = await loadAndResolveFlow(pluginCacheDir, "feature");
+    // review-fix-loop fragment: after_clean param → clean transition, after_warning param → warning transition
+    expect(flow.states.review.transitions?.clean).toBe("pre-launch-check");
+    expect(flow.states.review.transitions?.warning).toBe("pre-launch-check");
+  });
+
+  it("fast-path flow execute state transitions to pre-launch-check", async () => {
+    const flow = await loadAndResolveFlow(pluginCacheDir, "fast-path");
+    expect(flow.states.execute.transitions?.done).toBe("pre-launch-check");
+    expect(flow.states["pre-launch-check"]).toBeDefined();
+  });
+
+  it("epic flow pre-launch-check state is present and wired before ship", async () => {
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
+    expect(flow.states["pre-launch-check"]).toBeDefined();
+    expect(flow.states["pre-launch-check"].transitions?.done).toBe("ship");
+  });
+
+  it("all shipping flows include pre-launch-check", async () => {
+    for (const flowName of ["feature", "fast-path", "refactor", "epic", "migrate"]) {
+      const flow = await loadAndResolveFlow(pluginCacheDir, flowName);
+      expect(flow.states["pre-launch-check"]).toBeDefined();
+    }
   });
 });
 

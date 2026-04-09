@@ -6,6 +6,10 @@ entry: execute
 progress: ${WORKSPACE}/progress.md
 
 includes:
+  - fragment: pre-launch-check
+    with:
+      after_passing: ship
+
   - fragment: ship-done
 
 states:
@@ -19,8 +23,8 @@ states:
       - from: file_context
         as: file_context
     transitions:
-      done: ship
-      done_with_concerns: ship
+      done: pre-launch-check
+      done_with_concerns: pre-launch-check
       blocked: hitl
 ---
 

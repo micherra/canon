@@ -37,6 +37,7 @@ Fragments are reusable state groups stored in `fragments/`. A flow includes them
 | `context-sync` | Sync documentation after implementation or fix changes (skipped if no contract changes) |
 | `security-scan` | Security scan with optional fix loop for critical findings |
 | `user-checkpoint` | Pause for user approval or revision feedback before proceeding |
+| `pre-launch-check` | Deterministic quality gate — runs agent-discovered quality checks before shipping (language-agnostic) |
 | `ship-done` | Synthesize build artifacts into a PR description and mark the flow complete. |
 | `plan-review` | Consultation: architect reviews upcoming wave plans for conflicts and ambiguity |
 | `pattern-check` | Consultation: architect reviews wave output for pattern drift and convention inconsistency |
