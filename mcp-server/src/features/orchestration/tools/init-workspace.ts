@@ -5,8 +5,8 @@
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, mkdir, readFile, readdir } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
@@ -31,6 +31,7 @@ type InitWorkspaceInput = {
   original_input?: string;
   skip_flags?: string[];
   preflight?: boolean;
+  seed_from?: string;
 };
 
 type InitWorkspaceResult = {
@@ -45,6 +46,7 @@ type InitWorkspaceResult = {
   worktree_path?: string;
   worktree_branch?: string;
   cache_prefix_hash?: string;
+  seeded_from?: string;
 };
 
 /**
@@ -459,6 +461,105 @@ async function finalizeNewWorkspace(
   };
 }
 
+/** Maximum total bytes copied from a single source directory (1 MB). */
+const MAX_COPY_BYTES_PER_DIR = 1_048_576;
+
+/**
+ * Copy .md artifacts from a prior workspace into seeded/ subdirectories
+ * of the new workspace. Returns warnings (not errors) for missing paths.
+ *
+ * errors-are-values: never throws; all failures produce warnings.
+ * information-hiding: seeded/ is an implementation detail; callers only see seeded_from.
+ */
+export async function seedFromPriorWorkspace(
+  sourceWorkspace: string,
+  targetWorkspace: string,
+): Promise<{ seeded: boolean; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  // Validate: must be an absolute path
+  if (!isAbsolute(sourceWorkspace)) {
+    warnings.push(
+      `seed_from must be an absolute path; got relative path: "${sourceWorkspace}"`,
+    );
+    return { seeded: false, warnings };
+  }
+
+  // Validate: must be within .canon/workspaces/ tree (path traversal guard)
+  const normalizedSource = sourceWorkspace.replace(/\\/g, "/");
+  if (!normalizedSource.includes(".canon/workspaces/")) {
+    warnings.push(
+      `seed_from path "${sourceWorkspace}" is not within a .canon/workspaces/ directory — invalid workspace path`,
+    );
+    return { seeded: false, warnings };
+  }
+
+  // Validate: source workspace must exist
+  if (!existsSync(sourceWorkspace)) {
+    warnings.push(`seed_from workspace does not exist: "${sourceWorkspace}"`);
+    return { seeded: false, warnings };
+  }
+
+  const subdirs = ["handoffs", "research"] as const;
+  let anySubdirExists = false;
+
+  for (const subdir of subdirs) {
+    const sourceDir = join(sourceWorkspace, subdir);
+    const targetDir = join(targetWorkspace, "seeded", subdir);
+
+    if (!existsSync(sourceDir)) {
+      warnings.push(
+        `seed_from: source directory "${subdir}" not found in "${sourceWorkspace}" — skipping`,
+      );
+      continue;
+    }
+
+    anySubdirExists = true;
+
+    // Create target directory
+    await mkdir(targetDir, { recursive: true });
+
+    // Read .md files and copy (skip others; enforce size cap)
+    let files: string[];
+    try {
+      files = await readdir(sourceDir);
+    } catch {
+      warnings.push(`seed_from: failed to read directory "${sourceDir}" — skipping`);
+      continue;
+    }
+
+    const mdFiles = files.filter((f) => f.endsWith(".md"));
+    let totalBytes = 0;
+
+    for (const file of mdFiles) {
+      const sourcePath = join(sourceDir, file);
+      const targetPath = join(targetDir, file);
+
+      try {
+        const content = await readFile(sourcePath);
+        if (totalBytes + content.length > MAX_COPY_BYTES_PER_DIR) {
+          warnings.push(
+            `seed_from: skipping "${file}" in "${subdir}" — 1MB per-directory copy cap reached`,
+          );
+          continue;
+        }
+        await copyFile(sourcePath, targetPath);
+        totalBytes += content.length;
+      } catch {
+        warnings.push(`seed_from: failed to copy "${file}" from "${subdir}" — skipping`);
+      }
+    }
+  }
+
+  if (!anySubdirExists) {
+    // No source directories found — create empty seeded/ dirs and return seeded: true
+    await mkdir(join(targetWorkspace, "seeded", "handoffs"), { recursive: true });
+    await mkdir(join(targetWorkspace, "seeded", "research"), { recursive: true });
+  }
+
+  return { seeded: true, warnings };
+}
+
 export async function initWorkspaceFlow(
   input: InitWorkspaceInput,
   projectDir: string,
@@ -520,6 +621,17 @@ export async function initWorkspaceFlow(
     slug,
     workspace,
   });
+
+  // Seed from prior workspace if requested (best-effort — never blocks init)
+  if (input.seed_from) {
+    const seedResult = await seedFromPriorWorkspace(input.seed_from, workspace);
+    for (const warning of seedResult.warnings) {
+      console.warn(`[init-workspace] ${warning}`);
+    }
+    if (seedResult.seeded) {
+      result.seeded_from = input.seed_from;
+    }
+  }
 
   await runLegacyMigration(projectDir);
 
