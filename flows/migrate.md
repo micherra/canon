@@ -50,6 +50,10 @@ states:
   design:
     type: single
     agent: canon-architect
+    compete:
+      count: 2
+      strategy: synthesize
+      lenses: [safety-first, minimal-disruption]
     template: [design-decision, session-context]
     inject_context:
       - from: research
@@ -67,6 +71,8 @@ states:
     inject_context:
       - from: file_context
         as: file_context
+      - from: handoff
+        as: design_handoff
     transitions:
       done: verify
       blocked: hitl
@@ -88,6 +94,8 @@ Design staged migration plan for: ${task}. Read research from ${WORKSPACE}/resea
 
 ### implement
 Execute migration stage from ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Verify the system works after this stage — run tests, check for regressions. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
+
+${design_handoff}
 
 ${wave_briefing}
 
