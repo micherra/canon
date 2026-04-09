@@ -8,6 +8,7 @@ cursor-extension/media/dashboard.js
 .idea/
 .air/
 .claude/*
+!.claude/settings.json
 .claude/settings.local.json
 .junie/
 .ai/

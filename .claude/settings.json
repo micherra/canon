@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(.canon/)",
+      "Write(.canon/)",
+      "Edit(.canon/)",
+      "Bash(.canon/)",
+      "mcp__canon__*",
+      "mcp__canon-marketplace__*"
+    ]
+  },
+  "enabledPlugins": {
+    "canon@canon-marketplace": true
+  },
+  "mcpServers": {
+    "canon": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "--tsconfig",
+        "/Users/michelle/Documents/canon/mcp-server/tsconfig.json",
+        "/Users/michelle/Documents/canon/mcp-server/src/app/index.ts"
+      ],
+      "env": {
+        "CANON_PROJECT_DIR": "/Users/michelle/Documents/canon",
+        "CANON_PLUGIN_DIR": "/Users/michelle/Documents/canon"
+      }
+    }
+  }
+}
