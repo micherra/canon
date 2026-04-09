@@ -536,15 +536,31 @@ export function analyzeReachability(flow: ResolvedFlow): string[] {
  *
  * Returns an array of error messages (empty if valid).
  */
+/** Collect variable names declared via inject_context `as` fields across all states. */
+function collectInjectContextVars(states: Record<string, StateDefinition>): Set<string> {
+  const vars = new Set<string>();
+  for (const stateDef of Object.values(states)) {
+    if ("inject_context" in stateDef && Array.isArray(stateDef.inject_context)) {
+      for (const injection of stateDef.inject_context) {
+        if (injection.as) vars.add(injection.as);
+      }
+    }
+  }
+  return vars;
+}
+
 /** Check spawn instructions for unknown ${...} references. */
-function checkSpawnInstructionRefs(spawnInstructions: Record<string, string>): string[] {
+function checkSpawnInstructionRefs(
+  spawnInstructions: Record<string, string>,
+  extraAllowed: Set<string>,
+): string[] {
   const errors: string[] = [];
   const refPattern = /\$\{([^}]+)\}/g;
   for (const [stateId, text] of Object.entries(spawnInstructions)) {
     refPattern.lastIndex = 0;
     let match = refPattern.exec(text);
     while (match !== null) {
-      if (!RUNTIME_VARIABLES.has(match[1])) {
+      if (!RUNTIME_VARIABLES.has(match[1]) && !extraAllowed.has(match[1])) {
         errors.push(`Spawn instruction "${stateId}" has unresolved reference: \${${match[1]}}`);
       }
       match = refPattern.exec(text);
@@ -570,8 +586,9 @@ function checkTransitionTargetRefs(states: Record<string, StateDefinition>): str
 }
 
 export function checkUnresolvedRefs(flow: ResolvedFlow): string[] {
+  const injectVars = collectInjectContextVars(flow.states);
   return [
-    ...checkSpawnInstructionRefs(flow.spawn_instructions),
+    ...checkSpawnInstructionRefs(flow.spawn_instructions, injectVars),
     ...checkTransitionTargetRefs(flow.states),
   ];
 }
