@@ -62,6 +62,7 @@ steps:
     hitl: false
     required_artifacts:
       - plan_index
+      - implementation_summary
 
   - role: canon-scribe
     task_type: scribe
@@ -69,7 +70,7 @@ steps:
     artifact_path: decisions/CONTEXT-SYNC.md
     hitl: false
     required_artifacts:
-      - plan_index
+      - implementation_summary
 
   - role: canon-reviewer
     task_type: review
@@ -77,7 +78,7 @@ steps:
     artifact_path: reviews/REVIEW.md
     hitl: after_if_verdict_not_clean
     required_artifacts:
-      - plan_index
+      - implementation_summary
       - test_report
 
   - role: canon-shipper

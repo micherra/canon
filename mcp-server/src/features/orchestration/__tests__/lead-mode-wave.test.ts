@@ -254,6 +254,56 @@ describe("planRun — upstream ref resolution for waves", () => {
     expect(r2.spawn_prompt).not.toContain("plans/fix-bug/t1-SUMMARY.md");
   });
 
+  it("synthesizes a glob-shaped upstream path that strips only the role suffix, not task-id inner hyphens", () => {
+    // Regression: an earlier regex-based implementation used a lazy
+    // match on /-[A-Z][A-Z0-9-]*\.md$/ and silently split at the first
+    // hyphen-uppercase boundary inside the task id. A task id like
+    // "foo-A1" produced "plans/<slug>/*-A1-SUMMARY.md", which missed
+    // every other task's summary. The current implementation uses the
+    // authoritative WAVE_ARTIFACT_SUFFIXES table and is immune.
+    const yaml = `
+name: glob-regression
+description: regression test for wave fan-in glob synthesis
+tier: medium
+steps:
+  - role: canon-architect
+    task_type: design
+    artifact: plan_index
+    artifact_path: plans/INDEX.md
+    hitl: false
+    required_artifacts: []
+  - role: canon-implementor
+    task_type: implement
+    artifact: implementation_summary
+    artifact_path: plans/<slug>/<task_id>-SUMMARY.md
+    hitl: false
+    wave: true
+    required_artifacts:
+      - plan_index
+  - role: canon-shipper
+    task_type: ship
+    artifact: ship_notes
+    artifact_path: plans/SHIP.md
+    hitl: false
+    required_artifacts:
+      - implementation_summary
+`;
+    const rb = parseRunbook(yaml);
+    const descriptors = planRun({
+      runbook: rb,
+      workspace_id: "ws",
+      target_files: [],
+      wave_context: { slug: "fix-bug", task_ids: ["foo-A1", "foo-B2"] },
+    });
+    const shipper = descriptors.find((d) => d.role === "canon-shipper");
+    expect(shipper).toBeDefined();
+    // The glob must target the full suffix -SUMMARY.md, NOT
+    // -A1-SUMMARY.md. If this assertion flips, fan-in is broken again.
+    expect(shipper!.spawn_prompt).toContain("plans/fix-bug/*-SUMMARY.md");
+    expect(shipper!.spawn_prompt).not.toContain("*-A1-SUMMARY.md");
+    expect(shipper!.spawn_prompt).not.toContain("*-B2-SUMMARY.md");
+  });
+
   it("synthesizes a glob-shaped upstream path when a flat step references a wave output", () => {
     // Phase 2 fan-in: flat downstream steps (tester, scribe, reviewer,
     // shipper) reference the wave implementor's output via a glob path.
@@ -345,6 +395,33 @@ describe("planRun — wave_context validation", () => {
         wave_context: { slug: "s", task_ids: ["bad id"] },
       }),
     ).toThrow(/invalid id/);
+  });
+
+  it("rejects duplicate task ids in wave_context", () => {
+    // Duplicate ids would create colliding expanded task ids in the
+    // state files, silently overwriting the first expansion's entry
+    // and breaking hook lookups. Must be caught at plan time.
+    expect(() =>
+      planRun({
+        runbook: waveRunbook,
+        workspace_id: "ws",
+        target_files: [],
+        wave_context: { slug: "s", task_ids: ["t1", "t2", "t1"] },
+      }),
+    ).toThrow(/duplicate id "t1"/);
+  });
+
+  it("accepts task ids that are unique-but-similar", () => {
+    // Uniqueness is exact-string; ids that differ by one character are
+    // all valid.
+    expect(() =>
+      planRun({
+        runbook: waveRunbook,
+        workspace_id: "ws",
+        target_files: [],
+        wave_context: { slug: "s", task_ids: ["t1", "t10", "t1a"] },
+      }),
+    ).not.toThrow();
   });
 
   it("rejects wave artifact_path that is not a valid template", () => {

@@ -34,6 +34,7 @@ import {
   CANON_ROLES,
   assembleSpawnPrompt,
   getRoleArtifactContract,
+  getWaveArtifactSuffix,
   resolveWaveArtifactPath,
   type TaskType,
   type UpstreamArtifactRef,
@@ -374,12 +375,19 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
         `Runbook "${runbook.name}" wave_context.slug ${JSON.stringify(wave_context.slug)} must match /^[a-zA-Z0-9_-]+$/`,
       );
     }
+    const seenTaskIds = new Set<string>();
     for (const tid of wave_context.task_ids) {
       if (!/^[a-zA-Z0-9_-]+$/.test(tid)) {
         throw new RunbookError(
           `Runbook "${runbook.name}" wave_context.task_ids contains invalid id ${JSON.stringify(tid)}; must match /^[a-zA-Z0-9_-]+$/`,
         );
       }
+      if (seenTaskIds.has(tid)) {
+        throw new RunbookError(
+          `Runbook "${runbook.name}" wave_context.task_ids contains duplicate id ${JSON.stringify(tid)}; each task id must appear at most once per wave`,
+        );
+      }
+      seenTaskIds.add(tid);
     }
   }
 
@@ -570,9 +578,9 @@ function resolveUpstreamRefsForFlatStep(
       );
     }
     // Every wave entry lives in the same parent dir, so any one is fine
-    // for shape extraction.
+    // for the parent-dir extraction.
     const samplePath = hit.wavePaths.values().next().value!;
-    const globPath = waveGlobFromSamplePath(samplePath);
+    const globPath = waveGlobFromSamplePath(samplePath, hit.produced_by);
     return {
       id: refId,
       path: globPath,
@@ -585,15 +593,26 @@ function resolveUpstreamRefsForFlatStep(
 /**
  * Derive a glob-shaped upstream path from a concrete wave artifact path.
  * Example:
- *     `plans/fix-bug/t1-SUMMARY.md` → `plans/fix-bug/*-SUMMARY.md`
- * Strips the per-task prefix preserving the suffix so the glob is as
- * narrow as possible.
+ *     (`plans/fix-bug/t1-SUMMARY.md`, `canon-implementor`) → `plans/fix-bug/*-SUMMARY.md`
+ *
+ * Uses the authoritative suffix table from the spawn module rather than
+ * regex-splitting the sample path. A regex approach is unsafe because a
+ * task id may contain a hyphen followed by uppercase letters (e.g.
+ * `foo-A1`), which would make the lazy regex latch onto the wrong
+ * boundary and silently narrow the glob to only match that one task id.
+ *
+ * Falls back to the sample path unchanged if the parent dir cannot be
+ * extracted or the role has no registered wave suffix — both are
+ * unreachable in the happy path (`produced_by` must be a
+ * wave-compatible role for the wavePaths entry to exist in the first
+ * place) but we never throw here to keep planRun pure.
  */
-function waveGlobFromSamplePath(samplePath: string): string {
-  // Expected shape: plans/<slug>/<task_id>-<REST>.md
-  const m = /^(plans\/[^/]+\/)([^/]+?)(-[A-Z][A-Z0-9-]*\.md)$/.exec(samplePath);
-  if (!m) return samplePath; // Give up gracefully — still returns a usable ref.
-  return `${m[1]}*${m[3]}`;
+function waveGlobFromSamplePath(samplePath: string, role: CanonRole): string {
+  const suffix = getWaveArtifactSuffix(role);
+  if (!suffix) return samplePath;
+  const lastSlash = samplePath.lastIndexOf("/");
+  if (lastSlash < 0) return samplePath;
+  return `${samplePath.slice(0, lastSlash + 1)}*${suffix}`;
 }
 
 /**

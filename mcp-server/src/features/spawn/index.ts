@@ -287,6 +287,17 @@ export const WAVE_COMPATIBLE_ROLES: readonly CanonRole[] = Object.freeze(
   Object.keys(WAVE_ARTIFACT_SUFFIXES) as CanonRole[],
 );
 
+/**
+ * Return the canonical wave file-name suffix for a role (e.g. `-SUMMARY.md`
+ * for `canon-implementor`) or `undefined` if the role never participates
+ * in waves. Exposed so callers that need the suffix — e.g. lead-mode's
+ * wave-to-flat fan-in glob synthesizer — can avoid fragile regex
+ * splitting on concrete paths that embed the suffix inside the task id.
+ */
+export function getWaveArtifactSuffix(role: CanonRole): string | undefined {
+  return WAVE_ARTIFACT_SUFFIXES[role];
+}
+
 /** Role-specific task-type guidance block. */
 function taskTypeGuidance(role: CanonRole, taskType: TaskType): string {
   const common: Partial<Record<TaskType, string>> = {

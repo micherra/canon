@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assembleSpawnPrompt,
   CANON_ROLES,
+  getWaveArtifactSuffix,
   resolveWaveArtifactPath,
   WAVE_COMPATIBLE_ROLES,
   type CanonRole,
@@ -186,6 +187,42 @@ describe("resolveWaveArtifactPath", () => {
         task_id: "task_1-a",
       }),
     ).toBe("plans/my-slug/task_1-a-SUMMARY.md");
+  });
+});
+
+describe("getWaveArtifactSuffix", () => {
+  it("returns the canonical suffix for each wave-compatible role", () => {
+    expect(getWaveArtifactSuffix("canon-researcher")).toBe("-RESEARCH.md");
+    expect(getWaveArtifactSuffix("canon-architect")).toBe("-DESIGN.md");
+    expect(getWaveArtifactSuffix("canon-implementor")).toBe("-SUMMARY.md");
+    expect(getWaveArtifactSuffix("canon-reviewer")).toBe("-REVIEW.md");
+    expect(getWaveArtifactSuffix("canon-tester")).toBe("-TEST-REPORT.md");
+    expect(getWaveArtifactSuffix("canon-fixer")).toBe("-FIX-SUMMARY.md");
+    expect(getWaveArtifactSuffix("canon-security")).toBe("-SECURITY.md");
+    expect(getWaveArtifactSuffix("canon-scribe")).toBe("-CONTEXT-SYNC.md");
+    expect(getWaveArtifactSuffix("canon-shipper")).toBe("-SHIP.md");
+  });
+
+  it("returns undefined for single-agent roles", () => {
+    expect(getWaveArtifactSuffix("canon-guide")).toBeUndefined();
+    expect(getWaveArtifactSuffix("canon-chat")).toBeUndefined();
+    expect(getWaveArtifactSuffix("canon-writer")).toBeUndefined();
+    expect(getWaveArtifactSuffix("canon-learner")).toBeUndefined();
+  });
+
+  it("matches the tail of resolveWaveArtifactPath for every wave role", () => {
+    // Invariant: the suffix must equal the tail of the resolved path
+    // after the slug + task_id prefix. Keeps the suffix table and the
+    // resolver in lockstep so downstream callers (wave-to-flat glob
+    // synthesis in lead-mode) always produce correct globs.
+    for (const role of WAVE_COMPATIBLE_ROLES) {
+      const resolved = resolveWaveArtifactPath(role, {
+        slug: "probe",
+        task_id: "abc",
+      });
+      const suffix = getWaveArtifactSuffix(role);
+      expect(resolved).toBe(`plans/probe/abc${suffix}`);
+    }
   });
 });
 
