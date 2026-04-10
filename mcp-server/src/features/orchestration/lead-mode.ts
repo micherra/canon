@@ -34,8 +34,11 @@ import {
   CANON_ROLES,
   assembleSpawnPrompt,
   getRoleArtifactContract,
+  resolveWaveArtifactPath,
   type TaskType,
   type UpstreamArtifactRef,
+  WAVE_COMPATIBLE_ROLES,
+  type WaveContext,
 } from "@features/spawn/index.ts";
 
 /** HITL gate values recognized in a runbook step. */
@@ -49,9 +52,28 @@ export interface RunbookStep {
   role: CanonRole;
   task_type: TaskType;
   artifact: string;
+  /**
+   * Declared artifact path. For a non-wave step this is the Phase 1 flat
+   * path that must match the role's canonical contract. For a
+   * wave-expanded step (`wave: true`) this is a TEMPLATE path of the
+   * shape `plans/<slug>/<TASK_ID><SUFFIX>` whose concrete expansion is
+   * resolved at plan time via {@link resolveWaveArtifactPath}. Runbook
+   * authors write it in that template form so the declaration is
+   * self-describing even before planning.
+   */
   artifact_path: string;
   hitl: RunbookHitl;
   required_artifacts: string[];
+  /**
+   * Phase 2 addition. When `true`, this step is spawned once per task id
+   * provided in {@link PlanRunInput.wave_context}. The resulting
+   * descriptors each carry their own wave_context, write to a per-task
+   * path under `plans/<slug>/`, and share the same upstream refs. When
+   * absent or `false`, Phase 1 single-agent behavior applies and the
+   * step's `artifact_path` is cross-checked against the canonical flat
+   * contract in `ROLE_ARTIFACT_CONTRACTS`.
+   */
+  wave?: boolean;
 }
 
 /** Parsed runbook contents. */
@@ -62,6 +84,26 @@ export interface Runbook {
   steps: RunbookStep[];
 }
 
+/**
+ * Optional wave context supplied at plan time for runbooks that contain
+ * `wave: true` steps. Phase 2 addition.
+ *
+ * The caller (the smoke-test harness today; the team-lead orchestrator
+ * in Phase 3) supplies a stable slug and an ordered list of task ids.
+ * Each wave step is expanded into one descriptor per task id, keyed off
+ * the expanded id `<runbook>-<slug>-<task_id>-<role>`.
+ *
+ * This is the static-shape version of wave support. Adaptive wave
+ * planning — where the architect rewrites the next wave's task list
+ * from the previous wave's output — is Phase 3.
+ */
+export interface PlanRunWaveContext {
+  /** Stable plan-index slug. Must match /^[a-zA-Z0-9_-]+$/. */
+  slug: string;
+  /** Ordered list of task ids. Empty is rejected at plan time. */
+  task_ids: string[];
+}
+
 /** Input to `planRun`. */
 export interface PlanRunInput {
   runbook: Runbook;
@@ -69,11 +111,25 @@ export interface PlanRunInput {
   /** Target files the user's request pins. Passed to every step that
    * needs them; Phase 1 does not do per-step scoping. */
   target_files: string[];
+  /**
+   * Phase 2 addition. Required when the runbook contains any `wave:
+   * true` step; must be omitted or empty when every step is flat.
+   * Supplying a wave_context for a flat runbook is not an error, it is
+   * simply ignored — this keeps the smoke-test harness simple.
+   */
+  wave_context?: PlanRunWaveContext;
 }
 
 /** Output of `planRun`: an ordered list of spawn descriptors. */
 export interface SpawnDescriptor {
-  /** Stable per-step id; derived as `<runbook_name>-<index>-<role>`. */
+  /**
+   * Stable per-descriptor id. Flat (Phase 1) shape:
+   *     `<runbook_name>-<NN>-<role>`
+   * Wave-expanded (Phase 2) shape:
+   *     `<runbook_name>-<slug>-<task_id>-<role>`
+   * Both shapes round-trip through the workspace-local state files and
+   * the hooks look up either one by exact match.
+   */
   task_id: string;
   /** Canon role to spawn. */
   role: CanonRole;
@@ -89,6 +145,14 @@ export interface SpawnDescriptor {
   spawn_prompt: string;
   /** Logical artifact ids the step depends on. */
   required_artifacts: string[];
+  /**
+   * Phase 2 addition. Present only on descriptors produced from a
+   * `wave: true` step. Carries the concrete (slug, task_id) pair used
+   * to derive the artifact path so downstream tools (the smoke-test
+   * harness, observability) can inspect the expansion without re-parsing
+   * the task id string.
+   */
+  wave_context?: WaveContext;
 }
 
 /** The state file format consumed by the workspace-local hooks. */
@@ -245,6 +309,27 @@ function parseStep(
     return entry;
   });
 
+  // Phase 2: optional `wave: true | false` field. Absent / undefined
+  // defaults to `false`, which keeps Phase 1 runbooks (`fast-path.yaml`)
+  // parse-compatible with this parser. Any value other than boolean is
+  // rejected to catch typos like `wave: yes`.
+  const waveRaw = s.wave;
+  let wave: boolean | undefined;
+  if (waveRaw === undefined) {
+    wave = undefined;
+  } else if (typeof waveRaw === "boolean") {
+    wave = waveRaw;
+  } else {
+    throw new RunbookError(
+      `Runbook "${runbookName}" step ${index}: wave must be a boolean if present, got ${JSON.stringify(waveRaw)}`,
+    );
+  }
+  if (wave === true && !WAVE_COMPATIBLE_ROLES.includes(role as CanonRole)) {
+    throw new RunbookError(
+      `Runbook "${runbookName}" step ${index}: role ${role} is not wave-compatible (see WAVE_COMPATIBLE_ROLES)`,
+    );
+  }
+
   return {
     role: role as CanonRole,
     task_type: task_type as TaskType,
@@ -252,88 +337,180 @@ function parseStep(
     artifact_path,
     hitl,
     required_artifacts,
+    ...(wave !== undefined ? { wave } : {}),
   };
 }
+
+/** Expected template shape of a wave step's declared artifact path. */
+const WAVE_PATH_TEMPLATE_RE = /^plans\/<slug>\/<task_id>-[A-Z][A-Z0-9-]*\.md$/;
 
 /**
  * Plan a runbook execution against a workspace.
  *
- * Walks each step in order, resolves upstream artifact refs from
- * earlier steps, and calls `assembleSpawnPrompt` to build the prompt.
+ * Walks each step in order, resolves upstream artifact refs from earlier
+ * steps, and calls `assembleSpawnPrompt` to build the prompt. Supports
+ * both flat (Phase 1) and wave-expanded (Phase 2) steps.
  *
- * Pure function — no filesystem writes. The workspace-local state
- * files that the hooks consume are written by `writeTaskArtifactState`.
+ * Pure function — no filesystem writes. The workspace-local state files
+ * that the hooks consume are written by `writeTaskArtifactState`.
  */
 export function planRun(input: PlanRunInput): SpawnDescriptor[] {
-  const { runbook, workspace_id, target_files } = input;
+  const { runbook, workspace_id, target_files, wave_context } = input;
 
-  // Map of logical artifact id -> { path, produced_by }. Populated as we
-  // walk the steps, so downstream steps can resolve their upstream refs.
-  const artifactIndex = new Map<
-    string,
-    { path: string; produced_by: CanonRole; description?: string }
-  >();
+  // Up-front validation: if any step is wave-expanded, the caller must
+  // supply a wave_context with at least one task id. This is a soft
+  // error with a helpful message — we emit it here rather than letting
+  // it surface deep inside assembleSpawnPrompt so the smoke-test harness
+  // sees a recognizable RunbookError.
+  const hasWave = runbook.steps.some((s) => s.wave === true);
+  if (hasWave) {
+    if (!wave_context || wave_context.task_ids.length === 0) {
+      throw new RunbookError(
+        `Runbook "${runbook.name}" has wave-expanded step(s) but no wave_context.task_ids were provided at plan time`,
+      );
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(wave_context.slug)) {
+      throw new RunbookError(
+        `Runbook "${runbook.name}" wave_context.slug ${JSON.stringify(wave_context.slug)} must match /^[a-zA-Z0-9_-]+$/`,
+      );
+    }
+    for (const tid of wave_context.task_ids) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(tid)) {
+        throw new RunbookError(
+          `Runbook "${runbook.name}" wave_context.task_ids contains invalid id ${JSON.stringify(tid)}; must match /^[a-zA-Z0-9_-]+$/`,
+        );
+      }
+    }
+  }
+
+  // Map of logical artifact id -> { produced_by role, description,
+  //   path | wavePaths }.
+  //   - `path` is set for flat steps (one physical artifact per run).
+  //   - `wavePaths` is a Map<task_id, path> for wave-expanded steps so
+  //     downstream wave steps can resolve their upstream ref to the
+  //     matching per-task path rather than a single path.
+  interface ArtifactIndexEntry {
+    produced_by: CanonRole;
+    description?: string;
+    path?: string;
+    wavePaths?: Map<string, string>;
+  }
+  const artifactIndex = new Map<string, ArtifactIndexEntry>();
 
   const descriptors: SpawnDescriptor[] = [];
   for (let i = 0; i < runbook.steps.length; i++) {
     const step = runbook.steps[i]!;
-    // Validate that the step's declared artifact matches the role's
-    // canonical contract; the spawn prompt embeds the canonical path and
-    // a mismatch would silently diverge from what the hooks enforce.
     const contract = getRoleArtifactContract(step.role);
-    if (contract.artifact_path !== step.artifact_path) {
-      throw new RunbookError(
-        `Runbook "${runbook.name}" step ${i}: artifact_path ${step.artifact_path} does not match canonical contract ${contract.artifact_path} for role ${step.role}`,
-      );
-    }
+    // The flat role artifact id is always the same across flat and
+    // waved spawns — it names the logical artifact the step produces.
     if (contract.artifact_id !== step.artifact) {
       throw new RunbookError(
         `Runbook "${runbook.name}" step ${i}: artifact id ${step.artifact} does not match canonical contract ${contract.artifact_id} for role ${step.role}`,
       );
     }
 
-    // Resolve upstream refs from earlier steps' outputs.
-    const upstream: UpstreamArtifactRef[] = step.required_artifacts.map(
-      (refId) => {
-        const hit = artifactIndex.get(refId);
-        if (!hit) {
-          throw new RunbookError(
-            `Runbook "${runbook.name}" step ${i} (${step.role}): required artifact "${refId}" is not produced by any earlier step`,
-          );
-        }
-        return {
-          id: refId,
-          path: hit.path,
-          produced_by: hit.produced_by,
-          description: hit.description,
-        };
-      },
-    );
+    if (step.wave !== true) {
+      // Phase 1 flat path — behavior must be byte-identical to Phase 1.
+      if (contract.artifact_path !== step.artifact_path) {
+        throw new RunbookError(
+          `Runbook "${runbook.name}" step ${i}: artifact_path ${step.artifact_path} does not match canonical contract ${contract.artifact_path} for role ${step.role}`,
+        );
+      }
+      const upstream = resolveUpstreamRefsForFlatStep(
+        step,
+        i,
+        runbook.name,
+        artifactIndex,
+      );
+      const task_id = `${runbook.name}-${String(i).padStart(2, "0")}-${step.role}`;
+      const spawn_prompt = assembleSpawnPrompt({
+        role: step.role,
+        task_type: step.task_type,
+        target_files,
+        upstream_artifact_refs: upstream,
+        workspace_id,
+      });
+      descriptors.push({
+        task_id,
+        role: step.role,
+        task_type: step.task_type,
+        artifact: step.artifact,
+        artifact_path: step.artifact_path,
+        hitl: step.hitl,
+        spawn_prompt,
+        required_artifacts: step.required_artifacts,
+      });
+      artifactIndex.set(step.artifact, {
+        path: step.artifact_path,
+        produced_by: step.role,
+      });
+      continue;
+    }
 
-    const task_id = `${runbook.name}-${String(i).padStart(2, "0")}-${step.role}`;
-    const spawn_prompt = assembleSpawnPrompt({
-      role: step.role,
-      task_type: step.task_type,
-      target_files,
-      upstream_artifact_refs: upstream,
-      workspace_id,
+    // Phase 2 wave-expanded step.
+    if (!wave_context) {
+      // Already caught by the top-of-function guard; this is belt-and-
+      // suspenders for direct callers that somehow got past it.
+      throw new RunbookError(
+        `Runbook "${runbook.name}" step ${i}: wave_context is required for wave steps`,
+      );
+    }
+    if (!WAVE_PATH_TEMPLATE_RE.test(step.artifact_path)) {
+      throw new RunbookError(
+        `Runbook "${runbook.name}" step ${i}: wave step artifact_path ${step.artifact_path} must be of the template form "plans/<slug>/<task_id>-<NAME>.md"`,
+      );
+    }
+    // Cross-check that the declared template expands to the canonical
+    // wave path for this role. We do this by materializing a sample
+    // expansion with a placeholder slug/task_id and comparing shapes.
+    const templateSample = resolveWaveArtifactPath(step.role, {
+      slug: "PROBE",
+      task_id: "PROBE",
     });
+    if (
+      step.artifact_path !== templateSample.replace("PROBE/PROBE", "<slug>/<task_id>")
+    ) {
+      throw new RunbookError(
+        `Runbook "${runbook.name}" step ${i}: declared wave artifact_path ${step.artifact_path} does not match the canonical wave shape for role ${step.role} (${templateSample.replace("PROBE/PROBE", "<slug>/<task_id>")})`,
+      );
+    }
 
-    descriptors.push({
-      task_id,
-      role: step.role,
-      task_type: step.task_type,
-      artifact: step.artifact,
-      artifact_path: step.artifact_path,
-      hitl: step.hitl,
-      spawn_prompt,
-      required_artifacts: step.required_artifacts,
-    });
-
-    // Index this step's output for downstream consumers.
+    const waveOutputPaths = new Map<string, string>();
+    for (const taskIdLocal of wave_context.task_ids) {
+      const wc: WaveContext = { slug: wave_context.slug, task_id: taskIdLocal };
+      const concretePath = resolveWaveArtifactPath(step.role, wc);
+      const upstream = resolveUpstreamRefsForWaveStep(
+        step,
+        i,
+        runbook.name,
+        artifactIndex,
+        taskIdLocal,
+      );
+      const spawn_prompt = assembleSpawnPrompt({
+        role: step.role,
+        task_type: step.task_type,
+        target_files,
+        upstream_artifact_refs: upstream,
+        workspace_id,
+        wave_context: wc,
+      });
+      const expandedId = `${runbook.name}-${wave_context.slug}-${taskIdLocal}-${step.role}`;
+      descriptors.push({
+        task_id: expandedId,
+        role: step.role,
+        task_type: step.task_type,
+        artifact: step.artifact,
+        artifact_path: concretePath,
+        hitl: step.hitl,
+        spawn_prompt,
+        required_artifacts: step.required_artifacts,
+        wave_context: wc,
+      });
+      waveOutputPaths.set(taskIdLocal, concretePath);
+    }
     artifactIndex.set(step.artifact, {
-      path: step.artifact_path,
       produced_by: step.role,
+      wavePaths: waveOutputPaths,
     });
   }
 
@@ -341,12 +518,115 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
 }
 
 /**
+ * Resolve upstream artifact refs for a flat (non-wave) step.
+ * A flat step always sees a single physical path per upstream id, so
+ * if the upstream was itself wave-expanded this is an authoring error.
+ */
+function resolveUpstreamRefsForFlatStep(
+  step: RunbookStep,
+  index: number,
+  runbookName: string,
+  artifactIndex: Map<
+    string,
+    {
+      produced_by: CanonRole;
+      description?: string;
+      path?: string;
+      wavePaths?: Map<string, string>;
+    }
+  >,
+): UpstreamArtifactRef[] {
+  return step.required_artifacts.map((refId) => {
+    const hit = artifactIndex.get(refId);
+    if (!hit) {
+      throw new RunbookError(
+        `Runbook "${runbookName}" step ${index} (${step.role}): required artifact "${refId}" is not produced by any earlier step`,
+      );
+    }
+    if (hit.path === undefined) {
+      throw new RunbookError(
+        `Runbook "${runbookName}" step ${index} (${step.role}): required artifact "${refId}" is wave-scoped but the consuming step is not; flat steps cannot reference wave outputs`,
+      );
+    }
+    return {
+      id: refId,
+      path: hit.path,
+      produced_by: hit.produced_by,
+      description: hit.description,
+    };
+  });
+}
+
+/**
+ * Resolve upstream artifact refs for a wave-expanded step running
+ * against a specific task id. Wave steps can reference:
+ *   - Flat upstreams (single path shared across the whole wave)
+ *   - Wave upstreams from an earlier step (same task id; one-to-one
+ *     match by the shared task id key)
+ * If a wave upstream has no entry for the current task id, it is an
+ * authoring error — the wave shapes do not line up.
+ */
+function resolveUpstreamRefsForWaveStep(
+  step: RunbookStep,
+  index: number,
+  runbookName: string,
+  artifactIndex: Map<
+    string,
+    {
+      produced_by: CanonRole;
+      description?: string;
+      path?: string;
+      wavePaths?: Map<string, string>;
+    }
+  >,
+  taskId: string,
+): UpstreamArtifactRef[] {
+  return step.required_artifacts.map((refId) => {
+    const hit = artifactIndex.get(refId);
+    if (!hit) {
+      throw new RunbookError(
+        `Runbook "${runbookName}" step ${index} (${step.role}): required artifact "${refId}" is not produced by any earlier step`,
+      );
+    }
+    if (hit.path !== undefined) {
+      // Flat upstream — every wave task sees the same path.
+      return {
+        id: refId,
+        path: hit.path,
+        produced_by: hit.produced_by,
+        description: hit.description,
+      };
+    }
+    // Wave upstream — resolve by task id.
+    const p = hit.wavePaths?.get(taskId);
+    if (!p) {
+      throw new RunbookError(
+        `Runbook "${runbookName}" step ${index} (${step.role}): required wave artifact "${refId}" has no entry for task id "${taskId}"`,
+      );
+    }
+    return {
+      id: refId,
+      path: p,
+      produced_by: hit.produced_by,
+      description: hit.description,
+    };
+  });
+}
+
+/**
  * Write the workspace-local state files the hooks consume.
  *
  * Creates `.canon/workspaces/<workspace_id>/agent-teams/task-artifacts.json`
- * and `.../teammate-artifacts.json`. Both are keyed differently (task id
- * vs teammate name) but carry the same underlying data so either hook
- * can do a quick lookup.
+ * and `.../teammate-artifacts.json`. Both are keyed so the hooks can do
+ * a quick lookup:
+ *   - `task-artifacts.json` is keyed by descriptor `task_id` — flat
+ *     ids for Phase 1 steps, expanded ids for Phase 2 wave steps.
+ *   - `teammate-artifacts.json` is keyed by role name for flat steps
+ *     (Phase 1 convention, unchanged) AND by the expanded task id for
+ *     wave steps. This lets `idle-backstop.sh` find the Phase 1 entries
+ *     by the plain role name while still giving the hook a
+ *     task-id-keyed entry for wave teammates whose Claude Code
+ *     teammate_name embeds the expanded id.
  */
 export function writeTaskArtifactState(
   workspaceDir: string,
@@ -363,14 +643,26 @@ export function writeTaskArtifactState(
       artifact: d.artifact,
       artifact_path: d.artifact_path,
     };
-    // Teammate-name convention: use the role name directly. Phase 1
-    // spawns at most one instance of a role per team, so this is
-    // unambiguous. Phase 3 adaptive waves will need a richer key.
-    teammateState[d.role] = {
-      role: d.role,
-      artifact: d.artifact,
-      artifact_path: d.artifact_path,
-    };
+    if (d.wave_context) {
+      // Wave-expanded teammate — key the teammate state by the
+      // expanded task id so the hook can resolve it. The flat role
+      // name is intentionally NOT overwritten here; wave teammates do
+      // not own the shared flat key, since multiple descriptors share
+      // the same role and last-writer-wins would be misleading.
+      teammateState[d.task_id] = {
+        role: d.role,
+        artifact: d.artifact,
+        artifact_path: d.artifact_path,
+      };
+    } else {
+      // Phase 1 behavior: one teammate per role per team, keyed by
+      // the role name directly.
+      teammateState[d.role] = {
+        role: d.role,
+        artifact: d.artifact,
+        artifact_path: d.artifact_path,
+      };
+    }
   }
 
   const task_state_path = join(dir, "task-artifacts.json");
