@@ -185,5 +185,7 @@ Deliberate out-of-scope items, tracked so Phase 3 knows what to pick up:
 7. **Gate-only states** (`pre-launch-check`). Deterministic quality-check execution is deferred.
 8. **The learner step.** `canon-learner` is never spawned by Phase 2 runbooks.
 9. **Skip conditions** (`skip_when: no_contract_changes`, `skip_when: auto_approved`, `skip_when: learn_gate_not_passed`). Runbook steps always run.
+10. **Post-state effects** (`effects: [check_postconditions]`). Legacy Canon runs contract-checker assertions after a state completes — the `feature.implement` wave state is the main user. Runbooks have no post-step effect hook; the equivalent enforcement must be embedded in the agent's instructions or surface as a separate step.
+11. **Inter-wave gates** (`gate: test-suite` on `refactor.implement` and `migrate.implement`). Legacy Canon runs a shell gate between waves; runbooks have no inter-step gate primitive. Gates are deferred to a dedicated tester step that runs after the wave completes.
 
-All nine items are valid Phase 3 schema extensions. They are documented here so that when Phase 3 begins with epic-flow adaptive waves, the full punt list is visible to whoever designs the extended schema.
+All eleven items are valid Phase 3 schema extensions. They are documented here so that when Phase 3 begins with epic-flow adaptive waves, the full punt list is visible to whoever designs the extended schema.
