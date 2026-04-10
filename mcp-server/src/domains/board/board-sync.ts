@@ -55,9 +55,9 @@ export function syncBoardToStore(
 
     if (!versionResult.updated) {
       return {
-        ok: false as const,
-        error: "version_conflict" as const,
         currentVersion: versionResult.currentVersion,
+        error: "version_conflict" as const,
+        ok: false as const,
       };
     }
 
@@ -77,6 +77,6 @@ export function syncBoardToStore(
       });
     }
 
-    return { ok: true as const, newVersion: versionResult.newVersion };
+    return { newVersion: versionResult.newVersion, ok: true as const };
   });
 }

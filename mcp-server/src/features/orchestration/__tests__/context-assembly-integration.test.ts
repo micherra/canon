@@ -19,8 +19,7 @@
 import { rmSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // 1. Cross-task: shared tier caps from context-budget.ts
@@ -88,8 +87,6 @@ describe("PIPELINE_ALLOWED_VARIABLES superset relationship", () => {
 //    This is the integration test for ctx-05's RUNTIME_VARIABLES addition.
 //    Without it, loadAndResolveFlow would throw for epic, feature, refactor, migrate.
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 const pluginDir = resolve(process.cwd(), ".."); // mcp-server root (where flows/ lives)
 
 describe("flow files load successfully with ${enrichment} in spawn instructions", () => {

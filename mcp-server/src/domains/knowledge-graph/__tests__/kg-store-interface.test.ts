@@ -17,8 +17,8 @@ describe("IKgStore and IKgQuery structural compatibility", () => {
     const db = initDatabase(":memory:");
     const store = new KgStore(db);
 
-    // Type-level check: this assignment must compile without error.
-    const _: IKgStore = store;
+    // Type-level check: this assertion must compile without error.
+    store satisfies IKgStore;
 
     expect(store).toBeDefined();
 
@@ -29,8 +29,8 @@ describe("IKgStore and IKgQuery structural compatibility", () => {
     const db = initDatabase(":memory:");
     const query = new KgQuery(db);
 
-    // Type-level check: this assignment must compile without error.
-    const _: IKgQuery = query;
+    // Type-level check: this assertion must compile without error.
+    query satisfies IKgQuery;
 
     expect(query).toBeDefined();
 

@@ -20,8 +20,7 @@
 import { rmSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Shared mock declarations (vi.hoisted) ───────────────────────────────────
@@ -117,8 +116,6 @@ import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 // pluginDir = one level above mcp-server (the canon repo root where flows/ lives)
 const pluginDir = resolve(process.cwd(), "..");
 

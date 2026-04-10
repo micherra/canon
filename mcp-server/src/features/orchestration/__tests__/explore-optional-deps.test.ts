@@ -7,15 +7,12 @@
  * 3. isRoleOptional returns true for the dependencies role entry and false for codebase
  */
 
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import type { RoleEntry } from "@domains/flows/flow-definition-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { describe, expect, it } from "vitest";
 import { isRoleOptional } from "../engine/transitions.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 const pluginDir = resolve(process.cwd(), ".."); // mcp-server/src/__tests__ → project root
 
 // Parse explore.md and verify role structure

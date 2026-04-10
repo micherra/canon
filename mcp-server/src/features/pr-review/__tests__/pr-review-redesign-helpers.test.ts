@@ -9,18 +9,6 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { PrFileInfo } from "../tools/pr-review-data.ts";
-
-function _makeFile(path: string, layer: string, overrides: Partial<PrFileInfo> = {}): PrFileInfo {
-  return {
-    bucket: "low-risk",
-    layer,
-    path,
-    reason: "",
-    status: "modified",
-    ...overrides,
-  };
-}
 
 // The helpers are not exported from PrReview.svelte, so we reproduce the
 // exact logic here (copied verbatim from the component) and test it as a unit.

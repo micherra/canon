@@ -151,7 +151,7 @@ describe("injectWaveBriefing — no-op conditions", () => {
       consultation_outputs: undefined,
     });
     vi.mocked(readWaveGuidance).mockResolvedValue("");
-    const _result = await injectWaveBriefing(ctx);
+    await injectWaveBriefing(ctx);
     // assembleWaveBriefing should not be called without consultation_outputs
     expect(assembleWaveBriefing).not.toHaveBeenCalled();
   });

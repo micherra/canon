@@ -255,7 +255,7 @@ describe("runPipeline embed phase", () => {
     const dbPath = path.join(projectDir, "test.db");
 
     // First run — embeds everything
-    const _result1 = await runPipeline(projectDir, { dbPath, incremental: true });
+    await runPipeline(projectDir, { dbPath, incremental: true });
 
     const db1 = new Database(dbPath);
     const vectorStore1 = new KgVectorStore(db1);

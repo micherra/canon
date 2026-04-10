@@ -17,9 +17,9 @@ describe("IDriftStore structural compatibility", () => {
     try {
       const store = new DriftStore(dir);
 
-      // Type-level check: this assignment must compile without error.
+      // Type-level check: this assertion must compile without error.
       // If DriftStore is missing any IDriftStore method, tsc will fail here.
-      const _: IDriftStore = store;
+      store satisfies IDriftStore;
 
       expect(store).toBeDefined();
     } finally {
