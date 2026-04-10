@@ -8,7 +8,7 @@ import {
   escapeDollarBrace,
   parseTaskIdsForWave,
 } from "@domains/workspaces/wave-variables.ts";
-import { KgQuery } from "@graph/kg-query.ts";
+import { createKgDependencies } from "@features/knowledge-graph/services/kg-factory.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { isPathContained } from "@shared/lib/worktree-guard.ts";
@@ -148,7 +148,7 @@ async function resolveFileContextInjection(
   }
 
   try {
-    const kgQuery = new KgQuery(db);
+    const { kgQuery, kgStore } = createKgDependencies(db);
 
     const freshnessMs = kgQuery.getKgFreshnessMs();
     if (freshnessMs !== null && freshnessMs > 3_600_000) {
@@ -157,7 +157,8 @@ async function resolveFileContextInjection(
       );
     }
 
-    const entries = buildKgFileEntries(cappedFiles, db);
+    const insightMaps = kgQuery.computeInsightMaps();
+    const entries = buildKgFileEntries(cappedFiles, kgQuery, kgStore, insightMaps);
     const value = formatKgFileContext(entries);
 
     return { value, warnings };

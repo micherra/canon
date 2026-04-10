@@ -63,6 +63,11 @@ vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: class MockKgQuery {
     getFileMetrics = mockGetFileMetrics;
     getKgFreshnessMs = mockGetKgFreshnessMs;
+    computeInsightMaps = vi.fn().mockReturnValue({
+      cycleMemberPaths: new Map<string, string[]>(),
+      hubPaths: new Set<string>(),
+      layerViolationsByPath: new Map<string, LayerViolation[]>(),
+    });
   },
 }));
 
@@ -561,9 +566,7 @@ describe("resolveContextInjections — file_context source", () => {
 
     const result = await resolveContextInjections(injections, board, tmpDir);
 
-    // computeFileInsightMaps called once
-    expect(computeFileInsightMaps).toHaveBeenCalledTimes(1);
-    // KgQuery.getFileMetrics called at most 5 times (capped)
+    // KgQuery.getFileMetrics called at most 5 times (capped) — computeInsightMaps called once per request
     expect(mockGetFileMetrics).toHaveBeenCalledTimes(5);
     // Result should reference only the first 5 files
     const value = result.variables.FILE_CONTEXT;

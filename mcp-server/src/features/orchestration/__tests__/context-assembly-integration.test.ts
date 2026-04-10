@@ -171,6 +171,11 @@ vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: class MockKgQuery2 {
     getFileMetrics = mockGetFileMetrics2;
     getKgFreshnessMs = mockGetKgFreshnessMs2;
+    computeInsightMaps = vi.fn().mockReturnValue({
+      cycleMemberPaths: new Map<string, string[]>(),
+      hubPaths: new Set<string>(),
+      layerViolationsByPath: new Map<string, unknown[]>(),
+    });
   },
 }));
 
@@ -240,8 +245,7 @@ describe("file_context injection — session null fallback", () => {
       tmpDir,
     );
 
-    // Medium cap is 15, so computeFileInsightMaps called once and getFileMetrics called 15 times
-    expect(computeFileInsightMaps).toHaveBeenCalledTimes(1);
+    // Medium cap is 15, so getFileMetrics called 15 times — computeInsightMaps called once per request
     expect(mockGetFileMetrics2).toHaveBeenCalledTimes(15);
     const value = result.variables.FILE_CONTEXT;
     expect(value).toContain("src/file0.ts");

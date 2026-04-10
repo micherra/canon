@@ -334,9 +334,16 @@ describe("injectWaveBriefing — KG summary injection", () => {
     overrides: {
       getFileMetrics?: ReturnType<typeof vi.fn>;
       getKgFreshnessMs?: ReturnType<typeof vi.fn>;
+      computeInsightMaps?: ReturnType<typeof vi.fn>;
     } = {},
   ) {
+    const defaultInsightMaps = {
+      cycleMemberPaths: new Map(),
+      hubPaths: new Set(),
+      layerViolationsByPath: new Map(),
+    };
     return {
+      computeInsightMaps: overrides.computeInsightMaps ?? vi.fn().mockReturnValue(defaultInsightMaps),
       getFileMetrics: overrides.getFileMetrics ?? vi.fn().mockReturnValue(null),
       getKgFreshnessMs: overrides.getKgFreshnessMs ?? vi.fn().mockReturnValue(1000),
     };
@@ -376,11 +383,6 @@ describe("injectWaveBriefing — KG summary injection", () => {
     if (dbExists) {
       const mockDb = { close: vi.fn() };
       vi.mocked(initDatabase).mockReturnValue(mockDb as unknown as ReturnType<typeof initDatabase>);
-      vi.mocked(computeFileInsightMaps).mockReturnValue({
-        cycleMemberPaths: new Map(),
-        hubPaths: new Set(),
-        layerViolationsByPath: new Map(),
-      });
 
       const defaultMetrics = {
         cycle_peers: [],
@@ -568,8 +570,35 @@ describe("injectWaveBriefing — KG summary injection", () => {
     expect(result.basePrompt).toContain("### File Context");
   });
 
-  it("calls computeFileInsightMaps exactly once (not per file) — prevents N+1", async () => {
+  it("calls computeInsightMaps exactly once (not per file) — prevents N+1", async () => {
+    const capturedComputeInsightMapsMock = vi.fn().mockReturnValue({
+      cycleMemberPaths: new Map(),
+      hubPaths: new Set(),
+      layerViolationsByPath: new Map(),
+    });
+    const defaultMetrics = {
+      cycle_peers: [],
+      impact_score: 17,
+      in_cycle: false,
+      in_degree: 5,
+      is_hub: false,
+      layer: "domain",
+      layer_violation_count: 0,
+      layer_violations: [],
+      out_degree: 3,
+    };
+
     setupKgMocks();
+
+    // Override KgQuery mock after setupKgMocks to capture computeInsightMaps
+    vi.mocked(KgQuery).mockImplementation(function () {
+      return {
+        computeInsightMaps: capturedComputeInsightMapsMock,
+        getFileMetrics: vi.fn().mockReturnValue(defaultMetrics),
+        getKgFreshnessMs: vi.fn().mockReturnValue(1000),
+      };
+    } as unknown as typeof KgQuery);
+
     const ctx = makeCtx({
       items: ["src/file-a.ts", "src/file-b.ts", "src/file-c.ts"],
       project_dir: "/project",
@@ -578,7 +607,7 @@ describe("injectWaveBriefing — KG summary injection", () => {
 
     await injectWaveBriefing(ctx);
 
-    expect(computeFileInsightMaps).toHaveBeenCalledOnce();
+    expect(capturedComputeInsightMapsMock).toHaveBeenCalledOnce();
   });
 
   it("escapes ${var} patterns in KG section via escapeDollarBrace at trust boundary", async () => {

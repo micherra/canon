@@ -105,6 +105,11 @@ vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: class MockKgQuery {
     getFileMetrics = mockGetFileMetrics;
     getKgFreshnessMs = mockGetKgFreshnessMs;
+    computeInsightMaps = vi.fn().mockReturnValue({
+      cycleMemberPaths: new Map<string, string[]>(),
+      hubPaths: new Set<string>(),
+      layerViolationsByPath: new Map(),
+    });
   },
 }));
 
@@ -435,8 +440,6 @@ describe("ctx-09 integration — pipeline stage 1 invokes file_context handler",
     // Stage 1 should have populated mergedVariables.file_context
     // (initDatabase was called because KG DB exists)
     expect(vi.mocked(initDatabase)).toHaveBeenCalledTimes(1);
-    // computeFileInsightMaps called (for the 2 affected_files)
-    expect(vi.mocked(computeFileInsightMaps)).toHaveBeenCalledTimes(1);
     // mergedVariables now has file_context key
     expect(result.mergedVariables).toHaveProperty("file_context");
     // The value should contain the file paths
@@ -663,9 +666,7 @@ describe("tier consistency — same execution store drives both enrichment and f
       tmpDir,
     );
 
-    // computeFileInsightMaps called once (KG opened)
-    expect(vi.mocked(computeFileInsightMaps)).toHaveBeenCalledTimes(1);
-    // mockGetFileMetrics called 5 times (small cap = 5)
+    // mockGetFileMetrics called 5 times (small cap = 5) — computeInsightMaps called once per request
     expect(mockGetFileMetrics).toHaveBeenCalledTimes(5);
 
     // Result contains first 5 files, not file5+

@@ -9,56 +9,15 @@
  * - formatKgFileContext with custom heading uses that heading
  * - Unindexed file contains "(not indexed)"
  * - formatKgFileContext default heading includes file count
+ *
+ * After the DI refactoring, buildKgFileEntries accepts IKgQuery, IKgStore, and
+ * KgInsightMaps as parameters instead of a raw Database handle. Tests construct
+ * minimal mock objects satisfying those interfaces — no @graph/ module mocking needed.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-// Hoist mocks before module imports
-
-const {
-  mockGetFileMetrics,
-  mockGetKgFreshnessMs,
-  mockGetFile,
-  mockGetSummaryByFile,
-  mockComputeFileInsightMaps,
-} = vi.hoisted(() => {
-  const mockGetFileMetrics = vi.fn();
-  const mockGetKgFreshnessMs = vi.fn().mockReturnValue(1000);
-  const mockGetFile = vi.fn();
-  const mockGetSummaryByFile = vi.fn();
-  const mockComputeFileInsightMaps = vi.fn().mockReturnValue({
-    cycleMemberPaths: new Map<string, string[]>(),
-    hubPaths: new Set<string>(),
-    layerViolationsByPath: new Map(),
-  });
-  return {
-    mockComputeFileInsightMaps,
-    mockGetFile,
-    mockGetFileMetrics,
-    mockGetKgFreshnessMs,
-    mockGetSummaryByFile,
-  };
-});
-
-vi.mock("@graph/kg-query.ts", () => ({
-  computeFileInsightMaps: mockComputeFileInsightMaps,
-  KgQuery: class MockKgQuery {
-    getFileMetrics = mockGetFileMetrics;
-    getKgFreshnessMs = mockGetKgFreshnessMs;
-  },
-}));
-
-vi.mock("@graph/kg-store.ts", () => ({
-  KgStore: class MockKgStore {
-    getFile = mockGetFile;
-    getSummaryByFile = mockGetSummaryByFile;
-  },
-}));
-
+import type { IKgQuery, IKgStore, KgInsightMaps } from "@domains/knowledge-graph/kg-store.interface.ts";
 import { buildKgFileEntries, formatKgFileContext } from "../services/kg-context-formatter.ts";
-
-// Minimal mock DB (only needs to be passed through; never called directly in the module)
-const mockDb = {} as Parameters<typeof buildKgFileEntries>[1];
 
 // Shared metrics shape matching FileMetrics
 function makeMetrics(
@@ -77,14 +36,55 @@ function makeMetrics(
   };
 }
 
+/** Build a default KgInsightMaps with empty sets/maps (no hubs, no cycles, no violations). */
+function makeEmptyInsightMaps(): KgInsightMaps {
+  return {
+    cycleMemberPaths: new Map<string, string[]>(),
+    hubPaths: new Set<string>(),
+    layerViolationsByPath: new Map(),
+  };
+}
+
+/** Build a minimal IKgQuery mock with controllable return values. */
+function makeKgQuery(
+  getFileMetrics: ReturnType<typeof vi.fn> = vi.fn(),
+): IKgQuery {
+  return {
+    computeInsightMaps: vi.fn().mockReturnValue(makeEmptyInsightMaps()),
+    getAllDegrees: vi.fn(),
+    getAllFileDegrees: vi.fn().mockReturnValue(new Map()),
+    getAllFilesWithStats: vi.fn().mockReturnValue([]),
+    getFileMetrics,
+    getKgFreshnessMs: vi.fn().mockReturnValue(1000),
+  } as unknown as IKgQuery;
+}
+
+/** Build a minimal IKgStore mock with controllable return values. */
+function makeKgStore(
+  getFile: ReturnType<typeof vi.fn> = vi.fn(),
+  getSummaryByFile: ReturnType<typeof vi.fn> = vi.fn(),
+): IKgStore {
+  return {
+    getFile: getFile as IKgStore["getFile"],
+    getSummaryByFile: getSummaryByFile as IKgStore["getSummaryByFile"],
+  };
+}
+
 describe("buildKgFileEntries", () => {
+  let mockGetFileMetrics: ReturnType<typeof vi.fn>;
+  let mockGetFile: ReturnType<typeof vi.fn>;
+  let mockGetSummaryByFile: ReturnType<typeof vi.fn>;
+  let kgQuery: IKgQuery;
+  let kgStore: IKgStore;
+  let insightMaps: KgInsightMaps;
+
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockComputeFileInsightMaps.mockReturnValue({
-      cycleMemberPaths: new Map<string, string[]>(),
-      hubPaths: new Set<string>(),
-      layerViolationsByPath: new Map(),
-    });
+    mockGetFileMetrics = vi.fn();
+    mockGetFile = vi.fn();
+    mockGetSummaryByFile = vi.fn();
+    kgQuery = makeKgQuery(mockGetFileMetrics);
+    kgStore = makeKgStore(mockGetFile, mockGetSummaryByFile);
+    insightMaps = makeEmptyInsightMaps();
   });
 
   it("returns entries with correct fields for files found in KG", () => {
@@ -93,7 +93,7 @@ describe("buildKgFileEntries", () => {
     mockGetFile.mockReturnValue({ file_id: 1, path: "src/api/handler.ts" });
     mockGetSummaryByFile.mockReturnValue({ summary: "Handles HTTP requests" });
 
-    const entries = buildKgFileEntries(["src/api/handler.ts"], mockDb);
+    const entries = buildKgFileEntries(["src/api/handler.ts"], kgQuery, kgStore, insightMaps);
 
     expect(entries).toHaveLength(1);
     const entry = entries[0];
@@ -115,7 +115,12 @@ describe("buildKgFileEntries", () => {
       .mockReturnValueOnce({ summary: "Domain logic" })
       .mockReturnValueOnce(undefined);
 
-    const entries = buildKgFileEntries(["src/domain/svc.ts", "src/infra/repo.ts"], mockDb);
+    const entries = buildKgFileEntries(
+      ["src/domain/svc.ts", "src/infra/repo.ts"],
+      kgQuery,
+      kgStore,
+      insightMaps,
+    );
 
     expect(entries).toHaveLength(2);
     expect(entries[0].layer).toBe("domain");
@@ -127,7 +132,7 @@ describe("buildKgFileEntries", () => {
   it("returns entries with unknown layer and 0 degrees for files not in KG", () => {
     mockGetFileMetrics.mockReturnValue(null); // not indexed
 
-    const entries = buildKgFileEntries(["src/unknown/file.ts"], mockDb);
+    const entries = buildKgFileEntries(["src/unknown/file.ts"], kgQuery, kgStore, insightMaps);
 
     expect(entries).toHaveLength(1);
     const entry = entries[0];
@@ -140,22 +145,42 @@ describe("buildKgFileEntries", () => {
     expect(entry.indexed).toBe(false);
   });
 
-  it("calls computeFileInsightMaps exactly once (not per file) — prevents N+1", () => {
+  it("passes insightMaps fields into getFileMetrics options", () => {
+    const hubPaths = new Set(["src/api/handler.ts"]);
+    const cycleMemberPaths = new Map([["src/a.ts", ["src/b.ts"]]]);
+    const layerViolationsByPath = new Map();
+    const customInsightMaps: KgInsightMaps = { cycleMemberPaths, hubPaths, layerViolationsByPath };
+
     mockGetFileMetrics.mockReturnValue(makeMetrics());
     mockGetFile.mockReturnValue(undefined);
 
-    buildKgFileEntries(["src/a.ts", "src/b.ts", "src/c.ts"], mockDb);
+    buildKgFileEntries(["src/api/handler.ts"], kgQuery, kgStore, customInsightMaps);
 
-    expect(mockComputeFileInsightMaps).toHaveBeenCalledTimes(1);
+    expect(mockGetFileMetrics).toHaveBeenCalledWith("src/api/handler.ts", {
+      cycleMemberPaths,
+      hubPaths,
+      layerViolationsByPath,
+    });
   });
 
   it("returns null summary when no file row found in KG store", () => {
     mockGetFileMetrics.mockReturnValue(makeMetrics());
     mockGetFile.mockReturnValue(undefined); // file not in store
 
-    const entries = buildKgFileEntries(["src/no-store.ts"], mockDb);
+    const entries = buildKgFileEntries(["src/no-store.ts"], kgQuery, kgStore, insightMaps);
 
     expect(entries[0].summary).toBeNull();
+  });
+
+  it("processes all file paths and returns entries in the same order", () => {
+    mockGetFileMetrics.mockReturnValue(makeMetrics());
+    mockGetFile.mockReturnValue(undefined);
+
+    const paths = ["src/a.ts", "src/b.ts", "src/c.ts"];
+    const entries = buildKgFileEntries(paths, kgQuery, kgStore, insightMaps);
+
+    expect(entries).toHaveLength(3);
+    expect(entries.map((e) => e.path)).toEqual(paths);
   });
 });
 

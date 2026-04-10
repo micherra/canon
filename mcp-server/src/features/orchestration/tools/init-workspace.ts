@@ -17,7 +17,7 @@ import {
   generateSlug,
   sanitizeBranch,
 } from "@domains/workspaces/workspace.ts";
-import { KgQuery } from "@graph/kg-query.ts";
+import { createKgDependencies } from "@features/knowledge-graph/services/kg-factory.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
@@ -227,7 +227,7 @@ function generateProjectStructure(projectDir: string): string | null {
 
   const db = initDatabase(kgDbPath);
   try {
-    const kgQuery = new KgQuery(db);
+    const { kgQuery } = createKgDependencies(db);
     const allFiles = kgQuery.getAllFilesWithStats();
 
     const layerCounts = new Map<string, number>();

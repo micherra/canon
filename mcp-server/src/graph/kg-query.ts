@@ -845,4 +845,19 @@ export class KgQuery {
       nodes: [...nodeMap.values()],
     };
   }
+
+  /**
+   * Compute batch insight maps (hub paths, cycle membership, layer violations).
+   *
+   * Delegates to the module-level computeFileInsightMaps() using the instance's
+   * database handle.  Call once per request and pass the result into
+   * getFileMetrics() to avoid N+1 queries.
+   *
+   * Satisfies the IKgQuery.computeInsightMaps() contract so cross-context
+   * callers (orchestration, prompt-pipeline) can call this via the interface
+   * without importing from @graph/.
+   */
+  computeInsightMaps(): ReturnType<typeof computeFileInsightMaps> {
+    return computeFileInsightMaps(this.db);
+  }
 }

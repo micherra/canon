@@ -36,7 +36,7 @@ import {
   assembleWaveBriefing,
   readWaveGuidance,
 } from "@features/orchestration/services/wave-briefing.ts";
-import { KgQuery } from "@graph/kg-query.ts";
+import { createKgDependencies } from "@features/knowledge-graph/services/kg-factory.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import type { PromptContext, TaskItem } from "../model/types.ts";
@@ -120,14 +120,15 @@ function injectKgSection(
   let db: ReturnType<typeof initDatabase> | undefined;
   try {
     db = initDatabase(dbPath);
-    const kgQuery = new KgQuery(db);
+    const { kgQuery, kgStore } = createKgDependencies(db);
 
     const freshnessMs = kgQuery.getKgFreshnessMs();
     if (freshnessMs !== null && freshnessMs > KG_STALENESS_THRESHOLD_MS) {
       warnings.push(`WARNING: KG data is ${freshnessMs}ms old (>1hr) — file context may be stale`);
     }
 
-    const entries = buildKgFileEntries(cappedPaths, db);
+    const insightMaps = kgQuery.computeInsightMaps();
+    const entries = buildKgFileEntries(cappedPaths, kgQuery, kgStore, insightMaps);
     if (entries.length === 0) return { section: "", warnings };
     return { section: formatKgFileContext(entries), warnings };
   } catch (err: unknown) {

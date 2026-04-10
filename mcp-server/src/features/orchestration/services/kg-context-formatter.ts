@@ -15,9 +15,7 @@
  * for files missing from the KG.
  */
 
-import type { IKgQuery, IKgStore } from "@domains/knowledge-graph/kg-store.interface.ts";
-import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
-import { KgStore } from "@graph/kg-store.ts";
+import type { IKgQuery, IKgStore, KgInsightMaps } from "@domains/knowledge-graph/kg-store.interface.ts";
 
 /**
  * Structured representation of a single file's KG context.
@@ -37,23 +35,26 @@ export type KgFileEntry = {
   indexed: boolean;
 };
 
-type Database = Parameters<typeof computeFileInsightMaps>[0];
-
 /**
- * Build KgFileEntry records for the given file paths using the provided KG database.
+ * Build KgFileEntry records for the given file paths using the provided KG interfaces.
  *
- * Calls computeFileInsightMaps(db) once (not per-file) to avoid N+1 queries.
+ * The caller is responsible for constructing kgQuery and kgStore (via createKgDependencies)
+ * and for calling kgQuery.computeInsightMaps() once before this call to avoid N+1 queries.
  * Files not found in the KG get placeholder entries with layer "unknown" and
  * zero degree values — never throws.
  *
  * @param filePaths - Ordered list of file paths to look up
- * @param db - Open KG SQLite database handle
+ * @param kgQuery - IKgQuery instance for file metrics lookups
+ * @param kgStore - IKgStore instance for file row and summary lookups
+ * @param insightMaps - Pre-computed insight maps (hub paths, cycle membership, violations)
  * @returns Structured entries in the same order as filePaths
  */
-export function buildKgFileEntries(filePaths: string[], db: Database): KgFileEntry[] {
-  const insightMaps = computeFileInsightMaps(db);
-  const kgQuery: IKgQuery = new KgQuery(db);
-  const kgStore: IKgStore = new KgStore(db);
+export function buildKgFileEntries(
+  filePaths: string[],
+  kgQuery: IKgQuery,
+  kgStore: IKgStore,
+  insightMaps: KgInsightMaps,
+): KgFileEntry[] {
 
   return filePaths.map((filePath) => {
     const metrics = kgQuery.getFileMetrics(filePath, {
