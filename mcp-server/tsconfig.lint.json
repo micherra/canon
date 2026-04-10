@@ -3,7 +3,6 @@
   "compilerOptions": {
     "noEmit": true,
     "emitDeclarationOnly": false,
-    "strict": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true
   }

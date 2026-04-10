@@ -13,8 +13,7 @@
  * 7. loadAndResolveFlow: throws combining both spawn + ref errors
  */
 
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import type {
   FragmentDefinition,
   FragmentInclude,
@@ -35,8 +34,6 @@ import {
 } from "@domains/flows/flow-parser-validation.ts";
 import { describe, expect, it } from "vitest";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 const pluginDir = resolve(process.cwd(), ".."); // mcp-server/src/__tests__ → project root
 
 // Helper
@@ -381,8 +378,7 @@ describe("resolveFragments — boolean typed param (write_tests pattern)", () =>
     // The flow must load cleanly — if boolean substitution is broken this would throw
     const flow = await loadAndResolveFlow(pluginDir, "feature");
     expect(flow).toBeDefined();
-    // The feature flow includes verify-fix-loop; check that no ${write_tests} refs remain
-    const _allSpawnText = Object.values(flow.spawn_instructions).join("\n");
+    // The feature flow includes verify-fix-loop; check that no ${write_tests} refs remain.
     // write_tests should be substituted (either "false" literal or absent as a runtime var)
     // RUNTIME_VARIABLES includes write_tests, so it may appear there — but should not appear
     // as an unresolved fragment param reference

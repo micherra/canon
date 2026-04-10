@@ -16,12 +16,10 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// Canon repo root — two levels up from mcp-server/src/__tests__/
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Canon repo root — one level up from mcp-server
 const REPO_ROOT = resolve(process.cwd(), "..");
 
 const DOMAINS_DIR = join(REPO_ROOT, "domain-primers");

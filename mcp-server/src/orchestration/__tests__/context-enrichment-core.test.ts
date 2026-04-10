@@ -104,17 +104,6 @@ function makeGitOk(stdout: string) {
   return { duration_ms: 20, exitCode: 0, ok: true, stderr: "", stdout, timedOut: false };
 }
 
-function _makeGitFail() {
-  return {
-    duration_ms: 5,
-    exitCode: 128,
-    ok: false,
-    stderr: "fatal: not a git repo",
-    stdout: "",
-    timedOut: false,
-  };
-}
-
 function makeReviewEntry(
   files: string[],
   violationCount = 0,

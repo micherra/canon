@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type {
   FlowDefinition,
@@ -7,8 +6,6 @@ import type {
 } from "../flow-definition-schemas.ts";
 import { parseFlowContent, resolveFragments } from "../flow-parser.ts";
 import { validateFlow } from "../flow-parser-validation.ts";
-
-const _pluginDir = resolve(process.cwd(), "..");
 
 // parseFlowContent
 

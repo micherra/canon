@@ -16,9 +16,9 @@ describe("IExecutionStore structural compatibility", () => {
     const db: Database.Database = initExecutionDb(":memory:");
     const store = new ExecutionStore(db);
 
-    // Type-level check: this assignment must compile without error.
+    // Type-level check: this assertion must compile without error.
     // If ExecutionStore is missing any IExecutionStore method, tsc will fail here.
-    const _: IExecutionStore = store;
+    store satisfies IExecutionStore;
 
     // Runtime sanity: instance was created successfully
     expect(store).toBeDefined();

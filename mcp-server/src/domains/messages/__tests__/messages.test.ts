@@ -120,11 +120,7 @@ describe("postMessage tool (store-backed)", () => {
 
   afterEach(async () => {
     await rm(workspace, { force: true, recursive: true });
-    // Clear store cache between tests
-    const _storeCache = (await import("@domains/workspaces/execution-store.ts")) as {
-      default?: unknown;
-    };
-    // Re-import to clear singleton — use a fresh workspace per test so no conflict
+    // Each test uses a fresh workspace, so singleton cache is effectively isolated.
   });
 
   it("returns a message with from, content, and timestamp fields", async () => {
