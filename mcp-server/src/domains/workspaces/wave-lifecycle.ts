@@ -10,6 +10,17 @@
 
 import { join } from "node:path";
 import { gitExecAsync } from "@platform/adapters/git-adapter-async.ts";
+import type { ProcessResult } from "@shared/lib/tool-result.ts";
+
+/**
+ * Async git runner type — injectable for testability.
+ * Matches the signature of gitExecAsync from @platform/adapters/git-adapter-async.ts.
+ */
+export type AsyncGitRunner = (
+  args: string[],
+  cwd: string,
+  timeout?: number,
+) => Promise<ProcessResult>;
 
 export type WaveTask = {
   task_id: string;
@@ -93,6 +104,7 @@ export async function createWaveWorktrees(
   tasks: WaveTask[],
   projectDir: string,
   baseCwd?: string,
+  gitRunner: AsyncGitRunner = gitExecAsync,
 ): Promise<WaveWorktreeResult[]> {
   const results: WaveWorktreeResult[] = [];
   const gitBaseCwd = baseCwd ?? projectDir;
@@ -103,7 +115,7 @@ export async function createWaveWorktrees(
     const branchName = `canon-wave/${safeTaskId}`;
 
     // biome-ignore lint/performance/noAwaitInLoops: worktrees must be created sequentially; each creates a new git branch from HEAD which is updated by previous iterations
-    const result = await gitExecAsync(
+    const result = await gitRunner(
       ["worktree", "add", worktreePath, "-b", branchName, "HEAD"],
       gitBaseCwd,
     );
@@ -149,6 +161,7 @@ export async function mergeWaveResults(
   tasks: WaveWorktreeResult[],
   projectDir: string,
   mergeStrategy: MergeStrategy,
+  gitRunner: AsyncGitRunner = gitExecAsync,
 ): Promise<MergeWaveResult> {
   if (mergeStrategy === "rebase" || mergeStrategy === "squash") {
     return {
@@ -163,7 +176,7 @@ export async function mergeWaveResults(
 
   for (const task of tasks) {
     // biome-ignore lint/performance/noAwaitInLoops: git merges must be sequential; each merge updates HEAD which subsequent merges build on
-    const mergeResult = await gitExecAsync(["merge", "--no-ff", task.branch], projectDir);
+    const mergeResult = await gitRunner(["merge", "--no-ff", task.branch], projectDir);
     if (mergeResult.ok) {
       mergedCount++;
       continue;
@@ -171,7 +184,7 @@ export async function mergeWaveResults(
 
     const conflict = isMergeConflict(mergeResult);
     if (conflict) {
-      await gitExecAsync(["merge", "--abort"], projectDir);
+      await gitRunner(["merge", "--abort"], projectDir);
     }
 
     return {
@@ -196,6 +209,7 @@ export async function mergeWaveResults(
 export async function cleanupWorktrees(
   tasks: WaveWorktreeResult[],
   projectDir: string,
+  gitRunner: AsyncGitRunner = gitExecAsync,
 ): Promise<CleanupResult> {
   let removed = 0;
   const errors: string[] = [];
@@ -203,7 +217,7 @@ export async function cleanupWorktrees(
   for (const task of tasks) {
     // Remove the worktree directory
     // biome-ignore lint/performance/noAwaitInLoops: best-effort cleanup with per-task error accumulation; sequential to avoid git lock contention
-    const removeResult = await gitExecAsync(
+    const removeResult = await gitRunner(
       ["worktree", "remove", task.worktree_path, "--force"],
       projectDir,
     );
@@ -211,7 +225,7 @@ export async function cleanupWorktrees(
     if (!removeResult.ok) {
       errors.push(`worktree remove ${task.task_id}: ${removeResult.stderr || removeResult.stdout}`);
       // Try to delete branch even if worktree removal failed
-      const branchResult = await gitExecAsync(["branch", "-d", task.branch], projectDir);
+      const branchResult = await gitRunner(["branch", "-d", task.branch], projectDir);
       if (!branchResult.ok) {
         errors.push(`branch delete ${task.branch}: ${branchResult.stderr || branchResult.stdout}`);
       }
@@ -219,7 +233,7 @@ export async function cleanupWorktrees(
     }
 
     // Delete the tracking branch
-    const branchResult = await gitExecAsync(["branch", "-d", task.branch], projectDir);
+    const branchResult = await gitRunner(["branch", "-d", task.branch], projectDir);
 
     if (!branchResult.ok) {
       // Non-critical: branch might already be merged or deleted

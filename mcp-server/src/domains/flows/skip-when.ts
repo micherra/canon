@@ -5,11 +5,24 @@ import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { loadLearnGateConfig } from "@shared/lib/config.ts";
 import { acquireLearnLock, getLastLearnTimestamp } from "@shared/lib/learn-lock.ts";
+import type { ProcessResult } from "@shared/lib/tool-result.ts";
 import type { Board } from "./board-state-schemas.ts";
 
 type SkipResult = {
   skip: boolean;
   reason?: string;
+};
+
+/**
+ * Dependency injection bag for evaluateSkipWhen.
+ * All fields are optional — omitting them uses the concrete infrastructure adapters.
+ * Inject mocks in tests to avoid real git/DB calls.
+ */
+export type SkipWhenDeps = {
+  /** Run a git command and return the result. Defaults to gitExec from git-adapter. */
+  gitDiff?: (args: string[], cwd: string) => ProcessResult;
+  /** Count flow runs since an ISO timestamp. Defaults to getDriftDb().countFlowRunsSince. */
+  countFlowRunsSince?: (sinceIso: string) => number;
 };
 
 const CONTRACT_PATTERNS = [
@@ -35,10 +48,11 @@ export async function evaluateSkipWhen(
   condition: string,
   _workspace: string,
   board: Board,
+  deps?: SkipWhenDeps,
 ): Promise<SkipResult> {
   switch (condition) {
     case "no_contract_changes":
-      return evaluateNoContractChanges(board.base_commit);
+      return evaluateNoContractChanges(board.base_commit, deps);
     case "no_fix_requested":
       return evaluateNoFixRequested(board);
     case "auto_approved":
@@ -46,7 +60,7 @@ export async function evaluateSkipWhen(
     case "no_open_questions":
       return evaluateNoOpenQuestions(board);
     case "learn_gate_not_passed":
-      return evaluateLearnGateNotPassed(_workspace);
+      return evaluateLearnGateNotPassed(_workspace, deps);
     default:
       console.error(`Warning: Unknown skip_when condition "${condition}" — not skipping`);
       return { skip: false };
@@ -55,14 +69,16 @@ export async function evaluateSkipWhen(
 
 const BASE_COMMIT_RE = /^[a-f0-9]{7,40}$/;
 
-function evaluateNoContractChanges(baseCommit: string): SkipResult {
+function evaluateNoContractChanges(baseCommit: string, deps?: SkipWhenDeps): SkipResult {
   if (!BASE_COMMIT_RE.test(baseCommit)) {
     // Reject malicious or malformed commit refs — safe default: do not skip
     return { skip: false };
   }
 
+  const runGitDiff = deps?.gitDiff ?? gitExec;
+
   try {
-    const result = gitExec(
+    const result = runGitDiff(
       ["diff", "--diff-filter=d", "--name-only", `${baseCommit}..HEAD`],
       process.cwd(),
     );
@@ -140,7 +156,10 @@ async function checkScanThrottle(throttlePath: string): Promise<string | null> {
   return null;
 }
 
-async function evaluateLearnGateNotPassed(workspace: string): Promise<SkipResult> {
+async function evaluateLearnGateNotPassed(
+  workspace: string,
+  deps?: SkipWhenDeps,
+): Promise<SkipResult> {
   try {
     const projectDir = getProjectDir(workspace);
     const canonDir = join(projectDir, ".canon");
@@ -169,10 +188,11 @@ async function evaluateLearnGateNotPassed(workspace: string): Promise<SkipResult
     if (throttleReason) return { reason: throttleReason, skip: true };
 
     // Gate 4: Flow gate — enough flows since last learn
-    const driftDb = getDriftDb(projectDir);
     const sinceIso =
       lastLearnTs !== null ? new Date(lastLearnTs).toISOString() : "1970-01-01T00:00:00.000Z";
-    const flowCount = driftDb.countFlowRunsSince(sinceIso);
+    const flowCount = deps?.countFlowRunsSince
+      ? deps.countFlowRunsSince(sinceIso)
+      : getDriftDb(projectDir).countFlowRunsSince(sinceIso);
     if (flowCount < config.min_flows_since_last) {
       try {
         await writeFile(throttlePath, "", { flag: "w", mode: 0o600 });

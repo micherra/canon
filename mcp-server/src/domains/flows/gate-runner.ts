@@ -9,8 +9,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runShell } from "@platform/adapters/process-adapter.ts";
+import type { ProcessResult } from "@shared/lib/tool-result.ts";
 import type { BoardStateEntry } from "./board-state-schemas.ts";
 import type { GateResult, ResolvedFlow, StateDefinition } from "./flow-definition-schemas.ts";
+
+/**
+ * Shell runner type — injectable for testability.
+ * Matches the signature of runShell from @platform/adapters/process-adapter.ts.
+ */
+export type ShellRunner = (command: string, cwd: string, timeout?: number) => ProcessResult;
 
 // GateResult is the source of truth from flow-definition-schemas.ts — no local interface needed.
 export type { GateResult };
@@ -69,7 +76,12 @@ function resolveTestSuiteCommand(cwd: string): string {
  * Fail-closed: if the gate command cannot be resolved, the gate fails
  * (returned as passed: false). This prevents silent quality gate bypasses.
  */
-export function runGate(gateName: string, flow: ResolvedFlow, cwd: string): GateResult {
+export function runGate(
+  gateName: string,
+  flow: ResolvedFlow,
+  cwd: string,
+  shellRunner: ShellRunner = runShell,
+): GateResult {
   const command = resolveGateCommand(gateName, flow, cwd);
 
   // Gate not configured — fail-closed (never silently pass an unresolved gate)
@@ -83,7 +95,7 @@ export function runGate(gateName: string, flow: ResolvedFlow, cwd: string): Gate
     };
   }
 
-  const result = runShell(command, cwd, 300_000);
+  const result = shellRunner(command, cwd, 300_000);
   const output = (result.stdout + result.stderr).trim();
 
   return {
@@ -154,6 +166,7 @@ export function runGates(
   flow: ResolvedFlow,
   cwd: string,
   boardState?: BoardStateEntry,
+  shellRunner: ShellRunner = runShell,
 ): GateResult[] {
   const normalized = normalizeGates(stateDef, flow, cwd, boardState);
   if (normalized.commands.length === 0) return [];
@@ -169,7 +182,7 @@ export function runGates(
       };
     }
 
-    const result = runShell(command, cwd, 300_000);
+    const result = shellRunner(command, cwd, 300_000);
     const output = (result.stdout + result.stderr).trim();
 
     return {
