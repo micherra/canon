@@ -217,7 +217,7 @@ describe("injectCoordination — commit provenance injection (step 3.5)", () => 
     vi.mocked(getExecutionStore).mockReturnValue(makeStoreWithSlug("my-slug"));
 
     const ctx = makeCtx({
-      prompts: [makeEntry({ item: { task_id: "provenance-01", description: "Task desc" } })],
+      prompts: [makeEntry({ item: { description: "Task desc", task_id: "provenance-01" } })],
       state_id: "implement",
     });
     const result = await injectCoordination(ctx);
@@ -254,8 +254,8 @@ describe("injectCoordination — commit provenance injection (step 3.5)", () => 
 
     const ctx = makeCtx({
       prompts: [
-        makeEntry({ item: { task_id: "task-01", description: "First task" } }),
-        makeEntry({ item: { task_id: "task-02", description: "Second task" } }),
+        makeEntry({ item: { description: "First task", task_id: "task-01" } }),
+        makeEntry({ item: { description: "Second task", task_id: "task-02" } }),
       ],
       state_id: "implement",
     });

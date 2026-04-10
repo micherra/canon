@@ -493,8 +493,8 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     // Fail-closed: unknown agents get an empty tools list
     expect(entry.tools).toEqual([]);
     expect(entry.disallowed_tools).toEqual(["Edit", "Write", "Bash", "NotebookEdit"]);
-    // No worktree_path on single-state entries without worktree, no KG DB → prompt mode
-    expect(entry.permission_mode).toBe("prompt");
+    // Unknown agents without worktree_path default to auto (permission resolved at spawn time)
+    expect(entry.permission_mode).toBe("auto");
   });
 
   it("permission_mode is prompt for wave entries inside the pipeline (worktree_path set post-pipeline)", async () => {

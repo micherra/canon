@@ -46,13 +46,13 @@ describe("readClaims", () => {
     const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
     const freshDate = new Date().toISOString();
     seedClaimsFile(tmpDir, {
-      version: 1,
       claims: {
         "src/foo.ts": [
-          { workflow: "stale-wf", claimed_at: staleDate },
-          { workflow: "fresh-wf", claimed_at: freshDate },
+          { claimed_at: staleDate, workflow: "stale-wf" },
+          { claimed_at: freshDate, workflow: "fresh-wf" },
         ],
       },
+      version: 1,
     });
 
     const result = readClaims(tmpDir);
@@ -63,10 +63,10 @@ describe("readClaims", () => {
   test("removes file keys with empty claim arrays after pruning", () => {
     const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
     seedClaimsFile(tmpDir, {
-      version: 1,
       claims: {
-        "src/all-stale.ts": [{ workflow: "stale-wf", claimed_at: staleDate }],
+        "src/all-stale.ts": [{ claimed_at: staleDate, workflow: "stale-wf" }],
       },
+      version: 1,
     });
 
     const result = readClaims(tmpDir);
@@ -84,7 +84,7 @@ describe("readClaims", () => {
   });
 
   test("returns empty structure on wrong version", () => {
-    seedClaimsFile(tmpDir, { version: 2, claims: { "src/foo.ts": [] } });
+    seedClaimsFile(tmpDir, { claims: { "src/foo.ts": [] }, version: 2 });
 
     const result = readClaims(tmpDir);
     expect(result.version).toBe(1);
@@ -96,7 +96,7 @@ describe("readClaims", () => {
 
 describe("writeClaims", () => {
   test("creates .canon/ directory if missing", () => {
-    const claims = { version: 1 as const, claims: {} };
+    const claims = { claims: {}, version: 1 as const };
     writeClaims(tmpDir, claims);
 
     expect(existsSync(join(tmpDir, ".canon", "claims.json"))).toBe(true);
@@ -105,10 +105,10 @@ describe("writeClaims", () => {
   test("writes claims atomically (file is present and readable after write)", () => {
     const freshDate = new Date().toISOString();
     const claims = {
-      version: 1 as const,
       claims: {
-        "src/foo.ts": [{ workflow: "my-wf", claimed_at: freshDate }],
+        "src/foo.ts": [{ claimed_at: freshDate, workflow: "my-wf" }],
       },
+      version: 1 as const,
     };
     writeClaims(tmpDir, claims);
 

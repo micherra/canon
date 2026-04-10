@@ -33,9 +33,12 @@ export type LineageStatements = {
 
 export function prepareLineageStatements(db: Database.Database): LineageStatements {
   return {
-    stmtRecordLineage: db.prepare(`
-      INSERT INTO flow_lineage (workspace_path, flow_name, branch, status, completed_at, task, slug)
-      VALUES (@workspace_path, @flow_name, @branch, @status, @completed_at, @task, @slug)
+    stmtGetLatestLineage: db.prepare(`
+      SELECT workspace_path, flow_name, branch, status, completed_at, task, slug
+      FROM flow_lineage
+      WHERE branch = ?
+      ORDER BY completed_at DESC
+      LIMIT 1
     `),
     stmtGetLineage: db.prepare(`
       SELECT workspace_path, flow_name, branch, status, completed_at, task, slug
@@ -43,12 +46,9 @@ export function prepareLineageStatements(db: Database.Database): LineageStatemen
       WHERE branch = ?
       ORDER BY completed_at DESC
     `),
-    stmtGetLatestLineage: db.prepare(`
-      SELECT workspace_path, flow_name, branch, status, completed_at, task, slug
-      FROM flow_lineage
-      WHERE branch = ?
-      ORDER BY completed_at DESC
-      LIMIT 1
+    stmtRecordLineage: db.prepare(`
+      INSERT INTO flow_lineage (workspace_path, flow_name, branch, status, completed_at, task, slug)
+      VALUES (@workspace_path, @flow_name, @branch, @status, @completed_at, @task, @slug)
     `),
   };
 }
@@ -69,10 +69,7 @@ function rowToEntry(r: LineageRow): FlowLineageEntry {
  * Record a completed flow run. Wraps INSERT in try/catch — lineage write
  * errors never abort the caller.
  */
-export function recordFlowLineage(
-  stmts: LineageStatements,
-  entry: FlowLineageEntry,
-): void {
+export function recordFlowLineage(stmts: LineageStatements, entry: FlowLineageEntry): void {
   try {
     stmts.stmtRecordLineage.run({
       branch: entry.branch,
@@ -89,10 +86,7 @@ export function recordFlowLineage(
 }
 
 /** Retrieve all flow lineage entries for a branch, ordered by completed_at DESC. */
-export function getFlowLineage(
-  stmts: LineageStatements,
-  branch: string,
-): FlowLineageEntry[] {
+export function getFlowLineage(stmts: LineageStatements, branch: string): FlowLineageEntry[] {
   const rows = stmts.stmtGetLineage.all(branch) as LineageRow[];
   return rows.map(rowToEntry);
 }

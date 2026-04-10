@@ -425,11 +425,8 @@ async function handleInlineAction(
       // If affected_files metadata was set, register file claims and check for overlaps
       if (input.metadata.affected_files && typeof input.metadata.affected_files === "string") {
         try {
-          const { registerClaims, checkClaimOverlaps } = await import(
-            "@shared/lib/file-claims.ts"
-          );
-          const projectDir =
-            input.project_dir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
+          const { registerClaims, checkClaimOverlaps } = await import("@shared/lib/file-claims.ts");
+          const projectDir = input.project_dir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
           const filePaths: string[] = JSON.parse(input.metadata.affected_files);
           const session = store.getSession();
           if (session) {

@@ -9,8 +9,7 @@
  * - Claims operation failure is non-blocking
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
@@ -75,18 +74,18 @@ describe("update-board — set_metadata with affected_files registers claims", (
 
   afterEach(() => {
     clearStoreCache();
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("registers file claims when set_metadata includes affected_files", async () => {
     const filePaths = ["src/foo.ts", "src/bar.ts"];
     const result = await updateBoard({
-      workspace,
       action: "set_metadata",
       metadata: {
         affected_files: JSON.stringify(filePaths),
       },
       project_dir: tmpDir,
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -108,29 +107,25 @@ describe("update-board — set_metadata with affected_files registers claims", (
   it("stores overlap warnings in board metadata when another workflow claims same files", async () => {
     // Pre-register claims from another workflow
     const claimsData = {
-      version: 1,
       claims: {
         "src/foo.ts": [
           {
-            workflow: "concurrent-workflow",
             claimed_at: new Date().toISOString(),
+            workflow: "concurrent-workflow",
           },
         ],
       },
+      version: 1,
     };
-    writeFileSync(
-      join(tmpDir, ".canon", "claims.json"),
-      JSON.stringify(claimsData),
-      "utf-8",
-    );
+    writeFileSync(join(tmpDir, ".canon", "claims.json"), JSON.stringify(claimsData), "utf-8");
 
     const result = await updateBoard({
-      workspace,
       action: "set_metadata",
       metadata: {
         affected_files: JSON.stringify(["src/foo.ts"]),
       },
       project_dir: tmpDir,
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -146,10 +141,10 @@ describe("update-board — set_metadata with affected_files registers claims", (
 
   it("does not touch claims when set_metadata has no affected_files", async () => {
     const result = await updateBoard({
-      workspace,
       action: "set_metadata",
       metadata: { some_key: "some_value" },
       project_dir: tmpDir,
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -162,10 +157,10 @@ describe("update-board — set_metadata with affected_files registers claims", (
   it("is non-blocking when affected_files JSON is malformed", async () => {
     // Should not throw or fail the tool result
     const result = await updateBoard({
-      workspace,
       action: "set_metadata",
       metadata: { affected_files: "not-valid-json[" },
       project_dir: tmpDir,
+      workspace,
     });
 
     // Tool should succeed despite the malformed JSON
@@ -188,34 +183,28 @@ describe("update-board — complete_flow releases claims", () => {
 
   afterEach(() => {
     clearStoreCache();
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("releases claims for the workflow on complete_flow", async () => {
     const now = new Date().toISOString();
     // Pre-register claims for the workspace's slug
     const claimsData = {
-      version: 1,
       claims: {
-        "src/foo.ts": [
-          { workflow: slug, claimed_at: now },
-        ],
         "src/bar.ts": [
-          { workflow: slug, claimed_at: now },
-          { workflow: "other-workflow", claimed_at: now },
+          { claimed_at: now, workflow: slug },
+          { claimed_at: now, workflow: "other-workflow" },
         ],
+        "src/foo.ts": [{ claimed_at: now, workflow: slug }],
       },
+      version: 1,
     };
-    writeFileSync(
-      join(tmpDir, ".canon", "claims.json"),
-      JSON.stringify(claimsData),
-      "utf-8",
-    );
+    writeFileSync(join(tmpDir, ".canon", "claims.json"), JSON.stringify(claimsData), "utf-8");
 
     const result = await updateBoard({
-      workspace,
       action: "complete_flow",
       project_dir: tmpDir,
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -236,9 +225,9 @@ describe("update-board — complete_flow releases claims", () => {
   it("complete_flow is non-blocking even when no claims exist", async () => {
     // No claims.json — releaseClaims is a no-op
     const result = await updateBoard({
-      workspace,
       action: "complete_flow",
       project_dir: tmpDir,
+      workspace,
     });
 
     expect(result.ok).toBe(true);

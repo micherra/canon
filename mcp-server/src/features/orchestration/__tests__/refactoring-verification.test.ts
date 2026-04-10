@@ -12,12 +12,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";

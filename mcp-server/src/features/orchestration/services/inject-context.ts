@@ -4,10 +4,7 @@ import path from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import {
-  escapeDollarBrace,
-  parseTaskIdsForWave,
-} from "@domains/workspaces/wave-variables.ts";
+import { escapeDollarBrace, parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
 import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
@@ -207,16 +204,12 @@ async function resolveWaveSummaryInjection(
   try {
     const session = getExecutionStore(workspace).getSession();
     if (!session?.slug) {
-      warnings.push(
-        "wave_summaries: execution store session unavailable — skipping injection",
-      );
+      warnings.push("wave_summaries: execution store session unavailable — skipping injection");
       return { warnings };
     }
     slug = session.slug;
   } catch {
-    warnings.push(
-      "wave_summaries: failed to read execution store session — skipping injection",
-    );
+    warnings.push("wave_summaries: failed to read execution store session — skipping injection");
     return { warnings };
   }
 
@@ -236,9 +229,7 @@ async function resolveWaveSummaryInjection(
   const indexPath = path.join(plansDir, "INDEX.md");
 
   if (!existsSync(indexPath)) {
-    warnings.push(
-      `wave_summaries: INDEX.md not found at ${indexPath} — skipping injection`,
-    );
+    warnings.push(`wave_summaries: INDEX.md not found at ${indexPath} — skipping injection`);
     return { warnings };
   }
 
@@ -246,9 +237,7 @@ async function resolveWaveSummaryInjection(
   try {
     indexContent = await readFile(indexPath, "utf-8");
   } catch {
-    warnings.push(
-      `wave_summaries: failed to read INDEX.md at ${indexPath} — skipping injection`,
-    );
+    warnings.push(`wave_summaries: failed to read INDEX.md at ${indexPath} — skipping injection`);
     return { warnings };
   }
 
@@ -260,16 +249,12 @@ async function resolveWaveSummaryInjection(
   }
 
   if (priorWaveTaskIds.length === 0) {
-    warnings.push(
-      "wave_summaries: no prior-wave tasks found in INDEX.md — skipping injection",
-    );
+    warnings.push("wave_summaries: no prior-wave tasks found in INDEX.md — skipping injection");
     return { warnings };
   }
 
   // Read summary files for prior-wave tasks
-  type SummaryReadResult =
-    | { taskId: string; chunk: string }
-    | { taskId: string; missing: true };
+  type SummaryReadResult = { taskId: string; chunk: string } | { taskId: string; missing: true };
 
   const readResults = await Promise.all(
     priorWaveTaskIds.map(async (taskId): Promise<SummaryReadResult> => {
@@ -306,9 +291,7 @@ async function resolveWaveSummaryInjection(
   }
 
   if (parts.length === 0) {
-    warnings.push(
-      "wave_summaries: no prior-wave summary files found — skipping injection",
-    );
+    warnings.push("wave_summaries: no prior-wave summary files found — skipping injection");
     return { warnings };
   }
 

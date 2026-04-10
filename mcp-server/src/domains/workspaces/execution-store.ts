@@ -67,6 +67,7 @@ import type {
 } from "./execution-store-types.ts";
 import { ALLOWED_UPDATE_EXECUTION_COLUMNS } from "./execution-store-types.ts";
 
+export type { FlowLineageEntry } from "./execution-store-lineage.ts";
 // Re-export types so all existing importers continue to work unchanged
 export type {
   EventOutput,
@@ -78,14 +79,14 @@ export type {
   UpdateExecutionFields,
   UpdateWaveEventFields,
 } from "./execution-store-types.ts";
-export type { FlowLineageEntry } from "./execution-store-lineage.ts";
+
 import {
-  type FlowLineageEntry,
-  type LineageStatements,
   getFlowLineage as _getFlowLineage,
   getLatestFlowForBranch as _getLatestFlowForBranch,
-  prepareLineageStatements,
   recordFlowLineage as _recordFlowLineage,
+  type FlowLineageEntry,
+  type LineageStatements,
+  prepareLineageStatements,
 } from "./execution-store-lineage.ts";
 
 // ExecutionStore

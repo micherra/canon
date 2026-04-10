@@ -54,7 +54,7 @@ describe("domain files — existence", () => {
     // If someone adds a file without updating the architect guidance, flag it.
     const { readdirSync } = require("node:fs");
     const files: string[] = readdirSync(DOMAINS_DIR).filter((f: string) => f.endsWith(".md"));
-    const knownNames = [...BUILT_IN_DOMAINS.map((d) => `${d}.md`), "TEMPLATE.md"];
+    const knownNames = [...BUILT_IN_DOMAINS.map((d) => `${d}.md`), "TEMPLATE.md", "README.md"];
     const unknown = files.filter((f: string) => !knownNames.includes(f));
     expect(unknown).toEqual([]);
   });

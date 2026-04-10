@@ -35,11 +35,10 @@ type ClaimOverlap = {
 };
 
 /** Absolute path to claims.json inside the project's .canon/ directory. */
-const claimsPath = (projectDir: string): string =>
-  join(projectDir, ".canon", "claims.json");
+const claimsPath = (projectDir: string): string => join(projectDir, ".canon", "claims.json");
 
 /** Return an empty, valid ClaimsFile. */
-const emptyFile = (): ClaimsFile => ({ version: 1, claims: {} });
+const emptyFile = (): ClaimsFile => ({ claims: {}, version: 1 });
 
 /**
  * Read claims.json, prune stale entries (>24h), return parsed data.
@@ -92,7 +91,7 @@ export const readClaims = (projectDir: string): ClaimsFile => {
     // Empty arrays are dropped — removes file_path keys with no live claims
   }
 
-  return { version: 1, claims: pruned };
+  return { claims: pruned, version: 1 };
 };
 
 /**
@@ -114,11 +113,7 @@ export const writeClaims = (projectDir: string, claims: ClaimsFile): void => {
  * Reads existing claims, merges, then writes atomically.
  * Idempotent — re-registering the same workflow+file is a no-op.
  */
-export const registerClaims = (
-  projectDir: string,
-  workflow: string,
-  filePaths: string[],
-): void => {
+export const registerClaims = (projectDir: string, workflow: string, filePaths: string[]): void => {
   const data = readClaims(projectDir);
   const now = new Date().toISOString();
 
@@ -126,7 +121,7 @@ export const registerClaims = (
     const existing = data.claims[filePath] ?? [];
     const alreadyClaimed = existing.some((e) => e.workflow === workflow);
     if (!alreadyClaimed) {
-      data.claims[filePath] = [...existing, { workflow, claimed_at: now }];
+      data.claims[filePath] = [...existing, { claimed_at: now, workflow }];
     }
   }
 
@@ -149,7 +144,7 @@ export const releaseClaims = (projectDir: string, workflow: string): void => {
     // Drop keys that become empty after release
   }
 
-  writeClaims(projectDir, { version: 1, claims: updated });
+  writeClaims(projectDir, { claims: updated, version: 1 });
 };
 
 /**
@@ -166,9 +161,7 @@ export const checkClaimOverlaps = (
 
   for (const filePath of filePaths) {
     const entries = data.claims[filePath] ?? [];
-    const otherWorkflows = entries
-      .filter((e) => e.workflow !== workflow)
-      .map((e) => e.workflow);
+    const otherWorkflows = entries.filter((e) => e.workflow !== workflow).map((e) => e.workflow);
 
     if (otherWorkflows.length > 0) {
       overlaps.push({ file_path: filePath, workflows: otherWorkflows });

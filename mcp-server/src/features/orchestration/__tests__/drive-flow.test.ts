@@ -33,11 +33,11 @@ import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { createWaveWorktrees } from "@domains/workspaces/wave-lifecycle.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { beforeEach } from "vitest";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { beforeEach } from "vitest";
 
 let tmpDirs: string[] = [];
 

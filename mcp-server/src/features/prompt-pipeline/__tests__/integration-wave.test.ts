@@ -293,7 +293,7 @@ describe("integration — stage ordering preserved end-to-end", () => {
     expect(instrIdx).toBeLessThan(metricsIdx);
   });
 
-  it("for wave state: prefix < instruction < wave briefing < coordination < metrics", async () => {
+  it("for wave state: prefix < instruction < wave briefing < metrics", async () => {
     const workspace = seedWorkspace();
     const store = getExecutionStore(workspace);
     store.setCachePrefix("## CACHE_PREFIX_MARKER ##\n\n");
@@ -321,14 +321,12 @@ describe("integration — stage ordering preserved end-to-end", () => {
     const prefixIdx = prompt.indexOf("## CACHE_PREFIX_MARKER ##");
     const instrIdx = prompt.indexOf("## INSTRUCTION_MARKER ##");
     const briefingIdx = prompt.indexOf("Consultation Briefing");
-    const coordIdx = prompt.indexOf("## Wave Coordination");
     const metricsIdx = prompt.indexOf("## Performance Metrics");
 
-    // Full ordering validation
+    // Wave coordination messaging removed (handled by debate.ts / get_messages)
     expect(prefixIdx).toBeLessThan(instrIdx);
     expect(instrIdx).toBeLessThan(briefingIdx);
-    expect(briefingIdx).toBeLessThan(coordIdx);
-    expect(coordIdx).toBeLessThan(metricsIdx);
+    expect(briefingIdx).toBeLessThan(metricsIdx);
   });
 });
 

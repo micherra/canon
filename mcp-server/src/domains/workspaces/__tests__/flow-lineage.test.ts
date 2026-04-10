@@ -17,8 +17,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { initExecutionDb, SCHEMA_VERSION } from "../execution-schema.ts";
-import { ExecutionStore } from "../execution-store.ts";
 import type { FlowLineageEntry } from "../execution-store.ts";
+import { ExecutionStore } from "../execution-store.ts";
 
 let tmpFiles: string[] = [];
 
@@ -30,11 +30,11 @@ function makeTmpDb(prefix = "flow-lineage-"): string {
 
 function makeEntry(overrides: Partial<FlowLineageEntry> = {}): FlowLineageEntry {
   return {
-    workspace_path: "/workspace/test",
-    flow_name: "fast-path",
     branch: "main",
-    status: "completed",
     completed_at: new Date().toISOString(),
+    flow_name: "fast-path",
+    status: "completed",
+    workspace_path: "/workspace/test",
     ...overrides,
   };
 }
@@ -73,7 +73,7 @@ describe("recordFlowLineage and getFlowLineage basic usage", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    const entry = makeEntry({ task: "Build auth module", slug: "build-auth-module" });
+    const entry = makeEntry({ slug: "build-auth-module", task: "Build auth module" });
     store.recordFlowLineage(entry);
 
     const results = store.getFlowLineage("main");
@@ -161,9 +161,9 @@ describe("getFlowLineage ordering", () => {
     const t2 = "2026-01-02T10:00:00.000Z";
     const t3 = "2026-01-03T10:00:00.000Z";
 
-    store.recordFlowLineage(makeEntry({ flow_name: "first", completed_at: t1 }));
-    store.recordFlowLineage(makeEntry({ flow_name: "third", completed_at: t3 }));
-    store.recordFlowLineage(makeEntry({ flow_name: "second", completed_at: t2 }));
+    store.recordFlowLineage(makeEntry({ completed_at: t1, flow_name: "first" }));
+    store.recordFlowLineage(makeEntry({ completed_at: t3, flow_name: "third" }));
+    store.recordFlowLineage(makeEntry({ completed_at: t2, flow_name: "second" }));
 
     const results = store.getFlowLineage("main");
     expect(results).toHaveLength(3);
@@ -186,8 +186,8 @@ describe("getLatestFlowForBranch", () => {
     const t1 = "2026-01-01T10:00:00.000Z";
     const t2 = "2026-01-02T10:00:00.000Z";
 
-    store.recordFlowLineage(makeEntry({ flow_name: "older", completed_at: t1 }));
-    store.recordFlowLineage(makeEntry({ flow_name: "newer", completed_at: t2 }));
+    store.recordFlowLineage(makeEntry({ completed_at: t1, flow_name: "older" }));
+    store.recordFlowLineage(makeEntry({ completed_at: t2, flow_name: "newer" }));
 
     const latest = store.getLatestFlowForBranch("main");
     expect(latest).not.toBeNull();
@@ -219,8 +219,12 @@ describe("getLatestFlowForBranch", () => {
     const t1 = "2026-01-01T10:00:00.000Z";
     const t2 = "2026-01-05T10:00:00.000Z";
 
-    store.recordFlowLineage(makeEntry({ branch: "feature/y", flow_name: "feature-flow", completed_at: t2 }));
-    store.recordFlowLineage(makeEntry({ branch: "main", flow_name: "main-flow", completed_at: t1 }));
+    store.recordFlowLineage(
+      makeEntry({ branch: "feature/y", completed_at: t2, flow_name: "feature-flow" }),
+    );
+    store.recordFlowLineage(
+      makeEntry({ branch: "main", completed_at: t1, flow_name: "main-flow" }),
+    );
 
     const latest = store.getLatestFlowForBranch("main");
     expect(latest).not.toBeNull();
@@ -278,7 +282,9 @@ describe("migration v10: flow_lineage table creation", () => {
     const db = initExecutionDb(dbPath);
 
     const indexRow = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_flow_lineage_branch'")
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_flow_lineage_branch'",
+      )
       .get() as { name: string } | undefined;
 
     expect(indexRow).toBeDefined();
@@ -330,7 +336,7 @@ describe("recordFlowLineage error tolerance", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    const entry = makeEntry({ flow_name: "fast-path", completed_at: "2026-01-01T10:00:00.000Z" });
+    const entry = makeEntry({ completed_at: "2026-01-01T10:00:00.000Z", flow_name: "fast-path" });
 
     expect(() => {
       store.recordFlowLineage(entry);

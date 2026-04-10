@@ -6,9 +6,8 @@
  * handling for missing paths, path traversal attempts, and non-.md files.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -56,7 +55,9 @@ function makePriorWorkspace(
 
   if (!opts.skipHandoffs) {
     mkdirSync(join(ws, "handoffs"), { recursive: true });
-    for (const [name, content] of Object.entries(opts.handoffs ?? { "handoff-1.md": "# Handoff 1" })) {
+    for (const [name, content] of Object.entries(
+      opts.handoffs ?? { "handoff-1.md": "# Handoff 1" },
+    )) {
       writeFileSync(join(ws, "handoffs", name), content);
     }
   } else {
@@ -65,7 +66,9 @@ function makePriorWorkspace(
 
   if (!opts.skipResearch) {
     mkdirSync(join(ws, "research"), { recursive: true });
-    for (const [name, content] of Object.entries(opts.research ?? { "research-1.md": "# Research 1" })) {
+    for (const [name, content] of Object.entries(
+      opts.research ?? { "research-1.md": "# Research 1" },
+    )) {
       writeFileSync(join(ws, "research", name), content);
     }
   }
@@ -120,7 +123,10 @@ describe("seedFromPriorWorkspace", () => {
 
     expect(result.seeded).toBe(true);
     expect(existsSync(join(targetDir, "seeded", "research", "research-synthesis.md"))).toBe(true);
-    const content = await readFile(join(targetDir, "seeded", "research", "research-synthesis.md"), "utf-8");
+    const content = await readFile(
+      join(targetDir, "seeded", "research", "research-synthesis.md"),
+      "utf-8",
+    );
     expect(content).toBe("# Research Synthesis");
   });
 
@@ -133,14 +139,18 @@ describe("seedFromPriorWorkspace", () => {
     const result = await seedFromPriorWorkspace(source, targetDir);
 
     expect(result.seeded).toBe(false);
-    expect(result.warnings.some((w) => w.includes("not found") || w.includes("does not exist") || w.includes("nonexistent"))).toBe(true);
+    expect(
+      result.warnings.some(
+        (w) => w.includes("not found") || w.includes("does not exist") || w.includes("nonexistent"),
+      ),
+    ).toBe(true);
   });
 
   it("returns warning but still copies research when handoffs/ directory is missing", async () => {
     const baseDir = makeTmpDir();
     const source = makePriorWorkspace(baseDir, {
-      skipHandoffs: true,
       research: { "research-1.md": "# Research" },
+      skipHandoffs: true,
     });
 
     const targetDir = join(baseDir, ".canon", "workspaces", "main", "new-task");
@@ -159,8 +169,8 @@ describe("seedFromPriorWorkspace", () => {
     const baseDir = makeTmpDir();
     const source = makePriorWorkspace(baseDir, {
       handoffs: { "handoff.md": "# Handoff" },
-      research: {},
       nonMdFiles: ["handoffs/binary.bin", "handoffs/image.png"],
+      research: {},
     });
 
     const targetDir = join(baseDir, ".canon", "workspaces", "main", "new-task");
@@ -179,7 +189,15 @@ describe("seedFromPriorWorkspace", () => {
     const result = await seedFromPriorWorkspace("../relative/path", targetDir);
 
     expect(result.seeded).toBe(false);
-    expect(result.warnings.some((w) => w.includes("absolute") || w.includes("traversal") || w.includes("invalid") || w.includes("relative"))).toBe(true);
+    expect(
+      result.warnings.some(
+        (w) =>
+          w.includes("absolute") ||
+          w.includes("traversal") ||
+          w.includes("invalid") ||
+          w.includes("relative"),
+      ),
+    ).toBe(true);
   });
 
   it("returns warning and seeded: false when path does not contain .canon/workspaces/ segment", async () => {
@@ -194,7 +212,11 @@ describe("seedFromPriorWorkspace", () => {
     const result = await seedFromPriorWorkspace(source, targetDir);
 
     expect(result.seeded).toBe(false);
-    expect(result.warnings.some((w) => w.includes(".canon/workspaces") || w.includes("invalid") || w.includes("workspace"))).toBe(true);
+    expect(
+      result.warnings.some(
+        (w) => w.includes(".canon/workspaces") || w.includes("invalid") || w.includes("workspace"),
+      ),
+    ).toBe(true);
   });
 
   it("produces seeded: true with empty target directories when source directories are empty", async () => {

@@ -5,7 +5,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, readdir } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
@@ -503,9 +503,7 @@ export async function seedFromPriorWorkspace(
 
   // Validate: must be an absolute path
   if (!isAbsolute(sourceWorkspace)) {
-    warnings.push(
-      `seed_from must be an absolute path; got relative path: "${sourceWorkspace}"`,
-    );
+    warnings.push(`seed_from must be an absolute path; got relative path: "${sourceWorkspace}"`);
     return { seeded: false, warnings };
   }
 

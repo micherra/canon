@@ -6,14 +6,12 @@
  * silently ignores claims check failures.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runPreflightChecksForTest } from "../tools/init-workspace.ts";
-
 // We need a temp dir for each test
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { runPreflightChecksForTest } from "../tools/init-workspace.ts";
 
 describe("init-workspace preflight — claim overlap check", () => {
   let tmpDir: string;
@@ -25,27 +23,23 @@ describe("init-workspace preflight — claim overlap check", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("reports active claims as informational warning", async () => {
     // Write a claims.json with one active claim
     const claimsData = {
-      version: 1,
       claims: {
         "src/foo.ts": [
           {
-            workflow: "other-workflow-slug",
             claimed_at: new Date().toISOString(),
+            workflow: "other-workflow-slug",
           },
         ],
       },
+      version: 1,
     };
-    writeFileSync(
-      join(tmpDir, ".canon", "claims.json"),
-      JSON.stringify(claimsData),
-      "utf-8",
-    );
+    writeFileSync(join(tmpDir, ".canon", "claims.json"), JSON.stringify(claimsData), "utf-8");
 
     const issues = await runPreflightChecksForTest(tmpDir, "main", "");
     const claimIssue = issues.find((i) => i.includes("Active file claims"));
@@ -57,21 +51,13 @@ describe("init-workspace preflight — claim overlap check", () => {
   it("reports multiple workflows in claim warning", async () => {
     const now = new Date().toISOString();
     const claimsData = {
-      version: 1,
       claims: {
-        "src/foo.ts": [
-          { workflow: "workflow-a", claimed_at: now },
-        ],
-        "src/bar.ts": [
-          { workflow: "workflow-b", claimed_at: now },
-        ],
+        "src/bar.ts": [{ claimed_at: now, workflow: "workflow-b" }],
+        "src/foo.ts": [{ claimed_at: now, workflow: "workflow-a" }],
       },
+      version: 1,
     };
-    writeFileSync(
-      join(tmpDir, ".canon", "claims.json"),
-      JSON.stringify(claimsData),
-      "utf-8",
-    );
+    writeFileSync(join(tmpDir, ".canon", "claims.json"), JSON.stringify(claimsData), "utf-8");
 
     const issues = await runPreflightChecksForTest(tmpDir, "main", "");
     const claimIssue = issues.find((i) => i.includes("Active file claims"));
@@ -90,12 +76,8 @@ describe("init-workspace preflight — claim overlap check", () => {
   });
 
   it("produces no claim warning when claims file is empty (no claims)", async () => {
-    const claimsData = { version: 1, claims: {} };
-    writeFileSync(
-      join(tmpDir, ".canon", "claims.json"),
-      JSON.stringify(claimsData),
-      "utf-8",
-    );
+    const claimsData = { claims: {}, version: 1 };
+    writeFileSync(join(tmpDir, ".canon", "claims.json"), JSON.stringify(claimsData), "utf-8");
 
     const issues = await runPreflightChecksForTest(tmpDir, "main", "");
     const claimIssue = issues.find((i) => i.includes("Active file claims"));
@@ -106,18 +88,12 @@ describe("init-workspace preflight — claim overlap check", () => {
     // Create a claim from 25 hours ago
     const staleTime = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
     const claimsData = {
-      version: 1,
       claims: {
-        "src/stale.ts": [
-          { workflow: "old-workflow", claimed_at: staleTime },
-        ],
+        "src/stale.ts": [{ claimed_at: staleTime, workflow: "old-workflow" }],
       },
+      version: 1,
     };
-    writeFileSync(
-      join(tmpDir, ".canon", "claims.json"),
-      JSON.stringify(claimsData),
-      "utf-8",
-    );
+    writeFileSync(join(tmpDir, ".canon", "claims.json"), JSON.stringify(claimsData), "utf-8");
 
     const issues = await runPreflightChecksForTest(tmpDir, "main", "");
     const claimIssue = issues.find((i) => i.includes("Active file claims"));
@@ -127,11 +103,7 @@ describe("init-workspace preflight — claim overlap check", () => {
 
   it("silently ignores corrupt claims.json (non-blocking)", async () => {
     // Write invalid JSON
-    writeFileSync(
-      join(tmpDir, ".canon", "claims.json"),
-      "{ this is not valid json }",
-      "utf-8",
-    );
+    writeFileSync(join(tmpDir, ".canon", "claims.json"), "{ this is not valid json }", "utf-8");
 
     // Should not throw and should produce no claim warning
     const issues = await runPreflightChecksForTest(tmpDir, "main", "");
