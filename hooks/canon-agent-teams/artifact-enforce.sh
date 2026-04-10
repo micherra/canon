@@ -51,10 +51,15 @@ fi
 
 # Locate the workspace. Prefer CANON_WORKSPACE_DIR (set by lead-mode
 # bootstrap). Fall back to searching .canon/workspaces/ in the current repo.
+#
+# maxdepth covers both the flat layout (.canon/workspaces/<id>/agent-teams/
+# task-artifacts.json — depth 3) and the branch/slug layout produced by
+# init_workspace (.canon/workspaces/<branch>/<slug>/agent-teams/
+# task-artifacts.json — depth 4), plus headroom for worktree nesting.
 WORKSPACE_DIR="${CANON_WORKSPACE_DIR:-}"
 if [[ -z "$WORKSPACE_DIR" ]]; then
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 2 -name 'task-artifacts.json' -path '*/agent-teams/*' 2>/dev/null | head -1 || true)"
+  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 6 -name 'task-artifacts.json' -path '*/agent-teams/*' 2>/dev/null | head -1 || true)"
   if [[ -n "$CANDIDATE" ]]; then
     WORKSPACE_DIR="$(dirname "$(dirname "$CANDIDATE")")"
   fi

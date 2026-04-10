@@ -24,10 +24,13 @@ if [[ -z "$INPUT" ]]; then
   exit 0
 fi
 
+# maxdepth covers both the flat layout (.canon/workspaces/<id>/agent-teams —
+# depth 2) and the branch/slug layout (.canon/workspaces/<branch>/<slug>/
+# agent-teams — depth 3), plus headroom for worktree nesting.
 WORKSPACE_DIR="${CANON_WORKSPACE_DIR:-}"
 if [[ -z "$WORKSPACE_DIR" ]]; then
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 2 -type d -name 'agent-teams' 2>/dev/null | head -1 || true)"
+  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 6 -type d -name 'agent-teams' 2>/dev/null | head -1 || true)"
   if [[ -n "$CANDIDATE" ]]; then
     WORKSPACE_DIR="$(dirname "$CANDIDATE")"
   fi
