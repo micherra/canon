@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildFileViolationMap } from "../tools/pr-review-data.ts";
+import { buildFileViolationMap } from "../tools/pr-review-data-helpers.ts";
 
 describe("buildFileViolationMap — unit", () => {
   it("returns empty map for empty reviews array", () => {

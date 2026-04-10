@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { KgQuery } from "@graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import type { FileMetrics } from "@graph/kg-types.ts";
 import { CANON_DIR, CANON_FILES, extractSummary } from "@shared/constants.ts";

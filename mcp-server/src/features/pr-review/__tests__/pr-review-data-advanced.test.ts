@@ -1,0 +1,358 @@
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DriftStore } from "@platform/storage/drift/store.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * Build a mock gitExecAsync that returns an ok ProcessResult with the given stdout.
+ */
+function mockGitExecAsyncOk(stdout: string) {
+  return vi.fn().mockResolvedValue({
+    exitCode: 0,
+    ok: true,
+    stderr: "",
+    stdout,
+    timedOut: false,
+  });
+}
+
+/**
+ * Build a mock runShell that returns an ok ProcessResult with the given stdout.
+ */
+function mockRunShellOk(stdout: string) {
+  return vi.fn().mockReturnValue({
+    exitCode: 0,
+    ok: true,
+    stderr: "",
+    stdout,
+    timedOut: false,
+  });
+}
+
+describe("getPrReviewData — incremental mode", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-pr-review-test-"));
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(tmpDir, { force: true, recursive: true });
+  });
+
+  it("uses last_reviewed_sha as base when incremental=true", async () => {
+    const store = new DriftStore(tmpDir);
+    await store.appendReview({
+      files: ["src/foo.ts"],
+      honored: [],
+      last_reviewed_sha: "abc123",
+      pr_number: 42,
+      review_id: "rev_test",
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 1 },
+        rules: { passed: 1, total: 1 },
+      },
+      timestamp: "2026-03-16T00:00:00Z",
+      verdict: "WARNING",
+      violations: [{ principle_id: "p1", severity: "strong-opinion" }],
+    });
+
+    // Incremental mode with last_reviewed_sha switches to git diff (not gh)
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk(""),
+    }));
+
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const result = await fn({ incremental: true, pr_number: 42 }, tmpDir);
+
+    expect(result.incremental).toBe(true);
+    expect(result.last_reviewed_sha).toBe("abc123");
+    expect(result.diff_command).toContain("abc123..HEAD");
+    // incremental mode uses git diff with --name-status
+    expect(result.diff_command).toContain("--name-status");
+  });
+});
+
+describe("getPrReviewData — git ref sanitization", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-pr-review-test-"));
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(tmpDir, { force: true, recursive: true });
+  });
+
+  it("throws on invalid git ref characters", async () => {
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    await expect(fn({ branch: "feat/x; rm -rf /", diff_base: "main" }, tmpDir)).rejects.toThrow(
+      "Invalid git ref",
+    );
+  });
+
+  it("throws on ref starting with dash", async () => {
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    await expect(fn({ diff_base: "-Xms256m" }, tmpDir)).rejects.toThrow("Invalid git ref");
+  });
+
+  it("throws on ref containing ..", async () => {
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    await expect(fn({ diff_base: "main..evil" }, tmpDir)).rejects.toThrow("Invalid git ref");
+  });
+});
+
+describe("DriftStore — review methods", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-drift-store-review-test-"));
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { force: true, recursive: true });
+  });
+
+  it("filters reviews by PR number", async () => {
+    const store = new DriftStore(tmpDir);
+    await store.appendReview({
+      files: [],
+      honored: [],
+      pr_number: 42,
+      review_id: "rev_1",
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
+      timestamp: "2026-03-16T00:00:00Z",
+      verdict: "CLEAN",
+      violations: [],
+    });
+    await store.appendReview({
+      files: [],
+      honored: [],
+      pr_number: 99,
+      review_id: "rev_2",
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
+      timestamp: "2026-03-16T01:00:00Z",
+      verdict: "WARNING",
+      violations: [],
+    });
+
+    const all = await store.getReviews();
+    expect(all).toHaveLength(2);
+
+    const pr42 = await store.getReviews({ prNumber: 42 });
+    expect(pr42).toHaveLength(1);
+    expect(pr42[0].review_id).toBe("rev_1");
+  });
+
+  it("gets last review for a PR", async () => {
+    const store = new DriftStore(tmpDir);
+    await store.appendReview({
+      files: [],
+      honored: [],
+      last_reviewed_sha: "sha1",
+      pr_number: 42,
+      review_id: "rev_1",
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
+      timestamp: "2026-03-16T00:00:00Z",
+      verdict: "WARNING",
+      violations: [],
+    });
+    await store.appendReview({
+      files: [],
+      honored: [],
+      last_reviewed_sha: "sha2",
+      pr_number: 42,
+      review_id: "rev_2",
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
+      timestamp: "2026-03-16T01:00:00Z",
+      verdict: "CLEAN",
+      violations: [],
+    });
+
+    const last = await store.getLastReviewForPr(42);
+    expect(last).not.toBeNull();
+    expect(last!.review_id).toBe("rev_2");
+    expect(last!.last_reviewed_sha).toBe("sha2");
+  });
+
+  it("returns null for PR with no reviews", async () => {
+    const store = new DriftStore(tmpDir);
+    const last = await store.getLastReviewForPr(999);
+    expect(last).toBeNull();
+  });
+});
+
+describe("getPrReviewData — blast radius from KG", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-pr-review-br-"));
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(tmpDir, { force: true, recursive: true });
+  });
+
+  it("returns empty blast_radius when KG does not exist", async () => {
+    // No KG database — files have no priority_factors.in_degree, no candidates
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/api/handler.ts"),
+    }));
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const result = await fn({}, tmpDir);
+    expect(result.blast_radius).toEqual([]);
+  });
+
+  it("computes blast_radius from KG file_edges when KG database exists", async () => {
+    // Set up a real SQLite DB with file_edges
+    const { initDatabase } = await import("@graph/kg-schema.js");
+    const { KgStore } = await import("@graph/kg-store.js");
+    const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+    const db = initDatabase(dbPath);
+    const store = new KgStore(db);
+
+    // handler.ts is imported by 3 service files (in_degree=3, meets blast radius threshold)
+    const handler = store.upsertFile({
+      content_hash: "h",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "api",
+      mtime_ms: Date.now(),
+      path: "src/api/handler.ts",
+    });
+    const svc1 = store.upsertFile({
+      content_hash: "s1",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "services",
+      mtime_ms: Date.now(),
+      path: "src/services/svc1.ts",
+    });
+    const svc2 = store.upsertFile({
+      content_hash: "s2",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "services",
+      mtime_ms: Date.now(),
+      path: "src/services/svc2.ts",
+    });
+    const svc3 = store.upsertFile({
+      content_hash: "s3",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "services",
+      mtime_ms: Date.now(),
+      path: "src/services/svc3.ts",
+    });
+    for (const svc of [svc1, svc2, svc3]) {
+      store.insertFileEdge({
+        confidence: 1.0,
+        edge_type: "imports",
+        evidence: null,
+        relation: null,
+        source_file_id: svc.file_id!,
+        target_file_id: handler.file_id!,
+      });
+    }
+    db.close();
+
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/api/handler.ts"),
+    }));
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const result = await fn({}, tmpDir);
+
+    // handler.ts has in_degree=3 and is_changed=true — should appear in blast_radius
+    const entry = result.blast_radius.find((e) => e.file === "src/api/handler.ts");
+    expect(entry).toBeDefined();
+    expect(entry!.affected.length).toBeGreaterThan(0);
+  });
+});
+
+describe("getPrReviewData — adapter routing", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-pr-review-adapter-"));
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(tmpDir, { force: true, recursive: true });
+  });
+
+  it("routes git commands to gitExecAsync (not child_process)", async () => {
+    const gitExecAsync = mockGitExecAsyncOk("M\tsrc/file.ts");
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({ gitExecAsync }));
+
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    await fn({}, tmpDir);
+
+    expect(gitExecAsync).toHaveBeenCalled();
+    // Should be called with the diff args, not the git binary name
+    const [args] = gitExecAsync.mock.calls[0];
+    expect(args).toBeInstanceOf(Array);
+    expect(args[0]).toBe("diff");
+  });
+
+  it("routes gh commands to runShell (not child_process)", async () => {
+    const runShell = mockRunShellOk("");
+    vi.doMock("@platform/adapters/process-adapter.ts", () => ({ runShell }));
+
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    await fn({ pr_number: 1 }, tmpDir);
+
+    expect(runShell).toHaveBeenCalled();
+    // Command string should start with "gh" and contain "pr" and "diff" (now shell-quoted)
+    const [cmd] = runShell.mock.calls[0];
+    expect(cmd).toMatch(/^gh /);
+    expect(cmd).toContain("pr");
+    expect(cmd).toContain("diff");
+  });
+
+  it("gitExecAsync export exists and never rejects (returns ProcessResult)", async () => {
+    // Verify the adapter module exports gitExecAsync as a function
+    // (behavioral tests for ok:false are in codebase-graph.test.ts)
+    const { gitExecAsync } = await import("@platform/adapters/git-adapter-async.ts");
+    expect(typeof gitExecAsync).toBe("function");
+    // Returns a Promise (not undefined)
+    const p = gitExecAsync(["--version"], process.cwd());
+    expect(p).toBeInstanceOf(Promise);
+    const result = await p;
+    expect(result).toHaveProperty("ok");
+    expect(result).toHaveProperty("stdout");
+    expect(result).toHaveProperty("stderr");
+    expect(result).toHaveProperty("exitCode");
+    expect(result).toHaveProperty("timedOut");
+  });
+});

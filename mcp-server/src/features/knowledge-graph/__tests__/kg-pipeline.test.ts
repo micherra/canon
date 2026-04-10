@@ -11,7 +11,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { reindexFile, runPipeline } from "@graph/kg-pipeline.ts";
+import { runPipeline } from "@graph/kg-pipeline.ts";
+import { reindexFile } from "@graph/kg-pipeline-reindex.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import { KgVectorStore } from "@graph/kg-vector-store.ts";

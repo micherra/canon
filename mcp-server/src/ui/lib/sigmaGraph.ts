@@ -1,36 +1,29 @@
-import {
-  EDGE_ADJACENT_FOCUS,
-  EDGE_DEFAULT,
-  EDGE_DIM,
-  EDGE_HIGHLIGHTED,
-  EDGE_SEMI_DIM,
-  EDGE_VERY_DIM,
-  NODE_CHANGED,
-  NODE_DEFAULT,
-  NODE_UNFOCUSED,
-  NODE_VIOLATION,
-} from "@shared/lib/constants";
+import { EDGE_DEFAULT, NODE_CHANGED, NODE_DEFAULT, NODE_VIOLATION } from "@shared/lib/constants";
 import type { GraphData, GraphNode } from "@shared/lib/types";
 import Graph from "graphology";
-import louvain from "graphology-communities-louvain";
-import forceAtlas2 from "graphology-layout-forceatlas2";
 import Sigma from "sigma";
+import {
+  applyCommunityDetection,
+  applyGraphLayout,
+  type EdgeAttrs,
+  type NodeAttrs,
+  populateEdges,
+  populateNodes,
+} from "./sigma-builders";
+import {
+  type FilterOptions,
+  isNodeVisible,
+  matchesSearchFilter,
+  reduceEdgeCascade,
+  reduceEdgeFilter,
+  reduceEdgeFocus,
+  reduceNodeCascade,
+  reduceNodeFilter,
+  reduceNodeFocus,
+} from "./sigma-reducers";
 
-// ── Filter options (mirrors GraphApi's FilterOptions) ────────────────────────
-
-export type FilterOptions = {
-  activeLayers: Set<string>;
-  searchQuery: string;
-  parsedSearch: {
-    textQuery: string;
-    filterLayer: string | null;
-    filterChanged: boolean;
-    filterViolation: boolean;
-  };
-  prReviewFiles: Set<string> | null;
-  insightFilter: Set<string> | null;
-  showChangedOnly: boolean;
-};
+// Re-export FilterOptions so existing importers keep working
+export type { FilterOptions };
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -44,293 +37,6 @@ export type SigmaGraphApi = {
   highlightCascade(nodeId: string, cascadeFiles: Set<string>): void;
   clearHighlight(): void;
   destroy(): void;
-};
-
-// ── Internal node attribute shape ─────────────────────────────────────────────
-
-type NodeAttrs = {
-  label: string;
-  x: number;
-  y: number;
-  size: number;
-  color: string;
-  // Canon fields
-  layer: string;
-  changed: boolean;
-  violation_count: number;
-  dead_code_count: number;
-  community: number;
-  // Rendering state
-  hidden: boolean;
-};
-
-type EdgeAttrs = {
-  color: string;
-  size: number;
-  hidden: boolean;
-  confidence: number;
-};
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-const nodeSize = (node: GraphNode): number => Math.max(2, Math.sqrt(node.entity_count || 1) * 1.5);
-
-const edgeSize = (confidence?: number): number => {
-  if (!confidence || confidence >= 1) return 0.4;
-  if (confidence >= 0.7) return 0.25;
-  return 0.15;
-};
-
-/** Sanitize a node id so it can be used as a graphology key (must be a string). */
-const safeKey = (id: string): string => id;
-
-// ── Graph construction helpers ─────────────────────────────────────────────────
-
-const initialNodeColor = (node: GraphNode): string => {
-  if ((node.violation_count ?? 0) > 0) return NODE_VIOLATION;
-  if (node.changed) return NODE_CHANGED;
-  return NODE_DEFAULT;
-};
-
-const buildNodeAttrs = (node: GraphNode): NodeAttrs => ({
-  changed: node.changed || false,
-  color: initialNodeColor(node),
-  community: node.community ?? -1,
-  dead_code_count: node.dead_code_count || 0,
-  hidden: false,
-  label: node.id.split("/").pop() || node.id,
-  layer: node.layer || "unknown",
-  size: nodeSize(node),
-  violation_count: node.violation_count || 0,
-  x: Math.random() * 1000,
-  y: Math.random() * 1000,
-});
-
-const populateNodes = (graph: Graph, nodes: GraphNode[]): void => {
-  for (const node of nodes) {
-    graph.addNode(safeKey(node.id), buildNodeAttrs(node));
-  }
-};
-
-const resolveEdgeEndpoint = (endpoint: string | { id: string }): string =>
-  typeof endpoint === "string" ? endpoint : endpoint.id;
-
-const tryAddEdge = (graph: Graph, s: string, t: string, confidence?: number): void => {
-  try {
-    graph.addEdge(safeKey(s), safeKey(t), {
-      color: EDGE_DEFAULT,
-      confidence: confidence ?? 1,
-      hidden: false,
-      size: edgeSize(confidence),
-    } satisfies EdgeAttrs);
-  } catch (_err) {
-    // ignore rare duplicate-edge errors in multi: false mode
-  }
-};
-
-const populateEdges = (graph: Graph, edges: GraphData["edges"]): void => {
-  const seenEdges = new Set<string>();
-  for (const edge of edges) {
-    const s = resolveEdgeEndpoint(edge.source);
-    const t = resolveEdgeEndpoint(edge.target);
-    if (!graph.hasNode(s) || !graph.hasNode(t)) continue;
-    const key = `${s}-->${t}`;
-    if (seenEdges.has(key)) continue;
-    seenEdges.add(key);
-    tryAddEdge(graph, s, t, edge.confidence);
-  }
-};
-
-const applyGraphLayout = (graph: Graph, iterations: number): void => {
-  try {
-    forceAtlas2.assign(graph, {
-      iterations,
-      settings: { barnesHutOptimize: true, gravity: 0.5, scalingRatio: 5, slowDown: 2 },
-    });
-  } catch (_err) {
-    // If FA2 fails (e.g. disconnected graph), positions stay random — still renderable
-  }
-};
-
-const applyCommunityDetection = (graph: Graph): void => {
-  try {
-    louvain.assign(graph as Parameters<typeof louvain.assign>[0], {
-      nodeCommunityAttribute: "community",
-    });
-  } catch (_err) {
-    // Community detection is optional — non-fatal
-  }
-};
-
-// ── Filter logic (module-scope to avoid nesting penalty) ─────────────────────
-
-const matchesSearchFilter = (
-  gn: GraphNode,
-  parsed: FilterOptions["parsedSearch"],
-  q: string,
-): boolean => {
-  if (parsed.filterLayer && !gn.layer.toLowerCase().includes(parsed.filterLayer)) return false;
-  if (parsed.filterChanged && !gn.changed) return false;
-  if (parsed.filterViolation && !(gn.violation_count && gn.violation_count > 0)) return false;
-  if (q.length >= 2 && !gn.id.toLowerCase().includes(q)) return false;
-  return true;
-};
-
-const isNodeVisible = (
-  nodeId: string,
-  f: FilterOptions,
-  nodeIndex: Map<string, GraphNode>,
-): boolean => {
-  const gn = nodeIndex.get(nodeId);
-  if (!gn) return false;
-  if (!f.activeLayers.has(gn.layer)) return false;
-  if (f.showChangedOnly && !gn.changed) return false;
-  if (f.prReviewFiles !== null && !f.prReviewFiles.has(nodeId)) return false;
-  if (f.insightFilter !== null && !f.insightFilter.has(nodeId)) return false;
-  const parsed = f.parsedSearch;
-  const q = (parsed.textQuery || "").toLowerCase();
-  const hasSearch =
-    q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
-  if (hasSearch && !matchesSearchFilter(gn, parsed, q)) return false;
-  return true;
-};
-
-// ── Reducer helpers ───────────────────────────────────────────────────────────
-
-const reduceNodeCascade = (
-  nodeId: string,
-  data: NodeAttrs,
-  cascadeRoot: string,
-  cascadeFiles: Set<string>,
-): Partial<NodeAttrs> => {
-  if (nodeId === cascadeRoot) return { ...data, color: "#60a5fa", hidden: false };
-  if (cascadeFiles.has(nodeId)) return { ...data, color: "#fbbf24", hidden: false };
-  return { ...data, color: NODE_UNFOCUSED, hidden: false };
-};
-
-type NodeFocusCtx = {
-  nodeId: string;
-  data: NodeAttrs;
-  gn: GraphNode;
-  focusedNodeId: string;
-  focusedConnected: Set<string>;
-  nodeBaseColor: (gn: GraphNode) => string;
-};
-
-const reduceNodeFocus = (ctx: NodeFocusCtx): Partial<NodeAttrs> => {
-  const { nodeId, data, gn, focusedNodeId, focusedConnected, nodeBaseColor } = ctx;
-  const baseColor = nodeBaseColor(gn);
-  if (nodeId === focusedNodeId) {
-    return { ...data, color: baseColor, hidden: false, size: nodeSize(gn) + 3 };
-  }
-  if (focusedConnected.has(nodeId)) {
-    return { ...data, color: baseColor, hidden: false, size: nodeSize(gn) };
-  }
-  return {
-    ...data,
-    color: (gn.violation_count ?? 0) > 0 ? "rgba(255,107,107,0.25)" : NODE_UNFOCUSED,
-    hidden: false,
-    size: nodeSize(gn),
-  };
-};
-
-type NodeFilterCtx = {
-  nodeId: string;
-  data: NodeAttrs;
-  gn: GraphNode;
-  f: FilterOptions;
-  matchesSearch: (gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string) => boolean;
-  nodeBaseColor: (gn: GraphNode) => string;
-};
-
-const reduceNodeFilter = (ctx: NodeFilterCtx): Partial<NodeAttrs> => {
-  const { nodeId, data, gn, f, matchesSearch, nodeBaseColor } = ctx;
-  if (!f.activeLayers.has(gn.layer)) return { ...data, hidden: true };
-  if (f.insightFilter !== null && !f.insightFilter.has(nodeId)) return { ...data, hidden: true };
-  if (f.prReviewFiles !== null && !f.prReviewFiles.has(nodeId)) return { ...data, hidden: true };
-  if (f.showChangedOnly && !gn.changed) return { ...data, hidden: true };
-
-  const parsed = f.parsedSearch;
-  const q = (parsed.textQuery || "").toLowerCase();
-  const hasSearch =
-    q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
-  if (hasSearch && !matchesSearch(gn, parsed, q)) return { ...data, hidden: true };
-
-  return { ...data, color: nodeBaseColor(gn), hidden: false, size: nodeSize(gn) };
-};
-
-const reduceEdgeCascade = (
-  s: string,
-  t: string,
-  data: EdgeAttrs,
-  cascadeFiles: Set<string>,
-): Partial<EdgeAttrs> => {
-  const bothIn = cascadeFiles.has(s) && cascadeFiles.has(t);
-  return { ...data, color: bothIn ? EDGE_HIGHLIGHTED : EDGE_VERY_DIM };
-};
-
-const reduceEdgeFocus = (
-  s: string,
-  t: string,
-  data: EdgeAttrs,
-  focusedNodeId: string,
-): Partial<EdgeAttrs> => {
-  const adjacent = s === focusedNodeId || t === focusedNodeId;
-  return { ...data, color: adjacent ? EDGE_ADJACENT_FOCUS : EDGE_DIM, size: adjacent ? 0.8 : 0.2 };
-};
-
-/** Classify a pair of endpoints as both-in, one-in, or neither for a set filter. */
-const setFilterColor = (sIn: boolean, tIn: boolean): string => {
-  if (sIn && tIn) return EDGE_HIGHLIGHTED;
-  if (sIn || tIn) return EDGE_SEMI_DIM;
-  return EDGE_DEFAULT;
-};
-
-type EdgeFilterColorCtx = {
-  s: string;
-  t: string;
-  f: FilterOptions;
-  nodeIndex: Map<string, GraphNode>;
-  matchesSearch: (gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string) => boolean;
-};
-
-const resolveEdgeFilterColor = (ctx: EdgeFilterColorCtx): string => {
-  const { s, t, f, nodeIndex, matchesSearch } = ctx;
-  if (f.prReviewFiles !== null) {
-    return setFilterColor(f.prReviewFiles.has(s), f.prReviewFiles.has(t));
-  }
-  if (f.insightFilter !== null) {
-    return setFilterColor(f.insightFilter.has(s), f.insightFilter.has(t));
-  }
-
-  const parsed = f.parsedSearch;
-  const q = (parsed.textQuery || "").toLowerCase();
-  const hasSearch =
-    q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
-  if (!hasSearch) return EDGE_DEFAULT;
-
-  const sGn = nodeIndex.get(s);
-  const tGn = nodeIndex.get(t);
-  const sMatch = sGn ? matchesSearch(sGn, parsed, q) : false;
-  const tMatch = tGn ? matchesSearch(tGn, parsed, q) : false;
-  return sMatch && tMatch ? EDGE_HIGHLIGHTED : EDGE_DEFAULT;
-};
-
-type EdgeFilterCtx = {
-  s: string;
-  t: string;
-  data: EdgeAttrs;
-  f: FilterOptions;
-  nodeVisible: (nodeId: string, f: FilterOptions) => boolean;
-  nodeIndex: Map<string, GraphNode>;
-  matchesSearch: (gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string) => boolean;
-};
-
-const reduceEdgeFilter = (ctx: EdgeFilterCtx): Partial<EdgeAttrs> => {
-  const { s, t, data, f, nodeVisible, nodeIndex, matchesSearch } = ctx;
-  if (!nodeVisible(s, f) || !nodeVisible(t, f)) return { ...data, hidden: true };
-  const color = resolveEdgeFilterColor({ f, matchesSearch, nodeIndex, s, t });
-  return { ...data, color, hidden: false };
 };
 
 // ── Drag support wiring ───────────────────────────────────────────────────────

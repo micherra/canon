@@ -12,13 +12,13 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
+import { loadAndResolveFlow } from "../flow-parser.ts";
 import {
   analyzeReachability,
   checkUnresolvedRefs,
-  loadAndResolveFlow,
   validateFlow,
   validateSpawnCoverage,
-} from "../flow-parser.ts";
+} from "../flow-parser-validation.ts";
 
 const pluginDir = resolve(process.cwd(), "..");
 

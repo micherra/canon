@@ -6,7 +6,7 @@
  * capability contract.
  */
 
-import type { FileInsightMaps } from "@graph/kg-query.ts";
+import type { FileInsightMaps } from "@graph/kg-query-insights.ts";
 import type { FileMetrics, FileRow, SummaryRow } from "@graph/kg-types.ts";
 
 /**

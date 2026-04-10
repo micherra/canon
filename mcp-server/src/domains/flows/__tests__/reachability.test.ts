@@ -16,7 +16,7 @@ import {
   collectReachableStates,
   detectDeadEnds,
   detectStuckLoops,
-} from "../flow-parser.ts";
+} from "../flow-parser-validation.ts";
 
 // Helper to build a minimal ResolvedFlow from inline state specs
 function makeFlow(
