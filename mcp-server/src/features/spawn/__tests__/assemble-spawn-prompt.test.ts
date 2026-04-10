@@ -14,32 +14,32 @@ const WORKSPACE_ID = "ws-phase-1-smoke";
  * researcher. Re-used across most role tests so fixtures stay compact.
  */
 const researchSynthesisRef: UpstreamArtifactRef = {
+  description: "Compressed findings from the research step",
   id: "research_synthesis",
   path: "research/SYNTHESIS.md",
   produced_by: "canon-researcher",
-  description: "Compressed findings from the research step",
 };
 
 const planIndexRef: UpstreamArtifactRef = {
+  description: "Architect-authored plan index",
   id: "plan_index",
   path: "plans/INDEX.md",
   produced_by: "canon-architect",
-  description: "Architect-authored plan index",
 };
 
 const implementationSummaryRef: UpstreamArtifactRef = {
+  description: "Implementor summary of the commit",
   id: "implementation_summary",
   path: "plans/SUMMARY.md",
   produced_by: "canon-implementor",
-  description: "Implementor summary of the commit",
 };
 
 describe("assembleSpawnPrompt", () => {
   it("emits role header, workspace id, and task type in every prompt", () => {
     const prompt = assembleSpawnPrompt({
       role: "canon-researcher",
-      task_type: "research",
       target_files: ["src/foo.ts"],
+      task_type: "research",
       upstream_artifact_refs: [],
       workspace_id: WORKSPACE_ID,
     });
@@ -52,8 +52,8 @@ describe("assembleSpawnPrompt", () => {
   it("renders target files as a bullet list", () => {
     const prompt = assembleSpawnPrompt({
       role: "canon-researcher",
-      task_type: "research",
       target_files: ["src/a.ts", "src/b.ts", "docs/c.md"],
+      task_type: "research",
       upstream_artifact_refs: [],
       workspace_id: WORKSPACE_ID,
     });
@@ -66,8 +66,8 @@ describe("assembleSpawnPrompt", () => {
   it("explains entry-point steps when upstream_artifact_refs is empty", () => {
     const prompt = assembleSpawnPrompt({
       role: "canon-researcher",
-      task_type: "research",
       target_files: ["src/x.ts"],
+      task_type: "research",
       upstream_artifact_refs: [],
       workspace_id: WORKSPACE_ID,
     });
@@ -78,13 +78,9 @@ describe("assembleSpawnPrompt", () => {
   it("lists every upstream artifact with id, path, and producer", () => {
     const prompt = assembleSpawnPrompt({
       role: "canon-reviewer",
-      task_type: "review",
       target_files: ["src/x.ts"],
-      upstream_artifact_refs: [
-        researchSynthesisRef,
-        planIndexRef,
-        implementationSummaryRef,
-      ],
+      task_type: "review",
+      upstream_artifact_refs: [researchSynthesisRef, planIndexRef, implementationSummaryRef],
       workspace_id: WORKSPACE_ID,
     });
 
@@ -104,16 +100,14 @@ describe("assembleSpawnPrompt", () => {
   it("includes a completion contract with the workspace-scoped artifact path", () => {
     const prompt = assembleSpawnPrompt({
       role: "canon-researcher",
-      task_type: "research",
       target_files: ["src/x.ts"],
+      task_type: "research",
       upstream_artifact_refs: [],
       workspace_id: WORKSPACE_ID,
     });
 
     expect(prompt).toContain("## Task-completion contract");
-    expect(prompt).toContain(
-      `.canon/workspaces/${WORKSPACE_ID}/research/SYNTHESIS.md`,
-    );
+    expect(prompt).toContain(`.canon/workspaces/${WORKSPACE_ID}/research/SYNTHESIS.md`);
     expect(prompt).toContain("`research_synthesis`");
     expect(prompt).toContain("TaskCompleted");
   });
@@ -121,8 +115,8 @@ describe("assembleSpawnPrompt", () => {
   it("includes a Canon principles section in every prompt", () => {
     const prompt = assembleSpawnPrompt({
       role: "canon-implementor",
-      task_type: "implement",
       target_files: ["src/impl.ts"],
+      task_type: "implement",
       upstream_artifact_refs: [researchSynthesisRef, planIndexRef],
       workspace_id: WORKSPACE_ID,
     });
@@ -133,8 +127,8 @@ describe("assembleSpawnPrompt", () => {
   it("provides task-type guidance that matches the role", () => {
     const implementerPrompt = assembleSpawnPrompt({
       role: "canon-implementor",
-      task_type: "implement",
       target_files: ["src/x.ts"],
+      task_type: "implement",
       upstream_artifact_refs: [researchSynthesisRef, planIndexRef],
       workspace_id: WORKSPACE_ID,
     });
@@ -142,8 +136,8 @@ describe("assembleSpawnPrompt", () => {
 
     const researcherPrompt = assembleSpawnPrompt({
       role: "canon-researcher",
-      task_type: "research",
       target_files: ["src/x.ts"],
+      task_type: "research",
       upstream_artifact_refs: [],
       workspace_id: WORKSPACE_ID,
     });
@@ -151,8 +145,8 @@ describe("assembleSpawnPrompt", () => {
 
     const reviewerPrompt = assembleSpawnPrompt({
       role: "canon-reviewer",
-      task_type: "review",
       target_files: ["src/x.ts"],
+      task_type: "review",
       upstream_artifact_refs: [implementationSummaryRef],
       workspace_id: WORKSPACE_ID,
     });
@@ -162,10 +156,9 @@ describe("assembleSpawnPrompt", () => {
   it("throws on unknown role", () => {
     expect(() =>
       assembleSpawnPrompt({
-        // biome-ignore lint/suspicious/noExplicitAny: intentional invalid role
-        role: "canon-unknown" as any,
-        task_type: "research",
+        role: "canon-unknown" as CanonRole,
         target_files: [],
+        task_type: "research",
         upstream_artifact_refs: [],
         workspace_id: WORKSPACE_ID,
       }),
@@ -175,8 +168,8 @@ describe("assembleSpawnPrompt", () => {
   it("is deterministic across repeated calls with identical input", () => {
     const input = {
       role: "canon-architect" as CanonRole,
-      task_type: "design" as const,
       target_files: ["src/a.ts", "src/b.ts"],
+      task_type: "design" as const,
       upstream_artifact_refs: [researchSynthesisRef],
       workspace_id: WORKSPACE_ID,
     };
@@ -194,8 +187,8 @@ describe("assembleSpawnPrompt — coverage for all Canon roles", () => {
     const contract = getRoleArtifactContract(role);
     const prompt = assembleSpawnPrompt({
       role,
-      task_type: "research",
       target_files: [],
+      task_type: "research",
       upstream_artifact_refs: [],
       workspace_id: WORKSPACE_ID,
     });
@@ -221,10 +214,7 @@ describe("getRoleArtifactContract", () => {
   });
 
   it("throws on unknown role", () => {
-    // biome-ignore lint/suspicious/noExplicitAny: intentional invalid role
-    expect(() => getRoleArtifactContract("canon-foo" as any)).toThrow(
-      /unknown role/,
-    );
+    expect(() => getRoleArtifactContract("canon-foo" as CanonRole)).toThrow(/unknown role/);
   });
 });
 

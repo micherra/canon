@@ -28,77 +28,74 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { parse as parseYaml } from "yaml";
 import {
-  type CanonRole,
-  CANON_ROLES,
   assembleSpawnPrompt,
+  CANON_ROLES,
+  type CanonRole,
   getRoleArtifactContract,
   type TaskType,
   type UpstreamArtifactRef,
 } from "@features/spawn/index.ts";
+import { parse as parseYaml } from "yaml";
 
 /** HITL gate values recognized in a runbook step. */
-export type RunbookHitl =
-  | false
-  | "after"
-  | "after_if_verdict_not_clean";
+export type RunbookHitl = false | "after" | "after_if_verdict_not_clean";
 
 /** One step in a runbook. */
-export interface RunbookStep {
-  role: CanonRole;
-  task_type: TaskType;
+export type RunbookStep = {
   artifact: string;
   artifact_path: string;
   hitl: RunbookHitl;
   required_artifacts: string[];
-}
+  role: CanonRole;
+  task_type: TaskType;
+};
 
 /** Parsed runbook contents. */
-export interface Runbook {
-  name: string;
+export type Runbook = {
   description: string;
-  tier: "small" | "medium" | "large";
+  name: string;
   steps: RunbookStep[];
-}
+  tier: "small" | "medium" | "large";
+};
 
 /** Input to `planRun`. */
-export interface PlanRunInput {
+export type PlanRunInput = {
   runbook: Runbook;
-  workspace_id: string;
   /** Target files the user's request pins. Passed to every step that
    * needs them; Phase 1 does not do per-step scoping. */
   target_files: string[];
-}
+  workspace_id: string;
+};
 
 /** Output of `planRun`: an ordered list of spawn descriptors. */
-export interface SpawnDescriptor {
-  /** Stable per-step id; derived as `<runbook_name>-<index>-<role>`. */
-  task_id: string;
-  /** Canon role to spawn. */
-  role: CanonRole;
-  /** Task type tag passed to the spawn module. */
-  task_type: TaskType;
+export type SpawnDescriptor = {
   /** Artifact this step is required to produce (logical id). */
   artifact: string;
   /** Artifact path relative to the workspace root. */
   artifact_path: string;
   /** HITL policy for this step. */
   hitl: RunbookHitl;
-  /** Fully assembled spawn prompt. */
-  spawn_prompt: string;
   /** Logical artifact ids the step depends on. */
   required_artifacts: string[];
-}
+  /** Canon role to spawn. */
+  role: CanonRole;
+  /** Fully assembled spawn prompt. */
+  spawn_prompt: string;
+  /** Stable per-step id; derived as `<runbook_name>-<index>-<role>`. */
+  task_id: string;
+  /** Task type tag passed to the spawn module. */
+  task_type: TaskType;
+};
 
 /** The state file format consumed by the workspace-local hooks. */
-export interface TaskArtifactState {
+export type TaskArtifactState = {
   [task_id: string]: {
     role: CanonRole;
     artifact: string;
     artifact_path: string;
   };
-}
+};
 
 /** Env var name that gates the module. */
 export const LEAD_MODE_ENV_VAR = "CANON_AGENT_TEAMS_MODE";
@@ -125,10 +122,7 @@ export class RunbookError extends Error {
  *
  * Path convention: `<pluginDir>/skills/canon/runbooks/<name>.yaml`.
  */
-export async function loadRunbook(
-  pluginDir: string,
-  name: string,
-): Promise<Runbook> {
+export async function loadRunbook(pluginDir: string, name: string): Promise<Runbook> {
   const path = join(pluginDir, "skills", "canon", "runbooks", `${name}.yaml`);
   if (!existsSync(path)) {
     throw new RunbookError(`Runbook not found: ${path}`);
@@ -143,9 +137,7 @@ export function parseRunbook(raw: string, source = "<in-memory>"): Runbook {
   try {
     doc = parseYaml(raw);
   } catch (err) {
-    throw new RunbookError(
-      `Failed to parse runbook YAML at ${source}: ${(err as Error).message}`,
-    );
+    throw new RunbookError(`Failed to parse runbook YAML at ${source}: ${(err as Error).message}`);
   }
 
   if (doc === null || typeof doc !== "object") {
@@ -162,98 +154,91 @@ export function parseRunbook(raw: string, source = "<in-memory>"): Runbook {
     throw new RunbookError(`Runbook at ${source} is missing a string "name"`);
   }
   if (typeof description !== "string") {
-    throw new RunbookError(
-      `Runbook "${name}" is missing a string "description"`,
-    );
+    throw new RunbookError(`Runbook "${name}" is missing a string "description"`);
   }
   if (tier !== "small" && tier !== "medium" && tier !== "large") {
-    throw new RunbookError(
-      `Runbook "${name}" has invalid tier ${JSON.stringify(tier)}`,
-    );
+    throw new RunbookError(`Runbook "${name}" has invalid tier ${JSON.stringify(tier)}`);
   }
   if (!Array.isArray(steps) || steps.length === 0) {
     throw new RunbookError(`Runbook "${name}" must declare at least one step`);
   }
 
-  const parsedSteps: RunbookStep[] = steps.map((step, index) =>
-    parseStep(step, name, index),
-  );
-  return { name, description, tier, steps: parsedSteps };
+  const parsedSteps: RunbookStep[] = steps.map((step, index) => parseStep(step, name, index));
+  return { description, name, steps: parsedSteps, tier };
 }
 
-function parseStep(
+function parseStep(raw: unknown, runbookName: string, index: number): RunbookStep {
+  const s = requireStepObject(raw, runbookName, index);
+  const ctx = `Runbook "${runbookName}" step ${index}`;
+  return {
+    artifact: requireString(s, "artifact", ctx),
+    artifact_path: requireString(s, "artifact_path", ctx),
+    hitl: requireHitl(s.hitl, ctx),
+    required_artifacts: requireStringArray(s.required_artifacts, "required_artifacts", ctx),
+    role: requireCanonRole(s.role, ctx),
+    task_type: requireString(s, "task_type", ctx) as TaskType,
+  };
+}
+
+function requireStepObject(
   raw: unknown,
   runbookName: string,
   index: number,
-): RunbookStep {
+): Record<string, unknown> {
   if (raw === null || typeof raw !== "object") {
     throw new RunbookError(
       `Runbook "${runbookName}" step ${index}: expected object, got ${typeof raw}`,
     );
   }
-  const s = raw as Record<string, unknown>;
-  const role = s.role;
-  if (typeof role !== "string" || !CANON_ROLES.includes(role as CanonRole)) {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: unknown role ${JSON.stringify(role)}`,
-    );
+  return raw as Record<string, unknown>;
+}
+
+function requireString(obj: Record<string, unknown>, field: string, ctx: string): string {
+  const value = obj[field];
+  if (typeof value !== "string") {
+    throw new RunbookError(`${ctx}: missing string "${field}"`);
   }
-  const task_type = s.task_type;
-  if (typeof task_type !== "string") {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: missing string "task_type"`,
-    );
+  return value;
+}
+
+function requireCanonRole(raw: unknown, ctx: string): CanonRole {
+  if (typeof raw !== "string" || !CANON_ROLES.includes(raw as CanonRole)) {
+    throw new RunbookError(`${ctx}: unknown role ${JSON.stringify(raw)}`);
   }
-  const artifact = s.artifact;
-  if (typeof artifact !== "string") {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: missing string "artifact"`,
-    );
+  return raw as CanonRole;
+}
+
+function requireHitl(raw: unknown, ctx: string): RunbookHitl {
+  if (raw === false) return false;
+  if (raw === "after" || raw === "after_if_verdict_not_clean") return raw;
+  throw new RunbookError(`${ctx}: invalid hitl value ${JSON.stringify(raw)}`);
+}
+
+function requireStringArray(raw: unknown, field: string, ctx: string): string[] {
+  const source = raw ?? [];
+  if (!Array.isArray(source)) {
+    throw new RunbookError(`${ctx}: ${field} must be an array`);
   }
-  const artifact_path = s.artifact_path;
-  if (typeof artifact_path !== "string") {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: missing string "artifact_path"`,
-    );
-  }
-  const hitlRaw = s.hitl;
-  let hitl: RunbookHitl;
-  if (hitlRaw === false) {
-    hitl = false;
-  } else if (
-    hitlRaw === "after" ||
-    hitlRaw === "after_if_verdict_not_clean"
-  ) {
-    hitl = hitlRaw;
-  } else {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: invalid hitl value ${JSON.stringify(hitlRaw)}`,
-    );
-  }
-  const requiredRaw = s.required_artifacts ?? [];
-  if (!Array.isArray(requiredRaw)) {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: required_artifacts must be an array`,
-    );
-  }
-  const required_artifacts = requiredRaw.map((entry, i) => {
+  return source.map((entry, i) => {
     if (typeof entry !== "string") {
-      throw new RunbookError(
-        `Runbook "${runbookName}" step ${index}: required_artifacts[${i}] must be a string`,
-      );
+      throw new RunbookError(`${ctx}: ${field}[${i}] must be a string`);
     }
     return entry;
   });
-
-  return {
-    role: role as CanonRole,
-    task_type: task_type as TaskType,
-    artifact,
-    artifact_path,
-    hitl,
-    required_artifacts,
-  };
 }
+
+/** Running index of which step produced which logical artifact. */
+type ArtifactIndex = Map<string, { description?: string; path: string; produced_by: CanonRole }>;
+
+/** Per-step context threaded through `buildStepDescriptor`. */
+type StepContext = {
+  artifactIndex: ArtifactIndex;
+  index: number;
+  runbook: Runbook;
+  step: RunbookStep;
+  target_files: string[];
+  workspace_id: string;
+};
 
 /**
  * Plan a runbook execution against a workspace.
@@ -266,71 +251,21 @@ function parseStep(
  */
 export function planRun(input: PlanRunInput): SpawnDescriptor[] {
   const { runbook, workspace_id, target_files } = input;
-
-  // Map of logical artifact id -> { path, produced_by }. Populated as we
-  // walk the steps, so downstream steps can resolve their upstream refs.
-  const artifactIndex = new Map<
-    string,
-    { path: string; produced_by: CanonRole; description?: string }
-  >();
-
+  const artifactIndex: ArtifactIndex = new Map();
   const descriptors: SpawnDescriptor[] = [];
+
   for (let i = 0; i < runbook.steps.length; i++) {
     const step = runbook.steps[i]!;
-    // Validate that the step's declared artifact matches the role's
-    // canonical contract; the spawn prompt embeds the canonical path and
-    // a mismatch would silently diverge from what the hooks enforce.
-    const contract = getRoleArtifactContract(step.role);
-    if (contract.artifact_path !== step.artifact_path) {
-      throw new RunbookError(
-        `Runbook "${runbook.name}" step ${i}: artifact_path ${step.artifact_path} does not match canonical contract ${contract.artifact_path} for role ${step.role}`,
-      );
-    }
-    if (contract.artifact_id !== step.artifact) {
-      throw new RunbookError(
-        `Runbook "${runbook.name}" step ${i}: artifact id ${step.artifact} does not match canonical contract ${contract.artifact_id} for role ${step.role}`,
-      );
-    }
-
-    // Resolve upstream refs from earlier steps' outputs.
-    const upstream: UpstreamArtifactRef[] = step.required_artifacts.map(
-      (refId) => {
-        const hit = artifactIndex.get(refId);
-        if (!hit) {
-          throw new RunbookError(
-            `Runbook "${runbook.name}" step ${i} (${step.role}): required artifact "${refId}" is not produced by any earlier step`,
-          );
-        }
-        return {
-          id: refId,
-          path: hit.path,
-          produced_by: hit.produced_by,
-          description: hit.description,
-        };
-      },
+    descriptors.push(
+      buildStepDescriptor({
+        artifactIndex,
+        index: i,
+        runbook,
+        step,
+        target_files,
+        workspace_id,
+      }),
     );
-
-    const task_id = `${runbook.name}-${String(i).padStart(2, "0")}-${step.role}`;
-    const spawn_prompt = assembleSpawnPrompt({
-      role: step.role,
-      task_type: step.task_type,
-      target_files,
-      upstream_artifact_refs: upstream,
-      workspace_id,
-    });
-
-    descriptors.push({
-      task_id,
-      role: step.role,
-      task_type: step.task_type,
-      artifact: step.artifact,
-      artifact_path: step.artifact_path,
-      hitl: step.hitl,
-      spawn_prompt,
-      required_artifacts: step.required_artifacts,
-    });
-
-    // Index this step's output for downstream consumers.
     artifactIndex.set(step.artifact, {
       path: step.artifact_path,
       produced_by: step.role,
@@ -338,6 +273,73 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
   }
 
   return descriptors;
+}
+
+/** Validate a step, resolve its upstream refs, and assemble its prompt. */
+function buildStepDescriptor(ctx: StepContext): SpawnDescriptor {
+  const { step, index, runbook, workspace_id, target_files, artifactIndex } = ctx;
+  assertContractMatches(step, index, runbook);
+  const upstream = resolveUpstreamRefs(step, index, runbook, artifactIndex);
+  const task_id = `${runbook.name}-${String(index).padStart(2, "0")}-${step.role}`;
+  const spawn_prompt = assembleSpawnPrompt({
+    role: step.role,
+    target_files,
+    task_type: step.task_type,
+    upstream_artifact_refs: upstream,
+    workspace_id,
+  });
+  return {
+    artifact: step.artifact,
+    artifact_path: step.artifact_path,
+    hitl: step.hitl,
+    required_artifacts: step.required_artifacts,
+    role: step.role,
+    spawn_prompt,
+    task_id,
+    task_type: step.task_type,
+  };
+}
+
+/**
+ * Validate that the step's declared artifact matches the role's canonical
+ * contract. The spawn prompt embeds the canonical path; a mismatch would
+ * silently diverge from what the hooks enforce.
+ */
+function assertContractMatches(step: RunbookStep, index: number, runbook: Runbook): void {
+  const contract = getRoleArtifactContract(step.role);
+  if (contract.artifact_path !== step.artifact_path) {
+    throw new RunbookError(
+      `Runbook "${runbook.name}" step ${index}: artifact_path ${step.artifact_path} does not match canonical contract ${contract.artifact_path} for role ${step.role}`,
+    );
+  }
+  if (contract.artifact_id !== step.artifact) {
+    throw new RunbookError(
+      `Runbook "${runbook.name}" step ${index}: artifact id ${step.artifact} does not match canonical contract ${contract.artifact_id} for role ${step.role}`,
+    );
+  }
+}
+
+/** Resolve the step's required_artifacts against earlier steps' outputs. */
+function resolveUpstreamRefs(
+  step: RunbookStep,
+  index: number,
+  runbook: Runbook,
+  artifactIndex: ArtifactIndex,
+): UpstreamArtifactRef[] {
+  return step.required_artifacts.map((refId) => {
+    const hit = artifactIndex.get(refId);
+    if (!hit) {
+      throw new RunbookError(
+        `Runbook "${runbook.name}" step ${index} (${step.role}): required artifact "${refId}" is not produced by any earlier step`,
+      );
+    }
+    return {
+      description: hit.description,
+      id: refId,
+      path: hit.path,
+      produced_by: hit.produced_by,
+    };
+  });
 }
 
 /**
@@ -359,17 +361,17 @@ export function writeTaskArtifactState(
   const teammateState: TaskArtifactState = {};
   for (const d of descriptors) {
     taskState[d.task_id] = {
-      role: d.role,
       artifact: d.artifact,
       artifact_path: d.artifact_path,
+      role: d.role,
     };
     // Teammate-name convention: use the role name directly. Phase 1
     // spawns at most one instance of a role per team, so this is
     // unambiguous. Phase 3 adaptive waves will need a richer key.
     teammateState[d.role] = {
-      role: d.role,
       artifact: d.artifact,
       artifact_path: d.artifact_path,
+      role: d.role,
     };
   }
 
@@ -395,13 +397,9 @@ export function deriveTaskListId(workspaceId: string): string {
  * Useful at the entry of any lead-mode call site so the off-path
  * cannot accidentally invoke it.
  */
-export function assertLeadModeEnabled(
-  env: NodeJS.ProcessEnv = process.env,
-): void {
+export function assertLeadModeEnabled(env: NodeJS.ProcessEnv = process.env): void {
   if (!isLeadModeEnabled(env)) {
-    throw new Error(
-      `${LEAD_MODE_ENV_VAR} must be set to "on" to use lead-mode`,
-    );
+    throw new Error(`${LEAD_MODE_ENV_VAR} must be set to "on" to use lead-mode`);
   }
 }
 
@@ -420,7 +418,7 @@ export async function loadAndPlan(
   assertLeadModeEnabled();
   const runbook = await loadRunbook(pluginDir, runbookName);
   const descriptors = planRun({ runbook, ...input });
-  return { runbook, descriptors };
+  return { descriptors, runbook };
 }
 
 // Re-export types from the spawn module so callers can import one place.
