@@ -10,6 +10,7 @@
  */
 
 import { z } from "zod";
+import { FlowNameSchema, StateIdSchema } from "./branded-types.js";
 
 // Status keywords and aliases
 
@@ -320,13 +321,13 @@ export const FlowDefinitionSchema = z.object({
   allowed_insertions: z.array(z.string()).optional(),
   debate: DebateConfigSchema.optional(),
   description: z.string(),
-  entry: z.string().optional(),
+  entry: StateIdSchema.optional(),
   gates: z.record(z.string(), z.string()).optional(),
   includes: z.array(FragmentIncludeSchema).optional(),
-  name: z.string(),
+  name: FlowNameSchema,
   progress: z.string().optional(),
   review_threshold: z.enum(["blocking", "warning"]).optional(),
-  states: z.record(z.string(), StateDefinitionSchema).optional(),
+  states: z.record(StateIdSchema, StateDefinitionSchema).optional(),
   tier: z.enum(["small", "medium", "large"]).optional(),
 });
 
@@ -462,9 +463,9 @@ export const ConsultationFragmentSchema = z.object({
 
 export const ResolvedFlowSchema = FlowDefinitionSchema.extend({
   consultations: z.record(z.string(), ConsultationFragmentSchema).optional(),
-  entry: z.string(), // guaranteed after resolution
-  spawn_instructions: z.record(z.string(), z.string()),
-  states: z.record(z.string(), StateDefinitionSchema), // required after resolution
+  entry: StateIdSchema, // guaranteed after resolution (no longer optional)
+  spawn_instructions: z.record(StateIdSchema, z.string()),
+  states: z.record(StateIdSchema, StateDefinitionSchema), // required after resolution
 });
 
 // Inferred TypeScript types

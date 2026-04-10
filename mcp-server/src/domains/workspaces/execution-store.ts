@@ -18,6 +18,10 @@ import type {
   IterationEntry,
   Session,
 } from "@domains/flows/board-state-schemas.ts";
+import {
+  type WorkspacePath,
+  workspacePath,
+} from "@domains/flows/branded-types.ts";
 import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
 import { validateEventPayload } from "@domains/messages/events.ts";
@@ -1360,7 +1364,7 @@ const storeCache = new Map<string, ExecutionStore>();
  * (`VITEST` env var set). Tests that operate on temp dirs typically do not include
  * the `.canon/workspaces/` segment in their paths.
  */
-export function assertWorkspacePath(workspace: string): void {
+export function assertWorkspacePath(workspace: string): WorkspacePath {
   if (process.env.CANON_SKIP_WORKSPACE_VALIDATION !== "true" && !process.env.VITEST) {
     // Use the raw string for the segment check so Windows-style paths work
     // cross-platform (resolve() would rewrite them on macOS).
@@ -1372,12 +1376,13 @@ export function assertWorkspacePath(workspace: string): void {
       );
     }
   }
+  return workspacePath(workspace);
 }
 
-export function getExecutionStore(workspace: string): ExecutionStore {
-  assertWorkspacePath(workspace);
+export function getExecutionStore(workspace: string | WorkspacePath): ExecutionStore {
+  const ws = typeof workspace === "string" ? assertWorkspacePath(workspace) : workspace;
 
-  const key = resolve(workspace);
+  const key = resolve(ws);
   const existing = storeCache.get(key);
   if (existing) return existing;
 

@@ -18,6 +18,24 @@ import {
   TestResultsSchema,
   ViolationSeveritiesSchema,
 } from "./flow-definition-schemas.js";
+import {
+  FlowNameSchema,
+  StateIdSchema,
+  WorkspacePathSchema,
+} from "./branded-types.js";
+
+// Re-export branded types and constructors so consumers can import from this file
+export {
+  FlowName,
+  FlowNameSchema,
+  flowName,
+  StateId,
+  StateIdSchema,
+  stateId,
+  WorkspacePath,
+  WorkspacePathSchema,
+  workspacePath,
+} from "./branded-types.js";
 
 // Board state schemas
 
@@ -190,7 +208,7 @@ export const BlockedInfoSchema = z
 export const ConcernEntrySchema = z.object({
   agent: z.string(),
   message: z.string(),
-  state_id: z.string(),
+  state_id: StateIdSchema,
   timestamp: z.string(),
 });
 
@@ -198,15 +216,15 @@ export const BoardSchema = z.object({
   base_commit: z.string(),
   blocked: BlockedInfoSchema,
   concerns: z.array(ConcernEntrySchema),
-  current_state: z.string(),
-  entry: z.string(),
-  flow: z.string(),
-  iterations: z.record(z.string(), IterationEntrySchema),
+  current_state: StateIdSchema,
+  entry: StateIdSchema,
+  flow: FlowNameSchema,
+  iterations: z.record(StateIdSchema, IterationEntrySchema),
   last_updated: z.string(),
   metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
-  skipped: z.array(z.string()),
+  skipped: z.array(StateIdSchema),
   started: z.string(),
-  states: z.record(z.string(), BoardStateEntrySchema),
+  states: z.record(StateIdSchema, BoardStateEntrySchema),
   task: z.string(),
 });
 
@@ -216,7 +234,7 @@ export const SessionSchema = z.object({
   branch: z.string(),
   completed_at: z.string().optional(),
   created: z.string(),
-  flow: z.string(),
+  flow: FlowNameSchema,
   original_task: z.string().optional(),
   rolled_back_at: z.string().optional(),
   rolled_back_to: z.string().optional(),
@@ -226,7 +244,7 @@ export const SessionSchema = z.object({
   task: z.string(),
   tier: z.enum(["small", "medium", "large"]),
   worktree_branch: z.string().optional(),
-  worktree_path: z.string().optional(),
+  worktree_path: WorkspacePathSchema.optional(),
 });
 
 // Inferred TypeScript types
