@@ -1,12 +1,12 @@
 # Canon
 
-Canon is a Claude Code plugin that adds engineering principles and a multi-agent build pipeline to your project. You describe what you want — Canon figures out the right approach, coordinates specialist agents to research, design, implement, test, review, and ship, and enforces your principles throughout. From your side, you just talk to Claude.
+Canon is a Claude Code plugin that turns Claude Code into an orchestrated, multi-agent build system governed by engineering principles. You describe what you want — Canon classifies your intent, selects the right workflow, coordinates specialist agents through research, design, implementation, testing, and review, and enforces your principles throughout. From your side, you just talk to Claude.
 
 ---
 
 ## Why Canon
 
-Most AI coding agents are capable but unstructured. Without Canon, common patterns emerge:
+Most AI coding workflows are capable but unstructured. Without Canon, common patterns emerge:
 
 - **Agents don't follow your standards.** Without explicit principles, agents generate code that works but doesn't match your team's patterns or quality bar. Every conversation starts from scratch.
 - **Complex tasks get one shot.** Ask an agent to "refactor the auth system" and you get a single attempt — no research, no design review, no plan approval before code is written.
@@ -54,7 +54,7 @@ Run this once inside your project:
 
 Canon creates a `.canon/` directory with:
 
-- **Principles** — a starter set of 54 built-in principles across three severity tiers, ready to customize
+- **Principles** — a starter set of 56 built-in principles across three severity tiers, ready to customize
 - **CONVENTIONS.md** — project conventions file for implementors to read
 - **config.json** — layer mappings and configuration with sensible defaults
 
@@ -66,7 +66,7 @@ From this point on, Canon loads relevant principles automatically whenever you b
 
 ## Principles
 
-Principles are the core of Canon. They are markdown files that tell agents what rules, preferences, and conventions to apply. Canon ships with 54 built-in principles (4 rules, 33 strong-opinions, 17 conventions) covering security, architecture, testing, and code design. After init, your project's active principles live in `.canon/principles/`.
+Principles are the core of Canon. They are markdown files that tell agents what rules, preferences, and conventions to apply. Canon ships with 56 built-in principles (5 rules, 34 strong-opinions, 17 conventions) covering security, architecture, testing, and code design. After init, your project's active principles live in `.canon/principles/`.
 
 A principle looks like this:
 
@@ -130,6 +130,80 @@ No flags, no flow names, no configuration needed. Canon auto-detects the right a
 | "Improve test coverage for the API layer" | Test-gap flow: scan coverage gaps, write tests, review |
 
 You can steer Canon naturally: "skip research", "just plan, don't implement", "use a quick fix".
+
+---
+
+## How It Works
+
+### The Orchestrator
+
+Canon's entry point is a Claude Code skill (`skills/canon/`) that activates for every user message. It acts as a pure dispatcher: it never writes code, runs tests, or produces artifacts itself. It classifies intent, selects a flow, and drives the state machine by calling Canon's MCP tools.
+
+### Flows and State Machines
+
+A flow is a YAML-defined state machine. Each state names an agent to spawn and a set of transitions to other states. The orchestrator walks the graph — calling `load_flow`, then `init_workspace`, then repeatedly calling `drive_flow` to advance one step at a time.
+
+**Available flows:**
+
+| Flow | Tier | When Canon picks it |
+|------|------|---------------------|
+| `fast-path` | Small | Bug fix, small change, 1–3 files |
+| `feature` | Medium | New feature, 4–10 files |
+| `refactor` | Medium | Behavior-preserving restructuring |
+| `migrate` | Medium | Dependency migration, "move to X" |
+| `epic` | Large | Cross-cutting change, 10+ files; uses adaptive waves |
+| `explore` | Research | "How does X work?" — no code changes |
+| `test-gap` | Testing | Analyze coverage gaps, write tests |
+| `review-only` | Review | Review a PR or branch without implementing |
+| `security-audit` | Security | Dedicated security audit |
+| `adopt` | Adoption | Scan for violations and auto-fix (invoked by `init`) |
+
+Flows are composed from reusable state groups called **fragments** (`flows/fragments/`): `context-sync`, `review-fix-loop`, `implement-verify`, `verify-fix-loop`, `security-scan`, `user-checkpoint`, `plan-review`, `pattern-check`, `early-scan`, `impl-handoff`, `targeted-research`, `test-fix-loop`, `pre-launch-check`, `ship-done`.
+
+### Agents
+
+Each state spawns a specialist agent in its own isolated git worktree. Agents receive relevant principles loaded for their task and produce structured artifacts that feed the next state.
+
+**Specialist agents:**
+
+| Agent | Role |
+|-------|------|
+| Researcher | Codebase analysis, risk assessment, investigation |
+| Architect | Design decisions, task plans, technical direction |
+| Implementor | Code changes, tests, self-review |
+| Tester | Test coverage analysis, test writing, verification |
+| Reviewer | Principle-based code review, compliance scoring |
+| Security | Vulnerability assessment, threat modeling |
+| Fixer | Targeted fixes for failing tests or review violations |
+| Scribe | Context sync — updates CLAUDE.md and documentation |
+| Shipper | Merge, PR creation, deployment prep |
+| Chat | Design discussions, brainstorming, ideas |
+| Guide | Questions, status checks, how-does-this-work |
+| Writer | Principle authoring and editing |
+| Learner | Review data analysis, principle improvement suggestions |
+
+### User Checkpoints
+
+Canon pauses at key moments to show you what's planned and get your approval. These **HITL breakpoints** happen after design (before code is written) and after review (if violations need a decision). You can approve, ask for revisions, or steer the flow. Canon never proceeds through a design without your sign-off.
+
+### Worktree Isolation
+
+Each specialist agent runs in its own git worktree — a lightweight, separate working directory on your branch. This means multiple agents can work in parallel without interfering with each other, and the main worktree stays clean throughout.
+
+### Hooks
+
+Canon installs tool-use interceptors that run automatically:
+
+| Hook | Trigger | Purpose |
+|------|---------|---------|
+| `pre-commit-check.sh` | Before `git commit` | Detect secrets, validate principle compliance |
+| `destructive-guard.sh` | Before Bash | Block force push, hard reset, and other dangerous git ops |
+| `workspace-lock-guard.sh` | Before Bash | Prevent concurrent builds on the same branch |
+| `pre-push-review.sh` | Before `git push` | Require review before pushing |
+| `large-file-guard.sh` | Before Write/Edit | Prevent accidental large file commits |
+| `principle-inject.sh` | Before Write/Edit | Inject relevant principle summaries into prompts |
+| `learn-nudge.sh` | After Bash | Suggest principle creation or updates |
+| `compaction-check.sh` | After Bash | Detect workspace file growth |
 
 ---
 
@@ -207,19 +281,52 @@ Analyzes accumulated review data to suggest principle improvements: severity adj
 
 ---
 
-## Key Concepts
+## The MCP Server
 
-**Principles** are the rules Canon enforces. They live in `.canon/principles/` and are matched to code by layer and file pattern. Project-local principles override built-ins with the same `id`.
+Canon's tooling is provided by a TypeScript MCP server (`mcp-server/`) that Claude Code connects to automatically when the plugin is installed. It exposes approximately 40 tools across six areas:
 
-**Flows** are the workflows Canon selects automatically: `fast-path`, `refactor`, `feature`, `migrate`, `epic`, `explore`, `test-gap`, `review-only`, `security-audit`, and `adopt` (run automatically at the end of `init`). You never pick a flow; Canon selects based on task scope and urgency.
+| Area | Tools |
+|------|-------|
+| **Orchestration** | `load_flow`, `init_workspace`, `drive_flow`, `update_board`, `report_result`, `post_message`, `get_messages`, `inject_wave_event`, `get_transcript`, `seed_workspace`, `simulate_flow`, `resolve_wave_event`, `resolve_after_consultations` |
+| **Principles** | `get_principles`, `list_principles`, `get_compliance`, `review_code` |
+| **Knowledge graph** | `codebase_graph`, `graph_query`, `semantic_search`, `store_summaries` |
+| **PR review** | `show_pr_impact`, `review_code`, `store_pr_review` |
+| **File context** | `get_file_context` |
+| **Diagnostics** | `get_drift_report`, `record_agent_metrics`, `categorize_failures`, `get_history` |
 
-**Agents** are specialists Canon dispatches — Researcher, Architect, Implementor, Tester, Reviewer, Security, Fixer, Scribe, Shipper, Chat, Guide, Writer, Learner. Each runs in its own isolated git worktree with relevant principles loaded. You see their output but never manage them directly.
+Tools that produce visual outputs (`show_pr_impact`, `codebase_graph`, `get_drift_report`, `get_compliance`, `get_file_context`, `graph_query`) open as interactive MCP App dashboards in Claude Desktop and compatible clients. In terminal-only environments, they return equivalent structured text.
 
-**User checkpoints** pause the pipeline after planning so you can review and give feedback before any code is written. Approve to proceed, or share thoughts — Canon routes revisions back to planning with your notes.
+The MCP server persists state to `.canon/` using SQLite databases and JSONL files.
 
-**The MCP server** (`mcp-server/`) is a TypeScript server that provides Canon's harness tools (flow orchestration, workspace management, board state) and principle/drift/graph tools. It persists state to `.canon/` using SQLite databases and JSONL files.
+---
 
-**Hooks** run automatically on tool use: `pre-commit-check.sh` (secrets + principle compliance), `destructive-guard.sh` (blocks dangerous git operations), `workspace-lock-guard.sh` (prevents concurrent builds), `principle-inject.sh` (injects relevant principles into write/edit prompts), and others.
+## Project Layout
+
+```
+canon/
+├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
+├── flows/                # Flow state machine definitions
+│   └── fragments/        # Reusable state groups included by flows
+├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
+├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
+│   └── src/
+│       ├── app/          # Entry point (index.ts), tool registration
+│       ├── domains/      # Shared domain types (flows, workspaces, messages, board)
+│       ├── features/     # Tool implementations grouped by feature area
+│       ├── platform/     # Job manager, infrastructure
+│       └── shared/       # Constants, matcher, parser, schema, utility libs
+├── principles/           # Built-in principles (56 total: 5 rules, 34 strong-opinions, 17 conventions)
+│   ├── rules/
+│   ├── strong-opinions/
+│   └── conventions/
+├── rules/                # Agent-behavior rules (loaded per agent at runtime)
+├── skills/canon/         # Claude Code skill definition — entry point for Canon activation
+│   ├── commands/         # Slash command definitions
+│   └── references/       # Reference fragments (canon-orchestrator.md, etc.)
+├── templates/            # Artifact templates agents must follow
+└── .canon/               # Runtime data (workspaces, principles, config, SQLite DBs)
+    └── workspaces/       # Per-branch/task build state
+```
 
 ---
 
@@ -259,3 +366,11 @@ Everything Canon stores lives in `.canon/` in your project root:
 | `workspaces/{branch}/{slug}/` | Per-task build state (board.json, session.json, progress.md, plans/, reviews/) |
 
 Canon does not collect, transmit, or share any data. No telemetry, no analytics, no background network calls. Everything stays local.
+
+---
+
+## Reference
+
+Full MCP tool signatures, flow schema, hook details, and the principles guide: [docs/reference/canon-reference.md](./docs/reference/canon-reference.md).
+
+What's coming next: [docs/roadmap.md](./docs/roadmap.md).
