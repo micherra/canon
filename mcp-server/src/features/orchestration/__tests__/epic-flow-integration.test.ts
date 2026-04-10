@@ -13,17 +13,13 @@
 
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { normalizeStatus } from "../engine/transitions.ts";
 import { loadFlow } from "../tools/load-flow.ts";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 // pluginDir must point to a directory that has flows/ with all standard flows and fragments,
 // including epic.md, test-fix-loop.md, and targeted-research.md.

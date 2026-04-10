@@ -5,6 +5,7 @@
  */
 
 import type { ReviewEntry } from "@shared/schema.ts";
+import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { FlowRunEntry } from "../drift-analytics-types.ts";
 import { DriftDb } from "../drift-db.ts";
