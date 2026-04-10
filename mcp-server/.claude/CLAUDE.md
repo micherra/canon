@@ -43,7 +43,7 @@ src/
 - **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-04-09 (bounded-context refactor: all contract path references updated to bounded-context layout; features/, platform/, shared/lib/ replace legacy flat directories) -->
+<!-- last-updated: 2026-04-09 (agent provenance: commit-trailers.ts + file-claims.ts contracts added; init_workspace + update_board tool rows updated for claims) -->
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -305,11 +305,11 @@ src/
 
 | Tool | Purpose |
 |------|---------|
-| `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status and stale sessions before creating; when preflight finds issues, returns `workspace: ""` (empty string) and puts the candidate path in `candidate_workspace` — callers must check `preflight_issues` before using `workspace` |
+| `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status, stale sessions, and active file claims before creating; when preflight finds issues, returns `workspace: ""` (empty string) and puts the candidate path in `candidate_workspace` — callers must check `preflight_issues` before using `workspace`; claim check is informational (non-blocking) |
 | `load_flow` | Load and resolve a flow definition; throws (hard-blocking) on validation errors since ADR-004; reachability issues emit non-blocking warnings |
 | `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
 | `drive_flow` | Drive the flow state machine for a single state; returns a `SpawnRequest` or `HitlBreakpoint` for the orchestrator to process; `{ action: "done" }` response includes optional `learn_gate_passed?: boolean` (ADR-016, 2026-04-08) — true only when auto-learn gates all pass at flow completion; absent when gate not evaluated or any gate failed |
-| `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress); at `complete_flow` aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
+| `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress, set_metadata); `set_metadata` with `affected_files` (JSON array string) calls `registerClaims` + stores overlap warnings in board metadata as `claim_warnings`; `complete_flow` releases all file claims for the workflow slug before recording analytics — aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
 | `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
 | `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
@@ -335,11 +335,26 @@ src/
 - `buildWorktreeSettings(allowRules: string[]): { permissions: { allow: string[] } }` — builds the `settings.local.json` structure; empty rules produce `{ permissions: { allow: [] } }` (no extra permissions)
 - `injectWorktreeSettings(worktreePath: string, tools: string[]): Promise<boolean>` — atomically writes `.claude/settings.local.json` into the worktree (write-to-temp + rename); validates absolute path; returns `false` on any failure without throwing; creates `.claude/` dir if absent; idempotent (second call overwrites first)
 
+**Agent Provenance** (`src/shared/lib/commit-trailers.ts`, `src/shared/lib/file-claims.ts`) — added 2026-04-09:
+<!-- last-updated: 2026-04-09 (agent provenance system: commit trailers + file claims) -->
+- `TrailerOpts` — `{ workflow: string; agent: string; state: string; taskId?: string }`
+- `formatCommitTrailers(opts: TrailerOpts): string` — returns trailer block string; returns `""` when any required field is missing
+- `buildCommitMessage(subject, body, trailerOpts): string` — full commit message: subject + optional body + trailers + Co-Authored-By
+- Trailer format: `Canon-Workflow: {slug}` / `Canon-Agent: {agent-type}` / `Canon-State: {state-id}` / `Canon-Task: {task-id}` (wave only)
+- `ClaimsFile` — `{ version: 1; claims: Record<string, ClaimEntry[]> }`; persisted to `.canon/claims.json`
+- `ClaimEntry` — `{ workflow: string; claimed_at: string }` (ISO-8601)
+- `ClaimOverlap` — `{ file_path: string; workflows: string[] }`
+- `readClaims(projectDir): ClaimsFile` — prunes stale entries (>24h TTL); returns empty structure on any error
+- `registerClaims(projectDir, workflow, filePaths): void` — idempotent; duplicate workflow+file pairs are no-ops
+- `releaseClaims(projectDir, workflow): void` — removes all entries for a workflow; no-op for unknown workflows
+- `checkClaimOverlaps(projectDir, workflow, filePaths): ClaimOverlap[]` — returns overlaps from OTHER workflows only
+- Spawn prompts now include a `## Commit Provenance` section (injected by `inject-coordination.ts`) with the pre-formatted trailer block for the agent's state
+
 **`injectSettingsIntoRequests`** (`src/features/orchestration/tools/drive-flow.ts`) — exported helper added 2026-04-08:
 - `injectSettingsIntoRequests(requests: SpawnRequest[]): Promise<void>` — iterates spawn requests sequentially; calls `injectWorktreeSettings(req.worktree_path, req.tools)` when `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools` are all present; sequential (not `Promise.all`) for error isolation — one failure does not abort others; never throws
 
 ## Invariants
-<!-- last-updated: 2026-04-08 (worktree_path sole isolation signal; learn_gate_passed on done action; auto-approve injection fail-closed) -->
+<!-- last-updated: 2026-04-09 (file claims lifecycle and non-blocking invariants added) -->
 
 - **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
@@ -364,6 +379,8 @@ src/
 - **ADR-005 computeFileInsightMaps call pattern**: call `computeFileInsightMaps(db)` once per request and pass the `FileInsightMaps` result into `KgQuery.getFileMetrics()`; do not call `getFileMetrics()` in a loop without pre-computing insight maps — added 2026-04-01
 - **worktree_path is the sole isolation signal** (2026-04-08): `SpawnPromptEntry` no longer carries `isolation`; `resolveToolProfile` permission_mode fallback uses `worktreePath ? "auto" : "prompt"` (not `isolation`); wave SpawnRequests with `worktree_path` are emitted with `isolation: "none"` — Canon owns the worktree lifecycle; `persistWaveTaskResult` stores the convention branch (`canon-wave/{task_id}`) unconditionally
 - **auto-approve settings injection** (2026-04-08): `injectSettingsIntoRequests` is called in all three spawn paths (`startNextWave`, `enterWaveState`, `tryEnterSingleState`) before returning `{ action: "spawn" }`; injection is conditional on `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools`; `injectWorktreeSettings` failure returns `false` and never blocks spawn (fail-closed); agents that would have received auto-approve simply fall back to standard prompting
+- **file claims non-blocking** (2026-04-09): all claim operations in `init_workspace`, `update_board`, and `inject-coordination.ts` are wrapped in try/catch; claim failures never block workflow execution; overlap warnings are advisory strings in board metadata (`claim_warnings`), not errors
+- **file claims lifecycle** (2026-04-09): claims are registered by `update_board set_metadata` (when `affected_files` is provided), checked as informational warnings by `init_workspace` preflight, and released by `update_board complete_flow`; do not call `file-claims.ts` functions directly from feature code outside these three integration points
 
 ## Development
 <!-- last-updated: 2026-03-22 -->

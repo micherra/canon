@@ -75,6 +75,8 @@ export const RUNTIME_VARIABLES = new Set([
   "write_tests",
   // Context enrichment (implementor and reviewer only — selective exposure)
   "enrichment",
+  // Context injection: design handoff summary for downstream states
+  "design_handoff",
 ]);
 
 // ---------------------------------------------------------------------------

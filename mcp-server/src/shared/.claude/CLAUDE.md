@@ -33,6 +33,8 @@ Shared kernel — cross-cutting utilities, constants, parsers, and low-level hel
 | `paths.ts` | `toPosix`, `loadPathAliases` — path normalization and tsconfig alias loading |
 | `fuzzy-field-validation.ts` | `suggestField`, `checkUnknownFields`, `installFuzzyValidation` — Levenshtein-based field name suggestions |
 | `learn-lock.ts` | Auto-learn lock file management |
+| `commit-trailers.ts` | `TrailerOpts`, `formatCommitTrailers`, `buildCommitMessage` — formats Canon-Workflow/Agent/State/Task git trailer blocks; added 2026-04-09 |
+| `file-claims.ts` | `readClaims`, `writeClaims`, `registerClaims`, `releaseClaims`, `checkClaimOverlaps` — `.canon/claims.json` concurrent workflow conflict detection; added 2026-04-09 |
 
 ## Invariants
 <!-- last-updated: 2026-04-09 -->

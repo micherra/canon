@@ -78,6 +78,15 @@ export type {
   UpdateExecutionFields,
   UpdateWaveEventFields,
 } from "./execution-store-types.ts";
+export type { FlowLineageEntry } from "./execution-store-lineage.ts";
+import {
+  type FlowLineageEntry,
+  type LineageStatements,
+  getFlowLineage as _getFlowLineage,
+  getLatestFlowForBranch as _getLatestFlowForBranch,
+  prepareLineageStatements,
+  recordFlowLineage as _recordFlowLineage,
+} from "./execution-store-lineage.ts";
 
 // ExecutionStore
 
@@ -85,10 +94,12 @@ export class ExecutionStore {
   // Expose db for test introspection (tests access via `(store as any).db`)
   private readonly db: Database.Database;
   private readonly s: ReturnType<typeof prepareAllStatements>;
+  private readonly lineage: LineageStatements;
 
   constructor(db: Database.Database) {
     this.db = db;
     this.s = prepareAllStatements(db);
+    this.lineage = prepareLineageStatements(db);
   }
 
   // Execution (board + session singleton)
@@ -438,6 +449,20 @@ export class ExecutionStore {
       stateId,
       options,
     );
+  }
+
+  // Flow lineage (cfcp-03)
+
+  recordFlowLineage(entry: FlowLineageEntry): void {
+    _recordFlowLineage(this.lineage, entry);
+  }
+
+  getFlowLineage(branch: string): FlowLineageEntry[] {
+    return _getFlowLineage(this.lineage, branch);
+  }
+
+  getLatestFlowForBranch(branch: string): FlowLineageEntry | null {
+    return _getLatestFlowForBranch(this.lineage, branch);
   }
 
   // Lifecycle
