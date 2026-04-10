@@ -1,11 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
 // Clear the DriftDb module cache between tests
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { reportInputSchema } from "@shared/schema.ts";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { report } from "../tools/report.ts";
 
 // --- Schema validation ---
@@ -147,5 +148,130 @@ describe("report()", () => {
     const store = new DriftStore(tmpDir);
     const entries = await store.getReviews();
     expect(entries[0].verdict).toBe("WARNING");
+  });
+});
+
+// --- report() with injected IDriftStore (DI parameter path) ---
+
+describe("report() — injected IDriftStore", () => {
+  function makeMockStore(): IDriftStore & { appendReview: ReturnType<typeof vi.fn> } {
+    return {
+      appendFlowRun: vi.fn().mockResolvedValue(undefined),
+      appendReview: vi.fn().mockResolvedValue(undefined),
+      countFlowRunsSince: vi.fn().mockReturnValue(0),
+      getComplianceTrend: vi.fn().mockResolvedValue([]),
+      getLastReviewForBranch: vi.fn().mockResolvedValue(null),
+      getLastReviewForPr: vi.fn().mockResolvedValue(null),
+      getReviews: vi.fn().mockResolvedValue([]),
+      getReviewsForFiles: vi.fn().mockResolvedValue([]),
+    };
+  }
+
+  it("calls appendReview on the injected store with correct entry fields", async () => {
+    const mockStore = makeMockStore();
+
+    const result = await report(
+      {
+        files: ["src/a.ts"],
+        honored: ["p2"],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 1, total: 1 },
+          rules: { passed: 0, total: 1 },
+        },
+        type: "review",
+        violations: [{ principle_id: "p1", severity: "rule" }],
+      },
+      "/unused/projectDir",
+      mockStore,
+    );
+
+    expect(result.recorded).toBe(true);
+    expect(result.id).toMatch(/^rev_/);
+    expect(mockStore.appendReview).toHaveBeenCalledOnce();
+
+    const entry = mockStore.appendReview.mock.calls[0][0];
+    expect(entry.verdict).toBe("BLOCKING");
+    expect(entry.files).toEqual(["src/a.ts"]);
+    expect(entry.violations).toHaveLength(1);
+    expect(entry.violations[0].principle_id).toBe("p1");
+    // Violated principle must be excluded from honored list
+    expect(entry.honored).not.toContain("p1");
+    expect(entry.honored).toContain("p2");
+  });
+
+  it("derives WARNING verdict from strong-opinion violation via injected store", async () => {
+    const mockStore = makeMockStore();
+
+    await report(
+      {
+        files: ["src/b.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 1 },
+          rules: { passed: 1, total: 1 },
+        },
+        type: "review",
+        violations: [{ principle_id: "p2", severity: "strong-opinion" }],
+      },
+      "/unused/projectDir",
+      mockStore,
+    );
+
+    const entry = mockStore.appendReview.mock.calls[0][0];
+    expect(entry.verdict).toBe("WARNING");
+  });
+
+  it("uses explicit verdict when provided, overriding derivation logic", async () => {
+    const mockStore = makeMockStore();
+
+    await report(
+      {
+        files: ["src/c.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 1 },
+        },
+        type: "review",
+        verdict: "CLEAN", // explicit — overrides the rule violation that would produce BLOCKING
+        violations: [{ principle_id: "p1", severity: "rule" }],
+      },
+      "/unused/projectDir",
+      mockStore,
+    );
+
+    const entry = mockStore.appendReview.mock.calls[0][0];
+    expect(entry.verdict).toBe("CLEAN");
+  });
+
+  it("does not construct a real DriftStore when driftStore is injected", async () => {
+    // This test verifies the backward-compat parameter is truly honored —
+    // report() must NOT attempt to open drift.db at a nonexistent path.
+    const mockStore = makeMockStore();
+    const nonexistentDir = "/absolutely/does/not/exist/on/this/machine";
+
+    // Should not throw despite nonexistent projectDir because the injected store is used
+    await expect(
+      report(
+        {
+          files: [],
+          honored: [],
+          score: {
+            conventions: { passed: 0, total: 0 },
+            opinions: { passed: 0, total: 0 },
+            rules: { passed: 0, total: 0 },
+          },
+          type: "review",
+          violations: [],
+        },
+        nonexistentDir,
+        mockStore,
+      ),
+    ).resolves.toBeDefined();
+
+    expect(mockStore.appendReview).toHaveBeenCalledOnce();
   });
 });

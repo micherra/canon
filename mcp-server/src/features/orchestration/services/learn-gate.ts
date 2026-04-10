@@ -20,7 +20,8 @@
 
 import { readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { createDriftStore } from "@domains/drift/drift-store-factory.ts";
+import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
 import { loadLearnGateConfig } from "@shared/lib/config.ts";
 import { acquireLearnLock, getLastLearnTimestamp } from "@shared/lib/learn-lock.ts";
 
@@ -94,8 +95,14 @@ async function checkScanThrottle(throttlePath: string): Promise<string | null> {
  * Evaluate all learn gates in cheapest-first order.
  * Returns { passed: true } only if ALL gates pass.
  * Returns { passed: false, reason } for any gate failure or unexpected error.
+ *
+ * @param driftStore Optional injected IDriftStore for the flow count gate.
+ *                   When absent, a DriftDb is obtained lazily from projectDir (backward-compatible).
  */
-export async function evaluateLearnGate(projectDir: string): Promise<LearnGateResult> {
+export async function evaluateLearnGate(
+  projectDir: string,
+  driftStore?: IDriftStore,
+): Promise<LearnGateResult> {
   // Gate 1: Config check (cheapest — cached per-tick)
   const config = await loadLearnGateConfig(projectDir);
   if (!config.enabled) return { passed: false, reason: "auto-learn disabled" };
@@ -120,10 +127,10 @@ export async function evaluateLearnGate(projectDir: string): Promise<LearnGateRe
   if (throttleReason) return { passed: false, reason: throttleReason };
 
   // Gate 4: Flow gate — enough flows since last learn
-  const driftDb = getDriftDb(projectDir);
+  const store = driftStore ?? createDriftStore(projectDir);
   const sinceIso =
     lastLearnTs !== null ? new Date(lastLearnTs).toISOString() : "1970-01-01T00:00:00.000Z";
-  const flowCount = driftDb.countFlowRunsSince(sinceIso);
+  const flowCount = store.countFlowRunsSince(sinceIso);
   if (flowCount < config.min_flows_since_last) {
     try {
       await writeFile(throttlePath, "", { flag: "w", mode: 0o600 });

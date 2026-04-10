@@ -6,10 +6,10 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { createDriftStore } from "@domains/drift/drift-store-factory.ts";
 import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
 import type { Effect, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import { z } from "zod";
@@ -68,7 +68,7 @@ export async function executeEffects(
   const { workspace, artifacts, projectDir, stateName } = opts;
   if (!stateDef.effects?.length) return [];
 
-  const store: IDriftStore = opts.driftStore ?? new DriftStore(projectDir);
+  const store: IDriftStore = opts.driftStore ?? createDriftStore(projectDir);
   const results: EffectResult[] = [];
 
   for (const effect of stateDef.effects) {

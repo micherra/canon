@@ -20,12 +20,13 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { createDriftStore } from "@domains/drift/drift-store-factory.ts";
+import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import { gitLog } from "@platform/adapters/git-adapter.ts";
-import { DriftStore } from "@platform/storage/drift/store.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import { resolveTaskScope } from "./scope-resolver.ts";
 
@@ -37,6 +38,9 @@ export type EnrichmentInput = {
   baseCommit?: string;
   cwd: string;
   projectDir?: string;
+  /** Optional injected IDriftStore for the drift signals section. When absent,
+   *  a DriftStore is constructed lazily from projectDir (backward-compatible). */
+  driftStore?: IDriftStore;
 };
 
 export type EnrichmentResult = {
@@ -125,7 +129,7 @@ async function assembleSections(
 
   const [gitSection, driftSection] = await Promise.all([
     safeAssembleGitSection(filePaths, input.cwd, sectionBudget, warnings),
-    safeAssembleDriftSection(filePaths, input.projectDir, sectionBudget, warnings),
+    safeAssembleDriftSection(filePaths, input.projectDir, sectionBudget, warnings, input.driftStore),
   ]);
 
   const workspaceSection = await safeAssembleWorkspaceSection(
@@ -193,9 +197,10 @@ async function safeAssembleDriftSection(
   projectDir: string | undefined,
   budget: number,
   warnings: string[],
+  driftStore?: IDriftStore,
 ): Promise<SectionResult & { data: ReviewEntry[] | null }> {
   try {
-    return await assembleDriftSection(filePaths, projectDir, budget);
+    return await assembleDriftSection(filePaths, projectDir, budget, driftStore);
   } catch (err) {
     warnings.push(`enrichment: drift section failed — ${String(err)}`);
     return { content: "", data: null, warnings: [] };
@@ -291,19 +296,20 @@ function assembleGitSection(
 /**
  * `assembleDriftSection` — Drift Signals.
  *
- * Calls DriftStore.getReviewsForFiles and formats as:
+ * Calls IDriftStore.getReviewsForFiles and formats as:
  *   - `file.ts`: last verdict CLEAN (2 days ago), N active violations
  */
 async function assembleDriftSection(
   filePaths: string[],
   projectDir: string | undefined,
   budget: number,
+  driftStore?: IDriftStore,
 ): Promise<SectionResult & { data: ReviewEntry[] | null }> {
-  if (!projectDir) {
+  if (!driftStore && !projectDir) {
     return { content: "", data: null, warnings: [] };
   }
 
-  const store = new DriftStore(projectDir);
+  const store = driftStore ?? createDriftStore(projectDir!);
   const reviews = await store.getReviewsForFiles(filePaths);
 
   if (reviews.length === 0) {

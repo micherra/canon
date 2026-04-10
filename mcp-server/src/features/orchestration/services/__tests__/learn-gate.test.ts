@@ -268,3 +268,62 @@ describe("evaluateLearnGate — best-effort error handling", () => {
     await expect(evaluateLearnGate(PROJECT_DIR)).rejects.toThrow("config read failed");
   });
 });
+
+// --- evaluateLearnGate() with injected IDriftStore (DI parameter path) ---
+
+import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
+
+describe("evaluateLearnGate — injected IDriftStore (DI path)", () => {
+  function makeMockDriftStore(flowCount = 10): IDriftStore {
+    return {
+      appendFlowRun: vi.fn().mockResolvedValue(undefined),
+      appendReview: vi.fn().mockResolvedValue(undefined),
+      countFlowRunsSince: vi.fn().mockReturnValue(flowCount),
+      getComplianceTrend: vi.fn().mockResolvedValue([]),
+      getLastReviewForBranch: vi.fn().mockResolvedValue(null),
+      getLastReviewForPr: vi.fn().mockResolvedValue(null),
+      getReviews: vi.fn().mockResolvedValue([]),
+      getReviewsForFiles: vi.fn().mockResolvedValue([]),
+    };
+  }
+
+  test("uses injected driftStore.countFlowRunsSince instead of getDriftDb", async () => {
+    const mockStore = makeMockDriftStore(10);
+
+    const result = await evaluateLearnGate(PROJECT_DIR, mockStore);
+
+    expect(result.passed).toBe(true);
+    // The injected store's countFlowRunsSince must be called — not getDriftDb
+    expect(mockStore.countFlowRunsSince as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      "1970-01-01T00:00:00.000Z", // no prior learn timestamp in default mock
+    );
+    // getDriftDb must NOT be called since we injected a store
+    expect(getDriftDb).not.toHaveBeenCalled();
+  });
+
+  test("fails flow gate when injected store returns insufficient count", async () => {
+    const mockStore = makeMockDriftStore(2); // < 5 threshold
+
+    const result = await evaluateLearnGate(PROJECT_DIR, mockStore);
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toBe("flow gate: 2 < 5");
+  });
+
+  test("all gates pass when injected store returns enough flows", async () => {
+    const mockStore = makeMockDriftStore(99);
+
+    const result = await evaluateLearnGate(PROJECT_DIR, mockStore);
+
+    expect(result.passed).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
+
+  test("getDriftDb is never called when driftStore is injected (isolation guarantee)", async () => {
+    const mockStore = makeMockDriftStore(0);
+
+    await evaluateLearnGate(PROJECT_DIR, mockStore);
+
+    expect(getDriftDb).not.toHaveBeenCalled();
+  });
+});

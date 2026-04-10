@@ -1,4 +1,5 @@
-import { DriftStore } from "@platform/storage/drift/store.ts";
+import { createDriftStore } from "@domains/drift/drift-store-factory.ts";
+import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ReportInput, ReviewEntry } from "@shared/schema.ts";
 
@@ -8,8 +9,12 @@ export type ReportOutput = {
   note: string;
 };
 
-export async function report(input: ReportInput, projectDir: string): Promise<ReportOutput> {
-  const store = new DriftStore(projectDir);
+export async function report(
+  input: ReportInput,
+  projectDir: string,
+  driftStore?: IDriftStore,
+): Promise<ReportOutput> {
+  const store = driftStore ?? createDriftStore(projectDir);
 
   switch (input.type) {
     case "review":
@@ -23,7 +28,7 @@ export async function report(input: ReportInput, projectDir: string): Promise<Re
 
 async function recordReview(
   review: Extract<ReportInput, { type: "review" }>,
-  store: DriftStore,
+  store: IDriftStore,
 ): Promise<ReportOutput> {
   const violatedIds = new Set(review.violations.map((v) => v.principle_id));
   const cleanHonored = review.honored.filter((id) => !violatedIds.has(id));

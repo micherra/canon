@@ -10,6 +10,10 @@ import type { FlowRunEntry } from "@platform/storage/drift/drift-analytics-types
 import type { WeeklyTrendPoint } from "@platform/storage/drift/drift-db.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 
+// Re-export FlowRunEntry so orchestration callers can obtain the type from the domain
+// layer without importing directly from @platform/storage/drift/.
+export type { FlowRunEntry };
+
 export type IDriftStore = {
   appendReview(entry: ReviewEntry): Promise<void>;
   getComplianceTrend(principleId: string, weeks?: number): Promise<WeeklyTrendPoint[]>;

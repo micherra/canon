@@ -15,13 +15,9 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-// Mock analytics so appendFlowRun doesn't need drift.db during most tests
-vi.mock("@platform/storage/drift/analytics.ts", () => ({
-  appendFlowRun: vi.fn().mockResolvedValue(undefined),
-}));
 
 vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
@@ -35,9 +31,22 @@ vi.mock("@domains/messages/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
 }));
 
-import { appendFlowRun } from "@platform/storage/drift/analytics.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { updateBoard } from "../tools/update-board.ts";
+
+/** Create a minimal mock IDriftStore for tests that exercise complete_flow analytics. */
+function makeMockDriftStore(): IDriftStore & { appendFlowRun: ReturnType<typeof vi.fn> } {
+  return {
+    appendFlowRun: vi.fn().mockResolvedValue(undefined),
+    appendReview: vi.fn().mockResolvedValue(undefined),
+    countFlowRunsSince: vi.fn().mockReturnValue(0),
+    getComplianceTrend: vi.fn().mockResolvedValue([]),
+    getLastReviewForBranch: vi.fn().mockResolvedValue(null),
+    getLastReviewForPr: vi.fn().mockResolvedValue(null),
+    getReviews: vi.fn().mockResolvedValue([]),
+    getReviewsForFiles: vi.fn().mockResolvedValue([]),
+  };
+}
 
 let tmpDirs: string[] = [];
 
@@ -315,19 +324,22 @@ describe("updateBoard — complete_flow", () => {
     expect(session?.completed_at).toBeDefined();
   });
 
-  it("calls appendFlowRun (best-effort analytics)", async () => {
+  it("calls appendFlowRun on injected IDriftStore (best-effort analytics)", async () => {
     const workspace = makeTmpDir();
     seedWorkspace(workspace, {
       currentState: "done",
       states: { done: { entries: 1, status: "in_progress" } },
     });
 
+    const mockStore = makeMockDriftStore();
+
     await updateBoard({
       action: "complete_flow",
+      driftStore: mockStore,
       workspace,
     });
 
-    expect(appendFlowRun).toHaveBeenCalled();
+    expect(mockStore.appendFlowRun).toHaveBeenCalled();
   });
 });
 

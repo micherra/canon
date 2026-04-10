@@ -1,8 +1,9 @@
 import { enterState, setBlocked } from "@domains/board/board.ts";
+import { createDriftStore } from "@domains/drift/drift-store-factory.ts";
+import type { FlowRunEntry, IDriftStore } from "@domains/drift/drift-store.interface.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
 import { generateId } from "@shared/lib/id.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
@@ -24,6 +25,9 @@ type UpdateBoardInput = {
   artifacts?: string[];
   metadata?: Record<string, string | number | boolean>;
   project_dir?: string;
+  /** Optional injected IDriftStore for flow run persistence. When absent,
+   *  a DriftStore is constructed lazily from project_dir (backward-compatible). */
+  driftStore?: IDriftStore;
 };
 
 type UpdateBoardResult = {
@@ -143,6 +147,7 @@ async function handleCompleteFlow(
   board: Board,
   now: string,
   projectDir: string,
+  driftStore?: IDriftStore,
 ): Promise<Board> {
   const currentEntry = board.states[board.current_state];
   const updatedBoard: Board = {
@@ -208,7 +213,8 @@ async function handleCompleteFlow(
         ? { total_test_results: agg.aggregateTestResults }
         : {}),
     };
-    await appendFlowRun(projectDir, flowRun);
+    const analytics = driftStore ?? createDriftStore(projectDir);
+    await analytics.appendFlowRun(flowRun);
   } catch {
     // Best-effort — analytics should never block flow completion
   }
@@ -424,6 +430,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
         board,
         now,
         input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd(),
+        input.driftStore,
       );
       result = { board };
       break;
