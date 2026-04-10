@@ -9,8 +9,6 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
 import type {
   Board,
   BoardStateEntry,
@@ -20,9 +18,7 @@ import type {
 } from "@domains/flows/board-state-schemas.ts";
 import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
-import { CANON_FILES } from "@shared/constants.ts";
 import type Database from "better-sqlite3";
-import { initExecutionDb } from "./execution-schema.ts";
 import {
   buildUpsertStateParams,
   deserializeExecutionRow,
@@ -65,8 +61,18 @@ import type {
   UpdateExecutionFields,
   UpdateWaveEventFields,
 } from "./execution-store-types.ts";
-import { ALLOWED_UPDATE_EXECUTION_COLUMNS } from "./execution-store-types.ts";
+import {
+  updateExecution as _updateExecution,
+  updateExecutionVersioned as _updateExecutionVersioned,
+  type VersionedUpdateResult,
+} from "./execution-store-updater.ts";
 
+// Re-export factory and cache helpers so existing importers continue to work
+export {
+  assertWorkspacePath,
+  clearStoreCache,
+  getExecutionStore,
+} from "./execution-store-cache.ts";
 export type { FlowLineageEntry } from "./execution-store-lineage.ts";
 // Re-export types so all existing importers continue to work unchanged
 export type {
@@ -181,62 +187,7 @@ export class ExecutionStore {
    * @internal — tool handlers should call updateExecutionVersioned instead.
    */
   updateExecution(fields: UpdateExecutionFields): void {
-    const parts: string[] = [];
-    const params: Record<string, unknown> = {};
-
-    const addColumn = (col: string, value: unknown): void => {
-      if (!ALLOWED_UPDATE_EXECUTION_COLUMNS.has(col)) {
-        throw new Error(`updateExecution: column '${col}' is not in the allowed list`);
-      }
-      parts.push(`${col} = @${col}`);
-      params[col] = value;
-    };
-
-    this.collectJsonColumns(fields, addColumn);
-    this.collectScalarColumns(fields, addColumn);
-
-    // Always update last_updated
-    const now = fields.last_updated ?? new Date().toISOString();
-    addColumn("last_updated", now);
-
-    if (parts.length === 0) return;
-
-    const sql = `UPDATE execution SET ${parts.join(", ")} WHERE id = 1`;
-    this.db.prepare(sql).run(params);
-  }
-
-  /** Map UpdateExecutionFields JSON-serialized columns. */
-  private collectJsonColumns(
-    fields: UpdateExecutionFields,
-    addColumn: (col: string, value: unknown) => void,
-  ): void {
-    if ("blocked" in fields) {
-      const val =
-        fields.blocked !== null && fields.blocked !== undefined
-          ? JSON.stringify(fields.blocked)
-          : null;
-      addColumn("blocked", val);
-    }
-    if (fields.concerns !== undefined) addColumn("concerns", JSON.stringify(fields.concerns));
-    if (fields.skipped !== undefined) addColumn("skipped", JSON.stringify(fields.skipped));
-    if (fields.metadata !== undefined) {
-      addColumn("metadata", fields.metadata !== null ? JSON.stringify(fields.metadata) : null);
-    }
-  }
-
-  /** Map UpdateExecutionFields scalar columns. */
-  private collectScalarColumns(
-    fields: UpdateExecutionFields,
-    addColumn: (col: string, value: unknown) => void,
-  ): void {
-    if (fields.current_state !== undefined) addColumn("current_state", fields.current_state);
-    if (fields.status !== undefined) addColumn("status", fields.status);
-    if (fields.completed_at !== undefined) addColumn("completed_at", fields.completed_at);
-    if (fields.rolled_back_at !== undefined) addColumn("rolled_back_at", fields.rolled_back_at);
-    if (fields.rolled_back_to !== undefined) addColumn("rolled_back_to", fields.rolled_back_to);
-    if ("worktree_path" in fields) addColumn("worktree_path", fields.worktree_path ?? null);
-    if ("worktree_branch" in fields) addColumn("worktree_branch", fields.worktree_branch ?? null);
-    if (fields.version !== undefined) addColumn("version", fields.version);
+    _updateExecution(this.db, fields);
   }
 
   // Board reconstruction
@@ -412,7 +363,7 @@ export class ExecutionStore {
         lastError = err;
         if (attempt < maxAttempts - 1) {
           // Atomics.wait backoff: 100ms × 2^attempt
-          const backoffMs = 100 * Math.pow(2, attempt);
+          const backoffMs = 100 * 2 ** attempt;
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, backoffMs);
         }
       }
@@ -439,39 +390,8 @@ export class ExecutionStore {
   updateExecutionVersioned(
     fields: UpdateExecutionFields,
     expectedVersion: number,
-  ): { updated: true; newVersion: number } | { updated: false; currentVersion: number } {
-    const parts: string[] = [];
-    const params: Record<string, unknown> = {};
-    const addColumn = (col: string, value: unknown): void => {
-      if (!ALLOWED_UPDATE_EXECUTION_COLUMNS.has(col)) {
-        throw new Error(`updateExecution: column '${col}' is not in the allowed list`);
-      }
-      parts.push(`${col} = @${col}`);
-      params[col] = value;
-    };
-
-    this.collectJsonColumns(fields, addColumn);
-    this.collectScalarColumns(fields, addColumn);
-
-    const now = fields.last_updated ?? new Date().toISOString();
-    addColumn("last_updated", now);
-
-    // Always increment version
-    const newVersion = expectedVersion + 1;
-    addColumn("version", newVersion);
-
-    if (parts.length === 0) return { updated: true, newVersion: expectedVersion };
-
-    const sql = `UPDATE execution SET ${parts.join(", ")} WHERE id = 1 AND version = @expected_version`;
-    params.expected_version = expectedVersion;
-
-    const result = this.db.prepare(sql).run(params);
-    if (result.changes === 0) {
-      // Version mismatch — read current version for diagnostics
-      const row = this.s.stmtGetExecution.get() as ExecutionRow | undefined;
-      return { updated: false, currentVersion: row?.version ?? -1 };
-    }
-    return { updated: true, newVersion };
+  ): VersionedUpdateResult {
+    return _updateExecutionVersioned(this.db, this.s.stmtGetExecution, fields, expectedVersion);
   }
 
   /** Read current execution version for optimistic locking. */
@@ -634,64 +554,4 @@ export class ExecutionStore {
   }
 }
 
-// ---- Factory and cache (absorbed from execution-store-cache.ts) ----
-
-/** Cache keyed by absolute workspace path. */
-const storeCache = new Map<string, ExecutionStore>();
-
-/**
- * Guards that a workspace path follows the canonical `.canon/workspaces/` convention.
- * Throws when the path does not contain the expected segment, preventing accidental
- * misuse (e.g. passing a project root instead of a workspace subdirectory).
- *
- * Skipped when `CANON_SKIP_WORKSPACE_VALIDATION=true` or when running under Vitest
- * (`VITEST` env var set). Tests that operate on temp dirs typically do not include
- * the `.canon/workspaces/` segment in their paths.
- */
-export function assertWorkspacePath(workspace: string): void {
-  if (process.env.CANON_SKIP_WORKSPACE_VALIDATION !== "true" && !process.env.VITEST) {
-    // Use the raw string for the segment check so Windows-style paths work
-    // cross-platform (resolve() would rewrite them on macOS).
-    const hasValidSegment =
-      workspace.includes(".canon/workspaces/") || workspace.includes(".canon\\workspaces\\");
-    if (!hasValidSegment) {
-      throw new Error(
-        `Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`,
-      );
-    }
-  }
-}
-
-export function getExecutionStore(workspace: string): ExecutionStore {
-  assertWorkspacePath(workspace);
-
-  const key = resolve(workspace);
-  const existing = storeCache.get(key);
-  if (existing) return existing;
-
-  if (!existsSync(key)) {
-    throw new Error(`Workspace directory does not exist: ${key}`);
-  }
-
-  const dbPath = join(key, CANON_FILES.ORCHESTRATION_DB);
-  const db = initExecutionDb(dbPath);
-  const store = new ExecutionStore(db);
-  storeCache.set(key, store);
-  return store;
-}
-
-/**
- * Close and evict all cached ExecutionStore instances.
- * Call this in test afterEach/afterAll to release SQLite file handles
- * before deleting temp workspace directories.
- */
-export function clearStoreCache(): void {
-  for (const store of storeCache.values()) {
-    try {
-      store.close();
-    } catch {
-      /* ignore close errors */
-    }
-  }
-  storeCache.clear();
-}
+// Factory and cache helpers live in execution-store-cache.ts and are re-exported at the top.
