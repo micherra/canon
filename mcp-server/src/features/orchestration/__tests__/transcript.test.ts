@@ -21,7 +21,7 @@ import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { getTranscript } from "../tools/get-transcript.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -34,17 +34,17 @@ function makeTmpWorkspace(): string {
 function makeMinimalFlow(): ResolvedFlow {
   return {
     description: "A test flow",
-    entry: "build",
+    entry: sid("build"),
     name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
-      build: {
+      [sid("build")]: {
         transitions: {
           done: "done_state",
         },
         type: "single",
       },
-      done_state: { type: "terminal" },
+      [sid("done_state")]: { type: "terminal" },
     },
   };
 }
@@ -70,7 +70,7 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
   });
 
   for (const stateId of Object.keys(flow.states)) {
-    store.upsertState(stateId, { entries: 0, status: "pending" });
+    store.upsertState(sid(stateId), { entries: 0, status: "pending" });
   }
 }
 
@@ -146,11 +146,11 @@ describe("getTranscript — full mode", () => {
     const transcriptPath = join(transcriptsDir, "build-001.jsonl");
     const entries = makeTranscriptEntries();
     writeTranscriptFile(transcriptPath, entries);
-    store.setTranscriptPath("build", transcriptPath);
+    store.setTranscriptPath(sid("build"), transcriptPath);
 
     const result = await getTranscript({
       state_id: "build",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     assertOk(result);
@@ -173,9 +173,9 @@ describe("getTranscript — full mode", () => {
     const transcriptPath = join(transcriptsDir, "build-001.jsonl");
     const entries = makeTranscriptEntries();
     writeTranscriptFile(transcriptPath, entries);
-    store.setTranscriptPath("build", transcriptPath);
+    store.setTranscriptPath(sid("build"), transcriptPath);
 
-    const result = await getTranscript({ state_id: "build", workspace });
+    const result = await getTranscript({ state_id: "build", workspace: workspacePath(workspace) });
 
     assertOk(result);
     expect(result.total_tokens).toBe(390); // last entry's cumulative_tokens
@@ -195,9 +195,9 @@ describe("getTranscript — full mode", () => {
       { content: "Hello", role: "user", timestamp: "2026-04-02T00:00:00Z", turn_number: 1 },
     ];
     writeTranscriptFile(transcriptPath, entries);
-    store.setTranscriptPath("build", transcriptPath);
+    store.setTranscriptPath(sid("build"), transcriptPath);
 
-    const result = await getTranscript({ state_id: "build", workspace });
+    const result = await getTranscript({ state_id: "build", workspace: workspacePath(workspace) });
 
     assertOk(result);
     expect(result.total_tokens).toBeUndefined();
@@ -219,12 +219,12 @@ describe("getTranscript — summary mode", () => {
     const transcriptPath = join(transcriptsDir, "build-001.jsonl");
     const entries = makeTranscriptEntries();
     writeTranscriptFile(transcriptPath, entries);
-    store.setTranscriptPath("build", transcriptPath);
+    store.setTranscriptPath(sid("build"), transcriptPath);
 
     const result = await getTranscript({
       mode: "summary",
       state_id: "build",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     assertOk(result);
@@ -249,9 +249,9 @@ describe("getTranscript — summary mode", () => {
     const transcriptPath = join(transcriptsDir, "build-001.jsonl");
     const entries = makeTranscriptEntries();
     writeTranscriptFile(transcriptPath, entries);
-    store.setTranscriptPath("build", transcriptPath);
+    store.setTranscriptPath(sid("build"), transcriptPath);
 
-    const result = await getTranscript({ mode: "summary", state_id: "build", workspace });
+    const result = await getTranscript({ mode: "summary", state_id: "build", workspace: workspacePath(workspace) });
 
     assertOk(result);
     // total_tokens is always computed from ALL entries (before filtering),
@@ -271,7 +271,7 @@ describe("getTranscript — error cases", () => {
 
     const result = await getTranscript({
       state_id: "build",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     expect(result.ok).toBe(false);
@@ -288,11 +288,11 @@ describe("getTranscript — error cases", () => {
 
     const store = getExecutionStore(workspace);
     const transcriptPath = join(workspace, "transcripts", "build-001.jsonl");
-    store.setTranscriptPath("build", transcriptPath);
+    store.setTranscriptPath(sid("build"), transcriptPath);
 
     const result = await getTranscript({
       state_id: "build",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     expect(result.ok).toBe(false);
@@ -311,11 +311,11 @@ describe("getTranscript — error cases", () => {
     // Directly set a path that is outside workspace/transcripts/
     const store = getExecutionStore(workspace);
     const maliciousPath = join(workspace, "..", "etc", "passwd");
-    store.setTranscriptPath("build", maliciousPath);
+    store.setTranscriptPath(sid("build"), maliciousPath);
 
     const result = await getTranscript({
       state_id: "build",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     expect(result.ok).toBe(false);
@@ -338,16 +338,16 @@ describe("reportResult — transcript_path persistence", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "done",
       transcript_path: transcriptPath,
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     assertOk(result);
 
     const store = getExecutionStore(workspace);
-    expect(store.getTranscriptPath("build")).toBe(transcriptPath);
+    expect(store.getTranscriptPath(sid("build"))).toBe(transcriptPath);
   });
 
   it("does not affect existing transcript_path when not provided", async () => {
@@ -359,21 +359,21 @@ describe("reportResult — transcript_path persistence", () => {
 
     // First, set a transcript path manually
     const store = getExecutionStore(workspace);
-    store.setTranscriptPath("build", transcriptPath);
+    store.setTranscriptPath(sid("build"), transcriptPath);
 
     // Now call reportResult WITHOUT transcript_path
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "done",
-      workspace,
+      workspace: workspacePath(workspace),
       // No transcript_path field
     });
 
     assertOk(result);
 
     // The transcript_path should still be the original value
-    expect(store.getTranscriptPath("build")).toBe(transcriptPath);
+    expect(store.getTranscriptPath(sid("build"))).toBe(transcriptPath);
   });
 
   it("report_result still succeeds even if transcript_path is provided for missing state", async () => {
@@ -387,10 +387,10 @@ describe("reportResult — transcript_path persistence", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "done",
       transcript_path: transcriptPath,
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     // report_result should succeed regardless
@@ -407,10 +407,10 @@ describe("reportResult — transcript_path persistence", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "done",
       transcript_path: maliciousPath,
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     // report_result must still succeed (best-effort, never blocks)
@@ -418,6 +418,6 @@ describe("reportResult — transcript_path persistence", () => {
 
     // But the malicious path must NOT have been stored
     const store = getExecutionStore(workspace);
-    expect(store.getTranscriptPath("build")).toBeNull();
+    expect(store.getTranscriptPath(sid("build"))).toBeNull();
   });
 });

@@ -280,7 +280,7 @@ describe("MCP metrics schema widening", () => {
         tool_calls: 42,
         turns: 7,
       },
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "done",
       workspace: workspacePath(ws),
     });

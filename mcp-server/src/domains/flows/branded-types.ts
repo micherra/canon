@@ -17,7 +17,7 @@ import { z } from "zod";
 
 // WorkspacePath — absolute filesystem path to a Canon workspace directory
 
-export const WorkspacePathSchema = z.string().brand<"WorkspacePath">();
+export const WorkspacePathSchema = z.string().min(1).brand<"WorkspacePath">();
 export type WorkspacePath = z.infer<typeof WorkspacePathSchema>;
 export const workspacePath = (raw: string): WorkspacePath => WorkspacePathSchema.parse(raw);
 

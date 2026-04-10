@@ -33,15 +33,16 @@ vi.mock("../engine/effects.ts", () => ({
 
 // Imports after mocks
 
-import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, BoardSchema, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { appendFlowRun, computeAnalytics } from "@platform/storage/drift/analytics.ts";
 import { CANON_DIR } from "@shared/constants.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
 
-function makeTmpWorkspace(): string {
-  return mkdtempSync(join(tmpdir(), "qg-integ-"));
+function makeTmpWorkspace(): WorkspacePath {
+  return workspacePath(mkdtempSync(join(tmpdir(), "qg-integ-")));
 }
 
 function seedBoard(
@@ -65,11 +66,11 @@ function seedBoard(
     task: board.task,
     tier: "medium",
   });
-  for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, stateEntry as any);
+  for (const [stateIdStr, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(sid(stateIdStr), stateEntry as any);
   }
-  for (const [stateId, iterEntry] of Object.entries(board.iterations)) {
-    store.upsertIteration(stateId, iterEntry as any);
+  for (const [stateIdStr, iterEntry] of Object.entries(board.iterations)) {
+    store.upsertIteration(sid(stateIdStr), iterEntry as any);
   }
 }
 
@@ -216,7 +217,7 @@ function makeMinimalFlow() {
 }
 
 describe("Integration: report_result discovered_gates → board stores → runGates uses them", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(() => {
     workspace = makeTmpWorkspace();
@@ -237,14 +238,14 @@ describe("Integration: report_result discovered_gates → board stores → runGa
         { command: "npx tsc --noEmit", source: "tester" },
       ],
       flow: makeMinimalFlow() as any,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
 
     // Step 2: Read the board back — discovered gates should be stored on the state entry
     const board = getExecutionStore(workspace).getBoard();
-    const implState = board!.states.impl;
+    const implState = board!.states[sid("impl")];
     expect(implState.discovered_gates).toHaveLength(2);
     expect(implState.discovered_gates![0]).toEqual({ command: "npx vitest run", source: "tester" });
     expect(implState.discovered_gates![1]).toEqual({
@@ -274,7 +275,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
     await reportResult({
       discovered_gates: [{ command: "npx vitest run", source: "tester" }],
       flow: makeMinimalFlow() as any,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
@@ -282,8 +283,8 @@ describe("Integration: report_result discovered_gates → board stores → runGa
     // Re-open state for second report (simulating second agent call)
     const storeAfterFirst = getExecutionStore(workspace);
     const boardAfterFirst = storeAfterFirst.getBoard()!;
-    storeAfterFirst.upsertState("impl", {
-      ...boardAfterFirst.states.impl,
+    storeAfterFirst.upsertState(sid("impl"), {
+      ...boardAfterFirst.states[sid("impl")],
       status: "in_progress" as const,
     });
 
@@ -291,13 +292,13 @@ describe("Integration: report_result discovered_gates → board stores → runGa
     await reportResult({
       discovered_gates: [{ command: "npx eslint . --ext .ts", source: "reviewer" }],
       flow: makeMinimalFlow() as any,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
 
     const finalBoard = getExecutionStore(workspace).getBoard()!;
-    const discovered = finalBoard.states.impl.discovered_gates ?? [];
+    const discovered = finalBoard.states[sid("impl")].discovered_gates ?? [];
 
     // Both gates accumulated — append not replace
     expect(discovered).toHaveLength(2);
@@ -314,7 +315,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
       states: {},
     };
     const { normalizeGates } = await import("@domains/flows/gate-runner.ts");
-    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states.impl);
+    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states[sid("impl")]);
 
     expect(normalized.source).toBe("none");
     expect(normalized.commands).toEqual([]);
@@ -357,7 +358,7 @@ describe("Integration: explicit gates override discovered gates (tier 1 wins)", 
 });
 
 describe("Integration: complete_flow aggregates multi-state quality metrics", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
   let projectDir: string;
 
   beforeEach(() => {
@@ -443,11 +444,11 @@ describe("Integration: board backward compatibility (old board.json without new 
     // Should NOT throw
     const parsed = BoardSchema.parse(oldBoard);
 
-    expect(parsed.states.impl.gate_results).toBeUndefined();
-    expect(parsed.states.impl.postcondition_results).toBeUndefined();
-    expect(parsed.states.impl.discovered_gates).toBeUndefined();
-    expect(parsed.states.impl.discovered_postconditions).toBeUndefined();
-    expect(parsed.states.impl.metrics).toBeUndefined();
+    expect(parsed.states[sid("impl")].gate_results).toBeUndefined();
+    expect(parsed.states[sid("impl")].postcondition_results).toBeUndefined();
+    expect(parsed.states[sid("impl")].discovered_gates).toBeUndefined();
+    expect(parsed.states[sid("impl")].discovered_postconditions).toBeUndefined();
+    expect(parsed.states[sid("impl")].metrics).toBeUndefined();
   });
 
   it("BoardSchema.parse() succeeds on a board with wave_results containing gate/gate_output fields", () => {
@@ -483,10 +484,10 @@ describe("Integration: board backward compatibility (old board.json without new 
 
     // Should NOT throw — gate and gate_output are optional on WaveResultSchema
     const parsed = BoardSchema.parse(boardWithWaveGate);
-    expect(parsed.states.impl.wave_results?.wave_1.gate).toBe("test-suite");
-    expect(parsed.states.impl.wave_results?.wave_1.gate_output).toBe("5 passed");
+    expect(parsed.states[sid("impl")].wave_results?.wave_1.gate).toBe("test-suite");
+    expect(parsed.states[sid("impl")].wave_results?.wave_1.gate_output).toBe("5 passed");
     // New fields absent as expected (no gate_results on state entry, only in wave_results)
-    expect(parsed.states.impl.gate_results).toBeUndefined();
+    expect(parsed.states[sid("impl")].gate_results).toBeUndefined();
   });
 
   it("BoardSchema.parse() succeeds when StateMetrics has only legacy fields (no new optional fields)", () => {
@@ -519,16 +520,16 @@ describe("Integration: board backward compatibility (old board.json without new 
     };
 
     const parsed = BoardSchema.parse(boardWithOldMetrics);
-    expect(parsed.states.impl.metrics?.duration_ms).toBe(10000);
-    expect(parsed.states.impl.metrics?.spawns).toBe(2);
-    expect(parsed.states.impl.metrics?.model).toBe("claude-3-opus");
-    expect(parsed.states.impl.metrics?.gate_results).toBeUndefined();
-    expect(parsed.states.impl.metrics?.violation_count).toBeUndefined();
+    expect(parsed.states[sid("impl")].metrics?.duration_ms).toBe(10000);
+    expect(parsed.states[sid("impl")].metrics?.spawns).toBe(2);
+    expect(parsed.states[sid("impl")].metrics?.model).toBe("claude-3-opus");
+    expect(parsed.states[sid("impl")].metrics?.gate_results).toBeUndefined();
+    expect(parsed.states[sid("impl")].metrics?.violation_count).toBeUndefined();
   });
 });
 
 describe("Integration: violation_count=0 is recorded distinctly from absent (edge case)", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(() => {
     workspace = makeTmpWorkspace();
@@ -545,14 +546,14 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
     await reportResult({
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 1000, model: "claude-sonnet", spawns: 1 },
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       violation_count: 0, // explicitly clean
       workspace,
     });
 
     const board = getExecutionStore(workspace).getBoard()!;
-    const metrics = board.states.impl.metrics;
+    const metrics = board.states[sid("impl")].metrics;
     expect(metrics).toBeDefined();
     // violation_count=0 must be present (not undefined)
     expect(metrics?.violation_count).toBe(0);
@@ -562,7 +563,7 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
   it("violation_count absent when no quality signals provided (backward compat)", async () => {
     await reportResult({
       flow: makeMinimalFlow() as any,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
       // No metrics, no quality signals
@@ -570,12 +571,12 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
 
     const board = getExecutionStore(workspace).getBoard()!;
     // When no signals provided, metrics should be absent entirely
-    expect(board.states.impl.metrics).toBeUndefined();
+    expect(board.states[sid("impl")].metrics).toBeUndefined();
   });
 });
 
 describe("Integration: gate_results from report_result flow through to complete_flow analytics", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
   let projectDir: string;
 
   beforeEach(() => {
@@ -612,7 +613,7 @@ describe("Integration: gate_results from report_result flow through to complete_
           type: "no_pattern",
         },
       ],
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       test_results: { failed: 0, passed: 10, skipped: 0 },
       violation_count: 1,
@@ -621,8 +622,8 @@ describe("Integration: gate_results from report_result flow through to complete_
 
     // Verify the board was updated correctly
     const board = getExecutionStore(workspace).getBoard()!;
-    expect(board.states.impl.gate_results).toHaveLength(3);
-    expect(board.states.impl.metrics?.gate_results).toHaveLength(3);
+    expect(board.states[sid("impl")].gate_results).toHaveLength(3);
+    expect(board.states[sid("impl")].metrics?.gate_results).toHaveLength(3);
 
     // Step 2: Call complete_flow (session data is already in the store via seedBoard/initExecution)
     await updateBoard({
@@ -707,7 +708,7 @@ describe("Integration: computeAnalytics aggregates across flow run history", () 
 });
 
 describe("Integration: discovered_gates deduplicated when same command reported by multiple agents", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(() => {
     workspace = makeTmpWorkspace();
@@ -725,29 +726,29 @@ describe("Integration: discovered_gates deduplicated when same command reported 
     await reportResult({
       discovered_gates: [{ command: "npm test", source: "tester" }],
       flow: makeMinimalFlow() as any,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
 
     const storeRef = getExecutionStore(workspace);
     const boardAfterFirst = storeRef.getBoard()!;
-    storeRef.upsertState("impl", {
-      ...boardAfterFirst.states.impl,
+    storeRef.upsertState(sid("impl"), {
+      ...boardAfterFirst.states[sid("impl")],
       status: "in_progress" as const,
     });
 
     await reportResult({
       discovered_gates: [{ command: "npm test", source: "reviewer" }], // same command, different source
       flow: makeMinimalFlow() as any,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
 
     const finalBoard = getExecutionStore(workspace).getBoard()!;
     // Board accumulates both (append semantics — dedup is runGates' responsibility, not reportResult's)
-    const accumulated = finalBoard.states.impl.discovered_gates ?? [];
+    const accumulated = finalBoard.states[sid("impl")].discovered_gates ?? [];
     expect(accumulated).toHaveLength(2);
     expect(accumulated[0]).toEqual({ command: "npm test", source: "tester" });
     expect(accumulated[1]).toEqual({ command: "npm test", source: "reviewer" });
@@ -756,7 +757,7 @@ describe("Integration: discovered_gates deduplicated when same command reported 
     const stateDef = { type: "single" as const };
     const flow = { description: "f", entry: "impl", name: "f", spawn_instructions: {}, states: {} };
     const { normalizeGates } = await import("@domains/flows/gate-runner.ts");
-    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states.impl);
+    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states[sid("impl")]);
 
     expect(normalized.source).toBe("none");
     expect(normalized.commands).toEqual([]);

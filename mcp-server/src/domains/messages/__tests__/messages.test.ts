@@ -15,6 +15,7 @@ import { postMessage } from "@features/orchestration/tools/post-message.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildMessageInstructions, readChannelAsContext } from "../messages.ts";
+import { workspacePath, type WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 // Store-level message operations (unit)
 
@@ -112,10 +113,10 @@ describe("ExecutionStore messages", () => {
 // Tool-level: postMessage and getMessages via workspace store
 
 describe("postMessage tool (store-backed)", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(async () => {
-    workspace = await mkdtemp(join(tmpdir(), "canon-post-msg-"));
+    workspace = workspacePath(await mkdtemp(join(tmpdir(), "canon-post-msg-")));
   });
 
   afterEach(async () => {
@@ -156,10 +157,10 @@ describe("postMessage tool (store-backed)", () => {
 });
 
 describe("getMessages tool (store-backed)", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(async () => {
-    workspace = await mkdtemp(join(tmpdir(), "canon-get-msg-"));
+    workspace = workspacePath(await mkdtemp(join(tmpdir(), "canon-get-msg-")));
   });
 
   afterEach(async () => {
@@ -235,10 +236,10 @@ describe("getMessages tool (store-backed)", () => {
 // readChannelAsContext (reads from store)
 
 describe("readChannelAsContext (store-backed)", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(async () => {
-    workspace = await mkdtemp(join(tmpdir(), "canon-ctx-msg-"));
+    workspace = workspacePath(await mkdtemp(join(tmpdir(), "canon-ctx-msg-")));
   });
 
   afterEach(async () => {
@@ -277,14 +278,14 @@ describe("readChannelAsContext (store-backed)", () => {
 
 describe("buildMessageInstructions", () => {
   it("includes channel and workspace in instructions", () => {
-    const instr = buildMessageInstructions("wave-001", 3, "/path/to/ws");
+    const instr = buildMessageInstructions("wave-001", 3, workspacePath("/path/to/ws"));
     expect(instr).toContain("wave-001");
     expect(instr).toContain("/path/to/ws");
     expect(instr).toContain("3 other agents");
   });
 
   it("handles singular peer count", () => {
-    const instr = buildMessageInstructions("wave-001", 1, "/path/to/ws");
+    const instr = buildMessageInstructions("wave-001", 1, workspacePath("/path/to/ws"));
     expect(instr).toContain("1 other agent.");
   });
 });

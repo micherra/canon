@@ -10,7 +10,7 @@
  */
 
 import { resolve } from "node:path";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import {
@@ -26,12 +26,12 @@ const pluginDir = resolve(process.cwd(), "..");
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test",
-    entry: "start",
+    entry: sid("start"),
     name: flowName("test-flow"),
-    spawn_instructions: { start: "Do the thing" },
+    spawn_instructions: { [sid("start")]: "Do the thing" },
     states: {
-      end: { type: "terminal" },
-      start: { agent: "agent-a", transitions: { done: "end" }, type: "single" },
+      [sid("end")]: { type: "terminal" },
+      [sid("start")]: { agent: "agent-a", transitions: { done: "end" }, type: "single" },
     },
     ...overrides,
   };
@@ -58,7 +58,7 @@ describe("validateSpawnCoverage", () => {
 
   it("does not require terminal states to have spawn instructions", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Do the thing" }, // 'end' terminal has no entry — fine
+      spawn_instructions: { [sid("start")]: "Do the thing" }, // 'end' terminal has no entry — fine
     });
     const errors = validateSpawnCoverage(flow);
     expect(errors).toEqual([]);
@@ -68,9 +68,9 @@ describe("validateSpawnCoverage", () => {
     const flow = makeFlow({
       spawn_instructions: {}, // both 'start' is missing
       states: {
-        end: { type: "terminal" },
-        middle: { agent: "b", transitions: { done: "end" }, type: "single" },
-        start: { agent: "a", transitions: { done: "middle" }, type: "single" },
+        [sid("end")]: { type: "terminal" },
+        [sid("middle")]: { agent: "b", transitions: { done: "end" }, type: "single" },
+        [sid("start")]: { agent: "a", transitions: { done: "middle" }, type: "single" },
       },
     });
     const errors = validateSpawnCoverage(flow);
@@ -79,16 +79,16 @@ describe("validateSpawnCoverage", () => {
 
   it("handles parallel-per and wave state types", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Do stuff" }, // 'fanout' missing
+      spawn_instructions: { [sid("start")]: "Do stuff" }, // 'fanout' missing
       states: {
-        end: { type: "terminal" },
-        fanout: {
+        [sid("end")]: { type: "terminal" },
+        [sid("fanout")]: {
           agent: "worker",
           iterate_on: "items",
           transitions: { done: "end" },
           type: "parallel-per",
         },
-        start: { agent: "a", transitions: { done: "fanout" }, type: "single" },
+        [sid("start")]: { agent: "a", transitions: { done: "fanout" }, type: "single" },
       },
     });
     const errors = validateSpawnCoverage(flow);
@@ -109,9 +109,9 @@ describe("analyzeReachability", () => {
   it("returns warning for unreachable state", () => {
     const flow = makeFlow({
       states: {
-        end: { type: "terminal" },
-        orphan: { agent: "b", type: "single" }, // never transitioned to
-        start: { agent: "a", transitions: { done: "end" }, type: "single" },
+        [sid("end")]: { type: "terminal" },
+        [sid("orphan")]: { agent: "b", type: "single" }, // never transitioned to
+        [sid("start")]: { agent: "a", transitions: { done: "end" }, type: "single" },
       },
     });
     const warnings = analyzeReachability(flow);
@@ -123,8 +123,8 @@ describe("analyzeReachability", () => {
   it("does not mark hitl-target source as unreachable", () => {
     const flow = makeFlow({
       states: {
-        end: { type: "terminal" },
-        start: {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: {
           agent: "a",
           transitions: { blocked: "hitl", done: "end" },
           type: "single",
@@ -141,14 +141,15 @@ describe("analyzeReachability", () => {
     // hitl is a virtual sink — it should not be visited as if it were a real state
     const flow = makeFlow({
       states: {
-        end: { type: "terminal" },
-        start: {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: {
           agent: "a",
           transitions: { blocked: "hitl", done: "end" },
           type: "single",
         },
       },
     });
+
     const warnings = analyzeReachability(flow);
     // Should be zero warnings — all real states are reachable
     expect(warnings).toEqual([]);
@@ -157,8 +158,8 @@ describe("analyzeReachability", () => {
   it("does not add 'no_items' to reachability as a real state", () => {
     const flow = makeFlow({
       states: {
-        end: { type: "terminal" },
-        start: {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: {
           agent: "a",
           transitions: { done: "end", empty: "no_items" },
           type: "single",
@@ -173,11 +174,11 @@ describe("analyzeReachability", () => {
     // unreachable states show up in validateFlow as warnings/errors but do NOT block
     // (the plan says warn only — they're logged but don't cause throws in loadAndResolveFlow)
     const flow = makeFlow({
-      spawn_instructions: { start: "do it" },
+      spawn_instructions: { [sid("start")]: "do it" },
       states: {
-        end: { type: "terminal" },
-        start: { agent: "a", transitions: { done: "end" }, type: "single" },
-        unreachable: { type: "terminal" }, // terminal, no spawn needed, but unreachable
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { done: "end" }, type: "single" },
+        [sid("unreachable")]: { type: "terminal" }, // terminal, no spawn needed, but unreachable
       },
     });
     const warnings = analyzeReachability(flow);
@@ -191,7 +192,7 @@ describe("analyzeReachability", () => {
 describe("checkUnresolvedRefs", () => {
   it("returns no errors when spawn instructions have no unresolved refs", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Do the work. Save to file." },
+      spawn_instructions: { [sid("start")]: "Do the work. Save to file." },
     });
     const errors = checkUnresolvedRefs(flow);
     expect(errors).toEqual([]);
@@ -199,7 +200,7 @@ describe("checkUnresolvedRefs", () => {
 
   it("returns error when spawn instruction has an unknown variable", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Process ${typo_var}." },
+      spawn_instructions: { [sid("start")]: "Process ${typo_var}." },
     });
     const errors = checkUnresolvedRefs(flow);
     expect(errors.length).toBe(1);
@@ -209,7 +210,7 @@ describe("checkUnresolvedRefs", () => {
 
   it("accepts ${WORKSPACE} as a known runtime variable", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Save to ${WORKSPACE}/output.md." },
+      spawn_instructions: { [sid("start")]: "Save to ${WORKSPACE}/output.md." },
     });
     const errors = checkUnresolvedRefs(flow);
     expect(errors).toEqual([]);
@@ -217,7 +218,7 @@ describe("checkUnresolvedRefs", () => {
 
   it("accepts ${task} as a known runtime variable", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Implement: ${task}." },
+      spawn_instructions: { [sid("start")]: "Implement: ${task}." },
     });
     const errors = checkUnresolvedRefs(flow);
     expect(errors).toEqual([]);
@@ -225,7 +226,7 @@ describe("checkUnresolvedRefs", () => {
 
   it("accepts ${slug} as a known runtime variable", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Save to ${WORKSPACE}/plans/${slug}/OUT.md." },
+      spawn_instructions: { [sid("start")]: "Save to ${WORKSPACE}/plans/${slug}/OUT.md." },
     });
     const errors = checkUnresolvedRefs(flow);
     expect(errors).toEqual([]);
@@ -233,7 +234,7 @@ describe("checkUnresolvedRefs", () => {
 
   it("accepts ${CLAUDE_PLUGIN_ROOT} as a known runtime variable", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Template: ${CLAUDE_PLUGIN_ROOT}/templates/foo.md." },
+      spawn_instructions: { [sid("start")]: "Template: ${CLAUDE_PLUGIN_ROOT}/templates/foo.md." },
     });
     const errors = checkUnresolvedRefs(flow);
     expect(errors).toEqual([]);
@@ -242,7 +243,7 @@ describe("checkUnresolvedRefs", () => {
   it("accepts item.* runtime variables", () => {
     const flow = makeFlow({
       spawn_instructions: {
-        start:
+        [sid("start")]:
           "Fix ${item.principle_id} (${item.severity}) in ${item.file_path}. Detail: ${item.detail}.",
       },
     });
@@ -253,8 +254,8 @@ describe("checkUnresolvedRefs", () => {
   it("returns error when a transition target still has an unresolved ${param}", () => {
     const flow = makeFlow({
       states: {
-        end: { type: "terminal" },
-        start: {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: {
           agent: "a",
           transitions: { done: "${unresolved_param}" }, // leftover after substitution
           type: "single",
@@ -271,7 +272,7 @@ describe("checkUnresolvedRefs", () => {
     const flow = makeFlow({
       spawn_instructions: {},
       states: {
-        start: { type: "terminal" }, // no transitions
+        [sid("start")]: { type: "terminal" }, // no transitions
       },
     });
     const errors = checkUnresolvedRefs(flow);
@@ -281,7 +282,7 @@ describe("checkUnresolvedRefs", () => {
   it("accepts wave_briefing, review_scope, progress as known runtime variables", () => {
     const flow = makeFlow({
       spawn_instructions: {
-        start: "${wave_briefing}\n${review_scope}\n${progress}",
+        [sid("start")]: "${wave_briefing}\n${review_scope}\n${progress}",
       },
     });
     const errors = checkUnresolvedRefs(flow);
@@ -291,7 +292,7 @@ describe("checkUnresolvedRefs", () => {
   it("accepts wave-related runtime variables used in consultation spawn instructions", () => {
     const flow = makeFlow({
       spawn_instructions: {
-        start:
+        [sid("start")]:
           "Review wave ${wave} changes. Files: ${wave_files}. Diff: ${wave_diff}. Summaries: ${wave_summaries}.",
       },
     });
@@ -314,9 +315,9 @@ describe("validateFlow — new passes", () => {
   it("includes reachability warnings in output", () => {
     const flow = makeFlow({
       states: {
-        end: { type: "terminal" },
-        ghost: { type: "terminal" }, // unreachable terminal, no spawn needed
-        start: { agent: "a", transitions: { done: "end" }, type: "single" },
+        [sid("end")]: { type: "terminal" },
+        [sid("ghost")]: { type: "terminal" }, // unreachable terminal, no spawn needed
+        [sid("start")]: { agent: "a", transitions: { done: "end" }, type: "single" },
       },
     });
     // analyzeReachability returns warnings — they appear in validateFlow output
@@ -329,7 +330,7 @@ describe("validateFlow — new passes", () => {
 
   it("returns errors for unresolved refs", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Process ${unknown_var}." },
+      spawn_instructions: { [sid("start")]: "Process ${unknown_var}." },
     });
     const errors = validateFlow(flow);
     expect(errors.some((e) => e.includes("unknown_var"))).toBe(true);
@@ -343,8 +344,8 @@ describe("loadAndResolveFlow — hard-blocking validation", () => {
     // After removing the errors field, loadAndResolveFlow returns just ResolvedFlow
     const flow = await loadAndResolveFlow(pluginDir, "review-only");
     expect(flow.name).toBe("review-only");
-    expect(flow.states.review).toBeDefined();
-    expect(flow.states.done).toBeDefined();
+    expect(flow.states[sid("review")]).toBeDefined();
+    expect(flow.states[sid("done")]).toBeDefined();
   });
 
   it("throws an Error for invalid flow name characters (path traversal)", async () => {

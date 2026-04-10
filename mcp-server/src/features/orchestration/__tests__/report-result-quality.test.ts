@@ -33,15 +33,16 @@ vi.mock("../engine/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, BoardSchema, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { reportResult } from "../tools/report-result.ts";
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "qg-report-result-"));
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeMinimalBoard() {
@@ -97,7 +98,7 @@ function makeMinimalFlow() {
 }
 
 describe("report_result: quality metrics enrichment", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(() => {
     workspace = makeTmpWorkspace();
@@ -119,8 +120,8 @@ describe("report_result: quality metrics enrichment", () => {
       task: board.task,
       tier: "medium",
     });
-    store.upsertState("impl", { entries: 1, status: "in_progress" });
-    store.upsertIteration("impl", { cannot_fix: [], count: 2, history: [], max: 3 });
+    store.upsertState(sid("impl"), { entries: 1, status: "in_progress" });
+    store.upsertIteration(sid("impl"), { cannot_fix: [], count: 2, history: [], max: 3 });
     // Reset mock call counts
     vi.clearAllMocks();
   });
@@ -139,13 +140,13 @@ describe("report_result: quality metrics enrichment", () => {
     const result = await reportResult({
       flow: makeMinimalFlow() as any,
       gate_results: gateResults,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.impl.gate_results).toEqual(gateResults);
+    expect(result.board.states[sid("impl")].gate_results).toEqual(gateResults);
   });
 
   // 2. postcondition_results stored on board state entry
@@ -158,13 +159,13 @@ describe("report_result: quality metrics enrichment", () => {
     const result = await reportResult({
       flow: makeMinimalFlow() as any,
       postcondition_results: postconditionResults,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.impl.postcondition_results).toEqual(postconditionResults);
+    expect(result.board.states[sid("impl")].postcondition_results).toEqual(postconditionResults);
   });
 
   // 3. discovered_gates accumulate (append, not replace)
@@ -175,18 +176,18 @@ describe("report_result: quality metrics enrichment", () => {
     await reportResult({
       discovered_gates: [{ command: "npm test", source: "tester" }],
       flow,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
 
     // Read board back and verify first gate was stored
     const storeAfterFirst = getExecutionStore(workspace);
-    const stateAfterFirst = storeAfterFirst.getState("impl");
+    const stateAfterFirst = storeAfterFirst.getState(sid("impl"));
     expect(stateAfterFirst?.discovered_gates).toHaveLength(1);
 
     // Reset board state to in_progress so we can call reportResult again
-    storeAfterFirst.upsertState("impl", {
+    storeAfterFirst.upsertState(sid("impl"), {
       ...(stateAfterFirst ?? {}),
       entries: stateAfterFirst?.entries ?? 1,
       status: "in_progress" as const,
@@ -196,14 +197,14 @@ describe("report_result: quality metrics enrichment", () => {
     await reportResult({
       discovered_gates: [{ command: "npx eslint .", source: "reviewer" }],
       flow,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
 
     const boardAfterSecond = getExecutionStore(workspace).getBoard()!;
-    expect(boardAfterSecond.states.impl.discovered_gates).toHaveLength(2);
-    expect(boardAfterSecond.states.impl.discovered_gates).toEqual(
+    expect(boardAfterSecond.states[sid("impl")].discovered_gates).toHaveLength(2);
+    expect(boardAfterSecond.states[sid("impl")].discovered_gates).toEqual(
       expect.arrayContaining([
         { command: "npm test", source: "tester" },
         { command: "npx eslint .", source: "reviewer" },
@@ -219,17 +220,17 @@ describe("report_result: quality metrics enrichment", () => {
     await reportResult({
       discovered_postconditions: [{ target: "dist/index.js", type: "file_exists" as const }],
       flow,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
 
     const storeAfterFirst2 = getExecutionStore(workspace);
-    const stateAfterFirst2 = storeAfterFirst2.getState("impl");
+    const stateAfterFirst2 = storeAfterFirst2.getState(sid("impl"));
     expect(stateAfterFirst2?.discovered_postconditions).toHaveLength(1);
 
     // Reset state for second call
-    storeAfterFirst2.upsertState("impl", {
+    storeAfterFirst2.upsertState(sid("impl"), {
       ...(stateAfterFirst2 ?? {}),
       entries: stateAfterFirst2?.entries ?? 1,
       status: "in_progress" as const,
@@ -241,14 +242,14 @@ describe("report_result: quality metrics enrichment", () => {
         { pattern: "console\\.log", target: "src/**/*.ts", type: "no_pattern" as const },
       ],
       flow,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
 
     const boardAfterSecond = getExecutionStore(workspace).getBoard()!;
-    expect(boardAfterSecond.states.impl.discovered_postconditions).toHaveLength(2);
-    expect(boardAfterSecond.states.impl.discovered_postconditions).toEqual(
+    expect(boardAfterSecond.states[sid("impl")].discovered_postconditions).toHaveLength(2);
+    expect(boardAfterSecond.states[sid("impl")].discovered_postconditions).toEqual(
       expect.arrayContaining([
         { target: "dist/index.js", type: "file_exists" },
         { pattern: "console\\.log", target: "src/**/*.ts", type: "no_pattern" },
@@ -262,7 +263,7 @@ describe("report_result: quality metrics enrichment", () => {
       files_changed: 4,
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 5000, model: "claude-sonnet", spawns: 1 },
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       test_results: { failed: 0, passed: 10, skipped: 2 }, // zero failures — no baseline evidence needed
       violation_count: 3,
@@ -271,7 +272,7 @@ describe("report_result: quality metrics enrichment", () => {
     });
     assertOk(result);
 
-    const m = result.board.states.impl.metrics;
+    const m = result.board.states[sid("impl")].metrics;
     expect(m).toBeDefined();
     expect(m?.duration_ms).toBe(5000);
     expect(m?.violation_count).toBe(3);
@@ -286,13 +287,13 @@ describe("report_result: quality metrics enrichment", () => {
     const result = await reportResult({
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 1000, model: "claude-sonnet", spawns: 1 },
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
     assertOk(result);
 
-    const m = result.board.states.impl.metrics;
+    const m = result.board.states[sid("impl")].metrics;
     expect(m?.revision_count).toBe(2);
   });
 
@@ -301,7 +302,7 @@ describe("report_result: quality metrics enrichment", () => {
     const result = await reportResult({
       artifacts: ["dist/index.js"],
       flow: makeMinimalFlow() as any,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
@@ -313,12 +314,12 @@ describe("report_result: quality metrics enrichment", () => {
     expect(result.hitl_required).toBe(false);
 
     // No new fields on board state entry
-    expect(result.board.states.impl.gate_results).toBeUndefined();
-    expect(result.board.states.impl.postcondition_results).toBeUndefined();
-    expect(result.board.states.impl.discovered_gates).toBeUndefined();
-    expect(result.board.states.impl.discovered_postconditions).toBeUndefined();
+    expect(result.board.states[sid("impl")].gate_results).toBeUndefined();
+    expect(result.board.states[sid("impl")].postcondition_results).toBeUndefined();
+    expect(result.board.states[sid("impl")].discovered_gates).toBeUndefined();
+    expect(result.board.states[sid("impl")].discovered_postconditions).toBeUndefined();
     // metrics should be undefined when not provided
-    expect(result.board.states.impl.metrics).toBeUndefined();
+    expect(result.board.states[sid("impl")].metrics).toBeUndefined();
   });
 
   // 8. Board round-trip: enriched metrics validate with BoardSchema
@@ -335,7 +336,7 @@ describe("report_result: quality metrics enrichment", () => {
       postcondition_results: [
         { name: "output exists", output: "found", passed: true, type: "file_exists" },
       ],
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       test_results: { failed: 0, passed: 5, skipped: 0 },
       violation_count: 0,
@@ -347,17 +348,17 @@ describe("report_result: quality metrics enrichment", () => {
     const board = getExecutionStore(workspace).getBoard();
     const parsed = BoardSchema.parse(board);
 
-    expect(parsed.states.impl.gate_results).toHaveLength(1);
-    expect(parsed.states.impl.postcondition_results).toHaveLength(1);
-    expect(parsed.states.impl.discovered_gates).toHaveLength(1);
-    expect(parsed.states.impl.discovered_postconditions).toHaveLength(1);
-    expect(parsed.states.impl.metrics?.violation_count).toBe(0);
-    expect(parsed.states.impl.metrics?.test_results).toEqual({
+    expect(parsed.states[sid("impl")].gate_results).toHaveLength(1);
+    expect(parsed.states[sid("impl")].postcondition_results).toHaveLength(1);
+    expect(parsed.states[sid("impl")].discovered_gates).toHaveLength(1);
+    expect(parsed.states[sid("impl")].discovered_postconditions).toHaveLength(1);
+    expect(parsed.states[sid("impl")].metrics?.violation_count).toBe(0);
+    expect(parsed.states[sid("impl")].metrics?.test_results).toEqual({
       failed: 0,
       passed: 5,
       skipped: 0,
     });
-    expect(parsed.states.impl.metrics?.files_changed).toBe(2);
+    expect(parsed.states[sid("impl")].metrics?.files_changed).toBe(2);
   });
 
   // 9. Log entry includes new fields when provided
@@ -374,7 +375,7 @@ describe("report_result: quality metrics enrichment", () => {
       postcondition_results: [
         { name: "output exists", output: "found", passed: true, type: "file_exists" },
       ],
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       test_results: { failed: 0, passed: 8, skipped: 0 }, // zero failures — no baseline evidence needed
       violation_count: 2,
@@ -398,7 +399,7 @@ describe("report_result: quality metrics enrichment", () => {
   it("log entry omits new metric fields when not provided", async () => {
     const result = await reportResult({
       flow: makeMinimalFlow() as any,
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
@@ -425,15 +426,15 @@ describe("report_result: quality metrics enrichment", () => {
       flow: makeMinimalFlow() as any,
       gate_results: gateResults,
       metrics: { duration_ms: 1500, model: "claude-sonnet", spawns: 1 },
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       workspace,
     });
     assertOk(result);
 
     // gate_results should be on both top-level BoardStateEntry and inside metrics
-    expect(result.board.states.impl.gate_results).toEqual(gateResults);
-    expect(result.board.states.impl.metrics?.gate_results).toEqual(gateResults);
+    expect(result.board.states[sid("impl")].gate_results).toEqual(gateResults);
+    expect(result.board.states[sid("impl")].metrics?.gate_results).toEqual(gateResults);
   });
 
   // 12. state_completed event emitted with new signal fields
@@ -444,7 +445,7 @@ describe("report_result: quality metrics enrichment", () => {
       discovered_gates: [{ command: "npm test", source: "tester" }],
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 1000, model: "claude-sonnet", spawns: 1 },
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "done",
       test_results: { failed: 0, passed: 20, skipped: 1 },
       violation_count: 5,

@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection } from "@domains/flows/flow-definition-schemas.ts";
 import type { LayerViolation } from "@graph/kg-types.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -80,15 +80,15 @@ vi.mock("@graph/kg-store.ts", () => ({
 
 import { existsSync } from "node:fs";
 import { computeFileInsightMaps } from "@graph/kg-query.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(stateOverrides: Board["states"] = {}): Board {
   return {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "start",
-    entry: "start",
+    current_state: sid("start"),
+    entry: sid("start"),
     flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -168,10 +168,10 @@ describe("extractSection", () => {
 // resolveContextInjections — filesystem interactions
 
 describe("resolveContextInjections", () => {
-  let tmpDir: string;
+  let tmpDir: WorkspacePath;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "inject-context-test-"));
+    tmpDir = workspacePath(await mkdtemp(join(tmpdir(), "inject-context-test-")));
   });
 
   afterEach(() => {
@@ -183,7 +183,7 @@ describe("resolveContextInjections", () => {
     await writeFile(artifactPath, "# Summary\nThis is important output.");
 
     const board = makeBoard({
-      research: { artifacts: [artifactPath], entries: 1, status: "done" },
+      [sid("research")]: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [{ as: "RESEARCH_OUTPUT", from: "research" }];
 
@@ -200,7 +200,7 @@ describe("resolveContextInjections", () => {
     await writeFile(artifactPath, content);
 
     const board = makeBoard({
-      analysis: { artifacts: [artifactPath], entries: 1, status: "done" },
+      [sid("analysis")]: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [
       { as: "FINDINGS", from: "analysis", section: "Findings" },
@@ -218,7 +218,7 @@ describe("resolveContextInjections", () => {
     await writeFile(artifactPath, "# Introduction\nIntro only.");
 
     const board = makeBoard({
-      analysis: { artifacts: [artifactPath], entries: 1, status: "done" },
+      [sid("analysis")]: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [
       { as: "OUTPUT", from: "analysis", section: "Missing Section" },
@@ -245,7 +245,7 @@ describe("resolveContextInjections", () => {
 
   it("produces warning when source state has no artifacts", async () => {
     const board = makeBoard({
-      empty_state: { entries: 1, status: "done" },
+      [sid("empty_state")]: { entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [{ as: "OUTPUT", from: "empty_state" }];
 
@@ -258,7 +258,7 @@ describe("resolveContextInjections", () => {
 
   it("produces warning when artifact file does not exist on disk", async () => {
     const board = makeBoard({
-      research: { artifacts: ["nonexistent/path.md"], entries: 1, status: "done" },
+      [sid("research")]: { artifacts: ["nonexistent/path.md"], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
@@ -269,7 +269,7 @@ describe("resolveContextInjections", () => {
 
   it("produces warning when all artifacts are missing, variable not set", async () => {
     const board = makeBoard({
-      research: {
+      [sid("research")]: {
         artifacts: ["missing1.md", "missing2.md"],
         entries: 1,
         status: "done",
@@ -288,7 +288,7 @@ describe("resolveContextInjections", () => {
     await writeFile(existingPath, "Found content.");
 
     const board = makeBoard({
-      research: {
+      [sid("research")]: {
         artifacts: [existingPath, "missing.md"],
         entries: 1,
         status: "done",
@@ -309,7 +309,7 @@ describe("resolveContextInjections", () => {
     await writeFile(path2, "Second part.");
 
     const board = makeBoard({
-      research: { artifacts: [path1, path2], entries: 1, status: "done" },
+      [sid("research")]: { artifacts: [path1, path2], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
@@ -346,7 +346,7 @@ describe("resolveContextInjections", () => {
     await writeFile(artifactPath, "Absolute path content.");
 
     const board = makeBoard({
-      research: { artifacts: [artifactPath], entries: 1, status: "done" },
+      [sid("research")]: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
@@ -357,7 +357,7 @@ describe("resolveContextInjections", () => {
 
   it("blocks absolute path traversal outside workspace (e.g. /etc/passwd)", async () => {
     const board = makeBoard({
-      research: { artifacts: ["/etc/passwd"], entries: 1, status: "done" },
+      [sid("research")]: { artifacts: ["/etc/passwd"], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
@@ -370,7 +370,7 @@ describe("resolveContextInjections", () => {
 
   it("blocks relative path traversal that escapes workspace (e.g. ../../etc/passwd)", async () => {
     const board = makeBoard({
-      research: { artifacts: ["../../etc/passwd"], entries: 1, status: "done" },
+      [sid("research")]: { artifacts: ["../../etc/passwd"], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
@@ -389,7 +389,7 @@ describe("resolveContextInjections", () => {
     await writeFile(join(subdir, "relative.md"), "Relative path content.");
 
     const board = makeBoard({
-      research: { artifacts: ["artifacts/relative.md"], entries: 1, status: "done" },
+      [sid("research")]: { artifacts: ["artifacts/relative.md"], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
@@ -403,7 +403,7 @@ describe("resolveContextInjections", () => {
     await writeFile(artifactPath, "Good content.");
 
     const board = makeBoard({
-      good_state: { artifacts: [artifactPath], entries: 1, status: "done" },
+      [sid("good_state")]: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [
       { as: "GOOD", from: "good_state" },
@@ -424,8 +424,8 @@ function makeBoardWithMetadata(metadata?: Record<string, string | number | boole
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "start",
-    entry: "start",
+    current_state: sid("start"),
+    entry: sid("start"),
     flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -438,10 +438,10 @@ function makeBoardWithMetadata(metadata?: Record<string, string | number | boole
 }
 
 describe("resolveContextInjections — file_context source", () => {
-  let tmpDir: string;
+  let tmpDir: WorkspacePath;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "inject-ctx-kg-test-"));
+    tmpDir = workspacePath(await mkdtemp(join(tmpdir(), "inject-ctx-kg-test-")));
     // Reset mocks to clean state
     vi.mocked(existsSync).mockImplementation((p) => {
       // Default: KG DB exists
@@ -634,10 +634,10 @@ describe("resolveContextInjections — file_context source", () => {
 // handoff injection source
 
 describe("resolveContextInjections — handoff source", () => {
-  let tmpDir: string;
+  let tmpDir: WorkspacePath;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "inject-handoff-test-"));
+    tmpDir = workspacePath(await mkdtemp(join(tmpdir(), "inject-handoff-test-")));
     // Restore the real existsSync — the file_context tests override the mock's implementation
     // in their beforeEach, and vi.clearAllMocks() does not restore implementations.
     // We use vi.importActual to get the real function and reset the mock here.
@@ -758,10 +758,10 @@ describe("resolveContextInjections — handoff source", () => {
 // wave_summaries injection source
 
 describe("resolveContextInjections — wave_summaries source", () => {
-  let tmpDir: string;
+  let tmpDir: WorkspacePath;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "inject-wave-summaries-test-"));
+    tmpDir = workspacePath(await mkdtemp(join(tmpdir(), "inject-wave-summaries-test-")));
     // Restore real existsSync for fs-based tests
     const { existsSync: realExistsSync } =
       await vi.importActual<typeof import("node:fs")>("node:fs");
@@ -801,9 +801,9 @@ describe("resolveContextInjections — wave_summaries source", () => {
 
     // Board current_state is wave 2
     const board = makeBoard({
-      implement: { entries: 1, status: "in_progress", wave: 2 },
+      [sid("implement")]: { entries: 1, status: "in_progress", wave: 2 },
     });
-    board.current_state = "implement";
+    board.current_state = sid("implement");
     const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
@@ -821,9 +821,9 @@ describe("resolveContextInjections — wave_summaries source", () => {
     // No summaries — this is wave 1
 
     const board = makeBoard({
-      implement: { entries: 1, status: "in_progress", wave: 1 },
+      [sid("implement")]: { entries: 1, status: "in_progress", wave: 1 },
     });
-    board.current_state = "implement";
+    board.current_state = sid("implement");
     const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
@@ -842,9 +842,9 @@ describe("resolveContextInjections — wave_summaries source", () => {
     // No summary files created for wave 1
 
     const board = makeBoard({
-      implement: { entries: 1, status: "in_progress", wave: 2 },
+      [sid("implement")]: { entries: 1, status: "in_progress", wave: 2 },
     });
-    board.current_state = "implement";
+    board.current_state = sid("implement");
     const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
@@ -864,9 +864,9 @@ describe("resolveContextInjections — wave_summaries source", () => {
     await writeFile(join(plansDir, "wave2-task-SUMMARY.md"), "Wave 2 output (current).");
 
     const board = makeBoard({
-      implement: { entries: 1, status: "in_progress", wave: 2 },
+      [sid("implement")]: { entries: 1, status: "in_progress", wave: 2 },
     });
-    board.current_state = "implement";
+    board.current_state = sid("implement");
     const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
@@ -890,9 +890,9 @@ describe("resolveContextInjections — wave_summaries source", () => {
     await writeFile(join(plansDir, "small-task-SUMMARY.md"), overflowContent);
 
     const board = makeBoard({
-      implement: { entries: 1, status: "in_progress", wave: 2 },
+      [sid("implement")]: { entries: 1, status: "in_progress", wave: 2 },
     });
-    board.current_state = "implement";
+    board.current_state = sid("implement");
     const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
@@ -909,9 +909,9 @@ describe("resolveContextInjections — wave_summaries source", () => {
     mockStore.getSession.mockReturnValue(null);
 
     const board = makeBoard({
-      implement: { entries: 1, status: "in_progress", wave: 2 },
+      [sid("implement")]: { entries: 1, status: "in_progress", wave: 2 },
     });
-    board.current_state = "implement";
+    board.current_state = sid("implement");
     const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
@@ -929,9 +929,9 @@ describe("resolveContextInjections — wave_summaries source", () => {
     await writeFile(join(plansDir, "task-a-SUMMARY.md"), "Use ${variable} here.");
 
     const board = makeBoard({
-      implement: { entries: 1, status: "in_progress", wave: 2 },
+      [sid("implement")]: { entries: 1, status: "in_progress", wave: 2 },
     });
-    board.current_state = "implement";
+    board.current_state = sid("implement");
     const injections: ContextInjection[] = [{ as: "wave_summaries", from: "wave_summaries" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);

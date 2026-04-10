@@ -51,7 +51,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -66,16 +66,16 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     base_commit: "abc1234",
     blocked: null,
     concerns: [],
-    current_state: "review",
-    entry: "review",
+    current_state: sid("review"),
+    entry: sid("review"),
     flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
     started: new Date().toISOString(),
     states: {
-      done: { entries: 0, status: "pending" },
-      review: { entries: 0, status: "pending" },
+      [sid("done")]: { entries: 0, status: "pending" },
+      [sid("review")]: { entries: 0, status: "pending" },
     },
     task: "test task",
     ...overrides,
@@ -85,14 +85,14 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
-    entry: "review",
+    entry: sid("review"),
     name: flowName("test-flow"),
     spawn_instructions: {
-      review: "Review changes via git diff ${base_commit}..HEAD. ${review_scope}",
+      [sid("review")]: "Review changes via git diff ${base_commit}..HEAD. ${review_scope}",
     },
     states: {
-      done: { type: "terminal" },
-      review: { agent: "canon-reviewer", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("review")]: { agent: "canon-reviewer", type: "single" },
     },
     ...overrides,
   };
@@ -117,7 +117,7 @@ function seedBoard(workspace: string, board: Board): void {
     tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, {
+    store.upsertState(sid(stateId), {
       ...stateEntry,
       entries: stateEntry.entries ?? 0,
       status: stateEntry.status,
@@ -142,8 +142,8 @@ describe("scoped re-review (review_scope injection)", () => {
         workspace,
         makeBoard({
           states: {
-            done: { entries: 0, status: "pending" },
-            review: { entries: 0, status: "pending" },
+            [sid("done")]: { entries: 0, status: "pending" },
+            [sid("review")]: { entries: 0, status: "pending" },
           },
         }),
       );
@@ -153,7 +153,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         state_id: "review",
         variables: { base_commit: "abc1234", CANON_PLUGIN_ROOT: "", task: "test" },
-        workspace,
+        workspace: workspacePath(workspace),
       });
       assertOk(result);
 
@@ -170,8 +170,8 @@ describe("scoped re-review (review_scope injection)", () => {
         workspace,
         makeBoard({
           states: {
-            done: { entries: 0, status: "pending" },
-            review: { entries: 0, status: "done" },
+            [sid("done")]: { entries: 0, status: "pending" },
+            [sid("review")]: { entries: 0, status: "done" },
           },
         }),
       );
@@ -181,7 +181,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         state_id: "review",
         variables: { base_commit: "abc1234", CANON_PLUGIN_ROOT: "", task: "test" },
-        workspace,
+        workspace: workspacePath(workspace),
       });
 
       // git diff should NOT be called for a non-re-entry
@@ -198,8 +198,8 @@ describe("scoped re-review (review_scope injection)", () => {
         makeBoard({
           base_commit: "abc1234",
           states: {
-            done: { entries: 0, status: "pending" },
-            review: { entries: 1, status: "done" },
+            [sid("done")]: { entries: 0, status: "pending" },
+            [sid("review")]: { entries: 1, status: "done" },
           },
         }),
       );
@@ -220,7 +220,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         state_id: "review",
         variables: { base_commit: "abc1234", CANON_PLUGIN_ROOT: "", task: "test" },
-        workspace,
+        workspace: workspacePath(workspace),
       });
       assertOk(result);
 
@@ -246,8 +246,8 @@ describe("scoped re-review (review_scope injection)", () => {
         makeBoard({
           base_commit: "abc1234",
           states: {
-            done: { entries: 0, status: "pending" },
-            review: { entries: 1, status: "done" },
+            [sid("done")]: { entries: 0, status: "pending" },
+            [sid("review")]: { entries: 1, status: "done" },
           },
         }),
       );
@@ -267,7 +267,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         state_id: "review",
         variables: { base_commit: "abc1234", CANON_PLUGIN_ROOT: "", task: "test" },
-        workspace,
+        workspace: workspacePath(workspace),
       });
       assertOk(result);
 
@@ -286,8 +286,8 @@ describe("scoped re-review (review_scope injection)", () => {
         makeBoard({
           base_commit: "abc1234",
           states: {
-            done: { entries: 0, status: "pending" },
-            review: { entries: 1, status: "done" },
+            [sid("done")]: { entries: 0, status: "pending" },
+            [sid("review")]: { entries: 1, status: "done" },
           },
         }),
       );
@@ -302,7 +302,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         state_id: "review",
         variables: { base_commit: "abc1234", CANON_PLUGIN_ROOT: "", task: "test" },
-        workspace,
+        workspace: workspacePath(workspace),
       });
       assertOk(result);
 
@@ -319,8 +319,8 @@ describe("scoped re-review (review_scope injection)", () => {
         makeBoard({
           base_commit: "",
           states: {
-            done: { entries: 0, status: "pending" },
-            review: { entries: 1, status: "done" },
+            [sid("done")]: { entries: 0, status: "pending" },
+            [sid("review")]: { entries: 1, status: "done" },
           },
         }),
       );
@@ -330,7 +330,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         state_id: "review",
         variables: { base_commit: "", CANON_PLUGIN_ROOT: "", task: "test" },
-        workspace,
+        workspace: workspacePath(workspace),
       });
 
       // git diff should NOT be called when base_commit is empty
@@ -346,8 +346,8 @@ describe("scoped re-review (review_scope injection)", () => {
         makeBoard({
           base_commit: "not-a-valid-sha; rm -rf /",
           states: {
-            done: { entries: 0, status: "pending" },
-            review: { entries: 1, status: "done" },
+            [sid("done")]: { entries: 0, status: "pending" },
+            [sid("review")]: { entries: 1, status: "done" },
           },
         }),
       );
@@ -361,7 +361,7 @@ describe("scoped re-review (review_scope injection)", () => {
           CANON_PLUGIN_ROOT: "",
           task: "test",
         },
-        workspace,
+        workspace: workspacePath(workspace),
       });
 
       // git diff should NOT be called for an invalid base_commit
@@ -376,8 +376,8 @@ describe("scoped re-review (review_scope injection)", () => {
         makeBoard({
           base_commit: "abc1234",
           states: {
-            done: { entries: 0, status: "pending" },
-            review: { entries: 1, status: "done" },
+            [sid("done")]: { entries: 0, status: "pending" },
+            [sid("review")]: { entries: 1, status: "done" },
           },
         }),
       );
@@ -397,7 +397,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         state_id: "review",
         variables: { base_commit: "abc1234", CANON_PLUGIN_ROOT: "", task: "test" },
-        workspace,
+        workspace: workspacePath(workspace),
       });
       assertOk(result);
 
@@ -417,8 +417,8 @@ describe("scoped re-review (review_scope injection)", () => {
         makeBoard({
           base_commit: "deadbeef",
           states: {
-            done: { entries: 0, status: "pending" },
-            review: { entries: 1, status: "done" },
+            [sid("done")]: { entries: 0, status: "pending" },
+            [sid("review")]: { entries: 1, status: "done" },
           },
         }),
       );
@@ -434,7 +434,7 @@ describe("scoped re-review (review_scope injection)", () => {
 
       const flow = makeFlow({
         spawn_instructions: {
-          review: "Review via git diff. ${review_scope}\n${progress}",
+          [sid("review")]: "Review via git diff. ${review_scope}\n${progress}",
         },
       });
 
@@ -442,7 +442,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         state_id: "review",
         variables: { base_commit: "deadbeef", CANON_PLUGIN_ROOT: "", task: "test" },
-        workspace,
+        workspace: workspacePath(workspace),
       });
       assertOk(result);
 

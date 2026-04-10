@@ -13,6 +13,7 @@ import type { RoleEntry } from "@domains/flows/flow-definition-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { describe, expect, it } from "vitest";
 import { isRoleOptional } from "../engine/transitions.ts";
+import { stateId as sid } from "@domains/flows/board-state-schemas.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,7 +25,7 @@ describe("explore.md role structure", () => {
   it("parses explore.md and finds the dependencies role marked as optional", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "explore");
 
-    const researchState = flow.states.research;
+    const researchState = flow.states[sid("research")];
     expect(researchState).toBeDefined();
     expect(researchState.roles).toBeDefined();
 
@@ -41,7 +42,7 @@ describe("explore.md role structure", () => {
   it("parses explore.md and finds codebase role is required (not optional)", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "explore");
 
-    const researchState = flow.states.research;
+    const researchState = flow.states[sid("research")];
     const roles = researchState.roles as RoleEntry[];
     const codebaseRole = roles.find((r) =>
       typeof r === "string" ? r === "codebase" : r.name === "codebase",
@@ -64,7 +65,7 @@ describe("loadAndResolveFlow explore", () => {
 
   it("resolves research state as parallel type with two roles", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "explore");
-    const researchState = flow.states.research;
+    const researchState = flow.states[sid("research")];
 
     expect(researchState.type).toBe("parallel");
     expect(researchState.roles).toHaveLength(2);
@@ -72,9 +73,9 @@ describe("loadAndResolveFlow explore", () => {
 
   it("has synthesize and done states", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "explore");
-    expect(flow.states.synthesize).toBeDefined();
-    expect(flow.states.done).toBeDefined();
-    expect(flow.states.done.type).toBe("terminal");
+    expect(flow.states[sid("synthesize")]).toBeDefined();
+    expect(flow.states[sid("done")]).toBeDefined();
+    expect(flow.states[sid("done")].type).toBe("terminal");
   });
 });
 

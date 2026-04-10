@@ -19,13 +19,15 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { postEvent } from "../tools/post-event.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "post-event-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function setupWorkspace(workspace: string): void {
@@ -143,7 +145,7 @@ describe("postEvent — WORKSPACE_NOT_FOUND", () => {
       action: "start",
       agent: "canon-implementor",
       detail: "Starting something",
-      workspace: "/tmp/does-not-exist-post-event-test-xyz-12345",
+      workspace: workspacePath("/tmp/does-not-exist-post-event-test-xyz-12345"),
     });
 
     expect(result.ok).toBe(false);

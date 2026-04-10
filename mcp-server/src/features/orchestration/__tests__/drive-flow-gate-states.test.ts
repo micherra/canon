@@ -51,14 +51,15 @@ import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "drive-flow-gate-states-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(workspace: string, currentState: string): ExecutionStore {
@@ -104,8 +105,8 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
       base_commit: "abc123",
       blocked: null,
       concerns: [],
-      current_state: nextState ?? "terminal",
-      entry: "check",
+      current_state: sid(nextState ?? "terminal"),
+      entry: sid("check"),
       flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
@@ -153,24 +154,24 @@ describe("gate-only state: all gates pass", () => {
 
     const flow: ResolvedFlow = {
       description: "flow with gate-only state",
-      entry: "check",
+      entry: sid("check"),
       name: flowName("test-flow"),
       spawn_instructions: {
         // Note: no spawn instruction for "check" — gate-only states are exempt
-        review: "Do review",
+        [sid("review")]: "Do review",
       },
       states: {
-        check: {
+        [sid("check")]: {
           gates: ["npm run build"],
           transitions: { done: "review" },
           type: "single",
         },
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
       },
@@ -235,23 +236,23 @@ describe("gate-only state: gate fails", () => {
 
     const flow: ResolvedFlow = {
       description: "flow with gate-only state",
-      entry: "check",
+      entry: sid("check"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        review: "Do review",
+        [sid("review")]: "Do review",
       },
       states: {
-        check: {
+        [sid("check")]: {
           gates: ["npm run build"],
           transitions: { done: "review" },
           type: "single",
         },
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
       },
@@ -301,23 +302,23 @@ describe("gate-only state: no gates resolved", () => {
 
     const flow: ResolvedFlow = {
       description: "flow with gate-only state",
-      entry: "check",
+      entry: sid("check"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        review: "Do review",
+        [sid("review")]: "Do review",
       },
       states: {
-        check: {
+        [sid("check")]: {
           // No gates, no agent — gate-only state that relies on discovered gates
           transitions: { done: "review" },
           type: "single",
         },
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
       },
@@ -349,7 +350,7 @@ describe("gate-only state: discovered gates from prior states", () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace, "check");
     // Seed a prior state with discovered gates (simulating what agents reported earlier)
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       discovered_gates: [
         { command: "pytest", source: "tester" },
         { command: "ruff check .", source: "reviewer" },
@@ -360,23 +361,23 @@ describe("gate-only state: discovered gates from prior states", () => {
 
     const flow: ResolvedFlow = {
       description: "flow with gate-only state using discovered gates",
-      entry: "check",
+      entry: sid("check"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        review: "Do review",
+        [sid("review")]: "Do review",
       },
       states: {
-        check: {
+        [sid("check")]: {
           // No explicit gates — should use discovered gates from board
           transitions: { done: "review" },
           type: "single",
         },
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
       },
@@ -436,19 +437,19 @@ describe("normal single state with agent and gates", () => {
 
     const flow: ResolvedFlow = {
       description: "flow with agent + gates state",
-      entry: "implement",
+      entry: sid("implement"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        implement: "Implement the changes",
+        [sid("implement")]: "Implement the changes",
       },
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon:canon-implementor",
           gates: ["npm test"],
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
       },
@@ -493,18 +494,18 @@ describe("normal single state without gates", () => {
 
     const flow: ResolvedFlow = {
       description: "normal flow without gates",
-      entry: "research",
+      entry: sid("research"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        research: "Do research",
+        [sid("research")]: "Do research",
       },
       states: {
-        research: {
+        [sid("research")]: {
           agent: "canon:canon-researcher",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
       },

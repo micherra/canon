@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Message, writeMessage } from "@domains/messages/messages.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import {
   buildDebatePrompt,
   buildDebateSummary,
@@ -149,10 +151,10 @@ describe("debate", () => {
   });
 
   describe("buildDebateSummary", () => {
-    let workspace: string;
+    let workspace: WorkspacePath;
 
     beforeEach(async () => {
-      workspace = await mkdtemp(join(tmpdir(), "canon-debate-"));
+      workspace = workspacePath(await mkdtemp(join(tmpdir(), "canon-debate-")));
     });
 
     afterEach(async () => {
@@ -206,7 +208,7 @@ describe("debate", () => {
   });
 
   describe("inspectDebateProgress", () => {
-    let workspace: string;
+    let workspace: WorkspacePath;
 
     const config: DebateConfig = {
       composition: ["canon-researcher"],
@@ -219,7 +221,7 @@ describe("debate", () => {
     };
 
     beforeEach(async () => {
-      workspace = await mkdtemp(join(tmpdir(), "canon-debate-progress-"));
+      workspace = workspacePath(await mkdtemp(join(tmpdir(), "canon-debate-progress-")));
     });
 
     afterEach(async () => {
@@ -317,7 +319,7 @@ describe("debate", () => {
         otherTeamLabels: ["Team B", "Team C"],
         roundNumber: 1,
         teamLabel: "Team A",
-        workspace: "/workspace",
+        workspace: workspacePath("/workspace"),
       });
       expect(result).toContain("Design the auth system.");
     });
@@ -329,7 +331,7 @@ describe("debate", () => {
         otherTeamLabels: ["Team B"],
         roundNumber: 1,
         teamLabel: "Team A",
-        workspace: "/workspace",
+        workspace: workspacePath("/workspace"),
       });
       expect(result).toContain("State Your Position");
       expect(result).toContain("Team A");
@@ -342,7 +344,7 @@ describe("debate", () => {
         otherTeamLabels: ["Team A"],
         roundNumber: 2,
         teamLabel: "Team B",
-        workspace: "/workspace/test",
+        workspace: workspacePath("/workspace/test"),
       });
       expect(result).toContain('channel="debate-round-2"');
       expect(result).toContain('workspace="/workspace/test"');
@@ -357,7 +359,7 @@ describe("debate", () => {
         roundNumber: 2,
         teamLabel: "Team B",
         transcript,
-        workspace: "/workspace",
+        workspace: workspacePath("/workspace"),
       });
       expect(result).toContain("Prior Debate Transcript");
       expect(result).toContain("Use event sourcing.");
@@ -370,7 +372,7 @@ describe("debate", () => {
         otherTeamLabels: ["Team B"],
         roundNumber: 1,
         teamLabel: "Team A",
-        workspace: "/workspace",
+        workspace: workspacePath("/workspace"),
       });
       expect(result).not.toContain("Prior Debate Transcript");
     });

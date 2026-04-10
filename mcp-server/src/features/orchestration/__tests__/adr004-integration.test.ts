@@ -18,7 +18,7 @@
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type {
   FragmentDefinition,
   FragmentInclude,
@@ -51,12 +51,12 @@ const pluginDir = resolve(process.cwd(), ".."); // mcp-server/src/__tests__ → 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test",
-    entry: "start",
+    entry: sid("start"),
     name: flowName("test-flow"),
-    spawn_instructions: { start: "Do the thing" },
+    spawn_instructions: { [sid("start")]: "Do the thing" },
     states: {
-      end: { type: "terminal" },
-      start: { agent: "agent-a", transitions: { done: "end" }, type: "single" },
+      [sid("end")]: { type: "terminal" },
+      [sid("start")]: { agent: "agent-a", transitions: { done: "end" }, type: "single" },
     },
     ...overrides,
   };
@@ -79,8 +79,8 @@ describe("loadAndResolveFlow — hard-blocking error message content", () => {
     const flowWithBothErrors: ResolvedFlow = makeFlow({
       spawn_instructions: {}, // missing 'start' → spawn coverage error
       states: {
-        end: { type: "terminal" },
-        start: {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: {
           agent: "a",
           transitions: { done: "end" },
           type: "single",
@@ -99,8 +99,8 @@ describe("loadAndResolveFlow — hard-blocking error message content", () => {
     const flow: ResolvedFlow = makeFlow({
       spawn_instructions: {}, // missing 'start' → spawn error
       states: {
-        end: { type: "terminal" },
-        start: {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: {
           agent: "a",
           transitions: { done: "${missing_param}" }, // → ref error
           type: "single",
@@ -121,11 +121,11 @@ describe("loadAndResolveFlow — hard-blocking error message content", () => {
     // A flow with unreachable state emits only warnings; loadAndResolveFlow must not throw
     // We test validateFlow alone here to verify the Warning: prefix is applied
     const flow: ResolvedFlow = makeFlow({
-      spawn_instructions: { start: "Do it" },
+      spawn_instructions: { [sid("start")]: "Do it" },
       states: {
-        end: { type: "terminal" },
-        orphan: { type: "terminal" }, // unreachable, no spawn needed, warning only
-        start: { agent: "a", transitions: { done: "end" }, type: "single" },
+        [sid("end")]: { type: "terminal" },
+        [sid("orphan")]: { type: "terminal" }, // unreachable, no spawn needed, warning only
+        [sid("start")]: { agent: "a", transitions: { done: "end" }, type: "single" },
       },
     });
 
@@ -195,35 +195,35 @@ describe("RUNTIME_VARIABLES export", () => {
 describe("checkUnresolvedRefs — item.* variable exhaustive coverage", () => {
   it("accepts item.test_file in spawn instruction", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Fix failing test: ${item.test_file}" },
+      spawn_instructions: { [sid("start")]: "Fix failing test: ${item.test_file}" },
     });
     expect(checkUnresolvedRefs(flow)).toEqual([]);
   });
 
   it("accepts item.test_name in spawn instruction", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Failing test: ${item.test_name}" },
+      spawn_instructions: { [sid("start")]: "Failing test: ${item.test_name}" },
     });
     expect(checkUnresolvedRefs(flow)).toEqual([]);
   });
 
   it("accepts item.error_message in spawn instruction", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Error: ${item.error_message}" },
+      spawn_instructions: { [sid("start")]: "Error: ${item.error_message}" },
     });
     expect(checkUnresolvedRefs(flow)).toEqual([]);
   });
 
   it("accepts item.source_file in spawn instruction", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Source: ${item.source_file}" },
+      spawn_instructions: { [sid("start")]: "Source: ${item.source_file}" },
     });
     expect(checkUnresolvedRefs(flow)).toEqual([]);
   });
 
   it("rejects item.unknown_field as unresolved reference", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Unknown: ${item.unknown_field}" },
+      spawn_instructions: { [sid("start")]: "Unknown: ${item.unknown_field}" },
     });
     const errors = checkUnresolvedRefs(flow);
     expect(errors.length).toBe(1);
@@ -232,14 +232,14 @@ describe("checkUnresolvedRefs — item.* variable exhaustive coverage", () => {
 
   it("accepts role variable in spawn instruction (parallel state context)", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "You are the ${role} agent. Do work." },
+      spawn_instructions: { [sid("start")]: "You are the ${role} agent. Do work." },
     });
     expect(checkUnresolvedRefs(flow)).toEqual([]);
   });
 
   it("accepts open_questions variable in spawn instruction", () => {
     const flow = makeFlow({
-      spawn_instructions: { start: "Address these questions: ${open_questions}" },
+      spawn_instructions: { [sid("start")]: "Address these questions: ${open_questions}" },
     });
     expect(checkUnresolvedRefs(flow)).toEqual([]);
   });
@@ -452,7 +452,7 @@ describe("runMigrations — data preservation during upgrade", () => {
 
     // ExecutionStore prepares statements for all tables — all must exist after migration
     const store = new ExecutionStore(db);
-    store.recordIterationResult("implement", 1, "done", { commit_sha: "abc" });
+    store.recordIterationResult(sid("implement"), 1, "done", { commit_sha: "abc" });
 
     const rows = db
       .prepare("SELECT * FROM iteration_results WHERE state_id = 'implement'")
@@ -489,73 +489,73 @@ describe("ExecutionStore.isStuck — additional edge cases", () => {
   it("same_violations: considers only the last two iterations (3+ iterations)", () => {
     const store = makeStore();
     // Three iterations: 1 and 2 differ, but 2 and 3 are identical
-    store.recordIterationResult("review", 1, "blocking", {
+    store.recordIterationResult(sid("review"), 1, "blocking", {
       file_paths: ["a.ts"],
       principle_ids: ["thin-handlers"],
     });
-    store.recordIterationResult("review", 2, "blocking", {
+    store.recordIterationResult(sid("review"), 2, "blocking", {
       file_paths: ["b.ts"],
       principle_ids: ["errors-are-values"],
     });
-    store.recordIterationResult("review", 3, "blocking", {
+    store.recordIterationResult(sid("review"), 3, "blocking", {
       file_paths: ["b.ts"],
       principle_ids: ["errors-are-values"],
     });
     // Last two (2,3) match → stuck
-    expect(store.isStuck("review", "same_violations")).toBe(true);
+    expect(store.isStuck(sid("review"), "same_violations")).toBe(true);
   });
 
   it("no_progress: returns false when artifact_count changes even if commit_sha same", () => {
     const store = makeStore();
-    store.recordIterationResult("implement", 1, "needs_fix", {
+    store.recordIterationResult(sid("implement"), 1, "needs_fix", {
       artifact_count: 2,
       commit_sha: "abc",
     });
-    store.recordIterationResult("implement", 2, "needs_fix", {
+    store.recordIterationResult(sid("implement"), 2, "needs_fix", {
       artifact_count: 3, // different artifact count
       commit_sha: "abc",
     });
-    expect(store.isStuck("implement", "no_progress")).toBe(false);
+    expect(store.isStuck(sid("implement"), "no_progress")).toBe(false);
   });
 
   it("same_file_test: different state_ids are isolated (no cross-contamination)", () => {
     const store = makeStore();
     const pairs = [{ file: "foo.ts", test: "foo.test.ts" }];
-    store.recordIterationResult("state-a", 1, "failing", { pairs });
-    store.recordIterationResult("state-a", 2, "failing", { pairs });
-    store.recordIterationResult("state-b", 1, "failing", { pairs });
+    store.recordIterationResult(sid("state-a"), 1, "failing", { pairs });
+    store.recordIterationResult(sid("state-a"), 2, "failing", { pairs });
+    store.recordIterationResult(sid("state-b"), 1, "failing", { pairs });
     // state-b only has 1 iteration, so it cannot be stuck
-    expect(store.isStuck("state-a", "same_file_test")).toBe(true);
-    expect(store.isStuck("state-b", "same_file_test")).toBe(false);
+    expect(store.isStuck(sid("state-a"), "same_file_test")).toBe(true);
+    expect(store.isStuck(sid("state-b"), "same_file_test")).toBe(false);
   });
 
   it("unknown stuckWhen strategy returns false safely", () => {
     // The type is StuckWhen — but the function should degrade gracefully for unknown values
     // (contract test for defensive coding)
     const store = makeStore();
-    store.recordIterationResult("s", 1, "needs_fix", {});
-    store.recordIterationResult("s", 2, "needs_fix", {});
+    store.recordIterationResult(sid("s"), 1, "needs_fix", {});
+    store.recordIterationResult(sid("s"), 2, "needs_fix", {});
     // Cast to any to pass an unknown value — should not throw, returns false
-    expect(() => store.isStuck("s", "unknown_strategy" as never)).not.toThrow();
+    expect(() => store.isStuck(sid("s"), "unknown_strategy" as never)).not.toThrow();
   });
 
   it("same_file_test: empty pairs on both iterations should NOT be stuck (all_passing result)", () => {
     // Bug: unorderedEqual([], []) returned true (vacuously), causing false stuck detection
     // when all tests pass and the failing-file set is empty.
     const store = makeStore();
-    store.recordIterationResult("fix", 1, "all_passing", { pairs: [] });
-    store.recordIterationResult("fix", 2, "all_passing", { pairs: [] });
-    expect(store.isStuck("fix", "same_file_test")).toBe(false);
+    store.recordIterationResult(sid("fix"), 1, "all_passing", { pairs: [] });
+    store.recordIterationResult(sid("fix"), 2, "all_passing", { pairs: [] });
+    expect(store.isStuck(sid("fix"), "same_file_test")).toBe(false);
   });
 
   it("same_file_test: empty current pairs (tests now all passing) should NOT be stuck", () => {
     // Progress was made: previous iteration had failures, current has none.
     const store = makeStore();
-    store.recordIterationResult("fix", 1, "failing", {
+    store.recordIterationResult(sid("fix"), 1, "failing", {
       pairs: [{ file: "a.ts", test: "a.test.ts" }],
     });
-    store.recordIterationResult("fix", 2, "all_passing", { pairs: [] });
-    expect(store.isStuck("fix", "same_file_test")).toBe(false);
+    store.recordIterationResult(sid("fix"), 2, "all_passing", { pairs: [] });
+    expect(store.isStuck(sid("fix"), "same_file_test")).toBe(false);
   });
 });
 
@@ -616,11 +616,11 @@ describe("Cross-task: typed param state_id validation with real production flows
 describe("validateSpawnCoverage — parallel state type", () => {
   it("reports missing spawn instruction for a parallel state", () => {
     const flow: ResolvedFlow = makeFlow({
-      spawn_instructions: { start: "Do stuff" }, // missing 'workers'
+      spawn_instructions: { [sid("start")]: "Do stuff" }, // missing 'workers'
       states: {
-        end: { type: "terminal" },
-        start: { agent: "a", transitions: { done: "workers" }, type: "single" },
-        workers: {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { done: "workers" }, type: "single" },
+        [sid("workers")]: {
           agents: ["agent-a", "agent-b"],
           transitions: { done: "end" },
           type: "parallel",
@@ -635,11 +635,11 @@ describe("validateSpawnCoverage — parallel state type", () => {
 
   it("reports missing spawn instruction for a wave state", () => {
     const flow: ResolvedFlow = makeFlow({
-      spawn_instructions: { start: "Do stuff" }, // missing 'wave-impl'
+      spawn_instructions: { [sid("start")]: "Do stuff" }, // missing 'wave-impl'
       states: {
-        end: { type: "terminal" },
-        start: { agent: "a", transitions: { done: "wave-impl" }, type: "single" },
-        "wave-impl": {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { done: "wave-impl" }, type: "single" },
+        [sid("wave-impl")]: {
           agent: "implementor",
           transitions: { done: "end" },
           type: "wave",
@@ -668,7 +668,7 @@ describe("writePlanIndex — additional edge cases", () => {
       const result = await writePlanIndex({
         slug: "",
         tasks: [{ task_id: "t-01", wave: 1 }],
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       });
       // Empty slug is rejected — SLUG_PATTERN requires at least 1 character
       expect(result.ok).toBe(false);
@@ -689,7 +689,7 @@ describe("writePlanIndex — additional edge cases", () => {
             wave: 1,
           },
         ],
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       });
       assertOk(result);
       const content = await readFile(result.path, "utf-8");
@@ -712,7 +712,7 @@ describe("writePlanIndex — additional edge cases", () => {
       const result = await writePlanIndex({
         slug: "test",
         tasks: [{ task_id: "", wave: 1 }],
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       });
       expect(result.ok).toBe(false);
       if (!result.ok) {

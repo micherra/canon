@@ -35,14 +35,15 @@ vi.mock("../services/wave-briefing.ts", () => ({
 
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "gsp-iso-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 afterEach(() => {
@@ -68,7 +69,7 @@ function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
       },
     },
     ...overrides,
-  } as ResolvedFlow;
+  } as unknown as ResolvedFlow;
 }
 
 function makeSingleFlow(): ResolvedFlow {
@@ -85,7 +86,7 @@ function makeSingleFlow(): ResolvedFlow {
         type: "single",
       },
     },
-  } as ResolvedFlow;
+  } as unknown as ResolvedFlow;
 }
 
 function makeParallelPerFlow(): ResolvedFlow {
@@ -102,7 +103,7 @@ function makeParallelPerFlow(): ResolvedFlow {
         type: "parallel-per",
       },
     },
-  } as ResolvedFlow;
+  } as unknown as ResolvedFlow;
 }
 
 describe("getSpawnPrompt — wave state entries", () => {

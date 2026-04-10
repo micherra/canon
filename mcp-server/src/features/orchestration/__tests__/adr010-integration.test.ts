@@ -18,7 +18,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type {
   RequiredArtifact,
   ResolvedFlow,
@@ -37,10 +38,10 @@ import { writeTestReport } from "../tools/write-test-report.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "adr010-integration-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 afterEach(() => {
@@ -71,9 +72,9 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
     tier: "medium",
   });
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { entries: 0, status: "pending" });
+    store.upsertState(sid(stateId), { entries: 0, status: "pending" });
     if ("max_iterations" in stateDef && stateDef.max_iterations !== undefined) {
-      store.upsertIteration(stateId, {
+      store.upsertIteration(sid(stateId), {
         cannot_fix: [],
         count: 0,
         history: [],
@@ -96,12 +97,12 @@ function makeFlow(requiredArtifacts?: RequiredArtifact[]): ResolvedFlow {
       };
   return {
     description: "ADR-010 integration test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("adr010-integration-flow"),
-    spawn_instructions: { implement: "Implement." },
+    spawn_instructions: { [sid("implement")]: "Implement." },
     states: {
-      implement: stateDef,
-      terminal: { type: "terminal" as const },
+      [sid("implement")]: stateDef,
+      [sid("terminal")]: { type: "terminal" as const },
     },
   };
 }
@@ -517,7 +518,7 @@ describe("writeReview → reportResult with required_artifacts (end-to-end)", ()
     const result = await reportResult({
       artifacts: ["reviews/REVIEW.md"],
       flow,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
@@ -539,7 +540,7 @@ describe("writeReview → reportResult with required_artifacts (end-to-end)", ()
     const result = await reportResult({
       artifacts: ["reviews/REVIEW.md"],
       flow,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
@@ -591,7 +592,7 @@ describe("Multiple required artifact types in a single state", () => {
     const result = await reportResult({
       artifacts: ["plans/my-epic/TEST-REPORT.md", "reviews/REVIEW.md"],
       flow,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
@@ -621,7 +622,7 @@ describe("Multiple required artifact types in a single state", () => {
     const result = await reportResult({
       artifacts: ["plans/my-epic/TEST-REPORT.md"],
       flow,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });

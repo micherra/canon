@@ -28,7 +28,8 @@ const pluginDir = resolve(process.cwd(), "..");
 
 // 1 & 2: Flow YAML parsing — feature.md and epic.md
 
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { ParallelStateSchema } from "@domains/flows/flow-definition-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
@@ -36,7 +37,7 @@ import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow", () => {
   it("feature.md: design state has approval_gate: true and max_revisions: 3", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "feature");
-    const design = flow.states.design;
+    const design = flow.states[sid("design")];
     expect(design).toBeDefined();
     expect(design?.approval_gate).toBe(true);
     expect(design?.max_revisions).toBe(3);
@@ -44,7 +45,7 @@ describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow"
 
   it("feature.md: design state has approved and revise transitions", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "feature");
-    const design = flow.states.design;
+    const design = flow.states[sid("design")];
     expect(design?.transitions?.approved).toBeDefined();
     expect(design?.transitions?.revise).toBeDefined();
     expect(design?.transitions?.reject).toBeDefined();
@@ -52,7 +53,7 @@ describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow"
 
   it("epic.md: design state has approval_gate: true and max_revisions: 3", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "epic");
-    const design = flow.states.design;
+    const design = flow.states[sid("design")];
     expect(design).toBeDefined();
     expect(design?.approval_gate).toBe(true);
     expect(design?.max_revisions).toBe(3);
@@ -60,7 +61,7 @@ describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow"
 
   it("epic.md: design state has approved and revise transitions", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "epic");
-    const design = flow.states.design;
+    const design = flow.states[sid("design")];
     expect(design?.transitions?.approved).toBeDefined();
     expect(design?.transitions?.revise).toBeDefined();
     expect(design?.transitions?.reject).toBeDefined();
@@ -124,8 +125,8 @@ function makeBoard(metadataOverrides?: Record<string, string | number | boolean>
     base_commit: "abc",
     blocked: null,
     concerns: [],
-    current_state: "design",
-    entry: "design",
+    current_state: sid("design"),
+    entry: sid("design"),
     flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -148,7 +149,7 @@ function makeFlow(tier: "small" | "medium" | "large" | undefined): DriveFlowInpu
       terminal: { type: "terminal" },
     },
     tier,
-  } as DriveFlowInput["flow"];
+  } as unknown as DriveFlowInput["flow"];
 }
 
 describe("shouldApprovalGate — additional edge cases", () => {
@@ -234,7 +235,7 @@ describe("initBoard with approval gate fields — wave state", () => {
         terminal: { type: "terminal" },
         ...stateOverrides,
       },
-    } as ResolvedFlow;
+    } as unknown as ResolvedFlow;
   }
 
   it("wave state with max_revisions creates IterationEntry", () => {
@@ -242,7 +243,7 @@ describe("initBoard with approval gate fields — wave state", () => {
       implement: { max_revisions: 4, type: "wave" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.implement).toEqual({
+    expect(board.iterations[sid("implement")]).toEqual({
       cannot_fix: [],
       count: 0,
       history: [],
@@ -255,7 +256,7 @@ describe("initBoard with approval gate fields — wave state", () => {
       implement: { approval_gate: true, type: "wave" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.implement).toEqual({
+    expect(board.iterations[sid("implement")]).toEqual({
       cannot_fix: [],
       count: 0,
       history: [],
@@ -268,7 +269,7 @@ describe("initBoard with approval gate fields — wave state", () => {
       implement: { max_iterations: 10, max_revisions: 2, type: "wave" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.implement).toEqual({
+    expect(board.iterations[sid("implement")]).toEqual({
       cannot_fix: [],
       count: 0,
       history: [],
@@ -288,10 +289,10 @@ describe("initBoard with approval gate fields — wave state", () => {
         // in initBoard prevents creating an iteration entry (fix #5).
         terminal: { approval_gate: true, type: "terminal" as const },
       },
-    } as ResolvedFlow;
+    } as unknown as ResolvedFlow;
     const board = initBoard(flow, "task", "abc");
     // Terminal states are skipped by the approval_gate iteration entry guard.
-    expect(board.iterations.terminal).toBeUndefined();
+    expect(board.iterations[sid("terminal")]).toBeUndefined();
   });
 });
 
@@ -317,10 +318,10 @@ import { reportResult } from "../tools/report-result.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "adr017-integration-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(workspace: string): ExecutionStore {

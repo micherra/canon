@@ -15,6 +15,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import {
   cleanupWorktrees,
   createWaveWorktrees,
@@ -50,17 +51,17 @@ afterEach(() => {
 
 describe("getProjectDir", () => {
   it("strips .canon/workspaces/... suffix from workspace path", () => {
-    const workspace = "/Users/alice/myproject/.canon/workspaces/feat--my-branch/slug-abc";
+    const workspace = workspacePath("/Users/alice/myproject/.canon/workspaces/feat--my-branch/slug-abc");
     expect(getProjectDir(workspace)).toBe("/Users/alice/myproject");
   });
 
   it("works with deeply nested .canon/workspaces paths", () => {
-    const workspace = "/home/user/projects/deep/.canon/workspaces/wave-001/task-01-slug";
+    const workspace = workspacePath("/home/user/projects/deep/.canon/workspaces/wave-001/task-01-slug");
     expect(getProjectDir(workspace)).toBe("/home/user/projects/deep");
   });
 
   it("returns the path unchanged if .canon/workspaces not found", () => {
-    const workspace = "/some/unrelated/path";
+    const workspace = workspacePath("/some/unrelated/path");
     expect(getProjectDir(workspace)).toBe("/some/unrelated/path");
   });
 });

@@ -37,7 +37,8 @@ vi.mock("../services/wave-briefing.ts", async (importOriginal) => {
   };
 });
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { ConsultationFragmentSchema } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
@@ -46,10 +47,10 @@ import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "cond-consult-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
@@ -57,16 +58,16 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     base_commit: "abc1234",
     blocked: null,
     concerns: [],
-    current_state: "implement",
-    entry: "implement",
-    flow: "test-flow",
+    current_state: sid("implement"),
+    entry: sid("implement"),
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
     started: new Date().toISOString(),
     states: {
-      done: { entries: 0, status: "pending" },
-      implement: { entries: 0, status: "pending" },
+      [sid("done")]: { entries: 0, status: "pending" },
+      [sid("implement")]: { entries: 0, status: "pending" },
     },
     task: "test task",
     ...overrides,
@@ -92,7 +93,7 @@ function seedBoard(workspace: string, board: Board): void {
     tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, {
+    store.upsertState(sid(stateId), {
       ...stateEntry,
       entries: stateEntry.entries ?? 0,
       status: stateEntry.status,
@@ -116,15 +117,15 @@ function makeFlowWithMinWavesConsultation(minWaves: number = 2): ResolvedFlow {
       },
     },
     description: "Test flow",
-    entry: "implement",
-    name: "test-flow",
+    entry: sid("implement"),
+    name: flowName("test-flow"),
     spawn_instructions: {
-      implement: "Implement ${task} for ${item}.",
-      "pattern-check": "Check patterns for ${task}.",
+      [sid("implement")]: "Implement ${task} for ${item}.",
+      [sid("pattern-check")]: "Check patterns for ${task}.",
     },
     states: {
-      done: { type: "terminal" },
-      implement: {
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: {
         agent: "canon-implementor",
         consultations: {
           between: ["pattern-check"],
@@ -149,15 +150,15 @@ function makeFlowWithUnconditionalConsultation(): ResolvedFlow {
       },
     },
     description: "Test flow",
-    entry: "implement",
-    name: "test-flow",
+    entry: sid("implement"),
+    name: flowName("test-flow"),
     spawn_instructions: {
-      implement: "Implement ${task} for ${item}.",
-      "plan-review": "Review the plan for ${task}.",
+      [sid("implement")]: "Implement ${task} for ${item}.",
+      [sid("plan-review")]: "Review the plan for ${task}.",
     },
     states: {
-      done: { type: "terminal" },
-      implement: {
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: {
         agent: "canon-implementor",
         consultations: {
           between: ["plan-review"],
@@ -185,15 +186,15 @@ function makeFlowWithMinWavesBeforeConsultation(): ResolvedFlow {
       },
     },
     description: "Test flow",
-    entry: "implement",
-    name: "test-flow",
+    entry: sid("implement"),
+    name: flowName("test-flow"),
     spawn_instructions: {
-      "early-scan": "Quick scan for ${task}.",
-      implement: "Implement ${task} for ${item}.",
+      [sid("early-scan")]: "Quick scan for ${task}.",
+      [sid("implement")]: "Implement ${task} for ${item}.",
     },
     states: {
-      done: { type: "terminal" },
-      implement: {
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: {
         agent: "canon-implementor",
         consultations: {
           before: ["early-scan"],
@@ -255,7 +256,7 @@ describe("ConsultationFragmentSchema — min_waves field", () => {
 // 2. Runtime filtering tests -- between consultations
 
 describe("enterAndPrepareState — min_waves filtering for between consultations", () => {
-  function setupBoard(workspace: string, waveTotalOverride?: number) {
+  function setupBoard(workspace: WorkspacePath, waveTotalOverride?: number) {
     // wave_total set on the state entry BEFORE entering so enterState preserves it
     const stateEntry: Record<string, unknown> = { entries: 0, status: "pending" };
     if (waveTotalOverride !== undefined) {
@@ -263,8 +264,8 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     }
     const board = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: stateEntry,
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: stateEntry,
       },
     });
     seedBoard(workspace, board);
@@ -369,15 +370,15 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
 // 3. Runtime filtering tests -- before consultations with min_waves
 
 describe("enterAndPrepareState — min_waves filtering for before consultations", () => {
-  function setupBoard(workspace: string, waveTotalOverride?: number) {
+  function setupBoard(workspace: WorkspacePath, waveTotalOverride?: number) {
     const stateEntry: Record<string, unknown> = { entries: 0, status: "pending" };
     if (waveTotalOverride !== undefined) {
       stateEntry.wave_total = waveTotalOverride;
     }
     const board = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: stateEntry,
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: stateEntry,
       },
     });
     seedBoard(workspace, board);

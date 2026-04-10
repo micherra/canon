@@ -17,7 +17,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board} from "@domains/flows/board-state-schemas.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,15 +56,15 @@ import {
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "implement",
-    entry: "implement",
+    current_state: sid("implement"),
+    entry: sid("implement"),
     flow: flowName("build"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -101,8 +102,8 @@ function makeInput(overrides: Partial<EnrichmentInput> = {}): EnrichmentInput {
     cwd: "/tmp/project",
     flow: makeFlow(),
     projectDir: "/tmp/project",
-    stateId: "implement",
-    workspace: "/tmp/workspace",
+    stateId: sid("implement"),
+    workspace: workspacePath("/tmp/workspace"),
     ...overrides,
   };
 }
@@ -594,7 +595,7 @@ describe("assembleEnrichment — prior work section", () => {
       "## Design\n\nThis design covers `src/foo.ts` and its dependencies.\n",
     );
 
-    const result = await assembleEnrichment(makeInput({ workspace: currentWs }));
+    const result = await assembleEnrichment(makeInput({ workspace: workspacePath(currentWs) }));
 
     expect(result.content).toContain("Prior Work");
     expect(result.content).toContain("sibling-ws");
@@ -613,7 +614,7 @@ describe("assembleEnrichment — prior work section", () => {
       "## Design\n\nThis is about `src/unrelated.ts`.\n",
     );
 
-    const result = await assembleEnrichment(makeInput({ workspace: currentWs }));
+    const result = await assembleEnrichment(makeInput({ workspace: workspacePath(currentWs) }));
 
     expect(result.content).not.toContain("sibling-ws");
   });

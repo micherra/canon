@@ -27,19 +27,19 @@ vi.mock("../services/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import type { FileCluster } from "../services/diff-cluster.ts";
 import { clusterDiff } from "../services/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 const mockBoard: Board = {
   base_commit: "abc1234",
   blocked: null,
   concerns: [],
-  current_state: "review",
-  entry: "review",
+  current_state: sid("review"),
+  entry: sid("review"),
   flow: flowName("test"),
   iterations: {},
   last_updated: new Date().toISOString(),
@@ -51,23 +51,23 @@ const mockBoard: Board = {
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "gsp-fanout-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeSingleReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test review flow",
-    entry: "review",
+    entry: sid("review"),
     name: flowName("test-review-flow"),
     spawn_instructions: {
-      review: "Review cluster ${item.cluster_key} files: ${item.files} (${item.file_count} files)",
+      [sid("review")]: "Review cluster ${item.cluster_key} files: ${item.files} (${item.file_count} files)",
     },
     states: {
-      done: { type: "terminal" },
-      review: {
+      [sid("done")]: { type: "terminal" },
+      [sid("review")]: {
         agent: "canon-reviewer",
         large_diff_threshold: 5,
         type: "single",
@@ -197,8 +197,8 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
     const flow = makeSingleReviewFlow({
       states: {
-        done: { type: "terminal" },
-        review: {
+        [sid("done")]: { type: "terminal" },
+        [sid("review")]: {
           agent: "canon-reviewer",
           large_diff_threshold: 5,
           template: "review-template",
@@ -227,7 +227,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
     const flow = makeSingleReviewFlow({
       spawn_instructions: {
-        review: "As ${role}, review cluster ${item.cluster_key}: ${item.files}",
+        [sid("review")]: "As ${role}, review cluster ${item.cluster_key}: ${item.files}",
       },
     });
 
@@ -256,7 +256,7 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow = makeSingleReviewFlow({
-      spawn_instructions: { review: "Review all the files." },
+      spawn_instructions: { [sid("review")]: "Review all the files." },
     });
 
     const result = await getSpawnPrompt({
@@ -293,12 +293,12 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
 
     const flow: ResolvedFlow = {
       description: "Test",
-      entry: "review",
+      entry: sid("review"),
       name: flowName("test-flow"),
-      spawn_instructions: { review: "Review everything." },
+      spawn_instructions: { [sid("review")]: "Review everything." },
       states: {
-        done: { type: "terminal" },
-        review: { agent: "canon-reviewer", type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("review")]: { agent: "canon-reviewer", type: "single" },
       },
     };
 
@@ -340,8 +340,8 @@ describe("getSpawnPrompt — compete expansion", () => {
 
     const flow = makeSingleReviewFlow({
       states: {
-        done: { type: "terminal" },
-        review: {
+        [sid("done")]: { type: "terminal" },
+        [sid("review")]: {
           agent: "canon-reviewer",
           compete: {
             count: 3,
@@ -374,8 +374,8 @@ describe("getSpawnPrompt — compete expansion", () => {
 
     const flow = makeSingleReviewFlow({
       states: {
-        done: { type: "terminal" },
-        review: {
+        [sid("done")]: { type: "terminal" },
+        [sid("review")]: {
           agent: "canon-reviewer",
           compete: "auto",
           type: "single",

@@ -47,14 +47,15 @@ import { assertOk } from "@shared/lib/tool-result.ts";
 import { resolveContextInjections } from "../services/inject-context.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt, truncateProgress } from "../tools/get-spawn-prompt.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "opt-mcp-int-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
@@ -75,18 +76,18 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     },
     task: "test task",
     ...overrides,
-  } as Board;
+  } as unknown as Board;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
-    spawn_instructions: { implement: "Implement ${task}." },
+    spawn_instructions: { [sid("implement")]: "Implement ${task}." },
     states: {
-      done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: { agent: "canon-implementor", type: "single" },
     },
     ...overrides,
   };
@@ -110,8 +111,8 @@ function seedBoard(workspace: string, board: Board): void {
     task: board.task,
     tier: "medium",
   });
-  for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, {
+  for (const [stateIdStr, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(sid(stateIdStr), {
       ...stateEntry,
       entries: stateEntry.entries ?? 0,
       status: stateEntry.status,
@@ -138,8 +139,8 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
           type: "single",
@@ -170,8 +171,8 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [{ as: "some_context", from: "board" }],
           type: "single",
@@ -196,8 +197,8 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           large_diff_threshold: 5,
           type: "parallel-per",
@@ -229,8 +230,8 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [{ as: "ctx", from: "board" }],
           large_diff_threshold: 5,
@@ -275,8 +276,8 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
           type: "single",
@@ -295,8 +296,8 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
     // The board in the result must be the entered board (post-enterState)
     expect(result.board).toBeDefined();
     // After enterState: status=in_progress, entries=1
-    expect(result.board!.states.implement.status).toBe("in_progress");
-    expect(result.board!.states.implement.entries).toBe(1);
+    expect(result.board!.states[sid("implement")].status).toBe("in_progress");
+    expect(result.board!.states[sid("implement")].entries).toBe(1);
   });
 
   it("the entered board state shows in_progress for the entered state", async () => {
@@ -312,8 +313,8 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
     assertOk(result);
 
     // The board snapshot in result reflects state entered, not the pre-enter state
-    expect(result.board!.states.implement.status).toBe("in_progress");
-    expect(result.board!.states.implement.entries).toBe(1);
+    expect(result.board!.states[sid("implement")].status).toBe("in_progress");
+    expect(result.board!.states[sid("implement")].entries).toBe(1);
   });
 });
 
@@ -394,8 +395,8 @@ describe("enterAndPrepareState — skip_reason message format", () => {
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
           type: "single",
@@ -428,8 +429,8 @@ describe("enterAndPrepareState — skip_reason message format", () => {
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
           type: "single",
@@ -455,8 +456,8 @@ describe("enterAndPrepareState — skip_reason message format", () => {
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
           type: "single",
@@ -487,7 +488,7 @@ describe("getSpawnPrompt — progress.md absent", () => {
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md",
-      spawn_instructions: { implement: "Task: ${task}\n\nProgress:\n${progress}" },
+      spawn_instructions: { [sid("implement")]: "Task: ${task}\n\nProgress:\n${progress}" },
     });
 
     const result = await getSpawnPrompt({
@@ -514,7 +515,7 @@ describe("getSpawnPrompt — progress.md absent", () => {
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md", // presence of this field triggers progress injection
-      spawn_instructions: { implement: "${progress}" },
+      spawn_instructions: { [sid("implement")]: "${progress}" },
     });
 
     const result = await getSpawnPrompt({

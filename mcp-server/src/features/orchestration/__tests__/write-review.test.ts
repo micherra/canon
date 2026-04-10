@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseReviewArtifact } from "../engine/effects.ts";
@@ -27,11 +28,11 @@ const BASE_INPUT: WriteReviewInput = {
   slug: "my-epic",
   verdict: "approved",
   violations: [],
-  workspace: "", // overwritten per-test
+  workspace: workspacePath("/tmp/placeholder"), // overwritten per-test
 };
 
 function makeInput(overrides: Partial<WriteReviewInput> = {}): WriteReviewInput {
-  return { ...BASE_INPUT, workspace: tmpDir, ...overrides };
+  return { ...BASE_INPUT, workspace: workspacePath(tmpDir), ...overrides };
 }
 
 // Happy path — files created in reviews/ directory
@@ -419,7 +420,7 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
     await Promise.all(
       verdicts.map(async (verdict, i) => {
         const subDir = await mkdtemp(join(tmpdir(), "write-review-test-v-"));
-        const result = await writeReview({ ...makeInput(), verdict, workspace: subDir });
+        const result = await writeReview({ ...makeInput(), verdict, workspace: workspacePath(subDir) });
         assertOk(result);
         const md = await readFile(result.path, "utf-8");
         const parsed = parseReviewArtifact(md);

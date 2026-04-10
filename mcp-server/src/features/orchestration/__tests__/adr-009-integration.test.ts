@@ -48,8 +48,9 @@ vi.mock("../tools/resolve-after-consultations.ts", () => ({
 }));
 
 import { syncBoardToStore } from "@domains/board/board-sync.ts";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
@@ -63,10 +64,10 @@ import { reportResult } from "../tools/report-result.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "adr009-integration-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(workspace: string): ExecutionStore {
@@ -95,8 +96,8 @@ function makeBoard(overrides: Partial<Board> = {}): Board {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "research",
-    entry: "research",
+    current_state: sid("research"),
+    entry: sid("research"),
     flow: flowName("test-flow"),
     iterations: {},
     last_updated: "2026-01-01T00:00:00.000Z",
@@ -133,7 +134,7 @@ function makeEnterResult(
 
 function makeReportResult(nextState: string | null, overrides: Record<string, unknown> = {}) {
   return {
-    board: makeBoard({ current_state: nextState ?? "terminal" }),
+    board: makeBoard({ current_state: sid(nextState ?? "terminal") }),
     hitl_required: false,
     log_entry: {},
     next_state: nextState,
@@ -175,45 +176,45 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
 
     const flow: ResolvedFlow = {
       description: "multi-skip flow",
-      entry: "research",
+      entry: sid("research"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        implement: "Implement",
-        research: "Do research",
-        "skip-a": "Skip A",
-        "skip-b": "Skip B",
-        "skip-c": "Skip C",
+        [sid("implement")]: "Implement",
+        [sid("research")]: "Do research",
+        [sid("skip-a")]: "Skip A",
+        [sid("skip-b")]: "Skip B",
+        [sid("skip-c")]: "Skip C",
       },
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon:canon-implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
-        research: {
+        [sid("research")]: {
           agent: "canon:canon-researcher",
           transitions: { done: "skip-a" },
           type: "single",
         },
-        "skip-a": {
+        [sid("skip-a")]: {
           agent: "canon:canon-researcher",
           skip_when: "no_contract_changes" as const,
           transitions: { done: "skip-b", skipped: "skip-b" },
           type: "single",
         },
-        "skip-b": {
+        [sid("skip-b")]: {
           agent: "canon:canon-researcher",
           skip_when: "no_contract_changes" as const,
           transitions: { done: "skip-c", skipped: "skip-c" },
           type: "single",
         },
-        "skip-c": {
+        [sid("skip-c")]: {
           agent: "canon:canon-security",
           skip_when: "no_fix_requested" as const,
           transitions: { done: "implement", skipped: "implement" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -297,25 +298,25 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
     // Chain ends at terminal state directly after skip
     const flow: ResolvedFlow = {
       description: "skip-to-terminal flow",
-      entry: "research",
+      entry: sid("research"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        research: "Do research",
-        "skip-state": "Skip state",
+        [sid("research")]: "Do research",
+        [sid("skip-state")]: "Skip state",
       },
       states: {
-        research: {
+        [sid("research")]: {
           agent: "canon:canon-researcher",
           transitions: { done: "skip-state" },
           type: "single",
         },
-        "skip-state": {
+        [sid("skip-state")]: {
           agent: "canon:canon-security",
           skip_when: "auto_approved" as const,
           transitions: { done: "terminal", skipped: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -359,16 +360,16 @@ describe("driveFlow — workspace exists but no board execution", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "research",
+      entry: sid("research"),
       name: flowName("test-flow"),
-      spawn_instructions: { research: "research" },
+      spawn_instructions: { [sid("research")]: "research" },
       states: {
-        research: {
+        [sid("research")]: {
           agent: "canon:canon-researcher",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -390,32 +391,32 @@ describe("driveFlow — buildDoneSummary state counting", () => {
     const store = makeStore(workspace);
     store.updateExecution({ current_state: "terminal" });
     // Manually populate state rows with mixed statuses
-    store.upsertState("research", { entries: 1, status: "done" });
-    store.upsertState("implement", { entries: 0, status: "skipped" });
-    store.upsertState("review", { entries: 0, status: "pending" });
+    store.upsertState(sid("research"), { entries: 1, status: "done" });
+    store.upsertState(sid("implement"), { entries: 0, status: "skipped" });
+    store.upsertState(sid("review"), { entries: 0, status: "pending" });
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "research",
+      entry: sid("research"),
       name: flowName("test-flow"),
-      spawn_instructions: { implement: "implement", research: "research", review: "review" },
+      spawn_instructions: { [sid("implement")]: "implement", [sid("research")]: "research", [sid("review")]: "review" },
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon:canon-implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
-        research: {
+        [sid("research")]: {
           agent: "canon:canon-researcher",
           transitions: { done: "terminal" },
           type: "single",
         },
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -440,7 +441,7 @@ describe("syncBoardToStore — skipped field", () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
 
-    const board = makeBoard({ skipped: ["security", "lint-check"] });
+    const board = makeBoard({ skipped: [sid("security"), sid("lint-check")] });
     syncBoardToStore(store, board);
 
     const exec = store.getExecution();
@@ -463,12 +464,12 @@ describe("syncBoardToStore — skipped field", () => {
     const store = makeStore(workspace);
 
     // First sync with one skipped entry
-    syncBoardToStore(store, makeBoard({ skipped: ["security"] }));
+    syncBoardToStore(store, makeBoard({ skipped: [sid("security")] }));
     let exec = store.getExecution();
     expect(exec?.skipped).toEqual(["security"]);
 
     // Second sync overwrites with new list
-    syncBoardToStore(store, makeBoard({ skipped: ["security", "review"] }));
+    syncBoardToStore(store, makeBoard({ skipped: [sid("security"), sid("review")] }));
     exec = store.getExecution();
     expect(exec?.skipped).toEqual(["security", "review"]);
   });
@@ -508,16 +509,16 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "research",
+      entry: sid("research"),
       name: flowName("test-flow"),
-      spawn_instructions: { research: "research" },
+      spawn_instructions: { [sid("research")]: "research" },
       states: {
-        research: {
+        [sid("research")]: {
           agent: "canon:canon-implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -558,16 +559,16 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "research",
+      entry: sid("research"),
       name: flowName("test-flow"),
-      spawn_instructions: { research: "research" },
+      spawn_instructions: { [sid("research")]: "research" },
       states: {
-        research: {
+        [sid("research")]: {
           agent: "canon:canon-implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -596,7 +597,7 @@ describe("categorizeFailures — uncategorized count boundary", () => {
         { error_message: "unique error alpha", file: "a/foo.test.ts" },
         { error_message: "unique error beta", file: "b/bar.test.ts" },
       ],
-      workspace: "/tmp/test",
+      workspace: workspacePath("/tmp/test"),
     });
 
     expect(result.ok).toBe(true);
@@ -615,7 +616,7 @@ describe("categorizeFailures — uncategorized count boundary", () => {
         { error_message: "TypeError: cannot read x", file: "src/tools/foo.test.ts" },
         { error_message: "ReferenceError: y is not defined", file: "src/tools/bar.test.ts" },
       ],
-      workspace: "/tmp/test",
+      workspace: workspacePath("/tmp/test"),
     });
 
     expect(result.ok).toBe(true);
@@ -653,7 +654,7 @@ describe("categorizeFailures — cross-module contract with driveFlow consumer p
           file: "src/domains/board/board-sync.ts",
         },
       ],
-      workspace: "/tmp/test-workspace",
+      workspace: workspacePath("/tmp/test-workspace"),
     });
 
     expect(result.ok).toBe(true);
@@ -697,7 +698,7 @@ describe("categorizeFailures — cross-module contract with driveFlow consumer p
           files: ["src/features/orchestration/tools/drive-flow.ts"],
         },
       ],
-      workspace: "/tmp/test",
+      workspace: workspacePath("/tmp/test"),
     });
 
     expect(result.ok).toBe(true);
@@ -740,21 +741,21 @@ describe("driveFlow — result without agent_session_id", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "research",
+      entry: sid("research"),
       name: flowName("test-flow"),
-      spawn_instructions: { implement: "implement", research: "research" },
+      spawn_instructions: { [sid("implement")]: "implement", [sid("research")]: "research" },
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon:canon-implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
-        research: {
+        [sid("research")]: {
           agent: "canon:canon-researcher",
           transitions: { done: "implement" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 

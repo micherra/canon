@@ -14,7 +14,7 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PromptContext } from "../model/types.ts";
 import { resolveProgress } from "../services/resolve-progress.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -29,8 +29,8 @@ function makeBoard(): Board {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "start",
-    entry: "start",
+    current_state: sid("start"),
+    entry: sid("start"),
     flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -44,13 +44,13 @@ function makeBoard(): Board {
 function makeFlow(progress?: string): ResolvedFlow {
   return {
     description: "test flow",
-    entry: "start",
+    entry: sid("start"),
     name: flowName("test"),
     progress,
-    spawn_instructions: { start: "Do the thing" },
+    spawn_instructions: { [sid("start")]: "Do the thing" },
     states: {
-      done: { type: "terminal" },
-      start: { agent: "test-agent", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("start")]: { agent: "test-agent", type: "single" },
     },
   };
 }
@@ -65,7 +65,7 @@ function makeCtx(workspace: string, overrides: Partial<PromptContext> = {}): Pro
       flow,
       state_id: "start",
       variables: { task: "test task" },
-      workspace,
+      workspace: workspacePath(workspace),
     },
     mergedVariables: { task: "test task" },
     prompts: [],
@@ -98,7 +98,7 @@ describe("resolveProgress (Stage 2)", () => {
     const workspace = makeTmpDir();
     const flow = makeFlow("");
     const ctx = makeCtx(workspace, {
-      input: { flow, state_id: "start", variables: {}, workspace },
+      input: { flow, state_id: "start", variables: {}, workspace: workspacePath(workspace) },
     });
     const result = await resolveProgress(ctx);
     expect(result).toBe(ctx);
@@ -129,7 +129,7 @@ describe("resolveProgress (Stage 2)", () => {
 
     const flow = makeFlow("${WORKSPACE}/progress.md");
     const ctx = makeCtx(workspace, {
-      input: { flow, state_id: "start", variables: {}, workspace },
+      input: { flow, state_id: "start", variables: {}, workspace: workspacePath(workspace) },
     });
 
     const result = await resolveProgress(ctx);
@@ -161,7 +161,7 @@ describe("resolveProgress (Stage 2)", () => {
 
     const flow = makeFlow("${WORKSPACE}/progress.md");
     const ctx = makeCtx(workspace, {
-      input: { flow, state_id: "start", variables: {}, workspace },
+      input: { flow, state_id: "start", variables: {}, workspace: workspacePath(workspace) },
     });
 
     const result = await resolveProgress(ctx);
@@ -176,7 +176,7 @@ describe("resolveProgress (Stage 2)", () => {
 
     const flow = makeFlow("${WORKSPACE}/progress.md");
     const ctx = makeCtx(workspace, {
-      input: { flow, state_id: "start", variables: {}, workspace },
+      input: { flow, state_id: "start", variables: {}, workspace: workspacePath(workspace) },
     });
 
     const result = await resolveProgress(ctx);

@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeResearchSynthesis } from "../tools/write-research-synthesis.ts";
@@ -29,7 +30,7 @@ const makeInput = (overrides: Partial<Parameters<typeof writeResearchSynthesis>[
     { area: "Migration", severity: "low" as const },
   ],
   slug: "my-epic",
-  workspace: "",
+  workspace: workspacePath("/tmp/placeholder"),
   ...overrides,
 });
 
@@ -37,7 +38,7 @@ describe("writeResearchSynthesis — happy path", () => {
   it("writes RESEARCH-SYNTHESIS.md and .meta.json to handoffs dir", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
-    const result = await writeResearchSynthesis(makeInput({ workspace: tmpDir }));
+    const result = await writeResearchSynthesis(makeInput({ workspace: workspacePath(tmpDir) }));
 
     assertOk(result);
     expect(result.path).toContain("RESEARCH-SYNTHESIS.md");
@@ -56,7 +57,7 @@ describe("writeResearchSynthesis — happy path", () => {
   it("meta.json has _type research_synthesis and _version 1", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
-    const result = await writeResearchSynthesis(makeInput({ workspace: tmpDir }));
+    const result = await writeResearchSynthesis(makeInput({ workspace: workspacePath(tmpDir) }));
 
     assertOk(result);
     const meta = JSON.parse(await readFile(result.meta_path, "utf-8"));
@@ -72,7 +73,7 @@ describe("writeResearchSynthesis — happy path", () => {
   it("markdown has all expected sections", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
-    const result = await writeResearchSynthesis(makeInput({ workspace: tmpDir }));
+    const result = await writeResearchSynthesis(makeInput({ workspace: workspacePath(tmpDir) }));
 
     assertOk(result);
     const content = await readFile(result.path, "utf-8");
@@ -97,7 +98,7 @@ describe("writeResearchSynthesis — happy path", () => {
   it("empty key_findings still produces valid output", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
-    const result = await writeResearchSynthesis(makeInput({ key_findings: [], workspace: tmpDir }));
+    const result = await writeResearchSynthesis(makeInput({ key_findings: [], workspace: workspacePath(tmpDir) }));
 
     assertOk(result);
     expect(result.finding_count).toBe(0);
@@ -108,7 +109,7 @@ describe("writeResearchSynthesis — happy path", () => {
   it("sources omitted: no Sources section in markdown", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
-    const result = await writeResearchSynthesis(makeInput({ workspace: tmpDir }));
+    const result = await writeResearchSynthesis(makeInput({ workspace: workspacePath(tmpDir) }));
 
     assertOk(result);
     const content = await readFile(result.path, "utf-8");
@@ -121,7 +122,7 @@ describe("writeResearchSynthesis — happy path", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
     const result = await writeResearchSynthesis(
-      makeInput({ sources: ["https://example.com/doc", "src/foo.ts"], workspace: tmpDir }),
+      makeInput({ sources: ["https://example.com/doc", "src/foo.ts"], workspace: workspacePath(tmpDir) }),
     );
 
     assertOk(result);
@@ -135,7 +136,7 @@ describe("writeResearchSynthesis — happy path", () => {
   it("creates handoffs directory if it does not exist", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
-    const result = await writeResearchSynthesis(makeInput({ workspace: tmpDir }));
+    const result = await writeResearchSynthesis(makeInput({ workspace: workspacePath(tmpDir) }));
 
     assertOk(result);
     expect(result.path).toContain("handoffs");
@@ -152,7 +153,7 @@ describe("writeResearchSynthesis — array .max() constraints", () => {
           confidence: "low" as const,
           finding: `Finding ${i}`,
         })),
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       }),
     );
 
@@ -172,7 +173,7 @@ describe("writeResearchSynthesis — array .max() constraints", () => {
           area: `Area ${i}`,
           severity: "low" as const,
         })),
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       }),
     );
 
@@ -189,7 +190,7 @@ describe("writeResearchSynthesis — array .max() constraints", () => {
     const result = await writeResearchSynthesis(
       makeInput({
         open_questions: Array.from({ length: 101 }, (_, i) => `Question ${i}`),
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       }),
     );
 
@@ -206,7 +207,7 @@ describe("writeResearchSynthesis — array .max() constraints", () => {
     const result = await writeResearchSynthesis(
       makeInput({
         affected_subsystems: Array.from({ length: 101 }, (_, i) => `Subsystem ${i}`),
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       }),
     );
 
@@ -223,7 +224,7 @@ describe("writeResearchSynthesis — array .max() constraints", () => {
     const result = await writeResearchSynthesis(
       makeInput({
         sources: Array.from({ length: 101 }, (_, i) => `https://source-${i}.example.com`),
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       }),
     );
 
@@ -243,7 +244,7 @@ describe("writeResearchSynthesis — array .max() constraints", () => {
           confidence: "low" as const,
           finding: `Finding ${i}`,
         })),
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       }),
     );
 
@@ -256,7 +257,7 @@ describe("writeResearchSynthesis — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
     const result = await writeResearchSynthesis(
-      makeInput({ slug: "invalid slug", workspace: tmpDir }),
+      makeInput({ slug: "invalid slug", workspace: workspacePath(tmpDir) }),
     );
 
     expect(result.ok).toBe(false);
@@ -269,7 +270,7 @@ describe("writeResearchSynthesis — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (special chars)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
-    const result = await writeResearchSynthesis(makeInput({ slug: "my/epic!", workspace: tmpDir }));
+    const result = await writeResearchSynthesis(makeInput({ slug: "my/epic!", workspace: workspacePath(tmpDir) }));
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -281,7 +282,7 @@ describe("writeResearchSynthesis — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
     // slug with traversal chars is caught by SLUG_PATTERN before path check
-    const result = await writeResearchSynthesis(makeInput({ slug: "../evil", workspace: tmpDir }));
+    const result = await writeResearchSynthesis(makeInput({ slug: "../evil", workspace: workspacePath(tmpDir) }));
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

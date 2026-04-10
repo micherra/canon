@@ -19,30 +19,31 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { reportResult, validateRequiredHandoffs } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 function makeMinimalFlow(overrides?: Partial<FlowType>): FlowType {
   return {
     description: "A test flow",
-    entry: "build",
+    entry: sid("build"),
     name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
-      build: {
+      [sid("build")]: {
         transitions: {
           done: "review",
           failed: "hitl",
         },
         type: "single",
       },
-      hitl: { type: "terminal" },
-      review: {
+      [sid("hitl")]: { type: "terminal" },
+      [sid("review")]: {
         transitions: {
           done: "ship",
         },
         type: "single",
       },
-      ship: { type: "terminal" },
+      [sid("ship")]: { type: "terminal" },
     },
     ...overrides,
   };
@@ -50,10 +51,10 @@ function makeMinimalFlow(overrides?: Partial<FlowType>): FlowType {
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "report-result-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 /**
@@ -79,7 +80,7 @@ function setupWorkspace(workspace: string, flow: FlowType): void {
     tier: "medium",
   });
 
-  for (const stateId of Object.keys(flow.states)) {
+  for (const stateId of Object.keys(flow.states) as (keyof typeof flow.states)[]) {
     store.upsertState(stateId, { entries: 0, status: "pending" });
   }
 }
@@ -105,7 +106,7 @@ describe("reportResult — basic functionality", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -123,7 +124,7 @@ describe("reportResult — basic functionality", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -139,7 +140,7 @@ describe("reportResult — basic functionality", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "SOMETHING_WEIRD",
       workspace,
     });
@@ -157,13 +158,13 @@ describe("reportResult — basic functionality", () => {
     const result = await reportResult({
       artifacts: ["summary.md", "diff.patch"],
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.build.artifacts).toEqual(["summary.md", "diff.patch"]);
+    expect(result.board.states[sid("build")].artifacts).toEqual(["summary.md", "diff.patch"]);
   });
 
   it("persists board state to execution_states table (no board.json)", async () => {
@@ -173,13 +174,13 @@ describe("reportResult — basic functionality", () => {
 
     await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
 
     const store = getExecutionStore(workspace);
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     expect(state?.status).toBe("done");
 
     // No board.json created
@@ -214,7 +215,7 @@ describe("reportResult — debate flow", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -263,7 +264,7 @@ describe("reportResult — debate flow", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -290,7 +291,7 @@ describe("reportResult — event emissions", () => {
 
     await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -313,7 +314,7 @@ describe("reportResult — event emissions", () => {
       artifacts: ["plan.md"],
       flow,
       metrics: { duration_ms: 3000, model: "sonnet", spawns: 1 },
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -332,7 +333,7 @@ describe("reportResult — event emissions", () => {
 
     await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -351,7 +352,7 @@ describe("reportResult — event emissions", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "BLOCKED",
       workspace,
     });
@@ -372,7 +373,7 @@ describe("reportResult — event emissions", () => {
 
     await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -390,7 +391,7 @@ describe("reportResult — event emissions", () => {
 
     await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "NEEDS_CONTEXT",
       workspace,
     });
@@ -410,19 +411,19 @@ describe("reportResult — event emissions", () => {
     let boardStatusAtEmit: string | undefined;
     flowEventBus.on("state_completed", () => {
       const store = getExecutionStore(workspace);
-      boardStatusAtEmit = store.getState("build")?.status;
+      boardStatusAtEmit = store.getState(sid("build"))?.status;
     });
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
     assertOk(result);
 
     expect(boardStatusAtEmit).toBe("done");
-    expect(result.board.states.build.status).toBe("done");
+    expect(result.board.states[sid("build")].status).toBe("done");
   });
 });
 
@@ -438,7 +439,7 @@ describe("reportResult — listener error isolation", () => {
 
     await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -458,7 +459,7 @@ describe("reportResult — HITL scenarios", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "MYSTERY_WORD",
       workspace,
     });
@@ -476,7 +477,7 @@ describe("reportResult — HITL scenarios", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "ship",
+      state_id: sid("ship"),
       status_keyword: "DONE",
       workspace,
     });
@@ -492,7 +493,7 @@ describe("reportResult — parallel_results aggregation", () => {
   function makeFlowWithParallelTransitions(): FlowType {
     return makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           transitions: {
             blocked: "hitl",
             cannot_fix: "hitl",
@@ -501,9 +502,9 @@ describe("reportResult — parallel_results aggregation", () => {
           },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
   }
@@ -519,7 +520,7 @@ describe("reportResult — parallel_results aggregation", () => {
         { item: "file-a.ts", status: "done" },
         { item: "file-b.ts", status: "done" },
       ],
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -540,7 +541,7 @@ describe("reportResult — parallel_results aggregation", () => {
         { item: "file-a.ts", status: "cannot_fix" },
         { item: "file-b.ts", status: "cannot_fix" },
       ],
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -561,7 +562,7 @@ describe("reportResult — parallel_results aggregation", () => {
         { item: "file-a.ts", status: "done" },
         { item: "file-b.ts", status: "cannot_fix" },
       ],
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -582,7 +583,7 @@ describe("reportResult — parallel_results aggregation", () => {
         { item: "file-a.ts", status: "done" },
         { item: "file-b.ts", status: "blocked" },
       ],
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -605,13 +606,13 @@ describe("reportResult — parallel_results aggregation", () => {
     const result = await reportResult({
       flow,
       parallel_results: parallelResults,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.build.parallel_results).toEqual(parallelResults);
+    expect(result.board.states[sid("build")].parallel_results).toEqual(parallelResults);
   });
 
   it("absent parallel_results does not override condition", async () => {
@@ -621,7 +622,7 @@ describe("reportResult — parallel_results aggregation", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -629,7 +630,7 @@ describe("reportResult — parallel_results aggregation", () => {
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("review");
-    expect(result.board.states.build.parallel_results).toBeUndefined();
+    expect(result.board.states[sid("build")].parallel_results).toBeUndefined();
   });
 
   it("empty parallel_results array does not override condition", async () => {
@@ -640,7 +641,7 @@ describe("reportResult — parallel_results aggregation", () => {
     const result = await reportResult({
       flow,
       parallel_results: [],
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -662,7 +663,7 @@ describe("reportResult — progress_line", () => {
     await reportResult({
       flow,
       progress_line: "- [build] done: Built successfully",
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -679,7 +680,7 @@ describe("reportResult — progress_line", () => {
 
     await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -706,18 +707,18 @@ describe("reportResult — quality signals", () => {
       flow,
       gate_results: gateResults,
       metrics: { duration_ms: 1000, model: "sonnet", spawns: 1 },
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.build.gate_results).toEqual(gateResults);
-    expect(result.board.states.build.metrics?.gate_results).toEqual(gateResults);
+    expect(result.board.states[sid("build")].gate_results).toEqual(gateResults);
+    expect(result.board.states[sid("build")].metrics?.gate_results).toEqual(gateResults);
 
     // Verify persisted in SQLite
     const store = getExecutionStore(workspace);
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     expect(state?.gate_results).toEqual(gateResults);
   });
 
@@ -734,13 +735,13 @@ describe("reportResult — quality signals", () => {
       flow,
       metrics: { duration_ms: 1000, model: "sonnet", spawns: 1 },
       postcondition_results: postconditionResults,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.build.postcondition_results).toEqual(postconditionResults);
+    expect(result.board.states[sid("build")].postcondition_results).toEqual(postconditionResults);
   });
 
   it("persists violation_count and violation_severities to metrics", async () => {
@@ -751,7 +752,7 @@ describe("reportResult — quality signals", () => {
     const result = await reportResult({
       flow,
       metrics: { duration_ms: 1000, model: "sonnet", spawns: 1 },
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       violation_count: 3,
       violation_severities: { blocking: 1, warning: 2 },
@@ -759,8 +760,8 @@ describe("reportResult — quality signals", () => {
     });
     assertOk(result);
 
-    expect(result.board.states.build.metrics?.violation_count).toBe(3);
-    expect(result.board.states.build.metrics?.violation_severities).toEqual({
+    expect(result.board.states[sid("build")].metrics?.violation_count).toBe(3);
+    expect(result.board.states[sid("build")].metrics?.violation_severities).toEqual({
       blocking: 1,
       warning: 2,
     });
@@ -774,14 +775,14 @@ describe("reportResult — quality signals", () => {
     const result = await reportResult({
       flow,
       metrics: { duration_ms: 1000, model: "sonnet", spawns: 1 },
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       test_results: { failed: 0, passed: 50, skipped: 1 }, // zero failures — no baseline evidence needed
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.build.metrics?.test_results).toEqual({
+    expect(result.board.states[sid("build")].metrics?.test_results).toEqual({
       failed: 0,
       passed: 50,
       skipped: 1,
@@ -795,14 +796,14 @@ describe("reportResult — quality signals", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
       // No metrics or signal fields
     });
     assertOk(result);
 
-    expect(result.board.states.build.metrics).toBeUndefined();
+    expect(result.board.states[sid("build")].metrics).toBeUndefined();
   });
 });
 
@@ -818,7 +819,7 @@ describe("reportResult — discovered gates/postconditions accumulation", () => 
     await reportResult({
       discovered_gates: [{ command: "npm test", source: "agent-1" }],
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -826,8 +827,8 @@ describe("reportResult — discovered gates/postconditions accumulation", () => 
     // Seed another call — re-seed with same execution for second call
     // Reset the state and re-run, preserving discovered_gates from first call
     const store = getExecutionStore(workspace);
-    const prevState = store.getState("build");
-    store.upsertState("build", {
+    const prevState = store.getState(sid("build"));
+    store.upsertState(sid("build"), {
       discovered_gates: prevState?.discovered_gates,
       entries: 0,
       status: "pending",
@@ -837,13 +838,13 @@ describe("reportResult — discovered gates/postconditions accumulation", () => 
     await reportResult({
       discovered_gates: [{ command: "npm run lint", source: "agent-2" }],
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
 
     // Both gates should be accumulated
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     expect(state?.discovered_gates).toHaveLength(2);
     expect(state?.discovered_gates?.map((g) => g.command)).toContain("npm test");
     expect(state?.discovered_gates?.map((g) => g.command)).toContain("npm run lint");
@@ -857,14 +858,14 @@ describe("reportResult — discovered gates/postconditions accumulation", () => 
     await reportResult({
       discovered_postconditions: [{ target: "dist/index.js", type: "file_exists" }],
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
 
     const store = getExecutionStore(workspace);
-    const prevState = store.getState("build");
-    store.upsertState("build", {
+    const prevState = store.getState(sid("build"));
+    store.upsertState(sid("build"), {
       discovered_postconditions: prevState?.discovered_postconditions,
       entries: 0,
       status: "pending",
@@ -876,12 +877,12 @@ describe("reportResult — discovered gates/postconditions accumulation", () => 
         { pattern: "export", target: "src/index.ts", type: "pattern_match" },
       ],
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
 
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     expect(state?.discovered_postconditions).toHaveLength(2);
   });
 });
@@ -902,13 +903,13 @@ describe("reportResult — compete_results persistence", () => {
     const result = await reportResult({
       compete_results: competeResults,
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.build.compete_results).toEqual(competeResults);
+    expect(result.board.states[sid("build")].compete_results).toEqual(competeResults);
   });
 
   it("persists synthesized flag to board state entry", async () => {
@@ -919,14 +920,14 @@ describe("reportResult — compete_results persistence", () => {
     const result = await reportResult({
       compete_results: [{ status: "done" }],
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       synthesized: true,
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.build.synthesized).toBe(true);
+    expect(result.board.states[sid("build")].synthesized).toBe(true);
   });
 
   it("persists synthesized flag without compete_results", async () => {
@@ -936,15 +937,15 @@ describe("reportResult — compete_results persistence", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       synthesized: true,
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.build.synthesized).toBe(true);
-    expect(result.board.states.build.compete_results).toBeUndefined();
+    expect(result.board.states[sid("build")].synthesized).toBe(true);
+    expect(result.board.states[sid("build")].compete_results).toBeUndefined();
   });
 
   it("does not set compete_results when not provided", async () => {
@@ -954,14 +955,14 @@ describe("reportResult — compete_results persistence", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
     assertOk(result);
 
-    expect(result.board.states.build.compete_results).toBeUndefined();
-    expect(result.board.states.build.synthesized).toBeUndefined();
+    expect(result.board.states[sid("build")].compete_results).toBeUndefined();
+    expect(result.board.states[sid("build")].synthesized).toBeUndefined();
   });
 });
 
@@ -980,7 +981,7 @@ describe("reportResult — concurrent calls", () => {
       reportResult({
         flow,
         progress_line: `- done in ${workspace}`,
-        state_id: "build",
+        state_id: sid("build"),
         status_keyword: "DONE",
         workspace,
       }),
@@ -999,19 +1000,19 @@ describe("reportResult — concurrent calls", () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow({
       states: {
-        build: { transitions: { done: "review", failed: "hitl" }, type: "single" },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("build")]: { transitions: { done: "review", failed: "hitl" }, type: "single" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
 
     // Call report_result 3x on different states in the same workspace
     const results = await Promise.all([
-      reportResult({ flow, state_id: "build", status_keyword: "DONE", workspace }),
-      reportResult({ flow, state_id: "review", status_keyword: "DONE", workspace }),
-      reportResult({ flow, state_id: "ship", status_keyword: "DONE", workspace }),
+      reportResult({ flow, state_id: sid("build"), status_keyword: "DONE", workspace }),
+      reportResult({ flow, state_id: sid("review"), status_keyword: "DONE", workspace }),
+      reportResult({ flow, state_id: sid("ship"), status_keyword: "DONE", workspace }),
     ]);
 
     // All should succeed (transactions serialize writes)
@@ -1036,7 +1037,7 @@ describe("reportResult — store persistence", () => {
         { command: "npm test", exitCode: 0, gate: "npm test", output: "", passed: true },
       ],
       metrics: { duration_ms: 2000, model: "sonnet", spawns: 2 },
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       violation_count: 0,
       workspace,
@@ -1045,7 +1046,7 @@ describe("reportResult — store persistence", () => {
 
     // All mutation steps persisted
     const store = getExecutionStore(workspace);
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     expect(state?.status).toBe("done");
     expect(state?.artifacts).toEqual(["plan.md"]);
     expect(state?.gate_results).toBeDefined();
@@ -1064,22 +1065,22 @@ describe("reportResult — store persistence", () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           max_iterations: 5,
           stuck_when: "same_status",
           transitions: { done: "review", failed: "build" },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
 
     // Seed iteration entry
     const store = getExecutionStore(workspace);
-    store.upsertIteration("build", {
+    store.upsertIteration(sid("build"), {
       cannot_fix: [],
       count: 1,
       history: [{ status: "failed" }],
@@ -1088,14 +1089,14 @@ describe("reportResult — store persistence", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "FAILED",
       workspace,
     });
     assertOk(result);
 
     // History updated in store
-    const iter = store.getIteration("build");
+    const iter = store.getIteration(sid("build"));
     expect(iter?.history.length).toBeGreaterThan(1);
 
     // If stuck, hitl_required
@@ -1118,13 +1119,13 @@ describe("reportResult — concurrent RMW serialization (P1)", () => {
     // Use a state that transitions to itself so both callers can use the same state_id
     const flow = makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           transitions: { done: "review", failed: "build" },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
@@ -1134,14 +1135,14 @@ describe("reportResult — concurrent RMW serialization (P1)", () => {
       reportResult({
         discovered_gates: [{ command: "npm test", source: "agent-1" }],
         flow,
-        state_id: "build",
+        state_id: sid("build"),
         status_keyword: "DONE",
         workspace,
       }),
       reportResult({
         discovered_gates: [{ command: "npm run lint", source: "agent-2" }],
         flow,
-        state_id: "build",
+        state_id: sid("build"),
         status_keyword: "DONE",
         workspace,
       }),
@@ -1157,7 +1158,7 @@ describe("reportResult — concurrent RMW serialization (P1)", () => {
     // (accumulated, not overwritten). With the stale-read bug present,
     // only one set survives; with the fix both are present.
     const store = getExecutionStore(workspace);
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     const gates = state?.discovered_gates ?? [];
 
     // Both gate commands must be present after concurrent accumulation
@@ -1176,7 +1177,7 @@ describe("reportResult — workspace not found", () => {
     const flow = makeMinimalFlow();
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -1241,14 +1242,14 @@ describe("reportResult — required_handoffs validation", () => {
   function makeFlowWithHandoffs(handoffs: Array<{ name: string; type: string }>): FlowType {
     return makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           required_handoffs: handoffs,
           transitions: { done: "review", failed: "hitl" },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
   }
@@ -1260,7 +1261,7 @@ describe("reportResult — required_handoffs validation", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -1288,7 +1289,7 @@ describe("reportResult — required_handoffs validation", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -1307,7 +1308,7 @@ describe("reportResult — required_handoffs validation", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -1337,7 +1338,7 @@ describe("reportResult — required_handoffs validation", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -1367,7 +1368,7 @@ describe("reportResult — required_handoffs validation", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });

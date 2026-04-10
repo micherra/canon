@@ -1,4 +1,4 @@
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoardStateEntry } from "../board-state-schemas.ts";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
@@ -41,7 +41,7 @@ import { normalizeGates, resolveGateCommand, runGate, runGates } from "../gate-r
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {
     description: "test",
-    entry: "start",
+    entry: sid("start"),
     name: flowName("test-flow"),
     spawn_instructions: {},
     states: {},

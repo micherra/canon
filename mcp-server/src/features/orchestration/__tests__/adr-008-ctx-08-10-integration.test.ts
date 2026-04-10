@@ -123,7 +123,8 @@ vi.mock("@graph/kg-store.ts", () => ({
 // ─── Imports (after mocks) ─────────────────────────────────────────────────────
 
 import { existsSync } from "node:fs";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { flowName, stateId as sid, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { computeFileInsightMaps } from "@graph/kg-query.ts";
@@ -144,8 +145,8 @@ function makeBoard(
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "implement",
-    entry: "implement",
+    current_state: sid("implement"),
+    entry: sid("implement"),
     flow: flowName("feature"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -191,8 +192,8 @@ describe("ctx-08 integration — enrichment tier reads from execution store, not
         // the new code reads from execution store session (tier "large" → cap of 30)
       } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
       projectDir: undefined,
-      stateId: "implement",
-      workspace: "/tmp/workspace",
+      stateId: sid("implement"),
+      workspace: workspacePath("/tmp/workspace"),
     });
 
     // With large tier, up to 30 files processed. With medium (old behavior), only 15.
@@ -228,8 +229,8 @@ describe("ctx-08 integration — enrichment tier reads from execution store, not
         // New code reads "small" from session (5 files)
       } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
       projectDir: undefined,
-      stateId: "implement",
-      workspace: "/tmp/workspace",
+      stateId: sid("implement"),
+      workspace: workspacePath("/tmp/workspace"),
     });
 
     const fileMatches = result.content.match(/`src\/file-\d+\.ts`/g) ?? [];
@@ -260,8 +261,8 @@ describe("ctx-08 integration — enrichment tier reads from execution store, not
         states: { implement: { type: "terminal" } },
       } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
       projectDir: undefined,
-      stateId: "implement",
-      workspace: "/tmp/workspace",
+      stateId: sid("implement"),
+      workspace: workspacePath("/tmp/workspace"),
     });
 
     // Medium fallback cap = 15; so at most 15 files processed
@@ -283,7 +284,7 @@ describe("ctx-09 integration — flow YAML inject_context declarations", () => {
     const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     const flow = await loadAndResolveFlow(pluginDir, "feature");
 
-    const implementState = flow.states.implement;
+    const implementState = flow.states[sid("implement")];
     expect(implementState).toBeDefined();
     // The state must have inject_context declared
     expect(implementState.inject_context).toBeDefined();
@@ -319,7 +320,7 @@ describe("ctx-09 integration — flow YAML inject_context declarations", () => {
     const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     const flow = await loadAndResolveFlow(pluginDir, "refactor");
 
-    const implementState = flow.states.implement;
+    const implementState = flow.states[sid("implement")];
     expect(implementState).toBeDefined();
     const fileContextEntry = implementState?.inject_context?.find(
       (entry) => entry.from === "file_context",
@@ -332,7 +333,7 @@ describe("ctx-09 integration — flow YAML inject_context declarations", () => {
     const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const implementState = flow.states.implement;
+    const implementState = flow.states[sid("implement")];
     expect(implementState).toBeDefined();
     const fileContextEntry = implementState?.inject_context?.find(
       (entry) => entry.from === "file_context",
@@ -345,7 +346,7 @@ describe("ctx-09 integration — flow YAML inject_context declarations", () => {
     const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     const flow = await loadAndResolveFlow(pluginDir, "migrate");
 
-    const implementState = flow.states.implement;
+    const implementState = flow.states[sid("implement")];
     expect(implementState).toBeDefined();
     const fileContextEntry = implementState?.inject_context?.find(
       (entry) => entry.from === "file_context",
@@ -358,7 +359,7 @@ describe("ctx-09 integration — flow YAML inject_context declarations", () => {
     const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const designState = flow.states.design;
+    const designState = flow.states[sid("design")];
     expect(designState).toBeDefined();
     // Design state should still have its risk_findings injection
     const riskFindingsEntry = designState?.inject_context?.find(
@@ -374,10 +375,10 @@ describe("ctx-09 integration — flow YAML inject_context declarations", () => {
 // and the KG handler is triggered.
 
 describe("ctx-09 integration — pipeline stage 1 invokes file_context handler", () => {
-  let tmpDir: string;
+  let tmpDir: WorkspacePath;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "ctx09-pipeline-"));
+    tmpDir = workspacePath(await mkdtemp(join(tmpdir(), "ctx09-pipeline-")));
     // KG DB appears to exist
     vi.mocked(existsSync).mockImplementation((p) => {
       return String(p).endsWith("knowledge-graph.db");
@@ -634,10 +635,10 @@ describe("ctx-10 integration — shared KG formatter used by both callers", () =
 // both should apply the 5-file cap.
 
 describe("tier consistency — same execution store drives both enrichment and file_context", () => {
-  let tmpDir: string;
+  let tmpDir: WorkspacePath;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "tier-consistency-"));
+    tmpDir = workspacePath(await mkdtemp(join(tmpdir(), "tier-consistency-")));
     vi.clearAllMocks();
     // KG DB exists
     vi.mocked(existsSync).mockImplementation((p) => {
@@ -693,7 +694,7 @@ describe("tier consistency — same execution store drives both enrichment and f
         states: { implement: { type: "terminal" } },
       } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
       projectDir: undefined,
-      stateId: "implement",
+      stateId: sid("implement"),
       workspace: tmpDir,
     });
 
@@ -729,7 +730,7 @@ describe("ctx-09 backward compatibility — existing inject_context not disturbe
     const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     const flow = await loadAndResolveFlow(pluginDir, "migrate");
 
-    const designState = flow.states.design;
+    const designState = flow.states[sid("design")];
     expect(designState).toBeDefined();
     const rollbackEntry = designState?.inject_context?.find(
       (entry) => entry.as === "rollback_findings" || entry.from === "research",

@@ -30,7 +30,8 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { canEnterState } from "@domains/board/board.ts";
-import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, BoardSchema, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import type { FlowEventMap } from "@domains/messages/events.ts";
@@ -44,10 +45,10 @@ import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "harness-integration-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 afterEach(() => {
@@ -63,15 +64,15 @@ afterEach(() => {
 function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
     description: "Integration test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
     spawn_instructions: {
-      fix: "Fix the issues.",
-      implement: "Implement the feature.",
-      review: "Review the implementation.",
+      [sid("fix")]: "Fix the issues.",
+      [sid("implement")]: "Implement the feature.",
+      [sid("review")]: "Review the implementation.",
     },
     states: {
-      fix: {
+      [sid("fix")]: {
         agent: "canon-fixer",
         transitions: {
           cannot_fix: "hitl",
@@ -79,8 +80,8 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
         },
         type: "single",
       },
-      hitl: { type: "terminal" },
-      implement: {
+      [sid("hitl")]: { type: "terminal" },
+      [sid("implement")]: {
         agent: "canon-implementor",
         max_iterations: 3,
         transitions: {
@@ -90,7 +91,7 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
         },
         type: "single",
       },
-      review: {
+      [sid("review")]: {
         agent: "canon-reviewer",
         max_iterations: 2,
         transitions: {
@@ -99,7 +100,7 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
         },
         type: "single",
       },
-      ship: { type: "terminal" },
+      [sid("ship")]: { type: "terminal" },
     },
     ...overrides,
   };
@@ -123,10 +124,10 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
     task: "task",
     tier: "medium",
   });
-  for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { entries: 0, status: "pending" });
+  for (const [stateIdStr, stateDef] of Object.entries(flow.states)) {
+    store.upsertState(sid(stateIdStr), { entries: 0, status: "pending" });
     if (stateDef.max_iterations !== undefined) {
-      store.upsertIteration(stateId, {
+      store.upsertIteration(sid(stateIdStr), {
         cannot_fix: [],
         count: 0,
         history: [],
@@ -141,8 +142,8 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
 function readConvergence(workspace: string, stateId: string) {
   const board = getExecutionStore(workspace).getBoard();
   if (board === null) throw new Error(`No board found for workspace: ${workspace}`);
-  const { allowed, reason } = canEnterState(board, stateId);
-  const iteration = board.iterations[stateId];
+  const { allowed, reason } = canEnterState(board, sid(stateId));
+  const iteration = board.iterations[sid(stateId)];
   return {
     can_enter: allowed,
     cannot_fix_items: iteration?.cannot_fix ?? [],
@@ -173,7 +174,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
         { item: "file-a.ts", status: "done" },
         { item: "file-b.ts", status: "cannot_fix" },
       ],
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
@@ -203,7 +204,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
         { item: "file-a.ts", status: "cannot_fix" },
         { item: "file-b.ts", status: "cannot_fix" },
       ],
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
@@ -228,15 +229,15 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
       file_paths: ["src/features/orchestration/tools/report-result.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
     assertOk(result);
 
     // Cannot_fix items accumulated
-    expect(result.board.iterations.implement?.cannot_fix).toHaveLength(1);
-    expect(result.board.iterations.implement?.cannot_fix?.[0]).toEqual({
+    expect(result.board.iterations[sid("implement")]?.cannot_fix).toHaveLength(1);
+    expect(result.board.iterations[sid("implement")]?.cannot_fix?.[0]).toEqual({
       file_path: "src/features/orchestration/tools/report-result.ts",
       principle_id: "no-hidden-side-effects",
     });
@@ -259,14 +260,14 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     await reportResult({
       flow,
       parallel_results: parallelResults,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
 
     // Read board directly to verify parallel_results persisted
     const board = getExecutionStore(workspace).getBoard();
-    expect(board?.states.implement.parallel_results).toEqual(parallelResults);
+    expect(board?.states[sid("implement")].parallel_results).toEqual(parallelResults);
 
     // convergence check should still work (doesn't break on new field)
     const convergence = readConvergence(workspace, "implement");
@@ -289,7 +290,7 @@ describe("cross-feature: cannot_fix pipeline — reportResult → checkConvergen
       file_paths: ["a.ts", "b.ts"],
       flow,
       principle_ids: ["p1"],
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
@@ -299,7 +300,7 @@ describe("cross-feature: cannot_fix pipeline — reportResult → checkConvergen
       file_paths: ["a.ts"],
       flow,
       principle_ids: ["p2"],
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
@@ -412,27 +413,27 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
     // Build board with research state having artifacts
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "implement",
+      entry: sid("implement"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        implement: "Implement using context: ${RESEARCH}",
+        [sid("implement")]: "Implement using context: ${RESEARCH}",
       },
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [{ as: "RESEARCH", from: "research" }],
           transitions: { done: "ship" },
           type: "single",
         },
-        research: { type: "terminal" },
-        ship: { type: "terminal" },
+        [sid("research")]: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
       },
     };
 
     // Seed workspace and set research state as done with artifact
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("research", { artifacts: [artifactPath], entries: 1, status: "done" });
+    store.upsertState(sid("research"), { artifacts: [artifactPath], entries: 1, status: "done" });
 
     const result = await getSpawnPrompt({
       flow,
@@ -452,19 +453,19 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "implement",
+      entry: sid("implement"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        implement: "Implement with user guidance: ${USER_INPUT}",
+        [sid("implement")]: "Implement with user guidance: ${USER_INPUT}",
       },
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [{ as: "USER_INPUT", from: "user", prompt: "Please describe the scope" }],
           transitions: { done: "ship" },
           type: "single",
         },
-        ship: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
       },
     };
 
@@ -488,27 +489,27 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "implement",
+      entry: sid("implement"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        implement: "Do work: ${CONTEXT}",
+        [sid("implement")]: "Do work: ${CONTEXT}",
       },
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [{ as: "CONTEXT", from: "research" }],
           transitions: { done: "ship" },
           type: "single",
         },
-        research: { type: "terminal" },
-        ship: { type: "terminal" },
+        [sid("research")]: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
       },
     };
 
     // Seed workspace and set research state as done with a missing artifact file
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("research", { artifacts: ["does-not-exist.md"], entries: 1, status: "done" });
+    store.upsertState(sid("research"), { artifacts: ["does-not-exist.md"], entries: 1, status: "done" });
 
     const result = await getSpawnPrompt({
       flow,
@@ -541,15 +542,15 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "type-check",
+      entry: sid("type-check"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        "type-check": "Check types with context: ${PRIOR}",
+        [sid("type-check")]: "Check types with context: ${PRIOR}",
       },
       states: {
-        prior: { type: "terminal" },
-        ship: { type: "terminal" },
-        "type-check": {
+        [sid("prior")]: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
+        [sid("type-check")]: {
           agent: "canon-reviewer",
           inject_context: [{ as: "PRIOR", from: "prior" }],
           skip_when: "no_contract_changes",
@@ -583,27 +584,27 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "review",
+      entry: sid("review"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        review: "Review with context: ${CONTEXT}",
+        [sid("review")]: "Review with context: ${CONTEXT}",
       },
       states: {
-        prior: { type: "terminal" },
-        review: {
+        [sid("prior")]: { type: "terminal" },
+        [sid("review")]: {
           agent: "canon-reviewer",
           inject_context: [{ as: "CONTEXT", from: "prior" }],
           skip_when: "no_contract_changes",
           transitions: { done: "ship" },
           type: "single",
         },
-        ship: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
       },
     };
 
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("prior", { artifacts: [artifactPath], entries: 1, status: "done" });
+    store.upsertState(sid("prior"), { artifacts: [artifactPath], entries: 1, status: "done" });
 
     const result = await getSpawnPrompt({
       flow,
@@ -627,17 +628,17 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "build",
+      entry: sid("build"),
       name: flowName("test-flow"),
-      spawn_instructions: { build: "Build the feature." },
+      spawn_instructions: { [sid("build")]: "Build the feature." },
       states: {
-        build: {
+        [sid("build")]: {
           agent: "canon-implementor",
           gate: "some-gate-condition",
           transitions: { done: "ship" },
           type: "single",
         },
-        ship: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
       },
     };
 
@@ -664,17 +665,17 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "build",
+      entry: sid("build"),
       name: flowName("test-flow"),
-      spawn_instructions: { build: "Build the feature." },
+      spawn_instructions: { [sid("build")]: "Build the feature." },
       states: {
-        build: {
+        [sid("build")]: {
           agent: "canon-implementor",
           gate: "some-gate-condition",
           transitions: { done: "ship" },
           type: "single",
         },
-        ship: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
       },
     };
 
@@ -700,17 +701,17 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "build",
+      entry: sid("build"),
       name: flowName("test-flow"),
-      spawn_instructions: { build: "Build the feature." },
+      spawn_instructions: { [sid("build")]: "Build the feature." },
       states: {
-        build: {
+        [sid("build")]: {
           agent: "canon-implementor",
           timeout: "30m",
           transitions: { done: "ship" },
           type: "single",
         },
-        ship: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
       },
     };
 
@@ -735,11 +736,11 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "build",
+      entry: sid("build"),
       name: flowName("test-flow"),
-      spawn_instructions: { build: "Build the feature." },
+      spawn_instructions: { [sid("build")]: "Build the feature." },
       states: {
-        build: {
+        [sid("build")]: {
           agent: "canon-implementor",
           gate: "some-gate",
           large_diff_threshold: 500,
@@ -747,7 +748,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
           transitions: { done: "ship" },
           type: "single",
         },
-        ship: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
       },
     };
 
@@ -801,8 +802,8 @@ describe("backward compatibility: board.json without new fields", () => {
 
     // Should parse without error via BoardSchema
     const board = BoardSchema.parse(legacyBoard);
-    expect(board.states.build.status).toBe("done");
-    expect(board.states.build.parallel_results).toBeUndefined();
+    expect(board.states[sid("build")].status).toBe("done");
+    expect(board.states[sid("build")].parallel_results).toBeUndefined();
     expect(board.current_state).toBe("build");
   });
 
@@ -862,8 +863,8 @@ describe("backward compatibility: board.json without new fields", () => {
     const parsed = BoardSchema.safeParse(boardWithNewFields);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data.states.build.parallel_results).toHaveLength(2);
-      expect(parsed.data.iterations.build.cannot_fix).toHaveLength(1);
+      expect(parsed.data.states[sid("build")].parallel_results).toHaveLength(2);
+      expect(parsed.data.iterations[sid("build")].cannot_fix).toHaveLength(1);
     }
   });
 });

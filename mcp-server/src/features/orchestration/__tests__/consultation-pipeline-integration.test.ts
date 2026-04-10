@@ -47,7 +47,8 @@ vi.mock("../services/wave-briefing.ts", async (importOriginal) => {
   };
 });
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
@@ -56,14 +57,13 @@ import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
 import { assembleWaveBriefing } from "../services/wave-briefing.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "cp-int-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
@@ -71,16 +71,16 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     base_commit: "abc1234",
     blocked: null,
     concerns: [],
-    current_state: "implement",
-    entry: "implement",
+    current_state: sid("implement"),
+    entry: sid("implement"),
     flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
     started: new Date().toISOString(),
     states: {
-      done: { entries: 0, status: "pending" },
-      implement: { entries: 0, status: "pending" },
+      [sid("done")]: { entries: 0, status: "pending" },
+      [sid("implement")]: { entries: 0, status: "pending" },
     },
     task: "test task",
     ...overrides,
@@ -106,7 +106,7 @@ function seedBoard(workspace: string, board: Board): void {
     tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, {
+    store.upsertState(sid(stateId), {
       ...stateEntry,
       entries: stateEntry.entries ?? 0,
       status: stateEntry.status,
@@ -129,15 +129,15 @@ function makeFlowWithBeforeConsultation(): ResolvedFlow {
       },
     },
     description: "Test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
     spawn_instructions: {
-      implement: "Implement ${task} for ${item}.",
-      "security-review": "Review security for ${task}.",
+      [sid("implement")]: "Implement ${task} for ${item}.",
+      [sid("security-review")]: "Review security for ${task}.",
     },
     states: {
-      done: { type: "terminal" },
-      implement: {
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: {
         agent: "canon-implementor",
         consultations: {
           before: ["security-review"],
@@ -168,16 +168,16 @@ function makeFlowWithMultipleConsultations(): ResolvedFlow {
       },
     },
     description: "Test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
     spawn_instructions: {
-      implement: "Implement ${task} for ${item}.",
-      "perf-review": "Check performance for ${task}.",
-      "security-review": "Review security for ${task}.",
+      [sid("implement")]: "Implement ${task} for ${item}.",
+      [sid("perf-review")]: "Check performance for ${task}.",
+      [sid("security-review")]: "Review security for ${task}.",
     },
     states: {
-      done: { type: "terminal" },
-      implement: {
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: {
         agent: "canon-implementor",
         consultations: {
           before: ["security-review", "perf-review"],
@@ -271,10 +271,10 @@ describe("resolveConsultationPrompt — both timeout and section present", () =>
         },
       },
       description: "Test flow",
-      entry: "start",
+      entry: sid("start"),
       name: flowName("test-flow"),
-      spawn_instructions: { "full-check": "Run full check for ${task}." },
-      states: { start: { type: "terminal" } },
+      spawn_instructions: { [sid("full-check")]: "Run full check for ${task}." },
+      states: { [sid("start")]: { type: "terminal" } },
     } as unknown as ResolvedFlow;
 
     const result = resolveConsultationPrompt("full-check", flow, { task: "my-feature" });
@@ -329,16 +329,16 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
         // "missing-consult" is also absent from flow.consultations
       },
       description: "Test flow",
-      entry: "implement",
+      entry: sid("implement"),
       name: flowName("test-flow"),
       spawn_instructions: {
-        implement: "Implement ${task}.",
-        "security-review": "Review security for ${task}.",
+        [sid("implement")]: "Implement ${task}.",
+        [sid("security-review")]: "Review security for ${task}.",
         // "missing-consult" spawn instruction is absent
       },
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           consultations: {
             before: ["security-review", "missing-consult"],
@@ -374,12 +374,12 @@ describe("getSpawnPrompt — wave=null with consultation_outputs does not inject
 
     const flow: ResolvedFlow = {
       description: "Test flow",
-      entry: "build",
+      entry: sid("build"),
       name: flowName("test-flow"),
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     };
 
@@ -413,8 +413,8 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
     // Board has a completed security consultation from wave 0
     const boardWithResults = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: {
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: {
           entries: 1,
           status: "in_progress",
           wave_results: {
@@ -472,8 +472,8 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
 
     const boardWithResults = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: {
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: {
           entries: 1,
           status: "in_progress",
           wave_results: {
@@ -616,8 +616,8 @@ describe("enterAndPrepareState — collects after-consultation summaries from wa
     // Board has a completed "after" consultation from a synthetic "after" wave key
     const boardWithAfterResults = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: {
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: {
           entries: 1,
           status: "in_progress",
           wave_results: {

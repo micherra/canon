@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeDesignBrief } from "../tools/write-design-brief.ts";
@@ -25,7 +26,7 @@ describe("writeDesignBrief — valid input", () => {
       test_expectations: [
         { description: "happy path creates file", file: "src/__tests__/foo.test.ts" },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -51,7 +52,7 @@ describe("writeDesignBrief — valid input", () => {
       slug: "my-epic",
       task_id: "task-02",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -74,7 +75,7 @@ describe("writeDesignBrief — valid input", () => {
       slug: "test-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -101,7 +102,7 @@ describe("writeDesignBrief — valid input", () => {
       slug: "test-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -123,7 +124,7 @@ describe("writeDesignBrief — valid input", () => {
         { description: "creates output file", file: "src/__tests__/foo.test.ts" },
         { description: "returns INVALID_INPUT on bad slug" },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -149,7 +150,7 @@ describe("writeDesignBrief — valid input", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -166,7 +167,7 @@ describe("writeDesignBrief — valid input", () => {
       slug: "new-slug",
       task_id: "t-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -184,7 +185,7 @@ describe("writeDesignBrief — optional fields absent", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -204,7 +205,7 @@ describe("writeDesignBrief — optional fields absent", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -227,7 +228,7 @@ describe("writeDesignBrief — optional fields present", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -250,7 +251,7 @@ describe("writeDesignBrief — optional fields present", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -274,7 +275,7 @@ describe("writeDesignBrief — optional fields present", () => {
       slug: "full-epic",
       task_id: "full-task-01",
       test_expectations: [{ description: "passes", file: "src/__tests__/a.test.ts" }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -306,7 +307,7 @@ describe("writeDesignBrief — array .max() constraints", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -328,7 +329,7 @@ describe("writeDesignBrief — array .max() constraints", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(true);
@@ -343,7 +344,7 @@ describe("writeDesignBrief — array .max() constraints", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -364,7 +365,7 @@ describe("writeDesignBrief — array .max() constraints", () => {
       test_expectations: Array.from({ length: 101 }, (_, i) => ({
         description: `Test ${i}`,
       })),
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -384,7 +385,7 @@ describe("writeDesignBrief — array .max() constraints", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -404,7 +405,7 @@ describe("writeDesignBrief — array .max() constraints", () => {
       slug: "my-epic",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -425,7 +426,7 @@ describe("writeDesignBrief — validation errors", () => {
       slug: "invalid slug",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -444,7 +445,7 @@ describe("writeDesignBrief — validation errors", () => {
       slug: "my/epic!",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -462,7 +463,7 @@ describe("writeDesignBrief — validation errors", () => {
       slug: "my-epic",
       task_id: "task 01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -481,7 +482,7 @@ describe("writeDesignBrief — validation errors", () => {
       slug: "my-epic",
       task_id: "task@01!",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -500,7 +501,7 @@ describe("writeDesignBrief — validation errors", () => {
       slug: "../evil",
       task_id: "task-01",
       test_expectations: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);

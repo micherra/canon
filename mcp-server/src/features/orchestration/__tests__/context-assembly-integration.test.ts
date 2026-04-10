@@ -188,7 +188,7 @@ vi.mock("@graph/kg-store.ts", () => ({
 
 import { existsSync } from "node:fs";
 import { computeFileInsightMaps } from "@graph/kg-query.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoardWithFiles(
   files: string[],
@@ -197,8 +197,8 @@ function makeBoardWithFiles(
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "start",
-    entry: "start",
+    current_state: sid("start"),
+    entry: sid("start"),
     flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -213,10 +213,10 @@ function makeBoardWithFiles(
 }
 
 describe("file_context injection — session null fallback", () => {
-  let tmpDir: string;
+  let tmpDir: import("@domains/flows/board-state-schemas.ts").WorkspacePath;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "ctx-integration-null-session-"));
+    tmpDir = workspacePath(await mkdtemp(join(tmpdir(), "ctx-integration-null-session-")));
     // KG DB appears to exist
     vi.mocked(existsSync).mockImplementation((p) => {
       return String(p).endsWith("knowledge-graph.db");
@@ -258,10 +258,10 @@ describe("file_context injection — session null fallback", () => {
 //    This path is exercised but not explicitly asserted in ctx-03 tests.
 
 describe("file_context injection — not-indexed file formatting", () => {
-  let tmpDir: string;
+  let tmpDir: import("@domains/flows/board-state-schemas.ts").WorkspacePath;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "ctx-integration-not-indexed-"));
+    tmpDir = workspacePath(await mkdtemp(join(tmpdir(), "ctx-integration-not-indexed-")));
     vi.mocked(existsSync).mockImplementation((p) => {
       return String(p).endsWith("knowledge-graph.db");
     });
@@ -295,10 +295,10 @@ describe("file_context injection — not-indexed file formatting", () => {
 //    ctx-02 declared: "No test for KG DB that exists but throws on open"
 
 describe("file_context injection — initDatabase failure graceful degradation", () => {
-  let tmpDir: string;
+  let tmpDir: import("@domains/flows/board-state-schemas.ts").WorkspacePath;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "ctx-integration-db-fail-"));
+    tmpDir = workspacePath(await mkdtemp(join(tmpdir(), "ctx-integration-db-fail-")));
     // KG DB appears to exist (existsSync returns true) but initDatabase throws
     vi.mocked(existsSync).mockImplementation((p) => {
       return String(p).endsWith("knowledge-graph.db");

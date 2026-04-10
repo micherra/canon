@@ -29,8 +29,8 @@ function makeBoard(metadataOverrides?: Record<string, string | number | boolean>
     base_commit: "abc",
     blocked: null,
     concerns: [],
-    current_state: "design",
-    entry: "design",
+    current_state: sid("design"),
+    entry: sid("design"),
     flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -67,7 +67,7 @@ function makeFlow(
       ...stateOverrides,
     },
     tier,
-  } as DriveFlowInput["flow"];
+  } as unknown as DriveFlowInput["flow"];
 }
 
 // shouldApprovalGate tests
@@ -305,7 +305,7 @@ describe("initBoard with approval gate fields", () => {
         terminal: { type: "terminal" },
         ...stateOverrides,
       },
-    } as ResolvedFlow;
+    } as unknown as ResolvedFlow;
   }
 
   it("creates IterationEntry from max_revisions when present", () => {
@@ -313,7 +313,7 @@ describe("initBoard with approval gate fields", () => {
       design: { approval_gate: true, max_revisions: 5, type: "single" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.design).toEqual({
+    expect(board.iterations[sid("design")]).toEqual({
       cannot_fix: [],
       count: 0,
       history: [],
@@ -326,7 +326,7 @@ describe("initBoard with approval gate fields", () => {
       design: { max_iterations: 10, max_revisions: 4, type: "single" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.design).toEqual({
+    expect(board.iterations[sid("design")]).toEqual({
       cannot_fix: [],
       count: 0,
       history: [],
@@ -339,7 +339,7 @@ describe("initBoard with approval gate fields", () => {
       design: { approval_gate: true, type: "single" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.design).toEqual({
+    expect(board.iterations[sid("design")]).toEqual({
       cannot_fix: [],
       count: 0,
       history: [],
@@ -352,7 +352,7 @@ describe("initBoard with approval gate fields", () => {
       design: { agent: "canon:canon-architect", type: "single" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.design).toBeUndefined();
+    expect(board.iterations[sid("design")]).toBeUndefined();
   });
 
   it("still uses max_iterations when approval_gate is not set", () => {
@@ -360,7 +360,7 @@ describe("initBoard with approval gate fields", () => {
       design: { max_iterations: 7, type: "single" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.design).toEqual({
+    expect(board.iterations[sid("design")]).toEqual({
       cannot_fix: [],
       count: 0,
       history: [],
@@ -396,13 +396,15 @@ import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "drive-flow-approval-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(workspace: string): ExecutionStore {
@@ -955,7 +957,7 @@ describe("driveFlow — self-transition on single state (revise: design)", () =>
 // Fix 4: STATUS_ALIASES — "approve" maps to "approved"
 
 import { STATUS_ALIASES } from "@domains/flows/flow-definition-schemas.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 
 describe("STATUS_ALIASES — approve alias", () => {
   it("'approve' maps to 'approved'", () => {
@@ -982,10 +984,10 @@ describe("init-workspace — iteration persistence matches initBoard for approva
         design: { max_revisions: 5, type: "single" as const },
         terminal: { type: "terminal" as const },
       },
-    } as ResolvedFlow;
+    } as unknown as ResolvedFlow;
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.design).toBeDefined();
-    expect(board.iterations.design!.max).toBe(5);
+    expect(board.iterations[sid("design")]).toBeDefined();
+    expect(board.iterations[sid("design")]!.max).toBe(5);
   });
 
   it("initBoard creates default iteration (max: 3) for approval_gate: true without explicit limits", () => {
@@ -998,11 +1000,11 @@ describe("init-workspace — iteration persistence matches initBoard for approva
         design: { approval_gate: true, type: "single" as const },
         terminal: { type: "terminal" as const },
       },
-    } as ResolvedFlow;
+    } as unknown as ResolvedFlow;
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.design).toBeDefined();
-    expect(board.iterations.design!.max).toBe(3);
-    expect(board.iterations.design!.count).toBe(0);
+    expect(board.iterations[sid("design")]).toBeDefined();
+    expect(board.iterations[sid("design")]!.max).toBe(3);
+    expect(board.iterations[sid("design")]!.count).toBe(0);
   });
 
   it("initBoard does NOT create iteration for terminal state with approval_gate", () => {
@@ -1015,8 +1017,8 @@ describe("init-workspace — iteration persistence matches initBoard for approva
         start: { type: "single" as const },
         terminal: { approval_gate: true, type: "terminal" as const },
       },
-    } as ResolvedFlow;
+    } as unknown as ResolvedFlow;
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations.terminal).toBeUndefined();
+    expect(board.iterations[sid("terminal")]).toBeUndefined();
   });
 });

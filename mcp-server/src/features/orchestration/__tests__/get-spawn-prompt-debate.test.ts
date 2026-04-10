@@ -16,14 +16,15 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { writeMessage } from "@domains/messages/messages.ts";
 import { clusterDiff } from "../services/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "gsp-debate-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
@@ -38,14 +39,14 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
       teams: 2,
     },
     description: "Test debate flow",
-    entry: "research",
+    entry: sid("research"),
     name: flowName("debate-flow"),
     spawn_instructions: {
-      research: "Research ${task}.",
+      [sid("research")]: "Research ${task}.",
     },
     states: {
-      build: { type: "terminal" },
-      research: {
+      [sid("build")]: { type: "terminal" },
+      [sid("research")]: {
         agent: "canon-researcher",
         transitions: { done: "build" },
         type: "single",

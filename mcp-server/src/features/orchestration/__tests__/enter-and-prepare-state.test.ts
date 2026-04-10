@@ -50,14 +50,15 @@ import { assertOk } from "@shared/lib/tool-result.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "eaps-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 /**
@@ -90,14 +91,14 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
     implement: { entries: 0, status: "pending" },
   };
   for (const [stateId, state] of Object.entries(states)) {
-    store.upsertState(stateId, { entries: state.entries ?? 0, status: state.status });
+    store.upsertState(stateId as StateId, { entries: state.entries ?? 0, status: state.status });
   }
 
   // Create iteration rows if provided
   const iterations = overrides.iterations as Board["iterations"] | undefined;
   if (iterations) {
     for (const [stateId, iter] of Object.entries(iterations)) {
-      store.upsertIteration(stateId, {
+      store.upsertIteration(stateId as StateId, {
         cannot_fix: iter.cannot_fix ?? [],
         count: iter.count,
         history: iter.history ?? [],
@@ -112,12 +113,12 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
-    spawn_instructions: { implement: "Implement ${task}." },
+    spawn_instructions: { [sid("implement")]: "Implement ${task}." },
     states: {
-      done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: { agent: "canon-implementor", type: "single" },
     },
     ...overrides,
   };
@@ -141,7 +142,7 @@ describe("enterAndPrepareState", () => {
       const workspace = makeTmpDir();
       seedStore(workspace, {
         iterations: {
-          implement: { cannot_fix: [], count: 3, history: [], max: 3 },
+          [sid("implement")]: { cannot_fix: [], count: 3, history: [], max: 3 },
         },
       });
 
@@ -161,7 +162,7 @@ describe("enterAndPrepareState", () => {
 
       // State must NOT have been entered — still pending
       const store = getExecutionStore(workspace);
-      const stateEntry = store.getState("implement");
+      const stateEntry = store.getState(sid("implement"));
       expect(stateEntry?.status).toBe("pending");
     });
 
@@ -171,7 +172,7 @@ describe("enterAndPrepareState", () => {
       const history = [{ file_paths: ["src/api/handler.ts"], principle_ids: ["thin-handlers"] }];
       seedStore(workspace, {
         iterations: {
-          implement: { cannot_fix: cannotFixItems, count: 2, history, max: 2 },
+          [sid("implement")]: { cannot_fix: cannotFixItems, count: 2, history, max: 2 },
         },
       });
 
@@ -200,8 +201,8 @@ describe("enterAndPrepareState", () => {
 
       const flow = makeFlow({
         states: {
-          done: { type: "terminal" },
-          implement: {
+          [sid("done")]: { type: "terminal" },
+          [sid("implement")]: {
             agent: "canon-implementor",
             skip_when: "no_contract_changes",
             type: "single",
@@ -224,7 +225,7 @@ describe("enterAndPrepareState", () => {
 
       // State must NOT have been entered — still pending
       const store = getExecutionStore(workspace);
-      expect(store.getState("implement")?.status).toBe("pending");
+      expect(store.getState(sid("implement"))?.status).toBe("pending");
     });
 
     it("does not skip when skip_when condition is not met", async () => {
@@ -234,8 +235,8 @@ describe("enterAndPrepareState", () => {
 
       const flow = makeFlow({
         states: {
-          done: { type: "terminal" },
-          implement: {
+          [sid("done")]: { type: "terminal" },
+          [sid("implement")]: {
             agent: "canon-implementor",
             skip_when: "no_contract_changes",
             type: "single",
@@ -257,7 +258,7 @@ describe("enterAndPrepareState", () => {
 
       // State must have been entered — now in_progress
       const store = getExecutionStore(workspace);
-      expect(store.getState("implement")?.status).toBe("in_progress");
+      expect(store.getState(sid("implement"))?.status).toBe("in_progress");
     });
   });
 
@@ -296,8 +297,8 @@ describe("enterAndPrepareState", () => {
       assertOk(result);
 
       expect(result.board).toBeDefined();
-      expect(result.board!.states.implement.status).toBe("in_progress");
-      expect(result.board!.states.implement.entries).toBe(1);
+      expect(result.board!.states[sid("implement")].status).toBe("in_progress");
+      expect(result.board!.states[sid("implement")].entries).toBe(1);
     });
 
     it("persists state entry to execution_states table — not board.json", async () => {
@@ -319,7 +320,7 @@ describe("enterAndPrepareState", () => {
 
       // State must be persisted in SQLite
       const store = getExecutionStore(workspace);
-      const stateEntry = store.getState("implement");
+      const stateEntry = store.getState(sid("implement"));
       expect(stateEntry?.status).toBe("in_progress");
       expect(stateEntry?.entries).toBe(1);
     });
@@ -328,14 +329,14 @@ describe("enterAndPrepareState", () => {
       const workspace = makeTmpDir();
       seedStore(workspace, {
         iterations: {
-          implement: { cannot_fix: [], count: 1, history: [], max: 5 },
+          [sid("implement")]: { cannot_fix: [], count: 1, history: [], max: 5 },
         },
       });
 
       const flow = makeFlow({
         states: {
-          done: { type: "terminal" },
-          implement: { agent: "canon-implementor", max_iterations: 5, type: "single" },
+          [sid("done")]: { type: "terminal" },
+          [sid("implement")]: { agent: "canon-implementor", max_iterations: 5, type: "single" },
         },
       });
 
@@ -347,7 +348,7 @@ describe("enterAndPrepareState", () => {
       });
 
       const store = getExecutionStore(workspace);
-      const iter = store.getIteration("implement");
+      const iter = store.getIteration(sid("implement"));
       expect(iter?.count).toBe(2);
     });
 
@@ -376,8 +377,8 @@ describe("enterAndPrepareState", () => {
       const workspace = makeTmpDir();
       seedStore(workspace, {
         states: {
-          done: { entries: 0, status: "pending" },
-          implement: { entries: 0, status: "pending" },
+          [sid("done")]: { entries: 0, status: "pending" },
+          [sid("implement")]: { entries: 0, status: "pending" },
         },
       });
 
@@ -401,19 +402,19 @@ describe("enterAndPrepareState", () => {
       const workspace = makeTmpDir();
       seedStore(workspace, {
         states: {
-          done: { entries: 0, status: "pending" },
-          review: { entries: 0, status: "pending" },
+          [sid("done")]: { entries: 0, status: "pending" },
+          [sid("review")]: { entries: 0, status: "pending" },
         },
       });
 
       const flow: ResolvedFlow = {
         description: "Test flow",
-        entry: "review",
+        entry: sid("review"),
         name: flowName("test-flow"),
-        spawn_instructions: { review: "Review the code for ${task}." },
+        spawn_instructions: { [sid("review")]: "Review the code for ${task}." },
         states: {
-          done: { type: "terminal" },
-          review: { agents: ["canon-reviewer", "canon-security"], type: "parallel" },
+          [sid("done")]: { type: "terminal" },
+          [sid("review")]: { agents: ["canon-reviewer", "canon-security"], type: "parallel" },
         },
       };
 
@@ -643,12 +644,12 @@ describe("enterAndPrepareState", () => {
         },
       };
 
-      store.upsertState("implement", {
+      store.upsertState(sid("implement"), {
         entries: 1,
         status: "in_progress",
         wave_results: waveResults,
       });
-      store.upsertState("done", { entries: 0, status: "pending" });
+      store.upsertState(sid("done"), { entries: 0, status: "pending" });
 
       // escapeDollarBrace should escape the injection string
       vi.mocked(escapeDollarBrace).mockImplementation((s: string) => s.replace(/\$\{/g, "\\${"));
@@ -694,7 +695,7 @@ describe("enterAndPrepareState — session branch variable injection", () => {
     seedStore(workspace); // seeds with branch: "feat/test"
 
     const flow = makeFlow({
-      spawn_instructions: { implement: "Branch is ${branch}." },
+      spawn_instructions: { [sid("implement")]: "Branch is ${branch}." },
     });
 
     const result = await enterAndPrepareState({
@@ -730,11 +731,11 @@ describe("enterAndPrepareState — session branch variable injection", () => {
       worktree_branch: "canon-build/my-slug",
       worktree_path: "/tmp/worktrees/my-slug",
     });
-    store.upsertState("implement", { entries: 0, status: "pending" });
-    store.upsertState("done", { entries: 0, status: "pending" });
+    store.upsertState(sid("implement"), { entries: 0, status: "pending" });
+    store.upsertState(sid("done"), { entries: 0, status: "pending" });
 
     const flow = makeFlow({
-      spawn_instructions: { implement: "Worktree: ${worktree_branch}" },
+      spawn_instructions: { [sid("implement")]: "Worktree: ${worktree_branch}" },
     });
 
     const result = await enterAndPrepareState({
@@ -768,11 +769,11 @@ describe("enterAndPrepareState — session branch variable injection", () => {
       tier: "medium",
       worktree_path: "/tmp/worktrees/my-slug",
     });
-    store.upsertState("implement", { entries: 0, status: "pending" });
-    store.upsertState("done", { entries: 0, status: "pending" });
+    store.upsertState(sid("implement"), { entries: 0, status: "pending" });
+    store.upsertState(sid("done"), { entries: 0, status: "pending" });
 
     const flow = makeFlow({
-      spawn_instructions: { implement: "Path: ${worktree_path}" },
+      spawn_instructions: { [sid("implement")]: "Path: ${worktree_path}" },
     });
 
     const result = await enterAndPrepareState({
@@ -791,7 +792,7 @@ describe("enterAndPrepareState — session branch variable injection", () => {
     seedStore(workspace); // seeds with branch: "feat/test"
 
     const flow = makeFlow({
-      spawn_instructions: { implement: "Branch: ${branch}" },
+      spawn_instructions: { [sid("implement")]: "Branch: ${branch}" },
     });
 
     const result = await enterAndPrepareState({
@@ -812,7 +813,7 @@ describe("enterAndPrepareState — session branch variable injection", () => {
 
     const flow = makeFlow({
       spawn_instructions: {
-        implement: "Branch: ${branch}, Worktree: ${worktree_branch}, Path: ${worktree_path}",
+        [sid("implement")]: "Branch: ${branch}, Worktree: ${worktree_branch}, Path: ${worktree_path}",
       },
     });
 
@@ -833,7 +834,7 @@ describe("enterAndPrepareState — session branch variable injection", () => {
 
 describe("enterAndPrepareState — missing directory", () => {
   it("returns WORKSPACE_NOT_FOUND via wrapHandler when workspace directory does not exist", async () => {
-    const missingWorkspace = join(tmpdir(), ".canon", "workspaces", "nonexistent-dir-for-eaps");
+    const missingWorkspace = workspacePath(join(tmpdir(), ".canon", "workspaces", "nonexistent-dir-for-eaps"));
 
     const flow: ResolvedFlow = {
       description: "",

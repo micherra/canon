@@ -18,14 +18,15 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { reportResult, validateRequiredArtifacts } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "artifact-validation-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 afterEach(() => {
@@ -58,12 +59,12 @@ function makeFlow(requiredArtifacts?: RequiredArtifact[]): ResolvedFlow {
       };
   return {
     description: "Artifact validation test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
-    spawn_instructions: { implement: "Implement." },
+    spawn_instructions: { [sid("implement")]: "Implement." },
     states: {
-      implement: stateDef,
-      terminal: { type: "terminal" as const },
+      [sid("implement")]: stateDef,
+      [sid("terminal")]: { type: "terminal" as const },
     },
   };
 }
@@ -87,9 +88,9 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
     tier: "medium",
   });
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { entries: 0, status: "pending" });
+    store.upsertState(sid(stateId), { entries: 0, status: "pending" });
     if ("max_iterations" in stateDef && stateDef.max_iterations !== undefined) {
-      store.upsertIteration(stateId, {
+      store.upsertIteration(sid(stateId), {
         cannot_fix: [],
         count: 0,
         history: [],
@@ -285,7 +286,7 @@ describe("reportResult with required_artifacts", () => {
     const result = await reportResult({
       artifacts: ["plans/task/some-plan.md"], // no REVIEW.meta.json
       flow,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
@@ -298,8 +299,8 @@ describe("reportResult with required_artifacts", () => {
 
     // Board state must NOT be mutated
     const boardAfter = store.getBoard();
-    expect(boardAfter?.states.implement?.status).toBe(boardBefore?.states.implement?.status);
-    expect(boardAfter?.states.implement?.result).toBeUndefined();
+    expect(boardAfter?.states[sid("implement")]?.status).toBe(boardBefore?.states[sid("implement")]?.status);
+    expect(boardAfter?.states[sid("implement")]?.result).toBeUndefined();
   });
 
   it("succeeds when required artifact .meta.json exists with correct type", async () => {
@@ -317,7 +318,7 @@ describe("reportResult with required_artifacts", () => {
     const result = await reportResult({
       artifacts: ["reviews/REVIEW.md"],
       flow,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
@@ -336,7 +337,7 @@ describe("reportResult with required_artifacts", () => {
     const result = await reportResult({
       artifacts: ["some-output.md"],
       flow,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
@@ -354,7 +355,7 @@ describe("reportResult with required_artifacts", () => {
     // No artifacts array — validation still runs (empty list passed to validateRequiredArtifacts)
     const result = await reportResult({
       flow,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
       // artifacts: undefined — absent, but validation still runs
@@ -381,7 +382,7 @@ describe("reportResult with required_artifacts", () => {
     const result = await reportResult({
       artifacts: ["reviews/REVIEW.md"],
       flow,
-      state_id: "implement",
+      state_id: sid("implement"),
       status_keyword: "DONE",
       workspace,
     });
@@ -396,8 +397,8 @@ describe("reportResult with required_artifacts", () => {
     // Board NOT mutated
     const store = getExecutionStore(workspace);
     const board = store.getBoard();
-    expect(board?.states.implement?.status).toBe("pending");
-    expect(board?.states.implement?.result).toBeUndefined();
+    expect(board?.states[sid("implement")]?.status).toBe("pending");
+    expect(board?.states[sid("implement")]?.result).toBeUndefined();
   });
 });
 

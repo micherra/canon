@@ -89,7 +89,7 @@ import type {
 import { assemblePrompt, getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import type { PromptContext, SpawnPromptInput } from "../model/types.ts";
 import { fanout } from "../tools/fanout.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -118,20 +118,20 @@ function seedWorkspace(task = "test task"): string {
     task,
     tier: "medium",
   });
-  store.upsertState("implement", { entries: 0, status: "pending" });
-  store.upsertState("done", { entries: 0, status: "pending" });
+  store.upsertState(sid("implement"), { entries: 0, status: "pending" });
+  store.upsertState(sid("done"), { entries: 0, status: "pending" });
   return workspace;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
-    spawn_instructions: { implement: "Implement the task." },
+    spawn_instructions: { [sid("implement")]: "Implement the task." },
     states: {
-      done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: { agent: "canon-implementor", type: "single" },
     },
     ...overrides,
   };
@@ -142,7 +142,7 @@ function makeInput(workspace: string, overrides: Partial<SpawnPromptInput> = {})
     flow: makeFlow(),
     state_id: "implement",
     variables: { CANON_PLUGIN_ROOT: "" },
-    workspace,
+    workspace: workspacePath(workspace),
     ...overrides,
   };
 }
@@ -163,7 +163,7 @@ function makeFanoutCtx(
       flow: flow ?? makeFlow(),
       state_id: state_id ?? "implement",
       variables: variables ?? { CANON_PLUGIN_ROOT: "" },
-      workspace: workspace ?? "/tmp/test-ws",
+      workspace: workspacePath(workspace ?? "/tmp/test-ws"),
       ...("items" in overrides ? { items } : {}),
     },
     mergedVariables: { CANON_PLUGIN_ROOT: "" },
@@ -226,10 +226,10 @@ describe("get-spawn-prompt thin wrapper — delegation contract", () => {
     const workspace = seedWorkspace();
     const items: TaskItem[] = ["task-1", "task-2"];
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const result = await getSpawnPrompt(
@@ -248,10 +248,10 @@ describe("escaping ownership transfer — pipeline escapes raw consultation summ
   it("raw ${VAR} in consultation summary is escaped to \\${VAR} in the final prompt", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     // Simulate enter-and-prepare-state passing RAW (unescaped) summaries — the new contract
@@ -277,10 +277,10 @@ describe("escaping ownership transfer — pipeline escapes raw consultation summ
   it("plain text in consultation summary passes through without modification", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -302,10 +302,10 @@ describe("escaping ownership transfer — pipeline escapes raw consultation summ
   it("multiple consultation summaries are all escaped independently", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -516,8 +516,8 @@ describe("assemblePrompt — skip_reason result includes warnings accumulated be
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [{ from: "state", name: flowName("some-artifact") }] as unknown as never[],
           type: "single",
@@ -529,8 +529,8 @@ describe("assemblePrompt — skip_reason result includes warnings accumulated be
         base_commit: "abc",
         blocked: null,
         concerns: [],
-        current_state: "implement",
-        entry: "implement",
+        current_state: sid("implement"),
+        entry: sid("implement"),
         flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
@@ -570,11 +570,11 @@ describe("multi-inject_context entries — both variables substituted into promp
 
     const flow = makeFlow({
       spawn_instructions: {
-        implement: "Research: ${research_findings}\n\nSpec: ${design_spec}",
+        [sid("implement")]: "Research: ${research_findings}\n\nSpec: ${design_spec}",
       },
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [
             { from: "state", name: flowName("research_findings") },
@@ -589,8 +589,8 @@ describe("multi-inject_context entries — both variables substituted into promp
         base_commit: "abc",
         blocked: null,
         concerns: [],
-        current_state: "implement",
-        entry: "implement",
+        current_state: sid("implement"),
+        entry: sid("implement"),
         flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
@@ -620,10 +620,10 @@ describe("multi-inject_context entries — both variables substituted into promp
     });
 
     const flow = makeFlow({
-      spawn_instructions: { implement: "Context: ${research_findings}" },
+      spawn_instructions: { [sid("implement")]: "Context: ${research_findings}" },
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [{ from: "state", name: flowName("research_findings") }] as unknown as never[],
           type: "single",
@@ -635,8 +635,8 @@ describe("multi-inject_context entries — both variables substituted into promp
         base_commit: "abc",
         blocked: null,
         concerns: [],
-        current_state: "implement",
-        entry: "implement",
+        current_state: sid("implement"),
+        entry: sid("implement"),
         flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
@@ -666,7 +666,7 @@ describe("cache prefix lifecycle — store to prompt end-to-end", () => {
     const MARKER = "## STABLE_CONTEXT_MARKER ##";
     store.setCachePrefix(`${MARKER}\n\n`);
 
-    const flow = makeFlow({ spawn_instructions: { implement: "INSTRUCTION_CONTENT" } });
+    const flow = makeFlow({ spawn_instructions: { [sid("implement")]: "INSTRUCTION_CONTENT" } });
     const result = await getSpawnPrompt(makeInput(workspace, { flow }));
 
     const prompt = result.prompts[0].prompt;
@@ -682,7 +682,7 @@ describe("cache prefix lifecycle — store to prompt end-to-end", () => {
     const workspace = seedWorkspace();
     // No setCachePrefix — defaults to empty string
 
-    const flow = makeFlow({ spawn_instructions: { implement: "INSTRUCTION_START" } });
+    const flow = makeFlow({ spawn_instructions: { [sid("implement")]: "INSTRUCTION_START" } });
     const result = await getSpawnPrompt(makeInput(workspace, { flow }));
 
     const prompt = result.prompts[0].prompt;
@@ -699,10 +699,10 @@ describe("cache prefix lifecycle — store to prompt end-to-end", () => {
     store.setCachePrefix("## WAVE_PREFIX ##\n\n");
 
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -731,7 +731,7 @@ describe("cache prefix lifecycle — store to prompt end-to-end", () => {
     // Re-open store from same workspace — prefix should be read from SQLite
     const result = await getSpawnPrompt(
       makeInput(workspace, {
-        flow: makeFlow({ spawn_instructions: { implement: "Do the work." } }),
+        flow: makeFlow({ spawn_instructions: { [sid("implement")]: "Do the work." } }),
       }),
     );
 
@@ -756,8 +756,8 @@ describe("pipeline error paths — pre-pipeline early returns", () => {
     const flow = makeFlow({
       spawn_instructions: {}, // deliberate: no instruction for "implement"
       states: {
-        done: { type: "terminal" },
-        implement: { agent: "canon-implementor", type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: { agent: "canon-implementor", type: "single" },
       },
     });
 
@@ -788,10 +788,10 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
   it("canon-researcher state produces entries with tools and disallowed_tools from registry", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { research: "Research the codebase." },
+      spawn_instructions: { [sid("research")]: "Research the codebase." },
       states: {
-        done: { type: "terminal" },
-        research: { agent: "canon-researcher", type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("research")]: { agent: "canon-researcher", type: "single" },
       },
     });
 
@@ -810,10 +810,10 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
   it("tool_overrides.allow on state merges extra tool into allowed list", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { research: "Research the codebase." },
+      spawn_instructions: { [sid("research")]: "Research the codebase." },
       states: {
-        done: { type: "terminal" },
-        research: {
+        [sid("done")]: { type: "terminal" },
+        [sid("research")]: {
           agent: "canon-researcher",
           tool_overrides: { allow: ["Edit"] },
           type: "single",
@@ -835,10 +835,10 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
   it("unknown agent type produces empty tools array (fail-closed through full pipeline)", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { custom: "Do the custom thing." },
+      spawn_instructions: { [sid("custom")]: "Do the custom thing." },
       states: {
-        custom: { agent: "unknown-custom-agent", type: "single" },
-        done: { type: "terminal" },
+        [sid("custom")]: { agent: "unknown-custom-agent", type: "single" },
+        [sid("done")]: { type: "terminal" },
       },
     });
 
@@ -860,10 +860,10 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     // and get permission_mode "prompt" unless KG trust computation returns "auto".
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
 

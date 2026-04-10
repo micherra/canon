@@ -11,8 +11,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection, ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
@@ -28,10 +28,10 @@ import { writeResearchSynthesis } from "../tools/write-research-synthesis.ts";
 
 let tmpDirs: string[] = [];
 
-async function makeTmpDir(): Promise<string> {
+async function makeTmpDir(): Promise<WorkspacePath> {
   const dir = await mkdtemp(join(tmpdir(), "adr018-int-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeBoard(): Board {
@@ -39,8 +39,8 @@ function makeBoard(): Board {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "start",
-    entry: "start",
+    current_state: sid("start"),
+    entry: sid("start"),
     flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -54,17 +54,17 @@ function makeBoard(): Board {
 function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
     description: "Integration test flow",
-    entry: "build",
+    entry: sid("build"),
     name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
-      build: {
+      [sid("build")]: {
         transitions: { done: "review", failed: "hitl" },
         type: "single",
       },
-      hitl: { type: "terminal" },
-      review: { transitions: { done: "ship" }, type: "single" },
-      ship: { type: "terminal" },
+      [sid("hitl")]: { type: "terminal" },
+      [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+      [sid("ship")]: { type: "terminal" },
     },
     ...overrides,
   };
@@ -89,7 +89,7 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
     tier: "medium",
   });
   for (const stateId of Object.keys(flow.states)) {
-    store.upsertState(stateId, { entries: 0, status: "pending" });
+    store.upsertState(sid(stateId), { entries: 0, status: "pending" });
   }
 }
 
@@ -201,14 +201,14 @@ describe("ADR-018 integration: writeDesignBrief → required_handoffs validation
     // Flow requires a DESIGN-BRIEF handoff with type design_brief
     const flow = makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           required_handoffs: [{ name: "DESIGN-BRIEF", type: "design_brief" }],
           transitions: { done: "review", failed: "hitl" },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
@@ -216,7 +216,7 @@ describe("ADR-018 integration: writeDesignBrief → required_handoffs validation
     // report_result should find the DESIGN-BRIEF.meta.json and emit no warnings
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -233,14 +233,14 @@ describe("ADR-018 integration: writeDesignBrief → required_handoffs validation
 
     const flow = makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           required_handoffs: [{ name: "DESIGN-BRIEF", type: "design_brief" }],
           transitions: { done: "review", failed: "hitl" },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
@@ -248,7 +248,7 @@ describe("ADR-018 integration: writeDesignBrief → required_handoffs validation
     // No writeDesignBrief call — meta.json absent
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -366,14 +366,14 @@ describe("reportResult — required_handoffs with malformed meta.json", () => {
     const workspace = await makeTmpDir();
     const flow = makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           required_handoffs: [{ name: "synthesis", type: "research_synthesis" }],
           transitions: { done: "review", failed: "hitl" },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
@@ -385,7 +385,7 @@ describe("reportResult — required_handoffs with malformed meta.json", () => {
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -409,7 +409,7 @@ describe("reportResult — multiple required_handoffs, mixed valid/invalid", () 
     const workspace = await makeTmpDir();
     const flow = makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           required_handoffs: [
             { name: "RESEARCH-SYNTHESIS", type: "research_synthesis" },
             { name: "DESIGN-BRIEF", type: "design_brief" },
@@ -418,9 +418,9 @@ describe("reportResult — multiple required_handoffs, mixed valid/invalid", () 
           transitions: { done: "review", failed: "hitl" },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
@@ -444,7 +444,7 @@ describe("reportResult — multiple required_handoffs, mixed valid/invalid", () 
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -487,21 +487,21 @@ describe("ADR-018 integration: writeResearchSynthesis _type matches required_han
     // Flow requires the handoff with type "research_synthesis"
     const flow = makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           required_handoffs: [{ name: "RESEARCH-SYNTHESIS", type: "research_synthesis" }],
           transitions: { done: "review", failed: "hitl" },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });
@@ -525,7 +525,7 @@ describe("ADR-018 integration: writeResearchSynthesis _type matches required_han
 
     const flow = makeMinimalFlow({
       states: {
-        build: {
+        [sid("build")]: {
           required_handoffs: [
             // Expect design_brief but synthesis was written (type: research_synthesis)
             { name: "RESEARCH-SYNTHESIS", type: "design_brief" },
@@ -533,16 +533,16 @@ describe("ADR-018 integration: writeResearchSynthesis _type matches required_han
           transitions: { done: "review", failed: "hitl" },
           type: "single",
         },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: { transitions: { done: "ship" }, type: "single" },
+        [sid("ship")]: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       workspace,
     });

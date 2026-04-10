@@ -1,4 +1,4 @@
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import {
@@ -24,14 +24,14 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
       },
     },
     description: "Test flow",
-    entry: "start",
+    entry: sid("start"),
     name: flowName("test-flow"),
     spawn_instructions: {
-      "perf-check": "Run performance check.",
-      "security-check": "Run security audit for ${task}.",
+      [sid("perf-check")]: "Run performance check.",
+      [sid("security-check")]: "Run security audit for ${task}.",
     },
     states: {
-      start: { type: "terminal" },
+      [sid("start")]: { type: "terminal" },
     },
     ...overrides,
   };
@@ -212,7 +212,7 @@ describe("resolveConsultationPrompt", () => {
         },
       },
       spawn_instructions: {
-        "section-check": "Run section check.",
+        [sid("section-check")]: "Run section check.",
       },
     });
     const result = resolveConsultationPrompt("section-check", flow, {});

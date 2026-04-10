@@ -33,19 +33,19 @@ vi.mock("../services/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assembleWaveBriefing } from "../services/wave-briefing.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "gsp-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
@@ -63,18 +63,18 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     states: {},
     task: "test task",
     ...overrides,
-  } as Board;
+  } as unknown as Board;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
-    spawn_instructions: { implement: "Implement ${task}." },
+    spawn_instructions: { [sid("implement")]: "Implement ${task}." },
     states: {
-      done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: { agent: "canon-implementor", type: "single" },
     },
     ...overrides,
   };
@@ -83,12 +83,12 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test wave flow",
-    entry: "build",
+    entry: sid("build"),
     name: flowName("test-wave-flow"),
-    spawn_instructions: { build: "Build ${item}." },
+    spawn_instructions: { [sid("build")]: "Build ${item}." },
     states: {
-      build: { agent: "canon-implementor", type: "wave" },
-      done: { type: "terminal" },
+      [sid("build")]: { agent: "canon-implementor", type: "wave" },
+      [sid("done")]: { type: "terminal" },
     },
     ...overrides,
   };
@@ -118,8 +118,8 @@ describe("getSpawnPrompt — board state from ExecutionStore", () => {
 
     const flow = makeFlow({
       states: {
-        done: { type: "terminal" },
-        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
       },
     });
 
@@ -165,7 +165,7 @@ describe("getSpawnPrompt — progress from store", () => {
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md",
-      spawn_instructions: { implement: "Task: ${task}\n\nProgress:\n${progress}" },
+      spawn_instructions: { [sid("implement")]: "Task: ${task}\n\nProgress:\n${progress}" },
     });
 
     const result = await getSpawnPrompt({
@@ -190,7 +190,7 @@ describe("getSpawnPrompt — progress from store", () => {
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md",
-      spawn_instructions: { implement: "Task: ${task}\n\nProgress:\n${progress}" },
+      spawn_instructions: { [sid("implement")]: "Task: ${task}\n\nProgress:\n${progress}" },
     });
 
     const result = await getSpawnPrompt({
@@ -214,7 +214,7 @@ describe("getSpawnPrompt — progress from store", () => {
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md",
-      spawn_instructions: { implement: "${progress}" },
+      spawn_instructions: { [sid("implement")]: "${progress}" },
     });
 
     const result = await getSpawnPrompt({
@@ -371,12 +371,12 @@ describe("getSpawnPrompt — wave briefing injection", () => {
 
     const flow: ResolvedFlow = {
       description: "Test parallel-per flow",
-      entry: "review",
+      entry: sid("review"),
       name: flowName("test-parallel-per-flow"),
-      spawn_instructions: { review: "Review ${item}." },
+      spawn_instructions: { [sid("review")]: "Review ${item}." },
       states: {
-        done: { type: "terminal" },
-        review: { agent: "canon-reviewer", type: "parallel-per" },
+        [sid("done")]: { type: "terminal" },
+        [sid("review")]: { agent: "canon-reviewer", type: "parallel-per" },
       },
     };
 
@@ -430,11 +430,11 @@ describe("getSpawnPrompt — metrics footer injection", () => {
 
     const flow: ResolvedFlow = {
       ...makeFlow(),
-      entry: "review",
-      spawn_instructions: { review: "Review the code." },
+      entry: sid("review"),
+      spawn_instructions: { [sid("review")]: "Review the code." },
       states: {
-        done: { type: "terminal" as const },
-        review: { agent: "canon-reviewer", type: "single" as const },
+        [sid("done")]: { type: "terminal" as const },
+        [sid("review")]: { agent: "canon-reviewer", type: "single" as const },
       },
     };
 
@@ -512,10 +512,10 @@ describe("getSpawnPrompt — metrics footer injection", () => {
 
     const flow: ResolvedFlow = {
       ...makeFlow(),
-      spawn_instructions: { implement: "Implement ${task}." },
+      spawn_instructions: { [sid("implement")]: "Implement ${task}." },
       states: {
-        done: { type: "terminal" as const },
-        implement: { agent: "canon-implementor", type: "single" as const },
+        [sid("done")]: { type: "terminal" as const },
+        [sid("implement")]: { agent: "canon-implementor", type: "single" as const },
       },
     };
 

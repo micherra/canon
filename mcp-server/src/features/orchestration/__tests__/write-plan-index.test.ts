@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
@@ -27,7 +28,7 @@ describe("writePlanIndex — valid input", () => {
         { task_id: "task-02", wave: 1 },
         { task_id: "task-03", wave: 2 },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -52,7 +53,7 @@ describe("writePlanIndex — valid input", () => {
         },
         { task_id: "task-02", wave: 2 },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -70,7 +71,7 @@ describe("writePlanIndex — valid input", () => {
     const result = await writePlanIndex({
       slug: "new-slug",
       tasks: [{ task_id: "t-01", wave: 1 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -92,7 +93,7 @@ describe("writePlanIndex — valid input", () => {
           wave: 1,
         },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -111,7 +112,7 @@ describe("writePlanIndex — valid input", () => {
         { task_id: "t-01", wave: 3 },
         { task_id: "t-02", wave: 3 },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -126,7 +127,7 @@ describe("writePlanIndex — validation errors", () => {
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [{ task_id: "task with spaces", wave: 1 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -142,7 +143,7 @@ describe("writePlanIndex — validation errors", () => {
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [{ task_id: "task@01!", wave: 1 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -160,7 +161,7 @@ describe("writePlanIndex — validation errors", () => {
         { task_id: "task-01", wave: 1 },
         { task_id: "task-01", wave: 2 },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -176,7 +177,7 @@ describe("writePlanIndex — validation errors", () => {
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [{ task_id: "task-01", wave: 0 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -192,7 +193,7 @@ describe("writePlanIndex — validation errors", () => {
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [{ task_id: "task-01", wave: -1 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -216,7 +217,7 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
         { task_id: "adr004-03", wave: 2 },
         { depends_on: ["adr004-01"], task_id: "adr004-04", wave: 2 },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -243,7 +244,7 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
     const result = await writePlanIndex({
       slug: "full-roundtrip",
       tasks,
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -269,7 +270,7 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
         { task_id: "CamelCase-01", wave: 1 },
         { task_id: "ALL_CAPS_ID", wave: 2 },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -293,7 +294,7 @@ describe("ADR-004 acceptance: write_plan_index round-trip (dc-05)", () => {
         { files: ["b.ts"], task_id: "t-02", wave: 1 },
         { depends_on: ["t-01", "t-02"], task_id: "t-03", wave: 2 },
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -326,7 +327,7 @@ describe("ADR-004 acceptance: parseTaskIdsForWave zero-task guard (dc-06)", () =
     const result = await writePlanIndex({
       slug: "empty-slug",
       tasks: [],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);

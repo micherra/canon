@@ -62,14 +62,15 @@ import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-stat
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "drive-flow-wave-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(workspace: string): ExecutionStore {
@@ -112,14 +113,14 @@ function writeIndexMd(
 function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "epic flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("epic-flow"),
     spawn_instructions: {
-      implement: "Implement the tasks",
-      terminal: "",
+      [sid("implement")]: "Implement the tasks",
+      [sid("terminal")]: "",
     },
     states: {
-      implement: {
+      [sid("implement")]: {
         transitions: { done: "terminal" },
         type: "wave",
         wave_policy: {
@@ -128,7 +129,7 @@ function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
           on_conflict: "hitl",
         },
       },
-      terminal: {
+      [sid("terminal")]: {
         type: "terminal",
       },
     },
@@ -166,8 +167,8 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
       base_commit: "abc123",
       blocked: null,
       concerns: [],
-      current_state: nextState ?? "terminal",
-      entry: "implement",
+      current_state: sid(nextState ?? "terminal"),
+      entry: sid("implement"),
       flow: flowName("epic-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
@@ -312,7 +313,7 @@ describe("driveFlow — wave entry", () => {
     Object.assign(waveResults["task-01"], { worktree_path: "/project/.canon/worktrees/task-01" });
     Object.assign(waveResults["task-02"], { worktree_path: "/project/.canon/worktrees/task-02" });
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -371,7 +372,7 @@ describe("driveFlow — wave entry", () => {
     };
     Object.assign(waveResults["task-01"], { worktree_path: "/project/.canon/worktrees/task-01" });
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -461,7 +462,7 @@ describe("driveFlow — wave entry", () => {
     const flow = makeWaveFlow();
     await driveFlow({ flow, workspace }, "/fake/project");
 
-    const stateEntry = store.getState("implement");
+    const stateEntry = store.getState(sid("implement"));
     expect(stateEntry).not.toBeNull();
     expect(stateEntry?.wave).toBe(1);
     expect(stateEntry?.wave_total).toBe(2);
@@ -480,7 +481,7 @@ describe("driveFlow — wave result accumulation", () => {
     ]);
 
     // Set up state: wave=1, wave_total=2, wave_results has 0 results
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -523,7 +524,7 @@ describe("driveFlow — wave result accumulation", () => {
     ]);
 
     // Set up state: wave=1, wave_total=2, already have task-01 result
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 2,
       status: "in_progress",
       wave: 1,
@@ -567,7 +568,7 @@ describe("driveFlow — wave result accumulation", () => {
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
     // Set up state: wave=1, wave_total=1, no results yet
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -596,7 +597,7 @@ describe("driveFlow — wave result accumulation", () => {
     );
 
     // After processing, wave_results should contain task-01
-    const stateEntry = store.getState("implement");
+    const stateEntry = store.getState(sid("implement"));
     const waveResults = stateEntry?.wave_results as Record<string, unknown> | undefined;
     expect(waveResults).toBeDefined();
     expect(waveResults?.["task-01"]).toBeDefined();
@@ -612,7 +613,7 @@ describe("driveFlow — merge conflict handling", () => {
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
     // All tasks done, ready to merge
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -655,7 +656,7 @@ describe("driveFlow — merge conflict handling", () => {
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -673,7 +674,7 @@ describe("driveFlow — merge conflict handling", () => {
 
     const flow = makeWaveFlow({
       states: {
-        implement: {
+        [sid("implement")]: {
           transitions: { done: "terminal" },
           type: "wave",
           wave_policy: {
@@ -682,7 +683,7 @@ describe("driveFlow — merge conflict handling", () => {
             on_conflict: "replan",
           },
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     });
 
@@ -711,7 +712,7 @@ describe("driveFlow — merge conflict handling", () => {
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -729,7 +730,7 @@ describe("driveFlow — merge conflict handling", () => {
 
     const flow = makeWaveFlow({
       states: {
-        implement: {
+        [sid("implement")]: {
           transitions: { done: "terminal" },
           type: "wave",
           wave_policy: {
@@ -738,7 +739,7 @@ describe("driveFlow — merge conflict handling", () => {
             on_conflict: "retry-single",
           },
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     });
 
@@ -771,7 +772,7 @@ describe("driveFlow — merge conflict handling", () => {
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -802,7 +803,7 @@ describe("driveFlow — merge conflict handling", () => {
 
     const flow = makeWaveFlow({
       states: {
-        implement: {
+        [sid("implement")]: {
           transitions: { done: "terminal" },
           type: "wave",
           wave_policy: {
@@ -811,7 +812,7 @@ describe("driveFlow — merge conflict handling", () => {
             on_conflict: "retry-single",
           },
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     });
 
@@ -847,7 +848,7 @@ describe("driveFlow — gate failure after merge", () => {
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -877,11 +878,11 @@ describe("driveFlow — gate failure after merge", () => {
 
     const flow = makeWaveFlow({
       states: {
-        fix: {
+        [sid("fix")]: {
           transitions: { done: "terminal" },
           type: "single",
         },
-        implement: {
+        [sid("implement")]: {
           gate: "test-suite",
           transitions: { done: "terminal", gate_failed: "fix" },
           type: "wave",
@@ -891,7 +892,7 @@ describe("driveFlow — gate failure after merge", () => {
             on_conflict: "hitl",
           },
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     });
 
@@ -919,7 +920,7 @@ describe("driveFlow — gate failure after merge", () => {
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -942,8 +943,8 @@ describe("driveFlow — gate failure after merge", () => {
 
     const flow = makeWaveFlow({
       states: {
-        fix: { transitions: { done: "terminal" }, type: "single" },
-        implement: {
+        [sid("fix")]: { transitions: { done: "terminal" }, type: "single" },
+        [sid("implement")]: {
           gate: "test-suite",
           transitions: { done: "terminal", gate_failed: "fix" },
           type: "wave",
@@ -953,7 +954,7 @@ describe("driveFlow — gate failure after merge", () => {
             on_conflict: "hitl",
           },
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     });
 
@@ -993,7 +994,7 @@ describe("driveFlow — wave-to-wave advancement", () => {
     ]);
 
     // State: currently in wave 1, wave_total=1, wave_results empty
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -1059,7 +1060,7 @@ describe("driveFlow — wave-to-wave advancement", () => {
       { task_id: "task-02", wave: 2 },
     ]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -1105,7 +1106,7 @@ describe("driveFlow — wave-to-wave advancement", () => {
       "/fake/project",
     );
 
-    const stateEntry = store.getState("implement");
+    const stateEntry = store.getState(sid("implement"));
     expect(stateEntry?.wave).toBe(2);
     expect(stateEntry?.wave_total).toBe(1);
   });
@@ -1119,7 +1120,7 @@ describe("driveFlow — wave event handling", () => {
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -1172,7 +1173,7 @@ describe("driveFlow — wave event handling", () => {
       { task_id: "task-02", wave: 2 },
     ]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -1229,7 +1230,7 @@ describe("driveFlow — after-consultation handling", () => {
     // Single wave only
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -1255,7 +1256,7 @@ describe("driveFlow — after-consultation handling", () => {
 
     const flow = makeWaveFlow({
       states: {
-        implement: {
+        [sid("implement")]: {
           consultations: { after: ["pattern-check"] },
           transitions: { done: "terminal" },
           type: "wave",
@@ -1265,7 +1266,7 @@ describe("driveFlow — after-consultation handling", () => {
             on_conflict: "hitl",
           },
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     });
 
@@ -1306,7 +1307,7 @@ describe("driveFlow — epic checkpoint", () => {
       { task_id: "task-02", wave: 2 },
     ]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -1341,7 +1342,7 @@ describe("driveFlow — epic checkpoint", () => {
     // Epic flow with hitl_checkpoint between waves
     const flow = makeWaveFlow({
       states: {
-        implement: {
+        [sid("implement")]: {
           consultations: { between: ["pattern-check"] },
           transitions: { done: "terminal" },
           type: "wave",
@@ -1352,7 +1353,7 @@ describe("driveFlow — epic checkpoint", () => {
             on_conflict: "hitl",
           },
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     });
 
@@ -1388,7 +1389,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -1417,7 +1418,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
       "/fake/project",
     );
 
-    const stateEntry = store.getState("implement");
+    const stateEntry = store.getState(sid("implement"));
     const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
     // Always convention branch — agents work in Canon's worktrees on convention branches
     expect(waveResults?.["task-01"]?.branch).toBe("canon-wave/task-01");
@@ -1428,7 +1429,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
     const store = makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-02", wave: 1 }]);
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -1457,7 +1458,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
       "/fake/project",
     );
 
-    const stateEntry = store.getState("implement");
+    const stateEntry = store.getState(sid("implement"));
     const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
     // Convention branch is always used
     expect(waveResults?.["task-02"]?.branch).toBe("canon-wave/task-02");
@@ -1473,7 +1474,7 @@ describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () =>
     // Set execution worktree_path to simulate a build-branch worktree
     store.updateExecution({ worktree_path: "/project/.canon/worktrees/epic-slug" });
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,
@@ -1515,7 +1516,7 @@ describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () =>
     writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
 
     // No worktree_path set on execution (non-worktree build)
-    storeInstance.upsertState("implement", {
+    storeInstance.upsertState(sid("implement"), {
       entries: 1,
       status: "in_progress",
       wave: 1,

@@ -60,14 +60,15 @@ import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-stat
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { LogEntry, ReportResultResult } from "../tools/report-result.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "drive-flow-flow-events-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(workspace: string, opts: { currentState?: string } = {}): ExecutionStore {
@@ -96,30 +97,30 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     allowed_insertions: ["review"],
     description: "test",
-    entry: "research",
+    entry: sid("research"),
     name: flowName("test-flow"),
     spawn_instructions: {
-      implement: "Do implement",
-      research: "Do research",
-      review: "Do review",
+      [sid("implement")]: "Do implement",
+      [sid("research")]: "Do research",
+      [sid("review")]: "Do review",
     },
     states: {
-      implement: {
+      [sid("implement")]: {
         agent: "canon:canon-implementor",
         transitions: { done: "review" },
         type: "single",
       },
-      research: {
+      [sid("research")]: {
         agent: "canon:canon-researcher",
         transitions: { done: "implement" },
         type: "single",
       },
-      review: {
+      [sid("review")]: {
         agent: "canon:canon-reviewer",
         transitions: { done: "terminal" },
         type: "single",
       },
-      terminal: {
+      [sid("terminal")]: {
         type: "terminal",
       },
     },
@@ -171,8 +172,8 @@ function makeReportResult(
       base_commit: "abc123",
       blocked: null,
       concerns: [],
-      current_state: nextState ?? "terminal",
-      entry: "research",
+      current_state: sid(nextState ?? "terminal"),
+      entry: sid("research"),
       flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
@@ -541,7 +542,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
 
     // Set up: "review" was inserted with return address "implement"
     // (as if drainFlowEvents fired an insert while in "research" → next was "implement")
-    store.upsertState("review", {
+    store.upsertState(sid("review"), {
       entries: 1,
       inserted_return_to: "implement",
       status: "in_progress",
@@ -605,7 +606,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
     const store = makeStore(workspace, { currentState: "review" });
 
     // "review" was inserted with return address "implement", but completes with "needs_revision"
-    store.upsertState("review", {
+    store.upsertState(sid("review"), {
       entries: 1,
       inserted_return_to: "implement",
       status: "in_progress",
@@ -616,7 +617,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
       ...makeFlow(),
       states: {
         ...makeFlow().states,
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal", needs_revision: "implement" },
           type: "single",
@@ -709,7 +710,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
     );
 
     // The inserted state "review" should have inserted_return_to = "implement" (the normal next state)
-    const reviewState = store.getState("review");
+    const reviewState = store.getState(sid("review"));
     expect(reviewState?.inserted_return_to).toBe("implement");
   });
 
@@ -768,7 +769,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
     );
 
     // inserted_return_to should be null/undefined since next_state was null
-    const reviewState = store.getState("review");
+    const reviewState = store.getState(sid("review"));
     expect(reviewState?.inserted_return_to).toBeUndefined();
   });
 });

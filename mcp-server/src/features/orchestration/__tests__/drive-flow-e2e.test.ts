@@ -61,14 +61,15 @@ import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-stat
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "drive-flow-e2e-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(
@@ -118,15 +119,15 @@ function writeIndexMd(
 function makeFullFlow(): ResolvedFlow {
   return {
     description: "full e2e flow",
-    entry: "research",
+    entry: sid("research"),
     name: flowName("test-flow"),
     spawn_instructions: {
-      implement: "Implement the tasks",
-      research: "Do research",
-      review: "Do review",
+      [sid("implement")]: "Implement the tasks",
+      [sid("research")]: "Do research",
+      [sid("review")]: "Do review",
     },
     states: {
-      implement: {
+      [sid("implement")]: {
         transitions: { done: "review" },
         type: "wave",
         wave_policy: {
@@ -135,17 +136,17 @@ function makeFullFlow(): ResolvedFlow {
           on_conflict: "hitl",
         },
       },
-      research: {
+      [sid("research")]: {
         agent: "canon:canon-researcher",
         transitions: { done: "implement" },
         type: "single",
       },
-      review: {
+      [sid("review")]: {
         agent: "canon:canon-reviewer",
         transitions: { done: "terminal" },
         type: "single",
       },
-      terminal: {
+      [sid("terminal")]: {
         type: "terminal",
       },
     },
@@ -156,28 +157,28 @@ function makeFullFlow(): ResolvedFlow {
 function makeSkipFlow(): ResolvedFlow {
   return {
     description: "flow with skip state",
-    entry: "research",
+    entry: sid("research"),
     name: flowName("skip-flow"),
     spawn_instructions: {
-      research: "Do research",
-      review: "Do review",
-      "test-state": "Run tests",
+      [sid("research")]: "Do research",
+      [sid("review")]: "Do review",
+      [sid("test-state")]: "Run tests",
     },
     states: {
-      research: {
+      [sid("research")]: {
         agent: "canon:canon-researcher",
         transitions: { done: "test-state" },
         type: "single",
       },
-      review: {
+      [sid("review")]: {
         agent: "canon:canon-reviewer",
         transitions: { done: "terminal" },
         type: "single",
       },
-      terminal: {
+      [sid("terminal")]: {
         type: "terminal",
       },
-      "test-state": {
+      [sid("test-state")]: {
         agent: "canon:canon-tester",
         skip_when: "no_fix_requested" as const,
         transitions: { done: "review", skipped: "review" },
@@ -216,8 +217,8 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
       base_commit: "abc123",
       blocked: null,
       concerns: [],
-      current_state: nextState ?? "terminal",
-      entry: "research",
+      current_state: sid(nextState ?? "terminal"),
+      entry: sid("research"),
       flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),

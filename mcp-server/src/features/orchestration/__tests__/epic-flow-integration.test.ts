@@ -15,13 +15,14 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board} from "@domains/flows/board-state-schemas.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { normalizeStatus } from "../engine/transitions.ts";
 import { loadFlow } from "../tools/load-flow.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -38,8 +39,8 @@ function makeBoard(overrides?: Partial<Board>): Board {
     base_commit: "abc1234",
     blocked: null,
     concerns: [],
-    current_state: "research",
-    entry: "research",
+    current_state: sid("research"),
+    entry: sid("research"),
     flow: flowName("epic"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -253,34 +254,34 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
   it("epic flow has all three inline states: research, design, implement", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states.research).toBeDefined();
-    expect(flow.states.design).toBeDefined();
-    expect(flow.states.implement).toBeDefined();
+    expect(flow.states[sid("research")]).toBeDefined();
+    expect(flow.states[sid("design")]).toBeDefined();
+    expect(flow.states[sid("implement")]).toBeDefined();
   });
 
   it("epic implement state has stuck_when: no_gate_progress", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states.implement.stuck_when).toBe("no_gate_progress");
+    expect(flow.states[sid("implement")].stuck_when).toBe("no_gate_progress");
   });
 
   it("epic implement state has max_iterations: 10", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states.implement.max_iterations).toBe(10);
+    expect(flow.states[sid("implement")].max_iterations).toBe(10);
   });
 
   it("epic implement state does NOT have max_waves (architecture constraint)", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     // max_waves must not be present — architecture decision epic-06
-    expect((flow.states.implement as Record<string, unknown>).max_waves).toBeUndefined();
+    expect((flow.states[sid("implement")] as Record<string, unknown>).max_waves).toBeUndefined();
   });
 
   it("epic implement state has epic_complete transition to pre-launch-check", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states.implement.transitions?.epic_complete).toBe("pre-launch-check");
+    expect(flow.states[sid("implement")].transitions?.epic_complete).toBe("pre-launch-check");
   });
 
   it("epic flow has tier: large", async () => {
@@ -308,19 +309,19 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
   it("epic flow ship state is present (from ship-done fragment)", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states.ship).toBeDefined();
+    expect(flow.states[sid("ship")]).toBeDefined();
   });
 
   it("epic flow research state has type: parallel", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states.research.type).toBe("parallel");
+    expect(flow.states[sid("research")].type).toBe("parallel");
   });
 
   it("epic flow design state has done transition to checkpoint", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states.design.transitions?.done).toBe("checkpoint");
+    expect(flow.states[sid("design")].transitions?.done).toBe("checkpoint");
   });
 });
 
@@ -361,29 +362,29 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
 describe("loadAndResolveFlow() plugin-level resolution — pre-launch-check", () => {
   it("feature flow pre-launch-check state is present (from pre-launch-check fragment)", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "feature");
-    expect(flow.states["pre-launch-check"]).toBeDefined();
-    expect(flow.states["pre-launch-check"].type).toBe("single");
-    expect(flow.states["pre-launch-check"].gates).toBeUndefined();
-    expect(flow.states["pre-launch-check"].agent).toBeUndefined();
+    expect(flow.states[sid("pre-launch-check")]).toBeDefined();
+    expect(flow.states[sid("pre-launch-check")].type).toBe("single");
+    expect(flow.states[sid("pre-launch-check")].gates).toBeUndefined();
+    expect(flow.states[sid("pre-launch-check")].agent).toBeUndefined();
   });
 
   it("feature flow review-fix-loop exits to pre-launch-check not ship", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "feature");
     // review-fix-loop fragment: after_clean param → clean transition, after_warning param → warning transition
-    expect(flow.states.review.transitions?.clean).toBe("pre-launch-check");
-    expect(flow.states.review.transitions?.warning).toBe("pre-launch-check");
+    expect(flow.states[sid("review")].transitions?.clean).toBe("pre-launch-check");
+    expect(flow.states[sid("review")].transitions?.warning).toBe("pre-launch-check");
   });
 
   it("fast-path flow execute state transitions to pre-launch-check", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "fast-path");
-    expect(flow.states.execute.transitions?.done).toBe("pre-launch-check");
-    expect(flow.states["pre-launch-check"]).toBeDefined();
+    expect(flow.states[sid("execute")].transitions?.done).toBe("pre-launch-check");
+    expect(flow.states[sid("pre-launch-check")]).toBeDefined();
   });
 
   it("epic flow pre-launch-check state is present and wired before ship", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
-    expect(flow.states["pre-launch-check"]).toBeDefined();
-    expect(flow.states["pre-launch-check"].transitions?.done).toBe("ship");
+    expect(flow.states[sid("pre-launch-check")]).toBeDefined();
+    expect(flow.states[sid("pre-launch-check")].transitions?.done).toBe("ship");
   });
 
   it("all shipping flows include pre-launch-check", async () => {
@@ -393,7 +394,7 @@ describe("loadAndResolveFlow() plugin-level resolution — pre-launch-check", ()
       ),
     );
     for (const { flow } of flows) {
-      expect(flow.states["pre-launch-check"]).toBeDefined();
+      expect(flow.states[sid("pre-launch-check")]).toBeDefined();
     }
   });
 });
@@ -434,19 +435,19 @@ describe("loadAndResolveFlow error message — lists flows from both project and
 describe("no_open_questions runtime path via evaluateSkipWhen", () => {
   it("returns skip: false when has_open_questions is true on an epic board", async () => {
     const board = makeBoard({ metadata: { has_open_questions: true } });
-    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_open_questions", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
   it("returns skip: true when has_open_questions is false on an epic board", async () => {
     const board = makeBoard({ metadata: { has_open_questions: false } });
-    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_open_questions", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
   });
 
   it("returns skip: true when has_open_questions is absent (between-wave consultation skipped by default)", async () => {
     const board = makeBoard();
-    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_open_questions", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("targeted research skipped");
   });

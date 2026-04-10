@@ -99,7 +99,7 @@ import { resolveToolProfile } from "../model/tool-profiles.ts";
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 import { injectCoordination } from "../services/inject-coordination.ts";
 import { computeTrustLevel, trustLevelToPermissionMode } from "../services/trust-resolver.ts"; // import for vi.mocked() access
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry {
   return {
@@ -129,17 +129,17 @@ function makeCtx(
         flow ??
         ({
           description: "Test",
-          entry: "implement",
+          entry: sid("implement"),
           name: flowName("test-flow"),
-          spawn_instructions: { implement: "Do the thing" },
+          spawn_instructions: { [sid("implement")]: "Do the thing" },
           states: {
-            done: { type: "terminal" },
-            implement: { agent: "canon-implementor", type: "single" },
+            [sid("done")]: { type: "terminal" },
+            [sid("implement")]: { agent: "canon-implementor", type: "single" },
           },
         } as ResolvedFlow),
       state_id: state_id ?? "implement",
       variables: variables ?? {},
-      workspace: workspace ?? "/tmp/test-workspace",
+      workspace: workspacePath(workspace ?? "/tmp/test-workspace"),
       ...("role" in overrides ? { role } : {}),
       ...("wave" in overrides ? { wave } : {}),
       ...("peer_count" in overrides ? { peer_count } : {}),
@@ -670,14 +670,14 @@ describe("injectCoordination — trust integration", () => {
         base_commit: "abc",
         blocked: null,
         concerns: [],
-        current_state: "implement",
-        entry: "implement",
+        current_state: sid("implement"),
+        entry: sid("implement"),
         flow: flowName("test-flow"),
         iterations: {},
         last_updated: "2026-01-01",
         skipped: [],
         started: "2026-01-01",
-        states: { implement: { entries: 1, status: "in_progress" } },
+        states: { [sid("implement")]: { entries: 1, status: "in_progress" } },
         task: "test",
       },
       prompts: [makeEntry({ agent: "canon-implementor" })],
@@ -753,8 +753,8 @@ describe("injectCoordination — trust integration", () => {
       base_commit: "abc",
       blocked: null,
       concerns: [],
-      current_state: "implement",
-      entry: "implement",
+      current_state: sid("implement"),
+      entry: sid("implement"),
       flow: flowName("test-flow"),
       iterations: {},
       last_updated: "2026-01-01",

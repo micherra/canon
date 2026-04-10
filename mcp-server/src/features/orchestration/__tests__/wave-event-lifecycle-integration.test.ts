@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getMessages } from "../tools/get-messages.ts";
 import { injectWaveEvent } from "../tools/inject-wave-event.ts";
 import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
+import { stateId as sid, workspacePath, type WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 function seedStore(workspace: string): void {
   const store = getExecutionStore(workspace);
@@ -37,7 +38,7 @@ function seedStore(workspace: string): void {
     task: "Integration test task",
     tier: "small",
   });
-  store.upsertState("implement", {
+  store.upsertState(sid("implement"), {
     entries: 1,
     status: "in_progress",
     wave: 1,
@@ -52,10 +53,10 @@ function readAllEvents(workspace: string): WaveEvent[] {
   return getExecutionStore(workspace).getWaveEvents();
 }
 
-let workspace: string;
+let workspace: WorkspacePath;
 
 beforeEach(async () => {
-  workspace = await mkdtemp(join(tmpdir(), "canon-wave-lifecycle-"));
+  workspace = workspacePath(await mkdtemp(join(tmpdir(), "canon-wave-lifecycle-")));
   seedStore(workspace);
 });
 

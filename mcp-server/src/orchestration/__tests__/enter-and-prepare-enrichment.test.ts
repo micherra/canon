@@ -62,17 +62,17 @@ vi.mock("@features/orchestration/services/context-enrichment.ts", () => ({
 import { assembleEnrichment } from "@features/orchestration/services/context-enrichment.ts";
 import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath, type WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "enr03-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
-function seedStore(workspace: string, overrides: Partial<Board> = {}): ExecutionStore {
+function seedStore(workspace: WorkspacePath, overrides: Partial<Board> = {}): ExecutionStore {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
 
@@ -96,8 +96,8 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
     done: { entries: 0, status: "pending" },
     implement: { entries: 0, status: "pending" },
   };
-  for (const [stateId, state] of Object.entries(states)) {
-    store.upsertState(stateId, { entries: state.entries ?? 0, status: state.status });
+  for (const [stateIdStr, state] of Object.entries(states)) {
+    store.upsertState(sid(stateIdStr), { entries: state.entries ?? 0, status: state.status });
   }
 
   return store;
@@ -106,12 +106,12 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
-    spawn_instructions: { implement: "Implement ${task}. ${enrichment}" },
+    spawn_instructions: { [sid("implement")]: "Implement ${task}. ${enrichment}" },
     states: {
-      done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: { agent: "canon-implementor", type: "single" },
     },
     ...overrides,
   };
@@ -141,7 +141,7 @@ describe("enterAndPrepareState — enrichment integration", () => {
 
       const flow = makeFlow({
         spawn_instructions: {
-          implement: "Implement ${task}. ${enrichment}",
+          [sid("implement")]: "Implement ${task}. ${enrichment}",
         },
       });
 
@@ -194,7 +194,7 @@ describe("enterAndPrepareState — enrichment integration", () => {
 
       const flow = makeFlow({
         spawn_instructions: {
-          implement: "Implement ${task}. ${enrichment}",
+          [sid("implement")]: "Implement ${task}. ${enrichment}",
         },
       });
 
@@ -240,7 +240,7 @@ describe("enterAndPrepareState — enrichment integration", () => {
 
       const flow = makeFlow({
         spawn_instructions: {
-          implement: "Implement ${task}.",
+          [sid("implement")]: "Implement ${task}.",
         },
       });
 
@@ -265,8 +265,8 @@ describe("enterAndPrepareState — enrichment integration", () => {
       seedStore(workspace, {
         base_commit: "abc1234",
         states: {
-          done: { entries: 0, status: "pending" },
-          implement: { entries: 2, status: "in_progress" },
+          [sid("done")]: { entries: 0, status: "pending" },
+          [sid("implement")]: { entries: 2, status: "in_progress" },
         },
       });
 
@@ -277,7 +277,7 @@ describe("enterAndPrepareState — enrichment integration", () => {
 
       const flow = makeFlow({
         spawn_instructions: {
-          implement: "Implement ${task}. Scope: ${review_scope}. ${enrichment}",
+          [sid("implement")]: "Implement ${task}. Scope: ${review_scope}. ${enrichment}",
         },
       });
 
@@ -329,7 +329,7 @@ describe("enterAndPrepareState — enrichment integration", () => {
       const flow = makeFlow({
         spawn_instructions: {
           // Use ${enrichment} explicitly to verify it resolves to empty not literal
-          implement: "Task: ${task}. Extra: [${enrichment}]",
+          [sid("implement")]: "Task: ${task}. Extra: [${enrichment}]",
         },
       });
 

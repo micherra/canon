@@ -16,15 +16,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // We test resolveTaskScope via a workspace with temp dirs and board objects
 
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "research",
-    entry: "research",
+    current_state: sid("research"),
+    entry: sid("research"),
     flow: flowName("build"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -58,7 +58,7 @@ describe("resolveTaskScope — board artifact source", () => {
 
     const board = makeBoard({
       states: {
-        research: {
+        [sid("research")]: {
           artifacts: [artifactPath],
           entries: 1,
           status: "done",
@@ -68,8 +68,8 @@ describe("resolveTaskScope — board artifact source", () => {
 
     const result = resolveTaskScope({
       board,
-      stateId: "research",
-      workspace: tmpDir,
+      stateId: sid("research"),
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result).toContain("mcp-server/src/adapters/git-adapter.ts");
@@ -79,7 +79,7 @@ describe("resolveTaskScope — board artifact source", () => {
   it("returns empty array when board state has no artifacts", () => {
     const board = makeBoard({
       states: {
-        research: {
+        [sid("research")]: {
           artifacts: [],
           entries: 1,
           status: "done",
@@ -89,8 +89,8 @@ describe("resolveTaskScope — board artifact source", () => {
 
     const result = resolveTaskScope({
       board,
-      stateId: "research",
-      workspace: tmpDir,
+      stateId: sid("research"),
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result).toEqual([]);
@@ -99,7 +99,7 @@ describe("resolveTaskScope — board artifact source", () => {
   it("handles missing artifact files gracefully (no throw)", () => {
     const board = makeBoard({
       states: {
-        research: {
+        [sid("research")]: {
           artifacts: [join(tmpDir, "nonexistent-file.md")],
           entries: 1,
           status: "done",
@@ -107,12 +107,12 @@ describe("resolveTaskScope — board artifact source", () => {
       },
     });
 
-    expect(() => resolveTaskScope({ board, stateId: "research", workspace: tmpDir })).not.toThrow();
+    expect(() => resolveTaskScope({ board, stateId: sid("research"), workspace: workspacePath(tmpDir) })).not.toThrow();
 
     const result = resolveTaskScope({
       board,
-      stateId: "research",
-      workspace: tmpDir,
+      stateId: sid("research"),
+      workspace: workspacePath(tmpDir),
     });
     expect(result).toEqual([]);
   });
@@ -125,7 +125,7 @@ describe("resolveTaskScope — board artifact source", () => {
 
     const board = makeBoard({
       states: {
-        research: {
+        [sid("research")]: {
           artifacts: [artifactPath],
           entries: 1,
           status: "done",
@@ -134,7 +134,7 @@ describe("resolveTaskScope — board artifact source", () => {
     });
 
     // Should not throw and should extract paths from within the cap
-    expect(() => resolveTaskScope({ board, stateId: "research", workspace: tmpDir })).not.toThrow();
+    expect(() => resolveTaskScope({ board, stateId: sid("research"), workspace: workspacePath(tmpDir) })).not.toThrow();
   });
 });
 
@@ -172,9 +172,9 @@ files:
     const result = resolveTaskScope({
       board,
       planSlug: "my-slug",
-      stateId: "implement",
+      stateId: sid("implement"),
       taskId: "enr-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result).toContain("mcp-server/src/features/orchestration/services/scope-resolver.ts");
@@ -187,9 +187,9 @@ files:
     const result = resolveTaskScope({
       board,
       planSlug: "nonexistent-slug",
-      stateId: "implement",
+      stateId: sid("implement"),
       taskId: "enr-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result).toEqual([]);
@@ -213,9 +213,9 @@ wave: 1
     const result = resolveTaskScope({
       board,
       planSlug: "my-slug",
-      stateId: "implement",
+      stateId: sid("implement"),
       taskId: "enr-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result).toEqual([]);
@@ -240,8 +240,8 @@ describe("resolveTaskScope — fallback", () => {
 
     const result = resolveTaskScope({
       board,
-      stateId: "implement",
-      workspace: tmpDir,
+      stateId: sid("implement"),
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result).toEqual([]);
@@ -262,7 +262,7 @@ describe("resolveTaskScope — fallback", () => {
 
     const board = makeBoard({
       states: {
-        research: {
+        [sid("research")]: {
           artifacts: [artifact1, artifact2],
           entries: 1,
           status: "done",
@@ -272,8 +272,8 @@ describe("resolveTaskScope — fallback", () => {
 
     const result = resolveTaskScope({
       board,
-      stateId: "research",
-      workspace: tmpDir,
+      stateId: sid("research"),
+      workspace: workspacePath(tmpDir),
     });
 
     // Should not contain duplicate paths

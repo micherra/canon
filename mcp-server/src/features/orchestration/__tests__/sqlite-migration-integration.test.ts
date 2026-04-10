@@ -29,7 +29,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { getMessages } from "../tools/get-messages.ts";
 import { postMessage } from "../tools/post-message.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -43,20 +43,20 @@ function makeTmpWorkspace(prefix = "sqlite-integ-"): string {
 function makeThreeStateFlow(): ResolvedFlow {
   return {
     description: "Build, review, ship",
-    entry: "build",
+    entry: sid("build"),
     name: flowName("fast-path"),
     spawn_instructions: {},
     states: {
-      build: {
+      [sid("build")]: {
         transitions: { done: "review", failed: "hitl" },
         type: "single",
       },
-      hitl: { type: "terminal" },
-      review: {
+      [sid("hitl")]: { type: "terminal" },
+      [sid("review")]: {
         transitions: { done: "ship", failed: "hitl" },
         type: "single",
       },
-      ship: { type: "terminal" },
+      [sid("ship")]: { type: "terminal" },
     },
   };
 }
@@ -85,8 +85,8 @@ function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
   // Create pending state entries and iteration records for each non-terminal state
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
     if (stateDef.type === "terminal") continue;
-    store.upsertState(stateId, { entries: 0, status: "pending" });
-    store.upsertIteration(stateId, { cannot_fix: [], count: 0, history: [], max: 3 });
+    store.upsertState(sid(stateId), { entries: 0, status: "pending" });
+    store.upsertIteration(sid(stateId), { cannot_fix: [], count: 0, history: [], max: 3 });
   }
 }
 
@@ -109,15 +109,15 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     // Verify initial state
     const initialBoard = getExecutionStore(workspace).getBoard()!;
     expect(initialBoard.current_state).toBe("build");
-    expect(initialBoard.states.build.status).toBe("pending");
+    expect(initialBoard.states[sid("build")].status).toBe("pending");
 
     // Agent reports build done
     const buildResult = await reportResult({
       artifacts: ["src/fix.ts"],
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     assertOk(buildResult);
@@ -129,16 +129,16 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     // Board persisted: current_state is now "review", build is done
     const midBoard = getExecutionStore(workspace).getBoard()!;
     expect(midBoard.current_state).toBe("review");
-    expect(midBoard.states.build.status).toBe("done");
-    expect(midBoard.states.build.result).toBe("done");
-    expect(midBoard.states.build.artifacts).toEqual(["src/fix.ts"]);
+    expect(midBoard.states[sid("build")].status).toBe("done");
+    expect(midBoard.states[sid("build")].result).toBe("done");
+    expect(midBoard.states[sid("build")].artifacts).toEqual(["src/fix.ts"]);
 
     // Agent reports review done
     const reviewResult = await reportResult({
       flow,
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     assertOk(reviewResult);
@@ -147,7 +147,7 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     // Verify ship state is the next state in the board
     const finalBoard = getExecutionStore(workspace).getBoard()!;
     expect(finalBoard.current_state).toBe("ship");
-    expect(finalBoard.states.review.status).toBe("done");
+    expect(finalBoard.states[sid("review")].status).toBe("done");
   });
 
   it("progress_line from report_result accumulates in SQLite, not in log.jsonl", async () => {
@@ -158,17 +158,17 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     await reportResult({
       flow,
       progress_line: "Build completed: 3 files changed",
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     await reportResult({
       flow,
       progress_line: "Review passed: no violations",
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     const store = getExecutionStore(workspace);
@@ -189,9 +189,9 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
 
     await reportResult({
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     // Read events from SQLite directly
@@ -224,9 +224,9 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     await reportResult({
       concern_text: "TypeScript strict mode violations remain in legacy files",
       flow,
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE_WITH_CONCERNS",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     const board = getExecutionStore(workspace).getBoard()!;
@@ -252,14 +252,14 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
       flow,
       gate_results: gateResults,
       metrics: { duration_ms: 1500, model: "claude-3", spawns: 1 },
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "DONE",
       test_results: testResults,
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     const board = getExecutionStore(workspace).getBoard()!;
-    const buildState = board.states.build;
+    const buildState = board.states[sid("build")];
     expect(buildState.gate_results).toEqual(gateResults);
     expect(buildState.metrics?.test_results).toEqual(testResults);
     expect(buildState.metrics?.files_changed).toBe(5);
@@ -274,17 +274,17 @@ describe("messages round-trip through SQLite store", () => {
     const workspace = makeTmpWorkspace();
     seedWorkspace(workspace, makeThreeStateFlow());
 
-    await postMessage({ channel: "main", content: "Hello", from: "orchestrator", workspace });
-    await postMessage({ channel: "main", content: "Working on it", from: "agent", workspace });
-    await postMessage({ channel: "notes", content: "Side note", from: "orchestrator", workspace });
+    await postMessage({ channel: "main", content: "Hello", from: "orchestrator", workspace: workspacePath(workspace) });
+    await postMessage({ channel: "main", content: "Working on it", from: "agent", workspace: workspacePath(workspace) });
+    await postMessage({ channel: "notes", content: "Side note", from: "orchestrator", workspace: workspacePath(workspace) });
 
-    const mainMessages = await getMessages({ channel: "main", workspace });
+    const mainMessages = await getMessages({ channel: "main", workspace: workspacePath(workspace) });
     expect(mainMessages.messages).toHaveLength(2);
     expect(mainMessages.messages[0].content).toBe("Hello");
     expect(mainMessages.messages[1].content).toBe("Working on it");
 
     // Different channel is isolated
-    const notesMessages = await getMessages({ channel: "notes", workspace });
+    const notesMessages = await getMessages({ channel: "notes", workspace: workspacePath(workspace) });
     expect(notesMessages.messages).toHaveLength(1);
     expect(notesMessages.messages[0].content).toBe("Side note");
   });
@@ -308,10 +308,10 @@ describe("messages round-trip through SQLite store", () => {
       task: "task",
       tier: "small",
     });
-    store.upsertState("implement", { entries: 1, status: "in_progress", wave: 1 });
+    store.upsertState(sid("implement"), { entries: 1, status: "in_progress", wave: 1 });
 
     // Post a message and inject a wave event
-    await postMessage({ channel: "main", content: "Hi", from: "orchestrator", workspace });
+    await postMessage({ channel: "main", content: "Hi", from: "orchestrator", workspace: workspacePath(workspace) });
     store.postWaveEvent({
       id: "evt-test-001",
       payload: { description: "Added authentication" },
@@ -320,7 +320,7 @@ describe("messages round-trip through SQLite store", () => {
       type: "guidance",
     });
 
-    const result = await getMessages({ channel: "main", include_events: true, workspace });
+    const result = await getMessages({ channel: "main", include_events: true, workspace: workspacePath(workspace) });
     expect(result.messages.length).toBeGreaterThanOrEqual(1);
     expect(result.events).toBeDefined();
     expect(result.events!.some((e) => e.id === "evt-test-001")).toBe(true);
@@ -434,7 +434,7 @@ describe("wave events lifecycle through SQLite store", () => {
       task: "task",
       tier: "small",
     });
-    store.upsertState("implement", { entries: 1, status: "in_progress", wave: 1 });
+    store.upsertState(sid("implement"), { entries: 1, status: "in_progress", wave: 1 });
 
     const { resolveWaveEvent } = await import("../tools/resolve-wave-event.ts");
     const { injectWaveEvent } = await import("../tools/inject-wave-event.ts");
@@ -442,13 +442,13 @@ describe("wave events lifecycle through SQLite store", () => {
     const injected = await injectWaveEvent({
       payload: { description: "Test change" },
       type: "guidance",
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     await resolveWaveEvent({
       action: "apply",
       event_id: injected.event.id,
-      workspace,
+      workspace: workspacePath(workspace),
     });
 
     // log.jsonl should not exist — events go to SQLite
@@ -647,16 +647,16 @@ describe("concurrent report_result calls serialize without SQLITE_BUSY", () => {
       reportResult({
         flow,
         progress_line: "Agent A done",
-        state_id: "build",
+        state_id: sid("build"),
         status_keyword: "DONE",
-        workspace,
+        workspace: workspacePath(workspace),
       }),
       reportResult({
         flow,
         progress_line: "Agent B done",
-        state_id: "build",
+        state_id: sid("build"),
         status_keyword: "DONE",
-        workspace,
+        workspace: workspacePath(workspace),
       }),
     ]);
 
@@ -753,8 +753,8 @@ describe("no file-based orchestration state artifacts", () => {
     const flow = makeThreeStateFlow();
     seedWorkspace(workspace, flow);
 
-    await reportResult({ flow, state_id: "build", status_keyword: "DONE", workspace });
-    await reportResult({ flow, state_id: "review", status_keyword: "DONE", workspace });
+    await reportResult({ flow, state_id: sid("build"), status_keyword: "DONE", workspace: workspacePath(workspace) });
+    await reportResult({ flow, state_id: sid("review"), status_keyword: "DONE", workspace: workspacePath(workspace) });
 
     expect(existsSync(join(workspace, "board.json"))).toBe(false);
     expect(existsSync(join(workspace, "session.json"))).toBe(false);

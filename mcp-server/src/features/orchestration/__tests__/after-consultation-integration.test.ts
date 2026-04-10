@@ -50,7 +50,8 @@ vi.mock("../services/wave-briefing.ts", async (importOriginal) => {
   };
 });
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
@@ -59,10 +60,10 @@ import { resolveAfterConsultations } from "../tools/resolve-after-consultations.
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "after-int-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 afterEach(() => {
@@ -78,17 +79,17 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     base_commit: "abc1234",
     blocked: null,
     concerns: [],
-    current_state: "implement",
-    entry: "implement",
-    flow: "test-flow",
+    current_state: sid("implement"),
+    entry: sid("implement"),
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
     started: new Date().toISOString(),
     states: {
-      done: { entries: 0, status: "pending" },
-      implement: { entries: 0, status: "pending" },
-      review: { entries: 0, status: "pending" },
+      [sid("done")]: { entries: 0, status: "pending" },
+      [sid("implement")]: { entries: 0, status: "pending" },
+      [sid("review")]: { entries: 0, status: "pending" },
     },
     task: "test task",
     ...overrides,
@@ -118,14 +119,14 @@ function seedBoard(workspace: string, board: Board): void {
     tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, {
+    store.upsertState(sid(stateId), {
       ...stateEntry,
       entries: stateEntry.entries ?? 0,
       status: stateEntry.status,
     });
   }
   for (const [stateId, iterEntry] of Object.entries(board.iterations ?? {})) {
-    store.upsertIteration(stateId, {
+    store.upsertIteration(sid(stateId), {
       cannot_fix: iterEntry.cannot_fix ?? [],
       count: iterEntry.count,
       history: iterEntry.history ?? [],
@@ -151,23 +152,23 @@ function makeFlowWithAfterAndNextState(): ResolvedFlow {
       },
     },
     description: "Test flow",
-    entry: "implement",
-    name: "test-flow",
+    entry: sid("implement"),
+    name: flowName("test-flow"),
     spawn_instructions: {
-      implement: "Implement ${task}.",
-      "post-impl-check": "Run post-implementation check for ${task}.",
-      review: "Review ${task}.",
+      [sid("implement")]: "Implement ${task}.",
+      [sid("post-impl-check")]: "Run post-implementation check for ${task}.",
+      [sid("review")]: "Review ${task}.",
     },
     states: {
-      done: { type: "terminal" },
-      implement: {
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: {
         agent: "canon-implementor",
         consultations: {
           after: ["post-impl-check"],
         },
         type: "wave",
       },
-      review: {
+      [sid("review")]: {
         agent: "canon-reviewer",
         consultations: {
           before: ["post-impl-check"],
@@ -189,15 +190,15 @@ function makeFlowWithAfterNoSection(): ResolvedFlow {
       },
     },
     description: "Test flow",
-    entry: "implement",
-    name: "test-flow",
+    entry: sid("implement"),
+    name: flowName("test-flow"),
     spawn_instructions: {
-      implement: "Implement ${task}.",
-      "quick-check": "Quick check for ${task}.",
+      [sid("implement")]: "Implement ${task}.",
+      [sid("quick-check")]: "Quick check for ${task}.",
     },
     states: {
-      done: { type: "terminal" },
-      implement: {
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: {
         agent: "canon-implementor",
         consultations: {
           after: ["quick-check"],
@@ -221,7 +222,7 @@ describe("resolve_after_consultations: registration contract (after-01 gap)", ()
       flow,
       state_id: "implement",
       variables: { task: "my-feature" },
-      workspace: "/tmp/ws",
+      workspace: workspacePath("/tmp/ws"),
     });
 
     // index.ts does: return { content: [{ type: "text", text: JSON.stringify(result) }] }
@@ -241,7 +242,7 @@ describe("resolve_after_consultations: registration contract (after-01 gap)", ()
       flow,
       state_id: "implement",
       variables: { task: "integration-test" },
-      workspace: "/tmp/ws",
+      workspace: workspacePath("/tmp/ws"),
     });
 
     expect(result.consultation_prompts).toHaveLength(1);
@@ -263,7 +264,7 @@ describe("resolve_after_consultations: registration contract (after-01 gap)", ()
       flow,
       state_id: "nonexistent",
       variables: {},
-      workspace: "/tmp/ws",
+      workspace: workspacePath("/tmp/ws"),
     });
 
     expect(() => JSON.stringify(result)).not.toThrow();
@@ -283,8 +284,8 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
 
     const boardWithPendingAfter = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: {
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: {
           entries: 1,
           status: "in_progress",
           wave_results: {
@@ -302,7 +303,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
             },
           },
         },
-        review: { entries: 0, status: "pending" },
+        [sid("review")]: { entries: 0, status: "pending" },
       },
     });
 
@@ -331,8 +332,8 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
 
     const boardWithErrorAfter = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: {
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: {
           entries: 1,
           status: "in_progress",
           wave_results: {
@@ -350,7 +351,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
             },
           },
         },
-        review: { entries: 0, status: "pending" },
+        [sid("review")]: { entries: 0, status: "pending" },
       },
     });
 
@@ -378,8 +379,8 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
 
     const boardWithNullSummary = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: {
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: {
           entries: 1,
           status: "in_progress",
           wave_results: {
@@ -397,7 +398,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
             },
           },
         },
-        review: { entries: 0, status: "pending" },
+        [sid("review")]: { entries: 0, status: "pending" },
       },
     });
 
@@ -432,8 +433,8 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
 
     const boardWithAfterNoSection = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: {
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: {
           entries: 1,
           status: "in_progress",
           wave_results: {
@@ -486,7 +487,7 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
       flow,
       state_id: "implement",
       variables: { task: "my-feature" },
-      workspace: "/tmp/ws",
+      workspace: workspacePath("/tmp/ws"),
     });
 
     expect(result.warnings).toHaveLength(0);
@@ -531,8 +532,8 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
     // so the after-summary must live on the implement state's wave_results.
     const boardWithAfterSummary = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: {
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: {
           entries: 1,
           status: "in_progress",
           wave_results: {
@@ -550,7 +551,7 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
             },
           },
         },
-        review: { entries: 0, status: "pending" },
+        [sid("review")]: { entries: 0, status: "pending" },
       },
     });
 
@@ -585,7 +586,7 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
       flow,
       state_id: "implement",
       variables: { task: "cross-task-feature" },
-      workspace: "/tmp/ws",
+      workspace: workspacePath("/tmp/ws"),
     });
 
     // Orchestrator reads these fields to spawn the consultation agent
@@ -622,13 +623,13 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
         },
       },
       description: "Test",
-      entry: "review",
-      name: "test-flow",
+      entry: sid("review"),
+      name: flowName("test-flow"),
       spawn_instructions: {
-        "final-audit": "Audit ${component} after implementation.",
+        [sid("final-audit")]: "Audit ${component} after implementation.",
       },
       states: {
-        review: {
+        [sid("review")]: {
           agent: "canon-reviewer",
           consultations: { after: ["final-audit"] },
           type: "single",
@@ -640,7 +641,7 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
       flow,
       state_id: "review",
       variables: { component: "auth-module" },
-      workspace: "/tmp/ws",
+      workspace: workspacePath("/tmp/ws"),
     });
 
     expect(result.consultation_prompts).toHaveLength(1);
@@ -671,15 +672,15 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
         "check-c": { agent: "canon:agent-c", fragment: "check-c", role: "role-c" },
       },
       description: "Test",
-      entry: "review",
-      name: "test-flow",
+      entry: sid("review"),
+      name: flowName("test-flow"),
       spawn_instructions: {
-        "check-a": "Check A for ${task}.",
-        "check-b": "Check B for ${task}.",
-        "check-c": "Check C for ${task}.",
+        [sid("check-a")]: "Check A for ${task}.",
+        [sid("check-b")]: "Check B for ${task}.",
+        [sid("check-c")]: "Check C for ${task}.",
       },
       states: {
-        review: {
+        [sid("review")]: {
           agent: "canon-reviewer",
           consultations: { after: ["check-a", "check-b", "check-c"] },
           type: "single",
@@ -691,7 +692,7 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
       flow,
       state_id: "review",
       variables: { task: "order-test" },
-      workspace: "/tmp/ws",
+      workspace: workspacePath("/tmp/ws"),
     });
 
     expect(result.consultation_prompts).toHaveLength(3);
@@ -713,8 +714,8 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
 
     const boardWithAllBreakpoints = makeBoard({
       states: {
-        done: { entries: 0, status: "pending" },
-        implement: {
+        [sid("done")]: { entries: 0, status: "pending" },
+        [sid("implement")]: {
           entries: 2,
           status: "in_progress",
           wave_results: {
@@ -774,14 +775,14 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
         },
       },
       description: "Test",
-      entry: "implement",
-      name: "test-flow",
+      entry: sid("implement"),
+      name: flowName("test-flow"),
       spawn_instructions: {
-        implement: "Implement ${task}.",
+        [sid("implement")]: "Implement ${task}.",
       },
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           // Declare an empty between array — this makes stateDef.consultations truthy
           // so the collection block runs and collects prior wave summaries.

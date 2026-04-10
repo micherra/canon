@@ -13,6 +13,8 @@ import type { InitExecutionParams } from "@domains/workspaces/execution-store.ts
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
+import { stateId as sid, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 const BASE_EXECUTION: InitExecutionParams = {
   base_commit: "abc1234",
@@ -43,10 +45,10 @@ function postEvent(workspace: string, type: string, payload: Record<string, unkn
   return { id, payload, type };
 }
 
-let workspace: string;
+let workspace: WorkspacePath;
 
 beforeEach(async () => {
-  workspace = await mkdtemp(join(tmpdir(), "canon-resolve-wave-event-"));
+  workspace = workspacePath(await mkdtemp(join(tmpdir(), "canon-resolve-wave-event-")));
   const store = getExecutionStore(workspace);
   store.initExecution(BASE_EXECUTION);
 });
@@ -248,7 +250,7 @@ describe("validation", () => {
 describe("full lifecycle", () => {
   it("inject → apply → verify applied status in store", async () => {
     const store = getExecutionStore(workspace);
-    store.upsertState("implement", { entries: 1, status: "in_progress", wave: 1 });
+    store.upsertState(sid("implement"), { entries: 1, status: "in_progress", wave: 1 });
 
     const { injectWaveEvent } = await import("../tools/inject-wave-event.ts");
     const injected = await injectWaveEvent({
@@ -279,7 +281,7 @@ describe("full lifecycle", () => {
 
   it("inject → reject with reason → verify rejected status", async () => {
     const store = getExecutionStore(workspace);
-    store.upsertState("implement", { entries: 1, status: "in_progress", wave: 1 });
+    store.upsertState(sid("implement"), { entries: 1, status: "in_progress", wave: 1 });
 
     const { injectWaveEvent } = await import("../tools/inject-wave-event.ts");
     const injected = await injectWaveEvent({

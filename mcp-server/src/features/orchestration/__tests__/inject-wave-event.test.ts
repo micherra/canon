@@ -13,6 +13,8 @@ import type { InitExecutionParams } from "@domains/workspaces/execution-store.ts
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { injectWaveEvent } from "../tools/inject-wave-event.ts";
+import { stateId as sid, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 const BASE_EXECUTION: InitExecutionParams = {
   base_commit: "abc1234",
@@ -33,17 +35,17 @@ const BASE_EXECUTION: InitExecutionParams = {
 function setupStoreWithWave(workspace: string, stateId = "implement"): void {
   const store = getExecutionStore(workspace);
   store.initExecution(BASE_EXECUTION);
-  store.upsertState(stateId, {
+  store.upsertState(sid(stateId), {
     entries: 1,
     status: "in_progress",
     wave: 1,
   });
 }
 
-let workspace: string;
+let workspace: WorkspacePath;
 
 beforeEach(async () => {
-  workspace = await mkdtemp(join(tmpdir(), "canon-inject-wave-event-"));
+  workspace = workspacePath(await mkdtemp(join(tmpdir(), "canon-inject-wave-event-")));
   setupStoreWithWave(workspace);
 });
 
@@ -56,7 +58,7 @@ afterEach(async () => {
 
 describe("active-wave guard", () => {
   it("throws when no execution exists in store", async () => {
-    const emptyWorkspace = await mkdtemp(join(tmpdir(), "canon-empty-ws-"));
+    const emptyWorkspace = workspacePath(await mkdtemp(join(tmpdir(), "canon-empty-ws-")));
     try {
       await expect(
         injectWaveEvent({ payload: {}, type: "guidance", workspace: emptyWorkspace }),
@@ -67,12 +69,12 @@ describe("active-wave guard", () => {
   });
 
   it("throws when states exist but none are in_progress", async () => {
-    const ws2 = await mkdtemp(join(tmpdir(), "canon-no-wave-ws-"));
+    const ws2 = workspacePath(await mkdtemp(join(tmpdir(), "canon-no-wave-ws-")));
     try {
       const store = getExecutionStore(ws2);
       store.initExecution(BASE_EXECUTION);
-      store.upsertState("research", { entries: 1, status: "done", wave: 1 });
-      store.upsertState("implement", { entries: 0, status: "pending", wave: 2 });
+      store.upsertState(sid("research"), { entries: 1, status: "done", wave: 1 });
+      store.upsertState(sid("implement"), { entries: 0, status: "pending", wave: 2 });
 
       await expect(
         injectWaveEvent({ payload: {}, type: "guidance", workspace: ws2 }),
@@ -83,11 +85,11 @@ describe("active-wave guard", () => {
   });
 
   it("throws when a state is in_progress but has no wave field", async () => {
-    const ws3 = await mkdtemp(join(tmpdir(), "canon-no-wave-field-"));
+    const ws3 = workspacePath(await mkdtemp(join(tmpdir(), "canon-no-wave-field-")));
     try {
       const store = getExecutionStore(ws3);
       store.initExecution(BASE_EXECUTION);
-      store.upsertState("implement", { entries: 1, status: "in_progress" }); // no wave
+      store.upsertState(sid("implement"), { entries: 1, status: "in_progress" }); // no wave
 
       await expect(
         injectWaveEvent({ payload: { task_id: "task-01" }, type: "skip_task", workspace: ws3 }),
@@ -105,13 +107,13 @@ describe("active-wave guard", () => {
   });
 
   it("succeeds when multiple states exist but only one satisfies the guard", async () => {
-    const ws4 = await mkdtemp(join(tmpdir(), "canon-multi-state-"));
+    const ws4 = workspacePath(await mkdtemp(join(tmpdir(), "canon-multi-state-")));
     try {
       const store = getExecutionStore(ws4);
       store.initExecution(BASE_EXECUTION);
-      store.upsertState("research", { entries: 1, status: "done" });
-      store.upsertState("implement", { entries: 1, status: "in_progress", wave: 2 });
-      store.upsertState("review", { entries: 0, status: "pending" });
+      store.upsertState(sid("research"), { entries: 1, status: "done" });
+      store.upsertState(sid("implement"), { entries: 1, status: "in_progress", wave: 2 });
+      store.upsertState(sid("review"), { entries: 0, status: "pending" });
 
       await expect(
         injectWaveEvent({ payload: { context: "ctx" }, type: "inject_context", workspace: ws4 }),

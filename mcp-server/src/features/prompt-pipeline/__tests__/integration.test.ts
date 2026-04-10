@@ -105,7 +105,7 @@ import {
 } from "@features/orchestration/services/wave-briefing.ts";
 import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import type { SpawnPromptInput } from "../model/types.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -138,20 +138,20 @@ function seedWorkspace(task = "test task"): string {
     task,
     tier: "medium",
   });
-  store.upsertState("implement", { entries: 0, status: "pending" });
-  store.upsertState("done", { entries: 0, status: "pending" });
+  store.upsertState(sid("implement"), { entries: 0, status: "pending" });
+  store.upsertState(sid("done"), { entries: 0, status: "pending" });
   return workspace;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
-    spawn_instructions: { implement: "Implement the task." },
+    spawn_instructions: { [sid("implement")]: "Implement the task." },
     states: {
-      done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: { agent: "canon-implementor", type: "single" },
     },
     ...overrides,
   };
@@ -162,7 +162,7 @@ function makeInput(workspace: string, overrides: Partial<SpawnPromptInput> = {})
     flow: makeFlow(),
     state_id: "implement",
     variables: { CANON_PLUGIN_ROOT: "" },
-    workspace,
+    workspace: workspacePath(workspace),
     ...overrides,
   };
 }
@@ -193,7 +193,7 @@ describe("integration — single state produces correct prompt structure", () =>
 
   it("prompt contains the raw instruction text", async () => {
     const workspace = seedWorkspace();
-    const flow = makeFlow({ spawn_instructions: { implement: "Build the feature now." } });
+    const flow = makeFlow({ spawn_instructions: { [sid("implement")]: "Build the feature now." } });
     const input = makeInput(workspace, { flow });
 
     const result = await getSpawnPrompt(input);
@@ -216,7 +216,7 @@ describe("integration — single state produces correct prompt structure", () =>
 
   it("metrics footer appears after the instruction content (not before)", async () => {
     const workspace = seedWorkspace();
-    const flow = makeFlow({ spawn_instructions: { implement: "Implement the feature." } });
+    const flow = makeFlow({ spawn_instructions: { [sid("implement")]: "Implement the feature." } });
     const input = makeInput(workspace, { flow });
 
     const result = await getSpawnPrompt(input);
@@ -239,10 +239,10 @@ describe("integration — wave state produces N prompts with items substituted",
   it("produces one prompt per item for wave state", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -264,10 +264,10 @@ describe("integration — wave state produces N prompts with items substituted",
   it("wave prompts do not have isolation field (worktree_path is the sole signal)", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -285,10 +285,10 @@ describe("integration — wave state produces N prompts with items substituted",
   it("wave state with no items produces zero prompts (graceful)", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -319,7 +319,7 @@ describe("integration — progress variable injection", () => {
 
     const flow = makeFlow({
       progress: "progress.md",
-      spawn_instructions: { implement: "Do the work.\n\n${progress}" },
+      spawn_instructions: { [sid("implement")]: "Do the work.\n\n${progress}" },
     });
     const input = makeInput(workspace, { flow });
 
@@ -341,7 +341,7 @@ describe("integration — progress variable injection", () => {
 
     const flow = makeFlow({
       progress: "progress.md",
-      spawn_instructions: { implement: "${progress}" },
+      spawn_instructions: { [sid("implement")]: "${progress}" },
     });
     const input = makeInput(workspace, { flow });
 
@@ -365,7 +365,7 @@ describe("integration — progress variable injection", () => {
 
     const flow = makeFlow({
       progress: "progress.md",
-      spawn_instructions: { implement: "Work: ${progress}" },
+      spawn_instructions: { [sid("implement")]: "Work: ${progress}" },
     });
     const input = makeInput(workspace, { flow });
 
@@ -394,10 +394,10 @@ describe("integration — inject_context content is escaped (not expanded as var
     });
 
     const flow = makeFlow({
-      spawn_instructions: { implement: "Context: ${context_data}" },
+      spawn_instructions: { [sid("implement")]: "Context: ${context_data}" },
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [{ from: "state", name: flowName("context_data") }] as unknown as never[],
           type: "single",
@@ -409,8 +409,8 @@ describe("integration — inject_context content is escaped (not expanded as var
         base_commit: "abc",
         blocked: null,
         concerns: [],
-        current_state: "implement",
-        entry: "implement",
+        current_state: sid("implement"),
+        entry: sid("implement"),
         flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
@@ -442,10 +442,10 @@ describe("integration — inject_context content is escaped (not expanded as var
     });
 
     const flow = makeFlow({
-      spawn_instructions: { implement: "Context: ${context_data}" },
+      spawn_instructions: { [sid("implement")]: "Context: ${context_data}" },
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           inject_context: [{ from: "state", name: flowName("context_data") }] as unknown as never[],
           type: "single",
@@ -457,8 +457,8 @@ describe("integration — inject_context content is escaped (not expanded as var
         base_commit: "abc",
         blocked: null,
         concerns: [],
-        current_state: "implement",
-        entry: "implement",
+        current_state: sid("implement"),
+        entry: sid("implement"),
         flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
@@ -482,10 +482,10 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
   it("raw ${var} in consultation summary appears escaped in final prompt", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -510,10 +510,10 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
   it("absent consultation_outputs does not error and produces clean prompt", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -536,10 +536,10 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
 
     // Path 1: without consultation_outputs
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const inputWithout = makeInput(workspace, {
@@ -577,7 +577,7 @@ describe("integration — cache prefix prepended to all prompts", () => {
     store.setCachePrefix(prefix);
 
     const input = makeInput(workspace, {
-      flow: makeFlow({ spawn_instructions: { implement: "Do the work." } }),
+      flow: makeFlow({ spawn_instructions: { [sid("implement")]: "Do the work." } }),
     });
 
     const result = await getSpawnPrompt(input);
@@ -596,10 +596,10 @@ describe("integration — cache prefix prepended to all prompts", () => {
     store.setCachePrefix(prefix);
 
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -621,7 +621,7 @@ describe("integration — cache prefix prepended to all prompts", () => {
     // No setCachePrefix called — defaults to empty string
 
     const input = makeInput(workspace, {
-      flow: makeFlow({ spawn_instructions: { implement: "Do the work." } }),
+      flow: makeFlow({ spawn_instructions: { [sid("implement")]: "Do the work." } }),
     });
 
     const result = await getSpawnPrompt(input);
@@ -639,7 +639,7 @@ describe("integration — unresolved variable produces ERROR warning", () => {
   it("unknown variable in instruction produces ERROR: warning", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { implement: "Use the ${completely_unknown_variable} here." },
+      spawn_instructions: { [sid("implement")]: "Use the ${completely_unknown_variable} here." },
     });
     const input = makeInput(workspace, { flow });
 
@@ -655,7 +655,7 @@ describe("integration — unresolved variable produces ERROR warning", () => {
   it("prompts are still returned even when there are ERROR warnings", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { implement: "Use ${unknown_thing} here." },
+      spawn_instructions: { [sid("implement")]: "Use ${unknown_thing} here." },
     });
     const input = makeInput(workspace, { flow });
 
@@ -668,7 +668,7 @@ describe("integration — unresolved variable produces ERROR warning", () => {
   it("known runtime variables (${task}, ${WORKSPACE}) do not produce ERROR warnings", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { implement: "Task: ${task}. Workspace: ${WORKSPACE}." },
+      spawn_instructions: { [sid("implement")]: "Task: ${task}. Workspace: ${WORKSPACE}." },
     });
     const input = makeInput(workspace, { flow });
 
@@ -685,10 +685,10 @@ describe("integration — wave briefing injection", () => {
   it("wave briefing appears in each wave prompt when consultation_outputs provided", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -715,10 +715,10 @@ describe("integration — wave briefing injection", () => {
     vi.mocked(readWaveGuidance).mockResolvedValueOnce("Use the strangler fig pattern.");
 
     const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
+      spawn_instructions: { [sid("build")]: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -743,7 +743,7 @@ describe("integration — stage ordering preserved end-to-end", () => {
     const store = getExecutionStore(workspace);
     store.setCachePrefix("## STABLE PREFIX ##\n\n");
 
-    const flow = makeFlow({ spawn_instructions: { implement: "## INSTRUCTION CONTENT ##" } });
+    const flow = makeFlow({ spawn_instructions: { [sid("implement")]: "## INSTRUCTION CONTENT ##" } });
     const input = makeInput(workspace, { flow });
 
     const result = await getSpawnPrompt(input);
@@ -764,10 +764,10 @@ describe("integration — stage ordering preserved end-to-end", () => {
     store.setCachePrefix("## CACHE_PREFIX_MARKER ##\n\n");
 
     const flow = makeFlow({
-      spawn_instructions: { build: "## INSTRUCTION_MARKER ##\n\n${item}" },
+      spawn_instructions: { [sid("build")]: "## INSTRUCTION_MARKER ##\n\n${item}" },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
-        done: { type: "terminal" },
+        [sid("build")]: { agent: "canon-implementor", type: "wave" },
+        [sid("done")]: { type: "terminal" },
       },
     });
     const input = makeInput(workspace, {
@@ -844,10 +844,10 @@ describe("integration — cluster fanout for single state", () => {
     ] as never);
 
     const flow = makeFlow({
-      spawn_instructions: { implement: "Implement files: ${item.files}" },
+      spawn_instructions: { [sid("implement")]: "Implement files: ${item.files}" },
       states: {
-        done: { type: "terminal" },
-        implement: {
+        [sid("done")]: { type: "terminal" },
+        [sid("implement")]: {
           agent: "canon-implementor",
           large_diff_threshold: 5,
           type: "single",
@@ -859,8 +859,8 @@ describe("integration — cluster fanout for single state", () => {
         base_commit: "abc",
         blocked: null,
         concerns: [],
-        current_state: "implement",
-        entry: "implement",
+        current_state: sid("implement"),
+        entry: sid("implement"),
         flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
@@ -902,7 +902,7 @@ describe("integration — resumed workspace prefix availability (risk #8)", () =
 
     // Now run pipeline using the resumed workspace — prefix should appear in prompt
     const input = makeInput(workspace, {
-      flow: makeFlow({ spawn_instructions: { implement: "Do the work." } }),
+      flow: makeFlow({ spawn_instructions: { [sid("implement")]: "Do the work." } }),
     });
     const result = await getSpawnPrompt(input);
 

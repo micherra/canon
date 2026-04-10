@@ -2,22 +2,23 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canEnterState } from "@domains/board/board.ts";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { filterCannotFix } from "../engine/convergence.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "start",
-    entry: "start",
+    current_state: sid("start"),
+    entry: sid("start"),
     flow: flowName("test"),
     iterations,
     last_updated: new Date().toISOString(),
@@ -32,10 +33,10 @@ function makeBoard(iterations: Board["iterations"]): Board {
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "convergence-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 afterEach(() => {
@@ -50,12 +51,12 @@ afterEach(() => {
 function makeFlowWithCannotFix(): ResolvedFlow {
   return {
     description: "A test flow",
-    entry: "review",
+    entry: sid("review"),
     name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
-      hitl: { type: "terminal" },
-      review: {
+      [sid("hitl")]: { type: "terminal" },
+      [sid("review")]: {
         max_iterations: 3,
         transitions: {
           cannot_fix: "hitl",
@@ -63,7 +64,7 @@ function makeFlowWithCannotFix(): ResolvedFlow {
         },
         type: "single",
       },
-      ship: { type: "terminal" },
+      [sid("ship")]: { type: "terminal" },
     },
   };
 }
@@ -91,9 +92,9 @@ function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
     tier: "medium",
   });
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { entries: 0, status: "pending" });
+    store.upsertState(sid(stateId), { entries: 0, status: "pending" });
     if (stateDef.max_iterations !== undefined) {
-      store.upsertIteration(stateId, {
+      store.upsertIteration(sid(stateId), {
         cannot_fix: [],
         count: 0,
         history: [],
@@ -106,23 +107,23 @@ function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
 describe("canEnterState", () => {
   it("returns allowed when no iteration tracking exists for the state", () => {
     const board = makeBoard({});
-    const result = canEnterState(board, "review");
+    const result = canEnterState(board, sid("review"));
     expect(result).toEqual({ allowed: true });
   });
 
   it("returns allowed when count < max", () => {
     const board = makeBoard({
-      review: { count: 1, history: [], max: 3 },
+      [sid("review")]: { count: 1, history: [], max: 3 },
     });
-    const result = canEnterState(board, "review");
+    const result = canEnterState(board, sid("review"));
     expect(result).toEqual({ allowed: true });
   });
 
   it("returns not allowed when count === max", () => {
     const board = makeBoard({
-      review: { count: 3, history: [], max: 3 },
+      [sid("review")]: { count: 3, history: [], max: 3 },
     });
-    const result = canEnterState(board, "review");
+    const result = canEnterState(board, sid("review"));
     expect(result).toEqual({
       allowed: false,
       reason: "Max iterations (3) reached for state 'review'",
@@ -131,9 +132,9 @@ describe("canEnterState", () => {
 
   it("returns not allowed when count > max", () => {
     const board = makeBoard({
-      review: { count: 5, history: [], max: 3 },
+      [sid("review")]: { count: 5, history: [], max: 3 },
     });
-    const result = canEnterState(board, "review");
+    const result = canEnterState(board, sid("review"));
     expect(result).toEqual({
       allowed: false,
       reason: "Max iterations (3) reached for state 'review'",
@@ -198,13 +199,13 @@ describe("reportResult — cannot_fix accumulation", () => {
       file_paths: ["src/features/orchestration/tools/report-result.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations.review;
+    const iteration = result.board.iterations[sid("review")];
     expect(iteration).toBeDefined();
     expect(iteration.cannot_fix).toEqual([
       {
@@ -223,13 +224,13 @@ describe("reportResult — cannot_fix accumulation", () => {
       file_paths: ["a.ts", "b.ts"],
       flow,
       principle_ids: ["p1", "p2"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations.review;
+    const iteration = result.board.iterations[sid("review")];
     expect(iteration.cannot_fix).toHaveLength(4);
     expect(iteration.cannot_fix).toEqual(
       expect.arrayContaining([
@@ -251,7 +252,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
@@ -261,13 +262,13 @@ describe("reportResult — cannot_fix accumulation", () => {
       file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations.review;
+    const iteration = result.board.iterations[sid("review")];
     expect(iteration.cannot_fix).toHaveLength(1);
     expect(iteration.cannot_fix).toEqual([{ file_path: "a.ts", principle_id: "p1" }]);
   });
@@ -277,17 +278,17 @@ describe("reportResult — cannot_fix accumulation", () => {
     // Flow with no max_iterations on the state being reported
     const flow: ResolvedFlow = {
       description: "A test flow",
-      entry: "build",
+      entry: sid("build"),
       name: flowName("test-flow"),
       spawn_instructions: {},
       states: {
-        build: {
+        [sid("build")]: {
           transitions: { cannot_fix: "hitl", done: "ship" },
           type: "single",
           // no max_iterations — no iteration record created
         },
-        hitl: { type: "terminal" },
-        ship: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("ship")]: { type: "terminal" },
       },
     };
     seedWorkspace(workspace, flow);
@@ -296,14 +297,14 @@ describe("reportResult — cannot_fix accumulation", () => {
       file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      state_id: "build",
+      state_id: sid("build"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
     assertOk(result);
 
     // No iteration record — nothing to accumulate
-    expect(result.board.iterations.build).toBeUndefined();
+    expect(result.board.iterations[sid("build")]).toBeUndefined();
   });
 
   it("skips accumulation when principle_ids is missing", async () => {
@@ -315,13 +316,13 @@ describe("reportResult — cannot_fix accumulation", () => {
       // no principle_ids
       file_paths: ["a.ts"],
       flow,
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations.review;
+    const iteration = result.board.iterations[sid("review")];
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
   });
 
@@ -333,14 +334,14 @@ describe("reportResult — cannot_fix accumulation", () => {
     const result = await reportResult({
       flow,
       principle_ids: ["p1"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
       // no file_paths
     });
     assertOk(result);
 
-    const iteration = result.board.iterations.review;
+    const iteration = result.board.iterations[sid("review")];
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
   });
 
@@ -353,13 +354,13 @@ describe("reportResult — cannot_fix accumulation", () => {
       file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE",
       workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations.review;
+    const iteration = result.board.iterations[sid("review")];
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
   });
 });
@@ -369,8 +370,8 @@ describe("reportResult — cannot_fix accumulation", () => {
 function readConvergence(workspace: string, stateId: string) {
   const board = getExecutionStore(workspace).getBoard();
   if (board === null) throw new Error(`No board found for workspace: ${workspace}`);
-  const { allowed, reason } = canEnterState(board, stateId);
-  const iteration = board.iterations[stateId];
+  const { allowed, reason } = canEnterState(board, sid(stateId));
+  const iteration = board.iterations[sid(stateId)];
   return {
     can_enter: allowed,
     cannot_fix_items: iteration?.cannot_fix ?? [],
@@ -393,7 +394,7 @@ describe("cannot_fix round-trip: report-result → convergence", () => {
       file_paths: ["src/features/orchestration/engine/convergence.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
@@ -418,7 +419,7 @@ describe("cannot_fix round-trip: report-result → convergence", () => {
       file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
@@ -428,7 +429,7 @@ describe("cannot_fix round-trip: report-result → convergence", () => {
       file_paths: ["b.ts"],
       flow,
       principle_ids: ["p2"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });
@@ -453,7 +454,7 @@ describe("cannot_fix round-trip: report-result → convergence", () => {
       file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1", "p2"],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "CANNOT_FIX",
       workspace,
     });

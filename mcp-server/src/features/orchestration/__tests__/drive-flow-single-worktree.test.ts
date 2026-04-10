@@ -53,14 +53,15 @@ import {
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "drive-flow-single-wt-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(workspace: string): ExecutionStore {
@@ -88,18 +89,18 @@ function makeStore(workspace: string): ExecutionStore {
 function makeImplementorFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("fast-path"),
     spawn_instructions: {
-      implement: "Implement the fix",
+      [sid("implement")]: "Implement the fix",
     },
     states: {
-      implement: {
+      [sid("implement")]: {
         agent: "canon:canon-implementor",
         transitions: { done: "terminal" },
         type: "single",
       },
-      terminal: {
+      [sid("terminal")]: {
         type: "terminal",
       },
     },
@@ -111,18 +112,18 @@ function makeImplementorFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlo
 function makeResearcherFlow(): ResolvedFlow {
   return {
     description: "test",
-    entry: "research",
+    entry: sid("research"),
     name: flowName("explore"),
     spawn_instructions: {
-      research: "Research the codebase",
+      [sid("research")]: "Research the codebase",
     },
     states: {
-      research: {
+      [sid("research")]: {
         agent: "canon:canon-researcher",
         transitions: { done: "terminal" },
         type: "single",
       },
-      terminal: {
+      [sid("terminal")]: {
         type: "terminal",
       },
     },
@@ -226,7 +227,7 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
   it("fixer agent gets worktree_path and isolation:none", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "fix", entry: "fix" });
+    store.updateExecution({ current_state: "fix" });
 
     vi.mocked(getProjectDir).mockReturnValue("/fake/project");
     vi.mocked(createWaveWorktrees).mockResolvedValue([
@@ -240,16 +241,16 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "fix",
+      entry: sid("fix"),
       name: flowName("fast-path"),
-      spawn_instructions: { fix: "Fix the issue" },
+      spawn_instructions: { [sid("fix")]: "Fix the issue" },
       states: {
-        fix: {
+        [sid("fix")]: {
           agent: "canon:canon-fixer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -264,7 +265,7 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
   it("tester agent gets worktree_path and isolation:none", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "test", entry: "test" });
+    store.updateExecution({ current_state: "test" });
 
     vi.mocked(getProjectDir).mockReturnValue("/fake/project");
     vi.mocked(createWaveWorktrees).mockResolvedValue([
@@ -278,16 +279,16 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "test",
+      entry: sid("test"),
       name: flowName("fast-path"),
-      spawn_instructions: { test: "Test the fix" },
+      spawn_instructions: { [sid("test")]: "Test the fix" },
       states: {
-        test: {
+        [sid("test")]: {
           agent: "canon:canon-tester",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -302,7 +303,7 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
   it("scribe agent gets worktree_path and isolation:none", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "sync", entry: "sync" });
+    store.updateExecution({ current_state: "sync" });
 
     vi.mocked(getProjectDir).mockReturnValue("/fake/project");
     vi.mocked(createWaveWorktrees).mockResolvedValue([
@@ -316,16 +317,16 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "sync",
+      entry: sid("sync"),
       name: flowName("fast-path"),
-      spawn_instructions: { sync: "Sync context" },
+      spawn_instructions: { [sid("sync")]: "Sync context" },
       states: {
-        sync: {
+        [sid("sync")]: {
           agent: "canon:canon-scribe",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -346,7 +347,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
   it("researcher does not get worktree_path; isolation remains worktree", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "research", entry: "research" });
+    store.updateExecution({ current_state: "research" });
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult("canon:canon-researcher"),
@@ -368,7 +369,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
   it("reviewer does not get worktree_path", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "review", entry: "review" });
+    store.updateExecution({ current_state: "review" });
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult("canon:canon-reviewer"),
@@ -376,16 +377,16 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "review",
+      entry: sid("review"),
       name: flowName("review-only"),
-      spawn_instructions: { review: "Review the code" },
+      spawn_instructions: { [sid("review")]: "Review the code" },
       states: {
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -401,7 +402,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
   it("architect does not get worktree_path", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "design", entry: "design" });
+    store.updateExecution({ current_state: "design" });
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult("canon:canon-architect"),
@@ -409,16 +410,16 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "design",
+      entry: sid("design"),
       name: flowName("feature"),
-      spawn_instructions: { design: "Design the feature" },
+      spawn_instructions: { [sid("design")]: "Design the feature" },
       states: {
-        design: {
+        [sid("design")]: {
           agent: "canon:canon-architect",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -434,7 +435,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
   it("security agent does not get worktree_path", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "security", entry: "security" });
+    store.updateExecution({ current_state: "security" });
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult("canon:canon-security"),
@@ -442,16 +443,16 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "security",
+      entry: sid("security"),
       name: flowName("security-audit"),
-      spawn_instructions: { security: "Audit security" },
+      spawn_instructions: { [sid("security")]: "Audit security" },
       states: {
-        security: {
+        [sid("security")]: {
           agent: "canon:canon-security",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 
@@ -489,16 +490,16 @@ describe("driveFlow — write agent detection handles canon: prefix", () => {
 
     const flow: ResolvedFlow = {
       description: "test",
-      entry: "implement",
+      entry: sid("implement"),
       name: flowName("fast-path"),
-      spawn_instructions: { implement: "Implement the fix" },
+      spawn_instructions: { [sid("implement")]: "Implement the fix" },
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon-implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: { type: "terminal" },
+        [sid("terminal")]: { type: "terminal" },
       },
     };
 

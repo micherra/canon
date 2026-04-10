@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
@@ -29,7 +30,7 @@ describe("writeImplementationSummary — valid input", () => {
       ],
       slug: "my-epic",
       task_id: "adr010-03",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -57,7 +58,7 @@ describe("writeImplementationSummary — valid input", () => {
       ],
       slug: "test-epic",
       task_id: "task-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -79,7 +80,7 @@ describe("writeImplementationSummary — valid input", () => {
       files_changed: [{ action: "added", path: "src/tools/foo.ts" }],
       slug: "my-epic",
       task_id: "adr010-03",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -99,7 +100,7 @@ describe("writeImplementationSummary — valid input", () => {
       files_changed: [],
       slug: "my-epic",
       task_id: "task-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -122,7 +123,7 @@ describe("writeImplementationSummary — valid input", () => {
       files_changed: [],
       slug: "my-epic",
       task_id: "task-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -144,7 +145,7 @@ describe("writeImplementationSummary — valid input", () => {
       files_changed: [],
       slug: "my-epic",
       task_id: "task-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -169,7 +170,7 @@ describe("writeImplementationSummary — valid input", () => {
         "src/__tests__/write-implementation-summary.test.ts",
         "src/__tests__/other.test.ts",
       ],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -197,7 +198,7 @@ describe("writeImplementationSummary — valid input", () => {
       slug: "full-epic",
       task_id: "full-task-01",
       tests_added: ["src/__tests__/a.test.ts"],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -219,7 +220,7 @@ describe("writeImplementationSummary — valid input", () => {
       files_changed: [],
       slug: "new-slug",
       task_id: "t-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -235,7 +236,7 @@ describe("writeImplementationSummary — validation errors", () => {
       files_changed: [],
       slug: "invalid slug",
       task_id: "task-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -252,7 +253,7 @@ describe("writeImplementationSummary — validation errors", () => {
       files_changed: [],
       slug: "my/epic!",
       task_id: "task-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -268,7 +269,7 @@ describe("writeImplementationSummary — validation errors", () => {
       files_changed: [],
       slug: "my-epic",
       task_id: "task 01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -285,7 +286,7 @@ describe("writeImplementationSummary — validation errors", () => {
       files_changed: [],
       slug: "my-epic",
       task_id: "task@01!",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -301,7 +302,7 @@ describe("writeImplementationSummary — validation errors", () => {
       files_changed: [],
       slug: "../evil",
       task_id: "task-01",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);

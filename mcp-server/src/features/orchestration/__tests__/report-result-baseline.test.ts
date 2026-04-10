@@ -38,24 +38,25 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeTmpWorkspace(): string {
-  return mkdtempSync(join(tmpdir(), "baseline-report-result-"));
+function makeTmpWorkspace(): WorkspacePath {
+  return workspacePath(mkdtempSync(join(tmpdir(), "baseline-report-result-")));
 }
 
 function makeMinimalFlow(): ResolvedFlow {
   return {
     description: "test flow",
-    entry: "impl",
+    entry: sid("impl"),
     name: flowName("test-flow"),
-    spawn_instructions: { impl: "Do the thing" },
+    spawn_instructions: { [sid("impl")]: "Do the thing" },
     states: {
-      impl: {
+      [sid("impl")]: {
         agent: "canon:canon-implementor",
         transitions: {
           done: "terminal",
@@ -64,7 +65,7 @@ function makeMinimalFlow(): ResolvedFlow {
         },
         type: "single",
       },
-      terminal: { type: "terminal" },
+      [sid("terminal")]: { type: "terminal" },
     },
   } as ResolvedFlow;
 }
@@ -84,7 +85,7 @@ function makeMinimalBaselineEvidence(overrides?: {
 
 let tmpDirs: string[] = [];
 
-function setupWorkspace(): string {
+function setupWorkspace(): WorkspacePath {
   const workspace = makeTmpWorkspace();
   tmpDirs.push(workspace);
 
@@ -105,8 +106,8 @@ function setupWorkspace(): string {
     task: "test task",
     tier: "medium",
   });
-  store.upsertState("impl", { entries: 1, status: "in_progress" });
-  store.upsertIteration("impl", { cannot_fix: [], count: 1, history: [], max: 3 });
+  store.upsertState(sid("impl"), { entries: 1, status: "in_progress" });
+  store.upsertIteration(sid("impl"), { cannot_fix: [], count: 1, history: [], max: 3 });
 
   return workspace;
 }
@@ -129,7 +130,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const workspace = setupWorkspace();
     const result = await reportResult({
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "DONE",
       test_results: { failed: 5, passed: 10, skipped: 0 },
       workspace,
@@ -149,7 +150,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const workspace = setupWorkspace();
     const result = await reportResult({
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "DONE_WITH_CONCERNS",
       test_results: { failed: 5, passed: 10, skipped: 0 },
       workspace,
@@ -171,7 +172,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const result = await reportResult({
       baseline_evidence: evidence,
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "DONE",
       test_results: { failed: 5, passed: 10, skipped: 0 },
       workspace,
@@ -195,7 +196,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const result = await reportResult({
       baseline_evidence: evidence,
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "DONE",
       test_results: { failed: 5, passed: 10, skipped: 0 },
       workspace,
@@ -214,7 +215,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const workspace = setupWorkspace();
     const result = await reportResult({
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "DONE",
       test_results: { failed: 0, passed: 20, skipped: 0 },
       workspace,
@@ -231,7 +232,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const workspace = setupWorkspace();
     const result = await reportResult({
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "DONE",
       workspace,
     });
@@ -247,7 +248,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const workspace = setupWorkspace();
     const result = await reportResult({
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "IMPLEMENTATION_ISSUE",
       test_results: { failed: 5, passed: 3, skipped: 0 },
       workspace,
@@ -265,7 +266,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const workspace = setupWorkspace();
     const result = await reportResult({
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "ALL_PASSING",
       test_results: { failed: 1, passed: 15, skipped: 0 },
       workspace,
@@ -284,7 +285,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const workspace = setupWorkspace();
     const result = await reportResult({
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "FIXED",
       test_results: { failed: 2, passed: 8, skipped: 0 },
       workspace,
@@ -307,7 +308,7 @@ describe("report_result: baseline evidence consistency check", () => {
       baseline_evidence: evidence,
       concern_text: "Some pre-existing tests are still failing",
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "DONE_WITH_CONCERNS",
       test_results: { failed: 3, passed: 7, skipped: 0 },
       workspace,
@@ -326,7 +327,7 @@ describe("report_result: baseline evidence consistency check", () => {
     const workspace = setupWorkspace();
     const result = await reportResult({
       flow: makeMinimalFlow(),
-      state_id: "impl",
+      state_id: sid("impl"),
       status_keyword: "PARTIAL_FIX",
       test_results: { failed: 1, passed: 5, skipped: 0 },
       workspace,

@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { executeEffects } from "../engine/effects.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -180,7 +181,7 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
       artifacts: [],
       driftStore: mockStore,
       projectDir: "/nonexistent",
-      workspace: "/nonexistent",
+      workspace: workspacePath("/nonexistent"),
     });
 
     // No effects declared → empty array returned; injected store never called
@@ -223,7 +224,7 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
         artifacts: [`${tmpDir}/REVIEW.meta.json`],
         driftStore: mockStore,
         projectDir: tmpDir,
-        workspace: tmpDir,
+        workspace: workspacePath(tmpDir),
       });
 
       // The injected mockStore.appendReview must have been called — not the real DriftStore
@@ -260,7 +261,7 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
       artifacts: [],
       driftStore: mockStore,
       projectDir: "/nonexistent",
-      workspace: "/nonexistent",
+      workspace: workspacePath("/nonexistent"),
     });
 
     expect(result).toEqual([]);

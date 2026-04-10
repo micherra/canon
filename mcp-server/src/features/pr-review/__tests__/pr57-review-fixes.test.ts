@@ -13,6 +13,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { FragmentDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { resolveFragments } from "@domains/flows/flow-parser.ts";
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
@@ -23,7 +24,6 @@ import { KgVectorStore } from "@graph/kg-vector-store.ts";
 import { MockEmbeddingService, randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 // Fix 1: write-plan-index.ts — path traversal validation on slug
 
@@ -42,7 +42,7 @@ describe("writePlanIndex — slug path traversal validation", () => {
     const result = await writePlanIndex({
       slug: "../../etc",
       tasks: [{ task_id: "task-01", wave: 1 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -56,7 +56,7 @@ describe("writePlanIndex — slug path traversal validation", () => {
     const result = await writePlanIndex({
       slug: "foo/bar",
       tasks: [{ task_id: "task-01", wave: 1 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -69,7 +69,7 @@ describe("writePlanIndex — slug path traversal validation", () => {
     const result = await writePlanIndex({
       slug: "..dangerous",
       tasks: [{ task_id: "task-01", wave: 1 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -82,7 +82,7 @@ describe("writePlanIndex — slug path traversal validation", () => {
     const result = await writePlanIndex({
       slug: "my-epic-plan",
       tasks: [{ task_id: "task-01", wave: 1 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(true);
@@ -92,7 +92,7 @@ describe("writePlanIndex — slug path traversal validation", () => {
     const result = await writePlanIndex({
       slug: "",
       tasks: [{ task_id: "task-01", wave: 1 }],
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     // Empty slug is rejected — SLUG_PATTERN requires at least 1 character
@@ -230,7 +230,7 @@ describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
       line_end: 5,
       line_start: 1,
       metadata: null,
-      name: flowName("myFn"),
+      name: "myFn",
       qualified_name: "src/A.ts::myFn",
       signature: null,
     });
@@ -259,7 +259,7 @@ describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
       line_end: 0,
       line_start: 0,
       metadata: null,
-      name: flowName("B.ts"),
+      name: "B.ts",
       qualified_name: "src/B.ts",
       signature: null,
     });
@@ -325,7 +325,7 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   }
 
   test("entity threshold 0 returns no results (all distances > 0)", async () => {
-    seedEntityWithVector({ name: flowName("fn"), qualified_name: "src/A.ts::fn" }, 0);
+    seedEntityWithVector({ name: "fn", qualified_name: "src/A.ts::fn" }, 0);
 
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "entities", threshold: 0 });
@@ -335,8 +335,8 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   });
 
   test("entity threshold 2.0 (max possible L2 distance) returns all results", async () => {
-    seedEntityWithVector({ name: flowName("fn1"), qualified_name: "src/A.ts::fn1" }, 10);
-    seedEntityWithVector({ name: flowName("fn2"), qualified_name: "src/B.ts::fn2" }, 20);
+    seedEntityWithVector({ name: "fn1", qualified_name: "src/A.ts::fn1" }, 10);
+    seedEntityWithVector({ name: "fn2", qualified_name: "src/B.ts::fn2" }, 20);
 
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "entities", threshold: 2.0 });

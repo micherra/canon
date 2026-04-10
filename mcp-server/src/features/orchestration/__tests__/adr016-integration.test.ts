@@ -40,7 +40,8 @@ vi.mock("../tools/report-result.ts", () => ({
 
 // ── Imports after mock declarations ──────────────────────────────────────────
 
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
@@ -53,10 +54,10 @@ import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "adr016-integ-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(workspace: string): ExecutionStore {
@@ -83,16 +84,16 @@ function makeStore(workspace: string): ExecutionStore {
 function makeFlow(): ResolvedFlow {
   return {
     description: "test",
-    entry: "research",
+    entry: sid("research"),
     name: flowName("test-flow"),
-    spawn_instructions: { research: "Do research" },
+    spawn_instructions: { [sid("research")]: "Do research" },
     states: {
-      research: {
+      [sid("research")]: {
         agent: "canon:canon-researcher",
         transitions: { done: "terminal" },
         type: "single",
       },
-      terminal: { type: "terminal" },
+      [sid("terminal")]: { type: "terminal" },
     },
   };
 }

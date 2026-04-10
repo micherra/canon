@@ -5,20 +5,21 @@
  * One behavior per test.
  */
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board} from "@domains/flows/board-state-schemas.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 import { validatePrompts } from "../tools/validate.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(): Board {
   return {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "start",
-    entry: "start",
+    current_state: sid("start"),
+    entry: sid("start"),
     flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -32,12 +33,12 @@ function makeBoard(): Board {
 function makeFlow(): ResolvedFlow {
   return {
     description: "test flow",
-    entry: "start",
+    entry: sid("start"),
     name: flowName("test"),
-    spawn_instructions: { start: "Do the thing" },
+    spawn_instructions: { [sid("start")]: "Do the thing" },
     states: {
-      done: { type: "terminal" },
-      start: { agent: "test-agent", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("start")]: { agent: "test-agent", type: "single" },
     },
   };
 }
@@ -63,7 +64,7 @@ function makeCtx(
       flow: makeFlow(),
       state_id: "start",
       variables: {},
-      workspace: "/tmp/test-workspace",
+      workspace: workspacePath("/tmp/test-workspace"),
     },
     mergedVariables: {},
     prompts,

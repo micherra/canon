@@ -33,10 +33,11 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
-function makeTmpWorkspace(): string {
-  return mkdtempSync(join(tmpdir(), "optional-roles-test-"));
+function makeTmpWorkspace(): WorkspacePath {
+  return workspacePath(mkdtempSync(join(tmpdir(), "optional-roles-test-")));
 }
 
 function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
@@ -57,31 +58,31 @@ function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
     task: "test task",
     tier: "medium",
   });
-  for (const stateId of Object.keys(flow.states)) {
-    store.upsertState(stateId, { entries: 0, status: "pending" });
+  for (const stateIdStr of Object.keys(flow.states)) {
+    store.upsertState(sid(stateIdStr), { entries: 0, status: "pending" });
   }
 }
 
 function makeFlowWithOptionalRoles(): ResolvedFlow {
   return {
     description: "test",
-    entry: "review",
+    entry: sid("review"),
     name: flowName("test-flow"),
     spawn_instructions: {
-      review: "Review from role ${role}",
+      [sid("review")]: "Review from role ${role}",
     },
     states: {
-      hitl: { type: "terminal" },
-      review: {
+      [sid("hitl")]: { type: "terminal" },
+      [sid("review")]: {
         agents: ["canon:canon-reviewer"],
-        roles: ["required-reviewer", { name: flowName("optional-reviewer"), optional: true }],
+        roles: ["required-reviewer", { name: "optional-reviewer", optional: true }],
         transitions: {
           blocked: "hitl",
           done: "ship",
         },
         type: "parallel",
       },
-      ship: { type: "terminal" },
+      [sid("ship")]: { type: "terminal" },
     },
   };
 }
@@ -176,22 +177,22 @@ describe("isRoleOptional", () => {
   });
 
   it("returns true for object role with optional: true", () => {
-    expect(isRoleOptional({ name: flowName("optional-role"), optional: true })).toBe(true);
+    expect(isRoleOptional({ name: "optional-role", optional: true })).toBe(true);
   });
 
   it("returns false for object role with optional: false", () => {
-    expect(isRoleOptional({ name: flowName("required-role"), optional: false })).toBe(false);
+    expect(isRoleOptional({ name: "required-role", optional: false })).toBe(false);
   });
 
   it("returns false for object role with no optional field", () => {
-    expect(isRoleOptional({ name: flowName("required-role") })).toBe(false);
+    expect(isRoleOptional({ name: "required-role" })).toBe(false);
   });
 });
 
 // Integration tests: reportResult threads optional roles through aggregation
 
 describe("reportResult — optional roles in parallel state", () => {
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(async () => {
     workspace = makeTmpWorkspace();
@@ -212,7 +213,7 @@ describe("reportResult — optional roles in parallel state", () => {
         { item: "required-reviewer", status: "done" },
         { item: "optional-reviewer", status: "blocked" },
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "done",
       workspace,
     });
@@ -233,7 +234,7 @@ describe("reportResult — optional roles in parallel state", () => {
         { item: "required-reviewer", status: "blocked" },
         { item: "optional-reviewer", status: "done" },
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "done",
       workspace,
     });
@@ -253,7 +254,7 @@ describe("reportResult — optional roles in parallel state", () => {
         { item: "required-reviewer", status: "done" },
         { item: "optional-reviewer", status: "needs_context" },
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "done",
       workspace,
     });

@@ -44,7 +44,7 @@ import type { FileCluster } from "@features/orchestration/services/diff-cluster.
 import { clusterDiff } from "@features/orchestration/services/diff-cluster.ts";
 import type { PromptContext } from "../model/types.ts";
 import { fanout } from "../tools/fanout.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 function makeCtx(
   overrides: Partial<PromptContext> & {
@@ -63,17 +63,17 @@ function makeCtx(
         flow ??
         ({
           description: "Test",
-          entry: "implement",
+          entry: sid("implement"),
           name: flowName("test-flow"),
-          spawn_instructions: { implement: "Do the thing" },
+          spawn_instructions: { [sid("implement")]: "Do the thing" },
           states: {
-            done: { type: "terminal" },
-            implement: { agent: "canon-implementor", type: "single" },
+            [sid("done")]: { type: "terminal" },
+            [sid("implement")]: { agent: "canon-implementor", type: "single" },
           },
         } as ResolvedFlow),
       state_id: state_id ?? "implement",
       variables: variables ?? { CANON_PLUGIN_ROOT: "" },
-      workspace: workspace ?? "/tmp/test-ws",
+      workspace: workspacePath(workspace ?? "/tmp/test-ws"),
       ...("items" in overrides ? { items } : {}),
     },
     mergedVariables: { CANON_PLUGIN_ROOT: "" },
@@ -122,12 +122,12 @@ describe("fanout — single state", () => {
       basePrompt: "Review ${item.cluster_key}",
       flow: {
         description: "Test",
-        entry: "implement",
+        entry: sid("implement"),
         name: flowName("test-flow"),
-        spawn_instructions: { implement: "Review ${item.cluster_key}" },
+        spawn_instructions: { [sid("implement")]: "Review ${item.cluster_key}" },
         states: {
-          done: { type: "terminal" },
-          implement: { agent: "canon-reviewer", large_diff_threshold: 5, type: "single" },
+          [sid("done")]: { type: "terminal" },
+          [sid("implement")]: { agent: "canon-reviewer", large_diff_threshold: 5, type: "single" },
         },
       } as ResolvedFlow,
       state: {
@@ -273,7 +273,7 @@ describe("fanout — parallel state", () => {
     const ctx = makeCtx({
       state: {
         agents: ["canon-implementor"],
-        roles: [{ name: flowName("frontend"), optional: true }, "backend"],
+        roles: [{ name: "frontend", optional: true }, "backend"],
         type: "parallel",
       } as StateDefinition,
     });
@@ -344,7 +344,7 @@ describe("fanout — wave state", () => {
   it("handles object items with ${item.field} substitution", async () => {
     const ctx = makeCtx({
       basePrompt: "Implement ${item.name} in ${item.layer}",
-      items: [{ layer: "domain", name: flowName("OrderService") }],
+      items: [{ layer: "domain", name: "OrderService" }],
       state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
     });
 

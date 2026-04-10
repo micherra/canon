@@ -141,14 +141,15 @@ describe("compete", () => {
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clusterDiff } from "../services/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "gsp-compete-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeCompeteFlow(
@@ -158,19 +159,19 @@ function makeCompeteFlow(
 ): ResolvedFlow {
   return {
     description: "Test compete flow",
-    entry: "design",
+    entry: sid("design"),
     name: flowName("compete-flow"),
     spawn_instructions: {
-      design: "Design the system for ${task}.",
+      [sid("design")]: "Design the system for ${task}.",
     },
     states: {
-      design: {
+      [sid("design")]: {
         agent: "canon-architect",
         compete: competeValue,
         transitions: { done: "ship" },
         type: "single",
       },
-      ship: { type: "terminal" },
+      [sid("ship")]: { type: "terminal" },
     },
   };
 }
@@ -246,19 +247,19 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
 
     const flow: ResolvedFlow = {
       description: "Test",
-      entry: "build",
+      entry: sid("build"),
       name: flowName("wave-flow"),
       spawn_instructions: {
-        build: "Implement ${task}.",
+        [sid("build")]: "Implement ${task}.",
       },
       states: {
-        build: {
+        [sid("build")]: {
           agent: "canon-implementor",
           compete: "auto" as any, // non-single with compete
           transitions: { done: "done_state" },
           type: "wave",
         },
-        done_state: { type: "terminal" },
+        [sid("done_state")]: { type: "terminal" },
       },
     };
 

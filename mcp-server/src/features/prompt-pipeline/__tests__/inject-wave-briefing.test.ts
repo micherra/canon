@@ -60,7 +60,7 @@ import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { PromptContext } from "../model/types.ts";
 import { injectWaveBriefing } from "../services/inject-wave-briefing.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 
 function makeCtx(
   overrides: Partial<PromptContext> & {
@@ -76,17 +76,17 @@ function makeCtx(
     input: {
       flow: {
         description: "Test",
-        entry: "implement",
+        entry: sid("implement"),
         name: flowName("test-flow"),
-        spawn_instructions: { implement: "Do the thing" },
+        spawn_instructions: { [sid("implement")]: "Do the thing" },
         states: {
-          done: { type: "terminal" },
-          implement: { agent: "canon-implementor", type: "wave" },
+          [sid("done")]: { type: "terminal" },
+          [sid("implement")]: { agent: "canon-implementor", type: "wave" },
         },
       } as ResolvedFlow,
       state_id: "implement",
       variables: {},
-      workspace: "/tmp/test-workspace",
+      workspace: workspacePath("/tmp/test-workspace"),
       ...("wave" in overrides ? { wave } : { wave: 2 }),
       ...("consultation_outputs" in overrides ? { consultation_outputs } : {}),
       ...("items" in overrides ? { items } : {}),

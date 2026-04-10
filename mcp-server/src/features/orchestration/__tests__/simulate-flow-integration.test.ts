@@ -26,7 +26,7 @@ import {
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { describe, expect, it } from "vitest";
 import { simulateFlow, simulateFlowTool } from "../tools/simulate-flow.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 
 const pluginDir = resolve(process.cwd(), "..");
 
@@ -39,15 +39,15 @@ function makeFlow(
   entry: string,
   spawnInstructions?: Record<string, string>,
 ): ResolvedFlow {
-  const si: Record<string, string> = spawnInstructions ?? {};
+  const si = (spawnInstructions ?? {}) as ResolvedFlow["spawn_instructions"];
   for (const [id, s] of Object.entries(states)) {
-    if (s.type !== "terminal" && !si[id]) {
-      si[id] = `Do ${id}`;
+    if (s.type !== "terminal" && !(si as Record<string, string>)[id]) {
+      (si as Record<string, string>)[id] = `Do ${id}`;
     }
   }
   return {
     description: "integration-test",
-    entry,
+    entry: sid(entry),
     name: flowName("test-flow"),
     spawn_instructions: si,
     states,
@@ -123,9 +123,9 @@ describe("reachability analysis + simulation integration", () => {
     //       start -> done (terminal)
     const flow = makeFlow(
       {
-        dead_state: { agent: "d", transitions: {}, type: "single" },
-        done: { type: "terminal" },
-        start: { agent: "a", transitions: { dead: "dead_state", ok: "done" }, type: "single" },
+        [sid("dead_state")]: { agent: "d", transitions: {}, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { dead: "dead_state", ok: "done" }, type: "single" },
       },
       "start",
     );
@@ -152,11 +152,11 @@ describe("reachability analysis + simulation integration", () => {
     // start also -> done terminal
     const flow = makeFlow(
       {
-        a: { agent: "a", transitions: { next: "b" }, type: "single" },
-        b: { agent: "b", transitions: { back: "a" }, type: "single" },
-        done: { type: "terminal" },
-        orphan_dead: { agent: "o", transitions: {}, type: "single" },
-        start: {
+        [sid("a")]: { agent: "a", transitions: { next: "b" }, type: "single" },
+        [sid("b")]: { agent: "b", transitions: { back: "a" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("orphan_dead")]: { agent: "o", transitions: {}, type: "single" },
+        [sid("start")]: {
           agent: "s",
           transitions: { cycle: "a", dead: "orphan_dead", ok: "done" },
           type: "single",
@@ -195,8 +195,8 @@ describe("buildReverseGraph with virtual sink keys", () => {
     // buildStateGraph includes virtual sinks like 'hitl' as targets in adjacency lists
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        state_a: { agent: "a", transitions: { blocked: "hitl", ok: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("state_a")]: { agent: "a", transitions: { blocked: "hitl", ok: "done" }, type: "single" },
       },
       "state_a",
     );
@@ -218,8 +218,8 @@ describe("buildReverseGraph with virtual sink keys", () => {
   it("handles no_items as a virtual sink in forward and reverse graph", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        processor: { agent: "p", transitions: { empty: "no_items", ok: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("processor")]: { agent: "p", transitions: { empty: "no_items", ok: "done" }, type: "single" },
       },
       "processor",
     );
@@ -242,8 +242,8 @@ describe("simulateFlow — wave state with skip_when", () => {
   it("emits both wave-type and skip_when warnings for the same state", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        wave_with_skip: {
+        [sid("done")]: { type: "terminal" },
+        [sid("wave_with_skip")]: {
           skip_when: "no_contract_changes",
           transitions: { done: "done" },
           type: "wave",
@@ -276,8 +276,8 @@ describe("simulateFlow — needs_context alias maps to hitl virtual sink", () =>
   it("normalizes needs_context to hitl and treats it as a terminal-like exit", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        start: {
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: {
           agent: "a",
           transitions: { done: "done", hitl: "hitl" },
           type: "single",
@@ -307,12 +307,12 @@ describe("simulateFlow — errors-are-values: no throws for adversarial inputs",
     // This tests that even a broken flow doesn't crash the engine
     const flow: ResolvedFlow = {
       description: "broken",
-      entry: "start",
+      entry: sid("start"),
       name: flowName("broken-flow"),
-      spawn_instructions: { start: "Do it" },
+      spawn_instructions: { [sid("start")]: "Do it" },
       states: {
-        done: { type: "terminal" },
-        start: { agent: "a", transitions: { done: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { done: "done" }, type: "single" },
       },
     };
     // Normal scenario — just verify it returns, doesn't throw
@@ -324,8 +324,8 @@ describe("simulateFlow — errors-are-values: no throws for adversarial inputs",
   it("returns structured output for a scenario with max_steps = 0", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        start: { agent: "a", transitions: { done: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { done: "done" }, type: "single" },
       },
       "start",
     );
@@ -345,9 +345,9 @@ describe("simulateFlow — deterministic output", () => {
   it("produces identical results on repeated calls with the same inputs", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        fix: { agent: "fixer", transitions: { done: "test" }, type: "single" },
-        test: {
+        [sid("done")]: { type: "terminal" },
+        [sid("fix")]: { agent: "fixer", transitions: { done: "test" }, type: "single" },
+        [sid("test")]: {
           agent: "tester",
           transitions: { fail: "fix", pass: "done" },
           type: "single",
@@ -381,8 +381,8 @@ describe("simulateFlow — path entry recorded for virtual sink transitions", ()
   it("path entry exists for the state that exits to hitl", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        review: { agent: "r", transitions: { blocked: "hitl", ok: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("review")]: { agent: "r", transitions: { blocked: "hitl", ok: "done" }, type: "single" },
       },
       "review",
     );
@@ -402,8 +402,8 @@ describe("simulateFlow — path entry recorded for virtual sink transitions", ()
   it("path entry exists for the state that exits to no_items", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        process: { agent: "p", transitions: { empty: "no_items", ok: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("process")]: { agent: "p", transitions: { empty: "no_items", ok: "done" }, type: "single" },
       },
       "process",
     );
@@ -425,8 +425,8 @@ describe("simulateFlow — max_iterations boundary: exactly at limit", () => {
     // Visiting exactly 2 times should not trigger stuck
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        looping: {
+        [sid("done")]: { type: "terminal" },
+        [sid("looping")]: {
           agent: "a",
           max_iterations: 2,
           transitions: { done: "done", retry: "looping" },
@@ -453,8 +453,8 @@ describe("simulateFlow — max_iterations boundary: exactly at limit", () => {
   it("flags stuck when iterations_consumed exceeds max_iterations by 1", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        looping: {
+        [sid("done")]: { type: "terminal" },
+        [sid("looping")]: {
           agent: "a",
           max_iterations: 2,
           transitions: { done: "done", retry: "looping" },

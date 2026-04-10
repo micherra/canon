@@ -75,13 +75,15 @@ import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { loadFlow } from "../tools/load-flow.ts";
+import { stateId as sid, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath, StateId } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "flow-opt-integ-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
@@ -102,10 +104,10 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     },
     task: "test task",
     ...overrides,
-  } as Board;
+  } as unknown as Board;
 }
 
-function seedBoard(workspace: string, board: Board): void {
+function seedBoard(workspace: WorkspacePath, board: Board): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
@@ -124,7 +126,7 @@ function seedBoard(workspace: string, board: Board): void {
     tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, {
+    store.upsertState(stateId as StateId, {
       ...stateEntry,
       entries: stateEntry.entries ?? 0,
       status: stateEntry.status,
@@ -192,7 +194,7 @@ describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved"
   it("feature.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "feature");
 
-    const checkpointState = flow.states.checkpoint;
+    const checkpointState = flow.states[sid("checkpoint")];
     expect(checkpointState).toBeDefined();
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
@@ -200,7 +202,7 @@ describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved"
   it("epic.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const checkpointState = flow.states.checkpoint;
+    const checkpointState = flow.states[sid("checkpoint")];
     expect(checkpointState).toBeDefined();
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
@@ -208,7 +210,7 @@ describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved"
   it("refactor.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "refactor");
 
-    const checkpointState = flow.states.checkpoint;
+    const checkpointState = flow.states[sid("checkpoint")];
     expect(checkpointState).toBeDefined();
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
@@ -244,7 +246,7 @@ describe("disk-load: epic flow consultation fragments from disk", () => {
   it("epic implement state references pattern-check and early-scan in between breakpoint", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const implementState = flow.states.implement;
+    const implementState = flow.states[sid("implement")];
     expect(implementState).toBeDefined();
     const between = implementState.consultations?.between;
     expect(between).toContain("pattern-check");
@@ -311,7 +313,7 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
     expect(result.skip_reason).toBeDefined();
     expect(result.skip_reason).toContain("auto_approved");
     // State is skipped before entering — board state remains pending (not in_progress)
-    const checkpointState = getExecutionStore(workspace).getState("checkpoint");
+    const checkpointState = getExecutionStore(workspace).getState(sid("checkpoint"));
     expect(checkpointState?.status).toBe("pending");
   });
 
@@ -344,7 +346,7 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
     expect(result.can_enter).toBe(true);
     expect(result.skip_reason).toBeUndefined();
     // State was entered normally — board state should be in_progress
-    const checkpointState = getExecutionStore(workspace).getState("checkpoint");
+    const checkpointState = getExecutionStore(workspace).getState(sid("checkpoint"));
     expect(checkpointState?.status).toBe("in_progress");
   });
 

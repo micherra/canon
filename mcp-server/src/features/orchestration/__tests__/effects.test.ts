@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { stateId as sid } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
@@ -48,11 +49,11 @@ principles-checked: 5
 
 describe("persistReview via executeEffects — structured .meta.json path", () => {
   let tmpDir: string;
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-effects-meta-test-"));
-    workspace = join(tmpDir, "workspace");
+    workspace = workspacePath(join(tmpDir, "workspace"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
     await mkdir(join(workspace, "reviews"), { recursive: true });
     await mkdir(join(workspace, "plans", "test-task"), { recursive: true });
@@ -229,11 +230,11 @@ describe("persistReview via executeEffects — structured .meta.json path", () =
 
 describe("executeEffects", () => {
   let tmpDir: string;
-  let workspace: string;
+  let workspace: WorkspacePath;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-effects-test-"));
-    workspace = join(tmpDir, "workspace");
+    workspace = workspacePath(join(tmpDir, "workspace"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
     await mkdir(join(workspace, "reviews"), { recursive: true });
     await mkdir(join(workspace, "plans", "test-task"), { recursive: true });
@@ -302,12 +303,12 @@ describe("executeEffects", () => {
 
 describe("executeEffects — check_postconditions", () => {
   let tmpDir: string;
-  let workspace: string;
+  let workspace: WorkspacePath;
   let projectDir: string;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-postcond-test-"));
-    workspace = join(tmpDir, "workspace");
+    workspace = workspacePath(join(tmpDir, "workspace"));
     projectDir = join(tmpDir, "project");
     await mkdir(workspace, { recursive: true });
     await mkdir(projectDir, { recursive: true });

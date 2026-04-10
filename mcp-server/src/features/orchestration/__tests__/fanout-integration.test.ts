@@ -78,14 +78,15 @@ import { clusterDiff } from "../services/diff-cluster.ts";
 import { assembleWaveBriefing, readWaveGuidance } from "../services/wave-briefing.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath, StateId } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "fanout-integration-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
@@ -106,21 +107,21 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     },
     task: "test task",
     ...overrides,
-  } as Board;
+  } as unknown as Board;
 }
 
 function makeReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test review flow",
-    entry: "review",
+    entry: sid("review"),
     name: flowName("test-review-flow"),
     spawn_instructions: {
-      review: "Review cluster ${item.cluster_key}: ${item.files}",
+      [sid("review")]: "Review cluster ${item.cluster_key}: ${item.files}",
     },
     states: {
-      done: { type: "terminal" },
-      hitl: { type: "terminal" },
-      review: {
+      [sid("done")]: { type: "terminal" },
+      [sid("hitl")]: { type: "terminal" },
+      [sid("review")]: {
         agent: "canon-reviewer",
         large_diff_threshold: 5,
         transitions: {
@@ -135,7 +136,7 @@ function makeReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   };
 }
 
-function seedBoard(workspace: string, board: Board): void {
+function seedBoard(workspace: WorkspacePath, board: Board): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
@@ -154,7 +155,7 @@ function seedBoard(workspace: string, board: Board): void {
     tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, {
+    store.upsertState(stateId as StateId, {
       ...stateEntry,
       entries: stateEntry.entries ?? 0,
       status: stateEntry.status,
@@ -178,7 +179,7 @@ afterEach(() => {
 // Gap 1: isReviewAggregation auto-detection in report-result.ts
 
 describe("reportResult — isReviewAggregation auto-detection (gap fill)", () => {
-  function setupReviewBoard(workspace: string) {
+  function setupReviewBoard(workspace: WorkspacePath) {
     seedBoard(
       workspace,
       makeBoard({
@@ -202,7 +203,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/api", status: "clean" },
         { item: "src/ui", status: "clean" },
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE", // overridden by review aggregation
       workspace,
     });
@@ -223,7 +224,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/api", status: "clean" },
         { item: "src/ui", status: "blocking" },
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE", // overridden by review aggregation
       workspace,
     });
@@ -244,7 +245,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/api", status: "clean" },
         { item: "src/ui", status: "warning" },
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE", // overridden by review aggregation
       workspace,
     });
@@ -260,9 +261,9 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
     // Flow with done/cannot_fix transitions (not a review flow)
     const flow = makeReviewFlow({
       states: {
-        done: { type: "terminal" },
-        hitl: { type: "terminal" },
-        review: {
+        [sid("done")]: { type: "terminal" },
+        [sid("hitl")]: { type: "terminal" },
+        [sid("review")]: {
           agent: "canon-implementor",
           transitions: {
             blocked: "hitl",
@@ -280,7 +281,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "file-a.ts", status: "done" },
         { item: "file-b.ts", status: "cannot_fix" },
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE",
       workspace,
     });
@@ -301,7 +302,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/api", status: "CLEAN" },
         { item: "src/ui", status: "BLOCKING" },
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE",
       workspace,
     });
@@ -319,7 +320,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
     const result = await reportResult({
       flow,
       parallel_results: [{ item: "src/api", status: "clean" }],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE",
       workspace,
     });
@@ -377,12 +378,12 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
     // No large_diff_threshold — clusterDiff should never be called
     const flow: ResolvedFlow = {
       description: "Test",
-      entry: "review",
+      entry: sid("review"),
       name: flowName("test-flow"),
-      spawn_instructions: { review: "Review everything." },
+      spawn_instructions: { [sid("review")]: "Review everything." },
       states: {
-        done: { type: "terminal" },
-        review: {
+        [sid("done")]: { type: "terminal" },
+        [sid("review")]: {
           agent: "canon-reviewer",
           // no large_diff_threshold
           transitions: { clean: "done" },
@@ -513,14 +514,14 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
 
     // Step 3: reportResult receives the parallel_results and applies review aggregation
     // The board was already seeded above; update review state to in_progress for reportResult
-    getExecutionStore(workspace).upsertState("review", { entries: 1, status: "in_progress" });
-    getExecutionStore(workspace).upsertState("hitl", { entries: 0, status: "pending" });
+    getExecutionStore(workspace).upsertState(sid("review"), { entries: 1, status: "in_progress" });
+    getExecutionStore(workspace).upsertState(sid("hitl"), { entries: 0, status: "pending" });
 
     const reportResultImport = await import("../tools/report-result.ts");
     const result = await reportResultImport.reportResult({
       flow,
       parallel_results: clusterResults,
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE",
       workspace,
     });
@@ -553,7 +554,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
         { item: "src/ui", status: "clean" },
         { item: "src/db", status: "clean" },
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE",
       workspace,
     });
@@ -585,7 +586,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
         { item: "src/ui", status: "clean" },
         { item: "src/auth", status: "blocking" }, // one blocker
       ],
-      state_id: "review",
+      state_id: sid("review"),
       status_keyword: "DONE",
       workspace,
     });

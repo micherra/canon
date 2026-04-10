@@ -616,15 +616,15 @@ describe("loadAndResolveFlow", () => {
 
     expect(flow.name).toBe("review-only");
     expect(flow.entry).toBe("review");
-    expect(flow.states.review).toBeDefined();
-    expect(flow.states.done).toBeDefined();
-    expect(flow.states.review.type).toBe("single");
-    expect(flow.states.review.agent).toBe("canon-reviewer");
-    expect(flow.states.done.type).toBe("terminal");
+    expect(flow.states[sid("review")]).toBeDefined();
+    expect(flow.states[sid("done")]).toBeDefined();
+    expect(flow.states[sid("review")].type).toBe("single");
+    expect(flow.states[sid("review")].agent).toBe("canon-reviewer");
+    expect(flow.states[sid("done")].type).toBe("terminal");
 
     // Should have spawn instruction for review
-    expect(flow.spawn_instructions.review).toBeDefined();
-    expect(flow.spawn_instructions.review).toContain("git diff");
+    expect(flow.spawn_instructions[sid("review")]).toBeDefined();
+    expect(flow.spawn_instructions[sid("review")]).toContain("git diff");
   });
 
   it("fast-path execute state has agent: canon-implementor", async () => {
@@ -632,8 +632,8 @@ describe("loadAndResolveFlow", () => {
 
     expect(flow.name).toBe("fast-path");
     expect(flow.entry).toBe("execute");
-    expect(flow.states.execute).toBeDefined();
-    expect(flow.states.execute.agent).toBe("canon-implementor");
+    expect(flow.states[sid("execute")]).toBeDefined();
+    expect(flow.states[sid("execute")].agent).toBe("canon-implementor");
   });
 });
 

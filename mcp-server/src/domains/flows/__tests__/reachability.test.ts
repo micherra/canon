@@ -8,7 +8,7 @@
  *   - analyzeReachability: combined unreachable + dead-end + stuck-loop warnings
  */
 
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import {
@@ -25,16 +25,16 @@ function makeFlow(
   entry: string,
   spawnInstructions?: Record<string, string>,
 ): ResolvedFlow {
-  const si: Record<string, string> = spawnInstructions ?? {};
+  const si: ResolvedFlow["spawn_instructions"] = (spawnInstructions ?? {}) as ResolvedFlow["spawn_instructions"];
   // Default: add spawn instructions for all non-terminal states
   for (const [id, s] of Object.entries(states)) {
-    if (s.type !== "terminal" && !si[id]) {
-      si[id] = `Do ${id}`;
+    if (s.type !== "terminal" && !si[sid(id)]) {
+      si[sid(id)] = `Do ${id}`;
     }
   }
   return {
     description: "test",
-    entry,
+    entry: sid(entry),
     name: flowName("test-flow"),
     spawn_instructions: si,
     states,
@@ -88,22 +88,23 @@ describe("detectDeadEnds", () => {
   it("returns empty for a flow where all states reach a terminal", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        start: { agent: "a", transitions: { done: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { done: "done" }, type: "single" },
       },
       "start",
     );
     const warnings = detectDeadEnds(flow);
     expect(warnings).toEqual([]);
+
   });
 
   it("flags a state reachable from entry but with no path to terminal", () => {
     // start -> dead (dead has no transitions out)
     const flow = makeFlow(
       {
-        dead: { agent: "d", transitions: {}, type: "single" },
-        done: { type: "terminal" },
-        start: { agent: "a", transitions: { dead: "dead", done: "done" }, type: "single" },
+        [sid("dead")]: { agent: "d", transitions: {}, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { dead: "dead", done: "done" }, type: "single" },
       },
       "start",
     );
@@ -118,9 +119,9 @@ describe("detectDeadEnds", () => {
     // hitl-exit: its only transition target is hitl (a VIRTUAL_SINK)
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        hitl_exit: { agent: "h", transitions: { stuck: "hitl" }, type: "single" },
-        start: { agent: "a", transitions: { done: "done", stuck: "hitl_exit" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("hitl_exit")]: { agent: "h", transitions: { stuck: "hitl" }, type: "single" },
+        [sid("start")]: { agent: "a", transitions: { done: "done", stuck: "hitl_exit" }, type: "single" },
       },
       "start",
     );
@@ -132,9 +133,9 @@ describe("detectDeadEnds", () => {
     // no_items_exit: its only transition target is no_items (a VIRTUAL_SINK)
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        no_items_exit: { agent: "n", transitions: { empty: "no_items" }, type: "single" },
-        start: {
+        [sid("done")]: { type: "terminal" },
+        [sid("no_items_exit")]: { agent: "n", transitions: { empty: "no_items" }, type: "single" },
+        [sid("start")]: {
           agent: "a",
           transitions: { done: "done", process: "no_items_exit" },
           type: "single",
@@ -149,8 +150,8 @@ describe("detectDeadEnds", () => {
   it("does not flag terminal states themselves as dead-ends", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        start: { agent: "a", transitions: { done: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { done: "done" }, type: "single" },
       },
       "start",
     );
@@ -164,9 +165,9 @@ describe("detectDeadEnds", () => {
     // self_loop transitions only to itself, never to done
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        self_loop: { agent: "s", transitions: { retry: "self_loop" }, type: "single" },
-        start: { agent: "a", transitions: { done: "done", loop: "self_loop" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("self_loop")]: { agent: "s", transitions: { retry: "self_loop" }, type: "single" },
+        [sid("start")]: { agent: "a", transitions: { done: "done", loop: "self_loop" }, type: "single" },
       },
       "start",
     );
@@ -179,10 +180,10 @@ describe("detectDeadEnds", () => {
     // start -> a -> b (b is dead-end, a only leads to b)
     const flow = makeFlow(
       {
-        a: { agent: "a", transitions: { next: "b" }, type: "single" },
-        b: { agent: "b", transitions: {}, type: "single" },
-        done: { type: "terminal" },
-        start: { agent: "s", transitions: { go: "a" }, type: "single" },
+        [sid("a")]: { agent: "a", transitions: { next: "b" }, type: "single" },
+        [sid("b")]: { agent: "b", transitions: {}, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "s", transitions: { go: "a" }, type: "single" },
       },
       "start",
     );
@@ -203,9 +204,9 @@ describe("detectStuckLoops", () => {
   it("returns empty for a flow with no cycles", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        middle: { agent: "m", transitions: { done: "done" }, type: "single" },
-        start: { agent: "a", transitions: { next: "middle" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("middle")]: { agent: "m", transitions: { done: "done" }, type: "single" },
+        [sid("start")]: { agent: "a", transitions: { next: "middle" }, type: "single" },
       },
       "start",
     );
@@ -217,10 +218,10 @@ describe("detectStuckLoops", () => {
     // a -> b -> a (stuck cycle, neither reaches done)
     const flow = makeFlow(
       {
-        a: { agent: "a", transitions: { next: "b" }, type: "single" },
-        b: { agent: "b", transitions: { back: "a" }, type: "single" },
-        done: { type: "terminal" },
-        start: { agent: "s", transitions: { go: "a" }, type: "single" },
+        [sid("a")]: { agent: "a", transitions: { next: "b" }, type: "single" },
+        [sid("b")]: { agent: "b", transitions: { back: "a" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "s", transitions: { go: "a" }, type: "single" },
       },
       "start",
     );
@@ -236,10 +237,10 @@ describe("detectStuckLoops", () => {
     // a -> b -> a, but a also -> done
     const flow = makeFlow(
       {
-        a: { agent: "a", transitions: { done: "done", retry: "b" }, type: "single" },
-        b: { agent: "b", transitions: { back: "a" }, type: "single" },
-        done: { type: "terminal" },
-        start: { agent: "s", transitions: { go: "a" }, type: "single" },
+        [sid("a")]: { agent: "a", transitions: { done: "done", retry: "b" }, type: "single" },
+        [sid("b")]: { agent: "b", transitions: { back: "a" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "s", transitions: { go: "a" }, type: "single" },
       },
       "start",
     );
@@ -251,10 +252,10 @@ describe("detectStuckLoops", () => {
     // a -> b -> a, but a also -> hitl (virtual sink)
     const flow = makeFlow(
       {
-        a: { agent: "a", transitions: { retry: "b", stuck: "hitl" }, type: "single" },
-        b: { agent: "b", transitions: { back: "a" }, type: "single" },
-        done: { type: "terminal" },
-        start: { agent: "s", transitions: { done: "done", go: "a" }, type: "single" },
+        [sid("a")]: { agent: "a", transitions: { retry: "b", stuck: "hitl" }, type: "single" },
+        [sid("b")]: { agent: "b", transitions: { back: "a" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "s", transitions: { done: "done", go: "a" }, type: "single" },
       },
       "start",
     );
@@ -266,9 +267,9 @@ describe("detectStuckLoops", () => {
     // self_loop transitions only to itself
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        self_loop: { agent: "s", transitions: { retry: "self_loop" }, type: "single" },
-        start: { agent: "a", transitions: { loop: "self_loop" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("self_loop")]: { agent: "s", transitions: { retry: "self_loop" }, type: "single" },
+        [sid("start")]: { agent: "a", transitions: { loop: "self_loop" }, type: "single" },
       },
       "start",
     );
@@ -281,10 +282,10 @@ describe("detectStuckLoops", () => {
     // Resembles real Canon flow fragments: test -> fix -> test, but test -> done
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        fix: { agent: "fixer", transitions: { done: "test" }, type: "single" },
-        start: { agent: "s", transitions: { go: "test" }, type: "single" },
-        test: {
+        [sid("done")]: { type: "terminal" },
+        [sid("fix")]: { agent: "fixer", transitions: { done: "test" }, type: "single" },
+        [sid("start")]: { agent: "s", transitions: { go: "test" }, type: "single" },
+        [sid("test")]: {
           agent: "tester",
           transitions: { fail: "fix", pass: "done" },
           type: "single",
@@ -303,8 +304,8 @@ describe("analyzeReachability", () => {
   it("returns empty for a valid linear flow", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        start: { agent: "a", transitions: { done: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "a", transitions: { done: "done" }, type: "single" },
       },
       "start",
     );
@@ -315,11 +316,11 @@ describe("analyzeReachability", () => {
   it("includes unreachable-state warnings alongside dead-end and stuck-loop warnings", () => {
     const flow = makeFlow(
       {
-        a: { agent: "a", transitions: { loop: "b" }, type: "single" },
-        b: { agent: "b", transitions: { loop: "a" }, type: "single" },
-        done: { type: "terminal" },
-        orphan: { agent: "o", transitions: { done: "done" }, type: "single" },
-        start: { agent: "s", transitions: { go: "a" }, type: "single" },
+        [sid("a")]: { agent: "a", transitions: { loop: "b" }, type: "single" },
+        [sid("b")]: { agent: "b", transitions: { loop: "a" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("orphan")]: { agent: "o", transitions: { done: "done" }, type: "single" },
+        [sid("start")]: { agent: "s", transitions: { go: "a" }, type: "single" },
       },
       "start",
     );
@@ -342,9 +343,9 @@ describe("analyzeReachability", () => {
   it("all warnings are prefixed with 'Warning:'", () => {
     const flow = makeFlow(
       {
-        a: { agent: "a", transitions: { back: "a" }, type: "single" },
-        done: { type: "terminal" },
-        start: { agent: "s", transitions: { go: "a" }, type: "single" },
+        [sid("a")]: { agent: "a", transitions: { back: "a" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { agent: "s", transitions: { go: "a" }, type: "single" },
       },
       "start",
     );
@@ -361,9 +362,9 @@ describe("collectReachableStates", () => {
   it("is exported and returns all forward-reachable states", () => {
     const flow = makeFlow(
       {
-        done: { type: "terminal" },
-        orphan: { agent: "o", transitions: { done: "done" }, type: "single" },
-        start: { agent: "a", transitions: { done: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("orphan")]: { agent: "o", transitions: { done: "done" }, type: "single" },
+        [sid("start")]: { agent: "a", transitions: { done: "done" }, type: "single" },
       },
       "start",
     );

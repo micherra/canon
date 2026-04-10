@@ -29,25 +29,26 @@ import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "progress-wiring-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow for progress wiring",
-    entry: "implement",
+    entry: sid("implement"),
     name: flowName("test-flow"),
-    spawn_instructions: { implement: "Implement ${task}. Progress so far:\n${progress}" },
+    spawn_instructions: { [sid("implement")]: "Implement ${task}. Progress so far:\n${progress}" },
     states: {
-      done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      [sid("done")]: { type: "terminal" },
+      [sid("implement")]: { agent: "canon-implementor", type: "single" },
     },
     ...overrides,
   };
@@ -195,7 +196,7 @@ describe("getSpawnPrompt — progress variable resolution", () => {
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md",
-      spawn_instructions: { implement: "Implement the task.\n\nProgress:\n${progress}" },
+      spawn_instructions: { [sid("implement")]: "Implement the task.\n\nProgress:\n${progress}" },
     });
 
     const result = await getSpawnPrompt({
@@ -235,7 +236,7 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     const flow = makeFlow({
       // Path uses ${WORKSPACE} placeholder — must be resolved before readFile
       progress: "${WORKSPACE}/progress.md",
-      spawn_instructions: { implement: "Run: ${progress}" },
+      spawn_instructions: { [sid("implement")]: "Run: ${progress}" },
     });
 
     const result = await getSpawnPrompt({
@@ -256,7 +257,7 @@ describe("getSpawnPrompt — progress variable resolution", () => {
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md",
-      spawn_instructions: { implement: "Status: '${progress}'" },
+      spawn_instructions: { [sid("implement")]: "Status: '${progress}'" },
     });
 
     const result = await getSpawnPrompt({
@@ -282,7 +283,7 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     // Flow without progress field
     const flow = makeFlow({
       progress: undefined,
-      spawn_instructions: { implement: "Current progress: ${progress}" },
+      spawn_instructions: { [sid("implement")]: "Current progress: ${progress}" },
     });
 
     const result = await getSpawnPrompt({

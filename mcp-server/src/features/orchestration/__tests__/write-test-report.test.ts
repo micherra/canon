@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeTestReport } from "../tools/write-test-report.ts";
@@ -25,7 +26,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 2,
       slug: "my-slug",
       summary: "All tests passed.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -50,7 +51,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 1,
       slug: "stats-test",
       summary: "Some tests failed.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -86,7 +87,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 0,
       slug: "compute-test",
       summary: "Test run complete.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -103,7 +104,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 0,
       slug: "zero-total",
       summary: "No tests ran.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -120,7 +121,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 0,
       slug: "meta-type-test",
       summary: "Checking meta.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -140,7 +141,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 1,
       slug: "meta-fields-test",
       summary: "Complete summary text.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -175,7 +176,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 0,
       slug: "issues-test",
       summary: "Some failures.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -202,7 +203,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 0,
       slug: "issues-md-test",
       summary: "Some failures.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -226,7 +227,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 0,
       slug: "no-issues-test",
       summary: "All passed!",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
       // no issues field
     });
 
@@ -250,7 +251,7 @@ describe("writeTestReport — valid input", () => {
       skipped: 0,
       slug: "brand-new-slug",
       summary: "New plan directory.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     assertOk(result);
@@ -269,7 +270,7 @@ describe("writeTestReport — validation errors", () => {
       skipped: 0,
       slug: "slug with spaces",
       summary: "Bad slug.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -288,7 +289,7 @@ describe("writeTestReport — validation errors", () => {
       skipped: 0,
       slug: "bad@slug!",
       summary: "Bad slug.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -308,7 +309,7 @@ describe("writeTestReport — validation errors", () => {
       skipped: 0,
       slug: "..",
       summary: "Path traversal.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);
@@ -326,7 +327,7 @@ describe("writeTestReport — validation errors", () => {
       skipped: 0,
       slug: "invalid slug!",
       summary: "Should not write.",
-      workspace: tmpDir,
+      workspace: workspacePath(tmpDir),
     });
 
     expect(result.ok).toBe(false);

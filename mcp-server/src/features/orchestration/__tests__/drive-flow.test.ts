@@ -56,14 +56,15 @@ import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-stat
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { beforeEach } from "vitest";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
+function makeTmpWorkspace(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "drive-flow-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 function makeStore(workspace: string): ExecutionStore {
@@ -91,24 +92,24 @@ function makeStore(workspace: string): ExecutionStore {
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test",
-    entry: "research",
+    entry: sid("research"),
     name: flowName("test-flow"),
     spawn_instructions: {
-      implement: "Do implement",
-      research: "Do research",
+      [sid("implement")]: "Do implement",
+      [sid("research")]: "Do research",
     },
     states: {
-      implement: {
+      [sid("implement")]: {
         agent: "canon:canon-implementor",
         transitions: { done: "terminal" },
         type: "single",
       },
-      research: {
+      [sid("research")]: {
         agent: "canon:canon-researcher",
         transitions: { done: "implement" },
         type: "single",
       },
-      terminal: {
+      [sid("terminal")]: {
         type: "terminal",
       },
     },
@@ -147,8 +148,8 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
       base_commit: "abc123",
       blocked: null,
       concerns: [],
-      current_state: nextState ?? "terminal",
-      entry: "research",
+      current_state: sid(nextState ?? "terminal"),
+      entry: sid("research"),
       flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
@@ -514,12 +515,12 @@ describe("driveFlow — state_artifacts in done", () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
     // Simulate board states that have artifacts
-    store.upsertState("research", {
+    store.upsertState(sid("research"), {
       artifacts: ["research/findings.md"],
       entries: 1,
       status: "done",
     });
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       artifacts: ["plans/task-01/SUMMARY.md", "plans/task-02/SUMMARY.md"],
       entries: 1,
       status: "done",
@@ -545,12 +546,12 @@ describe("driveFlow — state_artifacts in done", () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
     // One state with artifacts, one without
-    store.upsertState("research", {
+    store.upsertState(sid("research"), {
       artifacts: ["research/findings.md"],
       entries: 1,
       status: "done",
     });
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       status: "done",
     });
@@ -636,9 +637,9 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
     const store = makeStore(workspace);
     store.updateExecution({ current_state: "implement" });
     // Set up state row first (upsert so agent session can update it)
-    store.upsertState("implement", { entries: 0, status: "pending" });
+    store.upsertState(sid("implement"), { entries: 0, status: "pending" });
     // Record a fresh agent session (last activity just now)
-    store.updateAgentSession("implement", "agent-id-abc123");
+    store.updateAgentSession(sid("implement"), "agent-id-abc123");
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
@@ -670,7 +671,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
     store.updateExecution({ current_state: "implement" });
-    store.upsertState("implement", { entries: 0, status: "pending" });
+    store.upsertState(sid("implement"), { entries: 0, status: "pending" });
 
     // Manually insert a stale session (>10 minutes ago)
     const staleTime = new Date(Date.now() - 11 * 60 * 1000).toISOString();
@@ -708,7 +709,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
   it("stores agent_session_id from result into execution store", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.upsertState("research", { entries: 1, status: "in_progress" });
+    store.upsertState(sid("research"), { entries: 1, status: "in_progress" });
 
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement") as any);
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
@@ -738,7 +739,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
       "/fake/project",
     );
 
-    const session = store.getAgentSession("research");
+    const session = store.getAgentSession(sid("research"));
     expect(session?.agent_session_id).toBe("session-xyz-456");
   });
 });
@@ -855,7 +856,7 @@ describe("driveFlow — error handling", () => {
     const result = await driveFlow(
       {
         flow,
-        workspace: "/nonexistent/path/workspace",
+        workspace: workspacePath("/nonexistent/path/workspace"),
       },
       "/fake/project",
     );

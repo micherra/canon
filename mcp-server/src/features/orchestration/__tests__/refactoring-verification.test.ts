@@ -21,14 +21,15 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function makeTmpDir(): WorkspacePath {
   const dir = mkdtempSync(join(tmpdir(), "refactor-verify-test-"));
   tmpDirs.push(dir);
-  return dir;
+  return workspacePath(dir);
 }
 
 afterEach(() => {
@@ -66,15 +67,15 @@ function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
 function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
     description: "A test flow",
-    entry: "build",
+    entry: sid("build"),
     name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
-      build: {
+      [sid("build")]: {
         transitions: { done: "ship" },
         type: "single",
       },
-      ship: { type: "terminal" },
+      [sid("ship")]: { type: "terminal" },
     },
     ...overrides,
   };
@@ -146,13 +147,13 @@ describe("FlowEventBus — no listener leaks across repeated operations", () => 
     for (let i = 0; i < CYCLES; i++) {
       // Reset board state for each cycle
       const store = getExecutionStore(workspace);
-      store.upsertState("build", { entries: 0, status: "pending" });
-      store.upsertIteration("build", { cannot_fix: [], count: 0, history: [], max: 3 });
+      store.upsertState(sid("build"), { entries: 0, status: "pending" });
+      store.upsertIteration(sid("build"), { cannot_fix: [], count: 0, history: [], max: 3 });
       // biome-ignore lint/performance/noAwaitInLoops: sequential board operations per cycle — each cycle resets and must complete before the next
       await updateBoard({ action: "enter_state", state_id: "build", workspace });
       await reportResult({
         flow,
-        state_id: "build",
+        state_id: sid("build"),
         status_keyword: "DONE",
         workspace,
       });

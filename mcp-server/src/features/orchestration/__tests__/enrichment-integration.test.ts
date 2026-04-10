@@ -22,7 +22,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board} from "@domains/flows/board-state-schemas.ts";
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { DriftDb } from "@platform/storage/drift/drift-db.ts";
 import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
@@ -53,7 +54,7 @@ import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { assembleEnrichment, type EnrichmentInput } from "../services/context-enrichment.ts";
 import { resolveTaskScope } from "../services/scope-resolver.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { stateId as sid, flowName } from "@domains/flows/board-state-schemas.ts";
 
 // Helpers shared across sections
 
@@ -62,8 +63,8 @@ function makeBoard(overrides: Partial<Board> = {}): Board {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "implement",
-    entry: "implement",
+    current_state: sid("implement"),
+    entry: sid("implement"),
     flow: flowName("build"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -99,8 +100,8 @@ function makeInput(overrides: Partial<EnrichmentInput> = {}): EnrichmentInput {
     cwd: "/tmp/project",
     flow: makeFlow(),
     projectDir: "/tmp/project",
-    stateId: "implement",
-    workspace: "/tmp/workspace",
+    stateId: sid("implement"),
+    workspace: workspacePath("/tmp/workspace"),
     ...overrides,
   };
 }
@@ -187,8 +188,8 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
       makeInput({
         board: makeBoard(),
         projectDir: undefined, // no drift
-        stateId: "research",
-        workspace: tmpDir,
+        stateId: sid("research"),
+        workspace: workspacePath(tmpDir),
       }),
     );
 
@@ -219,8 +220,8 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
       makeInput({
         board: makeBoard(),
         projectDir: undefined,
-        stateId: "implement",
-        workspace: tmpDir,
+        stateId: sid("implement"),
+        workspace: workspacePath(tmpDir),
       }),
     );
 
@@ -544,7 +545,7 @@ describe("enrichment integration — graceful degradation", () => {
 
     let result: Awaited<ReturnType<typeof assembleEnrichment>> | undefined;
     try {
-      result = await assembleEnrichment(makeInput({ projectDir: undefined, workspace: currentWs }));
+      result = await assembleEnrichment(makeInput({ projectDir: undefined, workspace: workspacePath(currentWs) }));
     } finally {
       rmSync(emptyWs, { force: true, recursive: true });
     }
@@ -725,7 +726,7 @@ describe("enrichment integration — workspace section edge cases", () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/important.ts"]);
 
     const result = await assembleEnrichment(
-      makeInput({ projectDir: undefined, workspace: currentWs }),
+      makeInput({ projectDir: undefined, workspace: workspacePath(currentWs) }),
     );
 
     expect(result.content).toContain("Prior Work");
@@ -749,7 +750,7 @@ describe("enrichment integration — workspace section edge cases", () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/shared.ts"]);
 
     const result = await assembleEnrichment(
-      makeInput({ projectDir: undefined, workspace: currentWs }),
+      makeInput({ projectDir: undefined, workspace: workspacePath(currentWs) }),
     );
 
     // Count "sibling-N" references in the output
@@ -774,7 +775,7 @@ describe("enrichment integration — workspace section edge cases", () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/important.ts"]);
 
     const result = await assembleEnrichment(
-      makeInput({ projectDir: undefined, workspace: currentWs }),
+      makeInput({ projectDir: undefined, workspace: workspacePath(currentWs) }),
     );
 
     expect(result.content).not.toContain("sibling-irrelevant");
