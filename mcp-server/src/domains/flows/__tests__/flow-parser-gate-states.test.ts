@@ -10,7 +10,7 @@
  * - fail-closed gate philosophy: gate-only exemption is narrow and explicit
  */
 
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { flowName, stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import { validateSpawnCoverage } from "../flow-parser.ts";
@@ -18,10 +18,10 @@ import { validateSpawnCoverage } from "../flow-parser.ts";
 function makeBaseFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test flow",
-    entry: "start",
+    entry: sid("start"),
     name: flowName("test-flow"),
-    spawn_instructions: {},
-    states: {},
+    spawn_instructions: {} as ResolvedFlow["spawn_instructions"],
+    states: {} as ResolvedFlow["states"],
     ...overrides,
   };
 }
@@ -33,23 +33,23 @@ describe("validateSpawnCoverage: gate-only state exemption", () => {
     const flow = makeBaseFlow({
       spawn_instructions: {
         // No instruction for "check" — gate-only state is exempt
-        review: "Do review",
-      },
+        [sid("review")]: "Do review",
+      } as ResolvedFlow["spawn_instructions"],
       states: {
-        check: {
+        [sid("check")]: {
           gates: ["npm run build"],
           transitions: { done: "review" },
           type: "single",
         },
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
-      },
+      } as ResolvedFlow["states"],
     });
 
     const errors = validateSpawnCoverage(flow);
@@ -59,23 +59,23 @@ describe("validateSpawnCoverage: gate-only state exemption", () => {
   it("skips gate-only states with multiple gates", () => {
     const flow = makeBaseFlow({
       spawn_instructions: {
-        review: "Do review",
-      },
+        [sid("review")]: "Do review",
+      } as ResolvedFlow["spawn_instructions"],
       states: {
-        check: {
+        [sid("check")]: {
           gates: ["npm run build", "npm test"],
           transitions: { done: "review" },
           type: "single",
         },
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
-      },
+      } as ResolvedFlow["states"],
     });
 
     const errors = validateSpawnCoverage(flow);
@@ -90,18 +90,18 @@ describe("validateSpawnCoverage: agent + gates states still need spawn instructi
     const flow = makeBaseFlow({
       spawn_instructions: {
         // No instruction for "implement" — should error even though it has gates
-      },
+      } as ResolvedFlow["spawn_instructions"],
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon:canon-implementor",
           gates: ["npm test"],
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
-      },
+      } as ResolvedFlow["states"],
     });
 
     const errors = validateSpawnCoverage(flow);
@@ -112,19 +112,19 @@ describe("validateSpawnCoverage: agent + gates states still need spawn instructi
   it("no error when agent + gates state has a spawn instruction", () => {
     const flow = makeBaseFlow({
       spawn_instructions: {
-        implement: "Implement the changes",
-      },
+        [sid("implement")]: "Implement the changes",
+      } as ResolvedFlow["spawn_instructions"],
       states: {
-        implement: {
+        [sid("implement")]: {
           agent: "canon:canon-implementor",
           gates: ["npm test"],
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
-      },
+      } as ResolvedFlow["states"],
     });
 
     const errors = validateSpawnCoverage(flow);
@@ -137,17 +137,17 @@ describe("validateSpawnCoverage: agent + gates states still need spawn instructi
 describe("validateSpawnCoverage: agentless single states are exempt", () => {
   it("exempts single states with no agent (gate-only, may use discovered gates)", () => {
     const flow = makeBaseFlow({
-      spawn_instructions: {},
+      spawn_instructions: {} as ResolvedFlow["spawn_instructions"],
       states: {
-        check: {
+        [sid("check")]: {
           // No agent, no explicit gates — exempt as gate-only state (discovered gates at runtime)
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
-      },
+      } as ResolvedFlow["states"],
     });
 
     const errors = validateSpawnCoverage(flow);
@@ -156,17 +156,17 @@ describe("validateSpawnCoverage: agentless single states are exempt", () => {
 
   it("still requires spawn instruction for non-single agentless states (e.g. parallel)", () => {
     const flow = makeBaseFlow({
-      spawn_instructions: {},
+      spawn_instructions: {} as ResolvedFlow["spawn_instructions"],
       states: {
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
-        work: {
+        [sid("work")]: {
           // No agent, but type is parallel — not exempt
           transitions: { done: "terminal" },
           type: "parallel",
         },
-      },
+      } as ResolvedFlow["states"],
     });
 
     const errors = validateSpawnCoverage(flow);
@@ -176,12 +176,12 @@ describe("validateSpawnCoverage: agentless single states are exempt", () => {
 
   it("terminal states are always exempt (baseline regression)", () => {
     const flow = makeBaseFlow({
-      spawn_instructions: {},
+      spawn_instructions: {} as ResolvedFlow["spawn_instructions"],
       states: {
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
-      },
+      } as ResolvedFlow["states"],
     });
 
     const errors = validateSpawnCoverage(flow);
@@ -197,28 +197,28 @@ describe("validateSpawnCoverage: mixed flow", () => {
       spawn_instructions: {
         // Missing "implement" instruction — should error
         // "check" is exempt (gate-only)
-        review: "Do review",
-      },
+        [sid("review")]: "Do review",
+      } as ResolvedFlow["spawn_instructions"],
       states: {
-        check: {
+        [sid("check")]: {
           gates: ["npm run build"],
           transitions: { done: "implement" },
           type: "single",
         },
-        implement: {
+        [sid("implement")]: {
           agent: "canon:canon-implementor",
           transitions: { done: "review" },
           type: "single",
         },
-        review: {
+        [sid("review")]: {
           agent: "canon:canon-reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
-        terminal: {
+        [sid("terminal")]: {
           type: "terminal",
         },
-      },
+      } as ResolvedFlow["states"],
     });
 
     const errors = validateSpawnCoverage(flow);

@@ -260,11 +260,11 @@ describe("drainFlowEvents — skip_ahead", () => {
       description: "branching flow",
       name: flowName("branching"),
       states: {
-        "branch-a": { transitions: { done: "done" }, type: "single" },
-        "branch-b": { transitions: { done: "done" }, type: "single" },
-        done: { type: "terminal" },
-        start: { transitions: { a: "branch-a", b: "branch-b" }, type: "single" },
-      },
+        [sid("branch-a")]: { transitions: { done: "done" }, type: "single" },
+        [sid("branch-b")]: { transitions: { done: "done" }, type: "single" },
+        [sid("done")]: { type: "terminal" },
+        [sid("start")]: { transitions: { a: "branch-a", b: "branch-b" }, type: "single" },
+      } as FlowDefinition["states"],
     };
     const store = makeStore([
       makeMsg(24, JSON.stringify({ reason: "prefer-b", target: "branch-b", type: "skip_ahead" })),

@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { flowName, stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type {
   FlowDefinition,
@@ -76,12 +76,12 @@ describe("resolveFragments", () => {
     description: "test flow",
     name: flowName("test"),
     states: {
-      start: {
+      [sid("start")]: {
         agent: "starter",
         transitions: { done: "frag-state" },
         type: "single",
       },
-    },
+    } as FlowDefinition["states"],
   };
 
   it("merges fragment states into the result", () => {
@@ -233,17 +233,17 @@ describe("validateFlow", () => {
   it("returns empty array for a valid flow", () => {
     const flow: ResolvedFlow = {
       description: "valid flow",
-      entry: "start",
+      entry: sid("start"),
       name: flowName("valid"),
-      spawn_instructions: { start: "Do work." },
+      spawn_instructions: { [sid("start")]: "Do work." } as ResolvedFlow["spawn_instructions"],
       states: {
-        end: { type: "terminal" },
-        start: {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: {
           agent: "a",
           transitions: { done: "end" },
           type: "single",
         },
-      },
+      } as ResolvedFlow["states"],
     };
 
     expect(validateFlow(flow)).toEqual([]);
@@ -252,12 +252,12 @@ describe("validateFlow", () => {
   it("catches missing entry state", () => {
     const flow: ResolvedFlow = {
       description: "bad flow",
-      entry: "nonexistent",
+      entry: sid("nonexistent"),
       name: flowName("bad"),
-      spawn_instructions: {},
+      spawn_instructions: {} as ResolvedFlow["spawn_instructions"],
       states: {
-        start: { type: "terminal" },
-      },
+        [sid("start")]: { type: "terminal" },
+      } as ResolvedFlow["states"],
     };
 
     const errors = validateFlow(flow);
@@ -267,16 +267,16 @@ describe("validateFlow", () => {
   it("catches broken transition targets", () => {
     const flow: ResolvedFlow = {
       description: "bad transitions",
-      entry: "start",
+      entry: sid("start"),
       name: flowName("bad-trans"),
-      spawn_instructions: { start: "Do work." },
+      spawn_instructions: { [sid("start")]: "Do work." } as ResolvedFlow["spawn_instructions"],
       states: {
-        start: {
+        [sid("start")]: {
           agent: "a",
           transitions: { done: "nowhere" },
           type: "single",
         },
-      },
+      } as ResolvedFlow["states"],
     };
 
     const errors = validateFlow(flow);
@@ -286,17 +286,17 @@ describe("validateFlow", () => {
   it("allows hitl as a transition target", () => {
     const flow: ResolvedFlow = {
       description: "hitl transitions",
-      entry: "start",
+      entry: sid("start"),
       name: flowName("hitl-ok"),
-      spawn_instructions: { start: "Do work." },
+      spawn_instructions: { [sid("start")]: "Do work." } as ResolvedFlow["spawn_instructions"],
       states: {
-        end: { type: "terminal" },
-        start: {
+        [sid("end")]: { type: "terminal" },
+        [sid("start")]: {
           agent: "a",
           transitions: { blocked: "hitl", done: "end" },
           type: "single",
         },
-      },
+      } as ResolvedFlow["states"],
     };
 
     expect(validateFlow(flow)).toEqual([]);
@@ -305,18 +305,18 @@ describe("validateFlow", () => {
   it("warns when max_iterations lacks stuck_when", () => {
     const flow: ResolvedFlow = {
       description: "missing stuck_when",
-      entry: "loop",
+      entry: sid("loop"),
       name: flowName("no-stuck"),
-      spawn_instructions: { loop: "Do loopy work." },
+      spawn_instructions: { [sid("loop")]: "Do loopy work." } as ResolvedFlow["spawn_instructions"],
       states: {
-        end: { type: "terminal" },
-        loop: {
+        [sid("end")]: { type: "terminal" },
+        [sid("loop")]: {
           agent: "a",
           max_iterations: 3,
           transitions: { done: "end" },
           type: "single",
         },
-      },
+      } as ResolvedFlow["states"],
     };
 
     const errors = validateFlow(flow);
@@ -326,17 +326,17 @@ describe("validateFlow", () => {
   it("warns when parallel-per lacks iterate_on", () => {
     const flow: ResolvedFlow = {
       description: "missing iterate_on",
-      entry: "par",
+      entry: sid("par"),
       name: flowName("no-iterate"),
-      spawn_instructions: { par: "Run in parallel." },
+      spawn_instructions: { [sid("par")]: "Run in parallel." } as ResolvedFlow["spawn_instructions"],
       states: {
-        end: { type: "terminal" },
-        par: {
+        [sid("end")]: { type: "terminal" },
+        [sid("par")]: {
           agent: "a",
           transitions: { done: "end" },
           type: "parallel-per",
         },
-      },
+      } as ResolvedFlow["states"],
     };
 
     const errors = validateFlow(flow);
@@ -346,20 +346,20 @@ describe("validateFlow", () => {
   it("warns when terminal state has transitions", () => {
     const flow: ResolvedFlow = {
       description: "terminal with transitions",
-      entry: "start",
+      entry: sid("start"),
       name: flowName("bad-terminal"),
-      spawn_instructions: { start: "Do work." },
+      spawn_instructions: { [sid("start")]: "Do work." } as ResolvedFlow["spawn_instructions"],
       states: {
-        end: {
+        [sid("end")]: {
           transitions: { done: "start" },
           type: "terminal",
         },
-        start: {
+        [sid("start")]: {
           agent: "a",
           transitions: { done: "end" },
           type: "single",
         },
-      },
+      } as ResolvedFlow["states"],
     };
 
     const errors = validateFlow(flow);

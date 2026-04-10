@@ -8,7 +8,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { flowName, stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FragmentDefinition } from "../flow-definition-schemas.ts";
 import { loadAndResolveFlow, loadFragment, resolveFragments } from "../flow-parser.ts";
@@ -185,8 +185,8 @@ describe("loadAndResolveFlow — project-level resolution", () => {
 
     expect(flow.name).toBe("my-project-flow");
     expect(flow.entry).toBe("research");
-    expect(flow.states.research).toBeDefined();
-    expect(flow.states.research.agent).toBe("canon-researcher");
+    expect(flow.states[sid("research")]).toBeDefined();
+    expect(flow.states[sid("research")].agent).toBe("canon-researcher");
   });
 
   it("project-level flow overrides plugin-level flow of the same name", async () => {
@@ -195,12 +195,12 @@ describe("loadAndResolveFlow — project-level resolution", () => {
     const pluginFlow = await loadAndResolveFlow(pluginDir, "feature");
 
     // Project flow has "build" state with custom-implementor
-    expect(projectFlow.states.build).toBeDefined();
-    expect(projectFlow.states.build.agent).toBe("custom-implementor");
+    expect(projectFlow.states[sid("build")]).toBeDefined();
+    expect(projectFlow.states[sid("build")].agent).toBe("custom-implementor");
 
     // Plugin flow uses a different structure (no "build" state with custom-implementor)
     // The plugin feature flow uses "design", "implement", etc.
-    expect(pluginFlow.states.build).toBeUndefined();
+    expect(pluginFlow.states[sid("build")]).toBeUndefined();
   });
 
   it("falls back to plugin flow when flow not in project dir", async () => {
@@ -259,7 +259,7 @@ describe("loadAndResolveFlow — mixed project/plugin fragment resolution", () =
 
     expect(flow.name).toBe("test-epic");
     expect(flow.entry).toBe("research");
-    expect(flow.states.research).toBeDefined();
+    expect(flow.states[sid("research")]).toBeDefined();
 
     // The targeted-research fragment should be resolved as a consultation
     expect(flow.consultations).toBeDefined();
