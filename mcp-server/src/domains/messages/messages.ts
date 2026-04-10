@@ -11,6 +11,7 @@
  * sender identity and `timestamp` for ordering.
  */
 
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 
 export type Message = {
@@ -40,7 +41,7 @@ function assertValidChannel(channel: string): void {
 export function buildMessageInstructions(
   channel: string,
   peerCount: number,
-  workspace: string,
+  workspace: WorkspacePath,
 ): string {
   return `## Wave Coordination
 
@@ -65,7 +66,7 @@ If you discover a gotcha (unexpected behavior, env issue, breaking test):
  * Returns the message object with from, timestamp, and content.
  */
 export async function writeMessage(
-  workspace: string,
+  workspace: WorkspacePath,
   channel: string,
   from: string,
   content: string,
@@ -87,7 +88,7 @@ export async function writeMessage(
  * Optionally filters messages by timestamp (since).
  */
 export async function readMessages(
-  workspace: string,
+  workspace: WorkspacePath,
   channel: string,
   options?: { since?: string },
 ): Promise<Message[]> {
@@ -109,7 +110,7 @@ export async function readMessages(
  * Returns empty string if the channel has no messages.
  */
 export async function readChannelAsContext(
-  workspace: string,
+  workspace: WorkspacePath,
   channel: string,
   options?: { maxChars?: number },
 ): Promise<string> {

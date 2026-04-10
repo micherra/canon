@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type {
   FlowDefinition,
@@ -73,7 +74,7 @@ Review the code changes.
 describe("resolveFragments", () => {
   const baseFlow: FlowDefinition = {
     description: "test flow",
-    name: "test",
+    name: flowName("test"),
     states: {
       start: {
         agent: "starter",
@@ -233,7 +234,7 @@ describe("validateFlow", () => {
     const flow: ResolvedFlow = {
       description: "valid flow",
       entry: "start",
-      name: "valid",
+      name: flowName("valid"),
       spawn_instructions: { start: "Do work." },
       states: {
         end: { type: "terminal" },
@@ -252,7 +253,7 @@ describe("validateFlow", () => {
     const flow: ResolvedFlow = {
       description: "bad flow",
       entry: "nonexistent",
-      name: "bad",
+      name: flowName("bad"),
       spawn_instructions: {},
       states: {
         start: { type: "terminal" },
@@ -267,7 +268,7 @@ describe("validateFlow", () => {
     const flow: ResolvedFlow = {
       description: "bad transitions",
       entry: "start",
-      name: "bad-trans",
+      name: flowName("bad-trans"),
       spawn_instructions: { start: "Do work." },
       states: {
         start: {
@@ -286,7 +287,7 @@ describe("validateFlow", () => {
     const flow: ResolvedFlow = {
       description: "hitl transitions",
       entry: "start",
-      name: "hitl-ok",
+      name: flowName("hitl-ok"),
       spawn_instructions: { start: "Do work." },
       states: {
         end: { type: "terminal" },
@@ -305,7 +306,7 @@ describe("validateFlow", () => {
     const flow: ResolvedFlow = {
       description: "missing stuck_when",
       entry: "loop",
-      name: "no-stuck",
+      name: flowName("no-stuck"),
       spawn_instructions: { loop: "Do loopy work." },
       states: {
         end: { type: "terminal" },
@@ -326,7 +327,7 @@ describe("validateFlow", () => {
     const flow: ResolvedFlow = {
       description: "missing iterate_on",
       entry: "par",
-      name: "no-iterate",
+      name: flowName("no-iterate"),
       spawn_instructions: { par: "Run in parallel." },
       states: {
         end: { type: "terminal" },
@@ -346,7 +347,7 @@ describe("validateFlow", () => {
     const flow: ResolvedFlow = {
       description: "terminal with transitions",
       entry: "start",
-      name: "bad-terminal",
+      name: flowName("bad-terminal"),
       spawn_instructions: { start: "Do work." },
       states: {
         end: {
@@ -513,7 +514,7 @@ describe("validateStateIdParams", () => {
 describe("resolveFragments — typed params", () => {
   const baseFlow: FlowDefinition = {
     description: "test flow",
-    name: "test",
+    name: flowName("test"),
   };
 
   it("accepts old null-marker format (backward compat)", () => {

@@ -1,4 +1,5 @@
 import type { Board } from "@domains/flows/board-state-schemas.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import {
@@ -17,7 +18,7 @@ function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
     description: "A test flow",
     entry: "start",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
       done: { type: "terminal" },

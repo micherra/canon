@@ -12,6 +12,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection, ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
@@ -40,7 +41,7 @@ function makeBoard(): Board {
     concerns: [],
     current_state: "start",
     entry: "start",
-    flow: "test",
+    flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -54,7 +55,7 @@ function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
     description: "Integration test flow",
     entry: "build",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
       build: {

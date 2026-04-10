@@ -8,6 +8,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FragmentDefinition } from "../flow-definition-schemas.ts";
 import { loadAndResolveFlow, loadFragment, resolveFragments } from "../flow-parser.ts";
@@ -282,7 +283,7 @@ describe("resolveFragments — consultation skip_when propagation", () => {
   it("propagates skip_when from fragment definition to resolved consultation", () => {
     const baseFlow = {
       description: "test",
-      name: "test",
+      name: flowName("test"),
       states: {
         done: { type: "terminal" as const },
         start: {
@@ -318,7 +319,7 @@ describe("resolveFragments — consultation skip_when propagation", () => {
   it("consultation without skip_when does not get skip_when field set", () => {
     const baseFlow = {
       description: "test",
-      name: "test",
+      name: flowName("test"),
       states: {
         done: { type: "terminal" as const },
         start: {

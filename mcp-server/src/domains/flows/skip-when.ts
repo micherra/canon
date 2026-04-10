@@ -6,7 +6,7 @@ import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { loadLearnGateConfig } from "@shared/lib/config.ts";
 import { acquireLearnLock, getLastLearnTimestamp } from "@shared/lib/learn-lock.ts";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
-import type { Board } from "./board-state-schemas.ts";
+import type { Board, WorkspacePath } from "./board-state-schemas.ts";
 
 type SkipResult = {
   skip: boolean;
@@ -46,7 +46,7 @@ const CONTRACT_PATTERNS = [
 
 export async function evaluateSkipWhen(
   condition: string,
-  _workspace: string,
+  _workspace: WorkspacePath,
   board: Board,
   deps?: SkipWhenDeps,
 ): Promise<SkipResult> {
@@ -157,7 +157,7 @@ async function checkScanThrottle(throttlePath: string): Promise<string | null> {
 }
 
 async function evaluateLearnGateNotPassed(
-  workspace: string,
+  workspace: WorkspacePath,
   deps?: SkipWhenDeps,
 ): Promise<SkipResult> {
   try {

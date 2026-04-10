@@ -9,6 +9,7 @@
  */
 
 import { join } from "node:path";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { gitExecAsync } from "@platform/adapters/git-adapter-async.ts";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
 
@@ -59,7 +60,7 @@ export type CleanupResult = {
  *
  * If the canonical suffix is not found, returns the workspace path unchanged.
  */
-export function getProjectDir(workspace: string): string {
+export function getProjectDir(workspace: WorkspacePath): string {
   // Check both POSIX and Windows path separators for cross-platform support.
   const posixMarker = "/.canon/workspaces/";
   const windowsMarker = "\\.canon\\workspaces\\";

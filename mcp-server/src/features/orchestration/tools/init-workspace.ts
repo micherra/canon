@@ -9,6 +9,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
+import { flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import {
@@ -338,7 +339,7 @@ function createAndPersistWorktree(
   });
   if (!wtResult.ok) return {};
 
-  session.worktree_path = worktreePath;
+  session.worktree_path = workspacePath(worktreePath);
   session.worktree_branch = worktreeBranch;
   try {
     store.updateExecution({ worktree_branch: worktreeBranch, worktree_path: worktreePath });
@@ -502,7 +503,7 @@ export async function initWorkspaceFlow(
   const session: Session = {
     branch: input.branch,
     created: now,
-    flow: input.flow_name,
+    flow: flow.name,
     original_task: input.original_input,
     sanitized,
     slug,

@@ -8,6 +8,7 @@
  *   - analyzeReachability: combined unreachable + dead-end + stuck-loop warnings
  */
 
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import {
@@ -34,7 +35,7 @@ function makeFlow(
   return {
     description: "test",
     entry,
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: si,
     states,
   };

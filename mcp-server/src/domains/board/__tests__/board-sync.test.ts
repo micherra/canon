@@ -6,6 +6,7 @@
  */
 
 import type { Board } from "@domains/flows/board-state-schemas.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -39,7 +40,7 @@ function makeBoard(overrides: Partial<Board> = {}): Board {
     concerns: [],
     current_state: "research",
     entry: "research",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: "2026-01-01T00:00:00.000Z",
     skipped: [],

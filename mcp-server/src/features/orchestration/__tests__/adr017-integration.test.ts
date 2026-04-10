@@ -28,6 +28,7 @@ const pluginDir = resolve(process.cwd(), "..");
 
 // 1 & 2: Flow YAML parsing — feature.md and epic.md
 
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { ParallelStateSchema } from "@domains/flows/flow-definition-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
@@ -125,7 +126,7 @@ function makeBoard(metadataOverrides?: Record<string, string | number | boolean>
     concerns: [],
     current_state: "design",
     entry: "design",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     metadata: metadataOverrides,
@@ -140,7 +141,7 @@ function makeFlow(tier: "small" | "medium" | "large" | undefined): DriveFlowInpu
   return {
     description: "test",
     entry: "design",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
       design: { agent: "canon-architect", type: "single" },
@@ -226,7 +227,7 @@ describe("initBoard with approval gate fields — wave state", () => {
     return {
       description: "test",
       entry: "implement",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {},
       states: {
         implement: { agent: "canon:canon-implementor", type: "wave" },
@@ -279,7 +280,7 @@ describe("initBoard with approval gate fields — wave state", () => {
     const flow = {
       description: "test",
       entry: "implement",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {},
       states: {
         implement: { agent: "canon:canon-implementor", type: "wave" as const },
@@ -407,7 +408,7 @@ function makeApprovalFlow(): ResolvedFlow {
   return {
     description: "test",
     entry: "design",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       design: "Design something",
       implement: "Implement it",
@@ -568,7 +569,7 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
     const flowNoGate: ResolvedFlow = {
       description: "test",
       entry: "implement",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { implement: "Implement" },
       states: {
         implement: {
@@ -613,7 +614,7 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
     const flowGatedToTerminal: ResolvedFlow = {
       description: "test",
       entry: "design",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { design: "Design" },
       states: {
         design: {

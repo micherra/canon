@@ -10,6 +10,7 @@
  * - fail-closed gate philosophy: gate-only exemption is narrow and explicit
  */
 
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import { validateSpawnCoverage } from "../flow-parser.ts";
@@ -18,7 +19,7 @@ function makeBaseFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test flow",
     entry: "start",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {},
     states: {},
     ...overrides,

@@ -49,6 +49,7 @@ vi.mock("../tools/resolve-after-consultations.ts", () => ({
 
 import { syncBoardToStore } from "@domains/board/board-sync.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
@@ -96,7 +97,7 @@ function makeBoard(overrides: Partial<Board> = {}): Board {
     concerns: [],
     current_state: "research",
     entry: "research",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: "2026-01-01T00:00:00.000Z",
     skipped: [],
@@ -175,7 +176,7 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
     const flow: ResolvedFlow = {
       description: "multi-skip flow",
       entry: "research",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         implement: "Implement",
         research: "Do research",
@@ -297,7 +298,7 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
     const flow: ResolvedFlow = {
       description: "skip-to-terminal flow",
       entry: "research",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         research: "Do research",
         "skip-state": "Skip state",
@@ -359,7 +360,7 @@ describe("driveFlow — workspace exists but no board execution", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "research",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { research: "research" },
       states: {
         research: {
@@ -396,7 +397,7 @@ describe("driveFlow — buildDoneSummary state counting", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "research",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { implement: "implement", research: "research", review: "review" },
       states: {
         implement: {
@@ -508,7 +509,7 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "research",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { research: "research" },
       states: {
         research: {
@@ -558,7 +559,7 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "research",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { research: "research" },
       states: {
         research: {
@@ -740,7 +741,7 @@ describe("driveFlow — result without agent_session_id", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "research",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { implement: "implement", research: "research" },
       states: {
         implement: {

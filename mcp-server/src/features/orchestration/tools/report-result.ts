@@ -13,7 +13,7 @@ import {
   setBlocked,
 } from "@domains/board/board.ts";
 import { syncBoardToStore } from "@domains/board/board-sync.ts";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type {
   BaselineEvidence,
   DiscoveredGate,
@@ -95,7 +95,7 @@ function matchesArtifactName(artifactPath: string, reqName: string, metaName: st
 }
 
 async function validateMatchedArtifact(
-  workspace: string,
+  workspace: WorkspacePath,
   match: string,
   req: RequiredArtifact,
 ): Promise<ToolResult<void> | null> {
@@ -166,7 +166,7 @@ async function validateMetaAtPath(
 }
 
 async function searchPlansForArtifact(
-  workspace: string,
+  workspace: WorkspacePath,
   metaName: string,
   req: RequiredArtifact,
 ): Promise<{ found: boolean; error: ToolResult<void> | null }> {
@@ -186,7 +186,7 @@ async function searchPlansForArtifact(
 }
 
 async function validateSingleArtifact(
-  workspace: string,
+  workspace: WorkspacePath,
   artifacts: string[],
   req: RequiredArtifact,
 ): Promise<ToolResult<void> | null> {
@@ -214,7 +214,7 @@ async function validateSingleArtifact(
 }
 
 export async function validateRequiredArtifacts(
-  workspace: string,
+  workspace: WorkspacePath,
   artifacts: string[],
   required: RequiredArtifact[],
 ): Promise<ToolResult<void> | null> {
@@ -234,7 +234,7 @@ export async function validateRequiredArtifacts(
  * array of warning strings (empty when all handoffs are present and correct).
  * Never throws.
  */
-async function validateHandoffEntry(workspace: string, req: RequiredArtifact): Promise<string[]> {
+async function validateHandoffEntry(workspace: WorkspacePath, req: RequiredArtifact): Promise<string[]> {
   const metaPath = join(workspace, "handoffs", `${req.name}.meta.json`);
   let content: string;
   try {
@@ -260,7 +260,7 @@ async function validateHandoffEntry(workspace: string, req: RequiredArtifact): P
 }
 
 export async function validateRequiredHandoffs(
-  workspace: string,
+  workspace: WorkspacePath,
   required: RequiredArtifact[],
 ): Promise<string[]> {
   const perEntry = await Promise.all(required.map((req) => validateHandoffEntry(workspace, req)));
@@ -644,7 +644,7 @@ function resolveHitl(options: ResolveHitlOptions): {
 }
 
 type ReportResultInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   state_id: string;
   status_keyword: string;
   flow: ResolvedFlow;

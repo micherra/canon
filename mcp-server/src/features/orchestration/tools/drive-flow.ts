@@ -21,7 +21,8 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { Board, WaveResult } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId, WaveResult, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as mkStateId } from "@domains/flows/board-state-schemas.ts";
 import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import { type GateResult, runGates } from "@domains/flows/gate-runner.ts";
@@ -177,7 +178,7 @@ function isApprovalDecisionStatus(status: string): boolean {
 }
 
 type HandleWaveResultOpts = {
-  state_id: string;
+  state_id: StateId;
   task_id: string | undefined;
   status: string;
   artifacts: string[] | undefined;
@@ -188,7 +189,7 @@ type HandleWaveResultOpts = {
 
 /** Handle the result of a wave-type state, routing to wave task handler or validating task_id. */
 function handleWaveResult(
-  workspace: string,
+  workspace: WorkspacePath,
   flow: DriveFlowInput["flow"],
   opts: HandleWaveResultOpts,
 ): Promise<ToolResult<DriveFlowAction>> | ToolResult<DriveFlowAction> | null {
@@ -232,11 +233,11 @@ function handleWaveResult(
  *   Pass `reportOut.next_state` from the calling context, or `null` at the wave boundary.
  */
 type ApplyFlowEventDrainOpts = {
-  workspace: string;
+  workspace: WorkspacePath;
   flow: DriveFlowInput["flow"];
-  currentStateId: string;
+  currentStateId: StateId;
   store: ReturnType<typeof getExecutionStore>;
-  resumeStateId: string | null;
+  resumeStateId: StateId | null;
   projectDir: string;
 };
 
@@ -268,13 +269,14 @@ async function applyFlowEventDrain(
   if (effect.type === "none") return null;
 
   if (effect.type === "insert") {
+    const insertedStateId = mkStateId(effect.state_id);
     const driveCtx: DriveCtx = { flow, projectDir, store, workspace };
-    const spawnAction = await enterStateAndBuildSpawn(driveCtx, effect.state_id);
+    const spawnAction = await enterStateAndBuildSpawn(driveCtx, insertedStateId);
     // Persist the return address so that when the inserted state completes with "done",
     // the flow resumes at resumeStateId instead of the inserted state's own transition target.
     if (resumeStateId !== null) {
-      const insertedEntry = store.getState(effect.state_id);
-      store.upsertState(effect.state_id, {
+      const insertedEntry = store.getState(insertedStateId);
+      store.upsertState(insertedStateId, {
         entries: insertedEntry?.entries ?? 1,
         inserted_return_to: resumeStateId,
         status: insertedEntry?.status ?? "in_progress",
@@ -284,7 +286,7 @@ async function applyFlowEventDrain(
   }
 
   if (effect.type === "skip") {
-    return enterStateAndBuildSpawn({ flow, projectDir, store, workspace }, effect.target);
+    return enterStateAndBuildSpawn({ flow, projectDir, store, workspace }, mkStateId(effect.target));
   }
 
   // effect.type === "escalate"
@@ -300,7 +302,7 @@ async function applyFlowEventDrain(
 }
 
 type ResolvePostReportOpts = {
-  state_id: string;
+  state_id: StateId;
   status: string;
   artifacts: string[] | undefined;
   reportOut: Awaited<ReturnType<typeof reportResult>> & { ok: true };
@@ -311,7 +313,7 @@ type ResolvePostReportOpts = {
 function buildApprovalAction(
   completedDef: StateDefinition | undefined,
   artifacts: string[] | undefined,
-  state_id: string,
+  state_id: StateId,
   status: string,
 ): ToolResult<DriveFlowAction> {
   return {
@@ -333,7 +335,7 @@ function isParallelWaitState(def: StateDefinition | undefined): boolean {
 
 /** Check post-report conditions and return the appropriate action. */
 async function resolvePostReportAction(
-  workspace: string,
+  workspace: WorkspacePath,
   flow: DriveFlowInput["flow"],
   opts: ResolvePostReportOpts,
 ): Promise<ToolResult<DriveFlowAction>> {
@@ -372,7 +374,7 @@ async function resolvePostReportAction(
     currentStateId: state_id,
     flow,
     projectDir,
-    resumeStateId: next_state ?? null,
+    resumeStateId: next_state ? mkStateId(next_state) : null,
     store,
     workspace,
   });
@@ -381,8 +383,9 @@ async function resolvePostReportAction(
   // Return-address semantics: if this state was inserted and completed with "done",
   // resume at the stored return address instead of the state's own transition target.
   const returnAddress = store.getState(state_id)?.inserted_return_to;
-  const effectiveNextState =
+  const rawNextState =
     returnAddress && reportOut.transition_condition === "done" ? returnAddress : next_state;
+  const effectiveNextState = rawNextState ? mkStateId(rawNextState) : null;
 
   return resolveNextStateAction(workspace, flow, {
     board: store.getBoard() ?? freshBoard,
@@ -394,8 +397,8 @@ async function resolvePostReportAction(
 }
 
 type ResolveNextStateOpts = {
-  next_state: string | null | undefined;
-  current_state: string;
+  next_state: StateId | null | undefined;
+  current_state: StateId;
   board: Board;
   store: ReturnType<typeof getExecutionStore>;
   projectDir: string;
@@ -403,7 +406,7 @@ type ResolveNextStateOpts = {
 
 /** Determine the action for the next state (done or spawn). */
 async function resolveNextStateAction(
-  workspace: string,
+  workspace: WorkspacePath,
   flow: DriveFlowInput["flow"],
   opts: ResolveNextStateOpts,
 ): Promise<ToolResult<DriveFlowAction>> {
@@ -443,7 +446,7 @@ export async function driveFlow(
 
   if (data.result) {
     const {
-      state_id,
+      state_id: state_id_raw,
       status,
       artifacts,
       parallel_results,
@@ -452,6 +455,7 @@ export async function driveFlow(
       task_id,
       worktree_branch,
     } = data.result;
+    const state_id = mkStateId(state_id_raw);
 
     if (agent_session_id) store.updateAgentSession(state_id, agent_session_id);
 
@@ -506,9 +510,9 @@ export async function driveFlow(
 // Wave state handling
 
 type WaveTaskResultInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   flow: DriveFlowInput["flow"];
-  state_id: string;
+  state_id: StateId;
   task_id: string;
   task_status: string;
   task_artifacts?: string[];
@@ -605,9 +609,9 @@ async function handleWaveTaskResult(
 }
 
 type CompleteWaveInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   flow: DriveFlowInput["flow"];
-  state_id: string;
+  state_id: StateId;
   currentWave: number;
   store: ReturnType<typeof getExecutionStore>;
 };
@@ -642,7 +646,7 @@ function buildWorktreeResults(
 type HandleMergeFailureOpts = {
   onConflict: "hitl" | "replan" | "retry-single";
   flow: DriveFlowInput["flow"];
-  state_id: string;
+  state_id: StateId;
   mergeStrategy: string;
   store: ReturnType<typeof getExecutionStore>;
 };
@@ -674,7 +678,7 @@ async function handleMergeFailure(
 }
 
 type RouteReportResultOpts = {
-  state_id: string;
+  state_id: StateId;
   reportOut: Awaited<ReturnType<typeof reportResult>> & { ok: true };
   store: ReturnType<typeof getExecutionStore>;
   projectDir: string;
@@ -682,7 +686,7 @@ type RouteReportResultOpts = {
 
 /** Route a report result to HITL, done, or next-state spawn. */
 async function routeReportResult(
-  workspace: string,
+  workspace: WorkspacePath,
   flow: DriveFlowInput["flow"],
   opts: RouteReportResultOpts,
 ): Promise<ToolResult<DriveFlowAction>> {
@@ -709,7 +713,7 @@ async function routeReportResult(
     currentStateId: state_id,
     flow,
     projectDir,
-    resumeStateId: next_state ?? null,
+    resumeStateId: next_state ? mkStateId(next_state) : null,
     store,
     workspace,
   });
@@ -718,8 +722,9 @@ async function routeReportResult(
   // Return-address semantics: if this state was inserted and completed with "done",
   // resume at the stored return address instead of the state's own transition target.
   const returnAddress = store.getState(state_id)?.inserted_return_to;
-  const effectiveNextState =
+  const rawNextState =
     returnAddress && reportOut.transition_condition === "done" ? returnAddress : next_state;
+  const effectiveNextState = rawNextState ? mkStateId(rawNextState) : null;
 
   return resolveNextStateAction(workspace, flow, {
     board: store.getBoard()!,
@@ -731,7 +736,7 @@ async function routeReportResult(
 }
 
 type HandleLastWaveOpts = {
-  state_id: string;
+  state_id: StateId;
   statusKeyword: string;
   gateResults: ReturnType<typeof runGates>;
   store: ReturnType<typeof getExecutionStore>;
@@ -740,7 +745,7 @@ type HandleLastWaveOpts = {
 
 /** Handle the last wave: after-consultations, report result, and advance. */
 async function handleLastWave(
-  workspace: string,
+  workspace: WorkspacePath,
   flow: DriveFlowInput["flow"],
   opts: HandleLastWaveOpts,
 ): Promise<ToolResult<DriveFlowAction>> {
@@ -779,7 +784,7 @@ async function handleLastWave(
 }
 
 type CheckWaveBoundaryApprovalOpts = {
-  state_id: string;
+  state_id: StateId;
   currentWave: number;
   nextWaveTaskIds: string[];
   store: ReturnType<typeof getExecutionStore>;
@@ -812,10 +817,10 @@ type AdvanceWaveInput = {
   flow: DriveFlowInput["flow"];
   gateResults: ReturnType<typeof runGates>;
   projectDir: string;
-  state_id: string;
+  state_id: StateId;
   stateDef: StateDefinition;
   store: ReturnType<typeof getExecutionStore>;
-  workspace: string;
+  workspace: WorkspacePath;
 };
 
 async function advanceWave(input: AdvanceWaveInput): Promise<ToolResult<DriveFlowAction>> {
@@ -919,7 +924,7 @@ type HandleMergeConflictInput = {
   conflictDetail: string;
   onConflict: "hitl" | "replan" | "retry-single";
   flow: DriveFlowInput["flow"];
-  state_id: string;
+  state_id: StateId;
   store: ReturnType<typeof getExecutionStore>;
 };
 
@@ -1039,7 +1044,7 @@ function handlePendingWaveEvents(
  * Returns an empty array when no tasks exist for that wave or INDEX.md is absent.
  */
 async function resolveNextWaveTaskIds(
-  workspace: string,
+  workspace: WorkspacePath,
   store: ReturnType<typeof getExecutionStore>,
   nextWave: number,
 ): Promise<string[]> {
@@ -1063,9 +1068,9 @@ async function resolveNextWaveTaskIds(
 }
 
 type StartNextWaveInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   flow: DriveFlowInput["flow"];
-  state_id: string;
+  state_id: StateId;
   nextWave: number;
   nextWaveTaskIds: string[];
   store: ReturnType<typeof getExecutionStore>;
@@ -1157,11 +1162,11 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
  */
 /** Handle a skipped state: report and return the next state ID or a terminal action. */
 async function handleSkippedState(
-  workspace: string,
+  workspace: WorkspacePath,
   flow: DriveFlowInput["flow"],
-  currentStateId: string,
+  currentStateId: StateId,
   projectDir: string,
-): Promise<{ nextStateId: string } | ToolResult<DriveFlowAction>> {
+): Promise<{ nextStateId: StateId } | ToolResult<DriveFlowAction>> {
   const reportOut = await reportResult({
     flow,
     state_id: currentStateId,
@@ -1189,24 +1194,25 @@ async function handleSkippedState(
       ...doneSummary,
     };
   }
-  if (flow.states[nextState]?.type === "terminal") {
+  const nextStateId = mkStateId(nextState);
+  if (flow.states[nextStateId]?.type === "terminal") {
     // Site 5: next state after skip is terminal
-    const doneSummary = await buildDoneSummary(reportOut.board, nextState, projectDir);
+    const doneSummary = await buildDoneSummary(reportOut.board, nextStateId, projectDir);
     return {
       action: "done",
       ok: true as const,
-      terminal_state: nextState,
+      terminal_state: nextStateId,
       ...doneSummary,
     };
   }
 
-  return { nextStateId: nextState };
+  return { nextStateId };
 }
 
 /** Build a terminal "done" action for a state. */
 async function buildTerminalAction(
-  workspace: string,
-  stateId: string,
+  workspace: WorkspacePath,
+  stateId: StateId,
   store: ReturnType<typeof getExecutionStore>,
   projectDir: string,
 ): Promise<ToolResult<DriveFlowAction>> {
@@ -1254,7 +1260,7 @@ function buildConvergenceHitl(
  */
 /** Shared context for internal drive-flow state-entry helpers. */
 type DriveCtx = {
-  workspace: string;
+  workspace: WorkspacePath;
   flow: DriveFlowInput["flow"];
   store: ReturnType<typeof getExecutionStore>;
   projectDir: string;
@@ -1281,7 +1287,7 @@ function resolveAndRunGates(
 async function handleGateFailure(
   gateResults: GateResult[],
   ctx: DriveCtx,
-  stateId: string,
+  stateId: StateId,
 ): Promise<ToolResult<DriveFlowAction>> {
   const failedGates = gateResults.filter((g) => !g.passed);
   const gateOutput =
@@ -1313,7 +1319,7 @@ async function handleGateFailure(
 
 async function handleGateOnlyState(
   ctx: DriveCtx,
-  stateId: string,
+  stateId: StateId,
   stateDef: StateDefinition,
 ): Promise<ToolResult<DriveFlowAction>> {
   const { workspace, flow, store, projectDir } = ctx;
@@ -1347,7 +1353,7 @@ async function handleGateOnlyState(
     const doneSummary = await buildDoneSummary(board, stateId, projectDir);
     return { action: "done", ok: true as const, terminal_state: stateId, ...doneSummary };
   }
-  return enterStateAndBuildSpawn(ctx, reportOut.next_state);
+  return enterStateAndBuildSpawn(ctx, mkStateId(reportOut.next_state));
 }
 
 /**
@@ -1373,7 +1379,7 @@ function isWriteAgent(agentType: string): boolean {
  */
 async function attachSingleStateWorktrees(
   requests: SpawnRequest[],
-  stateId: string,
+  stateId: StateId,
   store: ReturnType<typeof getExecutionStore>,
   projectDir: string,
   baseCwd: string,
@@ -1419,8 +1425,8 @@ async function attachSingleStateWorktrees(
 /** Try to enter a single state. Returns a final action, or { nextStateId } to continue the skip loop. */
 async function tryEnterSingleState(
   ctx: DriveCtx,
-  currentStateId: string,
-): Promise<ToolResult<DriveFlowAction> | { nextStateId: string }> {
+  currentStateId: StateId,
+): Promise<ToolResult<DriveFlowAction> | { nextStateId: StateId }> {
   const { workspace, flow, store, projectDir } = ctx;
   const stateDef = flow.states[currentStateId];
   if (stateDef?.type === "terminal")
@@ -1474,10 +1480,10 @@ async function tryEnterSingleState(
 
 async function enterStateAndBuildSpawn(
   ctx: DriveCtx,
-  stateId: string,
+  stateId: StateId,
 ): Promise<ToolResult<DriveFlowAction>> {
   const MAX_SKIP_ITERATIONS = 50;
-  let currentStateId = stateId;
+  let currentStateId: StateId = stateId;
 
   for (let i = 0; i < MAX_SKIP_ITERATIONS; i++) {
     // biome-ignore lint/performance/noAwaitInLoops: state machine loop — each iteration depends on the previous state's result
@@ -1504,7 +1510,7 @@ async function enterStateAndBuildSpawn(
  */
 /** Read wave task IDs from INDEX.md for the given wave number. */
 async function readWaveTaskIds(
-  workspace: string,
+  workspace: WorkspacePath,
   slug: string | undefined,
   wave: number,
 ): Promise<string[]> {
@@ -1597,7 +1603,7 @@ function attachWorktreeAndResumeContext(
 /** Persist wave metadata and build spawn requests for a wave state entry. */
 async function buildWaveSpawnRequests(opts: {
   enterOut: Extract<Awaited<ReturnType<typeof enterAndPrepareState>>, { ok: true }>;
-  stateId: string;
+  stateId: StateId;
   store: ReturnType<typeof getExecutionStore>;
   existingState: ReturnType<ReturnType<typeof getExecutionStore>["getState"]>;
   currentWave: number;
@@ -1628,9 +1634,9 @@ async function buildWaveSpawnRequests(opts: {
 }
 
 async function enterWaveState(
-  workspace: string,
+  workspace: WorkspacePath,
   flow: DriveFlowInput["flow"],
-  stateId: string,
+  stateId: StateId,
   store: ReturnType<typeof getExecutionStore>,
 ): Promise<ToolResult<DriveFlowAction>> {
   const session = store.getSession();
@@ -1776,7 +1782,7 @@ export async function injectSettingsIntoRequests(requests: SpawnRequest[]): Prom
  */
 function persistToolScopeWarnings(
   prompts: SpawnPromptEntry[],
-  stateId: string,
+  stateId: StateId,
   store: ReturnType<typeof getExecutionStore>,
 ): void {
   for (const entry of prompts) {
@@ -1801,7 +1807,7 @@ function persistToolScopeWarnings(
  */
 async function applySessionContinuation(
   requests: SpawnRequest[],
-  stateId: string,
+  stateId: StateId,
   store: ReturnType<typeof getExecutionStore>,
 ): Promise<SpawnRequest[]> {
   // Only apply continue_from for single-agent states (issue #20).
@@ -1848,7 +1854,7 @@ function buildHitlContext(
   board: ReturnType<typeof getExecutionStore>["getBoard"] extends () => infer T
     ? NonNullable<T>
     : never,
-  stateId: string,
+  stateId: StateId,
   reportOut: {
     transition_condition: string;
     stuck: boolean;
@@ -1885,7 +1891,7 @@ async function buildDoneSummary(
   board: ReturnType<typeof getExecutionStore>["getBoard"] extends () => infer T
     ? NonNullable<T>
     : never,
-  terminalState: string,
+  terminalState: StateId,
   projectDir: string,
 ): Promise<{
   summary: string;

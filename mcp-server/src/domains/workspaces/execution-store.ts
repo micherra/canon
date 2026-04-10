@@ -19,7 +19,11 @@ import type {
   Session,
 } from "@domains/flows/board-state-schemas.ts";
 import {
+  type FlowName,
+  type StateId,
   type WorkspacePath,
+  flowName,
+  stateId as mkStateId,
   workspacePath,
 } from "@domains/flows/branded-types.ts";
 import type { WaveEvent } from "@domains/flows/event-schemas.ts";
@@ -522,7 +526,7 @@ export class ExecutionStore {
       branch: row.branch,
       completed_at: row.completed_at ?? undefined,
       created: row.created,
-      flow: row.flow_name,
+      flow: flowName(row.flow_name),
       original_task: row.original_task ?? undefined,
       rolled_back_at: row.rolled_back_at ?? undefined,
       rolled_back_to: row.rolled_back_to ?? undefined,
@@ -532,7 +536,7 @@ export class ExecutionStore {
       task: row.task,
       tier: row.tier as "small" | "medium" | "large",
       worktree_branch: row.worktree_branch ?? undefined,
-      worktree_path: row.worktree_path ?? undefined,
+      worktree_path: row.worktree_path ? workspacePath(row.worktree_path) : undefined,
     };
   }
 
@@ -617,12 +621,12 @@ export class ExecutionStore {
 
     const states: Board["states"] = {};
     for (const row of stateRows) {
-      states[row.state_id] = this.deserializeStateRow(row);
+      states[mkStateId(row.state_id)] = this.deserializeStateRow(row);
     }
 
     const iterations: Board["iterations"] = {};
     for (const row of iterRows) {
-      iterations[row.state_id] = {
+      iterations[mkStateId(row.state_id)] = {
         cannot_fix: JSON.parse(row.cannot_fix),
         count: row.count,
         history: JSON.parse(row.history),
@@ -634,9 +638,9 @@ export class ExecutionStore {
       base_commit: exRow.base_commit,
       blocked: exRow.blocked !== null ? JSON.parse(exRow.blocked) : null,
       concerns: JSON.parse(exRow.concerns),
-      current_state: exRow.current_state,
-      entry: exRow.entry,
-      flow: exRow.flow,
+      current_state: mkStateId(exRow.current_state),
+      entry: mkStateId(exRow.entry),
+      flow: flowName(exRow.flow),
       iterations,
       last_updated: exRow.last_updated,
       metadata: exRow.metadata !== null ? JSON.parse(exRow.metadata) : undefined,
@@ -650,7 +654,7 @@ export class ExecutionStore {
   // States
 
   upsertState(
-    stateId: string,
+    stateId: StateId,
     fields: Partial<BoardStateEntry> & { status: BoardStateEntry["status"]; entries: number },
   ): void {
     this.stmtUpsertState.run(this.buildUpsertStateParams(stateId, fields));
@@ -658,7 +662,7 @@ export class ExecutionStore {
 
   /** Serialize BoardStateEntry fields into the parameter object for stmtUpsertState. */
   private buildUpsertStateParams(
-    stateId: string,
+    stateId: StateId,
     fields: Partial<BoardStateEntry> & { status: BoardStateEntry["status"]; entries: number },
   ): Record<string, unknown> {
     const jsonOrNull = (v: unknown) => (v !== undefined ? JSON.stringify(v) : null);
@@ -687,16 +691,16 @@ export class ExecutionStore {
     };
   }
 
-  getState(stateId: string): BoardStateEntry | null {
+  getState(stateId: StateId): BoardStateEntry | null {
     const row = this.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
     if (!row) return null;
     return this.deserializeStateRow(row);
   }
 
-  getAllStates(): Array<BoardStateEntry & { state_id: string }> {
+  getAllStates(): Array<BoardStateEntry & { state_id: StateId }> {
     const rows = this.stmtGetAllStates.all() as ExecutionStateRow[];
     return rows.map((row) => ({
-      state_id: row.state_id,
+      state_id: mkStateId(row.state_id),
       ...this.deserializeStateRow(row),
     }));
   }
@@ -704,7 +708,7 @@ export class ExecutionStore {
   // Iterations
 
   upsertIteration(
-    stateId: string,
+    stateId: StateId,
     fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] },
   ): void {
     this.stmtUpsertIteration.run({
@@ -716,7 +720,7 @@ export class ExecutionStore {
     });
   }
 
-  getIteration(stateId: string): IterationEntry | null {
+  getIteration(stateId: StateId): IterationEntry | null {
     const row = this.stmtGetIteration.get(stateId) as IterationRow | undefined;
     if (!row) return null;
     return {
@@ -735,7 +739,7 @@ export class ExecutionStore {
    * Uses INSERT OR REPLACE — re-recording the same iteration number overwrites the previous entry.
    */
   recordIterationResult(
-    stateId: string,
+    stateId: StateId,
     iteration: number,
     status: string,
     data: Record<string, unknown>,
@@ -769,7 +773,7 @@ export class ExecutionStore {
     );
   }
 
-  isStuck(stateId: string, stuckWhen: StuckWhen): boolean {
+  isStuck(stateId: StateId, stuckWhen: StuckWhen): boolean {
     const rows = this.stmtGetLastTwoIterationResults.all(stateId) as Array<{
       status: string;
       data: string;
@@ -1068,7 +1072,7 @@ export class ExecutionStore {
    * Record a state being entered — sets status to in_progress and increments entries.
    * Composes upsertState with entry-tracking logic that callers previously duplicated.
    */
-  recordStateEntry(stateId: string, fields?: Partial<BoardStateEntry>): void {
+  recordStateEntry(stateId: StateId, fields?: Partial<BoardStateEntry>): void {
     const current = this.getState(stateId);
     this.upsertState(stateId, {
       ...fields,
@@ -1084,7 +1088,7 @@ export class ExecutionStore {
    * and the iteration update succeed or fail together.
    */
   recordStateCompletion(
-    stateId: string,
+    stateId: StateId,
     result: string,
     artifacts?: string[],
     iterationHistory?: HistoryEntry[],
@@ -1113,7 +1117,7 @@ export class ExecutionStore {
    * state is stuck. Returns { recorded: true; stuck: boolean }.
    */
   recordIterationAttempt(
-    stateId: string,
+    stateId: StateId,
     options: {
       iteration: number;
       status: string;
@@ -1205,7 +1209,7 @@ export class ExecutionStore {
    * The row must exist (i.e. the state must have been upserted) before calling this.
    * Returns `true` when the row was found and updated, `false` when not found.
    */
-  updateStateMetrics(stateId: string, metrics: Record<string, number | string>): boolean {
+  updateStateMetrics(stateId: StateId, metrics: Record<string, number | string>): boolean {
     const row = this.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
     if (!row) return false;
 
@@ -1230,7 +1234,7 @@ export class ExecutionStore {
    * - `tool_calls` is 0 (avoids divide-by-zero)
    * - `orientation_calls` is missing from the metrics
    */
-  getOrientationRatio(stateId: string): number {
+  getOrientationRatio(stateId: StateId): number {
     const row = this.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
     if (!row?.metrics) return 0;
 
@@ -1271,7 +1275,7 @@ export class ExecutionStore {
    * Returns true when the row was found and updated, false when the state does not exist.
    * Errors-are-values: never throws for expected conditions.
    */
-  setTranscriptPath(stateId: string, transcriptPath: string): boolean {
+  setTranscriptPath(stateId: StateId, transcriptPath: string): boolean {
     const info = this.stmtSetTranscriptPath.run(transcriptPath, stateId);
     return info.changes > 0;
   }
@@ -1281,7 +1285,7 @@ export class ExecutionStore {
    * Returns null when the state does not exist or no transcript has been set.
    * Errors-are-values: never throws for expected conditions.
    */
-  getTranscriptPath(stateId: string): string | null {
+  getTranscriptPath(stateId: StateId): string | null {
     const row = this.stmtGetTranscriptPath.get(stateId) as
       | { transcript_path: string | null }
       | undefined;
@@ -1295,7 +1299,7 @@ export class ExecutionStore {
    * Used to track session continuations for the fix-loop in drive_flow.
    * The sessionId is the agentId returned by Claude Code's Agent tool.
    */
-  updateAgentSession(stateId: string, sessionId: string): void {
+  updateAgentSession(stateId: StateId, sessionId: string): void {
     this.stmtUpdateAgentSession.run(sessionId, new Date().toISOString(), stateId);
   }
 
@@ -1306,7 +1310,7 @@ export class ExecutionStore {
    * (idle > 600000ms = 10 minutes) before attempting SendMessage continuation.
    */
   getAgentSession(
-    stateId: string,
+    stateId: StateId,
   ): { agent_session_id: string; last_agent_activity: string } | null {
     const row = this.stmtGetAgentSession.get(stateId) as
       | {

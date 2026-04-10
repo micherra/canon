@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { ConcernEntry, HistoryEntry } from "@domains/flows/board-state-schemas.ts";
+import type { ConcernEntry, HistoryEntry, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type {
   GateResult,
   PostconditionResult,
@@ -75,7 +75,7 @@ export type FlowEventMap = {
     flowName: string;
     task: string;
     tier: string;
-    workspace: string;
+    workspace: WorkspacePath;
     timestamp: string;
     correlation_id?: string;
   };
@@ -98,7 +98,7 @@ export type FlowEventMap = {
   wave_event_injected: {
     eventId: string;
     eventType: string;
-    workspace: string;
+    workspace: WorkspacePath;
     timestamp: string;
     correlation_id?: string;
   };
@@ -106,7 +106,7 @@ export type FlowEventMap = {
     eventId: string;
     eventType: string;
     action: "apply" | "reject";
-    workspace: string;
+    workspace: WorkspacePath;
     timestamp: string;
     correlation_id?: string;
   };

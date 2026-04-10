@@ -18,6 +18,7 @@
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import type {
   FragmentDefinition,
   FragmentInclude,
@@ -51,7 +52,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test",
     entry: "start",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { start: "Do the thing" },
     states: {
       end: { type: "terminal" },

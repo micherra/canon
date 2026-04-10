@@ -5,7 +5,7 @@
  * Stages communicate via PromptContext — immutable input fields, accumulated mutable fields.
  */
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import type { FileCluster } from "@features/orchestration/services/diff-cluster.ts";
 
@@ -42,7 +42,7 @@ export type SpawnPromptResult = {
  * Carried unchanged through all stages.
  */
 export type SpawnPromptInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   state_id: string;
   flow: ResolvedFlow;
   variables: Record<string, string>;

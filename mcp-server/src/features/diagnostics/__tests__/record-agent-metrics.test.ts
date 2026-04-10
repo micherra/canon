@@ -13,6 +13,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
@@ -259,7 +260,7 @@ describe("MCP metrics schema widening", () => {
     const flow = {
       description: "test",
       entry: "build",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {},
       states: {
         build: { transitions: { done: "done" }, type: "single" as const },

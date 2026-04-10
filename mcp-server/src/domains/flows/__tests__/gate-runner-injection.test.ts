@@ -8,6 +8,7 @@
  * directly as the optional 5th / 4th argument.
  */
 
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it, vi } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import type { ShellRunner } from "../gate-runner.ts";
@@ -18,7 +19,7 @@ function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {
     description: "test",
     entry: "start",
-    name: "injection-test-flow",
+    name: flowName("injection-test-flow"),
     spawn_instructions: {},
     states: {},
     ...(gates ? { gates } : {}),

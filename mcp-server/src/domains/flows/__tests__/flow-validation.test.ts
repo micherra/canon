@@ -10,6 +10,7 @@
  */
 
 import { resolve } from "node:path";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import {
@@ -26,7 +27,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test",
     entry: "start",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { start: "Do the thing" },
     states: {
       end: { type: "terminal" },

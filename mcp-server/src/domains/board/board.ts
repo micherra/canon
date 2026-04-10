@@ -10,6 +10,7 @@ import type {
   CannotFixItem,
   ConcernEntry,
   ConsultationResult,
+  StateId,
 } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 
@@ -29,12 +30,13 @@ export function initBoard(flow: ResolvedFlow, task: string, baseCommit: string):
   const iterations: Board["iterations"] = {};
 
   for (const [key, stateDef] of Object.entries(flow.states)) {
-    states[key] = { entries: 0, status: "pending" };
+    const sid = key as StateId;
+    states[sid] = { entries: 0, status: "pending" };
 
     // max_revisions (ADR-017) takes precedence over max_iterations for revision budget
     const maxIter = stateDef.max_revisions ?? stateDef.max_iterations;
     if (maxIter !== undefined) {
-      iterations[key] = {
+      iterations[sid] = {
         cannot_fix: [],
         count: 0,
         history: [],
@@ -42,7 +44,7 @@ export function initBoard(flow: ResolvedFlow, task: string, baseCommit: string):
       };
     } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
       // Default revision budget for explicitly gated states without explicit limit
-      iterations[key] = {
+      iterations[sid] = {
         cannot_fix: [],
         count: 0,
         history: [],
@@ -74,7 +76,7 @@ export function initBoard(flow: ResolvedFlow, task: string, baseCommit: string):
  * Precondition: state must not already be "done".
  * Returns BoardResult — callers must check result.ok before using result.board.
  */
-export function enterState(board: Board, stateId: string): BoardResult {
+export function enterState(board: Board, stateId: StateId): BoardResult {
   const now = new Date().toISOString();
   const prev = board.states[stateId];
 
@@ -124,7 +126,7 @@ export function enterState(board: Board, stateId: string): BoardResult {
  */
 export function completeState(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   result: string,
   artifacts?: string[],
 ): BoardResult {
@@ -138,7 +140,7 @@ export function completeState(
     };
   }
 
-  const updated: Board["states"][string] = {
+  const updated: Board["states"][StateId] = {
     ...prev,
     completed_at: now,
     result,
@@ -165,7 +167,7 @@ export function completeState(
 /**
  * Mark a state as blocked.
  */
-export function setBlocked(board: Board, stateId: string, reason: string): Board {
+export function setBlocked(board: Board, stateId: StateId, reason: string): Board {
   const now = new Date().toISOString();
 
   return {
@@ -194,7 +196,7 @@ export type RecordConsultationOpts = {
  */
 export function recordConsultationResult(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   opts: RecordConsultationOpts,
 ): Board {
   const { waveKey, breakpoint, name, result } = opts;
@@ -238,7 +240,7 @@ export type RecordGateOpts = {
 /**
  * Record a gate result (gate name + output) into the board. Pure — returns a new Board.
  */
-export function recordGateResult(board: Board, stateId: string, opts: RecordGateOpts): Board {
+export function recordGateResult(board: Board, stateId: StateId, opts: RecordGateOpts): Board {
   const { waveKey, gate, gateOutput } = opts;
   const stateEntry = board.states[stateId] ?? { entries: 0, status: "pending" as const };
   const waveResult = stateEntry.wave_results?.[waveKey] ?? { status: "in_progress", tasks: [] };
@@ -270,7 +272,7 @@ export function recordGateResult(board: Board, stateId: string, opts: RecordGate
  */
 export function canEnterState(
   board: Board,
-  stateId: string,
+  stateId: StateId,
 ): { allowed: boolean; reason?: string } {
   const iteration = board.iterations[stateId];
   if (!iteration) {
@@ -291,7 +293,7 @@ export function canEnterState(
  */
 export function appendConcern(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   agent: string,
   concernText: string,
 ): Board {
@@ -315,7 +317,7 @@ export function appendConcern(
  */
 export function accumulateCannotFix(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   principleIds: string[],
   filePaths: string[],
 ): Board {

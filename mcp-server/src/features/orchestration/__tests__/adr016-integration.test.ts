@@ -40,6 +40,7 @@ vi.mock("../tools/report-result.ts", () => ({
 
 // ── Imports after mock declarations ──────────────────────────────────────────
 
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
@@ -83,7 +84,7 @@ function makeFlow(): ResolvedFlow {
   return {
     description: "test",
     entry: "research",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { research: "Do research" },
     states: {
       research: {

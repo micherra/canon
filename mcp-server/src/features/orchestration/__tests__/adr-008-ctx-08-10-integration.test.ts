@@ -123,6 +123,7 @@ vi.mock("@graph/kg-store.ts", () => ({
 // ─── Imports (after mocks) ─────────────────────────────────────────────────────
 
 import { existsSync } from "node:fs";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { computeFileInsightMaps } from "@graph/kg-query.ts";
@@ -145,7 +146,7 @@ function makeBoard(
     concerns: [],
     current_state: "implement",
     entry: "implement",
-    flow: "feature",
+    flow: flowName("feature"),
     iterations: {},
     last_updated: new Date().toISOString(),
     ...(metadata !== undefined ? { metadata } : {}),

@@ -5,6 +5,7 @@
  * DriveFlowInput: validated input for the drive_flow tool.
  */
 
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { ResolvedFlowSchema } from "@domains/flows/flow-definition-schemas.ts";
 import { z } from "zod";
 
@@ -95,7 +96,7 @@ export type DriveFlowAction =
 
 export type DriveFlowInput = {
   /** Workspace directory path */
-  workspace: string;
+  workspace: WorkspacePath;
   /** Resolved flow definition */
   flow: z.infer<typeof ResolvedFlowSchema>;
   /** Optional result from the most recently completed agent */

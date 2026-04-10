@@ -8,6 +8,7 @@
  * here; instead, we pass deps directly to verify the injection seam works.
  */
 
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Board } from "../board-state-schemas.ts";
 import { evaluateSkipWhen } from "../skip-when.ts";
@@ -58,7 +59,7 @@ function makeBoard(overrides?: Partial<Board>): Board {
     concerns: [],
     current_state: "start",
     entry: "start",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],

@@ -12,7 +12,7 @@
  */
 
 import { type BoardResult, canEnterState, enterState } from "@domains/board/board.ts";
-import type { Board, CannotFixItem, HistoryEntry } from "@domains/flows/board-state-schemas.ts";
+import type { Board, CannotFixItem, HistoryEntry, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
@@ -36,7 +36,7 @@ export type ConsultationPromptEntry = {
 };
 
 export type EnterAndPrepareStateInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   state_id: string;
   flow: ResolvedFlow;
   variables: Record<string, string>;

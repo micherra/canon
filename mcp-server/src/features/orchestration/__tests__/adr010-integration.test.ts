@@ -18,6 +18,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import type {
   RequiredArtifact,
   ResolvedFlow,
@@ -96,7 +97,7 @@ function makeFlow(requiredArtifacts?: RequiredArtifact[]): ResolvedFlow {
   return {
     description: "ADR-010 integration test flow",
     entry: "implement",
-    name: "adr010-integration-flow",
+    name: flowName("adr010-integration-flow"),
     spawn_instructions: { implement: "Implement." },
     states: {
       implement: stateDef,

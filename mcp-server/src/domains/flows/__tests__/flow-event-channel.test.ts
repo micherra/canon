@@ -19,6 +19,7 @@
  * - Multiple events, second produces the winning effect
  */
 
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import type { ExecutionStore, MessageOutput } from "@domains/workspaces/execution-store.ts";
 import { describe, expect, it, vi } from "vitest";
 import type { FlowDefinition } from "../flow-definition-schemas.ts";
@@ -42,7 +43,7 @@ function makeLinearFlow(allowedInsertions?: string[]): FlowDefinition {
   return {
     allowed_insertions: allowedInsertions,
     description: "test",
-    name: "test-flow",
+    name: flowName("test-flow"),
     states: {
       done: { type: "terminal" },
       middle: { transitions: { done: "done" }, type: "single" },
@@ -242,7 +243,7 @@ describe("drainFlowEvents — skip_ahead", () => {
     const store = makeStore([
       makeMsg(23, JSON.stringify({ reason: "x", target: "anywhere", type: "skip_ahead" })),
     ]);
-    const flow: FlowDefinition = { description: "empty", name: "empty" };
+    const flow: FlowDefinition = { description: "empty", name: flowName("empty") };
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
@@ -257,7 +258,7 @@ describe("drainFlowEvents — skip_ahead", () => {
     // Flow: start → (branch-a | branch-b) → done
     const flow: FlowDefinition = {
       description: "branching flow",
-      name: "branching",
+      name: flowName("branching"),
       states: {
         "branch-a": { transitions: { done: "done" }, type: "single" },
         "branch-b": { transitions: { done: "done" }, type: "single" },
