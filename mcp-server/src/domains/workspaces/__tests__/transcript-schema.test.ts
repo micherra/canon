@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import { TranscriptEntrySchema } from "@domains/flows/event-schemas.ts";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
@@ -304,13 +305,13 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
     const store = new ExecutionStore(db);
 
     // Insert a state row first
-    store.upsertState("build", { entries: 0, status: "pending" });
+    store.upsertState(sid("build"), { entries: 0, status: "pending" });
 
     const transcriptPath = "/workspace/transcripts/build-001.jsonl";
-    const result = store.setTranscriptPath("build", transcriptPath);
+    const result = store.setTranscriptPath(sid("build"), transcriptPath);
 
     expect(result).toBe(true);
-    expect(store.getTranscriptPath("build")).toBe(transcriptPath);
+    expect(store.getTranscriptPath(sid("build"))).toBe(transcriptPath);
 
     db.close();
   });
@@ -320,7 +321,7 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    const result = store.setTranscriptPath("nonexistent", "/some/path.jsonl");
+    const result = store.setTranscriptPath(sid("nonexistent"), "/some/path.jsonl");
 
     expect(result).toBe(false);
 
@@ -332,9 +333,9 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    store.upsertState("review", { entries: 0, status: "pending" });
+    store.upsertState(sid("review"), { entries: 0, status: "pending" });
 
-    expect(store.getTranscriptPath("review")).toBeNull();
+    expect(store.getTranscriptPath(sid("review"))).toBeNull();
 
     db.close();
   });
@@ -344,7 +345,7 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    expect(store.getTranscriptPath("ghost-state")).toBeNull();
+    expect(store.getTranscriptPath(sid("ghost-state"))).toBeNull();
 
     db.close();
   });
@@ -354,11 +355,11 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    store.upsertState("build", { entries: 0, status: "pending" });
-    store.setTranscriptPath("build", "/first/path.jsonl");
-    store.setTranscriptPath("build", "/second/path.jsonl");
+    store.upsertState(sid("build"), { entries: 0, status: "pending" });
+    store.setTranscriptPath(sid("build"), "/first/path.jsonl");
+    store.setTranscriptPath(sid("build"), "/second/path.jsonl");
 
-    expect(store.getTranscriptPath("build")).toBe("/second/path.jsonl");
+    expect(store.getTranscriptPath(sid("build"))).toBe("/second/path.jsonl");
 
     db.close();
   });
@@ -372,13 +373,13 @@ describe("ExecutionStore — upsert preserves transcript_path", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    store.upsertState("build", { entries: 0, status: "pending" });
-    store.setTranscriptPath("build", "/transcripts/build.jsonl");
+    store.upsertState(sid("build"), { entries: 0, status: "pending" });
+    store.setTranscriptPath(sid("build"), "/transcripts/build.jsonl");
 
     // Re-upsert the state (simulating a status update)
-    store.upsertState("build", { entries: 1, status: "in_progress" });
+    store.upsertState(sid("build"), { entries: 1, status: "in_progress" });
 
-    expect(store.getTranscriptPath("build")).toBe("/transcripts/build.jsonl");
+    expect(store.getTranscriptPath(sid("build"))).toBe("/transcripts/build.jsonl");
 
     db.close();
   });

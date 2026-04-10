@@ -13,6 +13,7 @@
  */
 
 import Database from "better-sqlite3";
+import { stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, test } from "vitest";
 import {
   columnExists,
@@ -26,8 +27,8 @@ const BASE_INIT_PARAMS = {
   base_commit: "abc123",
   branch: "feat/test",
   created: "2026-01-01T00:00:00.000Z",
-  current_state: "research",
-  entry: "research",
+  current_state: sid("research"),
+  entry: sid("research"),
   flow: "test-flow",
   flow_name: "test-flow",
   last_updated: "2026-01-01T00:00:00.000Z",
@@ -333,20 +334,20 @@ describe("ExecutionStore — updateAgentSession / getAgentSession", () => {
   test("getAgentSession returns null when no session set", () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState("research", { entries: 1, status: "in_progress" });
+    store.upsertState(sid("research"), { entries: 1, status: "in_progress" });
 
-    const result = store.getAgentSession("research");
+    const result = store.getAgentSession(sid("research"));
     expect(result).toBeNull();
   });
 
   test("updateAgentSession stores session ID and activity timestamp", () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState("research", { entries: 1, status: "in_progress" });
+    store.upsertState(sid("research"), { entries: 1, status: "in_progress" });
 
-    store.updateAgentSession("research", "agent-sess-xyz");
+    store.updateAgentSession(sid("research"), "agent-sess-xyz");
 
-    const result = store.getAgentSession("research");
+    const result = store.getAgentSession(sid("research"));
     expect(result).not.toBeNull();
     expect(result?.agent_session_id).toBe("agent-sess-xyz");
     expect(result?.last_agent_activity).toBeTruthy();
@@ -355,13 +356,13 @@ describe("ExecutionStore — updateAgentSession / getAgentSession", () => {
   test("updateAgentSession sets last_agent_activity to current ISO timestamp", () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState("research", { entries: 1, status: "in_progress" });
+    store.upsertState(sid("research"), { entries: 1, status: "in_progress" });
 
     const before = new Date().toISOString();
-    store.updateAgentSession("research", "agent-sess-abc");
+    store.updateAgentSession(sid("research"), "agent-sess-abc");
     const after = new Date().toISOString();
 
-    const result = store.getAgentSession("research");
+    const result = store.getAgentSession(sid("research"));
     expect(result).not.toBeNull();
     // ISO strings compare correctly as strings (YYYY-MM-DD lexicographic order)
     expect(result!.last_agent_activity >= before).toBe(true);
@@ -371,12 +372,12 @@ describe("ExecutionStore — updateAgentSession / getAgentSession", () => {
   test("updateAgentSession replaces existing session", () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState("research", { entries: 1, status: "in_progress" });
+    store.upsertState(sid("research"), { entries: 1, status: "in_progress" });
 
-    store.updateAgentSession("research", "agent-sess-first");
-    store.updateAgentSession("research", "agent-sess-second");
+    store.updateAgentSession(sid("research"), "agent-sess-first");
+    store.updateAgentSession(sid("research"), "agent-sess-second");
 
-    const result = store.getAgentSession("research");
+    const result = store.getAgentSession(sid("research"));
     expect(result?.agent_session_id).toBe("agent-sess-second");
   });
 
@@ -384,21 +385,21 @@ describe("ExecutionStore — updateAgentSession / getAgentSession", () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
 
-    const result = store.getAgentSession("nonexistent-state");
+    const result = store.getAgentSession(sid("nonexistent-state"));
     expect(result).toBeNull();
   });
 
   test("agent session IDs are independent per state", () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState("research", { entries: 1, status: "in_progress" });
-    store.upsertState("implement", { entries: 1, status: "in_progress" });
+    store.upsertState(sid("research"), { entries: 1, status: "in_progress" });
+    store.upsertState(sid("implement"), { entries: 1, status: "in_progress" });
 
-    store.updateAgentSession("research", "sess-research");
-    store.updateAgentSession("implement", "sess-implement");
+    store.updateAgentSession(sid("research"), "sess-research");
+    store.updateAgentSession(sid("implement"), "sess-implement");
 
-    expect(store.getAgentSession("research")?.agent_session_id).toBe("sess-research");
-    expect(store.getAgentSession("implement")?.agent_session_id).toBe("sess-implement");
+    expect(store.getAgentSession(sid("research"))?.agent_session_id).toBe("sess-research");
+    expect(store.getAgentSession(sid("implement"))?.agent_session_id).toBe("sess-implement");
   });
 });
 

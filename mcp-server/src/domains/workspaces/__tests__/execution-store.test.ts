@@ -8,7 +8,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
+import { BoardSchema, stateId as sid, type StateId } from "@domains/flows/board-state-schemas.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { initExecutionDb, SCHEMA_VERSION } from "../execution-schema.ts";
@@ -26,8 +26,8 @@ const BASE_INIT_PARAMS = {
   base_commit: "abc123",
   branch: "feat/test",
   created: "2026-01-01T00:00:00.000Z",
-  current_state: "research",
-  entry: "research",
+  current_state: sid("research"),
+  entry: sid("research"),
   flow: "test-flow",
   flow_name: "test-flow",
   last_updated: "2026-01-01T00:00:00.000Z",
@@ -232,7 +232,7 @@ describe("updateExecution", () => {
     const concern = {
       agent: "tester",
       message: "test concern",
-      state_id: "s1",
+      state_id: sid("s1"),
       timestamp: "2026-01-01T00:00:00.000Z",
     };
     store.updateExecution({ concerns: [concern] });
@@ -263,21 +263,21 @@ describe("upsertState + getState", () => {
   });
 
   test("inserts and retrieves a minimal state", () => {
-    store.upsertState("research", { entries: 0, status: "pending" });
-    const state = store.getState("research");
+    store.upsertState(sid("research"), { entries: 0, status: "pending" });
+    const state = store.getState(sid("research"));
     expect(state).not.toBeNull();
     expect(state!.status).toBe("pending");
     expect(state!.entries).toBe(0);
   });
 
   test("returns null for non-existent state", () => {
-    expect(store.getState("nonexistent")).toBeNull();
+    expect(store.getState(sid("nonexistent"))).toBeNull();
   });
 
   test("updates existing state", () => {
-    store.upsertState("research", { entries: 0, status: "pending" });
-    store.upsertState("research", { entries: 1, status: "in_progress" });
-    const state = store.getState("research");
+    store.upsertState(sid("research"), { entries: 0, status: "pending" });
+    store.upsertState(sid("research"), { entries: 1, status: "in_progress" });
+    const state = store.getState(sid("research"));
     expect(state!.status).toBe("in_progress");
     expect(state!.entries).toBe(1);
   });
@@ -313,7 +313,7 @@ describe("upsertState + getState", () => {
     const competeResults = [{ artifacts: ["PLAN.md"], lens: "performance", status: "done" }];
     const artifactHistory = [{ artifacts: ["SUMMARY.md"], entry: 1 }];
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       artifact_history: artifactHistory,
       artifacts: ["src/feature.ts"],
       compete_results: competeResults,
@@ -335,7 +335,7 @@ describe("upsertState + getState", () => {
       wave_total: 3,
     });
 
-    const state = store.getState("implement")!;
+    const state = store.getState(sid("implement"))!;
     expect(state.status).toBe("done");
     expect(state.wave_results).toEqual(waveResults);
     expect(state.metrics).toEqual(metrics);
@@ -350,9 +350,9 @@ describe("upsertState + getState", () => {
   });
 
   test("getAllStates returns all rows", () => {
-    store.upsertState("research", { entries: 1, status: "done" });
-    store.upsertState("implement", { entries: 1, status: "in_progress" });
-    store.upsertState("review", { entries: 0, status: "pending" });
+    store.upsertState(sid("research"), { entries: 1, status: "done" });
+    store.upsertState(sid("implement"), { entries: 1, status: "in_progress" });
+    store.upsertState(sid("review"), { entries: 0, status: "pending" });
     const states = store.getAllStates();
     expect(states).toHaveLength(3);
     const ids = states.map((s) => s.state_id);
@@ -375,48 +375,48 @@ describe("upsertState + getState — inserted_return_to field", () => {
   });
 
   test("persists inserted_return_to when set", () => {
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 0,
       inserted_return_to: "hitl",
       status: "in_progress",
     });
-    const state = store.getState("implement");
+    const state = store.getState(sid("implement"));
     expect(state).not.toBeNull();
     expect(state!.inserted_return_to).toBe("hitl");
   });
 
   test("returns undefined for inserted_return_to when not set", () => {
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 0,
       status: "in_progress",
     });
-    const state = store.getState("implement");
+    const state = store.getState(sid("implement"));
     expect(state).not.toBeNull();
     expect(state!.inserted_return_to).toBeUndefined();
   });
 
   test("round-trips an arbitrary string value", () => {
-    store.upsertState("research", {
+    store.upsertState(sid("research"), {
       entries: 1,
       inserted_return_to: "some-target-state",
       status: "done",
     });
-    const state = store.getState("research");
+    const state = store.getState(sid("research"));
     expect(state!.inserted_return_to).toBe("some-target-state");
   });
 
   test("update overwrites inserted_return_to", () => {
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 0,
       inserted_return_to: "first",
       status: "in_progress",
     });
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       entries: 1,
       inserted_return_to: "second",
       status: "done",
     });
-    const state = store.getState("implement");
+    const state = store.getState(sid("implement"));
     expect(state!.inserted_return_to).toBe("second");
   });
 });
@@ -434,8 +434,8 @@ describe("upsertIteration + getIteration", () => {
   });
 
   test("inserts and retrieves a minimal iteration", () => {
-    store.upsertIteration("implement", { cannot_fix: [], count: 0, history: [], max: 3 });
-    const iter = store.getIteration("implement");
+    store.upsertIteration(sid("implement"), { cannot_fix: [], count: 0, history: [], max: 3 });
+    const iter = store.getIteration(sid("implement"));
     expect(iter).not.toBeNull();
     expect(iter!.count).toBe(0);
     expect(iter!.max).toBe(3);
@@ -444,18 +444,18 @@ describe("upsertIteration + getIteration", () => {
   });
 
   test("returns null for non-existent state", () => {
-    expect(store.getIteration("nonexistent")).toBeNull();
+    expect(store.getIteration(sid("nonexistent"))).toBeNull();
   });
 
   test("updates existing iteration", () => {
-    store.upsertIteration("implement", { cannot_fix: [], count: 0, history: [], max: 3 });
-    store.upsertIteration("implement", {
+    store.upsertIteration(sid("implement"), { cannot_fix: [], count: 0, history: [], max: 3 });
+    store.upsertIteration(sid("implement"), {
       cannot_fix: [],
       count: 1,
       history: [{ status: "blocked" }],
       max: 3,
     });
-    const iter = store.getIteration("implement")!;
+    const iter = store.getIteration(sid("implement"))!;
     expect(iter.count).toBe(1);
     expect(iter.history).toEqual([{ status: "blocked" }]);
   });
@@ -470,9 +470,9 @@ describe("upsertIteration + getIteration", () => {
     ];
     const cannotFix = [{ file_path: "src/foo.ts", principle_id: "deep-modules" }];
 
-    store.upsertIteration("implement", { cannot_fix: cannotFix, count: 5, history, max: 5 });
+    store.upsertIteration(sid("implement"), { cannot_fix: cannotFix, count: 5, history, max: 5 });
 
-    const iter = store.getIteration("implement")!;
+    const iter = store.getIteration(sid("implement"))!;
     expect(iter.count).toBe(5);
     expect(iter.max).toBe(5);
     expect(iter.history).toEqual(history);
@@ -808,14 +808,14 @@ describe("getBoard", () => {
   });
 
   test("reconstructs Board matching BoardSchema.parse()", () => {
-    store.upsertState("research", {
+    store.upsertState(sid("research"), {
       artifacts: ["research/SUMMARY.md"],
       entries: 1,
       result: "done",
       status: "done",
     });
-    store.upsertState("implement", { entries: 1, status: "in_progress" });
-    store.upsertIteration("implement", {
+    store.upsertState(sid("implement"), { entries: 1, status: "in_progress" });
+    store.upsertIteration(sid("implement"), {
       cannot_fix: [],
       count: 1,
       history: [{ status: "blocked" }],
@@ -830,9 +830,9 @@ describe("getBoard", () => {
     expect(parsed.entry).toBe("research");
     expect(parsed.current_state).toBe("research");
     expect(parsed.base_commit).toBe("abc123");
-    expect(parsed.states.research!.status).toBe("done");
-    expect(parsed.states.implement!.status).toBe("in_progress");
-    expect(parsed.iterations.implement!.count).toBe(1);
+    expect(parsed.states[sid("research")]!.status).toBe("done");
+    expect(parsed.states[sid("implement")]!.status).toBe("in_progress");
+    expect(parsed.iterations[sid("implement")]!.count).toBe(1);
     expect(parsed.blocked).toBeNull();
     expect(parsed.concerns).toEqual([]);
     expect(parsed.skipped).toEqual([]);
@@ -841,7 +841,7 @@ describe("getBoard", () => {
   test("getBoard completes in <10ms for a board with 20 states", () => {
     // Populate 20 states
     for (let i = 0; i < 20; i++) {
-      store.upsertState(`state-${i}`, {
+      store.upsertState(`state-${i}` as StateId, {
         entries: i < 10 ? 1 : 0,
         result: i < 10 ? "done" : undefined,
         status: i < 10 ? "done" : "pending",
@@ -850,7 +850,7 @@ describe("getBoard", () => {
         },
       });
       if (i % 3 === 0) {
-        store.upsertIteration(`state-${i}`, {
+        store.upsertIteration(`state-${i}` as StateId, {
           cannot_fix: [],
           count: i,
           history: [{ status: "blocked" }, { artifact_count: 1, commit_sha: "abc" }],
@@ -876,7 +876,7 @@ describe("getBoard", () => {
       {
         agent: "reviewer",
         message: "issue",
-        state_id: "research",
+        state_id: sid("research"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
     ];
@@ -963,7 +963,7 @@ describe("JSON round-trip — deeply nested Board", () => {
       violation_severities: { blocking: 1, warning: 2 },
     };
 
-    store.upsertState("implement", {
+    store.upsertState(sid("implement"), {
       artifact_history: [
         { artifacts: ["src/feature.ts"], entry: 1 },
         { artifacts: ["src/feature.ts", "src/__tests__/feature.test.ts"], entry: 2 },
@@ -996,7 +996,7 @@ describe("JSON round-trip — deeply nested Board", () => {
       wave_total: 2,
     });
 
-    store.upsertIteration("implement", {
+    store.upsertIteration(sid("implement"), {
       cannot_fix: [{ file_path: "src/legacy.ts", principle_id: "deep-modules" }],
       count: 3,
       history: fullHistory,
@@ -1007,14 +1007,14 @@ describe("JSON round-trip — deeply nested Board", () => {
     const parsed = BoardSchema.parse(board);
 
     // Verify deep equality for all nested structures
-    expect(parsed.states.implement!.wave_results).toEqual(complexWaveResults);
-    expect(parsed.states.implement!.metrics).toEqual(fullMetrics);
-    expect(parsed.states.implement!.gate_results).toEqual(fullMetrics.gate_results);
-    expect(parsed.states.implement!.parallel_results).toHaveLength(2);
-    expect(parsed.states.implement!.compete_results).toHaveLength(2);
-    expect(parsed.states.implement!.synthesized).toBe(true);
-    expect(parsed.iterations.implement!.history).toEqual(fullHistory);
-    expect(parsed.iterations.implement!.cannot_fix).toEqual([
+    expect(parsed.states[sid("implement")]!.wave_results).toEqual(complexWaveResults);
+    expect(parsed.states[sid("implement")]!.metrics).toEqual(fullMetrics);
+    expect(parsed.states[sid("implement")]!.gate_results).toEqual(fullMetrics.gate_results);
+    expect(parsed.states[sid("implement")]!.parallel_results).toHaveLength(2);
+    expect(parsed.states[sid("implement")]!.compete_results).toHaveLength(2);
+    expect(parsed.states[sid("implement")]!.synthesized).toBe(true);
+    expect(parsed.iterations[sid("implement")]!.history).toEqual(fullHistory);
+    expect(parsed.iterations[sid("implement")]!.cannot_fix).toEqual([
       { file_path: "src/legacy.ts", principle_id: "deep-modules" },
     ]);
   });
@@ -1076,43 +1076,43 @@ describe("getOrientationRatio", () => {
   beforeEach(() => {
     store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState("research", { entries: 0, status: "in_progress" });
+    store.upsertState(sid("research"), { entries: 0, status: "in_progress" });
   });
   afterEach(() => {
     store.close();
   });
 
   test("returns correct ratio when tool_calls and orientation_calls are set", () => {
-    store.updateStateMetrics("research", { orientation_calls: 4, tool_calls: 10 });
-    expect(store.getOrientationRatio("research")).toBeCloseTo(0.4);
+    store.updateStateMetrics(sid("research"), { orientation_calls: 4, tool_calls: 10 });
+    expect(store.getOrientationRatio(sid("research"))).toBeCloseTo(0.4);
   });
 
   test("returns 1.0 when all calls are orientation calls", () => {
-    store.updateStateMetrics("research", { orientation_calls: 5, tool_calls: 5 });
-    expect(store.getOrientationRatio("research")).toBeCloseTo(1.0);
+    store.updateStateMetrics(sid("research"), { orientation_calls: 5, tool_calls: 5 });
+    expect(store.getOrientationRatio(sid("research"))).toBeCloseTo(1.0);
   });
 
   test("returns 0 when orientation_calls is 0", () => {
-    store.updateStateMetrics("research", { orientation_calls: 0, tool_calls: 8 });
-    expect(store.getOrientationRatio("research")).toBe(0);
+    store.updateStateMetrics(sid("research"), { orientation_calls: 0, tool_calls: 8 });
+    expect(store.getOrientationRatio(sid("research"))).toBe(0);
   });
 
   test("returns 0 when tool_calls is 0 (avoid divide-by-zero)", () => {
-    store.updateStateMetrics("research", { orientation_calls: 0, tool_calls: 0 });
-    expect(store.getOrientationRatio("research")).toBe(0);
+    store.updateStateMetrics(sid("research"), { orientation_calls: 0, tool_calls: 0 });
+    expect(store.getOrientationRatio(sid("research"))).toBe(0);
   });
 
   test("returns 0 when state has no metrics at all", () => {
-    expect(store.getOrientationRatio("research")).toBe(0);
+    expect(store.getOrientationRatio(sid("research"))).toBe(0);
   });
 
   test("returns 0 for unknown state_id", () => {
-    expect(store.getOrientationRatio("nonexistent")).toBe(0);
+    expect(store.getOrientationRatio(sid("nonexistent"))).toBe(0);
   });
 
   test("returns 0 when only tool_calls is set but not orientation_calls", () => {
-    store.updateStateMetrics("research", { tool_calls: 10 });
-    expect(store.getOrientationRatio("research")).toBe(0);
+    store.updateStateMetrics(sid("research"), { tool_calls: 10 });
+    expect(store.getOrientationRatio(sid("research"))).toBe(0);
   });
 });
 
@@ -1129,8 +1129,8 @@ describe("recordStateEntry", () => {
   });
 
   test("sets status to in_progress and entries to 1 on first call", () => {
-    store.recordStateEntry("implement");
-    const state = store.getState("implement");
+    store.recordStateEntry(sid("implement"));
+    const state = store.getState(sid("implement"));
     expect(state).not.toBeNull();
     expect(state!.status).toBe("in_progress");
     expect(state!.entries).toBe(1);
@@ -1138,16 +1138,16 @@ describe("recordStateEntry", () => {
   });
 
   test("increments entries on subsequent calls", () => {
-    store.recordStateEntry("implement");
-    store.recordStateEntry("implement");
-    const state = store.getState("implement");
+    store.recordStateEntry(sid("implement"));
+    store.recordStateEntry(sid("implement"));
+    const state = store.getState(sid("implement"));
     expect(state!.entries).toBe(2);
     expect(state!.status).toBe("in_progress");
   });
 
   test("merges custom fields into the state", () => {
-    store.recordStateEntry("implement", { wave: 2, wave_total: 5 });
-    const state = store.getState("implement");
+    store.recordStateEntry(sid("implement"), { wave: 2, wave_total: 5 });
+    const state = store.getState(sid("implement"));
     expect(state!.wave).toBe(2);
     expect(state!.wave_total).toBe(5);
     expect(state!.status).toBe("in_progress");
@@ -1156,8 +1156,8 @@ describe("recordStateEntry", () => {
 
   test("custom fields do not override status (always in_progress)", () => {
     // Even if caller passes status in fields, the domain method forces in_progress
-    store.recordStateEntry("implement", { wave: 1 });
-    const state = store.getState("implement");
+    store.recordStateEntry(sid("implement"), { wave: 1 });
+    const state = store.getState(sid("implement"));
     expect(state!.status).toBe("in_progress");
   });
 });
@@ -1170,42 +1170,42 @@ describe("recordStateCompletion", () => {
   beforeEach(() => {
     store = makeStore();
     // Seed state entry first
-    store.recordStateEntry("implement");
+    store.recordStateEntry(sid("implement"));
   });
   afterEach(() => {
     store.close();
   });
 
   test("sets status to done with result and completed_at", () => {
-    store.recordStateCompletion("implement", "done");
-    const state = store.getState("implement");
+    store.recordStateCompletion(sid("implement"), "done");
+    const state = store.getState(sid("implement"));
     expect(state!.status).toBe("done");
     expect(state!.result).toBe("done");
     expect(state!.completed_at).toBeDefined();
   });
 
   test("persists artifacts when provided", () => {
-    store.recordStateCompletion("implement", "done", ["SUMMARY.md", "plan.md"]);
-    const state = store.getState("implement");
+    store.recordStateCompletion(sid("implement"), "done", ["SUMMARY.md", "plan.md"]);
+    const state = store.getState(sid("implement"));
     expect(state!.artifacts).toEqual(["SUMMARY.md", "plan.md"]);
   });
 
   test("updates iteration history atomically when iteration exists", () => {
-    store.upsertIteration("implement", { cannot_fix: [], count: 1, history: [], max: 3 });
+    store.upsertIteration(sid("implement"), { cannot_fix: [], count: 1, history: [], max: 3 });
     const history = [{ status: "blocked" }, { status: "done" }];
-    store.recordStateCompletion("implement", "done", undefined, history);
-    const iter = store.getIteration("implement");
+    store.recordStateCompletion(sid("implement"), "done", undefined, history);
+    const iter = store.getIteration(sid("implement"));
     expect(iter!.history).toEqual(history);
-    const state = store.getState("implement");
+    const state = store.getState(sid("implement"));
     expect(state!.status).toBe("done");
   });
 
   test("does not fail when no iteration exists and iterationHistory provided", () => {
     const history = [{ status: "done" }];
     expect(() =>
-      store.recordStateCompletion("implement", "done", undefined, history),
+      store.recordStateCompletion(sid("implement"), "done", undefined, history),
     ).not.toThrow();
-    const state = store.getState("implement");
+    const state = store.getState(sid("implement"));
     expect(state!.status).toBe("done");
   });
 });
@@ -1217,14 +1217,14 @@ describe("recordIterationAttempt", () => {
 
   beforeEach(() => {
     store = makeStore();
-    store.recordStateEntry("implement");
+    store.recordStateEntry(sid("implement"));
   });
   afterEach(() => {
     store.close();
   });
 
   test("records iteration result and returns recorded:true stuck:false when no stuckWhen", () => {
-    const result = store.recordIterationAttempt("implement", {
+    const result = store.recordIterationAttempt(sid("implement"), {
       data: { failing_files: ["src/foo.ts"] },
       iteration: 1,
       status: "blocked",
@@ -1234,7 +1234,7 @@ describe("recordIterationAttempt", () => {
   });
 
   test("returns stuck:false when fewer than 2 iteration results exist", () => {
-    const result = store.recordIterationAttempt("implement", {
+    const result = store.recordIterationAttempt(sid("implement"), {
       data: { status: "blocked" },
       iteration: 1,
       status: "blocked",
@@ -1245,13 +1245,13 @@ describe("recordIterationAttempt", () => {
   });
 
   test("returns stuck:true when same_status repeats across two iterations", () => {
-    store.recordIterationAttempt("implement", {
+    store.recordIterationAttempt(sid("implement"), {
       data: { status: "blocked" },
       iteration: 1,
       status: "blocked",
       stuckWhen: "same_status",
     });
-    const result = store.recordIterationAttempt("implement", {
+    const result = store.recordIterationAttempt(sid("implement"), {
       data: { status: "blocked" },
       iteration: 2,
       status: "blocked",
@@ -1262,8 +1262,8 @@ describe("recordIterationAttempt", () => {
   });
 
   test("returns stuck:false when no stuckWhen provided even with repeated statuses", () => {
-    store.recordIterationResult("implement", 1, "blocked", { status: "blocked" });
-    const result = store.recordIterationAttempt("implement", {
+    store.recordIterationResult(sid("implement"), 1, "blocked", { status: "blocked" });
+    const result = store.recordIterationAttempt(sid("implement"), {
       data: { status: "blocked" },
       iteration: 2,
       status: "blocked",

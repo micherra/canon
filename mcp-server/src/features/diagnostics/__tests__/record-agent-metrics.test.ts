@@ -13,7 +13,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { workspacePath, flowName, stateId as sid, type StateId } from "@domains/flows/board-state-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
@@ -21,21 +21,22 @@ import { recordAgentMetrics } from "../tools/record-agent-metrics.ts";
 
 let tmpDirs: string[] = [];
 
-function makeTmpWorkspace(): string {
-  const dir = mkdtempSync(join(tmpdir(), "record-agent-metrics-test-"));
+function makeTmpWorkspace() {
+  const dir = workspacePath(mkdtempSync(join(tmpdir(), "record-agent-metrics-test-")));
   tmpDirs.push(dir);
   return dir;
 }
 
-function setupWorkspace(workspace: string, stateId = "build"): void {
+function setupWorkspace(workspace: string, stateIdStr = "build"): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
+  const stateIdVal = sid(stateIdStr);
   store.initExecution({
     base_commit: "abc123",
     branch: "feat/test",
     created: now,
-    current_state: stateId,
-    entry: stateId,
+    current_state: stateIdVal,
+    entry: stateIdVal,
     flow: flowName("test-flow"),
     flow_name: "test-flow",
     last_updated: now,
@@ -45,7 +46,7 @@ function setupWorkspace(workspace: string, stateId = "build"): void {
     task: "test task",
     tier: "medium",
   });
-  store.upsertState(stateId, { entries: 1, status: "in_progress" });
+  store.upsertState(stateIdVal, { entries: 1, status: "in_progress" });
 }
 
 afterEach(() => {
@@ -75,7 +76,7 @@ describe("recordAgentMetrics — basic writes", () => {
 
     // Verify the store was actually updated
     const store = getExecutionStore(workspace);
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     expect(state).not.toBeNull();
     expect(state!.metrics).toBeDefined();
     expect(state!.metrics!.tool_calls).toBe(5);
@@ -96,7 +97,7 @@ describe("recordAgentMetrics — basic writes", () => {
     expect(result.recorded).toEqual({ orientation_calls: 8 });
 
     const store = getExecutionStore(workspace);
-    const state = store.getState("implement");
+    const state = store.getState(sid("implement"));
     expect(state!.metrics!.orientation_calls).toBe(8);
   });
 });
@@ -110,7 +111,7 @@ describe("recordAgentMetrics — merge with pre-existing metrics", () => {
 
     // Simulate orchestrator having set duration_ms and model
     const store = getExecutionStore(workspace);
-    store.upsertState("build", {
+    store.upsertState(sid("build"), {
       entries: 1,
       metrics: {
         duration_ms: 12345,
@@ -130,7 +131,7 @@ describe("recordAgentMetrics — merge with pre-existing metrics", () => {
 
     assertOk(result);
 
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     const metrics = state!.metrics!;
 
     // Orchestrator fields preserved
@@ -148,7 +149,7 @@ describe("recordAgentMetrics — merge with pre-existing metrics", () => {
     setupWorkspace(workspace, "build");
 
     const store = getExecutionStore(workspace);
-    store.upsertState("build", {
+    store.upsertState(sid("build"), {
       entries: 1,
       metrics: {
         duration_ms: 9999,
@@ -176,7 +177,7 @@ describe("recordAgentMetrics — merge with pre-existing metrics", () => {
 
     assertOk(result);
 
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     const metrics = state!.metrics!;
 
     // Orchestrator fields still intact
@@ -243,8 +244,8 @@ describe("MCP metrics schema widening", () => {
       base_commit: "abc123",
       branch: "feat/test",
       created: now,
-      current_state: "build",
-      entry: "build",
+      current_state: sid("build"),
+      entry: sid("build"),
       flow: flowName("test-flow"),
       flow_name: "test-flow",
       last_updated: now,
@@ -254,18 +255,18 @@ describe("MCP metrics schema widening", () => {
       task: "test task",
       tier: "medium",
     });
-    store.upsertState("build", { entries: 1, status: "in_progress" });
-    store.upsertState("done", { entries: 0, status: "pending" });
+    store.upsertState(sid("build"), { entries: 1, status: "in_progress" });
+    store.upsertState(sid("done"), { entries: 0, status: "pending" });
 
     const flow = {
       description: "test",
-      entry: "build",
+      entry: sid("build"),
       name: flowName("test-flow"),
-      spawn_instructions: {},
+      spawn_instructions: {} as Record<StateId, string>,
       states: {
-        build: { transitions: { done: "done" }, type: "single" as const },
-        done: { type: "terminal" as const },
-      },
+        [sid("build")]: { transitions: { done: "done" }, type: "single" as const },
+        [sid("done")]: { type: "terminal" as const },
+      } as Record<StateId, { type: "single"; transitions?: Record<string, string> } | { type: "terminal" }>,
     };
 
     // Should not throw — widened metrics fields are accepted
@@ -281,13 +282,13 @@ describe("MCP metrics schema widening", () => {
       },
       state_id: "build",
       status_keyword: "done",
-      workspace: ws,
+      workspace: workspacePath(ws),
     });
 
     assertOk(result);
 
     // Verify the metrics were stored
-    const state = store.getState("build");
+    const state = store.getState(sid("build"));
     expect(state!.metrics!.tool_calls).toBe(42);
     expect(state!.metrics!.orientation_calls).toBe(10);
     expect(state!.metrics!.turns).toBe(7);

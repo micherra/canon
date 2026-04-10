@@ -1,4 +1,4 @@
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { workspacePath, flowName, stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Board } from "../board-state-schemas.ts";
 import { evaluateSkipWhen, matchGlob } from "../skip-when.ts";
@@ -67,8 +67,8 @@ function makeBoard(overrides?: Partial<Board>): Board {
     base_commit: "abc1234",
     blocked: null,
     concerns: [],
-    current_state: "start",
-    entry: "start",
+    current_state: sid("start"),
+    entry: sid("start"),
     flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -122,25 +122,25 @@ describe("matchGlob", () => {
 describe("evaluateSkipWhen — no_fix_requested", () => {
   it("skips when board has no metadata", async () => {
     const board = makeBoard();
-    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_fix_requested", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
   });
 
   it("skips when fix_requested is not set in metadata", async () => {
     const board = makeBoard({ metadata: { some_other_key: "value" } });
-    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_fix_requested", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
   });
 
   it("does not skip when fix_requested is true", async () => {
     const board = makeBoard({ metadata: { fix_requested: true } });
-    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_fix_requested", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
   it("skips when fix_requested is false", async () => {
     const board = makeBoard({ metadata: { fix_requested: false } });
-    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_fix_requested", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
   });
 });
@@ -150,26 +150,26 @@ describe("evaluateSkipWhen — no_fix_requested", () => {
 describe("evaluateSkipWhen — auto_approved", () => {
   it("skips when board.metadata.auto_approve is true", async () => {
     const board = makeBoard({ metadata: { auto_approve: true } });
-    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("auto_approved", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("auto-approved");
   });
 
   it("does not skip when board.metadata.auto_approve is false", async () => {
     const board = makeBoard({ metadata: { auto_approve: false } });
-    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("auto_approved", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
   it("does not skip when board.metadata is undefined", async () => {
     const board = makeBoard();
-    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("auto_approved", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
   it("does not skip when board.metadata.auto_approve is absent", async () => {
     const board = makeBoard({ metadata: { some_other_key: "value" } });
-    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("auto_approved", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
@@ -178,19 +178,19 @@ describe("evaluateSkipWhen — auto_approved", () => {
   it("does not skip when board.metadata.auto_approve is the string 'true' (strict equality)", async () => {
     // Implementation uses === true so non-boolean truthy values should NOT skip
     const board = makeBoard({ metadata: { auto_approve: "true" } });
-    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("auto_approved", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
   it("does not skip when board.metadata.auto_approve is 1 (numeric truthy)", async () => {
     const board = makeBoard({ metadata: { auto_approve: 1 } });
-    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("auto_approved", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
   it("does not skip when board.metadata.auto_approve is a non-boolean truthy value (string)", async () => {
     const board = makeBoard({ metadata: { auto_approve: "yes" } });
-    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("auto_approved", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 });
@@ -231,7 +231,7 @@ describe("evaluateSkipWhen — unknown condition", () => {
     });
     const board = makeBoard();
 
-    const result = await evaluateSkipWhen("unknown_condition_xyz", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("unknown_condition_xyz", workspacePath("/tmp/ws"), board);
 
     expect(result).toEqual({ skip: false });
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Unknown skip_when condition"));
@@ -246,34 +246,34 @@ describe("evaluateSkipWhen — unknown condition", () => {
 describe("evaluateSkipWhen — no_open_questions", () => {
   it("skips when board has no metadata (has_open_questions not set)", async () => {
     const board = makeBoard();
-    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_open_questions", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("No open questions");
   });
 
   it("skips when metadata is present but has_open_questions is not set", async () => {
     const board = makeBoard({ metadata: { some_other_key: "value" } });
-    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_open_questions", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
   });
 
   it("skips when has_open_questions is false", async () => {
     const board = makeBoard({ metadata: { has_open_questions: false } });
-    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_open_questions", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("targeted research skipped");
   });
 
   it("does not skip when has_open_questions is true", async () => {
     const board = makeBoard({ metadata: { has_open_questions: true } });
-    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_open_questions", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
   it("skips when has_open_questions is the string 'true' (strict === true check)", async () => {
     // Implementation uses === true so non-boolean truthy should skip (treated as falsy for our purposes)
     const board = makeBoard({ metadata: { has_open_questions: "true" } });
-    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_open_questions", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
   });
 });
@@ -290,7 +290,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       timedOut: false,
     });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("No contract changes detected");
@@ -305,7 +305,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       timedOut: false,
     });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(false);
   });
@@ -319,7 +319,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       timedOut: false,
     });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(false);
   });
@@ -333,7 +333,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       timedOut: false,
     });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(false);
   });
@@ -348,7 +348,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       timedOut: false,
     });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("No contract changes detected");
@@ -357,7 +357,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   it("passes --diff-filter=d to gitExec to exclude deleted files from contract check", async () => {
     gitExecImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
-    await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(lastGitExecArgs?.args).toContain("--diff-filter=d");
   });
@@ -365,7 +365,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   it("returns skip: true when diff output is empty (no changes at all)", async () => {
     gitExecImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(true);
   });
@@ -379,7 +379,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       timedOut: false,
     });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     // Fail-open for skip = fail-closed for execution
     expect(result.skip).toBe(false);
@@ -389,7 +389,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
     // Risk 9: adapter returns timedOut: true → function degrades gracefully
     gitExecImpl = () => ({ exitCode: 1, ok: false, stderr: "", stdout: "", timedOut: true });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     // Timed out — fail-open for skip, fail-closed for execution
     expect(result.skip).toBe(false);
@@ -403,7 +403,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "abc123; rm -rf /" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(false);
   });
@@ -413,7 +413,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "`whoami`" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(false);
   });
@@ -423,7 +423,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "abc123\nrm -rf /" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(false);
   });
@@ -433,7 +433,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(false);
   });
@@ -443,7 +443,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "abc12" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(false);
   });
@@ -451,7 +451,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   it("accepts a valid 7-char short SHA", async () => {
     gitExecImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     // Empty diff → no contract changes → skip
     expect(result.skip).toBe(true);
@@ -466,7 +466,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
       timedOut: false,
     });
     const board = makeBoard({ base_commit: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
 
     expect(result.skip).toBe(true);
   });
@@ -508,7 +508,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
 
   it("returns skip: false when all 5 gates pass", async () => {
     const board = makeBoard();
-    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("learn_gate_not_passed", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
@@ -520,7 +520,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
       min_hours_since_last: 48,
     });
     const board = makeBoard();
-    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("learn_gate_not_passed", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("auto-learn disabled");
   });
@@ -529,7 +529,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
     // last learn was 1 hour ago, min is 48h
     getLastLearnTimestamp.mockResolvedValue(Date.now() - 1 * 60 * 60 * 1000);
     const board = makeBoard();
-    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("learn_gate_not_passed", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("time gate");
   });
@@ -537,7 +537,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
   it("returns skip: true when flow gate fails (gate 4)", async () => {
     getDriftDb.mockReturnValue({ countFlowRunsSince: vi.fn().mockReturnValue(2) }); // < 5
     const board = makeBoard();
-    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("learn_gate_not_passed", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("flow gate");
   });
@@ -545,7 +545,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
   it("returns skip: true when lock gate fails (gate 5)", async () => {
     acquireLearnLock.mockResolvedValue({ acquired: false, reason: "already_locked" });
     const board = makeBoard();
-    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("learn_gate_not_passed", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("lock gate");
   });
@@ -553,7 +553,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
   it("returns skip: true with reason when config loading throws (fail-open)", async () => {
     loadLearnGateConfig.mockRejectedValue(new Error("unexpected config error"));
     const board = makeBoard();
-    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("learn_gate_not_passed", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(true);
     expect(result.reason).toContain("Learn gate evaluation failed");
   });
@@ -563,7 +563,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed", () => {
       // noop
     });
     const board = makeBoard();
-    const result = await evaluateSkipWhen("totally_unknown_condition", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("totally_unknown_condition", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
     errorSpy.mockRestore();
   });
@@ -640,7 +640,7 @@ describe("evaluateSkipWhen — no_contract_changes with structure patterns", () 
       timedOut: false,
     });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 
@@ -653,7 +653,7 @@ describe("evaluateSkipWhen — no_contract_changes with structure patterns", () 
       timedOut: false,
     });
     const board = makeBoard({ base_commit: "abc1234" });
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board);
     expect(result.skip).toBe(false);
   });
 });

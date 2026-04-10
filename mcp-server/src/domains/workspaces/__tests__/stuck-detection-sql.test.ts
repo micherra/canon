@@ -6,6 +6,7 @@
  */
 
 import Database from "better-sqlite3";
+import { stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, test } from "vitest";
 import { initExecutionDb, runMigrations, SCHEMA_VERSION } from "../execution-schema.ts";
 import { ExecutionStore } from "../execution-store.ts";
@@ -130,7 +131,7 @@ describe("runMigrations", () => {
 describe("ExecutionStore.recordIterationResult", () => {
   test("stores an iteration result and it can be read back", () => {
     const store = makeStore();
-    store.recordIterationResult("implement", 1, "done", {
+    store.recordIterationResult(sid("implement"), 1, "done", {
       artifact_count: 3,
       commit_sha: "abc123",
     });
@@ -156,8 +157,8 @@ describe("ExecutionStore.recordIterationResult", () => {
 
   test("INSERT OR REPLACE: overwrites existing record for same state_id + iteration", () => {
     const store = makeStore();
-    store.recordIterationResult("implement", 1, "needs_fix", { commit_sha: "aaa" });
-    store.recordIterationResult("implement", 1, "done", { commit_sha: "bbb" });
+    store.recordIterationResult(sid("implement"), 1, "needs_fix", { commit_sha: "aaa" });
+    store.recordIterationResult(sid("implement"), 1, "done", { commit_sha: "bbb" });
 
     const db = (store as unknown as { db: Database.Database }).db;
     const rows = db
@@ -171,15 +172,15 @@ describe("ExecutionStore.recordIterationResult", () => {
 
   test("stores multiple iterations for the same state", () => {
     const store = makeStore();
-    store.recordIterationResult("review", 1, "blocking", {
+    store.recordIterationResult(sid("review"), 1, "blocking", {
       file_paths: ["a.ts"],
       principle_ids: ["p1"],
     });
-    store.recordIterationResult("review", 2, "blocking", {
+    store.recordIterationResult(sid("review"), 2, "blocking", {
       file_paths: ["b.ts"],
       principle_ids: ["p2"],
     });
-    store.recordIterationResult("review", 3, "done", {});
+    store.recordIterationResult(sid("review"), 3, "done", {});
 
     const db = (store as unknown as { db: Database.Database }).db;
     const rows = db
@@ -200,65 +201,65 @@ describe("ExecutionStore.isStuck", () => {
 
   test("returns false when no iterations exist", () => {
     const store = makeStore();
-    expect(store.isStuck("implement", "same_status")).toBe(false);
+    expect(store.isStuck(sid("implement"), "same_status")).toBe(false);
   });
 
   test("returns false when only one iteration exists", () => {
     const store = makeStore();
-    store.recordIterationResult("implement", 1, "done", {});
-    expect(store.isStuck("implement", "same_status")).toBe(false);
+    store.recordIterationResult(sid("implement"), 1, "done", {});
+    expect(store.isStuck(sid("implement"), "same_status")).toBe(false);
   });
 
   // ---- same_violations ----
 
   test("same_violations: returns true when last two iterations have identical principle_ids and file_paths", () => {
     const store = makeStore();
-    store.recordIterationResult("review", 1, "blocking", {
+    store.recordIterationResult(sid("review"), 1, "blocking", {
       file_paths: ["src/foo.ts", "src/bar.ts"],
       principle_ids: ["thin-handlers", "errors-are-values"],
     });
-    store.recordIterationResult("review", 2, "blocking", {
+    store.recordIterationResult(sid("review"), 2, "blocking", {
       file_paths: ["src/bar.ts", "src/foo.ts"],
       principle_ids: ["errors-are-values", "thin-handlers"],
     });
 
-    expect(store.isStuck("review", "same_violations")).toBe(true);
+    expect(store.isStuck(sid("review"), "same_violations")).toBe(true);
   });
 
   test("same_violations: returns false when violations differ between last two iterations", () => {
     const store = makeStore();
-    store.recordIterationResult("review", 1, "blocking", {
+    store.recordIterationResult(sid("review"), 1, "blocking", {
       file_paths: ["src/foo.ts"],
       principle_ids: ["thin-handlers"],
     });
-    store.recordIterationResult("review", 2, "blocking", {
+    store.recordIterationResult(sid("review"), 2, "blocking", {
       file_paths: ["src/foo.ts"],
       principle_ids: ["errors-are-values"],
     });
 
-    expect(store.isStuck("review", "same_violations")).toBe(false);
+    expect(store.isStuck(sid("review"), "same_violations")).toBe(false);
   });
 
   test("same_violations: returns false when file_paths differ between last two iterations", () => {
     const store = makeStore();
-    store.recordIterationResult("review", 1, "blocking", {
+    store.recordIterationResult(sid("review"), 1, "blocking", {
       file_paths: ["src/foo.ts"],
       principle_ids: ["thin-handlers"],
     });
-    store.recordIterationResult("review", 2, "blocking", {
+    store.recordIterationResult(sid("review"), 2, "blocking", {
       file_paths: ["src/bar.ts"],
       principle_ids: ["thin-handlers"],
     });
 
-    expect(store.isStuck("review", "same_violations")).toBe(false);
+    expect(store.isStuck(sid("review"), "same_violations")).toBe(false);
   });
 
   test("same_violations: returns false when missing principle_ids/file_paths in data", () => {
     const store = makeStore();
-    store.recordIterationResult("review", 1, "blocking", {});
-    store.recordIterationResult("review", 2, "blocking", {});
+    store.recordIterationResult(sid("review"), 1, "blocking", {});
+    store.recordIterationResult(sid("review"), 2, "blocking", {});
     // Both have empty arrays by default — they match, should return true
-    expect(store.isStuck("review", "same_violations")).toBe(true);
+    expect(store.isStuck(sid("review"), "same_violations")).toBe(true);
   });
 
   // ---- same_file_test ----
@@ -266,126 +267,126 @@ describe("ExecutionStore.isStuck", () => {
   test("same_file_test: returns true when pairs are identical across last two iterations", () => {
     const store = makeStore();
     const pairs = [{ file: "foo.ts", test: "foo.test.ts" }];
-    store.recordIterationResult("test", 1, "failing", { pairs });
-    store.recordIterationResult("test", 2, "failing", { pairs });
+    store.recordIterationResult(sid("test"), 1, "failing", { pairs });
+    store.recordIterationResult(sid("test"), 2, "failing", { pairs });
 
-    expect(store.isStuck("test", "same_file_test")).toBe(true);
+    expect(store.isStuck(sid("test"), "same_file_test")).toBe(true);
   });
 
   test("same_file_test: returns false when pairs differ", () => {
     const store = makeStore();
-    store.recordIterationResult("test", 1, "failing", {
+    store.recordIterationResult(sid("test"), 1, "failing", {
       pairs: [{ file: "foo.ts", test: "foo.test.ts" }],
     });
-    store.recordIterationResult("test", 2, "failing", {
+    store.recordIterationResult(sid("test"), 2, "failing", {
       pairs: [{ file: "bar.ts", test: "bar.test.ts" }],
     });
 
-    expect(store.isStuck("test", "same_file_test")).toBe(false);
+    expect(store.isStuck(sid("test"), "same_file_test")).toBe(false);
   });
 
   // ---- same_status ----
 
   test("same_status: returns true when status is identical in last two iterations", () => {
     const store = makeStore();
-    store.recordIterationResult("implement", 1, "needs_fix", {});
-    store.recordIterationResult("implement", 2, "needs_fix", {});
+    store.recordIterationResult(sid("implement"), 1, "needs_fix", {});
+    store.recordIterationResult(sid("implement"), 2, "needs_fix", {});
 
-    expect(store.isStuck("implement", "same_status")).toBe(true);
+    expect(store.isStuck(sid("implement"), "same_status")).toBe(true);
   });
 
   test("same_status: returns false when status changes between last two iterations", () => {
     const store = makeStore();
-    store.recordIterationResult("implement", 1, "needs_fix", {});
-    store.recordIterationResult("implement", 2, "done", {});
+    store.recordIterationResult(sid("implement"), 1, "needs_fix", {});
+    store.recordIterationResult(sid("implement"), 2, "done", {});
 
-    expect(store.isStuck("implement", "same_status")).toBe(false);
+    expect(store.isStuck(sid("implement"), "same_status")).toBe(false);
   });
 
   // ---- no_progress ----
 
   test("no_progress: returns true when commit_sha and artifact_count are unchanged", () => {
     const store = makeStore();
-    store.recordIterationResult("implement", 1, "needs_fix", {
+    store.recordIterationResult(sid("implement"), 1, "needs_fix", {
       artifact_count: 2,
       commit_sha: "abc",
     });
-    store.recordIterationResult("implement", 2, "needs_fix", {
+    store.recordIterationResult(sid("implement"), 2, "needs_fix", {
       artifact_count: 2,
       commit_sha: "abc",
     });
 
-    expect(store.isStuck("implement", "no_progress")).toBe(true);
+    expect(store.isStuck(sid("implement"), "no_progress")).toBe(true);
   });
 
   test("no_progress: returns false when commit_sha changes", () => {
     const store = makeStore();
-    store.recordIterationResult("implement", 1, "needs_fix", {
+    store.recordIterationResult(sid("implement"), 1, "needs_fix", {
       artifact_count: 2,
       commit_sha: "abc",
     });
-    store.recordIterationResult("implement", 2, "needs_fix", {
+    store.recordIterationResult(sid("implement"), 2, "needs_fix", {
       artifact_count: 2,
       commit_sha: "def",
     });
 
-    expect(store.isStuck("implement", "no_progress")).toBe(false);
+    expect(store.isStuck(sid("implement"), "no_progress")).toBe(false);
   });
 
   // ---- no_gate_progress ----
 
   test("no_gate_progress: returns true when gate_output_hash matches and passed is false in latest", () => {
     const store = makeStore();
-    store.recordIterationResult("gate-state", 1, "failed", {
+    store.recordIterationResult(sid("gate-state"), 1, "failed", {
       gate_output_hash: "hash1",
       passed: false,
     });
-    store.recordIterationResult("gate-state", 2, "failed", {
+    store.recordIterationResult(sid("gate-state"), 2, "failed", {
       gate_output_hash: "hash1",
       passed: false,
     });
 
-    expect(store.isStuck("gate-state", "no_gate_progress")).toBe(true);
+    expect(store.isStuck(sid("gate-state"), "no_gate_progress")).toBe(true);
   });
 
   test("no_gate_progress: returns false when gate_output_hash differs", () => {
     const store = makeStore();
-    store.recordIterationResult("gate-state", 1, "failed", {
+    store.recordIterationResult(sid("gate-state"), 1, "failed", {
       gate_output_hash: "hash1",
       passed: false,
     });
-    store.recordIterationResult("gate-state", 2, "failed", {
+    store.recordIterationResult(sid("gate-state"), 2, "failed", {
       gate_output_hash: "hash2",
       passed: false,
     });
 
-    expect(store.isStuck("gate-state", "no_gate_progress")).toBe(false);
+    expect(store.isStuck(sid("gate-state"), "no_gate_progress")).toBe(false);
   });
 
   test("no_gate_progress: returns false when latest iteration passed (even if hash matches)", () => {
     const store = makeStore();
-    store.recordIterationResult("gate-state", 1, "failed", {
+    store.recordIterationResult(sid("gate-state"), 1, "failed", {
       gate_output_hash: "hash1",
       passed: false,
     });
-    store.recordIterationResult("gate-state", 2, "passed", {
+    store.recordIterationResult(sid("gate-state"), 2, "passed", {
       gate_output_hash: "hash1",
       passed: true,
     });
 
-    expect(store.isStuck("gate-state", "no_gate_progress")).toBe(false);
+    expect(store.isStuck(sid("gate-state"), "no_gate_progress")).toBe(false);
   });
 
   // ---- isolation between states ----
 
   test("compares only within the same state_id", () => {
     const store = makeStore();
-    store.recordIterationResult("state-a", 1, "needs_fix", {});
-    store.recordIterationResult("state-a", 2, "needs_fix", {});
-    store.recordIterationResult("state-b", 1, "needs_fix", {});
+    store.recordIterationResult(sid("state-a"), 1, "needs_fix", {});
+    store.recordIterationResult(sid("state-a"), 2, "needs_fix", {});
+    store.recordIterationResult(sid("state-b"), 1, "needs_fix", {});
     // state-b only has 1 iteration → false
-    expect(store.isStuck("state-b", "same_status")).toBe(false);
+    expect(store.isStuck(sid("state-b"), "same_status")).toBe(false);
     // state-a has 2 identical → true
-    expect(store.isStuck("state-a", "same_status")).toBe(true);
+    expect(store.isStuck(sid("state-a"), "same_status")).toBe(true);
   });
 });

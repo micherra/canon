@@ -8,7 +8,7 @@
  * here; instead, we pass deps directly to verify the injection seam works.
  */
 
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { workspacePath, flowName, stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Board } from "../board-state-schemas.ts";
 import { evaluateSkipWhen } from "../skip-when.ts";
@@ -57,8 +57,8 @@ function makeBoard(overrides?: Partial<Board>): Board {
     base_commit: "abc1234",
     blocked: null,
     concerns: [],
-    current_state: "start",
-    entry: "start",
+    current_state: sid("start"),
+    entry: sid("start"),
     flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
@@ -85,7 +85,7 @@ describe("evaluateSkipWhen — no_contract_changes with injected gitDiff", () =>
       timedOut: false,
     });
 
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board, {
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board, {
       gitDiff: mockGitDiff,
     });
 
@@ -108,7 +108,7 @@ describe("evaluateSkipWhen — no_contract_changes with injected gitDiff", () =>
       timedOut: false,
     });
 
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board, {
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board, {
       gitDiff: mockGitDiff,
     });
 
@@ -125,7 +125,7 @@ describe("evaluateSkipWhen — no_contract_changes with injected gitDiff", () =>
       timedOut: false,
     });
 
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board, {
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board, {
       gitDiff: mockGitDiff,
     });
 
@@ -137,7 +137,7 @@ describe("evaluateSkipWhen — no_contract_changes with injected gitDiff", () =>
     const board = makeBoard({ base_commit: "not-a-valid-sha!!!" });
     const mockGitDiff = vi.fn();
 
-    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board, {
+    const result = await evaluateSkipWhen("no_contract_changes", workspacePath("/tmp/ws"), board, {
       gitDiff: mockGitDiff,
     });
 
@@ -155,7 +155,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed with injected countFlowRuns
     const board = makeBoard();
     const mockCount = vi.fn().mockReturnValue(10); // above min threshold of 5
 
-    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board, {
+    const result = await evaluateSkipWhen("learn_gate_not_passed", workspacePath("/tmp/ws"), board, {
       countFlowRunsSince: mockCount,
     });
 
@@ -168,7 +168,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed with injected countFlowRuns
     const board = makeBoard();
     const mockCount = vi.fn().mockReturnValue(2); // below min threshold of 5
 
-    const result = await evaluateSkipWhen("learn_gate_not_passed", "/tmp/ws", board, {
+    const result = await evaluateSkipWhen("learn_gate_not_passed", workspacePath("/tmp/ws"), board, {
       countFlowRunsSince: mockCount,
     });
 
@@ -185,7 +185,7 @@ describe("evaluateSkipWhen — learn_gate_not_passed with injected countFlowRuns
 describe("evaluateSkipWhen — conditions unaffected by deps", () => {
   it("no_fix_requested ignores deps", async () => {
     const board = makeBoard({ metadata: { fix_requested: true } });
-    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board, {
+    const result = await evaluateSkipWhen("no_fix_requested", workspacePath("/tmp/ws"), board, {
       gitDiff: vi.fn(),
       countFlowRunsSince: vi.fn(),
     });
@@ -194,7 +194,7 @@ describe("evaluateSkipWhen — conditions unaffected by deps", () => {
 
   it("auto_approved ignores deps", async () => {
     const board = makeBoard({ metadata: { auto_approve: true } });
-    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board, {
+    const result = await evaluateSkipWhen("auto_approved", workspacePath("/tmp/ws"), board, {
       gitDiff: vi.fn(),
       countFlowRunsSince: vi.fn(),
     });
