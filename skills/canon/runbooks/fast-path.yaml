@@ -1,0 +1,57 @@
+# Canon runbook: fast-path
+#
+# Phase 1 of the Canon → agent teams migration.
+# This runbook is consumed by the new lead-mode orchestrator entry point
+# (mcp-server/src/features/orchestration/lead-mode.ts) when
+# CANON_AGENT_TEAMS_MODE=on. It is NOT read by drive_flow.
+#
+# Schema (see ./README.md for the full reference):
+#
+#   name:        short kebab-case identifier (filename stem)
+#   description: human-readable one-line description
+#   tier:        one of small | medium | large
+#   steps:       ordered list of teammate spawns
+#     - role:              canon agent identifier (no canon: prefix; matches agents/<role>.md)
+#       artifact:          required artifact file produced by this step; enforced by TaskCompleted hook
+#       artifact_path:     path under .canon/workspaces/<id>/ where the artifact must appear
+#       task_type:         short tag used by assembleSpawnPrompt to pick context shaping
+#       hitl:              false | after | after_if_verdict_not_clean
+#       required_artifacts:
+#                          upstream artifact ids this step consumes (for prompt assembly)
+
+name: fast-path
+description: Bug fix or small change, 1–3 files
+tier: small
+
+steps:
+  - role: canon-researcher
+    task_type: research
+    artifact: research_synthesis
+    artifact_path: research/SYNTHESIS.md
+    hitl: false
+    required_artifacts: []
+
+  - role: canon-architect
+    task_type: design
+    artifact: plan_index
+    artifact_path: plans/INDEX.md
+    hitl: after
+    required_artifacts:
+      - research_synthesis
+
+  - role: canon-implementor
+    task_type: implement
+    artifact: implementation_summary
+    artifact_path: plans/SUMMARY.md
+    hitl: false
+    required_artifacts:
+      - research_synthesis
+      - plan_index
+
+  - role: canon-reviewer
+    task_type: review
+    artifact: review
+    artifact_path: reviews/REVIEW.md
+    hitl: after_if_verdict_not_clean
+    required_artifacts:
+      - implementation_summary

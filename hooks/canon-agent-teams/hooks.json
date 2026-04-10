@@ -1,0 +1,59 @@
+{
+  "description": "Canon agent-teams hooks — artifact enforcement, idle backstop, and observability. Additive to the main hooks.json; loaded only when CANON_AGENT_TEAMS_MODE=on. Phase 1 of the Canon → agent teams migration.",
+  "hooks": {
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/artifact-enforce.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/observability.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/idle-backstop.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/observability.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/observability.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/observability.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
