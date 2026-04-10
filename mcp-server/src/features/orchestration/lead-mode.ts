@@ -519,8 +519,19 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
 
 /**
  * Resolve upstream artifact refs for a flat (non-wave) step.
- * A flat step always sees a single physical path per upstream id, so
- * if the upstream was itself wave-expanded this is an authoring error.
+ *
+ * A flat step sees one of two shapes per upstream ref:
+ *   1. Flat upstream: a single physical path, emitted as-is.
+ *   2. Wave upstream: a glob-shaped path of the form
+ *      `plans/<slug>/<*>-<SUFFIX>.md` pointing at every per-task artifact
+ *      the earlier wave produced. The downstream flat teammate (tester,
+ *      scribe, reviewer, shipper) is expected to discover the matching
+ *      files at runtime. This is Phase 2's compromise for fan-in: the
+ *      linear runbook format cannot enumerate N paths in a single upstream
+ *      ref, so we hand over a concrete glob the teammate can expand.
+ *
+ * The description field is annotated so the teammate understands it is
+ * a glob and not a single file.
  */
 function resolveUpstreamRefsForFlatStep(
   step: RunbookStep,
@@ -543,18 +554,46 @@ function resolveUpstreamRefsForFlatStep(
         `Runbook "${runbookName}" step ${index} (${step.role}): required artifact "${refId}" is not produced by any earlier step`,
       );
     }
-    if (hit.path === undefined) {
+    if (hit.path !== undefined) {
+      return {
+        id: refId,
+        path: hit.path,
+        produced_by: hit.produced_by,
+        description: hit.description,
+      };
+    }
+    // Wave upstream — synthesize a glob-shaped path so the flat consumer
+    // has a concrete pointer into the wave output directory.
+    if (!hit.wavePaths || hit.wavePaths.size === 0) {
       throw new RunbookError(
-        `Runbook "${runbookName}" step ${index} (${step.role}): required artifact "${refId}" is wave-scoped but the consuming step is not; flat steps cannot reference wave outputs`,
+        `Runbook "${runbookName}" step ${index} (${step.role}): wave upstream "${refId}" produced zero per-task artifacts`,
       );
     }
+    // Every wave entry lives in the same parent dir, so any one is fine
+    // for shape extraction.
+    const samplePath = hit.wavePaths.values().next().value!;
+    const globPath = waveGlobFromSamplePath(samplePath);
     return {
       id: refId,
-      path: hit.path,
+      path: globPath,
       produced_by: hit.produced_by,
-      description: hit.description,
+      description: `Wave fan-in glob — one artifact per task id produced by the wave step (${hit.wavePaths.size} total).`,
     };
   });
+}
+
+/**
+ * Derive a glob-shaped upstream path from a concrete wave artifact path.
+ * Example:
+ *     `plans/fix-bug/t1-SUMMARY.md` → `plans/fix-bug/*-SUMMARY.md`
+ * Strips the per-task prefix preserving the suffix so the glob is as
+ * narrow as possible.
+ */
+function waveGlobFromSamplePath(samplePath: string): string {
+  // Expected shape: plans/<slug>/<task_id>-<REST>.md
+  const m = /^(plans\/[^/]+\/)([^/]+?)(-[A-Z][A-Z0-9-]*\.md)$/.exec(samplePath);
+  if (!m) return samplePath; // Give up gracefully — still returns a usable ref.
+  return `${m[1]}*${m[3]}`;
 }
 
 /**

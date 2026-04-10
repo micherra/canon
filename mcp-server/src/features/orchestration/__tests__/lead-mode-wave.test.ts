@@ -254,11 +254,12 @@ describe("planRun — upstream ref resolution for waves", () => {
     expect(r2.spawn_prompt).not.toContain("plans/fix-bug/t1-SUMMARY.md");
   });
 
-  it("rejects flat steps that try to reference wave outputs", () => {
-    // Append a flat step that tries to consume the wave implementor output.
+  it("synthesizes a glob-shaped upstream path when a flat step references a wave output", () => {
+    // Phase 2 fan-in: flat downstream steps (tester, scribe, reviewer,
+    // shipper) reference the wave implementor's output via a glob path.
     const yaml = `
-name: bad-flat-after-wave
-description: flat step after a wave
+name: flat-after-wave
+description: flat step after a wave (fan-in)
 tier: medium
 steps:
   - role: canon-architect
@@ -284,14 +285,16 @@ steps:
       - implementation_summary
 `;
     const rb = parseRunbook(yaml);
-    expect(() =>
-      planRun({
-        runbook: rb,
-        workspace_id: "ws",
-        target_files: [],
-        wave_context: { slug: "s", task_ids: ["t1", "t2"] },
-      }),
-    ).toThrow(/flat steps cannot reference wave outputs/);
+    const descriptors = planRun({
+      runbook: rb,
+      workspace_id: "ws",
+      target_files: [],
+      wave_context: { slug: "fix-bug", task_ids: ["t1", "t2"] },
+    });
+    const shipper = descriptors.find((d) => d.role === "canon-shipper");
+    expect(shipper).toBeDefined();
+    expect(shipper!.spawn_prompt).toContain("plans/fix-bug/*-SUMMARY.md");
+    expect(shipper!.spawn_prompt).toContain("Wave fan-in glob");
   });
 });
 
