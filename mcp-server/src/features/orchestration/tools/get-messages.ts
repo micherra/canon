@@ -1,9 +1,10 @@
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import type { Message } from "@domains/messages/messages.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 
 export type GetMessagesInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   channel: string;
   since?: string;
   include_events?: boolean;

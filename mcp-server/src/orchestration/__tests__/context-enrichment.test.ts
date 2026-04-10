@@ -55,6 +55,7 @@ import {
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {
@@ -63,7 +64,7 @@ function makeBoard(overrides: Partial<Board> = {}): Board {
     concerns: [],
     current_state: "implement",
     entry: "implement",
-    flow: "build",
+    flow: flowName("build"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],

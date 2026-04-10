@@ -13,7 +13,7 @@
  * but this module does not enforce it.
  */
 
-import type { ConsultationResult } from "@domains/flows/board-state-schemas.ts";
+import type { ConsultationResult, StateId } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
 
@@ -52,7 +52,7 @@ export async function executeConsultations(input: ConsultationInput): Promise<Co
       continue;
     }
 
-    const spawnInstruction = flow.spawn_instructions[name];
+    const spawnInstruction = flow.spawn_instructions[name as StateId];
     if (!spawnInstruction) {
       warnings.push(
         `Spawn instruction for consultation "${name}" not found in flow.spawn_instructions — skipping.`,
@@ -83,7 +83,7 @@ export function resolveConsultationPrompt(
     return null;
   }
 
-  const spawnInstruction = flow.spawn_instructions[name];
+  const spawnInstruction = flow.spawn_instructions[name as StateId];
   if (!spawnInstruction) {
     return null;
   }

@@ -80,6 +80,7 @@ vi.mock("@graph/kg-store.ts", () => ({
 
 import { existsSync } from "node:fs";
 import { computeFileInsightMaps } from "@graph/kg-query.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(stateOverrides: Board["states"] = {}): Board {
   return {
@@ -88,7 +89,7 @@ function makeBoard(stateOverrides: Board["states"] = {}): Board {
     concerns: [],
     current_state: "start",
     entry: "start",
-    flow: "test",
+    flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -425,7 +426,7 @@ function makeBoardWithMetadata(metadata?: Record<string, string | number | boole
     concerns: [],
     current_state: "start",
     entry: "start",
-    flow: "test",
+    flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],

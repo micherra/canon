@@ -62,6 +62,7 @@ import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-stat
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -80,7 +81,7 @@ function makeStore(workspace: string): ExecutionStore {
     created: new Date().toISOString(),
     current_state: "implement",
     entry: "implement",
-    flow: "epic-flow",
+    flow: flowName("epic-flow"),
     flow_name: "epic-flow",
     last_updated: new Date().toISOString(),
     sanitized: "feat-epic",
@@ -112,7 +113,7 @@ function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "epic flow",
     entry: "implement",
-    name: "epic-flow",
+    name: flowName("epic-flow"),
     spawn_instructions: {
       implement: "Implement the tasks",
       terminal: "",
@@ -167,7 +168,7 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
       concerns: [],
       current_state: nextState ?? "terminal",
       entry: "implement",
-      flow: "epic-flow",
+      flow: flowName("epic-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
       skipped: [],
@@ -1244,7 +1245,7 @@ describe("driveFlow — after-consultation handling", () => {
       consultation_prompts: [
         {
           agent: "canon:canon-learner",
-          name: "pattern-check",
+          name: flowName("pattern-check"),
           prompt: "Check patterns",
           role: "consultation",
         },

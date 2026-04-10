@@ -12,6 +12,8 @@
 
 import { readFile, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as mkStateId } from "@domains/flows/board-state-schemas.ts";
 import { type TranscriptEntry, TranscriptEntrySchema } from "@domains/flows/event-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
@@ -19,7 +21,7 @@ import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { isPathContained } from "@shared/lib/worktree-guard.ts";
 
 export type GetTranscriptInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   state_id: string;
   mode?: "full" | "summary"; // default: "full"
 };
@@ -44,7 +46,7 @@ export type GetTranscriptResult = {
 /** Resolve the real filesystem path for the transcript, guarding against traversal and symlink escapes. */
 async function resolveTranscriptRealPath(
   transcriptPath: string,
-  workspace: string,
+  workspace: WorkspacePath,
 ): Promise<ToolResult<string> | string> {
   const transcriptsDir = resolve(workspace, "transcripts");
   const resolvedTranscriptPath = resolve(transcriptPath);
@@ -98,7 +100,7 @@ export async function getTranscript(
   input: GetTranscriptInput,
 ): Promise<ToolResult<GetTranscriptResult>> {
   const store = getExecutionStore(input.workspace);
-  const transcriptPath = store.getTranscriptPath(input.state_id);
+  const transcriptPath = store.getTranscriptPath(mkStateId(input.state_id));
 
   if (!transcriptPath) {
     return toolError(

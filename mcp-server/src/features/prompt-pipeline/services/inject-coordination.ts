@@ -27,7 +27,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ToolOverrides } from "@domains/flows/flow-definition-schemas.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
@@ -69,7 +69,7 @@ function closeDb(db: ReturnType<typeof initDatabase> | undefined): void {
  * Lazily load the board from the execution store.
  * Returns null if the workspace has no execution store or the store has no board.
  */
-function lazyLoadBoard(workspace: string): Board | null {
+function lazyLoadBoard(workspace: WorkspacePath): Board | null {
   try {
     return getExecutionStore(workspace).getBoard();
   } catch {
@@ -151,7 +151,7 @@ function computeTrustForEntries(
         ? resolveTaskScope({
             board,
             planSlug,
-            stateId: ctx.input.state_id,
+            stateId: ctx.input.state_id as StateId,
             taskId,
             workspace: ctx.input.workspace,
           })
@@ -170,7 +170,7 @@ function computeTrustForEntries(
  * Contains a concrete record_agent_metrics invocation example with the
  * real workspace and state_id so agents receive a runnable example.
  */
-function buildMetricsFooter(workspace: string, stateId: string): string {
+function buildMetricsFooter(workspace: WorkspacePath, stateId: string): string {
   return `## Performance Metrics
 
 Before returning your final status, call the \`record_agent_metrics\` tool to record your session counters:

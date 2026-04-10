@@ -50,6 +50,7 @@ import { assertOk } from "@shared/lib/tool-result.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -112,7 +113,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { implement: "Implement ${task}." },
     states: {
       done: { type: "terminal" },
@@ -408,7 +409,7 @@ describe("enterAndPrepareState", () => {
       const flow: ResolvedFlow = {
         description: "Test flow",
         entry: "review",
-        name: "test-flow",
+        name: flowName("test-flow"),
         spawn_instructions: { review: "Review the code for ${task}." },
         states: {
           done: { type: "terminal" },
@@ -445,7 +446,7 @@ describe("enterAndPrepareState", () => {
         },
         description: "Test flow",
         entry: "implement",
-        name: "test-flow",
+        name: flowName("test-flow"),
         spawn_instructions: {
           implement: "Implement ${task}.",
           "risk-assessment": "Assess risks for ${task}.",
@@ -487,7 +488,7 @@ describe("enterAndPrepareState", () => {
       expect(result.consultation_prompts).toHaveLength(1);
       expect(result.consultation_prompts![0]).toEqual({
         agent: "canon-security",
-        name: "risk-assessment",
+        name: flowName("risk-assessment"),
         prompt: "Assess risks for test task.",
         role: "security-reviewer",
         section: "Risk Assessment",
@@ -617,7 +618,7 @@ describe("enterAndPrepareState", () => {
         created: now,
         current_state: "implement",
         entry: "implement",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         flow_name: "test-flow",
         last_updated: now,
         sanitized: "feat-test",
@@ -718,7 +719,7 @@ describe("enterAndPrepareState — session branch variable injection", () => {
       created: now,
       current_state: "implement",
       entry: "implement",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       flow_name: "test-flow",
       last_updated: now,
       sanitized: "feat-my-feature",
@@ -757,7 +758,7 @@ describe("enterAndPrepareState — session branch variable injection", () => {
       created: now,
       current_state: "implement",
       entry: "implement",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       flow_name: "test-flow",
       last_updated: now,
       sanitized: "feat-my-feature",
@@ -837,11 +838,11 @@ describe("enterAndPrepareState — missing directory", () => {
     const flow: ResolvedFlow = {
       description: "",
       entry: "implement",
-      name: "test-flow",
+      name: flowName("test-flow"),
       states: {
         implement: {
           prompt: "test",
-          roles: [{ name: "implementor" }],
+          roles: [{ name: flowName("implementor") }],
         },
       },
     } as unknown as ResolvedFlow;

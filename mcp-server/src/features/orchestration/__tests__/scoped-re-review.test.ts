@@ -51,6 +51,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -67,7 +68,7 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     concerns: [],
     current_state: "review",
     entry: "review",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -85,7 +86,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "review",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       review: "Review changes via git diff ${base_commit}..HEAD. ${review_scope}",
     },

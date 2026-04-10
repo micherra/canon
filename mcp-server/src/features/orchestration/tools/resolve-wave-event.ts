@@ -1,9 +1,10 @@
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { resolveEventAgents } from "@domains/workspaces/wave-events.ts";
 
 export type ResolveWaveEventInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   event_id: string;
   action: "apply" | "reject";
   resolution?: Record<string, unknown>; // only for apply

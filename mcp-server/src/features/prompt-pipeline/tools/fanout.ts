@@ -24,6 +24,7 @@
  * into N prompt entries based on state type.
  */
 
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { CompeteConfig } from "@domains/flows/flow-definition-schemas.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
 import {
@@ -156,7 +157,7 @@ function resolveClusters(
 function buildActiveDebatePrompts(
   dc: Parameters<typeof inspectDebateProgress>[1],
   debate: Awaited<ReturnType<typeof inspectDebateProgress>>,
-  opts: { basePrompt: string; workspace: string; paths: string[] },
+  opts: { basePrompt: string; workspace: WorkspacePath; paths: string[] },
 ): SpawnPromptEntry[] {
   const { basePrompt, workspace, paths } = opts;
   const prompts: SpawnPromptEntry[] = [];
@@ -310,7 +311,7 @@ async function handleDebate(
   state_id: string,
   flow: PromptContext["input"]["flow"],
   opts: {
-    workspace: string;
+    workspace: WorkspacePath;
     basePrompt: string;
     warnings: string[];
     paths: string[];

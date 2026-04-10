@@ -25,17 +25,8 @@ import {
 } from "./branded-types.js";
 
 // Re-export branded types and constructors so consumers can import from this file
-export {
-  FlowName,
-  FlowNameSchema,
-  flowName,
-  StateId,
-  StateIdSchema,
-  stateId,
-  WorkspacePath,
-  WorkspacePathSchema,
-  workspacePath,
-} from "./branded-types.js";
+export type { FlowName, StateId, WorkspacePath } from "./branded-types.js";
+export { FlowNameSchema, flowName, StateIdSchema, stateId, WorkspacePathSchema, workspacePath } from "./branded-types.js";
 
 // Board state schemas
 

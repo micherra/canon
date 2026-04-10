@@ -26,6 +26,7 @@ import {
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { describe, expect, it } from "vitest";
 import { simulateFlow, simulateFlowTool } from "../tools/simulate-flow.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 const pluginDir = resolve(process.cwd(), "..");
 
@@ -47,7 +48,7 @@ function makeFlow(
   return {
     description: "integration-test",
     entry,
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: si,
     states,
   };
@@ -63,7 +64,7 @@ describe("simulateFlowTool — FLOW_PARSE_ERROR", () => {
     // to test the not-found path; the parse-error path is the same code path just
     // different message content. Verify the tool wrapper never throws.
     const result = await simulateFlowTool(
-      { flow: "nonexistent-flow-parse-test-xyz", scenario: [] },
+      { flow: flowName("nonexistent-flow-parse-test-xyz"), scenario: [] },
       pluginDir,
     );
     expect(isToolError(result)).toBe(true);
@@ -82,7 +83,7 @@ describe("simulateFlowTool — full simulation to terminal with explore flow", (
     // explore flow: entry state is typically 'research' or 'explore', terminal is 'done'
     // We provide an empty scenario first to find the entry state name
     const probe = await simulateFlowTool(
-      { flow: "explore", max_steps: 1, scenario: [] },
+      { flow: flowName("explore"), max_steps: 1, scenario: [] },
       pluginDir,
     );
     expect(isToolError(probe)).toBe(false);
@@ -95,7 +96,7 @@ describe("simulateFlowTool — full simulation to terminal with explore flow", (
     // Now simulate with done status from entry and expect to advance
     const result = await simulateFlowTool(
       {
-        flow: "explore",
+        flow: flowName("explore"),
         max_steps: 50,
         scenario: [{ state_id: entryState, status: "done" }],
       },
@@ -307,7 +308,7 @@ describe("simulateFlow — errors-are-values: no throws for adversarial inputs",
     const flow: ResolvedFlow = {
       description: "broken",
       entry: "start",
-      name: "broken-flow",
+      name: flowName("broken-flow"),
       spawn_instructions: { start: "Do it" },
       states: {
         done: { type: "terminal" },

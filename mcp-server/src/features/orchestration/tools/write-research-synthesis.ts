@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 
@@ -8,7 +9,7 @@ const escapeMdCell = (value: string): string =>
   value.replace(/\|/g, "&#124;").replace(/\r\n?|\n/g, " ");
 
 export type WriteResearchSynthesisInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   slug: string;
   key_findings: Array<{
     finding: string;

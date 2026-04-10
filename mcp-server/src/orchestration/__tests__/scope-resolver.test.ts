@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // We test resolveTaskScope via a workspace with temp dirs and board objects
 
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {
@@ -24,7 +25,7 @@ function makeBoard(overrides: Partial<Board> = {}): Board {
     concerns: [],
     current_state: "research",
     entry: "research",
-    flow: "build",
+    flow: flowName("build"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],

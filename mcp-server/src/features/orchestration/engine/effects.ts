@@ -8,6 +8,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { createDriftStore } from "@domains/drift/drift-store-factory.ts";
 import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
+import type { StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { Effect, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { generateId } from "@shared/lib/id.ts";
@@ -54,7 +55,7 @@ export type EffectResult = {
  *                    Required when check_postconditions effect is used.
  */
 export type ExecuteEffectsOpts = {
-  workspace: string;
+  workspace: WorkspacePath;
   artifacts: string[];
   projectDir: string;
   stateName?: string;
@@ -95,7 +96,7 @@ export async function executeEffects(
 }
 
 type ExecuteOneEffectOpts = {
-  workspace: string;
+  workspace: WorkspacePath;
   artifacts: string[];
   projectDir: string;
   stateName?: string;
@@ -120,7 +121,7 @@ async function executeOneEffect(
 
 async function checkPostconditions(
   stateDef: StateDefinition | undefined,
-  workspace: string,
+  workspace: WorkspacePath,
   projectDir: string,
   stateName?: string,
 ): Promise<EffectResult> {
@@ -135,7 +136,7 @@ async function checkPostconditions(
     if (board) {
       baseCommit = board.base_commit;
       if (stateName) {
-        const stateEntry = board.states[stateName];
+        const stateEntry = board.states[stateName as StateId];
         discoveredPostconditions = stateEntry?.discovered_postconditions;
       }
     }
@@ -160,7 +161,7 @@ async function checkPostconditions(
 async function persistReview(
   effect: Effect,
   store: IDriftStore,
-  workspace: string,
+  workspace: WorkspacePath,
   artifacts: string[],
 ): Promise<EffectResult> {
   const artifactName = effect.artifact ?? "REVIEW.md";
@@ -374,7 +375,7 @@ function isWithinWorkspace(resolvedWorkspace: string, resolvedPath: string): boo
 /** Try to read an artifact from the reported artifacts list. */
 async function tryReadFromArtifactsList(
   artifactName: string,
-  workspace: string,
+  workspace: WorkspacePath,
   artifacts: string[],
 ): Promise<string | null> {
   const resolvedWorkspace = resolve(workspace);
@@ -395,7 +396,7 @@ async function tryReadFromArtifactsList(
 /** Resolve an artifact name to a file path and read its content. */
 async function resolveAndRead(
   artifactName: string,
-  workspace: string,
+  workspace: WorkspacePath,
   artifacts: string[],
 ): Promise<string | null> {
   // First try matching against reported artifacts list

@@ -38,6 +38,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -51,7 +52,7 @@ function makeMinimalFlow(): ResolvedFlow {
   return {
     description: "test flow",
     entry: "impl",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { impl: "Do the thing" },
     states: {
       impl: {
@@ -95,7 +96,7 @@ function setupWorkspace(): string {
     created: now,
     current_state: "impl",
     entry: "impl",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     flow_name: "test-flow",
     last_updated: now,
     sanitized: "main",

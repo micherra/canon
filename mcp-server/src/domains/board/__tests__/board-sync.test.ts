@@ -5,8 +5,8 @@
  * syncs Board object fields to the ExecutionStore.
  */
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId } from "@domains/flows/board-state-schemas.ts";
+import { flowName, stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -21,8 +21,8 @@ const BASE_INIT_PARAMS = {
   base_commit: "abc123",
   branch: "feat/test",
   created: "2026-01-01T00:00:00.000Z",
-  current_state: "research",
-  entry: "research",
+  current_state: sid("research"),
+  entry: sid("research"),
   flow: "test-flow",
   flow_name: "test-flow",
   last_updated: "2026-01-01T00:00:00.000Z",
@@ -38,8 +38,8 @@ function makeBoard(overrides: Partial<Board> = {}): Board {
     base_commit: "abc123",
     blocked: null,
     concerns: [],
-    current_state: "research",
-    entry: "research",
+    current_state: sid("research"),
+    entry: sid("research"),
     flow: flowName("test-flow"),
     iterations: {},
     last_updated: "2026-01-01T00:00:00.000Z",
@@ -60,7 +60,7 @@ describe("syncBoardToStore", () => {
   });
 
   test("updates current_state on execution", () => {
-    const board = makeBoard({ current_state: "implement" });
+    const board = makeBoard({ current_state: sid("implement") });
     syncBoardToStore(store, board);
 
     const exec = store.getExecution();
@@ -91,13 +91,13 @@ describe("syncBoardToStore", () => {
         {
           agent: "canon-reviewer",
           message: "test concern 1",
-          state_id: "research",
+          state_id: sid("research"),
           timestamp: "2026-01-01T00:00:00.000Z",
         },
         {
           agent: "canon-reviewer",
           message: "test concern 2",
-          state_id: "implement",
+          state_id: sid("implement"),
           timestamp: "2026-01-01T00:00:00.000Z",
         },
       ],
@@ -124,18 +124,18 @@ describe("syncBoardToStore", () => {
   test("syncs board states to store", () => {
     const board = makeBoard({
       states: {
-        research: {
+        [sid("research")]: {
           completed_at: "2026-01-01T01:00:00.000Z",
           entered_at: "2026-01-01T00:00:00.000Z",
           entries: 1,
           result: "Research complete",
           status: "done",
         },
-      },
+      } as Board["states"],
     });
     syncBoardToStore(store, board);
 
-    const state = store.getState("research");
+    const state = store.getState(sid("research"));
     expect(state?.status).toBe("done");
     expect(state?.entries).toBe(1);
     expect(state?.result).toBe("Research complete");
@@ -144,17 +144,17 @@ describe("syncBoardToStore", () => {
   test("syncs iterations to store", () => {
     const board = makeBoard({
       iterations: {
-        implement: {
+        [sid("implement")]: {
           cannot_fix: [],
           count: 2,
           history: [{ status: "done" }, { status: "done_with_concerns" }],
           max: 3,
         },
-      },
+      } as Board["iterations"],
     });
     syncBoardToStore(store, board);
 
-    const iter = store.getIteration("implement");
+    const iter = store.getIteration(sid("implement"));
     expect(iter?.count).toBe(2);
     expect(iter?.max).toBe(3);
     expect(iter?.history).toEqual([{ status: "done" }, { status: "done_with_concerns" }]);
@@ -163,16 +163,16 @@ describe("syncBoardToStore", () => {
   test("syncs multiple states in one call", () => {
     const board = makeBoard({
       states: {
-        implement: { entries: 1, status: "in_progress" },
-        research: { entries: 1, status: "done" },
-        test: { entries: 0, status: "pending" },
-      },
+        [sid("implement")]: { entries: 1, status: "in_progress" },
+        [sid("research")]: { entries: 1, status: "done" },
+        [sid("test")]: { entries: 0, status: "pending" },
+      } as Board["states"],
     });
     syncBoardToStore(store, board);
 
-    expect(store.getState("research")?.status).toBe("done");
-    expect(store.getState("implement")?.status).toBe("in_progress");
-    expect(store.getState("test")?.status).toBe("pending");
+    expect(store.getState(sid("research"))?.status).toBe("done");
+    expect(store.getState(sid("implement"))?.status).toBe("in_progress");
+    expect(store.getState(sid("test"))?.status).toBe("pending");
   });
 
   test("handles empty states and iterations", () => {

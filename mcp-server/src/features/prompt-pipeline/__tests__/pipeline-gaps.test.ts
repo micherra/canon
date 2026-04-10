@@ -89,6 +89,7 @@ import type {
 import { assemblePrompt, getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import type { PromptContext, SpawnPromptInput } from "../model/types.ts";
 import { fanout } from "../tools/fanout.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -108,7 +109,7 @@ function seedWorkspace(task = "test task"): string {
     created: now,
     current_state: "implement",
     entry: "implement",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     flow_name: "test-flow",
     last_updated: now,
     sanitized: "feat-test",
@@ -126,7 +127,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { implement: "Implement the task." },
     states: {
       done: { type: "terminal" },
@@ -389,7 +390,7 @@ describe("fanout — debate triggered only when state_id === flow.entry", () => 
       },
       description: "Test",
       entry: "implement", // entry is "implement"
-      name: "debate-flow",
+      name: flowName("debate-flow"),
       spawn_instructions: { implement: "Implement", review: "Review" },
       states: {
         done: { type: "terminal" },
@@ -434,7 +435,7 @@ describe("fanout — debate triggered only when state_id === flow.entry", () => 
       },
       description: "Test",
       entry: "implement",
-      name: "debate-flow",
+      name: flowName("debate-flow"),
       spawn_instructions: { implement: "Implement this" },
       states: {
         done: { type: "terminal" },
@@ -518,7 +519,7 @@ describe("assemblePrompt — skip_reason result includes warnings accumulated be
         done: { type: "terminal" },
         implement: {
           agent: "canon-implementor",
-          inject_context: [{ from: "state", name: "some-artifact" }] as unknown as never[],
+          inject_context: [{ from: "state", name: flowName("some-artifact") }] as unknown as never[],
           type: "single",
         },
       },
@@ -530,7 +531,7 @@ describe("assemblePrompt — skip_reason result includes warnings accumulated be
         concerns: [],
         current_state: "implement",
         entry: "implement",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
         skipped: [],
@@ -576,8 +577,8 @@ describe("multi-inject_context entries — both variables substituted into promp
         implement: {
           agent: "canon-implementor",
           inject_context: [
-            { from: "state", name: "research_findings" },
-            { from: "state", name: "design_spec" },
+            { from: "state", name: flowName("research_findings") },
+            { from: "state", name: flowName("design_spec") },
           ] as unknown as never[],
           type: "single",
         },
@@ -590,7 +591,7 @@ describe("multi-inject_context entries — both variables substituted into promp
         concerns: [],
         current_state: "implement",
         entry: "implement",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
         skipped: [],
@@ -624,7 +625,7 @@ describe("multi-inject_context entries — both variables substituted into promp
         done: { type: "terminal" },
         implement: {
           agent: "canon-implementor",
-          inject_context: [{ from: "state", name: "research_findings" }] as unknown as never[],
+          inject_context: [{ from: "state", name: flowName("research_findings") }] as unknown as never[],
           type: "single",
         },
       },
@@ -636,7 +637,7 @@ describe("multi-inject_context entries — both variables substituted into promp
         concerns: [],
         current_state: "implement",
         entry: "implement",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
         skipped: [],

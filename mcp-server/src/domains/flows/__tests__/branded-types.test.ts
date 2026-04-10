@@ -19,6 +19,7 @@ import {
   stateId,
   workspacePath,
 } from "../board-state-schemas.ts";
+import type { StateId } from "../board-state-schemas.ts";
 import { ResolvedFlowSchema } from "../flow-definition-schemas.ts";
 
 // --- Smart constructor identity tests ---
@@ -110,7 +111,7 @@ describe("BoardSchema.parse() branded field propagation", () => {
 
   it("returns branded state keys in states record", () => {
     const result = BoardSchema.parse(validBoard);
-    expect(result.states["research"]).toBeDefined();
+    expect(result.states["research" as StateId]).toBeDefined();
   });
 });
 
@@ -152,12 +153,12 @@ describe("ResolvedFlowSchema.parse() branded field propagation", () => {
 
   it("returns branded state keys in states record", () => {
     const result = ResolvedFlowSchema.parse(validResolvedFlow);
-    expect(result.states["implement"]).toBeDefined();
+    expect(result.states["implement" as StateId]).toBeDefined();
   });
 
   it("returns branded spawn_instructions keys", () => {
     const result = ResolvedFlowSchema.parse(validResolvedFlow);
-    expect(result.spawn_instructions["implement"]).toBe("Implement the change");
+    expect(result.spawn_instructions["implement" as StateId]).toBe("Implement the change");
   });
 });
 

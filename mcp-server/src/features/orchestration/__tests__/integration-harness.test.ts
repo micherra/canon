@@ -40,6 +40,7 @@ import { filterCannotFix } from "../engine/convergence.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -63,7 +64,7 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
     description: "Integration test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       fix: "Fix the issues.",
       implement: "Implement the feature.",
@@ -412,7 +413,7 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
     const flow: ResolvedFlow = {
       description: "test",
       entry: "implement",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         implement: "Implement using context: ${RESEARCH}",
       },
@@ -452,7 +453,7 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
     const flow: ResolvedFlow = {
       description: "test",
       entry: "implement",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         implement: "Implement with user guidance: ${USER_INPUT}",
       },
@@ -488,7 +489,7 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
     const flow: ResolvedFlow = {
       description: "test",
       entry: "implement",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         implement: "Do work: ${CONTEXT}",
       },
@@ -541,7 +542,7 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "type-check",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         "type-check": "Check types with context: ${PRIOR}",
       },
@@ -583,7 +584,7 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "review",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         review: "Review with context: ${CONTEXT}",
       },
@@ -627,7 +628,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "build",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
@@ -664,7 +665,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "build",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
@@ -700,7 +701,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "build",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
@@ -735,7 +736,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "build",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
@@ -778,7 +779,7 @@ describe("backward compatibility: board.json without new fields", () => {
       concerns: [],
       current_state: "build",
       entry: "build",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
       skipped: [],
@@ -812,7 +813,7 @@ describe("backward compatibility: board.json without new fields", () => {
       blocked: null,
       current_state: "build",
       entry: "build",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
       started: new Date().toISOString(),
@@ -833,7 +834,7 @@ describe("backward compatibility: board.json without new fields", () => {
       concerns: [],
       current_state: "build",
       entry: "build",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       iterations: {
         build: {
           cannot_fix: [{ file_path: "a.ts", principle_id: "p1" }],

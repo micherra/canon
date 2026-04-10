@@ -19,6 +19,7 @@ import {
   StateDefinitionSchema,
   type TypedParam,
 } from "./flow-definition-schemas.ts";
+import type { StateId } from "./board-state-schemas.ts";
 
 // parseFlowContent
 
@@ -475,7 +476,7 @@ export function validateSpawnCoverage(flow: ResolvedFlow): string[] {
     if (stateDef.type === "terminal") continue;
     // Gate-only states (no agent) don't need spawn instructions — they run gates deterministically
     if (stateDef.type === "single" && !stateDef.agent) continue;
-    if (!flow.spawn_instructions[stateId]) {
+    if (!flow.spawn_instructions[stateId as StateId]) {
       errors.push(`State "${stateId}" (type: ${stateDef.type}) has no spawn instruction heading`);
     }
   }
@@ -494,13 +495,13 @@ export function validateSpawnCoverage(flow: ResolvedFlow): string[] {
 /** BFS from entry to collect all reachable state IDs. */
 export function collectReachableStates(flow: ResolvedFlow): Set<string> {
   const visited = new Set<string>();
-  const queue = [flow.entry];
+  const queue: string[] = [flow.entry];
 
   while (queue.length > 0) {
     const current = queue.shift()!;
     if (visited.has(current)) continue;
     visited.add(current);
-    const state = flow.states[current];
+    const state = flow.states[current as StateId];
     if (!state?.transitions) continue;
     for (const target of Object.values(state.transitions)) {
       if (!VIRTUAL_SINKS.has(target) && !visited.has(target)) {
@@ -823,7 +824,7 @@ export function detectDeadEnds(flow: ResolvedFlow): string[] {
   // Dead-ends = forward-reachable real states NOT in canReachTerminal AND NOT terminal
   const warnings: string[] = [];
   for (const stateId of realForwardReachable) {
-    const stateDef = flow.states[stateId];
+    const stateDef = flow.states[stateId as StateId];
     if (stateDef?.type === "terminal") continue;
     if (!canReachTerminal.has(stateId)) {
       warnings.push(
@@ -1165,7 +1166,7 @@ export async function loadAndResolveFlow(
       ? validateStateIdParams(loadedFragments, flowDef.includes, resolvedStateIds)
       : [];
 
-  const entry = flowDef.entry ?? Object.keys(inlineStates)[0] ?? fragmentEntry;
+  const entry = (flowDef.entry ?? Object.keys(inlineStates)[0] ?? fragmentEntry) as StateId;
   if (!entry) {
     throw new Error(
       `Flow "${flowName}" has no entry state — set entry: in frontmatter or include a fragment with an entry`,

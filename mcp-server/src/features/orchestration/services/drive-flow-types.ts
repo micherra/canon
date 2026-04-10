@@ -5,6 +5,7 @@
  * DriveFlowInput: validated input for the drive_flow tool.
  */
 
+import { WorkspacePathSchema } from "@domains/flows/board-state-schemas.ts";
 import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { ResolvedFlowSchema } from "@domains/flows/flow-definition-schemas.ts";
 import { z } from "zod";
@@ -152,7 +153,7 @@ export const DriveFlowResultSchema = z.object({
 export const DriveFlowInputSchema = z.object({
   flow: ResolvedFlowSchema,
   result: DriveFlowResultSchema.optional(),
-  workspace: z.string().min(1),
+  workspace: WorkspacePathSchema,
 });
 
 /** Zod-parsed (post-default) shape of DriveFlowInput — status is always string after Zod fills the default. */

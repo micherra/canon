@@ -18,6 +18,7 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { reportResult } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -32,7 +33,7 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
     description: "Diagnostics test flow",
     entry: "impl",
-    name: "diag-flow",
+    name: flowName("diag-flow"),
     spawn_instructions: {},
     states: {
       impl: {
@@ -50,7 +51,7 @@ function makeFlowWithStuck(): ResolvedFlow {
   return {
     description: "Stuck detection test flow",
     entry: "impl",
-    name: "diag-stuck-flow",
+    name: flowName("diag-stuck-flow"),
     spawn_instructions: {},
     states: {
       impl: {

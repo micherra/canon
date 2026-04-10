@@ -19,12 +19,13 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { reportResult, validateRequiredHandoffs } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeMinimalFlow(overrides?: Partial<FlowType>): FlowType {
   return {
     description: "A test flow",
     entry: "build",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
       build: {
@@ -726,7 +727,7 @@ describe("reportResult — quality signals", () => {
     setupWorkspace(workspace, flow);
 
     const postconditionResults = [
-      { name: "file_exists", output: "File found", passed: true, type: "file_exists" as const },
+      { name: flowName("file_exists"), output: "File found", passed: true, type: "file_exists" as const },
     ];
 
     const result = await reportResult({
@@ -1208,7 +1209,7 @@ describe("validateRequiredHandoffs — symlink guard", () => {
 
     // Call validateRequiredHandoffs directly — no reportResult overhead
     const warnings = await validateRequiredHandoffs(workspace, [
-      { name: "evil-link", type: "some-type" },
+      { name: flowName("evil-link"), type: "some-type" },
     ]);
 
     // Symlink escape should be caught and produce a warning (non-blocking)
@@ -1227,7 +1228,7 @@ describe("validateRequiredHandoffs — symlink guard", () => {
     );
 
     const warnings = await validateRequiredHandoffs(workspace, [
-      { name: "legit", type: "some-type" },
+      { name: flowName("legit"), type: "some-type" },
     ]);
 
     expect(warnings).toHaveLength(0);
@@ -1274,7 +1275,7 @@ describe("reportResult — required_handoffs validation", () => {
   it("required_handoffs with matching meta.json: ok true, no warnings", async () => {
     const { mkdirSync, writeFileSync } = await import("node:fs");
     const workspace = makeTmpWorkspace();
-    const flow = makeFlowWithHandoffs([{ name: "research", type: "research-summary" }]);
+    const flow = makeFlowWithHandoffs([{ name: flowName("research"), type: "research-summary" }]);
     setupWorkspace(workspace, flow);
 
     // Create handoffs directory and write meta.json
@@ -1299,7 +1300,7 @@ describe("reportResult — required_handoffs validation", () => {
 
   it("required_handoffs with missing meta.json: ok true, warnings present", async () => {
     const workspace = makeTmpWorkspace();
-    const flow = makeFlowWithHandoffs([{ name: "design-doc", type: "handoff-document" }]);
+    const flow = makeFlowWithHandoffs([{ name: flowName("design-doc"), type: "handoff-document" }]);
     setupWorkspace(workspace, flow);
 
     // Do NOT create handoffs/design-doc.meta.json
@@ -1323,7 +1324,7 @@ describe("reportResult — required_handoffs validation", () => {
   it("required_handoffs with wrong _type in meta.json: ok true, warnings present", async () => {
     const { mkdirSync, writeFileSync } = await import("node:fs");
     const workspace = makeTmpWorkspace();
-    const flow = makeFlowWithHandoffs([{ name: "plan", type: "implementation-plan" }]);
+    const flow = makeFlowWithHandoffs([{ name: flowName("plan"), type: "implementation-plan" }]);
     setupWorkspace(workspace, flow);
 
     // Create handoffs directory with WRONG _type
@@ -1354,7 +1355,7 @@ describe("reportResult — required_handoffs validation", () => {
   it("warnings field absent from result when no handoff issues", async () => {
     const { mkdirSync, writeFileSync } = await import("node:fs");
     const workspace = makeTmpWorkspace();
-    const flow = makeFlowWithHandoffs([{ name: "arch", type: "architecture-decision" }]);
+    const flow = makeFlowWithHandoffs([{ name: flowName("arch"), type: "architecture-decision" }]);
     setupWorkspace(workspace, flow);
 
     const handoffsDir = join(workspace, "handoffs");

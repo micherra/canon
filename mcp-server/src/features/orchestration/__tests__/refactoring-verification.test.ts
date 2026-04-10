@@ -21,6 +21,7 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -66,7 +67,7 @@ function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
     description: "A test flow",
     entry: "build",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
       build: {

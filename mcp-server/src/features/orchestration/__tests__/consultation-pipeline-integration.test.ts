@@ -56,6 +56,7 @@ import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
 import { assembleWaveBriefing } from "../services/wave-briefing.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -72,7 +73,7 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     concerns: [],
     current_state: "implement",
     entry: "implement",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -129,7 +130,7 @@ function makeFlowWithBeforeConsultation(): ResolvedFlow {
     },
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       implement: "Implement ${task} for ${item}.",
       "security-review": "Review security for ${task}.",
@@ -168,7 +169,7 @@ function makeFlowWithMultipleConsultations(): ResolvedFlow {
     },
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       implement: "Implement ${task} for ${item}.",
       "perf-review": "Check performance for ${task}.",
@@ -271,7 +272,7 @@ describe("resolveConsultationPrompt — both timeout and section present", () =>
       },
       description: "Test flow",
       entry: "start",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { "full-check": "Run full check for ${task}." },
       states: { start: { type: "terminal" } },
     } as unknown as ResolvedFlow;
@@ -329,7 +330,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
       },
       description: "Test flow",
       entry: "implement",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         implement: "Implement ${task}.",
         "security-review": "Review security for ${task}.",
@@ -374,7 +375,7 @@ describe("getSpawnPrompt — wave=null with consultation_outputs does not inject
     const flow: ResolvedFlow = {
       description: "Test flow",
       entry: "build",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { build: "Build ${item}." },
       states: {
         build: { agent: "canon-implementor", type: "wave" },

@@ -32,6 +32,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import type { FileCluster } from "../services/diff-cluster.ts";
 import { clusterDiff } from "../services/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 const mockBoard: Board = {
   base_commit: "abc1234",
@@ -39,7 +40,7 @@ const mockBoard: Board = {
   concerns: [],
   current_state: "review",
   entry: "review",
-  flow: "test",
+  flow: flowName("test"),
   iterations: {},
   last_updated: new Date().toISOString(),
   skipped: [],
@@ -60,7 +61,7 @@ function makeSingleReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFl
   return {
     description: "Test review flow",
     entry: "review",
-    name: "test-review-flow",
+    name: flowName("test-review-flow"),
     spawn_instructions: {
       review: "Review cluster ${item.cluster_key} files: ${item.files} (${item.file_count} files)",
     },
@@ -293,7 +294,7 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
     const flow: ResolvedFlow = {
       description: "Test",
       entry: "review",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { review: "Review everything." },
       states: {
         done: { type: "terminal" },

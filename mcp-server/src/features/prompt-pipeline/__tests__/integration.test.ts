@@ -105,6 +105,7 @@ import {
 } from "@features/orchestration/services/wave-briefing.ts";
 import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import type { SpawnPromptInput } from "../model/types.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -128,7 +129,7 @@ function seedWorkspace(task = "test task"): string {
     created: now,
     current_state: "implement",
     entry: "implement",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     flow_name: "test-flow",
     last_updated: now,
     sanitized: "feat-test",
@@ -146,7 +147,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { implement: "Implement the task." },
     states: {
       done: { type: "terminal" },
@@ -398,7 +399,7 @@ describe("integration — inject_context content is escaped (not expanded as var
         done: { type: "terminal" },
         implement: {
           agent: "canon-implementor",
-          inject_context: [{ from: "state", name: "context_data" }] as unknown as never[],
+          inject_context: [{ from: "state", name: flowName("context_data") }] as unknown as never[],
           type: "single",
         },
       },
@@ -410,7 +411,7 @@ describe("integration — inject_context content is escaped (not expanded as var
         concerns: [],
         current_state: "implement",
         entry: "implement",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
         skipped: [],
@@ -446,7 +447,7 @@ describe("integration — inject_context content is escaped (not expanded as var
         done: { type: "terminal" },
         implement: {
           agent: "canon-implementor",
-          inject_context: [{ from: "state", name: "context_data" }] as unknown as never[],
+          inject_context: [{ from: "state", name: flowName("context_data") }] as unknown as never[],
           type: "single",
         },
       },
@@ -458,7 +459,7 @@ describe("integration — inject_context content is escaped (not expanded as var
         concerns: [],
         current_state: "implement",
         entry: "implement",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
         skipped: [],
@@ -860,7 +861,7 @@ describe("integration — cluster fanout for single state", () => {
         concerns: [],
         current_state: "implement",
         entry: "implement",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
         skipped: [],

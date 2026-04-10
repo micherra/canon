@@ -7,6 +7,7 @@
  * convergence detection, and summary building.
  */
 
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { type Message, readChannelAsContext, readMessages } from "@domains/messages/messages.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 
@@ -73,7 +74,7 @@ function debateSender(roundNumber: number, teamLabel: string, agent: string): st
 }
 
 /** Discover populated debate round numbers from the execution store. */
-function discoverPopulatedRoundNumbers(workspace: string, maxRounds: number): number[] {
+function discoverPopulatedRoundNumbers(workspace: WorkspacePath, maxRounds: number): number[] {
   try {
     const store = getExecutionStore(workspace);
     const roundNumbers: number[] = [];
@@ -90,7 +91,7 @@ function discoverPopulatedRoundNumbers(workspace: string, maxRounds: number): nu
 
 /** Build transcript sections and populated round list from round numbers. */
 async function buildTranscriptSections(
-  workspace: string,
+  workspace: WorkspacePath,
   roundNumbers: number[],
 ): Promise<{ populatedRounds: number[]; transcriptSections: string[] }> {
   const populatedRounds: number[] = [];
@@ -111,7 +112,7 @@ async function buildTranscriptSections(
 }
 
 export async function inspectDebateProgress(
-  workspace: string,
+  workspace: WorkspacePath,
   config: DebateConfig,
 ): Promise<DebateProgress> {
   const roundNumbers = discoverPopulatedRoundNumbers(workspace, config.max_rounds);
@@ -251,7 +252,7 @@ function groupMessagesByRound(
   return rounds;
 }
 
-export async function buildDebateSummary(workspace: string, channel: string): Promise<string> {
+export async function buildDebateSummary(workspace: WorkspacePath, channel: string): Promise<string> {
   const messages = await readMessages(workspace, channel);
   if (messages.length === 0) return "No debate messages found.";
 
@@ -363,7 +364,7 @@ export function heuristicConvergence(roundMessages: Message[]): ConvergenceResul
 }
 
 export type DebatePromptOpts = {
-  workspace: string;
+  workspace: WorkspacePath;
   roundNumber: number;
   maxRounds: number;
   teamLabel: string;

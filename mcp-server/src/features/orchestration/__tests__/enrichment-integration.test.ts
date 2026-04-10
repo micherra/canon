@@ -53,6 +53,7 @@ import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { assembleEnrichment, type EnrichmentInput } from "../services/context-enrichment.ts";
 import { resolveTaskScope } from "../services/scope-resolver.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 // Helpers shared across sections
 
@@ -63,7 +64,7 @@ function makeBoard(overrides: Partial<Board> = {}): Board {
     concerns: [],
     current_state: "implement",
     entry: "implement",
-    flow: "build",
+    flow: flowName("build"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],

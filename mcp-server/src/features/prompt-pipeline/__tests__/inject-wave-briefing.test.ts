@@ -60,6 +60,7 @@ import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { PromptContext } from "../model/types.ts";
 import { injectWaveBriefing } from "../services/inject-wave-briefing.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeCtx(
   overrides: Partial<PromptContext> & {
@@ -76,7 +77,7 @@ function makeCtx(
       flow: {
         description: "Test",
         entry: "implement",
-        name: "test-flow",
+        name: flowName("test-flow"),
         spawn_instructions: { implement: "Do the thing" },
         states: {
           done: { type: "terminal" },

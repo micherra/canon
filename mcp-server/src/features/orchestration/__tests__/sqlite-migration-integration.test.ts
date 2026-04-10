@@ -29,6 +29,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { getMessages } from "../tools/get-messages.ts";
 import { postMessage } from "../tools/post-message.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -43,7 +44,7 @@ function makeThreeStateFlow(): ResolvedFlow {
   return {
     description: "Build, review, ship",
     entry: "build",
-    name: "fast-path",
+    name: flowName("fast-path"),
     spawn_instructions: {},
     states: {
       build: {
@@ -298,7 +299,7 @@ describe("messages round-trip through SQLite store", () => {
       created: now,
       current_state: "implement",
       entry: "implement",
-      flow: "test",
+      flow: flowName("test"),
       flow_name: "test",
       last_updated: now,
       sanitized: "main",
@@ -339,7 +340,7 @@ describe("wave events lifecycle through SQLite store", () => {
       created: now,
       current_state: "implement",
       entry: "implement",
-      flow: "test",
+      flow: flowName("test"),
       flow_name: "test",
       last_updated: now,
       sanitized: "main",
@@ -385,7 +386,7 @@ describe("wave events lifecycle through SQLite store", () => {
       created: now,
       current_state: "implement",
       entry: "implement",
-      flow: "test",
+      flow: flowName("test"),
       flow_name: "test",
       last_updated: now,
       sanitized: "main",
@@ -424,7 +425,7 @@ describe("wave events lifecycle through SQLite store", () => {
       created: now,
       current_state: "implement",
       entry: "implement",
-      flow: "test",
+      flow: flowName("test"),
       flow_name: "test",
       last_updated: now,
       sanitized: "main",

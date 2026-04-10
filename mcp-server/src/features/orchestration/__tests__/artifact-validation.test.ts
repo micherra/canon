@@ -18,6 +18,7 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { reportResult, validateRequiredArtifacts } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -58,7 +59,7 @@ function makeFlow(requiredArtifacts?: RequiredArtifact[]): ResolvedFlow {
   return {
     description: "Artifact validation test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { implement: "Implement." },
     states: {
       implement: stateDef,
@@ -119,7 +120,7 @@ describe("validateRequiredArtifacts", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       ["some-other-artifact.md"],
-      [{ name: "REVIEW", type: "review" }],
+      [{ name: flowName("REVIEW"), type: "review" }],
     );
     expect(result).toBeNull();
   });
@@ -132,7 +133,7 @@ describe("validateRequiredArtifacts", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       [metaPath], // reported as absolute path
-      [{ name: "REVIEW", type: "review" }],
+      [{ name: flowName("REVIEW"), type: "review" }],
     );
     expect(result).toBeNull();
   });
@@ -143,7 +144,7 @@ describe("validateRequiredArtifacts", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       ["plans/task/IMPLEMENTATION-SUMMARY.md"],
-      [{ name: "IMPLEMENTATION-SUMMARY", type: "implementation_summary" }],
+      [{ name: flowName("IMPLEMENTATION-SUMMARY"), type: "implementation_summary" }],
     );
 
     expect(result).not.toBeNull();
@@ -164,7 +165,7 @@ describe("validateRequiredArtifacts", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       [],
-      [{ name: "REVIEW", type: "review" }],
+      [{ name: flowName("REVIEW"), type: "review" }],
     );
 
     expect(result).not.toBeNull();
@@ -182,7 +183,7 @@ describe("validateRequiredArtifacts", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       [],
-      [{ name: "REVIEW", type: "review" }],
+      [{ name: flowName("REVIEW"), type: "review" }],
     );
 
     // Malformed JSON in reviews/ means it can't be parsed — falls through as "not found"
@@ -199,7 +200,7 @@ describe("validateRequiredArtifacts", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       [missingMetaPath], // .meta.json reported but doesn't exist on disk
-      [{ name: "REVIEW", type: "review" }],
+      [{ name: flowName("REVIEW"), type: "review" }],
     );
 
     expect(result).not.toBeNull();
@@ -219,7 +220,7 @@ describe("validateRequiredArtifacts", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       [],
-      [{ name: "IMPLEMENTATION-SUMMARY", type: "implementation_summary" }],
+      [{ name: flowName("IMPLEMENTATION-SUMMARY"), type: "implementation_summary" }],
     );
     expect(result).toBeNull();
   });
@@ -235,7 +236,7 @@ describe("validateRequiredArtifacts", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       [],
-      [{ name: "IMPLEMENTATION-SUMMARY", type: "implementation_summary" }],
+      [{ name: flowName("IMPLEMENTATION-SUMMARY"), type: "implementation_summary" }],
     );
 
     expect(result).not.toBeNull();
@@ -258,8 +259,8 @@ describe("validateRequiredArtifacts", () => {
       workspace,
       [],
       [
-        { name: "REVIEW", type: "review" },
-        { name: "IMPLEMENTATION-SUMMARY", type: "implementation_summary" },
+        { name: flowName("REVIEW"), type: "review" },
+        { name: flowName("IMPLEMENTATION-SUMMARY"), type: "implementation_summary" },
       ],
     );
 
@@ -275,7 +276,7 @@ describe("validateRequiredArtifacts", () => {
 describe("reportResult with required_artifacts", () => {
   it("returns INVALID_INPUT when required artifact is missing — board NOT mutated", async () => {
     const workspace = makeTmpWorkspace();
-    const flow = makeFlow([{ name: "REVIEW", type: "review" }]);
+    const flow = makeFlow([{ name: flowName("REVIEW"), type: "review" }]);
     setupWorkspace(workspace, flow);
 
     const store = getExecutionStore(workspace);
@@ -303,7 +304,7 @@ describe("reportResult with required_artifacts", () => {
 
   it("succeeds when required artifact .meta.json exists with correct type", async () => {
     const workspace = makeTmpWorkspace();
-    const flow = makeFlow([{ name: "REVIEW", type: "review" }]);
+    const flow = makeFlow([{ name: flowName("REVIEW"), type: "review" }]);
     setupWorkspace(workspace, flow);
 
     // Write the required .meta.json sidecar in reviews/
@@ -347,7 +348,7 @@ describe("reportResult with required_artifacts", () => {
   it("validates even when artifacts is absent — required_artifacts triggers validation with empty list", async () => {
     const workspace = makeTmpWorkspace();
     // required_artifacts declared but caller passes no artifacts
-    const flow = makeFlow([{ name: "REVIEW", type: "review" }]);
+    const flow = makeFlow([{ name: flowName("REVIEW"), type: "review" }]);
     setupWorkspace(workspace, flow);
 
     // No artifacts array — validation still runs (empty list passed to validateRequiredArtifacts)
@@ -368,7 +369,7 @@ describe("reportResult with required_artifacts", () => {
 
   it("returns INVALID_INPUT when .meta.json has wrong _type — board NOT mutated", async () => {
     const workspace = makeTmpWorkspace();
-    const flow = makeFlow([{ name: "REVIEW", type: "review" }]);
+    const flow = makeFlow([{ name: flowName("REVIEW"), type: "review" }]);
     setupWorkspace(workspace, flow);
 
     // Write .meta.json with WRONG type
@@ -412,7 +413,7 @@ describe("validateRequiredArtifacts — path traversal rejection", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       [traversalPath],
-      [{ name: "outside-file", type: "review" }],
+      [{ name: flowName("outside-file"), type: "review" }],
     );
 
     expect(result).not.toBeNull();
@@ -429,7 +430,7 @@ describe("validateRequiredArtifacts — path traversal rejection", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       [outsidePath],
-      [{ name: "some-other-file", type: "review" }],
+      [{ name: flowName("some-other-file"), type: "review" }],
     );
 
     expect(result).not.toBeNull();
@@ -451,7 +452,7 @@ describe("validateRequiredArtifacts — path traversal rejection", () => {
     const result = await validateRequiredArtifacts(
       workspace,
       [join(workspace, "reviews", "REVIEW.md")],
-      [{ name: "REVIEW", type: "review" }],
+      [{ name: flowName("REVIEW"), type: "review" }],
     );
 
     // Path is inside workspace — passes path check; meta.json exists with correct type

@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 
@@ -23,7 +24,7 @@ export type WriteDesignBriefInput = {
     description: string;
     file?: string;
   }>;
-  workspace: string;
+  workspace: WorkspacePath;
 };
 
 export type WriteDesignBriefResult = {

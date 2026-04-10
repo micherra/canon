@@ -6,12 +6,13 @@
  * cross-build analysis and pattern mining.
  */
 
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 type PostEventInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   agent: string;
   action: "start" | "complete";
   detail: string;

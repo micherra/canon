@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
@@ -373,8 +374,8 @@ describe("executeEffects — check_postconditions", () => {
       base_commit: "abc123",
       branch: "main",
       created: now,
-      current_state: "review",
-      entry: "review",
+      current_state: sid("review"),
+      entry: sid("review"),
       flow: "test-flow",
       flow_name: "test-flow",
       last_updated: now,
@@ -384,7 +385,7 @@ describe("executeEffects — check_postconditions", () => {
       task: "test-task",
       tier: "medium",
     });
-    store.upsertState("review", {
+    store.upsertState(sid("review"), {
       discovered_postconditions: [{ target: "discovered.ts", type: "file_exists" }],
       entries: 1,
       status: "in_progress",
@@ -420,8 +421,8 @@ describe("executeEffects — check_postconditions", () => {
       base_commit: "abc123",
       branch: "main",
       created: now,
-      current_state: "review",
-      entry: "review",
+      current_state: sid("review"),
+      entry: sid("review"),
       flow: "test-flow",
       flow_name: "test-flow",
       last_updated: now,
@@ -431,7 +432,7 @@ describe("executeEffects — check_postconditions", () => {
       task: "test-task",
       tier: "medium",
     });
-    store.upsertState("review", {
+    store.upsertState(sid("review"), {
       discovered_postconditions: [{ target: "discovered.ts", type: "file_exists" }],
       entries: 1,
       status: "in_progress",

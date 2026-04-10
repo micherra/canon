@@ -19,7 +19,7 @@
  * - Multiple events, second produces the winning effect
  */
 
-import { flowName } from "@domains/flows/board-state-schemas.ts";
+import { flowName, stateId as sid } from "@domains/flows/board-state-schemas.ts";
 import type { ExecutionStore, MessageOutput } from "@domains/workspaces/execution-store.ts";
 import { describe, expect, it, vi } from "vitest";
 import type { FlowDefinition } from "../flow-definition-schemas.ts";
@@ -45,10 +45,10 @@ function makeLinearFlow(allowedInsertions?: string[]): FlowDefinition {
     description: "test",
     name: flowName("test-flow"),
     states: {
-      done: { type: "terminal" },
-      middle: { transitions: { done: "done" }, type: "single" },
-      start: { transitions: { done: "middle" }, type: "single" },
-    },
+      [sid("done")]: { type: "terminal" },
+      [sid("middle")]: { transitions: { done: "done" }, type: "single" },
+      [sid("start")]: { transitions: { done: "middle" }, type: "single" },
+    } as FlowDefinition["states"],
   };
 }
 
@@ -110,9 +110,9 @@ describe("drainFlowEvents — request_state", () => {
       ...makeLinearFlow(["hotfix", "patch"]),
       states: {
         ...makeLinearFlow(["hotfix", "patch"]).states,
-        hotfix: { transitions: { done: "done" }, type: "single" },
-        patch: { transitions: { done: "done" }, type: "single" },
-      },
+        [sid("hotfix")]: { transitions: { done: "done" }, type: "single" },
+        [sid("patch")]: { transitions: { done: "done" }, type: "single" },
+      } as FlowDefinition["states"],
     };
     const result = drainFlowEvents({
       currentStateId: "start",
@@ -162,8 +162,8 @@ describe("drainFlowEvents — request_state", () => {
       ...makeLinearFlow(["hotfix"]),
       states: {
         ...makeLinearFlow(["hotfix"]).states,
-        hotfix: { transitions: { done: "done" }, type: "single" },
-      },
+        [sid("hotfix")]: { transitions: { done: "done" }, type: "single" },
+      } as FlowDefinition["states"],
     };
     const result = drainFlowEvents({
       currentStateId: "start",

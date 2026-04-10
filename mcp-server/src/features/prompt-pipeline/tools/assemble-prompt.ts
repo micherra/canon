@@ -9,7 +9,7 @@
  * 9-stage complexity. Callers see one function, not nine.
  */
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type {
@@ -56,7 +56,7 @@ const PIPELINE: PromptStage[] = [
  * store it, or make decisions about the result.
  */
 /** Check if the state requires a board for its features. */
-function stateNeedsBoard(state: SpawnPromptInput["flow"]["states"][string]): boolean {
+function stateNeedsBoard(state: SpawnPromptInput["flow"]["states"][StateId]): boolean {
   if (!state) return false;
   if (state.skip_when) return true;
   if (
@@ -78,9 +78,9 @@ function resolveBoard(input: SpawnPromptInput, needsBoard: boolean): Board | und
 
 /** Check skip_when condition and return a skip result if the state should be skipped. */
 async function checkSkipWhen(
-  state: SpawnPromptInput["flow"]["states"][string],
+  state: SpawnPromptInput["flow"]["states"][StateId],
   state_id: string,
-  workspace: string,
+  workspace: WorkspacePath,
   board: NonNullable<PromptContext["board"]>,
 ): Promise<SpawnPromptResult | null> {
   if (!state.skip_when) return null;
@@ -116,7 +116,8 @@ function buildPipelineResult(ctx: PromptContext): SpawnPromptResult {
 /** Validate preconditions for prompt assembly. Returns a skip result or null. */
 async function validatePreconditions(input: SpawnPromptInput): Promise<SpawnPromptResult | null> {
   const { state_id, flow } = input;
-  const state = flow.states[state_id];
+  const sid = state_id as StateId;
+  const state = flow.states[sid];
 
   if (!state)
     return {
@@ -141,7 +142,7 @@ async function validatePreconditions(input: SpawnPromptInput): Promise<SpawnProm
     if (skipResult) return skipResult;
   }
 
-  if (!flow.spawn_instructions[state_id]) {
+  if (!flow.spawn_instructions[sid]) {
     return {
       prompts: [],
       skip_reason: `No spawn instruction for state "${state_id}"`,
@@ -156,7 +157,8 @@ export async function assemblePrompt(input: SpawnPromptInput): Promise<SpawnProm
   if (earlyExit) return earlyExit;
 
   const { state_id, flow } = input;
-  const state = flow.states[state_id];
+  const sid = state_id as StateId;
+  const state = flow.states[sid];
   const board = resolveBoard(input, stateNeedsBoard(state));
 
   let ctx: PromptContext = {
@@ -165,7 +167,7 @@ export async function assemblePrompt(input: SpawnPromptInput): Promise<SpawnProm
     input,
     mergedVariables: { ...input.variables },
     prompts: [],
-    rawInstruction: flow.spawn_instructions[state_id],
+    rawInstruction: flow.spawn_instructions[sid],
     state,
     warnings: [],
   };

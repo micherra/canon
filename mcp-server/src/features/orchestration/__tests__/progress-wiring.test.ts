@@ -29,6 +29,7 @@ import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -42,7 +43,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow for progress wiring",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { implement: "Implement ${task}. Progress so far:\n${progress}" },
     states: {
       done: { type: "terminal" },
@@ -180,7 +181,7 @@ describe("getSpawnPrompt — progress variable resolution", () => {
       created: now,
       current_state: "implement",
       entry: "implement",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       flow_name: "test-flow",
       last_updated: now,
       sanitized: "main",
@@ -220,7 +221,7 @@ describe("getSpawnPrompt — progress variable resolution", () => {
       created: now,
       current_state: "implement",
       entry: "implement",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       flow_name: "test-flow",
       last_updated: now,
       sanitized: "main",

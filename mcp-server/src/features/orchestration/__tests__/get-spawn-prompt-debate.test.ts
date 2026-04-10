@@ -16,6 +16,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { writeMessage } from "@domains/messages/messages.ts";
 import { clusterDiff } from "../services/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -38,7 +39,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     description: "Test debate flow",
     entry: "research",
-    name: "debate-flow",
+    name: flowName("debate-flow"),
     spawn_instructions: {
       research: "Research ${task}.",
     },

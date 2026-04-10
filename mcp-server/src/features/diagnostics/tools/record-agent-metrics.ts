@@ -7,12 +7,14 @@
  * orientation_calls, turns).
  */
 
+import type { StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as mkStateId } from "@domains/flows/board-state-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 type RecordAgentMetricsInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   state_id: string;
   tool_calls?: number;
   orientation_calls?: number;
@@ -26,7 +28,8 @@ type RecordAgentMetricsResult = {
 export async function recordAgentMetrics(
   input: RecordAgentMetricsInput,
 ): Promise<ToolResult<RecordAgentMetricsResult>> {
-  const { workspace, state_id, tool_calls, orientation_calls, turns } = input;
+  const { workspace, state_id: state_id_raw, tool_calls, orientation_calls, turns } = input;
+  const state_id: StateId = mkStateId(state_id_raw);
 
   // Validate: at least one metric field must be provided
   if (tool_calls === undefined && orientation_calls === undefined && turns === undefined) {

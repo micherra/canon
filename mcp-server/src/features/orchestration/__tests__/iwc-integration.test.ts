@@ -54,12 +54,13 @@ import {
   resolveConsultationPrompt,
 } from "../engine/consultation-executor.ts";
 import { assembleWaveBriefing } from "../services/wave-briefing.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {
     description: "IWC integration test flow",
     entry: "implement",
-    name: "integration-flow",
+    name: flowName("integration-flow"),
     spawn_instructions: { implement: "Implement the feature." },
     states: {
       implement: { agent: "canon-implementor", type: "single" },
@@ -88,7 +89,7 @@ function makeConsultationFlow(): ResolvedFlow {
     },
     description: "Flow with consultations",
     entry: "build",
-    name: "consultation-flow",
+    name: flowName("consultation-flow"),
     spawn_instructions: {
       "arch-review": "Review architecture for ${task}.",
       "security-check": "Run security audit for ${task}.",
@@ -172,7 +173,7 @@ describe("integration: executeConsultations result → recordConsultationResult 
     const board = makeBoard();
     const updatedBoard = recordConsultationResult(board, "implement", {
       breakpoint: "before",
-      name: "security-check",
+      name: flowName("security-check"),
       result: results["security-check"],
       waveKey: "wave_1",
     });
@@ -205,13 +206,13 @@ describe("integration: executeConsultations result → recordConsultationResult 
     let board = makeBoard();
     board = recordConsultationResult(board, "implement", {
       breakpoint: "before",
-      name: "security-check",
+      name: flowName("security-check"),
       result: beforeOutput.results["security-check"],
       waveKey: "wave_1",
     });
     board = recordConsultationResult(board, "implement", {
       breakpoint: "after",
-      name: "arch-review",
+      name: flowName("arch-review"),
       result: afterOutput.results["arch-review"],
       waveKey: "wave_1",
     });
@@ -250,7 +251,7 @@ describe("integration: executeConsultations result → recordConsultationResult 
     const board = makeBoard();
     const stored = recordConsultationResult(board, "implement", {
       breakpoint: "between",
-      name: "security-check",
+      name: flowName("security-check"),
       result: betweenOutput.results["security-check"],
       waveKey: "wave_1",
     });
@@ -373,7 +374,7 @@ describe("board — recordGateResult preserves existing consultations", () => {
     const consultationResult: ConsultationResult = { status: "done", summary: "Looks good" };
     board = recordConsultationResult(board, "implement", {
       breakpoint: "before",
-      name: "sec-check",
+      name: flowName("sec-check"),
       result: consultationResult,
       waveKey: "wave_1",
     });
@@ -400,7 +401,7 @@ describe("board — recordConsultationResult on a state not in board.states", ()
     // "nonexistent-state" is NOT in makeBoard()'s flow states
     const result = recordConsultationResult(board, "nonexistent-state", {
       breakpoint: "after",
-      name: "my-consult",
+      name: flowName("my-consult"),
       result: { status: "pending" },
       waveKey: "wave_1",
     });
@@ -474,7 +475,7 @@ describe("consultation-executor — resolveConsultationPrompt edge cases", () =>
       consultations: {},
       description: "d",
       entry: "s",
-      name: "f",
+      name: flowName("f"),
       spawn_instructions: {},
       states: { s: { type: "terminal" } },
     };
@@ -487,7 +488,7 @@ describe("consultation-executor — resolveConsultationPrompt edge cases", () =>
     const flow: ResolvedFlow = {
       description: "d",
       entry: "s",
-      name: "f",
+      name: flowName("f"),
       spawn_instructions: { sec: "Run audit." },
       states: { s: { type: "terminal" } },
       // consultations: undefined
@@ -501,7 +502,7 @@ describe("consultation-executor — resolveConsultationPrompt edge cases", () =>
     const flow: ResolvedFlow = {
       description: "d",
       entry: "s",
-      name: "f",
+      name: flowName("f"),
       spawn_instructions: {},
       states: { s: { type: "terminal" } },
       // consultations: undefined

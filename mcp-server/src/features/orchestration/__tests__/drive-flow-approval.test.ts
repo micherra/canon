@@ -31,7 +31,7 @@ function makeBoard(metadataOverrides?: Record<string, string | number | boolean>
     concerns: [],
     current_state: "design",
     entry: "design",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     metadata: metadataOverrides,
@@ -49,7 +49,7 @@ function makeFlow(
   return {
     description: "test",
     entry: "design",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
       design: {
@@ -298,7 +298,7 @@ describe("initBoard with approval gate fields", () => {
     return {
       description: "test",
       entry: "design",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {},
       states: {
         design: { agent: "canon:canon-architect", type: "single" },
@@ -414,7 +414,7 @@ function makeStore(workspace: string): ExecutionStore {
     created: new Date().toISOString(),
     current_state: "design",
     entry: "design",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     flow_name: "test-flow",
     last_updated: new Date().toISOString(),
     sanitized: "feat-test",
@@ -430,7 +430,7 @@ function makeApprovalFlow(tier: "small" | "medium" | "large" | undefined = "medi
   return {
     description: "test",
     entry: "design",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       design: "Design something",
       implement: "Implement it",
@@ -490,7 +490,7 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
       concerns: [],
       current_state: nextState ?? "terminal",
       entry: "design",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
       skipped: [],
@@ -572,7 +572,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
     const flowWithParallel: ResolvedFlow = {
       description: "test",
       entry: "parallel-review",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { "parallel-review": "Review in parallel" },
       states: {
         "parallel-review": {
@@ -629,7 +629,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
     const flowWithoutGate: ResolvedFlow = {
       description: "test",
       entry: "design",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { design: "Design", implement: "Implement" },
       states: {
         design: {
@@ -688,7 +688,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
     const flowWithRevise: ResolvedFlow = {
       description: "test",
       entry: "design",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { design: "Design", implement: "Implement" },
       states: {
         design: {
@@ -746,7 +746,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "design",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { design: "Design", implement: "Implement" },
       states: {
         design: {
@@ -911,7 +911,7 @@ describe("driveFlow — self-transition on single state (revise: design)", () =>
     const flowWithSelfTransition: ResolvedFlow = {
       description: "test",
       entry: "design",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { design: "Design something" },
       states: {
         design: {
@@ -955,6 +955,7 @@ describe("driveFlow — self-transition on single state (revise: design)", () =>
 // Fix 4: STATUS_ALIASES — "approve" maps to "approved"
 
 import { STATUS_ALIASES } from "@domains/flows/flow-definition-schemas.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 describe("STATUS_ALIASES — approve alias", () => {
   it("'approve' maps to 'approved'", () => {
@@ -975,7 +976,7 @@ describe("init-workspace — iteration persistence matches initBoard for approva
     const flow = {
       description: "test",
       entry: "design",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {},
       states: {
         design: { max_revisions: 5, type: "single" as const },
@@ -991,7 +992,7 @@ describe("init-workspace — iteration persistence matches initBoard for approva
     const flow = {
       description: "test",
       entry: "design",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {},
       states: {
         design: { approval_gate: true, type: "single" as const },
@@ -1008,7 +1009,7 @@ describe("init-workspace — iteration persistence matches initBoard for approva
     const flow = {
       description: "test",
       entry: "start",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {},
       states: {
         start: { type: "single" as const },

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import {
@@ -36,7 +36,7 @@ function applyInjectionResult(
 export async function resolveContextInjections(
   injections: ContextInjection[],
   board: Board,
-  workspace: string,
+  workspace: WorkspacePath,
 ): Promise<InjectionResult> {
   const variables: Record<string, string> = {};
   const warnings: string[] = [];
@@ -120,7 +120,7 @@ function capFilesByTier(filePaths: string[], workspace: string, warnings: string
 async function resolveFileContextInjection(
   _injection: ContextInjection,
   board: Board,
-  workspace: string,
+  workspace: WorkspacePath,
 ): Promise<{ value?: string; warnings: string[] }> {
   const warnings: string[] = [];
 
@@ -192,7 +192,7 @@ const WAVE_SUMMARIES_CAP_BYTES = 50 * 1024; // 50KB
 async function resolveWaveSummaryInjection(
   _injection: ContextInjection,
   board: Board,
-  workspace: string,
+  workspace: WorkspacePath,
 ): Promise<{ value?: string; warnings: string[] }> {
   const warnings: string[] = [];
 
@@ -369,7 +369,7 @@ async function readAndCapHandoffFiles(
 
 async function resolveHandoffInjection(
   injection: ContextInjection,
-  workspace: string,
+  workspace: WorkspacePath,
 ): Promise<{ value?: string; warnings: string[] }> {
   const warnings: string[] = [];
   const handoffsDir = path.resolve(workspace, "handoffs");
@@ -414,10 +414,10 @@ async function resolveHandoffInjection(
 async function resolveStateInjection(
   injection: ContextInjection,
   board: Board,
-  workspace: string,
+  workspace: WorkspacePath,
 ): Promise<{ value?: string; warnings: string[] }> {
   const warnings: string[] = [];
-  const sourceState = board.states[injection.from];
+  const sourceState = board.states[injection.from as StateId];
 
   if (!sourceState) {
     warnings.push(`inject_context: source state "${injection.from}" not found in board`);
@@ -460,7 +460,7 @@ async function resolveStateInjection(
 
 async function readArtifacts(
   artifacts: string[],
-  workspace: string,
+  workspace: WorkspacePath,
   stateName: string,
 ): Promise<{ contents: string[]; anyFound: boolean; warnings: string[] }> {
   const workspaceRoot = path.resolve(workspace);

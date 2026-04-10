@@ -13,7 +13,8 @@ import {
   setBlocked,
 } from "@domains/board/board.ts";
 import { syncBoardToStore } from "@domains/board/board-sync.ts";
-import type { Board, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as mkStateId } from "@domains/flows/board-state-schemas.ts";
 import type {
   BaselineEvidence,
   DiscoveredGate,
@@ -271,7 +272,7 @@ export async function validateRequiredHandoffs(
 
 function updateBoardStateField(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   fields: Record<string, unknown>,
 ): Board {
   if (!board.states[stateId]) return board;
@@ -287,7 +288,7 @@ function updateBoardStateField(
 function enrichBoardMetrics(
   board: Board,
   input: {
-    state_id: string;
+    state_id: StateId;
     metrics?: Record<string, unknown>;
     gate_results?: GateResult[];
     postcondition_results?: PostconditionResult[];
@@ -330,7 +331,7 @@ function enrichBoardMetrics(
 
 function applyResultFields(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   gateResults?: GateResult[],
   postconditionResults?: PostconditionResult[],
 ): Board {
@@ -346,7 +347,7 @@ function applyResultFields(
 
 function applyDiscoveredItems(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   gates?: DiscoveredGate[],
   postconditions?: PostconditionAssertion[],
 ): Board {
@@ -369,7 +370,7 @@ function applyDiscoveredItems(
 
 function applyCompeteResults(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   competeResults?: Array<{ lens?: string; status: string; artifacts?: string[] }>,
   synthesized?: boolean,
 ): Board {
@@ -387,7 +388,7 @@ function applyCompeteResults(
 
 function applyDiscoveries(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   input: {
     gate_results?: GateResult[];
     postcondition_results?: PostconditionResult[];
@@ -422,7 +423,7 @@ function collectOptionalRoles(
 
 function aggregateParallelResultsOnBoard(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   parallelResults: Array<{ item: string; status: string; artifacts?: string[] }>,
   stateDef: { roles?: Array<string | { name: string; optional?: boolean }> } | undefined,
 ): { board: Board; condition: string } {
@@ -468,7 +469,7 @@ type DetectStuckOptions = {
 
 function detectStuck(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   options: DetectStuckOptions,
 ): { board: Board; stuck: boolean; stuck_reason?: string } {
   const { condition, stateDef, input, store } = options;
@@ -512,7 +513,7 @@ function detectStuck(
 function applyDebateResult(
   board: Board,
   debateResult: Awaited<ReturnType<typeof inspectDebateProgress>>,
-  stateId: string,
+  stateId: StateId,
   debate: NonNullable<ResolvedFlow["debate"]>,
 ): { board: Board; nextState: string | null; hitl_required: boolean; hitl_reason?: string } {
   const updatedBoard = {
@@ -540,7 +541,7 @@ function applyDebateResult(
 function resolveCondition(
   board: Board,
   input: ReportResultInput,
-  stateDef: ResolvedFlow["states"][string] | undefined,
+  stateDef: ResolvedFlow["states"][StateId] | undefined,
 ): { board: Board; condition: string } {
   let condition = normalizeStatus(input.status_keyword);
 
@@ -566,7 +567,7 @@ function resolveCondition(
 }
 
 type FinalizeTransitionOptions = {
-  stateId: string;
+  stateId: StateId;
   condition: string;
   statusKeyword: string;
   stateType: string | undefined;
@@ -599,7 +600,7 @@ function finalizeTransition(
   if (hitl_required && hitl_reason && result.blocked == null && stateType !== "terminal") {
     result = setBlocked(result, stateId, hitl_reason);
   }
-  if (nextState && nextState !== "hitl") result = { ...result, current_state: nextState };
+  if (nextState && nextState !== "hitl") result = { ...result, current_state: mkStateId(nextState) };
   return { board: result, hitl_reason, hitl_required };
 }
 
@@ -607,7 +608,7 @@ type ResolveHitlOptions = {
   stuck: boolean;
   stuckReason: string | undefined;
   nextState: string | null;
-  stateId: string;
+  stateId: StateId;
   condition: string;
   statusKeyword: string;
   stateType: string | undefined;
@@ -645,7 +646,7 @@ function resolveHitl(options: ResolveHitlOptions): {
 
 type ReportResultInput = {
   workspace: WorkspacePath;
-  state_id: string;
+  state_id: StateId;
   status_keyword: string;
   flow: ResolvedFlow;
   artifacts?: string[];
@@ -801,7 +802,7 @@ function checkTestResultConsistency(input: ReportResultInput): ToolResult<void> 
 async function validatePreTransaction(
   store: ReturnType<typeof getExecutionStore>,
   input: ReportResultInput,
-  stateDef: ResolvedFlow["states"][string] | undefined,
+  stateDef: ResolvedFlow["states"][StateId] | undefined,
 ): Promise<ToolResult<void> | null> {
   if (!store.getBoard()) {
     return toolError("WORKSPACE_NOT_FOUND", `No execution found in workspace: ${input.workspace}`);
@@ -830,7 +831,7 @@ async function validatePreTransaction(
  */
 function applyStateCompletion(
   board: Board,
-  stateId: string,
+  stateId: StateId,
   condition: string,
   artifacts: string[] | undefined,
 ): Board {
@@ -852,11 +853,11 @@ function applyStateCompletion(
 
 type ApplyStuckOptions = {
   board: Board;
-  stateId: string;
+  stateId: StateId;
   condition: string;
   nextState: string | null;
   input: ReportResultInput;
-  stateDef: ResolvedFlow["states"][string] | undefined;
+  stateDef: ResolvedFlow["states"][StateId] | undefined;
   store: ReturnType<typeof getExecutionStore>;
 };
 
@@ -892,7 +893,7 @@ type ApplyDebateHitlOptions = {
   debate: ResolvedFlow["debate"];
   debateResult: Awaited<ReturnType<typeof inspectDebateProgress>> | undefined;
   nextState: string | null;
-  stateId: string;
+  stateId: StateId;
 };
 
 function applyDebateHitl(options: ApplyDebateHitlOptions): DebateHitl {
@@ -915,7 +916,7 @@ function applyBoardMutations(
   board: Board,
   input: ReportResultInput,
   condition: string,
-  stateDef: ResolvedFlow["states"][string] | undefined,
+  stateDef: ResolvedFlow["states"][StateId] | undefined,
 ): Board {
   let result = board;
   if (input.status_keyword.toLowerCase() === "done_with_concerns" && input.concern_text) {
@@ -934,7 +935,7 @@ function applyBoardMutations(
 function executeReportTransaction(
   store: ReturnType<typeof getExecutionStore>,
   input: ReportResultInput,
-  stateDef: ResolvedFlow["states"][string] | undefined,
+  stateDef: ResolvedFlow["states"][StateId] | undefined,
   debateResult: Awaited<ReturnType<typeof inspectDebateProgress>> | undefined,
 ): TransactionResult {
   return store.transaction((): TransactionResult => {
@@ -1056,7 +1057,7 @@ async function postTransactionSideEffects({
 }: {
   store: ReturnType<typeof getExecutionStore>;
   input: ReportResultInput;
-  stateDef: ResolvedFlow["states"][string] | undefined;
+  stateDef: ResolvedFlow["states"][StateId] | undefined;
   txResult: TransactionResult;
   escalateToHitl?: ReportResultResult["escalate_to_hitl"];
 }): Promise<ToolResult<ReportResultResult>> {

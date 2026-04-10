@@ -62,6 +62,7 @@ vi.mock("@features/orchestration/services/context-enrichment.ts", () => ({
 import { assembleEnrichment } from "@features/orchestration/services/context-enrichment.ts";
 import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -106,7 +107,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { implement: "Implement ${task}. ${enrichment}" },
     states: {
       done: { type: "terminal" },

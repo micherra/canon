@@ -21,6 +21,7 @@ import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { normalizeStatus } from "../engine/transitions.ts";
 import { loadFlow } from "../tools/load-flow.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -39,7 +40,7 @@ function makeBoard(overrides?: Partial<Board>): Board {
     concerns: [],
     current_state: "research",
     entry: "research",
-    flow: "epic",
+    flow: flowName("epic"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -499,7 +500,7 @@ describe("BoardSchema backward compatibility with new fields", () => {
       concerns: [],
       current_state: "research",
       entry: "research",
-      flow: "feature",
+      flow: flowName("feature"),
       iterations: {},
       last_updated: new Date().toISOString(),
       skipped: [],
@@ -520,7 +521,7 @@ describe("BoardSchema backward compatibility with new fields", () => {
       concerns: [],
       current_state: "implement",
       entry: "research",
-      flow: "epic",
+      flow: flowName("epic"),
       iterations: {},
       last_updated: new Date().toISOString(),
       metadata: { has_open_questions: true },

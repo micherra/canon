@@ -60,6 +60,7 @@ import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-stat
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { LogEntry, ReportResultResult } from "../tools/report-result.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -78,7 +79,7 @@ function makeStore(workspace: string, opts: { currentState?: string } = {}): Exe
     created: new Date().toISOString(),
     current_state: opts.currentState ?? "research",
     entry: "research",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     flow_name: "test-flow",
     last_updated: new Date().toISOString(),
     sanitized: "feat-test",
@@ -96,7 +97,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     allowed_insertions: ["review"],
     description: "test",
     entry: "research",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       implement: "Do implement",
       research: "Do research",
@@ -172,7 +173,7 @@ function makeReportResult(
       concerns: [],
       current_state: nextState ?? "terminal",
       entry: "research",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
       skipped: [],
@@ -862,6 +863,6 @@ describe("driveFlow — flow events: watermark reading", () => {
 
     const drainCall = vi.mocked(drainFlowEvents).mock.calls[0][0];
     expect(drainCall.currentStateId).toBe("research");
-    expect(drainCall.flowDef).toMatchObject({ name: "test-flow" });
+    expect(drainCall.flowDef).toMatchObject({ name: flowName("test-flow") });
   });
 });

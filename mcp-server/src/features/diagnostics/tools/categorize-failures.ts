@@ -11,6 +11,7 @@
  *   4. Same directory prefix       → confidence 0.7 (boosted to 0.8 with common substring)
  */
 
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 
@@ -30,7 +31,7 @@ export type FailureCategory = {
 };
 
 export type CategorizeFailuresInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   failures: FailureEntry[];
   refined_categories?: Array<{
     category: string;

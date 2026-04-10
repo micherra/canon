@@ -1,6 +1,7 @@
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
@@ -20,7 +21,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     description: "Test flow",
     entry: "review",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       "perf-check": "Run performance check.",
       "post-review-check": "Run post-review check for ${task}.",

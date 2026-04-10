@@ -10,6 +10,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { describe, expect, it } from "vitest";
 import { simulateFlow, simulateFlowTool } from "../tools/simulate-flow.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 const pluginDir = resolve(process.cwd(), ".."); // mcp-server/ → project root
 
@@ -21,7 +22,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test",
     entry: "start",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { start: "Do the thing" },
     states: {
       end: { type: "terminal" },
@@ -415,7 +416,7 @@ describe("simulateFlowTool — integration with real flow file", () => {
   it("loads fast-path flow and returns a valid SimulateFlowOutput structure", async () => {
     const result = await simulateFlowTool(
       {
-        flow: "fast-path",
+        flow: flowName("fast-path"),
         max_steps: 50,
         scenario: [{ state_id: "implement", status: "done" }],
       },
@@ -439,7 +440,7 @@ describe("simulateFlowTool — invalid flow name", () => {
   it("returns FLOW_NOT_FOUND error for unknown flow", async () => {
     const result = await simulateFlowTool(
       {
-        flow: "nonexistent-flow-xyz",
+        flow: flowName("nonexistent-flow-xyz"),
         scenario: [],
       },
       pluginDir,
@@ -454,7 +455,7 @@ describe("simulateFlowTool — ToolResult contract", () => {
   it("spreads SimulateFlowOutput fields flat onto the result (no nested data wrapper)", async () => {
     const result = await simulateFlowTool(
       {
-        flow: "fast-path",
+        flow: flowName("fast-path"),
         max_steps: 50,
         scenario: [],
       },

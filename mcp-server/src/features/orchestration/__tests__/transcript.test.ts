@@ -21,6 +21,7 @@ import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { getTranscript } from "../tools/get-transcript.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -34,7 +35,7 @@ function makeMinimalFlow(): ResolvedFlow {
   return {
     description: "A test flow",
     entry: "build",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
       build: {

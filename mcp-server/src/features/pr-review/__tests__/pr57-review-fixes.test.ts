@@ -23,6 +23,7 @@ import { KgVectorStore } from "@graph/kg-vector-store.ts";
 import { MockEmbeddingService, randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 // Fix 1: write-plan-index.ts — path traversal validation on slug
 
@@ -106,7 +107,7 @@ describe("resolveFragments — boolean typed param support", () => {
     description: "test",
     fragments: [],
     initial_state: "start",
-    name: "test-flow",
+    name: flowName("test-flow"),
     principles: [],
     states: {
       start: { type: "terminal" as const },
@@ -229,7 +230,7 @@ describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
       line_end: 5,
       line_start: 1,
       metadata: null,
-      name: "myFn",
+      name: flowName("myFn"),
       qualified_name: "src/A.ts::myFn",
       signature: null,
     });
@@ -258,7 +259,7 @@ describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
       line_end: 0,
       line_start: 0,
       metadata: null,
-      name: "B.ts",
+      name: flowName("B.ts"),
       qualified_name: "src/B.ts",
       signature: null,
     });
@@ -324,7 +325,7 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   }
 
   test("entity threshold 0 returns no results (all distances > 0)", async () => {
-    seedEntityWithVector({ name: "fn", qualified_name: "src/A.ts::fn" }, 0);
+    seedEntityWithVector({ name: flowName("fn"), qualified_name: "src/A.ts::fn" }, 0);
 
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "entities", threshold: 0 });
@@ -334,8 +335,8 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   });
 
   test("entity threshold 2.0 (max possible L2 distance) returns all results", async () => {
-    seedEntityWithVector({ name: "fn1", qualified_name: "src/A.ts::fn1" }, 10);
-    seedEntityWithVector({ name: "fn2", qualified_name: "src/B.ts::fn2" }, 20);
+    seedEntityWithVector({ name: flowName("fn1"), qualified_name: "src/A.ts::fn1" }, 10);
+    seedEntityWithVector({ name: flowName("fn2"), qualified_name: "src/B.ts::fn2" }, 20);
 
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "entities", threshold: 2.0 });

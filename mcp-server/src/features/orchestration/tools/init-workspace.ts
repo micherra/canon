@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
-import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
+import type { Board, Session, StateId } from "@domains/flows/board-state-schemas.ts";
 import { flowName, workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
@@ -193,14 +193,14 @@ function persistInitialStates(
   store: ReturnType<typeof getExecutionStore>,
   flow: Awaited<ReturnType<typeof loadAndResolveFlow>>,
 ): void {
-  for (const [stateId] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { entries: 0, status: "pending" });
-    const stateDef = flow.states[stateId];
+  for (const [stateId, stateDef] of Object.entries(flow.states)) {
+    const sid = stateId as StateId;
+    store.upsertState(sid, { entries: 0, status: "pending" });
     const maxIter = stateDef.max_revisions ?? stateDef.max_iterations;
     if (maxIter !== undefined) {
-      store.upsertIteration(stateId, { cannot_fix: [], count: 0, history: [], max: maxIter });
+      store.upsertIteration(sid, { cannot_fix: [], count: 0, history: [], max: maxIter });
     } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
-      store.upsertIteration(stateId, { cannot_fix: [], count: 0, history: [], max: 3 });
+      store.upsertIteration(sid, { cannot_fix: [], count: 0, history: [], max: 3 });
     }
   }
 }

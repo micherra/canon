@@ -18,6 +18,7 @@ vi.mock("@domains/workspaces/execution-store.ts", () => ({
 
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { substituteVariablesStage } from "../services/substitute-variables.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(): Board {
   return {
@@ -26,7 +27,7 @@ function makeBoard(): Board {
     concerns: [],
     current_state: "start",
     entry: "start",
-    flow: "test",
+    flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -40,7 +41,7 @@ function makeFlow(): ResolvedFlow {
   return {
     description: "test flow",
     entry: "start",
-    name: "test",
+    name: flowName("test"),
     spawn_instructions: { start: "Do the thing" },
     states: {
       done: { type: "terminal" },

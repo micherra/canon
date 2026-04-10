@@ -3,6 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { StateIdSchema, type WorkspacePath, WorkspacePathSchema } from "@domains/flows/board-state-schemas.ts";
 import { ResolvedFlowSchema } from "@domains/flows/flow-definition-schemas.ts";
 import type { FailureEntry } from "@features/diagnostics/tools/categorize-failures.ts";
 import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";
@@ -579,7 +580,7 @@ server.registerTool(
         .describe(
           "One-line progress entry to append to progress.md (e.g. '- [state_id] done: summary')",
         ),
-      state_id: z.string(),
+      state_id: StateIdSchema,
       status_keyword: z.string(),
       synthesized: z
         .boolean()
@@ -605,7 +606,7 @@ server.registerTool(
         })
         .optional()
         .describe("Violation counts broken down by severity"),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => {
@@ -626,7 +627,7 @@ server.registerTool(
       state_id: z.string().describe("Current state ID the agent is working in"),
       tool_calls: z.number().optional().describe("Total tool invocations the agent made"),
       turns: z.number().optional().describe("Number of assistant turns in the agent conversation"),
-      workspace: z.string().describe("Workspace path"),
+      workspace: WorkspacePathSchema.describe("Workspace path"),
     },
   },
   gatedWrapHandler(async (input) => {
@@ -647,7 +648,7 @@ server.registerTool(
           "full returns all entries, summary returns only assistant messages (default: full)",
         ),
       state_id: z.string().describe("State ID to retrieve transcript for"),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => {
@@ -692,7 +693,7 @@ server.registerTool(
           wave_total: z.number(),
         })
         .optional(),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => {
@@ -723,7 +724,7 @@ server.registerTool(
         "guidance",
         "pause",
       ]),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => {
@@ -747,7 +748,7 @@ server.registerTool(
         .record(z.string(), z.unknown())
         .optional()
         .describe("Resolution data to attach (apply only)"),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => {
@@ -764,7 +765,7 @@ server.registerTool(
       flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
       state_id: z.string(),
       variables: z.record(z.string(), z.string()),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => {
@@ -783,7 +784,7 @@ server.registerTool(
         .describe("Channel name (e.g. 'wave-000', 'debate-preflight', 'consultation')"),
       content: z.string().describe("Markdown message content"),
       from: z.string().describe("Sender identity (e.g. task ID, agent name)"),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => {
@@ -806,7 +807,7 @@ server.registerTool(
         .optional()
         .describe("Relative artifact paths produced (e.g. 'plans/add-auth/DESIGN.md')"),
       detail: z.string().describe("What the agent is beginning or completed"),
-      workspace: z.string().describe("Workspace path"),
+      workspace: WorkspacePathSchema.describe("Workspace path"),
     },
   },
   wrapHandler(async (input) => {
@@ -823,7 +824,7 @@ server.registerTool(
       channel: z.string().describe("Channel name to read from"),
       include_events: z.boolean().optional().describe("Also return pending wave events"),
       since: z.string().optional().describe("ISO timestamp — only return messages after this time"),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => {
@@ -991,7 +992,7 @@ server.registerTool(
           wave: z.number().min(1).describe("Wave number (1-based)"),
         }),
       ),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => writePlanIndex(input)),
@@ -1018,7 +1019,7 @@ server.registerTool(
       skipped: z.number().int().min(0),
       slug: z.string(),
       summary: z.string().describe("Human-readable summary of test results"),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => writeTestReport(input)),
@@ -1057,7 +1058,7 @@ server.registerTool(
           severity: z.string(),
         }),
       ),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => writeReview(input)),
@@ -1087,7 +1088,7 @@ server.registerTool(
       slug: z.string(),
       task_id: z.string(),
       tests_added: z.array(z.string()).optional(),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => writeImplementationSummary(input)),
@@ -1117,7 +1118,7 @@ server.registerTool(
       ),
       slug: z.string(),
       sources: z.array(z.string()).optional(),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => writeResearchSynthesis(input)),
@@ -1147,7 +1148,7 @@ server.registerTool(
           file: z.string().optional(),
         }),
       ),
-      workspace: z.string(),
+      workspace: WorkspacePathSchema,
     },
   },
   gatedWrapHandler(async (input) => writeDesignBrief(input)),
@@ -1200,7 +1201,7 @@ server.registerTool(
         .strip()
         .optional()
         .describe("Result from the most recently completed agent. Omit on the first call."),
-      workspace: z.string().describe("Workspace directory path"),
+      workspace: WorkspacePathSchema.describe("Workspace directory path"),
     },
   },
   gatedWrapHandler(async (input) => driveFlow(input, projectDir)),
@@ -1238,13 +1239,13 @@ server.registerTool(
         .describe(
           "LLM-provided refined categories. When present, skips pattern matching and applies these groupings directly (confidence 1.0).",
         ),
-      workspace: z.string().describe("Workspace directory path"),
+      workspace: WorkspacePathSchema.describe("Workspace directory path"),
     },
   },
   gatedWrapHandler(async (input) =>
     categorizeFailures(
       input as {
-        workspace: string;
+        workspace: WorkspacePath;
         failures: FailureEntry[];
         refined_categories?: Array<{
           category: string;

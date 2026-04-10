@@ -53,6 +53,7 @@ import {
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -71,7 +72,7 @@ function makeStore(workspace: string): ExecutionStore {
     created: new Date().toISOString(),
     current_state: "implement",
     entry: "implement",
-    flow: "fast-path",
+    flow: flowName("fast-path"),
     flow_name: "fast-path",
     last_updated: new Date().toISOString(),
     sanitized: "feat-test",
@@ -88,7 +89,7 @@ function makeImplementorFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlo
   return {
     description: "test",
     entry: "implement",
-    name: "fast-path",
+    name: flowName("fast-path"),
     spawn_instructions: {
       implement: "Implement the fix",
     },
@@ -111,7 +112,7 @@ function makeResearcherFlow(): ResolvedFlow {
   return {
     description: "test",
     entry: "research",
-    name: "explore",
+    name: flowName("explore"),
     spawn_instructions: {
       research: "Research the codebase",
     },
@@ -240,7 +241,7 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
     const flow: ResolvedFlow = {
       description: "test",
       entry: "fix",
-      name: "fast-path",
+      name: flowName("fast-path"),
       spawn_instructions: { fix: "Fix the issue" },
       states: {
         fix: {
@@ -278,7 +279,7 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
     const flow: ResolvedFlow = {
       description: "test",
       entry: "test",
-      name: "fast-path",
+      name: flowName("fast-path"),
       spawn_instructions: { test: "Test the fix" },
       states: {
         test: {
@@ -316,7 +317,7 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
     const flow: ResolvedFlow = {
       description: "test",
       entry: "sync",
-      name: "fast-path",
+      name: flowName("fast-path"),
       spawn_instructions: { sync: "Sync context" },
       states: {
         sync: {
@@ -376,7 +377,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
     const flow: ResolvedFlow = {
       description: "test",
       entry: "review",
-      name: "review-only",
+      name: flowName("review-only"),
       spawn_instructions: { review: "Review the code" },
       states: {
         review: {
@@ -409,7 +410,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
     const flow: ResolvedFlow = {
       description: "test",
       entry: "design",
-      name: "feature",
+      name: flowName("feature"),
       spawn_instructions: { design: "Design the feature" },
       states: {
         design: {
@@ -442,7 +443,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
     const flow: ResolvedFlow = {
       description: "test",
       entry: "security",
-      name: "security-audit",
+      name: flowName("security-audit"),
       spawn_instructions: { security: "Audit security" },
       states: {
         security: {
@@ -489,7 +490,7 @@ describe("driveFlow — write agent detection handles canon: prefix", () => {
     const flow: ResolvedFlow = {
       description: "test",
       entry: "implement",
-      name: "fast-path",
+      name: flowName("fast-path"),
       spawn_instructions: { implement: "Implement the fix" },
       states: {
         implement: {

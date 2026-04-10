@@ -99,6 +99,7 @@ import { resolveToolProfile } from "../model/tool-profiles.ts";
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 import { injectCoordination } from "../services/inject-coordination.ts";
 import { computeTrustLevel, trustLevelToPermissionMode } from "../services/trust-resolver.ts"; // import for vi.mocked() access
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry {
   return {
@@ -129,7 +130,7 @@ function makeCtx(
         ({
           description: "Test",
           entry: "implement",
-          name: "test-flow",
+          name: flowName("test-flow"),
           spawn_instructions: { implement: "Do the thing" },
           states: {
             done: { type: "terminal" },
@@ -671,7 +672,7 @@ describe("injectCoordination — trust integration", () => {
         concerns: [],
         current_state: "implement",
         entry: "implement",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         iterations: {},
         last_updated: "2026-01-01",
         skipped: [],
@@ -754,7 +755,7 @@ describe("injectCoordination — trust integration", () => {
       concerns: [],
       current_state: "implement",
       entry: "implement",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       iterations: {},
       last_updated: "2026-01-01",
       skipped: [],

@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
@@ -8,7 +9,7 @@ function escapeMdCell(value: string): string {
 }
 
 export type WriteTestReportInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   slug: string;
   summary: string;
   passed: number;

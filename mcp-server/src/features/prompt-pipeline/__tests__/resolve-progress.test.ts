@@ -14,6 +14,7 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PromptContext } from "../model/types.ts";
 import { resolveProgress } from "../services/resolve-progress.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -30,7 +31,7 @@ function makeBoard(): Board {
     concerns: [],
     current_state: "start",
     entry: "start",
-    flow: "test",
+    flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -44,7 +45,7 @@ function makeFlow(progress?: string): ResolvedFlow {
   return {
     description: "test flow",
     entry: "start",
-    name: "test",
+    name: flowName("test"),
     progress,
     spawn_instructions: { start: "Do the thing" },
     states: {
@@ -114,7 +115,7 @@ describe("resolveProgress (Stage 2)", () => {
       created: now,
       current_state: "start",
       entry: "start",
-      flow: "test",
+      flow: flowName("test"),
       flow_name: "test",
       last_updated: now,
       sanitized: "main",
@@ -146,7 +147,7 @@ describe("resolveProgress (Stage 2)", () => {
       created: now,
       current_state: "start",
       entry: "start",
-      flow: "test",
+      flow: flowName("test"),
       flow_name: "test",
       last_updated: now,
       sanitized: "main",

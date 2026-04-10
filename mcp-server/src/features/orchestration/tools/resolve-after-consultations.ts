@@ -9,6 +9,8 @@
  * lifecycle phase cleanly separated from enterAndPrepareState (pre-spawn).
  */
 
+import type { StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as mkStateId } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
 import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
@@ -16,7 +18,7 @@ import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
 export type { ConsultationPromptEntry };
 
 export type ResolveAfterConsultationsInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   state_id: string;
   flow: ResolvedFlow;
   variables: Record<string, string>;
@@ -37,7 +39,8 @@ export type ResolveAfterConsultationsResult = {
 export function resolveAfterConsultations(
   input: ResolveAfterConsultationsInput,
 ): ResolveAfterConsultationsResult {
-  const { state_id, flow, variables } = input;
+  const { flow, variables } = input;
+  const state_id: StateId = mkStateId(input.state_id);
 
   const consultation_prompts: ConsultationPromptEntry[] = [];
   const warnings: string[] = [];

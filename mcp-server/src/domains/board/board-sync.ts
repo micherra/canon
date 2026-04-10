@@ -5,7 +5,7 @@
  * duplicating logic. See ADR-009a (composition over inline).
  */
 
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId } from "@domains/flows/board-state-schemas.ts";
 import type { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 
 /**
@@ -22,14 +22,14 @@ export function syncBoardToStore(store: ReturnType<typeof getExecutionStore>, bo
     skipped: board.skipped,
   });
   for (const [stateId, stateEntry] of Object.entries(board.states ?? {})) {
-    store.upsertState(stateId, {
+    store.upsertState(stateId as StateId, {
       ...stateEntry,
       entries: stateEntry.entries,
       status: stateEntry.status,
     });
   }
   for (const [stateId, iterEntry] of Object.entries(board.iterations ?? {})) {
-    store.upsertIteration(stateId, {
+    store.upsertIteration(stateId as StateId, {
       cannot_fix: iterEntry.cannot_fix,
       count: iterEntry.count,
       history: iterEntry.history,

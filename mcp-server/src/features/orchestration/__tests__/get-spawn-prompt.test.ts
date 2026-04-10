@@ -38,6 +38,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assembleWaveBriefing } from "../services/wave-briefing.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -54,7 +55,7 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     concerns: [],
     current_state: "implement",
     entry: "implement",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -69,7 +70,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { implement: "Implement ${task}." },
     states: {
       done: { type: "terminal" },
@@ -83,7 +84,7 @@ function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test wave flow",
     entry: "build",
-    name: "test-wave-flow",
+    name: flowName("test-wave-flow"),
     spawn_instructions: { build: "Build ${item}." },
     states: {
       build: { agent: "canon-implementor", type: "wave" },
@@ -371,7 +372,7 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     const flow: ResolvedFlow = {
       description: "Test parallel-per flow",
       entry: "review",
-      name: "test-parallel-per-flow",
+      name: flowName("test-parallel-per-flow"),
       spawn_instructions: { review: "Review ${item}." },
       states: {
         done: { type: "terminal" },

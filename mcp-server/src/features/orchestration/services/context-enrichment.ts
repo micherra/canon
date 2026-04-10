@@ -22,7 +22,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { createDriftStore } from "@domains/drift/drift-store-factory.ts";
 import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
@@ -31,8 +31,8 @@ import type { ReviewEntry } from "@shared/schema.ts";
 import { resolveTaskScope } from "./scope-resolver.ts";
 
 export type EnrichmentInput = {
-  workspace: string;
-  stateId: string;
+  workspace: WorkspacePath;
+  stateId: StateId;
   board: Board;
   flow: ResolvedFlow;
   baseCommit?: string;
@@ -212,7 +212,7 @@ async function safeAssembleDriftSection(
  */
 async function safeAssembleWorkspaceSection(
   filePaths: string[],
-  workspace: string,
+  workspace: WorkspacePath,
   budget: number,
   warnings: string[],
 ): Promise<SectionResult> {
@@ -363,7 +363,7 @@ async function assembleDriftSection(
  */
 function assembleWorkspaceSection(
   filePaths: string[],
-  workspace: string,
+  workspace: WorkspacePath,
   budget: number,
 ): SectionResult {
   const branchDir = dirname(workspace);

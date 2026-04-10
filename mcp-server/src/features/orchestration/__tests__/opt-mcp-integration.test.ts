@@ -47,6 +47,7 @@ import { assertOk } from "@shared/lib/tool-result.ts";
 import { resolveContextInjections } from "../services/inject-context.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt, truncateProgress } from "../tools/get-spawn-prompt.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -63,7 +64,7 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     concerns: [],
     current_state: "implement",
     entry: "implement",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -81,7 +82,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { implement: "Implement ${task}." },
     states: {
       done: { type: "terminal" },

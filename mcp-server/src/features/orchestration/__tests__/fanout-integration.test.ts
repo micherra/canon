@@ -78,6 +78,7 @@ import { clusterDiff } from "../services/diff-cluster.ts";
 import { assembleWaveBriefing, readWaveGuidance } from "../services/wave-briefing.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -94,7 +95,7 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     concerns: [],
     current_state: "review",
     entry: "review",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -112,7 +113,7 @@ function makeReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test review flow",
     entry: "review",
-    name: "test-review-flow",
+    name: flowName("test-review-flow"),
     spawn_instructions: {
       review: "Review cluster ${item.cluster_key}: ${item.files}",
     },
@@ -377,7 +378,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
     const flow: ResolvedFlow = {
       description: "Test",
       entry: "review",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: { review: "Review everything." },
       states: {
         done: { type: "terminal" },

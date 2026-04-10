@@ -141,6 +141,7 @@ describe("compete", () => {
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clusterDiff } from "../services/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -158,7 +159,7 @@ function makeCompeteFlow(
   return {
     description: "Test compete flow",
     entry: "design",
-    name: "compete-flow",
+    name: flowName("compete-flow"),
     spawn_instructions: {
       design: "Design the system for ${task}.",
     },
@@ -246,7 +247,7 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
     const flow: ResolvedFlow = {
       description: "Test",
       entry: "build",
-      name: "wave-flow",
+      name: flowName("wave-flow"),
       spawn_instructions: {
         build: "Implement ${task}.",
       },
@@ -263,7 +264,7 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
 
     const result = await getSpawnPrompt({
       flow,
-      items: [{ name: "task-1" }],
+      items: [{ name: flowName("task-1") }],
       state_id: "build",
       variables: { task: "feature" },
       workspace,

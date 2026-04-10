@@ -1,14 +1,15 @@
 import { enterState, setBlocked } from "@domains/board/board.ts";
 import { createDriftStore } from "@domains/drift/drift-store-factory.ts";
 import type { FlowRunEntry, IDriftStore } from "@domains/drift/drift-store.interface.ts";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as mkStateId } from "@domains/flows/board-state-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 type UpdateBoardInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   action:
     | "enter_state"
     | "skip_state"
@@ -50,7 +51,7 @@ type FlowRunAgg = {
 function accumulateStateMetrics(
   agg: FlowRunAgg,
   stateId: string,
-  m: NonNullable<Board["states"][string]["metrics"]>,
+  m: NonNullable<Board["states"][StateId]["metrics"]>,
 ): void {
   agg.stateDurations[stateId] = m.duration_ms ?? 0;
   agg.totalSpawns += m.spawns ?? 0;
@@ -87,7 +88,8 @@ function aggregateFlowRunMetrics(board: Board): FlowRunAgg {
 
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
     if (stateEntry.metrics) accumulateStateMetrics(agg, stateId, stateEntry.metrics);
-    if (board.iterations[stateId]) agg.stateIterations[stateId] = board.iterations[stateId].count;
+    const sid = stateId as StateId;
+    if (board.iterations[sid]) agg.stateIterations[stateId] = board.iterations[sid].count;
   }
 
   return agg;
@@ -128,7 +130,7 @@ function emitBoardEvents(
       flowEventBus.once("state_entered", onStateEntered);
       try {
         flowEventBus.emit("state_entered", {
-          iterationCount: board.iterations[input.state_id]?.count ?? 0,
+          iterationCount: board.iterations[mkStateId(input.state_id!)]?.count ?? 0,
           stateId: input.state_id,
           stateType: "unknown",
           timestamp: now,
@@ -235,23 +237,24 @@ function handleEnterState(
   now: string,
 ): ActionResult {
   if (!input.state_id) return toolError("INVALID_INPUT", "enter_state requires state_id");
-  const enterResult = enterState(board, input.state_id);
+  const sid = mkStateId(input.state_id);
+  const enterResult = enterState(board, sid);
   if (!enterResult.ok) {
     return toolError("INVALID_INPUT", enterResult.reason, false);
   }
   const updatedBoard = enterResult.board;
   store.transaction(() => {
-    store.updateExecution({ current_state: input.state_id!, last_updated: now });
-    const stateEntry = updatedBoard.states[input.state_id!];
+    store.updateExecution({ current_state: sid, last_updated: now });
+    const stateEntry = updatedBoard.states[sid];
     if (stateEntry)
-      store.upsertState(input.state_id!, {
+      store.upsertState(sid, {
         ...stateEntry,
         entries: stateEntry.entries,
         status: stateEntry.status,
       });
-    if (updatedBoard.iterations[input.state_id!]) {
-      const iter = updatedBoard.iterations[input.state_id!];
-      store.upsertIteration(input.state_id!, {
+    if (updatedBoard.iterations[sid]) {
+      const iter = updatedBoard.iterations[sid];
+      store.upsertIteration(sid, {
         cannot_fix: iter.cannot_fix,
         count: iter.count,
         history: iter.history,
@@ -269,32 +272,34 @@ function handleSkipState(
   now: string,
 ): ActionResult {
   if (!input.state_id) return toolError("INVALID_INPUT", "skip_state requires state_id");
-  if (input.next_state_id && !board.states[input.next_state_id]) {
+  const sid = mkStateId(input.state_id);
+  const nextSid = input.next_state_id ? mkStateId(input.next_state_id) : undefined;
+  if (nextSid && !board.states[nextSid]) {
     return toolError(
       "INVALID_INPUT",
       `skip_state next_state_id "${input.next_state_id}" does not exist in board states`,
     );
   }
-  const stateEntry = board.states[input.state_id];
+  const stateEntry = board.states[sid];
   if (stateEntry) {
-    const newSkipped = [...board.skipped, input.state_id];
+    const newSkipped = [...board.skipped, sid];
     const updatedBoard: Board = {
       ...board,
       skipped: newSkipped,
-      states: { ...board.states, [input.state_id]: { ...stateEntry, status: "skipped" } },
-      ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
+      states: { ...board.states, [sid]: { ...stateEntry, status: "skipped" } },
+      ...(nextSid ? { current_state: nextSid } : {}),
       last_updated: now,
     };
     store.transaction(() => {
-      store.upsertState(input.state_id!, {
-        ...updatedBoard.states[input.state_id!],
+      store.upsertState(sid, {
+        ...updatedBoard.states[sid],
         entries: stateEntry.entries,
         status: "skipped",
       });
       store.updateExecution({
         last_updated: now,
         skipped: newSkipped,
-        ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
+        ...(nextSid ? { current_state: nextSid } : {}),
       });
     });
     return { board: updatedBoard };
@@ -310,7 +315,8 @@ function handleSetWaveProgress(
 ): ActionResult {
   if (!input.state_id) return toolError("INVALID_INPUT", "set_wave_progress requires state_id");
   if (!input.wave_data) return toolError("INVALID_INPUT", "set_wave_progress requires wave_data");
-  const stateEntry = board.states[input.state_id];
+  const sid = mkStateId(input.state_id);
+  const stateEntry = board.states[sid];
   const waveKey = `wave_${input.wave_data.wave}`;
   const newWaveResults = {
     ...(stateEntry?.wave_results ?? {}),
@@ -321,7 +327,7 @@ function handleSetWaveProgress(
     last_updated: now,
     states: {
       ...board.states,
-      [input.state_id]: {
+      [sid]: {
         ...stateEntry,
         wave: input.wave_data.wave,
         wave_results: newWaveResults,
@@ -330,7 +336,7 @@ function handleSetWaveProgress(
     },
   };
   store.transaction(() => {
-    store.upsertState(input.state_id!, {
+    store.upsertState(sid, {
       ...(stateEntry ?? { entries: 0, status: "pending" as const }),
       entries: stateEntry?.entries ?? 0,
       status: stateEntry?.status ?? ("pending" as const),
@@ -353,16 +359,17 @@ function handleInlineAction(
   switch (input.action) {
     case "block": {
       if (!input.state_id) return toolError("INVALID_INPUT", "block requires state_id");
+      const sid = mkStateId(input.state_id);
       const blocked = setBlocked(
         board,
-        input.state_id,
+        sid,
         input.blocked_reason ?? "No reason provided",
       );
       store.transaction(() => {
         store.updateExecution({ blocked: blocked.blocked, last_updated: now });
-        const blockedState = blocked.states[input.state_id!];
+        const blockedState = blocked.states[sid];
         if (blockedState)
-          store.upsertState(input.state_id!, {
+          store.upsertState(sid, {
             ...blockedState,
             entries: blockedState.entries,
             status: "blocked",
@@ -372,21 +379,22 @@ function handleInlineAction(
     }
     case "unblock": {
       if (!input.state_id) return toolError("INVALID_INPUT", "unblock requires state_id");
-      const stateEntry = board.states[input.state_id];
-      const unblocked = {
+      const sid = mkStateId(input.state_id);
+      const stateEntry = board.states[sid];
+      const unblocked: Board = {
         ...board,
         blocked: null,
         last_updated: now,
         states: {
           ...board.states,
-          [input.state_id]: { ...stateEntry, error: undefined, status: "in_progress" as const },
+          [sid]: { ...stateEntry, error: undefined, status: "in_progress" as const },
         },
       };
       store.transaction(() => {
         store.updateExecution({ blocked: null, last_updated: now });
-        const st = unblocked.states[input.state_id!];
+        const st = unblocked.states[sid];
         if (st)
-          store.upsertState(input.state_id!, { ...st, entries: st.entries, status: "in_progress" });
+          store.upsertState(sid, { ...st, entries: st.entries, status: "in_progress" });
       });
       return { board: unblocked };
     }

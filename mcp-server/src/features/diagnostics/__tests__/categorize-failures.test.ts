@@ -1,3 +1,4 @@
+import { workspacePath } from "@domains/flows/board-state-schemas.ts";
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { describe, expect, it } from "vitest";
 import type { CategorizeFailuresInput } from "../tools/categorize-failures.ts";
@@ -6,7 +7,7 @@ import { categorizeFailures } from "../tools/categorize-failures.ts";
 function makeInput(overrides: Partial<CategorizeFailuresInput> = {}): CategorizeFailuresInput {
   return {
     failures: [],
-    workspace: "/tmp/ws",
+    workspace: workspacePath("/tmp/ws"),
     ...overrides,
   };
 }

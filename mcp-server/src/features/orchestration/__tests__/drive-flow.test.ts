@@ -56,6 +56,7 @@ import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-stat
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { beforeEach } from "vitest";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -74,7 +75,7 @@ function makeStore(workspace: string): ExecutionStore {
     created: new Date().toISOString(),
     current_state: "research",
     entry: "research",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     flow_name: "test-flow",
     last_updated: new Date().toISOString(),
     sanitized: "feat-test",
@@ -91,7 +92,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "test",
     entry: "research",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       implement: "Do implement",
       research: "Do research",
@@ -148,7 +149,7 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
       concerns: [],
       current_state: nextState ?? "terminal",
       entry: "research",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
       skipped: [],
@@ -596,7 +597,7 @@ describe("driveFlow — consultation prompts", () => {
         consultation_prompts: [
           {
             agent: "canon:canon-security",
-            name: "security-check",
+            name: flowName("security-check"),
             prompt: "Check security",
             role: "consultation",
           },

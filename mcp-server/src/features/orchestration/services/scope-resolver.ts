@@ -14,15 +14,15 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { Board, StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { extractFilePaths } from "@domains/workspaces/wave-variables.ts";
 
 /** Maximum bytes to read from a single artifact file. */
 const MAX_ARTIFACT_BYTES = 50 * 1024; // 50KB
 
 export type ScopeInput = {
-  workspace: string;
-  stateId: string;
+  workspace: WorkspacePath;
+  stateId: StateId;
   board: Board;
   planSlug?: string;
   taskId?: string;
@@ -66,7 +66,7 @@ export function resolveTaskScope(input: ScopeInput): string[] {
  * Reads each artifact markdown file and extracts backtick-quoted paths.
  * Caps reads at MAX_ARTIFACT_BYTES. Returns deduplicated paths.
  */
-function resolveFromBoardArtifacts(board: Board, stateId: string, workspace: string): string[] {
+function resolveFromBoardArtifacts(board: Board, stateId: StateId, workspace: WorkspacePath): string[] {
   const state = board.states[stateId];
   if (!state?.artifacts || state.artifacts.length === 0) {
     return [];
@@ -108,7 +108,7 @@ function resolveFromBoardArtifacts(board: Board, stateId: string, workspace: str
  * Uses simple regex parsing (no gray-matter dependency).
  * Returns deduplicated paths.
  */
-function resolveFromTaskPlan(workspace: string, planSlug: string, taskId: string): string[] {
+function resolveFromTaskPlan(workspace: WorkspacePath, planSlug: string, taskId: string): string[] {
   const planPath = join(workspace, "plans", planSlug, `${taskId}-PLAN.md`);
 
   try {

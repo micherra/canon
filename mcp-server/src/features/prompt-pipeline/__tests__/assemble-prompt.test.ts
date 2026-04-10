@@ -74,6 +74,7 @@ import { readChannelAsContext } from "@domains/messages/messages.ts";
 import { assembleWaveBriefing } from "@features/orchestration/services/wave-briefing.ts";
 import type { SpawnPromptInput } from "../model/types.ts";
 import { assemblePrompt } from "../tools/assemble-prompt.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
@@ -82,7 +83,7 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     concerns: [],
     current_state: "implement",
     entry: "implement",
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     iterations: {},
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -97,7 +98,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: { implement: "Implement the task." },
     states: {
       done: { type: "terminal" },

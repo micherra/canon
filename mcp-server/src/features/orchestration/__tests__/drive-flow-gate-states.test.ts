@@ -51,6 +51,7 @@ import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -69,7 +70,7 @@ function makeStore(workspace: string, currentState: string): ExecutionStore {
     created: new Date().toISOString(),
     current_state: currentState,
     entry: currentState,
-    flow: "test-flow",
+    flow: flowName("test-flow"),
     flow_name: "test-flow",
     last_updated: new Date().toISOString(),
     sanitized: "feat-test",
@@ -105,7 +106,7 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
       concerns: [],
       current_state: nextState ?? "terminal",
       entry: "check",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
       skipped: [],
@@ -153,7 +154,7 @@ describe("gate-only state: all gates pass", () => {
     const flow: ResolvedFlow = {
       description: "flow with gate-only state",
       entry: "check",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         // Note: no spawn instruction for "check" — gate-only states are exempt
         review: "Do review",
@@ -235,7 +236,7 @@ describe("gate-only state: gate fails", () => {
     const flow: ResolvedFlow = {
       description: "flow with gate-only state",
       entry: "check",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         review: "Do review",
       },
@@ -301,7 +302,7 @@ describe("gate-only state: no gates resolved", () => {
     const flow: ResolvedFlow = {
       description: "flow with gate-only state",
       entry: "check",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         review: "Do review",
       },
@@ -360,7 +361,7 @@ describe("gate-only state: discovered gates from prior states", () => {
     const flow: ResolvedFlow = {
       description: "flow with gate-only state using discovered gates",
       entry: "check",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         review: "Do review",
       },
@@ -436,7 +437,7 @@ describe("normal single state with agent and gates", () => {
     const flow: ResolvedFlow = {
       description: "flow with agent + gates state",
       entry: "implement",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         implement: "Implement the changes",
       },
@@ -493,7 +494,7 @@ describe("normal single state without gates", () => {
     const flow: ResolvedFlow = {
       description: "normal flow without gates",
       entry: "research",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {
         research: "Do research",
       },

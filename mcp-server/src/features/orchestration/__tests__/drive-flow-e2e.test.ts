@@ -61,6 +61,7 @@ import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-stat
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -118,7 +119,7 @@ function makeFullFlow(): ResolvedFlow {
   return {
     description: "full e2e flow",
     entry: "research",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       implement: "Implement the tasks",
       research: "Do research",
@@ -156,7 +157,7 @@ function makeSkipFlow(): ResolvedFlow {
   return {
     description: "flow with skip state",
     entry: "research",
-    name: "skip-flow",
+    name: flowName("skip-flow"),
     spawn_instructions: {
       research: "Do research",
       review: "Do review",
@@ -217,7 +218,7 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
       concerns: [],
       current_state: nextState ?? "terminal",
       entry: "research",
-      flow: "test-flow",
+      flow: flowName("test-flow"),
       iterations: {},
       last_updated: new Date().toISOString(),
       skipped: [],
@@ -440,7 +441,7 @@ describe("e2e: HITL flow (stuck detection → hitl breakpoint)", () => {
         concerns: [],
         current_state: "research",
         entry: "research",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         iterations: { research: { count: 2, max: 3 } },
         last_updated: new Date().toISOString(),
         skipped: [],
@@ -722,7 +723,7 @@ describe("e2e: wave with gate failure", () => {
         concerns: [],
         current_state: "implement",
         entry: "implement",
-        flow: "test-flow",
+        flow: flowName("test-flow"),
         iterations: {},
         last_updated: new Date().toISOString(),
         skipped: [],

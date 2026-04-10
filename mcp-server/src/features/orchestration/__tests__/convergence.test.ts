@@ -9,6 +9,7 @@ import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { filterCannotFix } from "../engine/convergence.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {
@@ -17,7 +18,7 @@ function makeBoard(iterations: Board["iterations"]): Board {
     concerns: [],
     current_state: "start",
     entry: "start",
-    flow: "test",
+    flow: flowName("test"),
     iterations,
     last_updated: new Date().toISOString(),
     skipped: [],
@@ -50,7 +51,7 @@ function makeFlowWithCannotFix(): ResolvedFlow {
   return {
     description: "A test flow",
     entry: "review",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {},
     states: {
       hitl: { type: "terminal" },
@@ -277,7 +278,7 @@ describe("reportResult — cannot_fix accumulation", () => {
     const flow: ResolvedFlow = {
       description: "A test flow",
       entry: "build",
-      name: "test-flow",
+      name: flowName("test-flow"),
       spawn_instructions: {},
       states: {
         build: {

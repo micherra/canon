@@ -44,6 +44,7 @@ import type { FileCluster } from "@features/orchestration/services/diff-cluster.
 import { clusterDiff } from "@features/orchestration/services/diff-cluster.ts";
 import type { PromptContext } from "../model/types.ts";
 import { fanout } from "../tools/fanout.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeCtx(
   overrides: Partial<PromptContext> & {
@@ -63,7 +64,7 @@ function makeCtx(
         ({
           description: "Test",
           entry: "implement",
-          name: "test-flow",
+          name: flowName("test-flow"),
           spawn_instructions: { implement: "Do the thing" },
           states: {
             done: { type: "terminal" },
@@ -122,7 +123,7 @@ describe("fanout — single state", () => {
       flow: {
         description: "Test",
         entry: "implement",
-        name: "test-flow",
+        name: flowName("test-flow"),
         spawn_instructions: { implement: "Review ${item.cluster_key}" },
         states: {
           done: { type: "terminal" },
@@ -272,7 +273,7 @@ describe("fanout — parallel state", () => {
     const ctx = makeCtx({
       state: {
         agents: ["canon-implementor"],
-        roles: [{ name: "frontend", optional: true }, "backend"],
+        roles: [{ name: flowName("frontend"), optional: true }, "backend"],
         type: "parallel",
       } as StateDefinition,
     });
@@ -343,7 +344,7 @@ describe("fanout — wave state", () => {
   it("handles object items with ${item.field} substitution", async () => {
     const ctx = makeCtx({
       basePrompt: "Implement ${item.name} in ${item.layer}",
-      items: [{ layer: "domain", name: "OrderService" }],
+      items: [{ layer: "domain", name: flowName("OrderService") }],
       state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
     });
 
@@ -415,7 +416,7 @@ describe("fanout — debate handling", () => {
       },
       description: "Test",
       entry: "implement",
-      name: "debate-flow",
+      name: flowName("debate-flow"),
       spawn_instructions: { implement: "Debate this" },
       states: {
         done: { type: "terminal" },
@@ -458,7 +459,7 @@ describe("fanout — debate handling", () => {
       },
       description: "Test",
       entry: "implement",
-      name: "debate-flow",
+      name: flowName("debate-flow"),
       spawn_instructions: { implement: "Debate this" },
       states: {
         done: { type: "terminal" },
@@ -496,7 +497,7 @@ describe("fanout — debate handling", () => {
       },
       description: "Test",
       entry: "implement",
-      name: "debate-flow",
+      name: flowName("debate-flow"),
       spawn_instructions: { implement: "Debate this" },
       states: {
         done: { type: "terminal" },
@@ -538,7 +539,7 @@ describe("fanout — debate handling", () => {
       },
       description: "Test",
       entry: "implement",
-      name: "debate-flow",
+      name: flowName("debate-flow"),
       spawn_instructions: { implement: "Debate this" },
       states: {
         done: { type: "terminal" },

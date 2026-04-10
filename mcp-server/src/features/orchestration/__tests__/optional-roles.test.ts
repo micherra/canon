@@ -33,6 +33,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "optional-roles-test-"));
@@ -65,7 +66,7 @@ function makeFlowWithOptionalRoles(): ResolvedFlow {
   return {
     description: "test",
     entry: "review",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       review: "Review from role ${role}",
     },
@@ -73,7 +74,7 @@ function makeFlowWithOptionalRoles(): ResolvedFlow {
       hitl: { type: "terminal" },
       review: {
         agents: ["canon:canon-reviewer"],
-        roles: ["required-reviewer", { name: "optional-reviewer", optional: true }],
+        roles: ["required-reviewer", { name: flowName("optional-reviewer"), optional: true }],
         transitions: {
           blocked: "hitl",
           done: "ship",
@@ -175,15 +176,15 @@ describe("isRoleOptional", () => {
   });
 
   it("returns true for object role with optional: true", () => {
-    expect(isRoleOptional({ name: "optional-role", optional: true })).toBe(true);
+    expect(isRoleOptional({ name: flowName("optional-role"), optional: true })).toBe(true);
   });
 
   it("returns false for object role with optional: false", () => {
-    expect(isRoleOptional({ name: "required-role", optional: false })).toBe(false);
+    expect(isRoleOptional({ name: flowName("required-role"), optional: false })).toBe(false);
   });
 
   it("returns false for object role with no optional field", () => {
-    expect(isRoleOptional({ name: "required-role" })).toBe(false);
+    expect(isRoleOptional({ name: flowName("required-role") })).toBe(false);
   });
 });
 

@@ -35,6 +35,7 @@ vi.mock("../services/wave-briefing.ts", () => ({
 
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 let tmpDirs: string[] = [];
 
@@ -56,7 +57,7 @@ function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       implement: "Implement task ${item}",
     },
@@ -74,7 +75,7 @@ function makeSingleFlow(): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "research",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       research: "Research the problem",
     },
@@ -91,7 +92,7 @@ function makeParallelPerFlow(): ResolvedFlow {
   return {
     description: "Test flow",
     entry: "implement",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       implement: "Implement ${item}",
     },

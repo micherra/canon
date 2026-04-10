@@ -1,9 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 export type WritePlanIndexInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   slug: string;
   tasks: Array<{
     task_id: string;

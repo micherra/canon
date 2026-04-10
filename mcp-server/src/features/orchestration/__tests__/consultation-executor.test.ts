@@ -1,3 +1,4 @@
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import {
@@ -24,7 +25,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     description: "Test flow",
     entry: "start",
-    name: "test-flow",
+    name: flowName("test-flow"),
     spawn_instructions: {
       "perf-check": "Run performance check.",
       "security-check": "Run security audit for ${task}.",

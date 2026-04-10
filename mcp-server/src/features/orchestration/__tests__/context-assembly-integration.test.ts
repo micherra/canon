@@ -188,6 +188,7 @@ vi.mock("@graph/kg-store.ts", () => ({
 
 import { existsSync } from "node:fs";
 import { computeFileInsightMaps } from "@graph/kg-query.ts";
+import { flowName } from "@domains/flows/board-state-schemas.ts";
 
 function makeBoardWithFiles(
   files: string[],
@@ -198,7 +199,7 @@ function makeBoardWithFiles(
     concerns: [],
     current_state: "start",
     entry: "start",
-    flow: "test",
+    flow: flowName("test"),
     iterations: {},
     last_updated: new Date().toISOString(),
     metadata: {

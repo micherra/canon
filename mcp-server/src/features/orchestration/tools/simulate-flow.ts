@@ -5,6 +5,7 @@
  * scenario of (state_id, status) pairs. No agents spawned, no workspace needed.
  */
 
+import type { StateId } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { loadAndResolveFlow, VIRTUAL_SINKS } from "@domains/flows/flow-parser.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -82,7 +83,7 @@ function simFail(
 
 /** Emit warnings for non-single state types and skip_when predicates. */
 function emitStateWarnings(
-  stateDef: ResolvedFlow["states"][string],
+  stateDef: ResolvedFlow["states"][StateId],
   currentState: string,
   warnings: string[],
 ): void {
@@ -114,7 +115,7 @@ function simulateStep(
   step: number,
 ): SimulateFlowOutput | string {
   const { currentState, path, iterationsConsumed, warnings } = sim;
-  const stateDef = flow.states[currentState];
+  const stateDef = flow.states[currentState as StateId];
 
   if (stateDef.type === "terminal") return simOk(path, iterationsConsumed, warnings, currentState);
 

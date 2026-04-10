@@ -1,8 +1,9 @@
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import type { Message } from "@domains/messages/messages.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 
 export type PostMessageInput = {
-  workspace: string;
+  workspace: WorkspacePath;
   channel: string;
   from: string;
   content: string;

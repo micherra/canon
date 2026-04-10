@@ -12,7 +12,8 @@
  */
 
 import { type BoardResult, canEnterState, enterState } from "@domains/board/board.ts";
-import type { Board, CannotFixItem, HistoryEntry, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import type { Board, CannotFixItem, HistoryEntry, StateId, WorkspacePath } from "@domains/flows/board-state-schemas.ts";
+import { stateId as mkStateId } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
@@ -85,7 +86,7 @@ function extractSessionVars(store: ReturnType<typeof getExecutionStore>): Record
 }
 
 /** Extract convergence data from the board for a given state. */
-function extractConvergenceData(board: Board, state_id: string) {
+function extractConvergenceData(board: Board, state_id: StateId) {
   const iteration = board.iterations[state_id];
   return {
     cannot_fix_items: (iteration?.cannot_fix ?? []) as CannotFixItem[],
@@ -99,7 +100,7 @@ function extractConvergenceData(board: Board, state_id: string) {
 function persistStateEntry(
   store: ReturnType<typeof getExecutionStore>,
   board: Board,
-  state_id: string,
+  state_id: StateId,
   now: string,
 ): BoardResult {
   let enterResult: BoardResult = { ok: false, reason: "transaction did not run" };
@@ -145,7 +146,7 @@ function persistStateEntry(
 }
 
 type EmitStateEntryEventsOpts = {
-  state_id: string;
+  state_id: StateId;
   stateType: string;
   now: string;
   iterationCount: number;
@@ -203,7 +204,7 @@ function shouldSkipConsultation(
   name: string,
   flow: ResolvedFlow,
   enteredBoard: Board,
-  state_id: string,
+  state_id: StateId,
 ): boolean {
   const fragment = flow.consultations?.[name];
   if (fragment?.min_waves == null) return false;
@@ -229,8 +230,8 @@ function buildConsultationEntry(
 type ResolveConsultationsOpts = {
   flow: ResolvedFlow;
   enteredBoard: Board;
-  state_id: string;
-  stateDef: ResolvedFlow["states"][string] | undefined;
+  state_id: StateId;
+  stateDef: ResolvedFlow["states"][StateId] | undefined;
 };
 
 /** Resolve consultation prompts for the current breakpoint. */
@@ -278,7 +279,7 @@ function extractBreakpointOutputs(
 /** Collect completed consultation summaries from prior waves. */
 function collectConsultationOutputs(
   board: Board,
-  state_id: string,
+  state_id: StateId,
   flow: ResolvedFlow,
   outputs: Record<string, { section?: string; summary: string }>,
 ): void {
@@ -294,7 +295,7 @@ function collectConsultationOutputs(
 }
 
 /** Resolve review_scope variable for re-entered review states. */
-function resolveReviewScope(enteredBoard: Board, state_id: string): Record<string, string> {
+function resolveReviewScope(enteredBoard: Board, state_id: StateId): Record<string, string> {
   if ((enteredBoard.states[state_id]?.entries ?? 0) <= 1) return {};
   const baseRef = enteredBoard.base_commit;
   if (!baseRef || !/^[a-f0-9]{7,40}$/.test(baseRef)) return {};
@@ -316,7 +317,7 @@ function resolveReviewScope(enteredBoard: Board, state_id: string): Record<strin
 }
 
 type ResolveEnrichmentVarsOpts = {
-  state_id: string;
+  state_id: StateId;
   enteredBoard: Board;
   flow: ResolvedFlow;
   projectDir: string | undefined;
@@ -324,7 +325,7 @@ type ResolveEnrichmentVarsOpts = {
 
 /** Resolve context enrichment variables (non-blocking). */
 async function resolveEnrichmentVars(
-  workspace: string,
+  workspace: WorkspacePath,
   opts: ResolveEnrichmentVarsOpts,
 ): Promise<Record<string, string>> {
   const { state_id, enteredBoard, flow, projectDir } = opts;
@@ -348,15 +349,15 @@ async function resolveEnrichmentVars(
 }
 
 type CheckStateSkipWhenOpts = {
-  state_id: string;
-  workspace: string;
+  state_id: StateId;
+  workspace: WorkspacePath;
   board: Board;
   convergence: ReturnType<typeof extractConvergenceData>;
 };
 
 /** Check skip_when condition on a state definition. Returns skip result or null. */
 async function checkStateSkipWhen(
-  stateDef: ResolvedFlow["states"][string] | undefined,
+  stateDef: ResolvedFlow["states"][StateId] | undefined,
   opts: CheckStateSkipWhenOpts,
 ): Promise<ToolResult<EnterAndPrepareStateResult> | null> {
   const { state_id, workspace, board, convergence } = opts;
@@ -403,7 +404,8 @@ async function enterAndResolveSpawn(
   board: Board,
   convergence: ReturnType<typeof extractConvergenceData>,
 ): Promise<ToolResult<EnterAndPrepareStateResult>> {
-  const { workspace, state_id, flow } = input;
+  const { workspace, flow } = input;
+  const state_id = mkStateId(input.state_id);
   const stateDef = flow.states[state_id];
   const skipEarly = await checkStateSkipWhen(stateDef, { board, convergence, state_id, workspace });
   if (skipEarly) return skipEarly;
@@ -456,7 +458,8 @@ async function enterAndResolveSpawn(
 export async function enterAndPrepareState(
   input: EnterAndPrepareStateInput,
 ): Promise<ToolResult<EnterAndPrepareStateResult>> {
-  const { workspace, state_id, flow } = input;
+  const { workspace, flow } = input;
+  const state_id = mkStateId(input.state_id);
   const store = getExecutionStore(workspace);
 
   const board = store.getBoard();

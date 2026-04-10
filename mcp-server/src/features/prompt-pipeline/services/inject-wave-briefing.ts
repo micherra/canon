@@ -25,6 +25,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { WorkspacePath } from "@domains/flows/board-state-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import { getItemCountCap } from "@features/orchestration/services/context-budget.ts";
@@ -79,7 +80,7 @@ function extractFilePaths(items: TaskItem[]): string[] {
  * Returns { section: string; warnings: string[] } — section may be empty if
  * no KG data is available. Never throws.
  */
-function getTierFromWorkspace(workspace: string): "small" | "medium" | "large" {
+function getTierFromWorkspace(workspace: WorkspacePath): "small" | "medium" | "large" {
   try {
     const store = getExecutionStore(workspace);
     const session = store.getSession();
@@ -102,7 +103,7 @@ function closeDb(db: ReturnType<typeof initDatabase> | undefined): void {
 function injectKgSection(
   filePaths: string[],
   projectDir: string,
-  workspace: string,
+  workspace: WorkspacePath,
 ): { section: string; warnings: string[] } {
   const warnings: string[] = [];
   const resolvedProjectDir = projectDir || process.env.CANON_PROJECT_DIR || process.cwd();
@@ -177,7 +178,7 @@ function injectConsultationBriefing(
 
 function injectKgFileContext(
   basePrompt: string,
-  opts: { warnings: string[]; items: unknown[]; projectDir: string; workspace: string },
+  opts: { warnings: string[]; items: unknown[]; projectDir: string; workspace: WorkspacePath },
 ): string {
   const { warnings, items, projectDir, workspace } = opts;
   const filePaths = extractFilePaths(items as TaskItem[]);
