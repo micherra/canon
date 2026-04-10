@@ -189,3 +189,32 @@ Deliberate out-of-scope items, tracked so Phase 3 knows what to pick up:
 11. **Inter-wave gates** (`gate: test-suite` on `refactor.implement` and `migrate.implement`). Legacy Canon runs a shell gate between waves; runbooks have no inter-step gate primitive. Gates are deferred to a dedicated tester step that runs after the wave completes.
 
 All eleven items are valid Phase 3 schema extensions. They are documented here so that when Phase 3 begins with epic-flow adaptive waves, the full punt list is visible to whoever designs the extended schema.
+
+---
+
+## Drift vs. legacy runtime
+
+Stretch-goal cross-check. Each Phase 2 runbook was planned via `loadAndPlan` and the corresponding legacy flow was walked via `simulate_flow` with a happy-path scenario. The diff below is a sanity check, not a correctness gate — the runbook format is linear and the flow format is a state machine with loops, so some divergence is expected. The drift script that produced this table is in the session record, not committed to the repo.
+
+Summary of role-set diffs (legacy vs runbook, on happy-path scenarios):
+
+| Flow             | Shared roles                                                                                                 | Legacy only                        | Runbook only           | Notes                                                                                                                                    |
+|------------------|--------------------------------------------------------------------------------------------------------------|------------------------------------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `feature`        | architect, implementor, reviewer, scribe, shipper, tester                                                    | `canon-learner`                    | `canon-researcher`     | Runbook prepends a researcher step (documented in §feature). Learner punt is per the common compromise list.                             |
+| `refactor`       | implementor, researcher, reviewer, scribe, shipper, tester                                                   | `canon-guide`, `canon-learner`     | `canon-architect`      | Runbook adds explicit architect step (documented in §refactor). Guide is the user-checkpoint collapse; learner is punted.                 |
+| `migrate`        | architect, implementor, researcher, reviewer, scribe, security, shipper, tester                              | `canon-guide`, `canon-learner`     | (none)                 | Parallel researcher and competitive architect are compressed to single spawns in §migrate. Guide/learner compromises as above.           |
+| `test-gap`       | researcher, reviewer, tester                                                                                 | (none)                             | (none)                 | **Exact match** on happy path. Only divergences (no_gaps short-circuit, fix-impl loop) live on non-happy scenarios.                      |
+| `review-only`    | reviewer                                                                                                     | (none)                             | (none)                 | **Exact match** on happy path. The large-diff auto-fanout divergence (§review-only) only triggers on `diff > 300` lines.                 |
+| `security-audit` | reviewer                                                                                                     | (none)                             | `canon-security`       | The legacy `flows/security-audit.md` file declares no `entry:` field, so the parser defaults to `review`, leaving the `security` and `fix-security` states from the `security-scan` fragment unreachable. The Phase 2 runbook runs `canon-security` first and is arguably more correct than legacy. The legacy flow raises two flow-parser warnings ("state 'security' is unreachable from entry 'review'") on every load. |
+
+### Interpretation
+
+- **Every Phase 2 divergence from legacy is already documented in a per-flow section above.** No surprises surfaced in the cross-check.
+- **`test-gap` and `review-only` are exact role-set matches on the happy path.** The only divergences for those two flows are branch-reachable states (`no_gaps`, `fix-impl`, the large-diff auto-fanout) that do not appear on the happy-path scenarios, and they are all documented in their per-flow sections.
+- **`feature` / `refactor` / `migrate` shed `canon-guide` and `canon-learner`** via the common-compromise collapses (user-checkpoint → runbook HITL; learner step → punted). Each also either adds or removes a role relative to legacy, all intentional.
+- **The `security-audit` anomaly** is not a Phase 2 regression — it is a pre-existing bug in `flows/security-audit.md` where the missing `entry:` field causes the legacy parser to pick `review` as the entry state and leave the `security-scan` fragment states unreachable. The Phase 2 runbook happens to correct this by running the security step first. Phase 2 does NOT patch the legacy flow file (out of scope per the hard rules), but a reviewer should note that a user running the legacy `security-audit` flow today is only getting a principle-compliance review, not a security scan.
+- The `simulate_flow` tool emits `wave`/`parallel`/`skip_when` warnings as expected on `feature` (`implement` wave, `context-sync` skip), `refactor` (`checkpoint`/`implement`/`context-sync`/`learn`), and `migrate` (`research` parallel, `checkpoint`/`implement`/`context-sync`/`learn` skip). None of these reflect drift — they are noise from the simulator's "simulated as single step" policy.
+
+### Conclusion
+
+No undocumented drift. Every legacy-only and runbook-only role in the table lines up with an already-explained compromise or punt earlier in this document. The one unexpected finding — the legacy `security-audit` entry-state bug — is a pre-existing issue in the legacy flow file that is explicitly out of Phase 2 scope and is flagged here for a human reviewer to decide whether to file separately.
