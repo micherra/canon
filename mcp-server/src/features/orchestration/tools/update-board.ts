@@ -138,77 +138,21 @@ function emitBoardEvents(
   }
 }
 
-async function handleCompleteFlow(
-  store: ReturnType<typeof getExecutionStore>,
-  board: Board,
+type HandleCompleteFlowOptions = {
+  store: ReturnType<typeof getExecutionStore>;
+  board: Board;
+  now: string;
+  projectDir: string;
+  workspacePath: string;
+};
+
+/** Append a FlowRunEntry to analytics. Best-effort — never throws. */
+async function appendFlowAnalytics(
+  updatedBoard: Board,
   now: string,
   projectDir: string,
-  workspacePath: string,
-): Promise<Board> {
-  const currentEntry = board.states[board.current_state];
-  const updatedBoard: Board = {
-    ...board,
-    blocked: null,
-    last_updated: now,
-    states: {
-      ...board.states,
-      [board.current_state]: {
-        ...currentEntry,
-        completed_at: now,
-        status: "done",
-      },
-    },
-  };
-
-  const currentStateId = updatedBoard.current_state;
-
-  store.transaction(() => {
-    const doneState = updatedBoard.states[currentStateId];
-    if (doneState) {
-      store.upsertState(currentStateId, {
-        ...doneState,
-        completed_at: now,
-        entries: doneState.entries ?? 0,
-        status: "done",
-      });
-    }
-    store.updateExecution({
-      blocked: null,
-      completed_at: now,
-      last_updated: now,
-      status: "completed",
-    });
-  });
-
-  const session = store.getSession();
-  const sessionTier = session?.tier ?? "unknown";
-
-  // Record flow lineage — best-effort, never blocks flow completion
-  try {
-    store.recordFlowLineage({
-      branch: session?.branch ?? "unknown",
-      completed_at: now,
-      flow_name: updatedBoard.flow,
-      slug: session?.slug,
-      status: "completed",
-      task: updatedBoard.task,
-      workspace_path: workspacePath,
-    });
-  } catch {
-    console.warn("[canon] handleCompleteFlow: failed to record flow lineage");
-  }
-
-  // Release file claims for this workflow — best-effort, never blocks flow completion
-  try {
-    const { releaseClaims } = await import("@shared/lib/file-claims.ts");
-    const releaseSession = store.getSession();
-    if (releaseSession) {
-      releaseClaims(projectDir, releaseSession.slug);
-    }
-  } catch {
-    // Claims release failure is non-blocking
-  }
-
+  sessionTier: string,
+): Promise<void> {
   try {
     const agg = aggregateFlowRunMetrics(updatedBoard);
     const flowRun: FlowRunEntry = {
@@ -239,7 +183,66 @@ async function handleCompleteFlow(
   } catch {
     // Best-effort — analytics should never block flow completion
   }
+}
 
+async function handleCompleteFlow(opts: HandleCompleteFlowOptions): Promise<Board> {
+  const { store, board, now, projectDir, workspacePath } = opts;
+  const currentEntry = board.states[board.current_state];
+  const updatedBoard: Board = {
+    ...board,
+    blocked: null,
+    last_updated: now,
+    states: {
+      ...board.states,
+      [board.current_state]: { ...currentEntry, completed_at: now, status: "done" },
+    },
+  };
+
+  const currentStateId = updatedBoard.current_state;
+  store.transaction(() => {
+    const doneState = updatedBoard.states[currentStateId];
+    if (doneState) {
+      store.upsertState(currentStateId, {
+        ...doneState,
+        completed_at: now,
+        entries: doneState.entries ?? 0,
+        status: "done",
+      });
+    }
+    store.updateExecution({
+      blocked: null,
+      completed_at: now,
+      last_updated: now,
+      status: "completed",
+    });
+  });
+
+  const session = store.getSession();
+  const sessionTier = session?.tier ?? "unknown";
+
+  try {
+    store.recordFlowLineage({
+      branch: session?.branch ?? "unknown",
+      completed_at: now,
+      flow_name: updatedBoard.flow,
+      slug: session?.slug,
+      status: "completed",
+      task: updatedBoard.task,
+      workspace_path: workspacePath,
+    });
+  } catch {
+    console.warn("[canon] handleCompleteFlow: failed to record flow lineage");
+  }
+
+  try {
+    const { releaseClaims } = await import("@shared/lib/file-claims.ts");
+    const releaseSession = store.getSession();
+    if (releaseSession) releaseClaims(projectDir, releaseSession.slug);
+  } catch {
+    // Claims release failure is non-blocking
+  }
+
+  await appendFlowAnalytics(updatedBoard, now, projectDir, sessionTier);
   return updatedBoard;
 }
 
@@ -364,6 +367,103 @@ function handleSetWaveProgress(
   return { board: updatedBoard };
 }
 
+/** Register file claims and return updated metadata with any overlap warnings. */
+async function applyAffectedFilesClaims(
+  store: ReturnType<typeof getExecutionStore>,
+  metadata: Record<string, string | number | boolean>,
+  affectedFiles: string,
+  projectDir: string,
+): Promise<Record<string, string | number | boolean>> {
+  try {
+    const { registerClaims, checkClaimOverlaps } = await import("@shared/lib/file-claims.ts");
+    const filePaths: string[] = JSON.parse(affectedFiles);
+    const session = store.getSession();
+    if (!session) return metadata;
+    registerClaims(projectDir, session.slug, filePaths);
+    const overlaps = checkClaimOverlaps(projectDir, session.slug, filePaths);
+    if (overlaps.length === 0) return metadata;
+    const warningLines = overlaps.map(
+      (o) => `${o.file_path} also claimed by: ${o.workflows.join(", ")}`,
+    );
+    return { ...metadata, claim_warnings: warningLines.join("; ") };
+  } catch {
+    return metadata; // Claims registration failure is non-blocking
+  }
+}
+
+function handleBlock(
+  store: ReturnType<typeof getExecutionStore>,
+  board: Board,
+  input: UpdateBoardInput,
+  now: string,
+): ActionResult {
+  if (!input.state_id) return toolError("INVALID_INPUT", "block requires state_id");
+  const blocked = setBlocked(board, input.state_id, input.blocked_reason ?? "No reason provided");
+  store.transaction(() => {
+    store.updateExecution({ blocked: blocked.blocked, last_updated: now });
+    const blockedState = blocked.states[input.state_id!];
+    if (blockedState)
+      store.upsertState(input.state_id!, {
+        ...blockedState,
+        entries: blockedState.entries,
+        status: "blocked",
+      });
+  });
+  return { board: blocked };
+}
+
+function handleUnblock(
+  store: ReturnType<typeof getExecutionStore>,
+  board: Board,
+  input: UpdateBoardInput,
+  now: string,
+): ActionResult {
+  if (!input.state_id) return toolError("INVALID_INPUT", "unblock requires state_id");
+  const stateEntry = board.states[input.state_id];
+  const unblocked = {
+    ...board,
+    blocked: null,
+    last_updated: now,
+    states: {
+      ...board.states,
+      [input.state_id]: { ...stateEntry, error: undefined, status: "in_progress" as const },
+    },
+  };
+  store.transaction(() => {
+    store.updateExecution({ blocked: null, last_updated: now });
+    const st = unblocked.states[input.state_id!];
+    if (st)
+      store.upsertState(input.state_id!, { ...st, entries: st.entries, status: "in_progress" });
+  });
+  return { board: unblocked };
+}
+
+async function handleSetMetadata(
+  store: ReturnType<typeof getExecutionStore>,
+  board: Board,
+  input: UpdateBoardInput,
+  now: string,
+): Promise<ActionResult> {
+  if (!input.metadata) return toolError("INVALID_INPUT", "set_metadata requires metadata");
+  let metadata = { ...(board.metadata ?? {}), ...input.metadata };
+  store.transaction(() => {
+    store.updateExecution({ last_updated: now, metadata });
+  });
+
+  if (input.metadata.affected_files && typeof input.metadata.affected_files === "string") {
+    const projectDir = input.project_dir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
+    metadata = await applyAffectedFilesClaims(
+      store,
+      metadata,
+      input.metadata.affected_files,
+      projectDir,
+    );
+    store.updateExecution({ metadata });
+  }
+
+  return { board: { ...board, last_updated: now, metadata } };
+}
+
 /** Handle block/unblock/set_metadata inline actions. */
 async function handleInlineAction(
   store: ReturnType<typeof getExecutionStore>,
@@ -372,85 +472,12 @@ async function handleInlineAction(
   now: string,
 ): Promise<ActionResult | ToolResult<UpdateBoardResult>> {
   switch (input.action) {
-    case "block": {
-      if (!input.state_id) return toolError("INVALID_INPUT", "block requires state_id");
-      const blocked = setBlocked(
-        board,
-        input.state_id,
-        input.blocked_reason ?? "No reason provided",
-      );
-      store.transaction(() => {
-        store.updateExecution({ blocked: blocked.blocked, last_updated: now });
-        const blockedState = blocked.states[input.state_id!];
-        if (blockedState)
-          store.upsertState(input.state_id!, {
-            ...blockedState,
-            entries: blockedState.entries,
-            status: "blocked",
-          });
-      });
-      return { board: blocked };
-    }
-    case "unblock": {
-      if (!input.state_id) return toolError("INVALID_INPUT", "unblock requires state_id");
-      const stateEntry = board.states[input.state_id];
-      const unblocked = {
-        ...board,
-        blocked: null,
-        last_updated: now,
-        states: {
-          ...board.states,
-          [input.state_id]: { ...stateEntry, error: undefined, status: "in_progress" as const },
-        },
-      };
-      store.transaction(() => {
-        store.updateExecution({ blocked: null, last_updated: now });
-        const st = unblocked.states[input.state_id!];
-        if (st)
-          store.upsertState(input.state_id!, { ...st, entries: st.entries, status: "in_progress" });
-      });
-      return { board: unblocked };
-    }
-    case "set_metadata": {
-      if (!input.metadata) return toolError("INVALID_INPUT", "set_metadata requires metadata");
-      let updated = {
-        ...board,
-        last_updated: now,
-        metadata: { ...(board.metadata ?? {}), ...input.metadata },
-      };
-      store.transaction(() => {
-        store.updateExecution({ last_updated: now, metadata: updated.metadata });
-      });
-
-      // If affected_files metadata was set, register file claims and check for overlaps
-      if (input.metadata.affected_files && typeof input.metadata.affected_files === "string") {
-        try {
-          const { registerClaims, checkClaimOverlaps } = await import("@shared/lib/file-claims.ts");
-          const projectDir = input.project_dir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
-          const filePaths: string[] = JSON.parse(input.metadata.affected_files);
-          const session = store.getSession();
-          if (session) {
-            registerClaims(projectDir, session.slug, filePaths);
-            const overlaps = checkClaimOverlaps(projectDir, session.slug, filePaths);
-            if (overlaps.length > 0) {
-              const warningLines = overlaps.map(
-                (o) => `${o.file_path} also claimed by: ${o.workflows.join(", ")}`,
-              );
-              const updatedMetadata = {
-                ...(updated.metadata ?? {}),
-                claim_warnings: warningLines.join("; "),
-              };
-              updated = { ...updated, metadata: updatedMetadata };
-              store.updateExecution({ metadata: updatedMetadata });
-            }
-          }
-        } catch {
-          // Claims registration failure is non-blocking
-        }
-      }
-
-      return { board: updated };
-    }
+    case "block":
+      return handleBlock(store, board, input, now);
+    case "unblock":
+      return handleUnblock(store, board, input, now);
+    case "set_metadata":
+      return handleSetMetadata(store, board, input, now);
     default:
       return toolError("INVALID_INPUT", `Unknown action: ${(input as UpdateBoardInput).action}`);
   }
@@ -474,13 +501,13 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
       result = handleSkipState(store, board, input, now);
       break;
     case "complete_flow": {
-      board = await handleCompleteFlow(
-        store,
+      board = await handleCompleteFlow({
         board,
         now,
-        input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd(),
-        input.workspace,
-      );
+        projectDir: input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd(),
+        store,
+        workspacePath: input.workspace,
+      });
       result = { board };
       break;
     }

@@ -60,14 +60,12 @@ export async function resolveContextInjections(
     }
 
     if (injection.from === "wave_summaries") {
-      // biome-ignore lint/performance/noAwaitInLoops: each injection resolves independently
       const resolved = await resolveWaveSummaryInjection(injection, board, workspace);
       applyInjectionResult(resolved, injection.as, variables, warnings);
       continue;
     }
 
     if (injection.from === "prior_workspace") {
-      // biome-ignore lint/performance/noAwaitInLoops: each injection resolves independently
       const resolved = await resolvePriorWorkspaceInjection(injection, workspace);
       applyInjectionResult(resolved, injection.as, variables, warnings);
       continue;
@@ -177,6 +175,55 @@ async function resolveFileContextInjection(
 const HANDOFF_CAP_BYTES = 50 * 1024; // 50KB
 const WAVE_SUMMARIES_CAP_BYTES = 50 * 1024; // 50KB
 
+/** Read the session slug from the execution store. Returns slug or a warning string on failure. */
+function readSessionSlug(workspace: string): string | string {
+  try {
+    const session = getExecutionStore(workspace).getSession();
+    if (!session?.slug)
+      return "wave_summaries: execution store session unavailable — skipping injection";
+    return session.slug;
+  } catch {
+    return "wave_summaries: failed to read execution store session — skipping injection";
+  }
+}
+
+type SummaryReadResult = { taskId: string; chunk: string } | { taskId: string; missing: true };
+
+/** Read a single summary file for a task. Returns chunk or missing marker. */
+async function readSummaryFile(taskId: string, plansDir: string): Promise<SummaryReadResult> {
+  const summaryPath = path.join(plansDir, `${taskId}-SUMMARY.md`);
+  if (!existsSync(summaryPath)) return { missing: true, taskId };
+  try {
+    const content = await readFile(summaryPath, "utf-8");
+    return { chunk: `## ${taskId}\n\n${content}`, taskId };
+  } catch {
+    return { missing: true, taskId };
+  }
+}
+
+/** Apply byte cap to summary chunks. Returns parts that fit within the cap. */
+function capSummaryChunks(
+  readResults: SummaryReadResult[],
+  capBytes: number,
+  warnings: string[],
+): string[] {
+  const parts: string[] = [];
+  let totalBytes = 0;
+  for (const result of readResults) {
+    if ("missing" in result) continue;
+    const rawBytes = Buffer.byteLength(result.chunk, "utf-8");
+    if (totalBytes + rawBytes > capBytes) {
+      warnings.push(
+        `wave_summaries: ${result.taskId}-SUMMARY.md skipped — 50KB injection cap reached`,
+      );
+      continue;
+    }
+    parts.push(result.chunk);
+    totalBytes += rawBytes;
+  }
+  return parts;
+}
+
 /**
  * Resolve a wave_summaries injection by reading *-SUMMARY.md files from prior waves.
  *
@@ -199,21 +246,16 @@ async function resolveWaveSummaryInjection(
 ): Promise<{ value?: string; warnings: string[] }> {
   const warnings: string[] = [];
 
-  // Get slug from execution store session
-  let slug: string;
-  try {
-    const session = getExecutionStore(workspace).getSession();
-    if (!session?.slug) {
-      warnings.push("wave_summaries: execution store session unavailable — skipping injection");
-      return { warnings };
-    }
-    slug = session.slug;
-  } catch {
-    warnings.push("wave_summaries: failed to read execution store session — skipping injection");
+  const slugOrWarning = readSessionSlug(workspace);
+  // readSessionSlug returns a warning string when it cannot produce a slug
+  // (the return type annotation is intentionally `string | string` to keep type inference simple;
+  // a warning always contains a colon prefix like "wave_summaries:")
+  if (slugOrWarning.startsWith("wave_summaries:")) {
+    warnings.push(slugOrWarning);
     return { warnings };
   }
+  const slug = slugOrWarning;
 
-  // Determine current wave from board current_state entry
   const currentStateEntry = board.states[board.current_state];
   const currentWave = currentStateEntry?.wave ?? 1;
 
@@ -224,7 +266,6 @@ async function resolveWaveSummaryInjection(
     return { warnings };
   }
 
-  // Read INDEX.md and find tasks from all prior waves (waves < currentWave)
   const plansDir = path.join(workspace, "plans", slug);
   const indexPath = path.join(plansDir, "INDEX.md");
 
@@ -241,11 +282,9 @@ async function resolveWaveSummaryInjection(
     return { warnings };
   }
 
-  // Collect task IDs from all prior waves (1 through currentWave - 1)
   const priorWaveTaskIds: string[] = [];
   for (let wave = 1; wave < currentWave; wave++) {
-    const ids = parseTaskIdsForWave(indexContent, wave);
-    priorWaveTaskIds.push(...ids);
+    priorWaveTaskIds.push(...parseTaskIdsForWave(indexContent, wave));
   }
 
   if (priorWaveTaskIds.length === 0) {
@@ -253,50 +292,17 @@ async function resolveWaveSummaryInjection(
     return { warnings };
   }
 
-  // Read summary files for prior-wave tasks
-  type SummaryReadResult = { taskId: string; chunk: string } | { taskId: string; missing: true };
-
   const readResults = await Promise.all(
-    priorWaveTaskIds.map(async (taskId): Promise<SummaryReadResult> => {
-      const summaryPath = path.join(plansDir, `${taskId}-SUMMARY.md`);
-      if (!existsSync(summaryPath)) {
-        return { missing: true, taskId };
-      }
-      try {
-        const content = await readFile(summaryPath, "utf-8");
-        return { chunk: `## ${taskId}\n\n${content}`, taskId };
-      } catch {
-        return { missing: true, taskId };
-      }
-    }),
+    priorWaveTaskIds.map((id) => readSummaryFile(id, plansDir)),
   );
-
-  // Apply byte cap with whole-file granularity
-  const parts: string[] = [];
-  let totalBytes = 0;
-  for (const result of readResults) {
-    if ("missing" in result) {
-      // Missing summaries are silently skipped (partial data is expected)
-      continue;
-    }
-    const rawBytes = Buffer.byteLength(result.chunk, "utf-8");
-    if (totalBytes + rawBytes > WAVE_SUMMARIES_CAP_BYTES) {
-      warnings.push(
-        `wave_summaries: ${result.taskId}-SUMMARY.md skipped — 50KB injection cap reached`,
-      );
-      continue;
-    }
-    parts.push(result.chunk);
-    totalBytes += rawBytes;
-  }
+  const parts = capSummaryChunks(readResults, WAVE_SUMMARIES_CAP_BYTES, warnings);
 
   if (parts.length === 0) {
     warnings.push("wave_summaries: no prior-wave summary files found — skipping injection");
     return { warnings };
   }
 
-  const value = escapeDollarBrace(parts.join("\n\n"));
-  return { value, warnings };
+  return { value: escapeDollarBrace(parts.join("\n\n")), warnings };
 }
 
 /**

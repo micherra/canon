@@ -1,6 +1,7 @@
 /**
  * drive-flow.test.ts — Unit tests for the driveFlow core loop (first call, call with result,
- * HITL breakpoints, skip-state auto-advancement, terminal state, state_artifacts, consultations).
+ * HITL breakpoints, skip-state auto-advancement, terminal state).
+ * See drive-flow-artifacts.test.ts for state_artifacts and consultation prompt tests.
  * See drive-flow-single.test.ts for ADR-009a, parallel, error handling, tool_scope_audit.
  */
 
@@ -485,126 +486,5 @@ describe("driveFlow — terminal state", () => {
     expect(result.terminal_state).toBe("terminal");
     // enterAndPrepareState should not be called for terminal states
     expect(enterAndPrepareState).not.toHaveBeenCalled();
-  });
-});
-
-// 5b. state_artifacts in done action
-
-describe("driveFlow — state_artifacts in done", () => {
-  it("includes state_artifacts map with artifact paths from board states", async () => {
-    const workspace = makeTmpWorkspace();
-    const store = makeStore(workspace);
-    // Simulate board states that have artifacts
-    store.upsertState("research", {
-      artifacts: ["research/findings.md"],
-      entries: 1,
-      status: "done",
-    });
-    store.upsertState("implement", {
-      artifacts: ["plans/task-01/SUMMARY.md", "plans/task-02/SUMMARY.md"],
-      entries: 1,
-      status: "done",
-    });
-    store.updateExecution({ current_state: "terminal" });
-
-    const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace }, "/fake/project");
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.action).toBe("done");
-    if (result.action !== "done") return;
-    expect(result.state_artifacts).toBeDefined();
-    expect(result.state_artifacts?.research).toEqual(["research/findings.md"]);
-    expect(result.state_artifacts?.implement).toEqual([
-      "plans/task-01/SUMMARY.md",
-      "plans/task-02/SUMMARY.md",
-    ]);
-  });
-
-  it("omits states with no artifacts from state_artifacts map", async () => {
-    const workspace = makeTmpWorkspace();
-    const store = makeStore(workspace);
-    // One state with artifacts, one without
-    store.upsertState("research", {
-      artifacts: ["research/findings.md"],
-      entries: 1,
-      status: "done",
-    });
-    store.upsertState("implement", {
-      entries: 1,
-      status: "done",
-    });
-    store.updateExecution({ current_state: "terminal" });
-
-    const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace }, "/fake/project");
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.action).toBe("done");
-    if (result.action !== "done") return;
-    expect(result.state_artifacts).toBeDefined();
-    expect(result.state_artifacts?.research).toEqual(["research/findings.md"]);
-    expect(result.state_artifacts?.implement).toBeUndefined();
-  });
-
-  it("omits state_artifacts when no states have artifacts (field absent signals no artifacts)", async () => {
-    const workspace = makeTmpWorkspace();
-    const store = makeStore(workspace);
-    store.updateExecution({ current_state: "terminal" });
-
-    const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace }, "/fake/project");
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.action).toBe("done");
-    if (result.action !== "done") return;
-    // state_artifacts is only present when at least one state has artifacts
-    expect(result.state_artifacts).toBeUndefined();
-  });
-});
-
-// 6. Consultation prompts
-
-describe("driveFlow — consultation prompts", () => {
-  it("includes consultation prompts in SpawnRequest array with role consultation", async () => {
-    const workspace = makeTmpWorkspace();
-    makeStore(workspace);
-
-    vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
-      makeEnterResult({
-        consultation_prompts: [
-          {
-            agent: "canon:canon-security",
-            name: "security-check",
-            prompt: "Check security",
-            role: "consultation",
-          },
-        ],
-        prompts: [
-          {
-            agent: "canon:canon-researcher",
-            prompt: "Research task",
-            role: "main",
-            template_paths: [],
-          },
-        ],
-      }),
-    );
-
-    const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace }, "/fake/project");
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.action).toBe("spawn");
-    if (result.action !== "spawn") return;
-    expect(result.requests).toHaveLength(2);
-    const consultationReq = result.requests.find((r) => r.role === "consultation");
-    expect(consultationReq).toBeDefined();
-    expect(consultationReq?.agent_type).toBe("canon:canon-security");
-    expect(consultationReq?.prompt).toBe("Check security");
   });
 });

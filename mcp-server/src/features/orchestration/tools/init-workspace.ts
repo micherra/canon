@@ -5,8 +5,8 @@
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { mkdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
@@ -21,6 +21,7 @@ import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { seedFromPriorWorkspace } from "./seed-workspace.ts";
 
 type InitWorkspaceInput = {
   flow_name: string;
@@ -95,6 +96,22 @@ export async function listBranchWorkspaces(
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
+/** Check for active file claims and return an issue string if any exist. */
+async function checkFileClaimsIssue(projectDir: string): Promise<string | null> {
+  try {
+    const { readClaims } = await import("@shared/lib/file-claims.ts");
+    const claims = readClaims(projectDir);
+    const totalClaimed = Object.keys(claims.claims).length;
+    if (totalClaimed === 0) return null;
+    const workflows = new Set<string>(
+      Object.values(claims.claims).flatMap((entries) => entries.map((e) => e.workflow)),
+    );
+    return `Active file claims: ${totalClaimed} file(s) claimed by workflow(s): ${[...workflows].join(", ")}`;
+  } catch {
+    return null; // Claims check failure — non-blocking
+  }
+}
+
 /**
  * Run pre-flight checks: git status, lock, stale sessions, and active file claims.
  * Returns an array of issue descriptions (empty if clean).
@@ -132,22 +149,8 @@ async function runPreflightChecks(
   }
 
   // 3. Check for active file claims
-  try {
-    const { readClaims } = await import("@shared/lib/file-claims.ts");
-    const claims = readClaims(projectDir);
-    const totalClaimed = Object.keys(claims.claims).length;
-    if (totalClaimed > 0) {
-      const workflows = new Set<string>();
-      for (const entries of Object.values(claims.claims)) {
-        for (const e of entries) workflows.add(e.workflow);
-      }
-      issues.push(
-        `Active file claims: ${totalClaimed} file(s) claimed by workflow(s): ${[...workflows].join(", ")}`,
-      );
-    }
-  } catch {
-    // Claims check failure — non-blocking
-  }
+  const claimsIssue = await checkFileClaimsIssue(projectDir);
+  if (claimsIssue) issues.push(claimsIssue);
 
   return issues;
 }
@@ -485,101 +488,78 @@ async function finalizeNewWorkspace(
   };
 }
 
-/** Maximum total bytes copied from a single source directory (1 MB). */
-const MAX_COPY_BYTES_PER_DIR = 1_048_576;
-
-/**
- * Copy .md artifacts from a prior workspace into seeded/ subdirectories
- * of the new workspace. Returns warnings (not errors) for missing paths.
- *
- * errors-are-values: never throws; all failures produce warnings.
- * information-hiding: seeded/ is an implementation detail; callers only see seeded_from.
- */
-export async function seedFromPriorWorkspace(
-  sourceWorkspace: string,
-  targetWorkspace: string,
-): Promise<{ seeded: boolean; warnings: string[] }> {
-  const warnings: string[] = [];
-
-  // Validate: must be an absolute path
-  if (!isAbsolute(sourceWorkspace)) {
-    warnings.push(`seed_from must be an absolute path; got relative path: "${sourceWorkspace}"`);
-    return { seeded: false, warnings };
-  }
-
-  // Validate: must be within .canon/workspaces/ tree (path traversal guard)
-  const normalizedSource = sourceWorkspace.replace(/\\/g, "/");
-  if (!normalizedSource.includes(".canon/workspaces/")) {
-    warnings.push(
-      `seed_from path "${sourceWorkspace}" is not within a .canon/workspaces/ directory — invalid workspace path`,
-    );
-    return { seeded: false, warnings };
-  }
-
-  // Validate: source workspace must exist
-  if (!existsSync(sourceWorkspace)) {
-    warnings.push(`seed_from workspace does not exist: "${sourceWorkspace}"`);
-    return { seeded: false, warnings };
-  }
-
-  const subdirs = ["handoffs", "research"] as const;
-  let anySubdirExists = false;
-
-  for (const subdir of subdirs) {
-    const sourceDir = join(sourceWorkspace, subdir);
-    const targetDir = join(targetWorkspace, "seeded", subdir);
-
-    if (!existsSync(sourceDir)) {
-      warnings.push(
-        `seed_from: source directory "${subdir}" not found in "${sourceWorkspace}" — skipping`,
-      );
-      continue;
+/** Apply optional seed-from and run the legacy migration after workspace creation. */
+async function applyPostCreateSteps(
+  input: InitWorkspaceInput,
+  workspace: string,
+  projectDir: string,
+  result: InitWorkspaceResult,
+): Promise<void> {
+  if (input.seed_from) {
+    const seedResult = await seedFromPriorWorkspace(input.seed_from, workspace);
+    for (const warning of seedResult.warnings) {
+      console.warn(`[init-workspace] ${warning}`);
     }
+    if (seedResult.seeded) result.seeded_from = input.seed_from;
+  }
+  await runLegacyMigration(projectDir);
+}
 
-    anySubdirExists = true;
+type CreateNewWorkspaceOptions = {
+  input: InitWorkspaceInput;
+  branchDir: string;
+  sanitized: string;
+  baseSlug: string;
+  projectDir: string;
+  pluginDir: string;
+};
 
-    // Create target directory
-    await mkdir(targetDir, { recursive: true });
+/** Create a brand-new workspace (no collision, no resume). */
+async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<InitWorkspaceResult> {
+  const { input, branchDir, sanitized, baseSlug, projectDir, pluginDir } = opts;
+  const slug = await checkSlugCollision(branchDir, baseSlug);
+  const workspace = join(branchDir, slug);
+  await createWorkspace(projectDir, join(sanitized, slug));
 
-    // Read .md files and copy (skip others; enforce size cap)
-    let files: string[];
-    try {
-      files = await readdir(sourceDir);
-    } catch {
-      warnings.push(`seed_from: failed to read directory "${sourceDir}" — skipping`);
-      continue;
-    }
-
-    const mdFiles = files.filter((f) => f.endsWith(".md"));
-    let totalBytes = 0;
-
-    for (const file of mdFiles) {
-      const sourcePath = join(sourceDir, file);
-      const targetPath = join(targetDir, file);
-
-      try {
-        const content = await readFile(sourcePath);
-        if (totalBytes + content.length > MAX_COPY_BYTES_PER_DIR) {
-          warnings.push(
-            `seed_from: skipping "${file}" in "${subdir}" — 1MB per-directory copy cap reached`,
-          );
-          continue;
-        }
-        await copyFile(sourcePath, targetPath);
-        totalBytes += content.length;
-      } catch {
-        warnings.push(`seed_from: failed to copy "${file}" from "${subdir}" — skipping`);
-      }
-    }
+  const store = getExecutionStore(workspace);
+  const existingSession = store.getSession();
+  if (existingSession?.status === "active") {
+    const existingBoard = store.getBoard()!;
+    return {
+      board: existingBoard,
+      created: false,
+      resume_state: existingBoard.current_state,
+      session: existingSession,
+      slug: existingSession.slug,
+      workspace,
+    };
   }
 
-  if (!anySubdirExists) {
-    // No source directories found — create empty seeded/ dirs and return seeded: true
-    await mkdir(join(targetWorkspace, "seeded", "handoffs"), { recursive: true });
-    await mkdir(join(targetWorkspace, "seeded", "research"), { recursive: true });
-  }
+  const flow = await loadAndResolveFlow(pluginDir, input.flow_name);
+  await mkdir(join(workspace, "plans", slug), { recursive: true });
+  const board = initBoard(flow, input.task, input.base_commit);
+  const now = new Date().toISOString();
+  const session: Session = {
+    branch: input.branch,
+    created: now,
+    flow: input.flow_name,
+    original_task: input.original_input,
+    sanitized,
+    slug,
+    status: "active",
+    task: input.task,
+    tier: input.tier,
+  };
 
-  return { seeded: true, warnings };
+  return finalizeNewWorkspace(store, input, {
+    board,
+    flow,
+    pluginDir,
+    projectDir,
+    session,
+    slug,
+    workspace,
+  });
 }
 
 export async function initWorkspaceFlow(
@@ -599,64 +579,15 @@ export async function initWorkspaceFlow(
   const resumeResult = tryResumeWorkspace(candidateWorkspace, projectDir);
   if (resumeResult) return resumeResult;
 
-  const slug = await checkSlugCollision(branchDir, baseSlug);
-  const workspace = join(branchDir, slug);
-  await createWorkspace(projectDir, join(sanitized, slug));
-
-  const store = getExecutionStore(workspace);
-  const existingSession = store.getSession();
-  if (existingSession && existingSession.status === "active") {
-    const existingBoard = store.getBoard()!;
-    return {
-      board: existingBoard,
-      created: false,
-      resume_state: existingBoard.current_state,
-      session: existingSession,
-      slug: existingSession.slug,
-      workspace,
-    };
-  }
-
-  const flow = await loadAndResolveFlow(pluginDir, input.flow_name);
-  await mkdir(join(workspace, "plans", slug), { recursive: true });
-  const board = initBoard(flow, input.task, input.base_commit);
-
-  const now = new Date().toISOString();
-  const session: Session = {
-    branch: input.branch,
-    created: now,
-    flow: input.flow_name,
-    original_task: input.original_input,
-    sanitized,
-    slug,
-    status: "active",
-    task: input.task,
-    tier: input.tier,
-  };
-
-  const result = await finalizeNewWorkspace(store, input, {
-    board,
-    flow,
+  const result = await createNewWorkspace({
+    baseSlug,
+    branchDir,
+    input,
     pluginDir,
     projectDir,
-    session,
-    slug,
-    workspace,
+    sanitized,
   });
-
-  // Seed from prior workspace if requested (best-effort — never blocks init)
-  if (input.seed_from) {
-    const seedResult = await seedFromPriorWorkspace(input.seed_from, workspace);
-    for (const warning of seedResult.warnings) {
-      console.warn(`[init-workspace] ${warning}`);
-    }
-    if (seedResult.seeded) {
-      result.seeded_from = input.seed_from;
-    }
-  }
-
-  await runLegacyMigration(projectDir);
-
+  await applyPostCreateSteps(input, result.workspace, projectDir, result);
   return result;
 }
 

@@ -235,6 +235,54 @@ export type ResolveToolProfileOptions = {
 };
 
 /**
+ * Resolve the effective allowed list and any audit warnings for tool override.
+ * Returns the allowed list and optional warnings when a replace override grants disallowed tools.
+ */
+function resolveAllowedList(
+  agent: string,
+  base: AgentToolProfile,
+  overrides?: ToolOverrides,
+): { effectiveAllowed: string[]; warnings?: ToolScopeWarning[] } {
+  if (!overrides?.replace && !overrides?.allow) {
+    return { effectiveAllowed: base.allowed };
+  }
+  if (overrides.replace) {
+    // Audit: replace override may grant tools in the base disallowed list
+    const grantedDisallowed = overrides.replace.filter((t) => base.disallowed.includes(t));
+    const warnings: ToolScopeWarning[] | undefined =
+      grantedDisallowed.length > 0
+        ? [
+            {
+              agent,
+              event: "adr014_replace_override_grants_disallowed",
+              granted_disallowed: grantedDisallowed,
+            },
+          ]
+        : undefined;
+    return { effectiveAllowed: overrides.replace, warnings };
+  }
+  return { effectiveAllowed: [...base.allowed, ...overrides.allow!] };
+}
+
+/**
+ * Determine the permission mode for an agent spawn.
+ * Precedence: overrides.permission_mode > trustPermissionMode > worktree auto > read-only auto > prompt
+ */
+function resolvePermissionMode(
+  base: AgentToolProfile,
+  overrides?: ToolOverrides,
+  worktreePath?: string,
+  trustPermissionMode?: "auto" | "prompt",
+): "auto" | "prompt" | "deny_unknown" {
+  if (overrides?.permission_mode) return overrides.permission_mode;
+  if (trustPermissionMode) return trustPermissionMode;
+  if (worktreePath) return "auto";
+  // Read-only agents (Write+Edit both disallowed at base) are safe everywhere
+  const isReadOnly = base.disallowed.includes("Write") && base.disallowed.includes("Edit");
+  return isReadOnly ? "auto" : "prompt";
+}
+
+/**
  * Resolve the final tool profile for an agent spawn.
  *
  * Resolution algorithm:
@@ -249,56 +297,20 @@ export const resolveToolProfile = (
   options?: ResolveToolProfileOptions,
 ): ResolvedProfile => {
   const overrides = options?.overrides;
-  const worktreePath = options?.worktreePath;
   const normalizedAgent = agent.startsWith("canon:") ? agent.slice("canon:".length) : agent;
   const base = AGENT_TOOL_PROFILES[normalizedAgent] ?? EMPTY_PROFILE;
 
-  // Resolve effective allowed list
-  let effectiveAllowed: string[];
-  let warnings: ToolScopeWarning[] | undefined;
-  if (overrides?.replace) {
-    // Audit: collect a structured warning when replace grants tools that are in the
-    // base disallowed list. This is permitted by the caller but must be persisted
-    // to the SQLite event log — callers are responsible for forwarding warnings.
-    const grantedDisallowed = overrides.replace.filter((t) => base.disallowed.includes(t));
-    if (grantedDisallowed.length > 0) {
-      warnings = [
-        {
-          agent,
-          event: "adr014_replace_override_grants_disallowed",
-          granted_disallowed: grantedDisallowed,
-        },
-      ];
-    }
-    effectiveAllowed = overrides.replace;
-  } else if (overrides?.allow) {
-    effectiveAllowed = [...base.allowed, ...overrides.allow];
-  } else {
-    effectiveAllowed = base.allowed;
-  }
-
-  // Resolve effective disallowed list
+  const { effectiveAllowed, warnings } = resolveAllowedList(agent, base, overrides);
   const effectiveDisallowed: string[] = overrides?.deny
     ? [...base.disallowed, ...overrides.deny]
     : base.disallowed;
-
-  // Disallowed wins — filter out any disallowed tools from allowed
   const finalAllowed = effectiveAllowed.filter((t) => !effectiveDisallowed.includes(t));
-
-  // Determine permission mode.
-  // Precedence chain:
-  //   1. overrides.permission_mode — explicit flow override always wins
-  //   2. trustPermissionMode — KG-informed trust resolver result
-  //   3. worktreePath fallback — worktree_path signals agent works in a sandboxed directory
-  //      (Canon worktree or Agent tool worktree). When present, auto permission mode is safe.
-  //   4. isReadOnly fallback — agents with Write and Edit in their BASE disallowed list cannot
-  //      modify files regardless of isolation; auto-approve is safe for them everywhere.
-  //      Uses base.disallowed (not effectiveDisallowed) so flow overrides cannot widen the auto grant.
-  const isReadOnly = base.disallowed.includes("Write") && base.disallowed.includes("Edit");
-  const permissionMode: "auto" | "prompt" | "deny_unknown" =
-    overrides?.permission_mode ??
-    options?.trustPermissionMode ??
-    (worktreePath ? "auto" : isReadOnly ? "auto" : "prompt");
+  const permissionMode = resolvePermissionMode(
+    base,
+    overrides,
+    options?.worktreePath,
+    options?.trustPermissionMode,
+  );
 
   const result: ResolvedProfile = {
     disallowed_tools: effectiveDisallowed,
