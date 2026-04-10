@@ -1,0 +1,31 @@
+# Canon runbook: review-only
+#
+# Phase 2 conversion of flows/review-only.md. Consumed by lead-mode.ts
+# when CANON_AGENT_TEAMS_MODE=on; legacy drive_flow handles
+# flows/review-only.md when the flag is off.
+#
+# Source flow:      flows/review-only.md
+# Fragments read:   none
+# Divergences from the legacy runtime are documented in
+# docs/phase-2-conversion-notes.md §review-only.
+#
+# Role sequence:
+#   1. canon-reviewer — single pass against the diff; HITL after on
+#                       non-clean verdict so the user can triage findings.
+#
+# Wave: none. The legacy flow has a `cluster_by: layer` annotation that
+# lets the runtime fan out into per-layer reviewers when the diff exceeds
+# `large_diff_threshold`. The Phase 2 runbook does NOT replicate that
+# auto-fanout (see conversion notes — this is an observable divergence).
+
+name: review-only
+description: Single-pass principle + drift review of the current diff
+tier: small
+
+steps:
+  - role: canon-reviewer
+    task_type: review
+    artifact: review
+    artifact_path: reviews/REVIEW.md
+    hitl: after_if_verdict_not_clean
+    required_artifacts: []

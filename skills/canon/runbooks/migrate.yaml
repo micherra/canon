@@ -1,0 +1,103 @@
+# Canon runbook: migrate
+#
+# Phase 2 conversion of flows/migrate.md. Consumed by lead-mode.ts when
+# CANON_AGENT_TEAMS_MODE=on; legacy drive_flow handles flows/migrate.md
+# when the flag is off.
+#
+# Source flow:      flows/migrate.md
+# Fragments read:   user-checkpoint, verify-fix-loop, security-scan,
+#                   context-sync, review-fix-loop, pre-launch-check,
+#                   ship-done
+# Divergences from the legacy runtime are documented in
+# docs/phase-2-conversion-notes.md §migrate.
+#
+# Role sequence:
+#   1. canon-researcher — migration scope + rollback plan (task_type=
+#                         migrate; the legacy flow spawns two parallel
+#                         researcher instances, we compress to one per
+#                         the linear-runbook constraint — see notes)
+#   2. canon-architect  — staged migration plan + rollback instructions
+#                         (HITL after, matches approval_gate and
+#                         user-checkpoint)
+#   3. canon-implementor WAVE — one teammate per stage/task id
+#   4. canon-tester     — verify each stage left the system working
+#   5. canon-security   — audit migration surface (data exposure,
+#                         credential handling, permission changes);
+#                         task_type=security_audit
+#   6. canon-scribe     — sync docs
+#   7. canon-reviewer   — principle + drift review
+#   8. canon-shipper    — PR + changelog
+
+name: migrate
+description: Staged migration with rollback planning, per-stage wave, security audit, and review
+tier: medium
+
+steps:
+  - role: canon-researcher
+    task_type: migrate
+    artifact: research_synthesis
+    artifact_path: research/SYNTHESIS.md
+    hitl: false
+    required_artifacts: []
+
+  - role: canon-architect
+    task_type: migrate
+    artifact: plan_index
+    artifact_path: plans/INDEX.md
+    hitl: after
+    required_artifacts:
+      - research_synthesis
+
+  - role: canon-implementor
+    task_type: migrate
+    artifact: implementation_summary
+    artifact_path: plans/<slug>/<task_id>-SUMMARY.md
+    hitl: false
+    wave: true
+    required_artifacts:
+      - plan_index
+
+  - role: canon-tester
+    task_type: test
+    artifact: test_report
+    artifact_path: reviews/TEST-REPORT.md
+    hitl: false
+    required_artifacts:
+      - plan_index
+      - implementation_summary
+
+  - role: canon-security
+    task_type: security_audit
+    artifact: security_assessment
+    artifact_path: reviews/SECURITY.md
+    hitl: after_if_verdict_not_clean
+    required_artifacts:
+      - implementation_summary
+
+  - role: canon-scribe
+    task_type: scribe
+    artifact: context_sync
+    artifact_path: decisions/CONTEXT-SYNC.md
+    hitl: false
+    required_artifacts:
+      - implementation_summary
+
+  - role: canon-reviewer
+    task_type: review
+    artifact: review
+    artifact_path: reviews/REVIEW.md
+    hitl: after_if_verdict_not_clean
+    required_artifacts:
+      - implementation_summary
+      - test_report
+      - security_assessment
+
+  - role: canon-shipper
+    task_type: ship
+    artifact: ship_notes
+    artifact_path: plans/SHIP.md
+    hitl: false
+    required_artifacts:
+      - review
+      - test_report
+      - security_assessment

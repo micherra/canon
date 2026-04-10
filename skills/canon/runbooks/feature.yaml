@@ -1,0 +1,90 @@
+# Canon runbook: feature
+#
+# Phase 2 conversion of flows/feature.md. Consumed by lead-mode.ts when
+# CANON_AGENT_TEAMS_MODE=on. The legacy flow runtime continues to execute
+# flows/feature.md when the flag is off — this runbook does not replace
+# the flow file, it is a parallel expression of the same pipeline.
+#
+# Source flow:      flows/feature.md
+# Fragments read:   user-checkpoint, context-sync, verify-fix-loop,
+#                   review-fix-loop, pre-launch-check, ship-done
+# Divergences from the legacy runtime are documented in
+# docs/phase-2-conversion-notes.md §feature.
+#
+# Role sequence (see README.md for schema):
+#   1. canon-researcher  — compress the feature scope (optional recon step;
+#                          the legacy flow enters directly at design, we add
+#                          a short research pass to match the other medium-
+#                          tier runbooks and give the architect upstream
+#                          context)
+#   2. canon-architect   — write the plan index (HITL after for user
+#                          checkpoint; mirrors approval_gate on design)
+#   3. canon-implementor — WAVE, one teammate per task id in the plan index
+#   4. canon-tester      — run the test suite against the wave output
+#   5. canon-scribe      — context-sync any contract-level changes
+#   6. canon-reviewer    — principle + drift review (HITL after on
+#                          non-clean verdict; mirrors review-fix-loop)
+#   7. canon-shipper     — PR description and changelog
+
+name: feature
+description: Design, implement as a wave, test, sync context, review, ship
+tier: medium
+
+steps:
+  - role: canon-researcher
+    task_type: research
+    artifact: research_synthesis
+    artifact_path: research/SYNTHESIS.md
+    hitl: false
+    required_artifacts: []
+
+  - role: canon-architect
+    task_type: design
+    artifact: plan_index
+    artifact_path: plans/INDEX.md
+    hitl: after
+    required_artifacts:
+      - research_synthesis
+
+  - role: canon-implementor
+    task_type: implement
+    artifact: implementation_summary
+    artifact_path: plans/<slug>/<task_id>-SUMMARY.md
+    hitl: false
+    wave: true
+    required_artifacts:
+      - plan_index
+
+  - role: canon-tester
+    task_type: test
+    artifact: test_report
+    artifact_path: reviews/TEST-REPORT.md
+    hitl: false
+    required_artifacts:
+      - plan_index
+
+  - role: canon-scribe
+    task_type: scribe
+    artifact: context_sync
+    artifact_path: decisions/CONTEXT-SYNC.md
+    hitl: false
+    required_artifacts:
+      - plan_index
+
+  - role: canon-reviewer
+    task_type: review
+    artifact: review
+    artifact_path: reviews/REVIEW.md
+    hitl: after_if_verdict_not_clean
+    required_artifacts:
+      - plan_index
+      - test_report
+
+  - role: canon-shipper
+    task_type: ship
+    artifact: ship_notes
+    artifact_path: plans/SHIP.md
+    hitl: false
+    required_artifacts:
+      - review
+      - test_report

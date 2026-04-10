@@ -1,0 +1,48 @@
+# Canon runbook: test-gap
+#
+# Phase 2 conversion of flows/test-gap.md. Consumed by lead-mode.ts when
+# CANON_AGENT_TEAMS_MODE=on; legacy drive_flow handles flows/test-gap.md
+# when the flag is off.
+#
+# Source flow:      flows/test-gap.md
+# Fragments read:   review-fix-loop
+# Divergences from the legacy runtime are documented in
+# docs/phase-2-conversion-notes.md §test-gap.
+#
+# Role sequence:
+#   1. canon-researcher — coverage scan (task_type=test_gap); identifies
+#                         untested modules, missing branches, missing
+#                         edge and integration cases
+#   2. canon-tester     — write tests to fill the gaps and run the suite
+#   3. canon-reviewer   — principle + drift review of the new tests
+#                         (HITL after on non-clean verdict)
+#
+# Wave: none. This is a small-tier flow with no fan-out.
+
+name: test-gap
+description: Scan coverage gaps, write tests, review for compliance
+tier: small
+
+steps:
+  - role: canon-researcher
+    task_type: test_gap
+    artifact: research_synthesis
+    artifact_path: research/SYNTHESIS.md
+    hitl: false
+    required_artifacts: []
+
+  - role: canon-tester
+    task_type: test_gap
+    artifact: test_report
+    artifact_path: reviews/TEST-REPORT.md
+    hitl: false
+    required_artifacts:
+      - research_synthesis
+
+  - role: canon-reviewer
+    task_type: review
+    artifact: review
+    artifact_path: reviews/REVIEW.md
+    hitl: after_if_verdict_not_clean
+    required_artifacts:
+      - test_report

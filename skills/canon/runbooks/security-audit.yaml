@@ -1,0 +1,42 @@
+# Canon runbook: security-audit
+#
+# Phase 2 conversion of flows/security-audit.md. Consumed by lead-mode.ts
+# when CANON_AGENT_TEAMS_MODE=on; legacy drive_flow handles
+# flows/security-audit.md when the flag is off.
+#
+# Source flow:      flows/security-audit.md
+# Fragments read:   security-scan
+# Divergences from the legacy runtime are documented in
+# docs/phase-2-conversion-notes.md §security-audit.
+#
+# Role sequence:
+#   1. canon-security — scan for vulnerabilities (task_type=security_audit);
+#                       HITL after on non-clean verdict so critical
+#                       findings pause for human triage
+#   2. canon-reviewer — principle compliance review of the same changes,
+#                       cross-referencing the security assessment
+#
+# Wave: none. The legacy flow has a parallel-per fix loop
+# (`fix-security`) that iterates on critical findings. The Phase 2
+# runbook does NOT replicate that loop — fixes are left to a follow-up
+# flow (feature / refactor) triggered by the user after HITL review.
+
+name: security-audit
+description: Security audit followed by principle compliance review
+tier: small
+
+steps:
+  - role: canon-security
+    task_type: security_audit
+    artifact: security_assessment
+    artifact_path: reviews/SECURITY.md
+    hitl: after_if_verdict_not_clean
+    required_artifacts: []
+
+  - role: canon-reviewer
+    task_type: review
+    artifact: review
+    artifact_path: reviews/REVIEW.md
+    hitl: after_if_verdict_not_clean
+    required_artifacts:
+      - security_assessment
