@@ -246,4 +246,3 @@ describe("appendFlowRun and computeAnalytics", () => {
     expect(analytics.total_runs).toBe(1);
   });
 });
-

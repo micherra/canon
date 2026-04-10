@@ -17,10 +17,7 @@
  * - init-workspace iteration persistence
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 // shouldApprovalGate and shouldApprovalGateWaveBoundary (pure functions)
 

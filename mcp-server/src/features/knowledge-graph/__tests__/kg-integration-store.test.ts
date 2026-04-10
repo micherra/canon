@@ -16,7 +16,7 @@ import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { EntityRow, FileRow } from "@graph/kg-types.ts";
 import { initParsers } from "@graph/kg-wasm-parser.ts";
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {

@@ -82,9 +82,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { buildDebatePrompt, inspectDebateProgress } from "@features/orchestration/engine/debate.ts";
 import { clusterDiff } from "@features/orchestration/services/diff-cluster.ts";
-import {
-  readWaveGuidance,
-} from "@features/orchestration/services/wave-briefing.ts";
+import { readWaveGuidance } from "@features/orchestration/services/wave-briefing.ts";
 import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import type { SpawnPromptInput } from "../model/types.ts";
 

@@ -21,8 +21,8 @@
  */
 
 import { computeUnifiedBlastRadius } from "@graph/kg-blast-radius.ts";
-import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 import { KgQuery } from "@graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { FileRow } from "@graph/kg-types.ts";

@@ -1,12 +1,4 @@
-/**
- * Knowledge Graph Store and Query Tests (Part 1)
- *
- * Uses in-memory SQLite (:memory:) for speed and isolation.
- * Each describe block gets a fresh DB via beforeEach.
- */
-
-import { KgQuery } from "@graph/kg-query.ts";
-import { initDatabase, runMigrations, SCHEMA_VERSION } from "@graph/kg-schema.ts";
+import { initDatabase, SCHEMA_VERSION } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { EntityRow, FileRow } from "@graph/kg-types.ts";
 import type Database from "better-sqlite3";
@@ -53,7 +45,7 @@ function makeEntityRow(
  * Entity edges: funcA->funcB (calls), funcB->funcC (calls)
  * File edges:   A imports B, B imports C
  */
-function populateTestGraph(store: KgStore): {
+function _populateTestGraph(store: KgStore): {
   fileA: FileRow;
   fileB: FileRow;
   fileC: FileRow;

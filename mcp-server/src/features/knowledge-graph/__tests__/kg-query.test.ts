@@ -548,4 +548,3 @@ describe("KgQuery.getAllFileDegrees()", () => {
     expect(map.size).toBe(0);
   });
 });
-

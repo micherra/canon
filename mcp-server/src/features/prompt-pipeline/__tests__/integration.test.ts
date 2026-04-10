@@ -83,9 +83,7 @@ vi.mock("@domains/flows/skip-when.ts", () => ({
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { resolveContextInjections } from "@features/orchestration/services/inject-context.ts";
-import {
-  assembleWaveBriefing,
-} from "@features/orchestration/services/wave-briefing.ts";
+import { assembleWaveBriefing } from "@features/orchestration/services/wave-briefing.ts";
 import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import type { SpawnPromptInput } from "../model/types.ts";
 
@@ -548,4 +546,3 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
     expect(resultWith.prompts[0].prompt).toContain("Plain text findings");
   });
 });
-

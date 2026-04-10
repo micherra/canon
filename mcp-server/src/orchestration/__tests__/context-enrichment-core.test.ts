@@ -11,12 +11,9 @@
  *   - Budget enforcement: output truncated with [truncated] marker
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Module mocks — must be hoisted to top of file
 
@@ -107,7 +104,7 @@ function makeGitOk(stdout: string) {
   return { duration_ms: 20, exitCode: 0, ok: true, stderr: "", stdout, timedOut: false };
 }
 
-function makeGitFail() {
+function _makeGitFail() {
   return {
     duration_ms: 5,
     exitCode: 128,

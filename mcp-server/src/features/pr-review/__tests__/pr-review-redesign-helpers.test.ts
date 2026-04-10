@@ -8,11 +8,10 @@
  * reproduced verbatim from the component and tested as a unit.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { PrFileInfo } from "../tools/pr-review-data.ts";
-import { generateNarrative } from "../tools/pr-review-data-helpers.ts";
 
-function makeFile(path: string, layer: string, overrides: Partial<PrFileInfo> = {}): PrFileInfo {
+function _makeFile(path: string, layer: string, overrides: Partial<PrFileInfo> = {}): PrFileInfo {
   return {
     bucket: "low-risk",
     layer,

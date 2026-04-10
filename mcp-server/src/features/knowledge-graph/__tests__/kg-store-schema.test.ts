@@ -129,9 +129,7 @@ describe("Schema v3 — vector tables", () => {
   test("summary_vectors accepts insert with valid embedding", () => {
     const jsonEmbedding = `[${new Array(384).fill("0.2").join(",")}]`;
     expect(() =>
-      db.exec(
-        `INSERT INTO summary_vectors (summary_id, embedding) VALUES (1, '${jsonEmbedding}')`,
-      ),
+      db.exec(`INSERT INTO summary_vectors (summary_id, embedding) VALUES (1, '${jsonEmbedding}')`),
     ).not.toThrow();
   });
 });

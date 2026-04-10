@@ -52,8 +52,8 @@ import {
   assembleWaveBriefing,
   readWaveGuidance,
 } from "@features/orchestration/services/wave-briefing.ts";
-import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 import { KgQuery } from "@graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { PromptContext } from "../model/types.ts";

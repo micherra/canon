@@ -16,8 +16,8 @@
  */
 
 import type { IKgQuery, IKgStore } from "@domains/knowledge-graph/kg-store.interface.ts";
-import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 import { KgQuery } from "@graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 import { KgStore } from "@graph/kg-store.ts";
 
 /**

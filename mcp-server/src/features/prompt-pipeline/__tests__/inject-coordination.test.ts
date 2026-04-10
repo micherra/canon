@@ -396,4 +396,3 @@ describe("injectCoordination — metrics footer", () => {
     expect(result.prompts[0].prompt).toContain("turns");
   });
 });
-

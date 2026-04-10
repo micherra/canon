@@ -5,14 +5,10 @@ import type {
   FragmentDefinition,
   ResolvedFlow,
 } from "../flow-definition-schemas.ts";
-import {
-  loadAndResolveFlow,
-  parseFlowContent,
-  resolveFragments,
-} from "../flow-parser.ts";
+import { parseFlowContent, resolveFragments } from "../flow-parser.ts";
 import { validateFlow } from "../flow-parser-validation.ts";
 
-const pluginDir = resolve(process.cwd(), "..");
+const _pluginDir = resolve(process.cwd(), "..");
 
 // parseFlowContent
 

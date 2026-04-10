@@ -487,5 +487,4 @@ describe("Knowledge Graph Store — Entities and Query", () => {
       });
     });
   });
-
 });

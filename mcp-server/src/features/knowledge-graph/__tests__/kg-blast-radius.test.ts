@@ -5,10 +5,7 @@
  * and the treatment of test files vs. production files.
  */
 
-import {
-  type BlastRadiusFile,
-  classifyBlastSeverity,
-} from "@graph/kg-blast-radius.ts";
+import { type BlastRadiusFile, classifyBlastSeverity } from "@graph/kg-blast-radius.ts";
 import { describe, expect, it } from "vitest";
 
 function makeFile(

@@ -5,9 +5,7 @@
  * maxDepth option, circular reference handling, and test file detection.
  */
 
-import {
-  computeUnifiedBlastRadius,
-} from "@graph/kg-blast-radius.ts";
+import { computeUnifiedBlastRadius } from "@graph/kg-blast-radius.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { EntityRow, FileRow } from "@graph/kg-types.ts";
