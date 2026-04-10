@@ -144,6 +144,7 @@ type HandleCompleteFlowOptions = {
   now: string;
   projectDir: string;
   workspacePath: string;
+  version: number;
 };
 
 /** Append a FlowRunEntry to analytics. Best-effort — never throws. */
@@ -186,7 +187,7 @@ async function appendFlowAnalytics(
 }
 
 async function handleCompleteFlow(opts: HandleCompleteFlowOptions): Promise<Board> {
-  const { store, board, now, projectDir, workspacePath } = opts;
+  const { store, board, now, projectDir, workspacePath, version } = opts;
   const currentEntry = board.states[board.current_state];
   const updatedBoard: Board = {
     ...board,
@@ -209,12 +210,17 @@ async function handleCompleteFlow(opts: HandleCompleteFlowOptions): Promise<Boar
         status: "done",
       });
     }
-    store.updateExecution({
-      blocked: null,
-      completed_at: now,
-      last_updated: now,
-      status: "completed",
-    });
+    store.updateExecutionVersioned(
+      {
+        blocked: null,
+        completed_at: now,
+        last_updated: now,
+        status: "completed",
+      },
+      version,
+    );
+    // Note: version conflicts on complete_flow are ignored — completion is best-effort
+    // once the flow has reached terminal state. The state upsert above is the critical write.
   });
 
   const session = store.getSession();
@@ -257,6 +263,7 @@ function handleEnterState(
   board: Board,
   input: UpdateBoardInput,
   now: string,
+  version: number,
 ): ActionResult {
   if (!input.state_id) return toolError("INVALID_INPUT", "enter_state requires state_id");
   const enterResult = enterState(board, input.state_id);
@@ -264,8 +271,12 @@ function handleEnterState(
     return toolError("INVALID_INPUT", enterResult.reason, false);
   }
   const updatedBoard = enterResult.board;
-  store.transaction(() => {
-    store.updateExecution({ current_state: input.state_id!, last_updated: now });
+  const txResult = store.transaction(() => {
+    const vr = store.updateExecutionVersioned(
+      { current_state: input.state_id!, last_updated: now },
+      version,
+    );
+    if (!vr.updated) return { ok: false as const, currentVersion: vr.currentVersion };
     const stateEntry = updatedBoard.states[input.state_id!];
     if (stateEntry)
       store.upsertState(input.state_id!, {
@@ -282,7 +293,15 @@ function handleEnterState(
         max: iter.max,
       });
     }
+    return { ok: true as const };
   });
+  if (!txResult.ok) {
+    return toolError(
+      "BOARD_LOCKED",
+      `Board version conflict: expected version was stale (current: ${txResult.currentVersion}). Retry the operation.`,
+      true,
+    );
+  }
   return { board: updatedBoard };
 }
 
@@ -291,6 +310,7 @@ function handleSkipState(
   board: Board,
   input: UpdateBoardInput,
   now: string,
+  version: number,
 ): ActionResult {
   if (!input.state_id) return toolError("INVALID_INPUT", "skip_state requires state_id");
   if (input.next_state_id && !board.states[input.next_state_id]) {
@@ -309,18 +329,30 @@ function handleSkipState(
       ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
       last_updated: now,
     };
-    store.transaction(() => {
+    const txResult = store.transaction(() => {
       store.upsertState(input.state_id!, {
         ...updatedBoard.states[input.state_id!],
         entries: stateEntry.entries,
         status: "skipped",
       });
-      store.updateExecution({
-        last_updated: now,
-        skipped: newSkipped,
-        ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
-      });
+      const vr = store.updateExecutionVersioned(
+        {
+          last_updated: now,
+          skipped: newSkipped,
+          ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
+        },
+        version,
+      );
+      if (!vr.updated) return { ok: false as const, currentVersion: vr.currentVersion };
+      return { ok: true as const };
     });
+    if (!txResult.ok) {
+      return toolError(
+        "BOARD_LOCKED",
+        `Board version conflict: expected version was stale (current: ${txResult.currentVersion}). Retry the operation.`,
+        true,
+      );
+    }
     return { board: updatedBoard };
   }
   return { board };
@@ -331,6 +363,7 @@ function handleSetWaveProgress(
   board: Board,
   input: UpdateBoardInput,
   now: string,
+  version: number,
 ): ActionResult {
   if (!input.state_id) return toolError("INVALID_INPUT", "set_wave_progress requires state_id");
   if (!input.wave_data) return toolError("INVALID_INPUT", "set_wave_progress requires wave_data");
@@ -353,7 +386,7 @@ function handleSetWaveProgress(
       },
     },
   };
-  store.transaction(() => {
+  const txResult = store.transaction(() => {
     store.upsertState(input.state_id!, {
       ...(stateEntry ?? { entries: 0, status: "pending" as const }),
       entries: stateEntry?.entries ?? 0,
@@ -362,8 +395,17 @@ function handleSetWaveProgress(
       wave_results: newWaveResults,
       wave_total: input.wave_data!.wave_total,
     });
-    store.updateExecution({ last_updated: now });
+    const vr = store.updateExecutionVersioned({ last_updated: now }, version);
+    if (!vr.updated) return { ok: false as const, currentVersion: vr.currentVersion };
+    return { ok: true as const };
   });
+  if (!txResult.ok) {
+    return toolError(
+      "BOARD_LOCKED",
+      `Board version conflict: expected version was stale (current: ${txResult.currentVersion}). Retry the operation.`,
+      true,
+    );
+  }
   return { board: updatedBoard };
 }
 
@@ -391,93 +433,115 @@ async function applyAffectedFilesClaims(
   }
 }
 
-function handleBlock(
-  store: ReturnType<typeof getExecutionStore>,
-  board: Board,
-  input: UpdateBoardInput,
-  now: string,
-): ActionResult {
-  if (!input.state_id) return toolError("INVALID_INPUT", "block requires state_id");
-  const blocked = setBlocked(board, input.state_id, input.blocked_reason ?? "No reason provided");
-  store.transaction(() => {
-    store.updateExecution({ blocked: blocked.blocked, last_updated: now });
-    const blockedState = blocked.states[input.state_id!];
-    if (blockedState)
-      store.upsertState(input.state_id!, {
-        ...blockedState,
-        entries: blockedState.entries,
-        status: "blocked",
-      });
-  });
-  return { board: blocked };
-}
-
-function handleUnblock(
-  store: ReturnType<typeof getExecutionStore>,
-  board: Board,
-  input: UpdateBoardInput,
-  now: string,
-): ActionResult {
-  if (!input.state_id) return toolError("INVALID_INPUT", "unblock requires state_id");
-  const stateEntry = board.states[input.state_id];
-  const unblocked = {
-    ...board,
-    blocked: null,
-    last_updated: now,
-    states: {
-      ...board.states,
-      [input.state_id]: { ...stateEntry, error: undefined, status: "in_progress" as const },
-    },
-  };
-  store.transaction(() => {
-    store.updateExecution({ blocked: null, last_updated: now });
-    const st = unblocked.states[input.state_id!];
-    if (st)
-      store.upsertState(input.state_id!, { ...st, entries: st.entries, status: "in_progress" });
-  });
-  return { board: unblocked };
-}
-
-async function handleSetMetadata(
-  store: ReturnType<typeof getExecutionStore>,
-  board: Board,
-  input: UpdateBoardInput,
-  now: string,
-): Promise<ActionResult> {
-  if (!input.metadata) return toolError("INVALID_INPUT", "set_metadata requires metadata");
-  let metadata = { ...(board.metadata ?? {}), ...input.metadata };
-  store.transaction(() => {
-    store.updateExecution({ last_updated: now, metadata });
-  });
-
-  if (input.metadata.affected_files && typeof input.metadata.affected_files === "string") {
-    const projectDir = input.project_dir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
-    metadata = await applyAffectedFilesClaims(
-      store,
-      metadata,
-      input.metadata.affected_files,
-      projectDir,
-    );
-    store.updateExecution({ metadata });
-  }
-
-  return { board: { ...board, last_updated: now, metadata } };
-}
-
 /** Handle block/unblock/set_metadata inline actions. */
 async function handleInlineAction(
   store: ReturnType<typeof getExecutionStore>,
   board: Board,
   input: UpdateBoardInput,
   now: string,
+  version: number,
 ): Promise<ActionResult | ToolResult<UpdateBoardResult>> {
   switch (input.action) {
-    case "block":
-      return handleBlock(store, board, input, now);
-    case "unblock":
-      return handleUnblock(store, board, input, now);
-    case "set_metadata":
-      return handleSetMetadata(store, board, input, now);
+    case "block": {
+      if (!input.state_id) return toolError("INVALID_INPUT", "block requires state_id");
+      const blocked = setBlocked(
+        board,
+        input.state_id,
+        input.blocked_reason ?? "No reason provided",
+      );
+      const blockTxResult = store.transaction(() => {
+        const vr = store.updateExecutionVersioned(
+          { blocked: blocked.blocked, last_updated: now },
+          version,
+        );
+        if (!vr.updated) return { ok: false as const, currentVersion: vr.currentVersion };
+        const blockedState = blocked.states[input.state_id!];
+        if (blockedState)
+          store.upsertState(input.state_id!, {
+            ...blockedState,
+            entries: blockedState.entries,
+            status: "blocked",
+          });
+        return { ok: true as const };
+      });
+      if (!blockTxResult.ok) {
+        return toolError(
+          "BOARD_LOCKED",
+          `Board version conflict: expected version was stale (current: ${blockTxResult.currentVersion}). Retry the operation.`,
+          true,
+        );
+      }
+      return { board: blocked };
+    }
+    case "unblock": {
+      if (!input.state_id) return toolError("INVALID_INPUT", "unblock requires state_id");
+      const stateEntry = board.states[input.state_id];
+      const unblocked = {
+        ...board,
+        blocked: null,
+        last_updated: now,
+        states: {
+          ...board.states,
+          [input.state_id]: { ...stateEntry, error: undefined, status: "in_progress" as const },
+        },
+      };
+      const unblockTxResult = store.transaction(() => {
+        const vr = store.updateExecutionVersioned({ blocked: null, last_updated: now }, version);
+        if (!vr.updated) return { ok: false as const, currentVersion: vr.currentVersion };
+        const st = unblocked.states[input.state_id!];
+        if (st)
+          store.upsertState(input.state_id!, {
+            ...st,
+            entries: st.entries,
+            status: "in_progress",
+          });
+        return { ok: true as const };
+      });
+      if (!unblockTxResult.ok) {
+        return toolError(
+          "BOARD_LOCKED",
+          `Board version conflict: expected version was stale (current: ${unblockTxResult.currentVersion}). Retry the operation.`,
+          true,
+        );
+      }
+      return { board: unblocked };
+    }
+    case "set_metadata": {
+      if (!input.metadata) return toolError("INVALID_INPUT", "set_metadata requires metadata");
+      let metadata = { ...(board.metadata ?? {}), ...input.metadata };
+      const metaTxResult = store.transaction(() => {
+        const vr = store.updateExecutionVersioned(
+          { last_updated: now, metadata },
+          version,
+        );
+        if (!vr.updated) return { ok: false as const, currentVersion: vr.currentVersion };
+        return { ok: true as const };
+      });
+      if (!metaTxResult.ok) {
+        return toolError(
+          "BOARD_LOCKED",
+          `Board version conflict: expected version was stale (current: ${metaTxResult.currentVersion}). Retry the operation.`,
+          true,
+        );
+      }
+
+      // If affected_files metadata was set, register file claims and check for overlaps
+      if (input.metadata.affected_files && typeof input.metadata.affected_files === "string") {
+        const projectDir = input.project_dir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
+        metadata = await applyAffectedFilesClaims(
+          store,
+          metadata,
+          input.metadata.affected_files,
+          projectDir,
+        );
+        if (metadata.claim_warnings) {
+          // Best-effort: read current version for this follow-up update
+          store.updateExecutionVersioned({ metadata }, store.getVersion());
+        }
+      }
+
+      return { board: { ...board, last_updated: now, metadata } };
+    }
     default:
       return toolError("INVALID_INPUT", `Unknown action: ${(input as UpdateBoardInput).action}`);
   }
@@ -490,15 +554,17 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
     return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
   let board: Board = boardOrNull;
   const now = new Date().toISOString();
+  // Read version once for optimistic locking — all handlers use this snapshot version.
+  const version = store.getVersion();
 
   let result: ActionResult;
 
   switch (input.action) {
     case "enter_state":
-      result = handleEnterState(store, board, input, now);
+      result = handleEnterState(store, board, input, now, version);
       break;
     case "skip_state":
-      result = handleSkipState(store, board, input, now);
+      result = handleSkipState(store, board, input, now, version);
       break;
     case "complete_flow": {
       board = await handleCompleteFlow({
@@ -506,16 +572,17 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
         now,
         projectDir: input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd(),
         store,
+        version,
         workspacePath: input.workspace,
       });
       result = { board };
       break;
     }
     case "set_wave_progress":
-      result = handleSetWaveProgress(store, board, input, now);
+      result = handleSetWaveProgress(store, board, input, now, version);
       break;
     default:
-      result = await handleInlineAction(store, board, input, now);
+      result = await handleInlineAction(store, board, input, now, version);
       break;
   }
 

@@ -8,7 +8,7 @@
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { syncBoardToStore } from "../board-sync.ts";
 
 function makeStore(): ExecutionStore {
@@ -190,5 +190,133 @@ describe("syncBoardToStore", () => {
 
     const exec = store.getExecution();
     expect(exec?.last_updated).toBe(newTimestamp);
+  });
+});
+
+describe("syncBoardToStore — transaction and versioning", () => {
+  let store: ExecutionStore;
+
+  beforeEach(() => {
+    store = makeStore();
+    store.initExecution(BASE_INIT_PARAMS);
+  });
+
+  test("returns ok:true with newVersion on success", () => {
+    const board = makeBoard({ current_state: "implement" });
+    const result = syncBoardToStore(store, board);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.newVersion).toBe(2); // started at 1, incremented to 2
+    }
+  });
+
+  test("increments version monotonically on each call", () => {
+    const board = makeBoard({ current_state: "implement" });
+
+    const r1 = syncBoardToStore(store, board);
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    expect(r1.newVersion).toBe(2);
+
+    const r2 = syncBoardToStore(store, makeBoard({ current_state: "test" }));
+    expect(r2.ok).toBe(true);
+    if (!r2.ok) return;
+    expect(r2.newVersion).toBe(3);
+  });
+
+  test("returns ok:false on version conflict", () => {
+    const board = makeBoard({ current_state: "implement" });
+    // Pass a stale version (0, but actual is 1)
+    const result = syncBoardToStore(store, board, 0);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("version_conflict");
+      expect(result.currentVersion).toBe(1);
+    }
+  });
+
+  test("rolls back all writes on version conflict — no partial state", () => {
+    const board = makeBoard({
+      current_state: "implement",
+      states: {
+        research: { entries: 1, status: "done" },
+      },
+    });
+
+    // First write succeeds
+    syncBoardToStore(store, board);
+
+    // Now simulate stale version by passing version 0 (current is 2)
+    const conflictBoard = makeBoard({
+      current_state: "test",
+      states: {
+        test: { entries: 1, status: "in_progress" },
+      },
+    });
+    const result = syncBoardToStore(store, conflictBoard, 0);
+
+    expect(result.ok).toBe(false);
+
+    // current_state should still be "implement" — the conflicted write did not apply
+    const exec = store.getExecution();
+    expect(exec?.current_state).toBe("implement");
+
+    // "test" state should NOT have been written
+    const testState = store.getState("test");
+    expect(testState).toBeNull();
+  });
+
+  test("wraps all writes in a single transaction — atomicity", () => {
+    // Spy on upsertState to count calls
+    const upsertSpy = vi.spyOn(store, "upsertState");
+
+    const board = makeBoard({
+      states: {
+        implement: { entries: 1, status: "in_progress" },
+        research: { entries: 1, status: "done" },
+      },
+    });
+
+    const result = syncBoardToStore(store, board);
+
+    expect(result.ok).toBe(true);
+    // Both states were upserted in the same call
+    expect(upsertSpy).toHaveBeenCalledTimes(2);
+
+    upsertSpy.mockRestore();
+  });
+
+  test("reader between two syncBoardToStore calls sees consistent state", () => {
+    // First sync: research done, current = implement
+    const board1 = makeBoard({
+      current_state: "implement",
+      states: { research: { entries: 1, status: "done" } },
+    });
+    const r1 = syncBoardToStore(store, board1);
+    expect(r1.ok).toBe(true);
+
+    // Read mid-flight: exec should show implement, research should be done
+    const exec1 = store.getExecution();
+    expect(exec1?.current_state).toBe("implement");
+    const researchState = store.getState("research");
+    expect(researchState?.status).toBe("done");
+
+    // Second sync: implement done, current = test
+    const board2 = makeBoard({
+      current_state: "test",
+      states: {
+        implement: { entries: 1, status: "done" },
+        research: { entries: 1, status: "done" },
+      },
+    });
+    const r2 = syncBoardToStore(store, board2);
+    expect(r2.ok).toBe(true);
+
+    const exec2 = store.getExecution();
+    expect(exec2?.current_state).toBe("test");
+    const implState = store.getState("implement");
+    expect(implState?.status).toBe("done");
   });
 });

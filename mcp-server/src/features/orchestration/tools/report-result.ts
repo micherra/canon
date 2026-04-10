@@ -276,7 +276,14 @@ function executeReportTransaction(
       stuckResult,
     });
     board = finalResult.board;
-    syncBoardToStore(store, board);
+    const syncResult = syncBoardToStore(store, board);
+    if (!syncResult.ok) {
+      // Version conflict — abort the outer transaction by throwing a sentinel error.
+      // reportResultLocked catches BOARD_VERSION_CONFLICT and returns a typed toolError.
+      throw Object.assign(new Error("BOARD_VERSION_CONFLICT"), {
+        currentVersion: syncResult.currentVersion,
+      });
+    }
 
     return {
       board,
@@ -308,7 +315,20 @@ async function reportResultLocked(
     debateResult = await inspectDebateProgress(input.workspace, input.flow.debate);
   }
 
-  const txResult = executeReportTransaction(store, input, stateDef, debateResult);
+  let txResult: TransactionResult;
+  try {
+    txResult = executeReportTransaction(store, input, stateDef, debateResult);
+  } catch (err) {
+    if (err instanceof Error && err.message === "BOARD_VERSION_CONFLICT") {
+      const currentVersion = (err as Error & { currentVersion?: number }).currentVersion ?? -1;
+      return toolError(
+        "BOARD_LOCKED",
+        `Board version conflict: expected version was stale (current: ${currentVersion}). Retry the operation.`,
+        true, // recoverable
+      );
+    }
+    throw err;
+  }
 
   return postTransactionSideEffects({ escalateToHitl, input, stateDef, store, txResult });
 }

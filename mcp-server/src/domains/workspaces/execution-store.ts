@@ -177,6 +177,8 @@ export class ExecutionStore {
    * Security: column names are programmer-controlled (not user input), but we
    * validate each name against an explicit allowlist before embedding it in SQL
    * to prevent future misuse if callers evolve.
+   *
+   * @internal — tool handlers should call updateExecutionVersioned instead.
    */
   updateExecution(fields: UpdateExecutionFields): void {
     const parts: string[] = [];
@@ -234,6 +236,7 @@ export class ExecutionStore {
     if (fields.rolled_back_to !== undefined) addColumn("rolled_back_to", fields.rolled_back_to);
     if ("worktree_path" in fields) addColumn("worktree_path", fields.worktree_path ?? null);
     if ("worktree_branch" in fields) addColumn("worktree_branch", fields.worktree_branch ?? null);
+    if (fields.version !== undefined) addColumn("version", fields.version);
   }
 
   // Board reconstruction
@@ -245,6 +248,7 @@ export class ExecutionStore {
 
   // States
 
+  /** @internal */
   upsertState(
     stateId: string,
     fields: Partial<BoardStateEntry> & { status: BoardStateEntry["status"]; entries: number },
@@ -268,6 +272,7 @@ export class ExecutionStore {
 
   // Iterations — delegate to execution-store-iterations.ts
 
+  /** @internal */
   upsertIteration(
     stateId: string,
     fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] },
@@ -389,8 +394,90 @@ export class ExecutionStore {
 
   // Transaction
 
+  /**
+   * Retry wrapper for SQLITE_BUSY errors.
+   * Retries up to maxAttempts times with Atomics.wait backoff (100ms, 200ms, 400ms, ...).
+   * Does NOT retry other error codes — only SQLITE_BUSY.
+   *
+   * @internal
+   */
+  withRetry<T>(fn: () => T, maxAttempts = 3): T {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return fn();
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code !== "SQLITE_BUSY") throw err;
+        lastError = err;
+        if (attempt < maxAttempts - 1) {
+          // Atomics.wait backoff: 100ms × 2^attempt
+          const backoffMs = 100 * Math.pow(2, attempt);
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, backoffMs);
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  /**
+   * Wrap a function in a SQLite transaction and execute it.
+   * Uses withRetry internally for transparent SQLITE_BUSY retry.
+   */
   transaction<T>(fn: () => T): T {
-    return this.db.transaction(fn)();
+    return this.withRetry(() => this.db.transaction(fn)());
+  }
+
+  /**
+   * Optimistic-locking UPDATE for execution-level fields.
+   * Increments the version column atomically; returns a discriminated union.
+   *
+   * errors-are-values: never throws for version conflicts.
+   *
+   * @internal — prefer this over updateExecution in handler code.
+   */
+  updateExecutionVersioned(
+    fields: UpdateExecutionFields,
+    expectedVersion: number,
+  ): { updated: true; newVersion: number } | { updated: false; currentVersion: number } {
+    const parts: string[] = [];
+    const params: Record<string, unknown> = {};
+    const addColumn = (col: string, value: unknown): void => {
+      if (!ALLOWED_UPDATE_EXECUTION_COLUMNS.has(col)) {
+        throw new Error(`updateExecution: column '${col}' is not in the allowed list`);
+      }
+      parts.push(`${col} = @${col}`);
+      params[col] = value;
+    };
+
+    this.collectJsonColumns(fields, addColumn);
+    this.collectScalarColumns(fields, addColumn);
+
+    const now = fields.last_updated ?? new Date().toISOString();
+    addColumn("last_updated", now);
+
+    // Always increment version
+    const newVersion = expectedVersion + 1;
+    addColumn("version", newVersion);
+
+    if (parts.length === 0) return { updated: true, newVersion: expectedVersion };
+
+    const sql = `UPDATE execution SET ${parts.join(", ")} WHERE id = 1 AND version = @expected_version`;
+    params.expected_version = expectedVersion;
+
+    const result = this.db.prepare(sql).run(params);
+    if (result.changes === 0) {
+      // Version mismatch — read current version for diagnostics
+      const row = this.s.stmtGetExecution.get() as ExecutionRow | undefined;
+      return { updated: false, currentVersion: row?.version ?? -1 };
+    }
+    return { updated: true, newVersion };
+  }
+
+  /** Read current execution version for optimistic locking. */
+  getVersion(): number {
+    const row = this.s.stmtGetExecution.get() as ExecutionRow | undefined;
+    return row?.version ?? 1;
   }
 
   // Domain-language operations — delegate to execution-store-iterations.ts

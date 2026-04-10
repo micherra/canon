@@ -292,8 +292,8 @@ describe("migration v10: flow_lineage table creation", () => {
     db.close();
   });
 
-  it("SCHEMA_VERSION is bumped to 10", () => {
-    expect(SCHEMA_VERSION).toBe("10");
+  it("SCHEMA_VERSION is bumped to 11", () => {
+    expect(SCHEMA_VERSION).toBe("11");
   });
 });
 
@@ -323,7 +323,7 @@ describe("migration v10 idempotency", () => {
       | { value: string }
       | undefined;
 
-    expect(row?.value).toBe("10");
+    expect(row?.value).toBe("11");
     db2.close();
   });
 });

@@ -34,6 +34,7 @@ export type ExecutionRow = {
   correlation_id: string | null;
   worktree_path: string | null;
   worktree_branch: string | null;
+  version: number;
 };
 
 export type ExecutionStateRow = {
@@ -132,6 +133,7 @@ export type UpdateExecutionFields = {
   rolled_back_to?: string;
   worktree_path?: string | null;
   worktree_branch?: string | null;
+  version?: number;
 };
 
 export type MessageOutput = {
@@ -195,6 +197,7 @@ export const ALLOWED_UPDATE_EXECUTION_COLUMNS = new Set([
   "last_updated",
   "worktree_path",
   "worktree_branch",
+  "version",
 ]);
 
 // Private helpers — stuck detection (used by ExecutionStore.isStuck)

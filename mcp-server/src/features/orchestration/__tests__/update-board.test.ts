@@ -443,6 +443,77 @@ describe("updateBoard — error returns", () => {
   });
 });
 
+describe("updateBoard — versioning and BOARD_LOCKED", () => {
+  it("enter_state increments execution version", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+    const versionBefore = store.getVersion();
+
+    const result = await updateBoard({
+      action: "enter_state",
+      state_id: "research",
+      workspace,
+    });
+
+    expect(result.ok).toBe(true);
+    const versionAfter = store.getVersion();
+    expect(versionAfter).toBe(versionBefore + 1);
+  });
+
+  it("skip_state increments execution version", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+    const versionBefore = store.getVersion();
+
+    await updateBoard({ action: "skip_state", state_id: "research", workspace });
+
+    expect(store.getVersion()).toBe(versionBefore + 1);
+  });
+
+  it("set_wave_progress increments execution version", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+    const versionBefore = store.getVersion();
+
+    await updateBoard({
+      action: "set_wave_progress",
+      state_id: "research",
+      wave_data: { tasks: ["t1"], wave: 1, wave_total: 1 },
+      workspace,
+    });
+
+    expect(store.getVersion()).toBe(versionBefore + 1);
+  });
+
+  it("returns BOARD_LOCKED on version conflict for enter_state", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+
+    // Simulate a stale version by mocking getVersion to return 0 on first call
+    const originalGetVersion = store.getVersion.bind(store);
+    let callCount = 0;
+    vi.spyOn(store, "getVersion").mockImplementation(() => {
+      callCount += 1;
+      if (callCount === 1) return 0; // Return stale version on first call (from updateBoard)
+      return originalGetVersion();
+    });
+
+    const result = await updateBoard({
+      action: "enter_state",
+      state_id: "research",
+      workspace,
+    });
+
+    vi.restoreAllMocks();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("BOARD_LOCKED");
+      expect(result.recoverable).toBe(true);
+    }
+  });
+});
+
 describe("updateBoard — missing directory", () => {
   it("returns WORKSPACE_NOT_FOUND via wrapHandler when workspace directory does not exist", async () => {
     const missingWorkspace = join(

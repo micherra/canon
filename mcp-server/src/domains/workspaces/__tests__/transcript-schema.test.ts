@@ -165,7 +165,7 @@ afterEach(() => {
 
 describe("schema version", () => {
   it("SCHEMA_VERSION is '8'", () => {
-    expect(SCHEMA_VERSION).toBe("10");
+    expect(SCHEMA_VERSION).toBe("11");
   });
 });
 
@@ -189,7 +189,7 @@ describe("migration v5 — fresh DB", () => {
       | { value: string }
       | undefined;
 
-    expect(row?.value).toBe("10");
+    expect(row?.value).toBe("11");
 
     db.close();
   });
@@ -221,7 +221,7 @@ describe("migration v5 — idempotency", () => {
       | { value: string }
       | undefined;
 
-    expect(row?.value).toBe("10");
+    expect(row?.value).toBe("11");
     db2.close();
   });
 
@@ -261,7 +261,7 @@ describe("migration v5 — v3 to v5 upgrade", () => {
       | { value: string }
       | undefined;
 
-    expect(row?.value).toBe("10");
+    expect(row?.value).toBe("11");
 
     db.close();
   });

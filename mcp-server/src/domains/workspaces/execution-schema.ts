@@ -20,7 +20,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const SCHEMA_VERSION = "10";
+export const SCHEMA_VERSION = "11";
 
 // DDL statements — v1 base tables (no correlation_id)
 //
@@ -350,6 +350,16 @@ const MIGRATIONS: Migration[] = [
     },
     // flow_lineage table — tracks completed flows per branch for cross-flow context passing
     version: "10",
+  },
+  {
+    up: (db) => {
+      if (!columnExists(db, "execution", "version")) {
+        db.exec(`ALTER TABLE execution ADD COLUMN version INTEGER NOT NULL DEFAULT 1`);
+      }
+      db.exec(`UPDATE meta SET value = '11' WHERE key = 'schema_version'`);
+    },
+    // version column on execution — optimistic locking for concurrent board writes
+    version: "11",
   },
 ];
 
