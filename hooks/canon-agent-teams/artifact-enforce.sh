@@ -51,21 +51,35 @@ fi
 
 # Locate the workspace. Prefer CANON_WORKSPACE_DIR (set by lead-mode
 # bootstrap). Fall back to searching .canon/workspaces/ in the current repo.
+#
+# maxdepth covers both the flat layout (.canon/workspaces/<id>/agent-teams/
+# task-artifacts.json — depth 3) and the branch/slug layout produced by
+# init_workspace (.canon/workspaces/<branch>/<slug>/agent-teams/
+# task-artifacts.json — depth 4), plus headroom for worktree nesting.
 WORKSPACE_DIR="${CANON_WORKSPACE_DIR:-}"
 if [[ -z "$WORKSPACE_DIR" ]]; then
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 2 -name 'task-artifacts.json' -path '*/agent-teams/*' 2>/dev/null | head -1 || true)"
+  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 6 -name 'task-artifacts.json' -path '*/agent-teams/*' 2>/dev/null | head -1 || true)"
   if [[ -n "$CANDIDATE" ]]; then
     WORKSPACE_DIR="$(dirname "$(dirname "$CANDIDATE")")"
   fi
 fi
 
 if [[ -z "$WORKSPACE_DIR" || ! -d "$WORKSPACE_DIR" ]]; then
+  # INTENTIONAL FAIL-OPEN (scoped, per principle fail-closed-by-default):
+  # This hook fires on every Claude Code TaskCompleted event — including
+  # sessions that have nothing to do with Canon. When we cannot resolve a
+  # Canon workspace we treat the task as out-of-scope and allow it through.
+  # The Canon-tracked path below still fails closed (exit 2) when a
+  # tracked artifact is missing; that is the security-relevant case.
   exit 0
 fi
 
 STATE_FILE="$WORKSPACE_DIR/agent-teams/task-artifacts.json"
 if [[ ! -f "$STATE_FILE" ]]; then
+  # INTENTIONAL FAIL-OPEN (scoped): workspace exists but Canon hasn't
+  # registered any tracked tasks for it yet (state file absent). Nothing
+  # for us to enforce; let the task proceed.
   exit 0
 fi
 
@@ -89,7 +103,9 @@ ARTIFACT_PATH="$(
 )"
 
 if [[ -z "$ARTIFACT_PATH" ]]; then
-  # Task is not Canon-tracked.
+  # INTENTIONAL FAIL-OPEN (scoped): the task id was not in Canon's state
+  # file, so this TaskCompleted event belongs to work outside the active
+  # runbook. Not our responsibility to block it.
   exit 0
 fi
 

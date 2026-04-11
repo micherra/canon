@@ -32,9 +32,20 @@ const mcpDir = resolve(here, "..");
 // Requires: `npx tsx scripts/phase-1-smoke-test.mjs` from mcp-server/.
 process.env.CANON_AGENT_TEAMS_MODE = "on";
 
-const { loadAndPlan, writeTaskArtifactState, deriveTaskListId } = await import(
+const {
+  deriveTaskListId,
+  filterPendingDescriptors,
+  loadAndPlan,
+  writeTaskArtifactState,
+} = await import(
   pathToFileURL(
     join(mcpDir, "src", "features", "orchestration", "lead-mode.ts"),
+  ).href
+);
+
+const { summarizeTaskList } = await import(
+  pathToFileURL(
+    join(mcpDir, "src", "domains", "task-list", "index.ts"),
   ).href
 );
 
@@ -108,5 +119,83 @@ function walk(dir, prefix = "") {
   }
 }
 walk(workspaceDir);
+console.log();
+
+// Task-list exercise: wire the Claude Code task list into the smoke
+// test so summarizeTaskList / filterPendingDescriptors get real
+// end-to-end coverage outside of unit tests. Uses an override
+// `tasks_root` pointing into the workspace so we never touch the real
+// ~/.claude/tasks directory.
+console.log("--- task-list exercise ---");
+const taskListId = deriveTaskListId(workspaceId);
+const tasksRoot = join(workspaceDir, "fake-tasks-root");
+mkdirSync(join(tasksRoot, taskListId), { recursive: true });
+
+// Stage 1: every descriptor pending.
+for (const d of descriptors) {
+  writeFileSync(
+    join(tasksRoot, taskListId, `${d.task_id}.json`),
+    JSON.stringify(
+      {
+        active_form: `Running ${d.role}`,
+        content: `${d.role} step for ${runbook.name}`,
+        id: d.task_id,
+        status: "pending",
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+const stage1Summary = summarizeTaskList({
+  task_list_id: taskListId,
+  tasks_root: tasksRoot,
+});
+console.log("stage 1 (all pending):");
+console.log(`  total: ${stage1Summary.total}`);
+console.log(`  by_status: ${JSON.stringify(stage1Summary.by_status)}`);
+console.log(`  path: ${stage1Summary.path}`);
+const stage1Pending = filterPendingDescriptors(descriptors, {
+  task_list_id: taskListId,
+  tasks_root: tasksRoot,
+});
+console.log(`  filterPendingDescriptors: ${stage1Pending.length} pending`);
+
+// Stage 2: mark the first two descriptors completed (researcher +
+// architect), leaving implementor and reviewer pending. This simulates
+// a mid-run resume from a previous session.
+for (const d of descriptors.slice(0, 2)) {
+  writeFileSync(
+    join(tasksRoot, taskListId, `${d.task_id}.json`),
+    JSON.stringify(
+      {
+        active_form: `Completed ${d.role}`,
+        content: `${d.role} step for ${runbook.name}`,
+        id: d.task_id,
+        status: "completed",
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+const stage2Summary = summarizeTaskList({
+  task_list_id: taskListId,
+  tasks_root: tasksRoot,
+});
+console.log();
+console.log("stage 2 (first two completed — simulating resume):");
+console.log(`  total: ${stage2Summary.total}`);
+console.log(`  by_status: ${JSON.stringify(stage2Summary.by_status)}`);
+const stage2Pending = filterPendingDescriptors(descriptors, {
+  task_list_id: taskListId,
+  tasks_root: tasksRoot,
+});
+console.log(
+  `  filterPendingDescriptors: ${stage2Pending.length} pending — ${stage2Pending.map((d) => d.role).join(", ")}`,
+);
+
 console.log();
 console.log("OK");

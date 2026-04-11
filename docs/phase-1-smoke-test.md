@@ -179,6 +179,30 @@ reviews/
 
 All four expected artifacts are present at the canonical paths declared in `ROLE_ARTIFACT_CONTRACTS`.
 
+### 4.5 Task-list exercise
+
+After the artifact tree is populated, the harness seeds a fake `tasks_root` inside the workspace (so the real `~/.claude/tasks/` is untouched) and walks through two task-list stages to exercise `summarizeTaskList` and `filterPendingDescriptors`:
+
+```
+--- task-list exercise ---
+stage 1 (all pending):
+  total: 4
+  by_status: {"pending":4}
+  path: /tmp/canon-phase-1-smoke-<hash>/fake-tasks-root/canon-phase-1-smoke
+  filterPendingDescriptors: 4 pending
+
+stage 2 (first two completed — simulating resume):
+  total: 4
+  by_status: {"completed":2,"pending":2}
+  filterPendingDescriptors: 2 pending — canon-implementor, canon-reviewer
+```
+
+Stage 1 stages a "fresh run" — every descriptor maps to a `pending` task file. `summarizeTaskList` counts them per status and `filterPendingDescriptors` returns all four (nothing completed yet).
+
+Stage 2 rewrites the researcher and architect task files to `completed` — simulating what a mid-run resume would see on disk after a prior session finished the first two steps. `summarizeTaskList` now reports the mixed state, and `filterPendingDescriptors` returns only the implementor and reviewer descriptors, which is exactly the subset a resuming team lead must re-spawn.
+
+This gives the `task-list` domain module its first end-to-end smoke coverage outside of unit tests, and proves that the cross-session resume story described in `docs/agent-teams-mode.md §"Cross-session resume"` has a working server-side implementation point.
+
 ---
 
 ## 5. Hook execution traces
@@ -248,8 +272,8 @@ Run from `mcp-server/`:
 
 ```
 ./node_modules/.bin/vitest run \
-  src/features/spawn/ \
-  src/features/task-list/ \
+  src/domains/spawn/ \
+  src/domains/task-list/ \
   src/features/orchestration/__tests__/lead-mode.test.ts
 ```
 
@@ -265,8 +289,8 @@ Per `docs/agent-teams-migration-plan.md` §8.3: "running the existing Canon test
 
 The new Phase 1 code is not imported from any existing module:
 
-- `mcp-server/src/features/spawn/` — no imports of it from outside Phase 1 code.
-- `mcp-server/src/features/task-list/` — no imports of it from outside Phase 1 code.
+- `mcp-server/src/domains/spawn/` — no imports of it from outside Phase 1 code.
+- `mcp-server/src/domains/task-list/` — no imports of it from outside Phase 1 code.
 - `mcp-server/src/features/orchestration/lead-mode.ts` — not imported by `register-orchestration.ts` or any runtime path. Confirmed by greping the source tree for `lead-mode` before committing.
 
 Because the existing `drive_flow` path does not reference any Phase 1 module, the runtime behavior with the flag unset is structurally identical to HEAD before the Phase 1 commits.

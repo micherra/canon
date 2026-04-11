@@ -22,25 +22,25 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
 /** A single task as persisted by Claude Code under the task list dir. */
-export interface TaskRecord {
-  /** Task identifier (stable across sessions). Usually the file stem. */
-  id: string;
-  /** Current task status. Values observed in practice: pending, in_progress, completed, blocked. */
-  status: string;
-  /** Short human-readable title or content. */
-  content: string;
+export type TaskRecord = {
   /** Active-form rendering, if the caller wrote one. */
   active_form?: string;
+  /** Short human-readable title or content. */
+  content: string;
+  /** Task identifier (stable across sessions). Usually the file stem. */
+  id: string;
   /** Free-form metadata preserved from the source file. */
   metadata?: Record<string, unknown>;
-  /** Absolute path the record was parsed from. */
-  source_path: string;
   /** Modification time of the source file (epoch ms). */
   mtime_ms: number;
-}
+  /** Absolute path the record was parsed from. */
+  source_path: string;
+  /** Current task status. Values observed in practice: pending, in_progress, completed, blocked. */
+  status: string;
+};
 
 /** Options accepted by `readTaskList`. */
-export interface ReadTaskListOptions {
+export type ReadTaskListOptions = {
   /**
    * Task list identifier. Defaults to the `CLAUDE_CODE_TASK_LIST_ID`
    * environment variable if unset.
@@ -51,19 +51,19 @@ export interface ReadTaskListOptions {
    * Exposed for tests.
    */
   tasks_root?: string;
-}
+};
 
 /** Result returned by `readTaskList`. */
-export interface ReadTaskListResult {
-  /** Resolved absolute path of the task list directory. */
-  path: string;
+export type ReadTaskListResult = {
   /** Whether the path exists on disk. */
   exists: boolean;
+  /** Resolved absolute path of the task list directory. */
+  path: string;
   /** Parsed task records, sorted by `id`. */
   tasks: TaskRecord[];
   /** Warnings accumulated while parsing (non-fatal). */
   warnings: string[];
-}
+};
 
 /** The absence of a task list id is not an error — return an empty shell. */
 const EMPTY_RESULT: Omit<ReadTaskListResult, "path"> = {
@@ -77,10 +77,7 @@ const EMPTY_RESULT: Omit<ReadTaskListResult, "path"> = {
  *
  * Pure function. Does not check for existence.
  */
-export function resolveTaskListPath(
-  taskListId: string,
-  tasksRoot?: string,
-): string {
+export function resolveTaskListPath(taskListId: string, tasksRoot?: string): string {
   const root = tasksRoot ?? join(homedir(), ".claude", "tasks");
   return join(root, taskListId);
 }
@@ -91,17 +88,13 @@ export function resolveTaskListPath(
  * Side effects: only reads files. Never throws — malformed files produce
  * warnings, missing directories produce an empty result.
  */
-export function readTaskList(
-  options: ReadTaskListOptions = {},
-): ReadTaskListResult {
+export function readTaskList(options: ReadTaskListOptions = {}): ReadTaskListResult {
   const id = options.task_list_id ?? process.env.CLAUDE_CODE_TASK_LIST_ID;
   if (!id) {
     return {
       path: "",
       ...EMPTY_RESULT,
-      warnings: [
-        "CLAUDE_CODE_TASK_LIST_ID is not set; returning an empty task list.",
-      ],
+      warnings: ["CLAUDE_CODE_TASK_LIST_ID is not set; returning an empty task list."],
     };
   }
 
@@ -111,43 +104,52 @@ export function readTaskList(
   }
 
   const warnings: string[] = [];
-  let entries: string[];
-  try {
-    entries = readdirSync(path);
-  } catch (err) {
-    warnings.push(
-      `Failed to read task list directory ${path}: ${(err as Error).message}`,
-    );
-    return { path, exists: true, tasks: [], warnings };
+  const entries = listDirSafe(path, warnings);
+  if (entries === null) {
+    return { exists: true, path, tasks: [], warnings };
   }
 
   const tasks: TaskRecord[] = [];
   for (const entry of entries) {
     if (!entry.endsWith(".json")) continue;
-    const filePath = join(path, entry);
-    try {
-      const statInfo = statSync(filePath);
-      if (!statInfo.isFile()) continue;
-      const raw = readFileSync(filePath, "utf8");
-      const parsed = parseTaskFile(raw, filePath);
-      if (parsed) {
-        tasks.push({
-          ...parsed,
-          source_path: filePath,
-          mtime_ms: statInfo.mtimeMs,
-        });
-      } else {
-        warnings.push(`Skipped ${filePath}: not a recognizable task record`);
-      }
-    } catch (err) {
-      warnings.push(
-        `Failed to parse ${filePath}: ${(err as Error).message}`,
-      );
-    }
+    const record = loadTaskFromFile(join(path, entry), warnings);
+    if (record) tasks.push(record);
   }
 
   tasks.sort((a, b) => a.id.localeCompare(b.id));
-  return { path, exists: true, tasks, warnings };
+  return { exists: true, path, tasks, warnings };
+}
+
+/** List a directory; on failure push a warning and return null. */
+function listDirSafe(dirPath: string, warnings: string[]): string[] | null {
+  try {
+    return readdirSync(dirPath);
+  } catch (err) {
+    warnings.push(`Failed to read task list directory ${dirPath}: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+/** Load a single task file into a TaskRecord; accumulate warnings on failure. */
+function loadTaskFromFile(filePath: string, warnings: string[]): TaskRecord | null {
+  try {
+    const statInfo = statSync(filePath);
+    if (!statInfo.isFile()) return null;
+    const raw = readFileSync(filePath, "utf8");
+    const parsed = parseTaskFile(raw, filePath);
+    if (!parsed) {
+      warnings.push(`Skipped ${filePath}: not a recognizable task record`);
+      return null;
+    }
+    return {
+      ...parsed,
+      mtime_ms: statInfo.mtimeMs,
+      source_path: filePath,
+    };
+  } catch (err) {
+    warnings.push(`Failed to parse ${filePath}: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 /**
@@ -160,6 +162,22 @@ export function parseTaskFile(
   raw: string,
   sourcePath: string,
 ): Omit<TaskRecord, "source_path" | "mtime_ms"> | null {
+  const record = tryParseObject(raw);
+  if (!record) return null;
+
+  // Claude Code task files observed in practice have these fields. We
+  // accept a superset and only require `id` + `status` + `content`.
+  return {
+    active_form: extractActiveForm(record),
+    content: typeof record.content === "string" ? record.content : "",
+    id: extractTaskId(record, sourcePath),
+    metadata: extractMetadata(record),
+    status: typeof record.status === "string" ? record.status : "unknown",
+  };
+}
+
+/** Parse raw text as JSON; return the object or null if empty / not-an-object. */
+function tryParseObject(raw: string): Record<string, unknown> | null {
   const trimmed = raw.trim();
   if (trimmed.length === 0) return null;
 
@@ -171,42 +189,38 @@ export function parseTaskFile(
   }
 
   if (parsed === null || typeof parsed !== "object") return null;
-  const record = parsed as Record<string, unknown>;
+  return parsed as Record<string, unknown>;
+}
 
-  // Claude Code task files observed in practice have these fields. We
-  // accept a superset and only require `id` + `status` + `content`.
-  const idRaw = record.id ?? record.task_id ?? basename(sourcePath, ".json");
-  const id = typeof idRaw === "string" ? idRaw : String(idRaw);
+/** Resolve the task id, falling back to the filename stem. */
+function extractTaskId(record: Record<string, unknown>, sourcePath: string): string {
+  const raw = record.id ?? record.task_id ?? basename(sourcePath, ".json");
+  return typeof raw === "string" ? raw : String(raw);
+}
 
-  const status = typeof record.status === "string" ? record.status : "unknown";
-  const content = typeof record.content === "string" ? record.content : "";
-  const activeForm =
-    typeof record.active_form === "string"
-      ? record.active_form
-      : typeof record.activeForm === "string"
-        ? record.activeForm
-        : undefined;
+/** Accept both snake_case and camelCase active-form fields. */
+function extractActiveForm(record: Record<string, unknown>): string | undefined {
+  if (typeof record.active_form === "string") return record.active_form;
+  if (typeof record.activeForm === "string") return record.activeForm;
+  return undefined;
+}
 
-  const knownKeys = new Set([
-    "id",
-    "task_id",
-    "status",
-    "content",
-    "active_form",
-    "activeForm",
-  ]);
+/** Everything outside the known key set becomes metadata; absent if empty. */
+const KNOWN_TASK_KEYS = new Set([
+  "id",
+  "task_id",
+  "status",
+  "content",
+  "active_form",
+  "activeForm",
+]);
+
+function extractMetadata(record: Record<string, unknown>): Record<string, unknown> | undefined {
   const metadata: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(record)) {
-    if (!knownKeys.has(k)) metadata[k] = v;
+    if (!KNOWN_TASK_KEYS.has(k)) metadata[k] = v;
   }
-
-  return {
-    id,
-    status,
-    content,
-    active_form: activeForm,
-    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-  };
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 /**
@@ -215,10 +229,7 @@ export function parseTaskFile(
  * Side effects: delegates to `readTaskList`, so it reads the filesystem
  * but never throws.
  */
-export function readTasksByStatus(
-  status: string,
-  options: ReadTaskListOptions = {},
-): TaskRecord[] {
+export function readTasksByStatus(status: string, options: ReadTaskListOptions = {}): TaskRecord[] {
   return readTaskList(options).tasks.filter((t) => t.status === status);
 }
 
@@ -226,13 +237,15 @@ export function readTasksByStatus(
  * Summarize the task list into counts per status. Useful for
  * lead-mode's status heartbeat logging.
  */
-export function summarizeTaskList(
-  options: ReadTaskListOptions = {},
-): { total: number; by_status: Record<string, number>; path: string } {
+export function summarizeTaskList(options: ReadTaskListOptions = {}): {
+  total: number;
+  by_status: Record<string, number>;
+  path: string;
+} {
   const result = readTaskList(options);
   const by_status: Record<string, number> = {};
   for (const task of result.tasks) {
     by_status[task.status] = (by_status[task.status] ?? 0) + 1;
   }
-  return { total: result.tasks.length, by_status, path: result.path };
+  return { by_status, path: result.path, total: result.tasks.length };
 }

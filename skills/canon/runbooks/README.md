@@ -209,4 +209,4 @@ Phase 4 (deletion of the legacy flow runtime) are tracked separately in
 - `docs/phase-1-smoke-test.md` — smoke-test log and artifact listing.
 - `docs/phase-2-smoke-test.md` — Phase 2 smoke-test log.
 - `docs/phase-2-conversion-notes.md` — per-flow conversion notes and divergences.
-- `mcp-server/src/features/spawn/README.md` — how spawn prompts are assembled.
+- `mcp-server/src/domains/spawn/README.md` — how spawn prompts are assembled.

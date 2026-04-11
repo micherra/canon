@@ -11,10 +11,10 @@ import {
   loadRunbook,
   parseRunbook,
   planRun,
-  RunbookError,
-  writeTaskArtifactState,
   type Runbook,
+  RunbookError,
   type SpawnDescriptor,
+  writeTaskArtifactState,
 } from "../lead-mode.ts";
 
 const VALID_RUNBOOK_YAML = `
@@ -73,9 +73,7 @@ describe("isLeadModeEnabled / assertLeadModeEnabled", () => {
   });
 
   it("assertLeadModeEnabled is silent when the flag is on", () => {
-    expect(() =>
-      assertLeadModeEnabled({ [LEAD_MODE_ENV_VAR]: "on" }),
-    ).not.toThrow();
+    expect(() => assertLeadModeEnabled({ [LEAD_MODE_ENV_VAR]: "on" })).not.toThrow();
   });
 });
 
@@ -88,10 +86,7 @@ describe("parseRunbook", () => {
     expect(rb.steps[0]!.role).toBe("canon-researcher");
     expect(rb.steps[1]!.hitl).toBe("after");
     expect(rb.steps[3]!.hitl).toBe("after_if_verdict_not_clean");
-    expect(rb.steps[2]!.required_artifacts).toEqual([
-      "research_synthesis",
-      "plan_index",
-    ]);
+    expect(rb.steps[2]!.required_artifacts).toEqual(["research_synthesis", "plan_index"]);
   });
 
   it("throws on non-object top level", () => {
@@ -113,16 +108,13 @@ describe("parseRunbook", () => {
   });
 
   it("throws on empty steps list", () => {
-    expect(() =>
-      parseRunbook(`name: t\ndescription: t\ntier: small\nsteps: []`),
-    ).toThrow(/must declare at least one step/);
+    expect(() => parseRunbook(`name: t\ndescription: t\ntier: small\nsteps: []`)).toThrow(
+      /must declare at least one step/,
+    );
   });
 
   it("throws on unknown role", () => {
-    const bad = VALID_RUNBOOK_YAML.replace(
-      "role: canon-researcher",
-      "role: canon-unknown",
-    );
+    const bad = VALID_RUNBOOK_YAML.replace("role: canon-researcher", "role: canon-unknown");
     expect(() => parseRunbook(bad)).toThrow(/unknown role/);
   });
 
@@ -140,7 +132,7 @@ describe("loadRunbook", () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, { force: true, recursive: true });
   });
 
   it("reads a runbook from <pluginDir>/skills/canon/runbooks/<name>.yaml", async () => {
@@ -173,8 +165,8 @@ describe("planRun", () => {
   it("produces one descriptor per step in order", () => {
     const descriptors = planRun({
       runbook,
-      workspace_id: "ws-1",
       target_files: ["src/foo.ts"],
+      workspace_id: "ws-1",
     });
     expect(descriptors.map((d) => d.role)).toEqual([
       "canon-researcher",
@@ -187,8 +179,8 @@ describe("planRun", () => {
   it("assembles a prompt that embeds the workspace id and target files", () => {
     const [first] = planRun({
       runbook,
-      workspace_id: "ws-xyz",
       target_files: ["a.ts", "b.ts"],
+      workspace_id: "ws-xyz",
     });
     expect(first!.spawn_prompt).toContain("Workspace: `ws-xyz`");
     expect(first!.spawn_prompt).toContain("`a.ts`");
@@ -198,12 +190,10 @@ describe("planRun", () => {
   it("resolves upstream artifact refs for downstream steps", () => {
     const descriptors = planRun({
       runbook,
-      workspace_id: "ws-1",
       target_files: [],
+      workspace_id: "ws-1",
     });
-    const reviewerStep = descriptors.find(
-      (d) => d.role === "canon-reviewer",
-    ) as SpawnDescriptor;
+    const reviewerStep = descriptors.find((d) => d.role === "canon-reviewer") as SpawnDescriptor;
     expect(reviewerStep.spawn_prompt).toContain("plans/SUMMARY.md");
     expect(reviewerStep.spawn_prompt).toContain("produced by `canon-implementor`");
   });
@@ -211,8 +201,8 @@ describe("planRun", () => {
   it("assigns stable task ids", () => {
     const descriptors = planRun({
       runbook,
-      workspace_id: "ws-1",
       target_files: [],
+      workspace_id: "ws-1",
     });
     expect(descriptors[0]!.task_id).toBe("fast-path-00-canon-researcher");
     expect(descriptors[3]!.task_id).toBe("fast-path-03-canon-reviewer");
@@ -220,19 +210,22 @@ describe("planRun", () => {
 
   it("throws when a required artifact is not produced upstream", () => {
     const broken = parseRunbook(
-      VALID_RUNBOOK_YAML.replace("research_synthesis\n      - plan_index", "totally_unknown\n      - plan_index"),
+      VALID_RUNBOOK_YAML.replace(
+        "research_synthesis\n      - plan_index",
+        "totally_unknown\n      - plan_index",
+      ),
     );
-    expect(() =>
-      planRun({ runbook: broken, workspace_id: "ws", target_files: [] }),
-    ).toThrow(/required artifact "totally_unknown"/);
+    expect(() => planRun({ runbook: broken, target_files: [], workspace_id: "ws" })).toThrow(
+      /required artifact "totally_unknown"/,
+    );
   });
 
   it("throws when a step declares an artifact_path that disagrees with the canonical role contract", () => {
     const cloned: Runbook = JSON.parse(JSON.stringify(runbook));
     cloned.steps[0]!.artifact_path = "wrong/PATH.md";
-    expect(() =>
-      planRun({ runbook: cloned, workspace_id: "ws", target_files: [] }),
-    ).toThrow(/does not match canonical contract/);
+    expect(() => planRun({ runbook: cloned, target_files: [], workspace_id: "ws" })).toThrow(
+      /does not match canonical contract/,
+    );
   });
 });
 
@@ -244,38 +237,34 @@ describe("writeTaskArtifactState", () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, { force: true, recursive: true });
   });
 
   it("writes task and teammate state files under agent-teams/", async () => {
     const runbook = parseRunbook(VALID_RUNBOOK_YAML);
     const descriptors = planRun({
       runbook,
-      workspace_id: "ws-xyz",
       target_files: [],
+      workspace_id: "ws-xyz",
     });
 
     const paths = writeTaskArtifactState(tmp, descriptors);
 
     expect(paths.task_state_path).toContain("/agent-teams/task-artifacts.json");
-    expect(paths.teammate_state_path).toContain(
-      "/agent-teams/teammate-artifacts.json",
-    );
+    expect(paths.teammate_state_path).toContain("/agent-teams/teammate-artifacts.json");
 
     const taskState = JSON.parse(await readFile(paths.task_state_path, "utf8"));
-    const teammateState = JSON.parse(
-      await readFile(paths.teammate_state_path, "utf8"),
-    );
+    const teammateState = JSON.parse(await readFile(paths.teammate_state_path, "utf8"));
 
     expect(taskState["fast-path-00-canon-researcher"]).toEqual({
-      role: "canon-researcher",
       artifact: "research_synthesis",
       artifact_path: "research/SYNTHESIS.md",
+      role: "canon-researcher",
     });
     expect(teammateState["canon-reviewer"]).toEqual({
-      role: "canon-reviewer",
       artifact: "review",
       artifact_path: "reviews/REVIEW.md",
+      role: "canon-reviewer",
     });
   });
 });
@@ -303,7 +292,7 @@ describe("loadAndPlan", () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, { force: true, recursive: true });
     if (prevFlag === undefined) delete process.env[LEAD_MODE_ENV_VAR];
     else process.env[LEAD_MODE_ENV_VAR] = prevFlag;
   });
@@ -312,8 +301,8 @@ describe("loadAndPlan", () => {
     delete process.env[LEAD_MODE_ENV_VAR];
     await expect(
       loadAndPlan(tmp, "fast-path", {
-        workspace_id: "ws",
         target_files: [],
+        workspace_id: "ws",
       }),
     ).rejects.toThrow(/must be set to "on"/);
   });
@@ -321,8 +310,8 @@ describe("loadAndPlan", () => {
   it("returns runbook + descriptors when the flag is on", async () => {
     process.env[LEAD_MODE_ENV_VAR] = "on";
     const result = await loadAndPlan(tmp, "fast-path", {
-      workspace_id: "ws",
       target_files: ["src/x.ts"],
+      workspace_id: "ws",
     });
     expect(result.runbook.name).toBe("fast-path");
     expect(result.descriptors).toHaveLength(4);

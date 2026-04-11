@@ -28,11 +28,10 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { parse as parseYaml } from "yaml";
 import {
-  type CanonRole,
-  CANON_ROLES,
   assembleSpawnPrompt,
+  CANON_ROLES,
+  type CanonRole,
   getRoleArtifactContract,
   getWaveArtifactSuffix,
   resolveWaveArtifactPath,
@@ -40,18 +39,15 @@ import {
   type UpstreamArtifactRef,
   WAVE_COMPATIBLE_ROLES,
   type WaveContext,
-} from "@features/spawn/index.ts";
+} from "@domains/spawn/index.ts";
+import { type ReadTaskListOptions, readTasksByStatus } from "@domains/task-list/index.ts";
+import { parse as parseYaml } from "yaml";
 
 /** HITL gate values recognized in a runbook step. */
-export type RunbookHitl =
-  | false
-  | "after"
-  | "after_if_verdict_not_clean";
+export type RunbookHitl = false | "after" | "after_if_verdict_not_clean";
 
 /** One step in a runbook. */
-export interface RunbookStep {
-  role: CanonRole;
-  task_type: TaskType;
+export type RunbookStep = {
   artifact: string;
   /**
    * Declared artifact path. For a non-wave step this is the Phase 1 flat
@@ -65,6 +61,8 @@ export interface RunbookStep {
   artifact_path: string;
   hitl: RunbookHitl;
   required_artifacts: string[];
+  role: CanonRole;
+  task_type: TaskType;
   /**
    * Phase 2 addition. When `true`, this step is spawned once per task id
    * provided in {@link PlanRunInput.wave_context}. The resulting
@@ -75,15 +73,15 @@ export interface RunbookStep {
    * contract in `ROLE_ARTIFACT_CONTRACTS`.
    */
   wave?: boolean;
-}
+};
 
 /** Parsed runbook contents. */
-export interface Runbook {
-  name: string;
+export type Runbook = {
   description: string;
-  tier: "small" | "medium" | "large";
+  name: string;
   steps: RunbookStep[];
-}
+  tier: "small" | "medium" | "large";
+};
 
 /**
  * Optional wave context supplied at plan time for runbooks that contain
@@ -98,17 +96,16 @@ export interface Runbook {
  * planning — where the architect rewrites the next wave's task list
  * from the previous wave's output — is Phase 3.
  */
-export interface PlanRunWaveContext {
+export type PlanRunWaveContext = {
   /** Stable plan-index slug. Must match /^[a-zA-Z0-9_-]+$/. */
   slug: string;
   /** Ordered list of task ids. Empty is rejected at plan time. */
   task_ids: string[];
-}
+};
 
 /** Input to `planRun`. */
-export interface PlanRunInput {
+export type PlanRunInput = {
   runbook: Runbook;
-  workspace_id: string;
   /** Target files the user's request pins. Passed to every step that
    * needs them; Phase 1 does not do per-step scoping. */
   target_files: string[];
@@ -119,10 +116,23 @@ export interface PlanRunInput {
    * simply ignored — this keeps the smoke-test harness simple.
    */
   wave_context?: PlanRunWaveContext;
-}
+  workspace_id: string;
+};
 
 /** Output of `planRun`: an ordered list of spawn descriptors. */
-export interface SpawnDescriptor {
+export type SpawnDescriptor = {
+  /** Artifact this step is required to produce (logical id). */
+  artifact: string;
+  /** Artifact path relative to the workspace root. */
+  artifact_path: string;
+  /** HITL policy for this step. */
+  hitl: RunbookHitl;
+  /** Logical artifact ids the step depends on. */
+  required_artifacts: string[];
+  /** Canon role to spawn. */
+  role: CanonRole;
+  /** Fully assembled spawn prompt. */
+  spawn_prompt: string;
   /**
    * Stable per-descriptor id. Flat (Phase 1) shape:
    *     `<runbook_name>-<NN>-<role>`
@@ -132,20 +142,8 @@ export interface SpawnDescriptor {
    * the hooks look up either one by exact match.
    */
   task_id: string;
-  /** Canon role to spawn. */
-  role: CanonRole;
   /** Task type tag passed to the spawn module. */
   task_type: TaskType;
-  /** Artifact this step is required to produce (logical id). */
-  artifact: string;
-  /** Artifact path relative to the workspace root. */
-  artifact_path: string;
-  /** HITL policy for this step. */
-  hitl: RunbookHitl;
-  /** Fully assembled spawn prompt. */
-  spawn_prompt: string;
-  /** Logical artifact ids the step depends on. */
-  required_artifacts: string[];
   /**
    * Phase 2 addition. Present only on descriptors produced from a
    * `wave: true` step. Carries the concrete (slug, task_id) pair used
@@ -154,16 +152,16 @@ export interface SpawnDescriptor {
    * the task id string.
    */
   wave_context?: WaveContext;
-}
+};
 
 /** The state file format consumed by the workspace-local hooks. */
-export interface TaskArtifactState {
+export type TaskArtifactState = {
   [task_id: string]: {
     role: CanonRole;
     artifact: string;
     artifact_path: string;
   };
-}
+};
 
 /** Env var name that gates the module. */
 export const LEAD_MODE_ENV_VAR = "CANON_AGENT_TEAMS_MODE";
@@ -190,10 +188,7 @@ export class RunbookError extends Error {
  *
  * Path convention: `<pluginDir>/skills/canon/runbooks/<name>.yaml`.
  */
-export async function loadRunbook(
-  pluginDir: string,
-  name: string,
-): Promise<Runbook> {
+export async function loadRunbook(pluginDir: string, name: string): Promise<Runbook> {
   const path = join(pluginDir, "skills", "canon", "runbooks", `${name}.yaml`);
   if (!existsSync(path)) {
     throw new RunbookError(`Runbook not found: ${path}`);
@@ -208,9 +203,7 @@ export function parseRunbook(raw: string, source = "<in-memory>"): Runbook {
   try {
     doc = parseYaml(raw);
   } catch (err) {
-    throw new RunbookError(
-      `Failed to parse runbook YAML at ${source}: ${(err as Error).message}`,
-    );
+    throw new RunbookError(`Failed to parse runbook YAML at ${source}: ${(err as Error).message}`);
   }
 
   if (doc === null || typeof doc !== "object") {
@@ -227,123 +220,144 @@ export function parseRunbook(raw: string, source = "<in-memory>"): Runbook {
     throw new RunbookError(`Runbook at ${source} is missing a string "name"`);
   }
   if (typeof description !== "string") {
-    throw new RunbookError(
-      `Runbook "${name}" is missing a string "description"`,
-    );
+    throw new RunbookError(`Runbook "${name}" is missing a string "description"`);
   }
   if (tier !== "small" && tier !== "medium" && tier !== "large") {
-    throw new RunbookError(
-      `Runbook "${name}" has invalid tier ${JSON.stringify(tier)}`,
-    );
+    throw new RunbookError(`Runbook "${name}" has invalid tier ${JSON.stringify(tier)}`);
   }
   if (!Array.isArray(steps) || steps.length === 0) {
     throw new RunbookError(`Runbook "${name}" must declare at least one step`);
   }
 
-  const parsedSteps: RunbookStep[] = steps.map((step, index) =>
-    parseStep(step, name, index),
-  );
-  return { name, description, tier, steps: parsedSteps };
+  const parsedSteps: RunbookStep[] = steps.map((step, index) => parseStep(step, name, index));
+  return { description, name, steps: parsedSteps, tier };
 }
 
-function parseStep(
+function parseStep(raw: unknown, runbookName: string, index: number): RunbookStep {
+  const s = requireStepObject(raw, runbookName, index);
+  const ctx = `Runbook "${runbookName}" step ${index}`;
+  const role = requireCanonRole(s.role, ctx);
+  const wave = parseOptionalBooleanField(s, "wave", ctx);
+  // Phase 2: `wave: true` steps must use a role that is registered in
+  // WAVE_COMPATIBLE_ROLES. Single-agent roles (canon-guide, canon-chat,
+  // canon-writer, canon-learner) never participate in waves and would
+  // blow up downstream in the spawn assembler if we let them through.
+  if (wave === true && !WAVE_COMPATIBLE_ROLES.includes(role)) {
+    throw new RunbookError(
+      `${ctx}: role ${role} is not wave-compatible (see WAVE_COMPATIBLE_ROLES)`,
+    );
+  }
+  const step: RunbookStep = {
+    artifact: requireString(s, "artifact", ctx),
+    artifact_path: requireString(s, "artifact_path", ctx),
+    hitl: requireHitl(s.hitl, ctx),
+    required_artifacts: requireStringArray(s.required_artifacts, "required_artifacts", ctx),
+    role,
+    task_type: requireString(s, "task_type", ctx) as TaskType,
+  };
+  if (wave !== undefined) {
+    step.wave = wave;
+  }
+  return step;
+}
+
+/**
+ * Phase 2 helper. Reads an optional boolean field from a raw step
+ * object. Returns `undefined` when the field is absent (preserving
+ * Phase 1 byte-compatibility for runbooks that don't set `wave:`).
+ * Throws when the field is present but not a boolean — this catches
+ * typos like `wave: yes` at parse time rather than letting them
+ * silently expand into a truthy string.
+ */
+function parseOptionalBooleanField(
+  obj: Record<string, unknown>,
+  field: string,
+  ctx: string,
+): boolean | undefined {
+  const raw = obj[field];
+  if (raw === undefined) return undefined;
+  if (typeof raw === "boolean") return raw;
+  throw new RunbookError(
+    `${ctx}: ${field} must be a boolean if present, got ${JSON.stringify(raw)}`,
+  );
+}
+
+function requireStepObject(
   raw: unknown,
   runbookName: string,
   index: number,
-): RunbookStep {
+): Record<string, unknown> {
   if (raw === null || typeof raw !== "object") {
     throw new RunbookError(
       `Runbook "${runbookName}" step ${index}: expected object, got ${typeof raw}`,
     );
   }
-  const s = raw as Record<string, unknown>;
-  const role = s.role;
-  if (typeof role !== "string" || !CANON_ROLES.includes(role as CanonRole)) {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: unknown role ${JSON.stringify(role)}`,
-    );
+  return raw as Record<string, unknown>;
+}
+
+function requireString(obj: Record<string, unknown>, field: string, ctx: string): string {
+  const value = obj[field];
+  if (typeof value !== "string") {
+    throw new RunbookError(`${ctx}: missing string "${field}"`);
   }
-  const task_type = s.task_type;
-  if (typeof task_type !== "string") {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: missing string "task_type"`,
-    );
+  return value;
+}
+
+function requireCanonRole(raw: unknown, ctx: string): CanonRole {
+  if (typeof raw !== "string" || !CANON_ROLES.includes(raw as CanonRole)) {
+    throw new RunbookError(`${ctx}: unknown role ${JSON.stringify(raw)}`);
   }
-  const artifact = s.artifact;
-  if (typeof artifact !== "string") {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: missing string "artifact"`,
-    );
+  return raw as CanonRole;
+}
+
+function requireHitl(raw: unknown, ctx: string): RunbookHitl {
+  if (raw === false) return false;
+  if (raw === "after" || raw === "after_if_verdict_not_clean") return raw;
+  throw new RunbookError(`${ctx}: invalid hitl value ${JSON.stringify(raw)}`);
+}
+
+function requireStringArray(raw: unknown, field: string, ctx: string): string[] {
+  const source = raw ?? [];
+  if (!Array.isArray(source)) {
+    throw new RunbookError(`${ctx}: ${field} must be an array`);
   }
-  const artifact_path = s.artifact_path;
-  if (typeof artifact_path !== "string") {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: missing string "artifact_path"`,
-    );
-  }
-  const hitlRaw = s.hitl;
-  let hitl: RunbookHitl;
-  if (hitlRaw === false) {
-    hitl = false;
-  } else if (
-    hitlRaw === "after" ||
-    hitlRaw === "after_if_verdict_not_clean"
-  ) {
-    hitl = hitlRaw;
-  } else {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: invalid hitl value ${JSON.stringify(hitlRaw)}`,
-    );
-  }
-  const requiredRaw = s.required_artifacts ?? [];
-  if (!Array.isArray(requiredRaw)) {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: required_artifacts must be an array`,
-    );
-  }
-  const required_artifacts = requiredRaw.map((entry, i) => {
+  return source.map((entry, i) => {
     if (typeof entry !== "string") {
-      throw new RunbookError(
-        `Runbook "${runbookName}" step ${index}: required_artifacts[${i}] must be a string`,
-      );
+      throw new RunbookError(`${ctx}: ${field}[${i}] must be a string`);
     }
     return entry;
   });
-
-  // Phase 2: optional `wave: true | false` field. Absent / undefined
-  // defaults to `false`, which keeps Phase 1 runbooks (`fast-path.yaml`)
-  // parse-compatible with this parser. Any value other than boolean is
-  // rejected to catch typos like `wave: yes`.
-  const waveRaw = s.wave;
-  let wave: boolean | undefined;
-  if (waveRaw === undefined) {
-    wave = undefined;
-  } else if (typeof waveRaw === "boolean") {
-    wave = waveRaw;
-  } else {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: wave must be a boolean if present, got ${JSON.stringify(waveRaw)}`,
-    );
-  }
-  if (wave === true && !WAVE_COMPATIBLE_ROLES.includes(role as CanonRole)) {
-    throw new RunbookError(
-      `Runbook "${runbookName}" step ${index}: role ${role} is not wave-compatible (see WAVE_COMPATIBLE_ROLES)`,
-    );
-  }
-
-  return {
-    role: role as CanonRole,
-    task_type: task_type as TaskType,
-    artifact,
-    artifact_path,
-    hitl,
-    required_artifacts,
-    ...(wave !== undefined ? { wave } : {}),
-  };
 }
 
 /** Expected template shape of a wave step's declared artifact path. */
 const WAVE_PATH_TEMPLATE_RE = /^plans\/<slug>\/<task_id>-[A-Z][A-Z0-9-]*\.md$/;
+
+/**
+ * Running index of which step produced which logical artifact. Phase 1
+ * steps set `path` to the single flat output; Phase 2 wave-expanded
+ * steps set `wavePaths` to a map of `task_id → per-task path` so a
+ * downstream step (flat or wave) can resolve its upstream ref by task
+ * id. Exactly one of `path` or `wavePaths` is populated per entry.
+ */
+type ArtifactIndex = Map<
+  string,
+  {
+    description?: string;
+    path?: string;
+    produced_by: CanonRole;
+    wavePaths?: Map<string, string>;
+  }
+>;
+
+/** Per-step context threaded through `buildStepDescriptor`. */
+type StepContext = {
+  artifactIndex: ArtifactIndex;
+  index: number;
+  runbook: Runbook;
+  step: RunbookStep;
+  target_files: string[];
+  workspace_id: string;
+};
 
 /**
  * Plan a runbook execution against a workspace.
@@ -359,10 +373,9 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
   const { runbook, workspace_id, target_files, wave_context } = input;
 
   // Up-front validation: if any step is wave-expanded, the caller must
-  // supply a wave_context with at least one task id. This is a soft
-  // error with a helpful message — we emit it here rather than letting
-  // it surface deep inside assembleSpawnPrompt so the smoke-test harness
-  // sees a recognizable RunbookError.
+  // supply a wave_context with at least one task id, a valid slug, and
+  // a unique set of task ids. Raise recognisable RunbookErrors here
+  // rather than letting failures surface deep inside assembleSpawnPrompt.
   const hasWave = runbook.steps.some((s) => s.wave === true);
   if (hasWave) {
     if (!wave_context || wave_context.task_ids.length === 0) {
@@ -391,74 +404,38 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
     }
   }
 
-  // Map of logical artifact id -> { produced_by role, description,
-  //   path | wavePaths }.
-  //   - `path` is set for flat steps (one physical artifact per run).
-  //   - `wavePaths` is a Map<task_id, path> for wave-expanded steps so
-  //     downstream wave steps can resolve their upstream ref to the
-  //     matching per-task path rather than a single path.
-  interface ArtifactIndexEntry {
-    produced_by: CanonRole;
-    description?: string;
-    path?: string;
-    wavePaths?: Map<string, string>;
-  }
-  const artifactIndex = new Map<string, ArtifactIndexEntry>();
-
+  const artifactIndex: ArtifactIndex = new Map();
   const descriptors: SpawnDescriptor[] = [];
+
   for (let i = 0; i < runbook.steps.length; i++) {
     const step = runbook.steps[i]!;
-    const contract = getRoleArtifactContract(step.role);
-    // The flat role artifact id is always the same across flat and
-    // waved spawns — it names the logical artifact the step produces.
-    if (contract.artifact_id !== step.artifact) {
-      throw new RunbookError(
-        `Runbook "${runbook.name}" step ${i}: artifact id ${step.artifact} does not match canonical contract ${contract.artifact_id} for role ${step.role}`,
-      );
-    }
 
     if (step.wave !== true) {
-      // Phase 1 flat path — behavior must be byte-identical to Phase 1.
-      if (contract.artifact_path !== step.artifact_path) {
-        throw new RunbookError(
-          `Runbook "${runbook.name}" step ${i}: artifact_path ${step.artifact_path} does not match canonical contract ${contract.artifact_path} for role ${step.role}`,
-        );
-      }
-      const upstream = resolveUpstreamRefsForFlatStep(
-        step,
-        i,
-        runbook.name,
+      // Phase 1 flat path — delegate to the refactored helper that base
+      // extracted. It handles artifact-id / artifact_path cross-checks,
+      // upstream ref resolution (including wave-to-flat glob synthesis),
+      // spawn prompt assembly, and descriptor construction.
+      const descriptor = buildStepDescriptor({
         artifactIndex,
-      );
-      const task_id = `${runbook.name}-${String(i).padStart(2, "0")}-${step.role}`;
-      const spawn_prompt = assembleSpawnPrompt({
-        role: step.role,
-        task_type: step.task_type,
+        index: i,
+        runbook,
+        step,
         target_files,
-        upstream_artifact_refs: upstream,
         workspace_id,
       });
-      descriptors.push({
-        task_id,
-        role: step.role,
-        task_type: step.task_type,
-        artifact: step.artifact,
-        artifact_path: step.artifact_path,
-        hitl: step.hitl,
-        spawn_prompt,
-        required_artifacts: step.required_artifacts,
-      });
+      descriptors.push(descriptor);
       artifactIndex.set(step.artifact, {
-        path: step.artifact_path,
+        path: descriptor.artifact_path,
         produced_by: step.role,
       });
       continue;
     }
 
-    // Phase 2 wave-expanded step.
+    // Phase 2 wave-expanded step — inline expansion, one descriptor per
+    // task id supplied in wave_context. We cannot delegate to
+    // buildStepDescriptor here because the step shape is one-to-many.
     if (!wave_context) {
-      // Already caught by the top-of-function guard; this is belt-and-
-      // suspenders for direct callers that somehow got past it.
+      // Already caught by the top-of-function guard; belt-and-suspenders.
       throw new RunbookError(
         `Runbook "${runbook.name}" step ${i}: wave_context is required for wave steps`,
       );
@@ -469,17 +446,22 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
       );
     }
     // Cross-check that the declared template expands to the canonical
-    // wave path for this role. We do this by materializing a sample
-    // expansion with a placeholder slug/task_id and comparing shapes.
+    // wave path for this role by materializing a sample expansion with
+    // a placeholder slug/task_id and comparing shapes.
     const templateSample = resolveWaveArtifactPath(step.role, {
       slug: "PROBE",
       task_id: "PROBE",
     });
-    if (
-      step.artifact_path !== templateSample.replace("PROBE/PROBE", "<slug>/<task_id>")
-    ) {
+    const templateShape = templateSample.replace("PROBE/PROBE", "<slug>/<task_id>");
+    if (step.artifact_path !== templateShape) {
       throw new RunbookError(
-        `Runbook "${runbook.name}" step ${i}: declared wave artifact_path ${step.artifact_path} does not match the canonical wave shape for role ${step.role} (${templateSample.replace("PROBE/PROBE", "<slug>/<task_id>")})`,
+        `Runbook "${runbook.name}" step ${i}: declared wave artifact_path ${step.artifact_path} does not match the canonical wave shape for role ${step.role} (${templateShape})`,
+      );
+    }
+    const contract = getRoleArtifactContract(step.role);
+    if (contract.artifact_id !== step.artifact) {
+      throw new RunbookError(
+        `Runbook "${runbook.name}" step ${i}: artifact id ${step.artifact} does not match canonical contract ${contract.artifact_id} for role ${step.role}`,
       );
     }
 
@@ -504,14 +486,14 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
       });
       const expandedId = `${runbook.name}-${wave_context.slug}-${taskIdLocal}-${step.role}`;
       descriptors.push({
-        task_id: expandedId,
-        role: step.role,
-        task_type: step.task_type,
         artifact: step.artifact,
         artifact_path: concretePath,
         hitl: step.hitl,
-        spawn_prompt,
         required_artifacts: step.required_artifacts,
+        role: step.role,
+        spawn_prompt,
+        task_id: expandedId,
+        task_type: step.task_type,
         wave_context: wc,
       });
       waveOutputPaths.set(taskIdLocal, concretePath);
@@ -523,6 +505,54 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
   }
 
   return descriptors;
+}
+
+/** Validate a step, resolve its upstream refs, and assemble its prompt. */
+function buildStepDescriptor(ctx: StepContext): SpawnDescriptor {
+  const { step, index, runbook, workspace_id, target_files, artifactIndex } = ctx;
+  assertContractMatches(step, index, runbook);
+  // resolveUpstreamRefsForFlatStep handles both same-flat upstreams and
+  // wave-to-flat fan-in globs; base's resolveUpstreamRefs helper was
+  // removed during the Phase 2 merge because it assumed hit.path was
+  // always defined, which is not true after wave-expanded steps exist.
+  const upstream = resolveUpstreamRefsForFlatStep(step, index, runbook, artifactIndex);
+  const task_id = `${runbook.name}-${String(index).padStart(2, "0")}-${step.role}`;
+  const spawn_prompt = assembleSpawnPrompt({
+    role: step.role,
+    target_files,
+    task_type: step.task_type,
+    upstream_artifact_refs: upstream,
+    workspace_id,
+  });
+  return {
+    artifact: step.artifact,
+    artifact_path: step.artifact_path,
+    hitl: step.hitl,
+    required_artifacts: step.required_artifacts,
+    role: step.role,
+    spawn_prompt,
+    task_id,
+    task_type: step.task_type,
+  };
+}
+
+/**
+ * Validate that the step's declared artifact matches the role's canonical
+ * contract. The spawn prompt embeds the canonical path; a mismatch would
+ * silently diverge from what the hooks enforce.
+ */
+function assertContractMatches(step: RunbookStep, index: number, runbook: Runbook): void {
+  const contract = getRoleArtifactContract(step.role);
+  if (contract.artifact_path !== step.artifact_path) {
+    throw new RunbookError(
+      `Runbook "${runbook.name}" step ${index}: artifact_path ${step.artifact_path} does not match canonical contract ${contract.artifact_path} for role ${step.role}`,
+    );
+  }
+  if (contract.artifact_id !== step.artifact) {
+    throw new RunbookError(
+      `Runbook "${runbook.name}" step ${index}: artifact id ${step.artifact} does not match canonical contract ${contract.artifact_id} for role ${step.role}`,
+    );
+  }
 }
 
 /**
@@ -544,37 +574,29 @@ export function planRun(input: PlanRunInput): SpawnDescriptor[] {
 function resolveUpstreamRefsForFlatStep(
   step: RunbookStep,
   index: number,
-  runbookName: string,
-  artifactIndex: Map<
-    string,
-    {
-      produced_by: CanonRole;
-      description?: string;
-      path?: string;
-      wavePaths?: Map<string, string>;
-    }
-  >,
+  runbook: Runbook,
+  artifactIndex: ArtifactIndex,
 ): UpstreamArtifactRef[] {
   return step.required_artifacts.map((refId) => {
     const hit = artifactIndex.get(refId);
     if (!hit) {
       throw new RunbookError(
-        `Runbook "${runbookName}" step ${index} (${step.role}): required artifact "${refId}" is not produced by any earlier step`,
+        `Runbook "${runbook.name}" step ${index} (${step.role}): required artifact "${refId}" is not produced by any earlier step`,
       );
     }
     if (hit.path !== undefined) {
       return {
+        description: hit.description,
         id: refId,
         path: hit.path,
         produced_by: hit.produced_by,
-        description: hit.description,
       };
     }
     // Wave upstream — synthesize a glob-shaped path so the flat consumer
     // has a concrete pointer into the wave output directory.
     if (!hit.wavePaths || hit.wavePaths.size === 0) {
       throw new RunbookError(
-        `Runbook "${runbookName}" step ${index} (${step.role}): wave upstream "${refId}" produced zero per-task artifacts`,
+        `Runbook "${runbook.name}" step ${index} (${step.role}): wave upstream "${refId}" produced zero per-task artifacts`,
       );
     }
     // Every wave entry lives in the same parent dir, so any one is fine
@@ -582,10 +604,10 @@ function resolveUpstreamRefsForFlatStep(
     const samplePath = hit.wavePaths.values().next().value!;
     const globPath = waveGlobFromSamplePath(samplePath, hit.produced_by);
     return {
+      description: `Wave fan-in glob — one artifact per task id produced by the wave step (${hit.wavePaths.size} total).`,
       id: refId,
       path: globPath,
       produced_by: hit.produced_by,
-      description: `Wave fan-in glob — one artifact per task id produced by the wave step (${hit.wavePaths.size} total).`,
     };
   });
 }
@@ -628,15 +650,7 @@ function resolveUpstreamRefsForWaveStep(
   step: RunbookStep,
   index: number,
   runbookName: string,
-  artifactIndex: Map<
-    string,
-    {
-      produced_by: CanonRole;
-      description?: string;
-      path?: string;
-      wavePaths?: Map<string, string>;
-    }
-  >,
+  artifactIndex: ArtifactIndex,
   taskId: string,
 ): UpstreamArtifactRef[] {
   return step.required_artifacts.map((refId) => {
@@ -649,10 +663,10 @@ function resolveUpstreamRefsForWaveStep(
     if (hit.path !== undefined) {
       // Flat upstream — every wave task sees the same path.
       return {
+        description: hit.description,
         id: refId,
         path: hit.path,
         produced_by: hit.produced_by,
-        description: hit.description,
       };
     }
     // Wave upstream — resolve by task id.
@@ -663,10 +677,10 @@ function resolveUpstreamRefsForWaveStep(
       );
     }
     return {
+      description: hit.description,
       id: refId,
       path: p,
       produced_by: hit.produced_by,
-      description: hit.description,
     };
   });
 }
@@ -697,9 +711,9 @@ export function writeTaskArtifactState(
   const teammateState: TaskArtifactState = {};
   for (const d of descriptors) {
     taskState[d.task_id] = {
-      role: d.role,
       artifact: d.artifact,
       artifact_path: d.artifact_path,
+      role: d.role,
     };
     if (d.wave_context) {
       // Wave-expanded teammate — key the teammate state by the
@@ -708,17 +722,17 @@ export function writeTaskArtifactState(
       // not own the shared flat key, since multiple descriptors share
       // the same role and last-writer-wins would be misleading.
       teammateState[d.task_id] = {
-        role: d.role,
         artifact: d.artifact,
         artifact_path: d.artifact_path,
+        role: d.role,
       };
     } else {
       // Phase 1 behavior: one teammate per role per team, keyed by
       // the role name directly.
       teammateState[d.role] = {
-        role: d.role,
         artifact: d.artifact,
         artifact_path: d.artifact_path,
+        role: d.role,
       };
     }
   }
@@ -745,14 +759,33 @@ export function deriveTaskListId(workspaceId: string): string {
  * Useful at the entry of any lead-mode call site so the off-path
  * cannot accidentally invoke it.
  */
-export function assertLeadModeEnabled(
-  env: NodeJS.ProcessEnv = process.env,
-): void {
+export function assertLeadModeEnabled(env: NodeJS.ProcessEnv = process.env): void {
   if (!isLeadModeEnabled(env)) {
-    throw new Error(
-      `${LEAD_MODE_ENV_VAR} must be set to "on" to use lead-mode`,
-    );
+    throw new Error(`${LEAD_MODE_ENV_VAR} must be set to "on" to use lead-mode`);
   }
+}
+
+/**
+ * Filter a descriptor list down to the descriptors whose tasks have not
+ * yet been marked `completed` in the pinned Claude Code task list.
+ *
+ * This is the server-side half of the "cross-session resume" story
+ * described in docs/agent-teams-mode.md. On resume, the team lead reads
+ * the pinned task list via `CLAUDE_CODE_TASK_LIST_ID`, asks this
+ * function for the set of descriptors that still need work, and spawns
+ * teammates only for those.
+ *
+ * Pure with respect to the passed-in descriptors (no mutation). Reads
+ * the task list directory lazily via `readTasksByStatus`; if the list
+ * is empty (env unset, directory missing, etc.) every descriptor is
+ * treated as still pending — matching the "first run" semantics.
+ */
+export function filterPendingDescriptors(
+  descriptors: readonly SpawnDescriptor[],
+  taskListOptions: ReadTaskListOptions = {},
+): SpawnDescriptor[] {
+  const completedIds = new Set(readTasksByStatus("completed", taskListOptions).map((t) => t.id));
+  return descriptors.filter((d) => !completedIds.has(d.task_id));
 }
 
 /**
@@ -770,11 +803,11 @@ export async function loadAndPlan(
   assertLeadModeEnabled();
   const runbook = await loadRunbook(pluginDir, runbookName);
   const descriptors = planRun({ runbook, ...input });
-  return { runbook, descriptors };
+  return { descriptors, runbook };
 }
 
 // Re-export types from the spawn module so callers can import one place.
-export type { CanonRole, TaskType, UpstreamArtifactRef } from "@features/spawn/index.ts";
+export type { CanonRole, TaskType, UpstreamArtifactRef } from "@domains/spawn/index.ts";
 
 // Explicitly mark that `dirname` is not unused — it's consumed by
 // future lead-mode helpers that derive plugin paths from module urls.

@@ -24,16 +24,24 @@ if [[ -z "$INPUT" ]]; then
   exit 0
 fi
 
+# maxdepth covers both the flat layout (.canon/workspaces/<id>/agent-teams —
+# depth 2) and the branch/slug layout (.canon/workspaces/<branch>/<slug>/
+# agent-teams — depth 3), plus headroom for worktree nesting.
 WORKSPACE_DIR="${CANON_WORKSPACE_DIR:-}"
 if [[ -z "$WORKSPACE_DIR" ]]; then
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 2 -type d -name 'agent-teams' 2>/dev/null | head -1 || true)"
+  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 6 -type d -name 'agent-teams' 2>/dev/null | head -1 || true)"
   if [[ -n "$CANDIDATE" ]]; then
     WORKSPACE_DIR="$(dirname "$CANDIDATE")"
   fi
 fi
 
 if [[ -z "$WORKSPACE_DIR" || ! -d "$WORKSPACE_DIR" ]]; then
+  # Advisory-only hook — never blocks. When there is no resolvable Canon
+  # workspace there is also no events.jsonl to append to, so we exit 0
+  # silently. Exit 0 here is not a security-relevant fail-open path (no
+  # artifact enforcement happens in this hook), it is a no-op when there
+  # is nothing to observe.
   exit 0
 fi
 

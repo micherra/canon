@@ -43,53 +43,47 @@ describe("parseTaskFile", () => {
   it("parses the standard fields", () => {
     const record = parseTaskFile(
       JSON.stringify({
+        active_form: "Writing the spawn module",
+        content: "Write the spawn module",
         id: "task-1",
         status: "in_progress",
-        content: "Write the spawn module",
-        active_form: "Writing the spawn module",
       }),
       SOURCE,
     );
     expect(record).toEqual({
-      id: "task-1",
-      status: "in_progress",
-      content: "Write the spawn module",
       active_form: "Writing the spawn module",
+      content: "Write the spawn module",
+      id: "task-1",
       metadata: undefined,
+      status: "in_progress",
     });
   });
 
   it("falls back to the filename stem when id is missing", () => {
-    const record = parseTaskFile(
-      JSON.stringify({ status: "pending", content: "X" }),
-      SOURCE,
-    );
+    const record = parseTaskFile(JSON.stringify({ content: "X", status: "pending" }), SOURCE);
     expect(record?.id).toBe("sample");
   });
 
   it("accepts task_id as an alternative id field", () => {
     const record = parseTaskFile(
-      JSON.stringify({ task_id: "foo", status: "pending", content: "x" }),
+      JSON.stringify({ content: "x", status: "pending", task_id: "foo" }),
       SOURCE,
     );
     expect(record?.id).toBe("foo");
   });
 
   it("defaults status to unknown when missing", () => {
-    const record = parseTaskFile(
-      JSON.stringify({ id: "foo", content: "x" }),
-      SOURCE,
-    );
+    const record = parseTaskFile(JSON.stringify({ content: "x", id: "foo" }), SOURCE);
     expect(record?.status).toBe("unknown");
   });
 
   it("accepts camelCase activeForm", () => {
     const record = parseTaskFile(
       JSON.stringify({
+        activeForm: "Doing it",
+        content: "c",
         id: "t",
         status: "pending",
-        content: "c",
-        activeForm: "Doing it",
       }),
       SOURCE,
     );
@@ -99,10 +93,10 @@ describe("parseTaskFile", () => {
   it("preserves unknown fields as metadata", () => {
     const record = parseTaskFile(
       JSON.stringify({
+        artifact: "plans/SUMMARY.md",
+        content: "c",
         id: "t",
         status: "done",
-        content: "c",
-        artifact: "plans/SUMMARY.md",
         workflow: "fast-path",
       }),
       SOURCE,
@@ -122,7 +116,7 @@ describe("readTaskList", () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, { force: true, recursive: true });
   });
 
   it("returns an empty shell when CLAUDE_CODE_TASK_LIST_ID is unset", () => {
@@ -153,11 +147,11 @@ describe("readTaskList", () => {
     await mkdir(listDir, { recursive: true });
     await writeFile(
       join(listDir, "a.json"),
-      JSON.stringify({ id: "a", status: "pending", content: "A" }),
+      JSON.stringify({ content: "A", id: "a", status: "pending" }),
     );
     await writeFile(
       join(listDir, "b.json"),
-      JSON.stringify({ id: "b", status: "in_progress", content: "B" }),
+      JSON.stringify({ content: "B", id: "b", status: "in_progress" }),
     );
     await writeFile(join(listDir, "readme.md"), "not json");
 
@@ -176,15 +170,15 @@ describe("readTaskList", () => {
     await mkdir(listDir, { recursive: true });
     await writeFile(
       join(listDir, "one.json"),
-      JSON.stringify({ id: "c", status: "pending", content: "" }),
+      JSON.stringify({ content: "", id: "c", status: "pending" }),
     );
     await writeFile(
       join(listDir, "two.json"),
-      JSON.stringify({ id: "a", status: "pending", content: "" }),
+      JSON.stringify({ content: "", id: "a", status: "pending" }),
     );
     await writeFile(
       join(listDir, "three.json"),
-      JSON.stringify({ id: "b", status: "pending", content: "" }),
+      JSON.stringify({ content: "", id: "b", status: "pending" }),
     );
 
     const result = readTaskList({ task_list_id: "ws", tasks_root: tmp });
@@ -196,7 +190,7 @@ describe("readTaskList", () => {
     await mkdir(listDir, { recursive: true });
     await writeFile(
       join(listDir, "ok.json"),
-      JSON.stringify({ id: "ok", status: "done", content: "" }),
+      JSON.stringify({ content: "", id: "ok", status: "done" }),
     );
     await writeFile(join(listDir, "broken.json"), "{ not valid");
 
@@ -211,10 +205,7 @@ describe("readTaskList", () => {
     const listDir = join(tmp, "ws");
     await mkdir(listDir, { recursive: true });
     const taskPath = join(listDir, "only.json");
-    await writeFile(
-      taskPath,
-      JSON.stringify({ id: "only", status: "pending", content: "" }),
-    );
+    await writeFile(taskPath, JSON.stringify({ content: "", id: "only", status: "pending" }));
 
     const result = readTaskList({ task_list_id: "ws", tasks_root: tmp });
     expect(result.tasks[0]!.source_path).toBe(taskPath);
@@ -230,7 +221,7 @@ describe("readTasksByStatus", () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, { force: true, recursive: true });
   });
 
   it("filters tasks by status", async () => {
@@ -238,15 +229,15 @@ describe("readTasksByStatus", () => {
     await mkdir(listDir, { recursive: true });
     await writeFile(
       join(listDir, "a.json"),
-      JSON.stringify({ id: "a", status: "pending", content: "" }),
+      JSON.stringify({ content: "", id: "a", status: "pending" }),
     );
     await writeFile(
       join(listDir, "b.json"),
-      JSON.stringify({ id: "b", status: "done", content: "" }),
+      JSON.stringify({ content: "", id: "b", status: "done" }),
     );
     await writeFile(
       join(listDir, "c.json"),
-      JSON.stringify({ id: "c", status: "pending", content: "" }),
+      JSON.stringify({ content: "", id: "c", status: "pending" }),
     );
 
     const pending = readTasksByStatus("pending", {
@@ -265,7 +256,7 @@ describe("summarizeTaskList", () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, { force: true, recursive: true });
   });
 
   it("counts tasks per status", async () => {
@@ -273,19 +264,19 @@ describe("summarizeTaskList", () => {
     await mkdir(listDir, { recursive: true });
     await writeFile(
       join(listDir, "a.json"),
-      JSON.stringify({ id: "a", status: "pending", content: "" }),
+      JSON.stringify({ content: "", id: "a", status: "pending" }),
     );
     await writeFile(
       join(listDir, "b.json"),
-      JSON.stringify({ id: "b", status: "pending", content: "" }),
+      JSON.stringify({ content: "", id: "b", status: "pending" }),
     );
     await writeFile(
       join(listDir, "c.json"),
-      JSON.stringify({ id: "c", status: "in_progress", content: "" }),
+      JSON.stringify({ content: "", id: "c", status: "in_progress" }),
     );
     await writeFile(
       join(listDir, "d.json"),
-      JSON.stringify({ id: "d", status: "completed", content: "" }),
+      JSON.stringify({ content: "", id: "d", status: "completed" }),
     );
 
     const summary = summarizeTaskList({
@@ -294,9 +285,9 @@ describe("summarizeTaskList", () => {
     });
     expect(summary.total).toBe(4);
     expect(summary.by_status).toEqual({
-      pending: 2,
-      in_progress: 1,
       completed: 1,
+      in_progress: 1,
+      pending: 2,
     });
     expect(summary.path).toContain("/ws");
   });

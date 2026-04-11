@@ -47,21 +47,33 @@ if [[ -z "$TEAMMATE_NAME" ]]; then
   exit 0
 fi
 
+# maxdepth covers both the flat layout (.canon/workspaces/<id>/agent-teams/
+# teammate-artifacts.json — depth 3) and the branch/slug layout produced by
+# init_workspace (.canon/workspaces/<branch>/<slug>/agent-teams/
+# teammate-artifacts.json — depth 4), plus headroom for worktree nesting.
 WORKSPACE_DIR="${CANON_WORKSPACE_DIR:-}"
 if [[ -z "$WORKSPACE_DIR" ]]; then
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 2 -name 'teammate-artifacts.json' -path '*/agent-teams/*' 2>/dev/null | head -1 || true)"
+  CANDIDATE="$(find "$REPO_ROOT/.canon/workspaces" -maxdepth 6 -name 'teammate-artifacts.json' -path '*/agent-teams/*' 2>/dev/null | head -1 || true)"
   if [[ -n "$CANDIDATE" ]]; then
     WORKSPACE_DIR="$(dirname "$(dirname "$CANDIDATE")")"
   fi
 fi
 
 if [[ -z "$WORKSPACE_DIR" || ! -d "$WORKSPACE_DIR" ]]; then
+  # INTENTIONAL FAIL-OPEN (scoped, per principle fail-closed-by-default):
+  # This hook fires on every Claude Code TeammateIdle event across every
+  # session. When we cannot resolve a Canon workspace we have nothing to
+  # backstop and must not nag unrelated sessions. The Canon-tracked
+  # branch below still emits exit 2 with feedback when a tracked
+  # teammate drops its artifact.
   exit 0
 fi
 
 STATE_FILE="$WORKSPACE_DIR/agent-teams/teammate-artifacts.json"
 if [[ ! -f "$STATE_FILE" ]]; then
+  # INTENTIONAL FAIL-OPEN (scoped): workspace present but no registered
+  # teammate state — nothing to backstop.
   exit 0
 fi
 
@@ -83,6 +95,9 @@ ARTIFACT_PATH="$(
 )"
 
 if [[ -z "$ARTIFACT_PATH" ]]; then
+  # INTENTIONAL FAIL-OPEN (scoped): teammate name not in Canon's state
+  # file — this idle event belongs to a teammate outside the active
+  # runbook, so we let it through untouched.
   exit 0
 fi
 
