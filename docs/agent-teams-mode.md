@@ -70,7 +70,7 @@ Phase 1 ships a single runbook: `fast-path.yaml`. Phase 2 will add the remaining
 
 ### Spawn prompts come from one place
 
-All teammate context assembly flows through `mcp-server/src/features/spawn/`. The lead passes role, task type, target files, upstream artifacts, and workspace id to `assembleSpawnPrompt`, which returns a deterministic prompt string. There is no hook-based context injection for teammates — Claude Code teammate sessions do not observe `UserPromptSubmit` or `SessionStart` hooks, so the spawn prompt is the only channel.
+All teammate context assembly flows through `mcp-server/src/domains/spawn/`. The lead passes role, task type, target files, upstream artifacts, and workspace id to `assembleSpawnPrompt`, which returns a deterministic prompt string. There is no hook-based context injection for teammates — Claude Code teammate sessions do not observe `UserPromptSubmit` or `SessionStart` hooks, so the spawn prompt is the only channel.
 
 ### Artifacts are enforced by a hook
 
@@ -91,7 +91,7 @@ All teammate context assembly flows through `mcp-server/src/features/spawn/`. Th
 Phase 1 relies on two on-disk substrates for resume:
 
 1. **On-disk artifacts** under `.canon/workspaces/<id>/` — the exact same files the drive_flow path writes today. Research syntheses, plan indexes, implementation summaries, and reviews all have stable paths described by the runbook.
-2. **The pinned task list** at `~/.claude/tasks/<CLAUDE_CODE_TASK_LIST_ID>/` — persists across sessions. The read side is in `mcp-server/src/features/task-list/`.
+2. **The pinned task list** at `~/.claude/tasks/<CLAUDE_CODE_TASK_LIST_ID>/` — persists across sessions. The read side is in `mcp-server/src/domains/task-list/`.
 
 On resume, lead-mode reads the pinned task list to see which tasks are still pending, cross-references against the artifact state file, and walks the remaining runbook steps.
 
@@ -112,7 +112,7 @@ If Phase 1 hits a bug, file an issue with the relevant JSONL events from `.canon
 
 1. Create `skills/canon/runbooks/<name>.yaml`. Follow the schema in `skills/canon/runbooks/README.md`.
 2. Match the steps to existing Canon agent definitions in `agents/*.md` — Phase 1 reuses all 13 agents unchanged.
-3. Keep the `artifact` and `artifact_path` fields aligned with the canonical contract in `mcp-server/src/features/spawn/index.ts` (`ROLE_ARTIFACT_CONTRACTS`). `planRun` will throw at load time if the two diverge.
+3. Keep the `artifact` and `artifact_path` fields aligned with the canonical contract in `mcp-server/src/domains/spawn/index.ts` (`ROLE_ARTIFACT_CONTRACTS`). `planRun` will throw at load time if the two diverge.
 4. Run the smoke-test procedure in `docs/phase-1-smoke-test.md` with your new runbook.
 5. Submit the runbook plus any required fixture updates in a single change.
 
@@ -145,4 +145,4 @@ Agent Teams Mode does not change:
 - `docs/coordination-layer-audit.md` — Phase 0 audit of the code that Phase 4 will eventually delete.
 - `docs/phase-1-smoke-test.md` — smoke-test log for the Phase 1 drop.
 - `skills/canon/runbooks/README.md` — runbook format reference.
-- `mcp-server/src/features/spawn/README.md` — spawn-prompt library API.
+- `mcp-server/src/domains/spawn/README.md` — spawn-prompt library API.

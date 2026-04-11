@@ -133,4 +133,4 @@ decides which path runs.
 - `docs/agent-teams-migration-plan.md` — authoritative plan and phased rollout.
 - `docs/agent-teams-mode.md` — user docs for the new mode.
 - `docs/phase-1-smoke-test.md` — smoke-test log and artifact listing.
-- `mcp-server/src/features/spawn/README.md` — how spawn prompts are assembled.
+- `mcp-server/src/domains/spawn/README.md` — how spawn prompts are assembled.

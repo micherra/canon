@@ -35,7 +35,7 @@ import {
   getRoleArtifactContract,
   type TaskType,
   type UpstreamArtifactRef,
-} from "@features/spawn/index.ts";
+} from "@domains/spawn/index.ts";
 import { parse as parseYaml } from "yaml";
 
 /** HITL gate values recognized in a runbook step. */
@@ -422,7 +422,7 @@ export async function loadAndPlan(
 }
 
 // Re-export types from the spawn module so callers can import one place.
-export type { CanonRole, TaskType, UpstreamArtifactRef } from "@features/spawn/index.ts";
+export type { CanonRole, TaskType, UpstreamArtifactRef } from "@domains/spawn/index.ts";
 
 // Explicitly mark that `dirname` is not unused — it's consumed by
 // future lead-mode helpers that derive plugin paths from module urls.

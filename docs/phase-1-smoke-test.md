@@ -248,8 +248,8 @@ Run from `mcp-server/`:
 
 ```
 ./node_modules/.bin/vitest run \
-  src/features/spawn/ \
-  src/features/task-list/ \
+  src/domains/spawn/ \
+  src/domains/task-list/ \
   src/features/orchestration/__tests__/lead-mode.test.ts
 ```
 
@@ -265,8 +265,8 @@ Per `docs/agent-teams-migration-plan.md` §8.3: "running the existing Canon test
 
 The new Phase 1 code is not imported from any existing module:
 
-- `mcp-server/src/features/spawn/` — no imports of it from outside Phase 1 code.
-- `mcp-server/src/features/task-list/` — no imports of it from outside Phase 1 code.
+- `mcp-server/src/domains/spawn/` — no imports of it from outside Phase 1 code.
+- `mcp-server/src/domains/task-list/` — no imports of it from outside Phase 1 code.
 - `mcp-server/src/features/orchestration/lead-mode.ts` — not imported by `register-orchestration.ts` or any runtime path. Confirmed by greping the source tree for `lead-mode` before committing.
 
 Because the existing `drive_flow` path does not reference any Phase 1 module, the runtime behavior with the flag unset is structurally identical to HEAD before the Phase 1 commits.

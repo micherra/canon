@@ -1,8 +1,16 @@
-# features/spawn — Canon spawn-prompt assembly
+# domains/spawn — Canon spawn-prompt assembly
 
 Phase 1 of the Canon → agent teams migration. This module is a **pure
 library** that assembles spawn prompts for teammates in agent-teams mode.
 It has no MCP tool surface and performs no I/O.
+
+This module lives under `domains/` rather than `features/` because it is
+a shared-kernel style contract without bounded-context ownership of its
+own. Orchestration is its only consumer today, but future Phase 2
+features will also read the canonical role → artifact contract table
+from here. Placing it under `features/` would force a cross-feature
+import in `features/orchestration/`, which `features/.claude/CLAUDE.md`
+explicitly forbids.
 
 ## Why it exists
 
@@ -33,7 +41,7 @@ import {
   type TaskType,
   type UpstreamArtifactRef,
   type AssembleSpawnPromptInput,
-} from "@features/spawn/index.ts";
+} from "@domains/spawn/index.ts";
 ```
 
 ### `assembleSpawnPrompt(input)`
