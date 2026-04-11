@@ -1,23 +1,43 @@
 /**
- * Tests for 5 PR review comments on PR #52 (feat/adr-002-adapters).
+ * Tests for PR #52 adapter-level review fixes that exercise the
+ * platform adapters directly via a `node:child_process` mock.
  *
- * Fix 1: git-adapter-async.ts — normalize err.code (string vs number) for exitCode
- * Fix 2: codebase-graph.ts — catch sanitizeGitRef throw for invalid diff_base input
- * Fix 3: pr-review-data.ts — shell-escape args in runDiffCommand non-git path
- * Fix 4: wrap-handler.ts — fix inaccurate docstring (comment-only change, verified here)
- * Fix 5: process-adapter.ts — incorporate result.error.message into stderr when empty
+ * These are adapter-layer tests: they validate gitExecAsync and
+ * runShell by stubbing the underlying child_process primitives.
+ * Downstream consumer tests (Fix 2: codebase-graph, Fix 3:
+ * pr-review-data shell escaping) live in the sibling file
+ * pr52-downstream-fixes.test.ts with hoisted adapter mocks instead.
+ * Splitting by mock layer keeps both styles race-free under vitest's
+ * file-parallel execution.
+ *
+ * Covered fixes in this file:
+ *   - Fix 1: git-adapter-async.ts — normalize err.code (string vs
+ *            number) for exitCode
+ *   - Fix 4: wrap-handler.ts — ok:false ToolResult passes through
+ *            jsonResponse (verified here via import + behavior test)
+ *   - Fix 5: process-adapter.ts — incorporate result.error.message
+ *            into stderr when empty
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
-// Fix 1: git-adapter-async — exitCode normalization for string err.code
+// Fix 1 setup: mock node:child_process so gitExecAsync's execFile call
+// is routed through `execFileImpl` and runShell's spawnSync is routed
+// through `spawnSyncImpl`. Each test overrides these impls.
 
 type ExecFileCallback = (err: Error | null, stdout: string, stderr: string) => void;
 
 let execFileImpl: ((cb: ExecFileCallback) => void) | null = null;
+
+type SpawnSyncResult = {
+  stdout: string;
+  stderr: string;
+  status: number | null;
+  signal?: string | null;
+  error?: Error;
+};
+
+let spawnSyncImpl: (() => SpawnSyncResult) | null = null;
 
 vi.mock("node:child_process", () => ({
   execFile: (
@@ -40,18 +60,8 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { gitExecAsync } from "@platform/adapters/git-adapter-async.ts";
-
-type SpawnSyncResult = {
-  stdout: string;
-  stderr: string;
-  status: number | null;
-  signal?: string | null;
-  error?: Error;
-};
-
-let spawnSyncImpl: (() => SpawnSyncResult) | null = null;
-
 import { runShell } from "@platform/adapters/process-adapter.ts";
+import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 
 beforeEach(() => {
   execFileImpl = null;
@@ -152,166 +162,7 @@ describe("Fix 5: runShell — error.message incorporated into stderr when stderr
   });
 });
 
-// Fix 2: codebase-graph — catch sanitizeGitRef throw for invalid diff_base
-//
-// To reach the sanitizeGitRef call at codebase-graph.ts line ~169, we must:
-// 1. Have a non-main branch (gitCurrentBranch returns non-null, non-main value)
-// 2. Have a non-null rawBase (either from input.diff_base or gitRefExists returning true)
-//
-// We mock gitExecAsync so gitCurrentBranch returns "feat/something", which causes
-// the code to enter the block where sanitizeGitRef(rawBase) is called with an
-// invalid diff_base value. Before the fix, this throws; after the fix, it's caught.
-
-describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
-  let tmpDir: string;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-graph-fix2-"));
-    await mkdir(join(tmpDir, ".canon"), { recursive: true });
-    await mkdir(join(tmpDir, "src"), { recursive: true });
-    await writeFile(
-      join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ layers: { api: ["src"] } }),
-    );
-    await writeFile(join(tmpDir, "src", "handler.ts"), `export function handler() {}`);
-  });
-
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    await rm(tmpDir, { force: true, recursive: true });
-  });
-
-  it("does not throw when diff_base is invalid and git branch detection is on a feature branch", async () => {
-    // Mock gitExecAsync: first call (rev-parse --abbrev-ref HEAD) returns "feat/test",
-    // subsequent calls (rev-parse --verify for origin/main) return ok:true,
-    // and the final diff call returns ok:true empty.
-    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi
-        .fn()
-        .mockResolvedValueOnce({
-          exitCode: 0,
-          ok: true,
-          stderr: "",
-          stdout: "feat/test\n",
-          timedOut: false,
-        })
-        .mockResolvedValueOnce({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false })
-        .mockResolvedValue({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }),
-    }));
-
-    const { codebaseGraph } = await import("@features/knowledge-graph/tools/codebase-graph.ts");
-    // diff_base with shell-dangerous chars that sanitizeGitRef would reject
-    await expect(
-      codebaseGraph(
-        { diff_base: "origin/main; rm -rf /", source_dirs: ["src"] },
-        tmpDir,
-        "/nonexistent",
-      ),
-    ).resolves.toBeDefined();
-  });
-
-  it("returns graph nodes when diff_base is invalid (graceful fallback, no changed files marked)", async () => {
-    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi
-        .fn()
-        .mockResolvedValueOnce({
-          exitCode: 0,
-          ok: true,
-          stderr: "",
-          stdout: "feat/test\n",
-          timedOut: false,
-        })
-        .mockResolvedValueOnce({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false })
-        .mockResolvedValue({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }),
-    }));
-
-    const { codebaseGraph } = await import("@features/knowledge-graph/tools/codebase-graph.ts");
-    const result = await codebaseGraph(
-      { diff_base: "$(bad-command)", source_dirs: ["src"] },
-      tmpDir,
-      "/nonexistent",
-    );
-    // Should return graph data; invalid diff_base means no changed-file detection
-    expect(result.nodes).toBeDefined();
-    expect(Array.isArray(result.nodes)).toBe(true);
-    // No node should be marked as changed
-    expect(result.nodes.filter((n) => n.changed)).toHaveLength(0);
-  });
-});
-
-// Fix 3: pr-review-data — shell-escaping in runDiffCommand non-git path
-
-describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
-  let tmpDir: string;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-prdata-fix3-"));
-    await mkdir(join(tmpDir, ".canon"), { recursive: true });
-  });
-
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    await rm(tmpDir, { force: true, recursive: true });
-  });
-
-  it("shell-escapes args when passed to runShell for non-git command", async () => {
-    let capturedCommand: string | undefined;
-    vi.doMock("@platform/adapters/process-adapter.ts", () => ({
-      runShell: (cmd: string, _cwd: string) => {
-        capturedCommand = cmd;
-        return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
-      },
-    }));
-
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await fn({ pr_number: 42 }, tmpDir);
-
-    // The constructed command must have each arg individually quoted or safe
-    expect(capturedCommand).toBeDefined();
-    // Verify the gh command is used and args are included
-    expect(capturedCommand).toContain("gh");
-    expect(capturedCommand).toContain("42");
-  });
-
-  it("args with special shell chars are properly quoted in the shell command", async () => {
-    let capturedCommand: string | undefined;
-    vi.doMock("@platform/adapters/process-adapter.ts", () => ({
-      runShell: (cmd: string, _cwd: string) => {
-        capturedCommand = cmd;
-        return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
-      },
-    }));
-    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi.fn().mockResolvedValue({
-        exitCode: 0,
-        ok: true,
-        stderr: "",
-        stdout: "",
-        timedOut: false,
-      }),
-    }));
-
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await fn({ pr_number: 42 }, tmpDir);
-
-    // Each arg should be wrapped in single quotes in the shell command string
-    expect(capturedCommand).toBeDefined();
-    // After fix: args like 'pr', 'diff', '42', '--name-only' should be quoted
-    // The presence of single quotes around at least one arg verifies the fix
-    const hasSingleQuotedArgs =
-      capturedCommand!.includes("'pr'") ||
-      capturedCommand!.includes("'diff'") ||
-      capturedCommand!.includes("'42'") ||
-      capturedCommand!.includes("'--name-only'");
-    expect(hasSingleQuotedArgs).toBe(true);
-  });
-});
-
 // Fix 4: wrap-handler — docstring accuracy (verified via import + behavior test)
-
-import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 
 describe("Fix 4: wrapHandler — ok:false ToolResult passes through jsonResponse (not converted to MCP error)", () => {
   it("returns ok:false result as JSON (not converted to SDK error format)", async () => {
