@@ -37,6 +37,11 @@ if [[ -z "$WORKSPACE_DIR" ]]; then
 fi
 
 if [[ -z "$WORKSPACE_DIR" || ! -d "$WORKSPACE_DIR" ]]; then
+  # Advisory-only hook — never blocks. When there is no resolvable Canon
+  # workspace there is also no events.jsonl to append to, so we exit 0
+  # silently. Exit 0 here is not a security-relevant fail-open path (no
+  # artifact enforcement happens in this hook), it is a no-op when there
+  # is nothing to observe.
   exit 0
 fi
 
