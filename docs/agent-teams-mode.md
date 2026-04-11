@@ -93,7 +93,7 @@ Phase 1 relies on two on-disk substrates for resume:
 1. **On-disk artifacts** under `.canon/workspaces/<id>/` — the exact same files the drive_flow path writes today. Research syntheses, plan indexes, implementation summaries, and reviews all have stable paths described by the runbook.
 2. **The pinned task list** at `~/.claude/tasks/<CLAUDE_CODE_TASK_LIST_ID>/` — persists across sessions. The read side is in `mcp-server/src/domains/task-list/`.
 
-On resume, lead-mode reads the pinned task list to see which tasks are still pending, cross-references against the artifact state file, and walks the remaining runbook steps.
+On resume, lead-mode reads the pinned task list to see which tasks are still pending, cross-references against the artifact state file, and walks the remaining runbook steps. The server-side entry point is `filterPendingDescriptors(descriptors, taskListOptions)` in `mcp-server/src/features/orchestration/lead-mode.ts`: given the descriptor list returned by `planRun` and the pinned task list, it returns only the descriptors whose tasks are not yet marked `completed`. Entries with status `pending`, `in_progress`, `blocked`, or anything else are treated as still needing work. If the task list is empty or `CLAUDE_CODE_TASK_LIST_ID` is unset, every descriptor is returned — matching the "first run" semantics.
 
 ---
 

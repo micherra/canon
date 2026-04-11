@@ -36,6 +36,7 @@ import {
   type TaskType,
   type UpstreamArtifactRef,
 } from "@domains/spawn/index.ts";
+import { type ReadTaskListOptions, readTasksByStatus } from "@domains/task-list/index.ts";
 import { parse as parseYaml } from "yaml";
 
 /** HITL gate values recognized in a runbook step. */
@@ -401,6 +402,29 @@ export function assertLeadModeEnabled(env: NodeJS.ProcessEnv = process.env): voi
   if (!isLeadModeEnabled(env)) {
     throw new Error(`${LEAD_MODE_ENV_VAR} must be set to "on" to use lead-mode`);
   }
+}
+
+/**
+ * Filter a descriptor list down to the descriptors whose tasks have not
+ * yet been marked `completed` in the pinned Claude Code task list.
+ *
+ * This is the server-side half of the "cross-session resume" story
+ * described in docs/agent-teams-mode.md. On resume, the team lead reads
+ * the pinned task list via `CLAUDE_CODE_TASK_LIST_ID`, asks this
+ * function for the set of descriptors that still need work, and spawns
+ * teammates only for those.
+ *
+ * Pure with respect to the passed-in descriptors (no mutation). Reads
+ * the task list directory lazily via `readTasksByStatus`; if the list
+ * is empty (env unset, directory missing, etc.) every descriptor is
+ * treated as still pending — matching the "first run" semantics.
+ */
+export function filterPendingDescriptors(
+  descriptors: readonly SpawnDescriptor[],
+  taskListOptions: ReadTaskListOptions = {},
+): SpawnDescriptor[] {
+  const completedIds = new Set(readTasksByStatus("completed", taskListOptions).map((t) => t.id));
+  return descriptors.filter((d) => !completedIds.has(d.task_id));
 }
 
 /**
