@@ -53,8 +53,8 @@ export type TaskType =
   // prompt-shaping guidance without branching per-role inside the assembler.
   | "refactor"
   | "migrate"
-  | "security_audit"
-  | "test_gap";
+  | "security-audit"
+  | "test-gap";
 
 /** Reference to an upstream artifact the spawned teammate must read. */
 export type UpstreamArtifactRef = {
@@ -69,7 +69,7 @@ export type UpstreamArtifactRef = {
 };
 
 /**
- * Wave-scoped context for a single spawned teammate. Phase 2 addition.
+ * Wave-scoped context for a **single spawned teammate**. Phase 2 addition.
  *
  * When present in {@link AssembleSpawnPromptInput}, the completion contract
  * renders a wave-scoped artifact path of the shape
@@ -80,6 +80,25 @@ export type UpstreamArtifactRef = {
  *
  * Phase 2 only writes one teammate per (slug, task_id, role) tuple. Phase 3
  * may extend this with wave-level metadata once adaptive wave planning lands.
+ *
+ * ## Relationship to `PlanRunWaveContext`
+ *
+ * The orchestration layer defines a sibling type `PlanRunWaveContext` in
+ * `features/orchestration/lead-mode.ts` that carries the **entire plan's**
+ * wave context (a single slug plus an ordered list of task ids). That type
+ * is one-to-many with this one: `planRun` fans `PlanRunWaveContext.task_ids`
+ * out into N `WaveContext` instances — one per wave teammate it spawns.
+ * Think of it as:
+ *
+ *     PlanRunWaveContext = { slug, task_ids: [t1, t2, t3] }
+ *                          ↓
+ *     WaveContext[]      = [{slug, task_id: t1}, {slug, task_id: t2}, {slug, task_id: t3}]
+ *
+ * The singular `WaveContext` lives in `domains/spawn/` because the spawn
+ * module operates on a single teammate at a time. The plural
+ * `PlanRunWaveContext` lives in the orchestration layer because it
+ * represents a caller-supplied input to `planRun`, which is where wave
+ * fan-out actually happens.
  */
 export interface WaveContext {
   /** Plan-index slug — matches `plans/<slug>/INDEX.md` on disk. */
@@ -309,10 +328,13 @@ function taskTypeGuidance(role: CanonRole, taskType: TaskType): string {
     implement:
       "Execute the plan: write code, run tests, and commit. Follow Canon principles and keep diffs minimal.",
     learn: "Analyze patterns, propose improvements, and produce a learning report.",
-    // Phase 2 task-type extensions (migrate, refactor, security_audit, test_gap)
+    // Phase 2 task-type extensions (migrate, refactor, security-audit, test-gap)
     // live inline in alphabetical order below. Each selects a slightly
     // different framing of the existing role brief so the assembler does
-    // not need to branch per-role on new flow conversions.
+    // not need to branch per-role on new flow conversions. The kebab-case
+    // form matches the runbook filenames / flow names (flows/test-gap.md,
+    // skills/canon/runbooks/security-audit.yaml) — one spelling per
+    // concept per `ubiquitous-language-in-code`.
     migrate:
       "Move the codebase from one technology, API, or schema to another. Plan migration waves, keep both sides working during cutover when feasible, and record a rollback path in the artifact.",
     refactor:
@@ -324,11 +346,11 @@ function taskTypeGuidance(role: CanonRole, taskType: TaskType): string {
     scribe: "Update CLAUDE.md and related context documents to reflect contract-level changes.",
     security:
       "Identify security vulnerabilities, unsafe patterns, and compliance issues. Rank findings by severity.",
-    security_audit:
+    "security-audit":
       "Audit for security vulnerabilities, misuse of auth/authz, secret handling, injection surfaces, and unsafe defaults. Rank findings by blast radius and exploitability. Do NOT attempt fixes in the audit step.",
     ship: "Synthesize build artifacts into a PR description and changelog entry.",
     test: "Write or extend tests. Run the suite. Report pass/fail counts and any newly-discovered gaps.",
-    test_gap:
+    "test-gap":
       "Inventory test coverage gaps for the pinned targets. Add missing tests that exercise meaningful behavior, not line coverage. Report pass/fail counts and any regressions surfaced while writing the tests.",
     write: "Draft or edit a Canon principle following the principle template.",
   };

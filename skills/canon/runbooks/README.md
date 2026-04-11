@@ -40,7 +40,7 @@ steps:                             # ordered list
   - role:              <canon agent name>   # e.g. canon-researcher
     task_type:         <tag>                # research | design | implement | review | test | fix | ...
                                             # plus Phase 2 tags: refactor | migrate |
-                                            # security_audit | test_gap
+                                            # security-audit | test-gap
     artifact:          <artifact id>        # logical name, referenced by downstream steps
     artifact_path:     <relative path>      # under .canon/workspaces/<id>/ —
                                             # flat (Phase 1) OR template

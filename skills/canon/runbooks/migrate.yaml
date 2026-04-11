@@ -23,7 +23,7 @@
 #   4. canon-tester     — verify each stage left the system working
 #   5. canon-security   — audit migration surface (data exposure,
 #                         credential handling, permission changes);
-#                         task_type=security_audit
+#                         task_type=security-audit
 #   6. canon-scribe     — sync docs
 #   7. canon-reviewer   — principle + drift review
 #   8. canon-shipper    — PR + changelog
@@ -67,7 +67,7 @@ steps:
       - implementation_summary
 
   - role: canon-security
-    task_type: security_audit
+    task_type: security-audit
     artifact: security_assessment
     artifact_path: reviews/SECURITY.md
     hitl: after_if_verdict_not_clean

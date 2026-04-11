@@ -10,7 +10,7 @@
 # docs/phase-2-conversion-notes.md §test-gap.
 #
 # Role sequence:
-#   1. canon-researcher — coverage scan (task_type=test_gap); identifies
+#   1. canon-researcher — coverage scan (task_type=test-gap); identifies
 #                         untested modules, missing branches, missing
 #                         edge and integration cases
 #   2. canon-tester     — write tests to fill the gaps and run the suite
@@ -25,14 +25,14 @@ tier: small
 
 steps:
   - role: canon-researcher
-    task_type: test_gap
+    task_type: test-gap
     artifact: research_synthesis
     artifact_path: research/SYNTHESIS.md
     hitl: false
     required_artifacts: []
 
   - role: canon-tester
-    task_type: test_gap
+    task_type: test-gap
     artifact: test_report
     artifact_path: reviews/TEST-REPORT.md
     hitl: false

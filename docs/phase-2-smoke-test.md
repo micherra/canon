@@ -227,7 +227,7 @@ All three per-task wave artifacts landed at their expanded
 ```
 
 Includes the security-audit step (`canon-security`,
-`task_type=security_audit`) between tester and reviewer. Migration
+`task_type=security-audit`) between tester and reviewer. Migration
 surface auditing preserved.
 
 #### test-gap, review-only, security-audit (flat, no waves)

@@ -373,8 +373,8 @@ describe("Phase 2 task types", () => {
   const newTaskTypes = [
     { task_type: "refactor" as const, expect: /behavior|refactor/i },
     { task_type: "migrate" as const, expect: /migration|rollback/i },
-    { task_type: "security_audit" as const, expect: /vulnerabilit/i },
-    { task_type: "test_gap" as const, expect: /coverage|gaps/i },
+    { task_type: "security-audit" as const, expect: /vulnerabilit/i },
+    { task_type: "test-gap" as const, expect: /coverage|gaps/i },
   ];
 
   for (const { task_type, expect: expected } of newTaskTypes) {

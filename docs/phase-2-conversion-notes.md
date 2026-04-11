@@ -93,7 +93,7 @@ Role sequence:
 2. `canon-architect` (`task_type: migrate`, `hitl: after`) — staged migration plan. **Compressed from two legacy architect spawns** — legacy uses `design.compete.count: 2` with `strategy: synthesize` and `lenses: [safety-first, minimal-disruption]`. Phase 2 runs a single architect; the task_type `migrate` is expected to select priming that balances safety and minimal disruption.
 3. `canon-implementor` (wave, `task_type: migrate`) — one teammate per migration stage.
 4. `canon-tester` (flat) — verifies each stage.
-5. `canon-security` (flat, `task_type: security_audit`, `hitl: after_if_verdict_not_clean`) — audits migration surface. Mirrors `security-scan.security`.
+5. `canon-security` (flat, `task_type: security-audit`, `hitl: after_if_verdict_not_clean`) — audits migration surface. Mirrors `security-scan.security`.
 6. `canon-scribe` (flat) — mirrors `context-sync`.
 7. `canon-reviewer` (flat, `hitl: after_if_verdict_not_clean`) — mirrors `review-fix-loop.review`.
 8. `canon-shipper` (flat) — mirrors `ship-done.ship`.
@@ -118,8 +118,8 @@ Fragments consulted: `review-fix-loop`
 Runbook: `skills/canon/runbooks/test-gap.yaml` (tier: small)
 
 Role sequence:
-1. `canon-researcher` (`task_type: test_gap`) — coverage scan. Mirrors legacy `scan.role: coverage-scan`.
-2. `canon-tester` (`task_type: test_gap`) — write tests and run the suite. Mirrors legacy `write-tests`.
+1. `canon-researcher` (`task_type: test-gap`) — coverage scan. Mirrors legacy `scan.role: coverage-scan`.
+2. `canon-tester` (`task_type: test-gap`) — write tests and run the suite. Mirrors legacy `write-tests`.
 3. `canon-reviewer` (`hitl: after_if_verdict_not_clean`) — principle review. Mirrors `review-fix-loop.review`.
 
 Divergences:
@@ -160,7 +160,7 @@ Fragments consulted: `security-scan`
 Runbook: `skills/canon/runbooks/security-audit.yaml` (tier: small)
 
 Role sequence:
-1. `canon-security` (`task_type: security_audit`, `hitl: after_if_verdict_not_clean`) — scan for vulnerabilities.
+1. `canon-security` (`task_type: security-audit`, `hitl: after_if_verdict_not_clean`) — scan for vulnerabilities.
 2. `canon-reviewer` (`hitl: after_if_verdict_not_clean`) — principle compliance review, cross-referencing the security assessment.
 
 Divergences:

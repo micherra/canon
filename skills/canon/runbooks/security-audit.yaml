@@ -10,7 +10,7 @@
 # docs/phase-2-conversion-notes.md §security-audit.
 #
 # Role sequence:
-#   1. canon-security — scan for vulnerabilities (task_type=security_audit);
+#   1. canon-security — scan for vulnerabilities (task_type=security-audit);
 #                       HITL after on non-clean verdict so critical
 #                       findings pause for human triage
 #   2. canon-reviewer — principle compliance review of the same changes,
@@ -27,7 +27,7 @@ tier: small
 
 steps:
   - role: canon-security
-    task_type: security_audit
+    task_type: security-audit
     artifact: security_assessment
     artifact_path: reviews/SECURITY.md
     hitl: after_if_verdict_not_clean
