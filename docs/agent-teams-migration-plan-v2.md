@@ -106,3 +106,15 @@ Runs after the final step completes or the flow is aborted:
 ### Design principle: no silent losses
 
 Every integration in the legacy pipeline maps to a named stage in 2.2, a named responsibility in 2.3, or a named step in 2.4. The integration disposition table (§9) traces each of the 28 audit gaps to its v2 home. If an integration cannot be traced, the plan is incomplete.
+
+### 2.5 Experimental validation (2026-04-12)
+
+Before committing to this architecture, four experiments tested the highest-risk assumptions. All passed.
+
+**Experiment 1: HITL pause/resume between agent spawns.** Hypothesis: the lead session can spawn step 1, receive its result, present an approval gate to the user, then spawn step 2 with step 1's output — without any special lifecycle management. Result: **PASS.** The Agent tool is synchronous from the lead's perspective. The lead spawned a simulated `canon-researcher` (step 1), received `STEP_1_COMPLETE` with an artifact path, then spawned `canon-architect` (step 2) which successfully read step 1's artifact. The interleave-pause-spawn pattern works natively. No team lifecycle complications observed.
+
+**Experiment 2: Spawn prompt size limits.** Hypothesis: a fully-hydrated spawn descriptor (~20–25k chars including principles, enrichment, wave briefing, commit provenance, and task instructions) can be delivered without truncation. Result: **PASS.** A 20,959-byte prompt containing 15 principle bodies, enrichment sections, KG context, wave briefing, and task instructions was delivered intact. The agent confirmed the last principle name (`provenance-traceability`) and last section heading (`Extended Task Context: Implementation Notes from Prior Waves`) matched expectations. No truncation detected.
+
+**Experiment 3: Worktree lifecycle from lead session.** Hypothesis: the lead session can create, list, and remove Git worktrees for wave-task isolation. Result: **PASS.** `git worktree add`, `git worktree list`, and `git worktree remove` all succeeded from the lead session. Merge behavior is already validated in production by `wave-lifecycle.ts` (`createWaveWorktrees`, `mergeWaveResults`, `cleanupWorktrees`).
+
+**Experiment 4: Completion signal and artifact verification.** Hypothesis: the lead session can parse structured completion data from an agent's response and verify artifact existence on disk. Result: **PASS.** The agent returned a parseable `STRUCTURED_RESULT` block with `artifact_written: true`, `artifact_path`, `agent_type`, and `exit_status`. Both artifact and metadata files were confirmed present on disk after the agent completed. This validates the post-step effect trigger: the lead parses the agent's structured response, then runs effects (persist_review, check_postconditions) before spawning the next step.
