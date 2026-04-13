@@ -50,178 +50,139 @@ The v1 plan's Phase 2 code (`lead-mode.ts` on `canon/agent-teams-phase-2`) produ
 
 ---
 
-## 2. Target Architecture Overview
+## 2. Target Architecture
 
-### 2.1 The hybrid model: subagents and agent teams
+### 2.1 The core insight
 
-The v1 plan assumed a single replacement substrate. The v2 plan uses **both** Claude Code primitives, each for what it does best. Anthropic's guidance:
+The v1 plan asked "how do we replace drive_flow with runbooks?" The v2 draft asked "how do we replace drive_flow with a hybrid of subagents and agent teams?" Both questions assumed the state machine needed a replacement. The right question is: **does Canon's state machine provide anything Claude can't do natively?**
 
-> Use subagents when you need quick, focused workers that report back. Use agent teams when teammates need to share findings, challenge each other, and coordinate on their own.
+The answer, after 18 experiments and a documentation review, is no. Everything `drive_flow` coordinates — sequencing, conditionals, HITL gates, parallel dispatch, convergence, skip conditions, effects — is native Claude capability. The state machine was built before Claude Code had multi-agent coordination. Now that it does, the custom scheduler is overhead.
 
-Most Canon flow steps are sequential pipelines — researcher → architect → implementor → reviewer — where each step produces an artifact consumed by the next. This is textbook subagent work: focused, fast, cheap. Only wave tasks (parallel implementation across files), debate protocols, and collaborative review genuinely need inter-agent coordination.
+What the state machine does NOT provide is Canon's actual value: principle-grounded context, drift tracking, knowledge graph queries, artifact contracts, commit provenance, file claims, enrichment. Those are MCP tools. They stay.
 
-**Decision framework — which primitive for which step:**
+### 2.2 The architecture: Canon as Claude's toolkit
+
+```
+User request
+  → Claude (lead) reads CLAUDE.md + agent defs + runbook
+  → Claude calls Canon MCP tools to compose context
+  → Claude spawns subagents or creates agent team
+  → Agents work (teammates have MCP access; subagents don't)
+  → Claude handles HITL, effects, completion natively
+  → Claude calls Canon MCP tools for analytics and cleanup
+```
+
+**What stays (Canon's value):**
+
+| Layer | What | Why |
+|-------|------|-----|
+| **MCP tools** | `get_principles`, `list_principles`, `get_compliance`, `get_drift_report`, `get_file_context`, `graph_query`, `semantic_search`, `codebase_graph`, `record_agent_metrics`, `post_event`, `show_pr_impact`, `review_code`, `store_pr_review`, `store_summaries` | These ARE Canon. Principles, drift, KG, artifacts, metrics — Claude uses them as a native toolkit. |
+| **Agent definitions** | 13 types in `agents/*.md` | Valid as both subagent types and agent team teammate types. The `tools` allowlist is honored in both paths. |
+| **Hooks** | `TaskCompleted`, `TeammateIdle`, `SubagentStart/Stop` scripts | Defense-in-depth artifact enforcement and observability. |
+| **Workspace storage** | `.canon/workspaces/<id>/` | Artifact storage, progress tracking, workspace metadata. |
+| **Shared libraries** | `commit-trailers.ts`, `file-claims.ts`, `matcher.ts` | Principle matching, commit provenance, file ownership — used by MCP tools and available to the lead. |
+| **Runbooks** | `skills/canon/runbooks/*.yaml` | Lightweight playbooks describing recommended step sequences. Not executable — Claude reads them as guidance. |
+
+**What goes (the custom coordination layer):**
+
+| Component | File(s) | Why it's deletable |
+|-----------|---------|-------------------|
+| State machine runtime | `drive-flow.ts`, `drive-flow-helpers.ts`, `drive-flow-wave.ts`, `drive-flow-wave-lifecycle.ts` | Claude sequences steps natively. |
+| 9-stage prompt pipeline | `features/prompt-pipeline/` (all stages) | Claude calls MCP tools directly to compose context before spawning. Each MCP tool is a standalone capability, not a pipeline stage. |
+| Flow YAML runtime | Parser, validator, fragment inclusion, transition matcher | Claude reads runbooks for guidance; no executable state machine needed. |
+| Wave event plumbing | `inject_wave_event`, `resolve_wave_event`, flow event channel | Agent teams' native Mailbox + task list replace custom wave coordination. |
+| Custom HITL vocabulary | Five breakpoint shapes, convergence exhausted, gate failure | Claude handles HITL natively. Agent teams' plan approval mode covers architect gates. |
+| Message channel | `post_message`, `get_messages` | Agent teams' Mailbox replaces this. |
+| Session continuation | `applySessionContinuation` | Claude includes context summaries in spawn prompts naturally. |
+| Consultation executor | `consultation-executor.ts` | Claude can spawn an advisory subagent and inject its output — no special mechanism needed. |
+
+### 2.3 How Claude orchestrates a Canon flow
+
+A concrete example of `fast-path` (bug fix):
+
+1. **User says** "fix the broken search" to the Canon lead session.
+2. **Claude reads** `CLAUDE.md`, sees Canon orchestration instructions. Reads the `fast-path` runbook for the recommended step sequence.
+3. **Claude calls** `get_principles` with the target file scope → gets matched principles. Calls `get_file_context` → gets KG summaries. Calls `get_drift_report` → gets recent drift. Assembles this into a research prompt.
+4. **Claude spawns** a `canon-researcher` subagent with the enriched prompt. Waits for result. Gets a research synthesis artifact.
+5. **Claude spawns** a `canon-architect` subagent with the research synthesis as upstream context. Waits for result. Gets a plan index.
+6. **Claude presents** the plan to the user for approval (native HITL). User approves.
+7. **Claude spawns** a `canon-implementor` subagent with the plan and principles. Waits for result. Gets an implementation summary.
+8. **Claude spawns** a `canon-reviewer` subagent. Waits for result. Gets a review verdict.
+9. **If verdict is not clean**, Claude loops back to step 7 with the review feedback. (Native judgment, not a state transition.)
+10. **Claude calls** `record_agent_metrics`, `store_summaries`, evaluates learn gate, releases file claims. Done.
+
+For an `epic` flow with wave tasks, step 7 becomes: Claude creates an agent team, spawns N `canon-implementor` teammates (one per task), they self-coordinate via shared task list and Mailbox, Claude merges worktrees after the wave completes.
+
+### 2.4 Dispatch framework
 
 | Step pattern | Primitive | Rationale |
 |-------------|-----------|-----------|
-| Single agent, focused task, artifact goes to next step | **Subagent** | Fast, cheap, result returns to orchestrator |
+| Single agent, focused task, artifact goes to next step | **Subagent** | Fast, cheap, result returns to lead |
 | Sequential pipeline (research → plan → implement → review) | **Subagents** (chained) | Each step is independent; only the artifact connects them |
-| Parallel implementation across files (wave tasks) | **Agent team** | Teammates need to avoid file conflicts, coordinate merges |
-| Debate / competing hypotheses | **Agent team** | Teammates challenge each other's findings |
-| Collaborative review (reviewer + author discussion) | **Agent team** | Back-and-forth requires direct messaging |
-| Consultation (advisory, non-blocking) | **Subagent** | Quick opinion, result returns to orchestrator |
-| Background housekeeping (janitor, learner) | **Subagent** (background) | No coordination needed, just runs and reports back |
+| Parallel implementation across files (wave tasks) | **Agent team** | Teammates coordinate via Mailbox, shared task list, file locking |
+| Debate / competing hypotheses | **Agent team** | Teammates challenge each other's findings directly |
+| Consultation (advisory, non-blocking) | **Subagent** | Quick opinion, result returns to lead |
+| Background housekeeping (janitor, learner) | **Subagent** (background) | No coordination needed |
 
-**Key capability differences (per [Claude Code docs](https://code.claude.com/docs/en/agent-teams)):**
+### 2.5 Why this is simpler
 
-| Capability | Subagents | Agent teams teammates |
-|-----------|-----------|----------------------|
-| Context | Own context window; results return to caller | Own context window; loads CLAUDE.md, MCP servers, skills |
-| MCP access | **No** — only built-in tools | **Yes** — same project context as a regular session |
-| Communication | Report results back to lead only | Native Mailbox — message each other directly |
-| Coordination | Lead manages all ordering | Shared task list with dependencies, self-claiming |
-| HITL gates | Lead checks result, then decides next step | Native plan approval mode (read-only until lead approves) |
-| Hooks | SubagentStart/Stop | TeammateIdle, TaskCreated, TaskCompleted |
-| Permissions | Inherit lead's tools via subagent definition `tools` field | Inherit lead's permission mode; subagent definition `tools` honored |
-| Lifecycle | Synchronous (lead waits) or background | Independent sessions; lead can message, redirect, shut down |
-| Token cost | Lower — results summarized back | Higher — each is a full Claude instance |
-| Abort | None (wait or timeout) | Lead asks to shut down (teammate can reject; shutdown is graceful) |
+1. **One orchestrator: Claude.** No custom state machine, no custom scheduler, no transition resolver. Claude reads guidance and uses judgment — the thing it's best at.
+2. **MCP tools as primitives.** Each Canon capability is a standalone MCP tool call, not a pipeline stage wired into a runtime. The lead composes them as needed, not in a fixed 13-stage sequence.
+3. **Native coordination.** Subagents for sequential work, agent teams for parallel work. No custom wave plumbing, no custom message channel, no custom HITL vocabulary.
+4. **Canon's value is untouched.** Principles, drift, KG, artifacts, metrics, commit provenance, file claims — all preserved as MCP tools. What's deleted is only the scheduling machinery.
+5. **Agent definitions work as-is.** All 13 agent defs are valid subagent and teammate types. The `tools` allowlist is honored in both paths per [Claude Code docs](https://code.claude.com/docs/en/agent-teams).
 
-### 2.2 Architecture layers
+### 2.6 The consistency question
 
-#### Layer 1: Runbook Loader (data)
+The risk: Claude might not consistently follow the same process. Two runs of the same task might produce different execution paths.
 
-Reads a declarative YAML runbook from `skills/canon/runbooks/<name>.yaml`. Runbooks describe *what* to do — roles, artifacts, dependencies, HITL gates, wave policy — but contain no execution logic. Each step declares its **dispatch mode**: `subagent` (default) or `team`. The loader is unchanged from v1 and already exists on the Phase 2 branch (`parseRunbook` in `lead-mode.ts`).
+Mitigations:
+- **CLAUDE.md** describes the expected flow patterns and orchestration discipline. Claude reads this on every session.
+- **Runbooks** as suggested playbooks — Claude follows them but can adapt when the situation warrants.
+- **Hooks** as guardrails — `TaskCompleted` enforces artifacts exist, `TeammateIdle` catches premature stops. These are hard enforcement, not Claude judgment.
+- **MCP tool contracts** — `record_agent_metrics`, `store_summaries`, `get_compliance` provide structured feedback loops. Canon's observability surface tells you what actually happened regardless of the execution path.
+- **Agent definitions** constrain each agent's tool access and behavioral instructions. A `canon-researcher` gets Read/Glob/Grep, not Write/Edit. This is enforced by Claude Code, not by Claude's judgment.
 
-#### Layer 2: Plan-Time Pipeline (composition)
+The state machine provided *determinism*. But Canon's flows aren't deterministic today (convergence loops, skip conditions, adaptive waves). And Claude's judgment about "what comes next" is arguably better than a rigid state graph — it can adapt to what it finds without needing a pre-authored transition for every contingency.
 
-Takes a parsed runbook + workspace state and produces **fully-hydrated spawn descriptors**. This layer is critical for subagent steps (subagents lack MCP access and cannot self-serve context) and an efficiency optimization for team steps (pre-composing avoids each teammate independently querying the same data).
+### 2.7 Experimental validation (2026-04-12)
 
-Pipeline stages:
+Eighteen experiments informed the architecture. Experiments 1–17 used the Agent tool (subagents); experiment 18 was corrected against the [agent teams documentation](https://code.claude.com/docs/en/agent-teams).
 
-1. **Workspace bootstrap** — create workspace directory, seed `progress.md`, build cache prefix, run preflight checks. Replaces `init_workspace`.
-2. **Worktree creation** — for wave/team steps, create per-task Git worktrees. Replaces `createWaveWorktrees`.
-3. **Principle resolution** — match principles to step scope via `shared/matcher.ts`. Inject into spawn prompt. *Required for subagents; optimization for teammates (who can call `get_principles` themselves).*
-4. **Context enrichment** — assemble the four-section enrichment block (Recent Changes, Drift Signals, Prior Work, Tensions). Replaces `assembleEnrichment`.
-5. **Tool profile resolution** — resolve each role's tools, permissions, and write scope. For subagents: injected into the spawn prompt and the subagent definition `tools` field. For teammates: carried via subagent definition `tools` allowlist (honored per docs).
-6. **Permissions setup** — for subagent worktree steps: write `.claude/settings.local.json` (subagents need this). For team steps: permissions inherit from lead (per docs: "Teammates start with the lead's permission settings").
-7. **Commit provenance** — inject `Canon-Workflow / Canon-Agent / Canon-State / Canon-Task` trailers. Same for both primitives.
-8. **Session continuation** — inject `continue_from` context summary for resumed steps. Subagents: in spawn prompt. Teammates: in spawn prompt (no cross-session memory per docs).
-9. **Wave briefing** — for wave 2+ steps, inject prior-wave summaries. Relevant for team dispatch.
-10. **Consultation pre-briefing** — resolve `before` / `between` consultation outputs. Consultations themselves are subagent-dispatched.
-11. **File claims registration** — register affected files in `.canon/claims.json`.
-12. **HITL classification** — classify breakpoint config. For subagents: lead checks result post-completion. For teammates: use native plan approval mode where applicable.
-13. **Prompt validation** — scan for unresolved `${...}` references.
+**Key findings that shaped this architecture:**
 
-#### Layer 3: Run-Time Coordinator (execution)
+| # | What we tested | Result | Architecture impact |
+|---|---------------|--------|-------------------|
+| 1 | HITL pause/resume between spawns | PASS | Claude can gate between steps natively |
+| 2 | 21k char enriched spawn prompt | PASS | MCP-composed context fits in spawn prompts |
+| 3 | Worktree lifecycle from lead | PASS | Lead can manage wave worktrees |
+| 4 | Structured completion parsing | PASS | Lead can parse agent results and run effects |
+| 5 | Flow event channel (structured response) | PASS | Subagent path works; teams use native Mailbox |
+| 6 | Session continuation | CONSTRAINT | No cross-session memory — context via prompt injection |
+| 7 | Artifact enforcement timing | PASS | Synchronous subagents = deterministic enforcement |
+| 8 | Worktree settings injection | CONSTRAINT | Subagents need pre-injected settings; teammates inherit lead permissions |
+| 9 | Concurrent file claims | PASS (caveat) | Add optimistic concurrency to claims.json |
+| 10 | Tool-level loop detection | POST-HOC | Subagents: check metrics after completion. Teams: lead messages to check |
+| 11/14 | Timeout / abort / effort budgets | GAP | No hard timeout. Teams: graceful shutdown. Mitigate with prompt budgets |
+| 12 | Self-reported metrics | PASS | Subagent self-report matches metadata. Teams: call `record_agent_metrics` via MCP |
+| 13 | Mid-execution signaling | PASS | Subagents: filesystem polling. Teams: native Mailbox |
+| 15 | Compaction visibility | GAP | No signal. Mitigate with reasoning checkpoint instructions |
+| 16 | Path enforcement | GAP | No sandbox. Mitigate with pre-tool hooks |
+| 17 | Background async agent | PASS | Janitor/learner pattern viable |
+| 18 | MCP tool access | CORRECTED | Subagents: no MCP. Teammates: full MCP (per docs) |
 
-Dispatches steps using the appropriate primitive and manages the flow lifecycle.
+**Critical documentation findings (not experimentally tested):**
 
-**For subagent steps** (the common path):
-- Spawn subagent with hydrated descriptor.
-- Wait for result (synchronous) or poll (background).
-- Parse structured response for completion status, metrics, flow events.
-- Verify artifact on disk.
-- Run post-step effects (persist_review, check_postconditions).
-- Present HITL breakpoint if classified.
-- Spawn next step.
+| Feature | Per Claude Code docs | Impact |
+|---------|---------------------|--------|
+| Teammates load CLAUDE.md, MCP servers, skills | "same project context as a regular session" | Teammates have full Canon MCP access |
+| Native Mailbox | Automatic message delivery between teammates | Replaces custom `post_message` / `get_messages` and flow event channel |
+| Plan approval mode | "Teammate works in read-only plan mode until the lead approves" | Maps directly to Canon's architect approval gate |
+| Shared task list with dependencies | Tasks auto-unblock; file-locking prevents race conditions | Replaces custom wave task coordination |
+| Subagent `tools` allowlist honored for teammates | "The teammate honors that definition's tools allowlist" | Canon agent definitions enforce tool scope in both paths |
+| Graceful teammate shutdown | "Lead sends shutdown request. Teammate can reject." | Partial abort mechanism for long-running teammates |
+| One team per session | Limitation | Lead cleans up team between flow phases |
+| No nested teams | Limitation | Teammates cannot spawn their own teams |
+| Permissions set at spawn | "Teammates start with the lead's permission settings" | Different mechanism than subagent settings.local.json |
 
-**For team steps** (wave tasks, debate):
-- Create agent team via lead session.
-- Spawn teammates from hydrated descriptors. Teammates load Canon MCP servers from project context — they can call `record_agent_metrics`, `post_event`, `report_result` directly.
-- Create shared task list with dependencies derived from the runbook.
-- Teammates self-claim tasks and coordinate via native Mailbox.
-- Use `TaskCompleted` hooks for artifact enforcement (exit 2 if artifact missing).
-- Use `TeammateIdle` hooks as backstop.
-- For architect approval gates: use native plan approval mode ("require plan approval before they make any changes").
-- After all tasks complete: merge worktrees per wave policy, run inter-wave gates.
-- Lead synthesizes results and decides next action.
-- Clean up team before proceeding.
-
-**For either path:**
-- Drain flow events (from subagent structured responses or teammate messages).
-- Handle mid-flow adaptation (insert/skip/escalate).
-- Detect stuck states via prompt-based budgets and post-completion metrics.
-
-#### Layer 4: Completion Phase (teardown)
-
-Runs after the final step completes or the flow is aborted. Same regardless of dispatch mode:
-
-- **Learn gate evaluation** — `evaluateLearnGate(projectDir)` (ADR-016).
-- **Flow analytics** — aggregate metrics into `FlowRunEntry` via DriftStore.
-- **Claims release** — `releaseClaims(projectDir, workflow)`.
-- **Agent metrics persistence** — from subagent structured responses or teammate `record_agent_metrics` calls.
-- **Drift persistence** — flush pending review entries to DriftStore.
-- **Worktree cleanup** — remove `.canon/worktrees/<task_id>/` after merges.
-- **Team teardown** — clean up Claude Code team state (if a team was created).
-
-### 2.3 Why this hybrid outperforms either primitive alone
-
-1. **Cost efficiency.** Most flow steps (research, architecture, single-file implementation, review) are fast subagent dispatches. Token cost scales linearly with teammates — only pay that cost for steps that genuinely need coordination.
-2. **Composition guarantee.** Subagents lack MCP access, so the plan-time pipeline must inject everything. This forces discipline: every integration is explicitly composed, not accidentally available. For team steps, the same pipeline provides consistent context across peers.
-3. **Native HITL.** Agent teams' plan approval mode maps directly to Canon's architect approval gate. No custom HITL vocabulary needed for that case. Subagent steps use the simpler post-completion check.
-4. **Native coordination for waves.** Shared task list with dependencies, file-locking for claim prevention, and direct teammate messaging replace Canon's custom wave orchestration for the cases that need it.
-5. **Canon's agent definitions work for both.** The 13 agent defs in `agents/*.md` are valid as both subagent types and teammate types. The `tools` allowlist in definitions is honored in both paths.
-
-### Design principle: no silent losses
-
-Every integration in the legacy pipeline maps to a named stage in the plan-time pipeline, a named responsibility in the run-time coordinator, or a named step in the completion phase. The integration disposition table (§9) traces each of the 28 audit gaps to its v2 home. If an integration cannot be traced, the plan is incomplete.
-
-### 2.4 Experimental validation (2026-04-12)
-
-Eighteen experiments tested architecture assumptions. Experiments 1–17 used the **Agent tool (subagents)** — findings about file I/O, prompt delivery, structured responses, and worktree lifecycle are portable to agent teams. Findings about tool access and communication channels differ between the two primitives. Experiment 18 was corrected against the [agent teams documentation](https://code.claude.com/docs/en/agent-teams).
-
-#### Subagent-path experiments (validated via Agent tool)
-
-**Experiment 1: HITL pause/resume.** Sequential spawn-pause-spawn works natively. The Agent tool is synchronous: lead spawns step 1, receives result, presents gate, spawns step 2. **PASS.**
-
-**Experiment 2: Spawn prompt size.** 20,959-byte hydrated prompt delivered intact. No truncation. **PASS.**
-
-**Experiment 3: Worktree lifecycle.** Create/list/remove from lead session works. Merge validated by production `wave-lifecycle.ts`. **PASS.**
-
-**Experiment 4: Completion signal.** Agent returned parseable structured `STRUCTURED_RESULT` block. Artifacts verified on disk post-completion. **PASS.**
-
-**Experiment 5: Flow events via structured response.** Agent emitted `FLOW_EVENT:TYPE:TARGET:reason=...` lines. Lead parsed all three. Also wrote JSON events file as backup channel. **PASS.** *Note: agent teams teammates have the native Mailbox for this — a richer channel than structured response parsing.*
-
-**Experiment 6: Session continuation.** No cross-session memory. Disk-persisted state recoverable; conversational context lost. Context summaries must be explicit in the spawn prompt. **CONFIRMED CONSTRAINT.** *Applies to both subagents and teammates (per docs: "The lead's conversation history does not carry over").*
-
-**Experiment 7: Artifact enforcement timing.** Synchronous Agent tool = deterministic sequencing. Lead checks artifact after agent completes, before spawning next step. **PASS BY DESIGN.** *For agent teams: `TaskCompleted` hooks provide native enforcement.*
-
-**Experiment 8: Worktree settings injection.** Subagents need settings.local.json written before spawn (they can't write their own). **CONFIRMED CONSTRAINT for subagents.** *For agent teams: teammates inherit lead's permission settings per docs — different mechanism.*
-
-**Experiment 9: Concurrent file claims.** Sequential operations work. Concurrent read-modify-write has lost-update risk. **PASS with caveat** — add optimistic concurrency.
-
-#### Roadmap compatibility experiments
-
-**Experiment 10: Tool-level loop detection.** Post-hoc only for subagents (no mid-execution visibility). Self-report + metadata `tool_uses` match. *For teams: lead can message teammates to check progress.* **POST-HOC for subagents; PARTIAL for teams.**
-
-**Experiment 11/14: Timeout and effort budgets.** No timeout/abort for subagents. *For teams: lead can ask teammate to shut down (graceful, teammate can reject). "Shutdown can be slow: teammates finish their current request."* **GAP for subagents; PARTIAL for teams.**
-
-**Experiment 12: Self-reported metrics.** Agent self-reported `tool_calls: 8` matched metadata `tool_uses: 8`. **PASS.** *For teams: teammates can call `record_agent_metrics` directly via MCP.*
-
-**Experiment 13: Mid-execution signaling.** Filesystem polling works (8-second gaps between signals). *For teams: native Mailbox with automatic delivery replaces polling.* **PASS for subagents; NATIVE for teams.**
-
-**Experiment 15: Compaction.** No compaction visibility for either primitive. Mitigate with prompt-based reasoning checkpoints. **CONFIRMED GAP.**
-
-**Experiment 16: Path enforcement.** No sandbox — worktree isolation only sets CWD. Writes to arbitrary paths succeed. **CONFIRMED GAP.** *Same for both primitives. Mitigate with pre-tool hooks.*
-
-**Experiment 17: Background agent.** `run_in_background` works for async subagents. *For teams: all teammates are inherently independent sessions.* **PASS.**
-
-#### Documentation-corrected finding
-
-**Experiment 18: MCP tool access.** Subagents do NOT inherit Canon MCP server. Agent teams teammates DO — per docs: "a teammate loads the same project context as a regular session: CLAUDE.md, MCP servers, and skills." The `skills` and `mcpServers` fields in subagent definitions are NOT applied to teammates — teammates get MCP from project/user settings. **This validates the hybrid model**: subagent steps need the plan-time pipeline (no MCP fallback); team steps benefit from it but can self-serve.
-
-### 2.5 Experiment summary
-
-**Confirmed constraints:**
-- No cross-session memory for either primitive (exp 6)
-- Subagents need settings.local.json pre-injected; teammates inherit lead's permissions (exp 8, docs)
-- Subagents lack MCP access; teammates have it (exp 18, docs)
-
-**Confirmed gaps (mitigations needed):**
-- No hard timeout/abort for subagents; graceful shutdown for teammates (exp 11/14, docs)
-- No path enforcement in worktree isolation (exp 16)
-- No compaction visibility (exp 15)
-- Post-hoc only loop detection for subagents (exp 10)
-
-**Architecture confidence:** HIGH. The hybrid model assigns each primitive to its strength: subagents for the fast sequential pipeline (most steps), agent teams for parallel coordination (waves, debate). The plan-time pipeline is required for subagent steps and an efficiency optimization for team steps. Phase 1 should include a validation checkpoint with actual agent teams to confirm teammate MCP access and Mailbox behavior in Canon's environment.
+**Architecture confidence:** HIGH. The "Canon as Claude's toolkit" model is validated. Canon's MCP tools provide every capability the state machine composed; Claude's native orchestration replaces the scheduling machinery. Phase 1 should include a validation checkpoint with actual agent teams to confirm teammate MCP access and Mailbox behavior in Canon's environment.
