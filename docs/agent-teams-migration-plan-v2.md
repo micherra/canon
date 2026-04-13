@@ -149,24 +149,21 @@ Eight additional experiments tested whether roadmap items that predate the agent
 
 #### Critical architecture experiment
 
-**Experiment 18: MCP tool access from spawned agents.** Hypothesis: agents spawned via the Agent tool can access Canon's MCP server tools (`get_principles`, `record_agent_metrics`, `post_event`, `report_result`, `get_drift_report`, etc.). Result: **CONFIRMED GAP — agents have zero Canon MCP access.** A spawned agent searched for every Canon MCP tool name and found none. The Canon MCP server (registered as a stdio process in the project's MCP config) is not connected to spawned agent environments. Agents have only: built-in Claude Code tools (Read, Write, Edit, Bash, Glob, Grep), GitHub MCP tools (`mcp__github__*`), and standard utilities (WebFetch, WebSearch, TodoWrite, ToolSearch).
+**Experiment 18: MCP tool access from spawned agents.** Hypothesis: agents spawned via the Agent tool can access Canon's MCP server tools. Result: **FLAWED EXPERIMENT — tested the wrong primitive.** The experiment used the Agent tool (subagents), which does not inherit Canon's MCP server. However, per Claude Code's [agent teams documentation](https://code.claude.com/docs/en/agent-teams): "Each teammate has its own context window. When spawned, a teammate loads the same project context as a regular session: CLAUDE.md, MCP servers, and skills." **Agent teams teammates DO have MCP access.** This changes the architecture picture:
 
-This is the single most consequential finding for the v2 architecture. It means:
-
-1. **All MCP-dependent context must be assembled by the orchestrator at plan time.** Agents cannot call `get_principles` — principles must be resolved and injected into the spawn prompt. Agents cannot call `get_file_context` — KG data must be queried and injected. Agents cannot call `graph_query` or `semantic_search`. The plan-time pipeline (§2.2) is not just an architectural preference — it is the only viable design.
-2. **All agent reporting must use structured response contracts.** Agents cannot call `record_agent_metrics` — they must self-report metrics in a parseable block (validated in experiment 12: self-reported `tool_calls: 8` matched metadata `tool_uses: 8`). Agents cannot call `post_event` — activity events must be extracted by the orchestrator from the agent's response. Agents cannot call `report_result` — completion status must be communicated through structured response blocks and artifact files.
-3. **The orchestrator is richer than v1 assumed.** It cannot delegate any MCP-dependent work to agents. It must be the sole consumer of Canon's MCP surface and the sole producer of enriched spawn prompts. This validates the four-layer architecture (§2): the plan-time pipeline does composition, the run-time coordinator does effects, and agents are pure workers that receive everything they need in their prompt and return everything via structured responses and artifacts.
-4. **GitHub MCP tools ARE available** (configured at the Claude Code project level, not the Canon MCP server level). This is a different configuration path — worth noting but not directly relevant to Canon's own tool surface.
+1. **Teammates can call Canon MCP tools directly.** `record_agent_metrics`, `post_event`, `get_principles`, `report_result`, `get_file_context`, `graph_query` — all available to teammates. Gaps 5 (principle loading), 17 (agent metrics), 18 (activity logging), and 8 (post-state effects) are significantly easier to address than if agents had no MCP access.
+2. **The plan-time pipeline is an optimization, not a hard requirement.** Pre-composing principles, enrichment, and KG context into the spawn prompt is still the right design — it's more efficient than each teammate independently querying the same data, and it ensures consistent context across wave peers. But agents are not helpless without it; they can fall back to MCP tool calls for anything the pipeline misses.
+3. **Structured response contracts remain valuable** for the lead to parse completion status, even though agents can also call `report_result` directly. The lead needs to know what happened to drive HITL breakpoints and post-state effects.
+4. **The Agent tool (subagents) vs. agent teams (teammates) distinction matters.** Experiments 1–17 used the Agent tool. Most findings (prompt delivery, file I/O, structured responses, worktree lifecycle) are portable to agent teams. Tool access findings are not — teammates get more tools than subagents. A Phase 1 validation checkpoint should re-confirm MCP access with actual agent teams teammates.
 
 ### 2.6 Experiment summary and architecture confidence
 
-Across 18 experiments, the v2 target architecture is validated with four confirmed constraints and three confirmed gaps:
+Across 18 experiments (17 via Agent tool, 1 corrected per agent teams docs), the v2 target architecture is validated with three confirmed constraints and three confirmed gaps:
 
 **Constraints (shape the design but don't block it):**
 - Session continuation is disk-only — no cross-agent memory (exp 6)
 - Worktree settings must be injected by orchestrator before spawn (exp 8)
-- Agents have zero Canon MCP access — all context is plan-time injected (exp 18)
-- Agent metrics must be self-reported via structured responses (exp 12, 18)
+- Agent tool subagents lack MCP access; agent teams teammates have it (exp 18 corrected) — plan-time pipeline is an efficiency optimization, not a hard requirement
 
 **Gaps (require mitigations in the plan):**
 - No agent timeout/abort mechanism (exp 11/14) — mitigate with prompt budgets + polling watchdog
@@ -183,4 +180,6 @@ Across 18 experiments, the v2 target architecture is validated with four confirm
 - Filesystem polling for mid-execution signals (exp 13)
 - Background async agents (exp 17)
 
-Architecture confidence: **HIGH for the core path** (plan-time composition → spawn → structured response → effects). Medium for observability (loop detection, effort budgets) — workable mitigations exist but are weaker than the legacy model's full-visibility wrapper. The four-layer architecture in §2 is validated as the correct and necessary design.
+**Portability note:** Experiments 1–17 used the Agent tool (subagents), not agent teams (teammates). Findings about file I/O, prompt delivery, structured responses, worktree lifecycle, and filesystem signaling are portable. Findings about tool access need re-validation with actual agent teams in Phase 1. The v2 plan includes a Phase 1 validation checkpoint for this.
+
+Architecture confidence: **HIGH for the core path** (plan-time composition → spawn → structured response → effects). The plan-time pipeline remains the right design for efficiency and consistency, even though teammates could theoretically self-serve via MCP tools. Medium confidence for observability (loop detection, effort budgets) — workable mitigations exist but are weaker than the legacy model's full-visibility wrapper.
