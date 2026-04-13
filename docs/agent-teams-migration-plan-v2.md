@@ -146,3 +146,41 @@ Eight additional experiments tested whether roadmap items that predate the agent
 **Experiment 16: Worktree path enforcement / sandboxing (roadmap item 9).** Hypothesis: worktree isolation prevents writes outside the worktree directory. Result: **CONFIRMED GAP — no path enforcement.** An agent spawned with `isolation: "worktree"` successfully wrote to `/tmp/`, to the main repo at `/home/user/canon/`, and to its own worktree. All three writes succeeded. Worktree "isolation" only sets the agent's working directory (CWD) — it does not restrict which filesystem paths tools can access. There is no sandbox. Real path enforcement requires one of: (a) OS-level sandboxing (chroot, namespaces), (b) tool-level path validation (Write/Edit/Bash checking paths against an allowlist), or (c) hook-based interception (pre-tool hooks rejecting out-of-bounds paths). The v2 plan should implement option (c) as a defense-in-depth layer, since hooks are already in the architecture. This is a significant finding for the `agent-tool-scope-minimization` principle.
 
 **Experiment 17: Background janitor agent (roadmap item 17).** Hypothesis: the lead can spawn an async agent for housekeeping while the main flow continues. Result: **PASS.** `run_in_background: true` worked cleanly. The janitor agent scanned workspace files, wrote scan results to disk, and the lead received a completion notification automatically. The lead was free to do other work during the janitor's execution. This validates the background janitor pattern: spawn at flow completion with `run_in_background`, let it prune worktrees and checkpoint databases, and handle its completion notification asynchronously.
+
+#### Critical architecture experiment
+
+**Experiment 18: MCP tool access from spawned agents.** Hypothesis: agents spawned via the Agent tool can access Canon's MCP server tools (`get_principles`, `record_agent_metrics`, `post_event`, `report_result`, `get_drift_report`, etc.). Result: **CONFIRMED GAP — agents have zero Canon MCP access.** A spawned agent searched for every Canon MCP tool name and found none. The Canon MCP server (registered as a stdio process in the project's MCP config) is not connected to spawned agent environments. Agents have only: built-in Claude Code tools (Read, Write, Edit, Bash, Glob, Grep), GitHub MCP tools (`mcp__github__*`), and standard utilities (WebFetch, WebSearch, TodoWrite, ToolSearch).
+
+This is the single most consequential finding for the v2 architecture. It means:
+
+1. **All MCP-dependent context must be assembled by the orchestrator at plan time.** Agents cannot call `get_principles` — principles must be resolved and injected into the spawn prompt. Agents cannot call `get_file_context` — KG data must be queried and injected. Agents cannot call `graph_query` or `semantic_search`. The plan-time pipeline (§2.2) is not just an architectural preference — it is the only viable design.
+2. **All agent reporting must use structured response contracts.** Agents cannot call `record_agent_metrics` — they must self-report metrics in a parseable block (validated in experiment 12: self-reported `tool_calls: 8` matched metadata `tool_uses: 8`). Agents cannot call `post_event` — activity events must be extracted by the orchestrator from the agent's response. Agents cannot call `report_result` — completion status must be communicated through structured response blocks and artifact files.
+3. **The orchestrator is richer than v1 assumed.** It cannot delegate any MCP-dependent work to agents. It must be the sole consumer of Canon's MCP surface and the sole producer of enriched spawn prompts. This validates the four-layer architecture (§2): the plan-time pipeline does composition, the run-time coordinator does effects, and agents are pure workers that receive everything they need in their prompt and return everything via structured responses and artifacts.
+4. **GitHub MCP tools ARE available** (configured at the Claude Code project level, not the Canon MCP server level). This is a different configuration path — worth noting but not directly relevant to Canon's own tool surface.
+
+### 2.6 Experiment summary and architecture confidence
+
+Across 18 experiments, the v2 target architecture is validated with four confirmed constraints and three confirmed gaps:
+
+**Constraints (shape the design but don't block it):**
+- Session continuation is disk-only — no cross-agent memory (exp 6)
+- Worktree settings must be injected by orchestrator before spawn (exp 8)
+- Agents have zero Canon MCP access — all context is plan-time injected (exp 18)
+- Agent metrics must be self-reported via structured responses (exp 12, 18)
+
+**Gaps (require mitigations in the plan):**
+- No agent timeout/abort mechanism (exp 11/14) — mitigate with prompt budgets + polling watchdog
+- No worktree path enforcement (exp 16) — mitigate with pre-tool hooks
+- No real-time loop detection (exp 10) — mitigate with post-hoc self-report analysis
+
+**Confirmed working patterns:**
+- HITL pause/resume between sequential agents (exp 1)
+- 21k+ char hydrated prompts delivered intact (exp 2)
+- Worktree create/merge/cleanup from lead (exp 3)
+- Structured completion signals parseable by lead (exp 4)
+- Filesystem-based flow event channel (exp 5)
+- Synchronous Agent tool = deterministic artifact enforcement (exp 7)
+- Filesystem polling for mid-execution signals (exp 13)
+- Background async agents (exp 17)
+
+Architecture confidence: **HIGH for the core path** (plan-time composition → spawn → structured response → effects). Medium for observability (loop detection, effort budgets) — workable mitigations exist but are weaker than the legacy model's full-visibility wrapper. The four-layer architecture in §2 is validated as the correct and necessary design.
