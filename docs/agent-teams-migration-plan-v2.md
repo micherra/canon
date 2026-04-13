@@ -247,3 +247,184 @@ Every one of the 28 gaps from the integration audit must map to a concrete repla
 | **deprecate** | 1 | Variable interpolation |
 
 **Zero gaps require new code.** Every HIGH-severity integration maps to an existing MCP tool, a native Claude capability, or a combination. The migration is: write CLAUDE.md orchestration guidance, write runbooks as playbooks, delete the state machine.
+
+---
+
+## 4. Phase Boundaries
+
+The migration has three phases. Phase 1 adds guidance (no deletions, no behavior change). Phase 2 validates (no deletions, feature-flagged behavior change). Phase 3 deletes (removes ~130 files / ~35,000 lines behind a verified flag flip).
+
+### Phase 1 — Orchestration Guidance (additions only)
+
+**Goal:** Give Claude everything it needs to orchestrate Canon flows natively, without touching the legacy code path.
+
+**Preconditions:** None. Can start immediately.
+
+**Deliverables:**
+
+| Deliverable | Path | Purpose |
+|------------|------|---------|
+| Orchestration CLAUDE.md | `CLAUDE.md` (update) | Add orchestration discipline: how the lead composes context via MCP tools, when to use subagents vs agent teams, HITL patterns, post-step effects, completion checklist. |
+| Fast-path runbook | `skills/canon/runbooks/fast-path.yaml` | Playbook: research → architecture → HITL → implement → review. Annotates which MCP tools to call at each step, expected artifacts, dispatch mode. |
+| Feature runbook | `skills/canon/runbooks/feature.yaml` | Playbook for 4–10 file features. Includes wave step annotations for parallel implementation. |
+| Refactor runbook | `skills/canon/runbooks/refactor.yaml` | Playbook for restructuring. |
+| Epic runbook | `skills/canon/runbooks/epic.yaml` | Playbook for large cross-cutting changes. Multi-wave with adaptive planning between waves. |
+| Remaining runbooks | `skills/canon/runbooks/{migrate,test-gap,review-only,security-audit,explore}.yaml` | One runbook per legacy flow. |
+| Agent def updates | `agents/*.md` | Add/verify `tools` allowlists for each role so subagent and teammate tool scoping works per docs. |
+| Feature flag | Environment variable `CANON_AGENT_TEAMS_MODE` | `off` (default): legacy `drive_flow` path unchanged. `on`: Claude reads runbooks, calls MCP tools, spawns agents natively. |
+
+**Exit criteria:**
+- All 10 runbooks written and reviewed.
+- CLAUDE.md orchestration section reviewed.
+- Agent definitions carry `tools` allowlists.
+- Feature flag wiring: when `off`, `drive_flow` path is byte-identical to today.
+- `npm test` passes, `npm run build` passes with zero new errors.
+
+**MUST NOT touch:**
+- Any file under `mcp-server/src/features/orchestration/`
+- Any file under `mcp-server/src/features/prompt-pipeline/`
+- Any flow YAML under `flows/`
+- Any existing MCP tool implementation
+
+### Phase 2 — Validation (no deletions)
+
+**Goal:** Prove that Claude-as-lead with `CANON_AGENT_TEAMS_MODE=on` produces equivalent results to the legacy `drive_flow` path for every flow type.
+
+**Preconditions:** Phase 1 complete. MCP server connected (Canon MCP tools available to the lead session).
+
+**Deliverables:**
+
+| Deliverable | Purpose |
+|------------|---------|
+| Fast-path smoke test | Run a real bug fix with the flag on. Verify: research synthesis, plan index, HITL gate, implementation summary, review verdict all produced. Compare artifact quality to a legacy run. |
+| Feature flow smoke test | Run a 4–6 file feature with the flag on. Verify wave dispatch via agent teams: shared task list, teammate coordination, worktree merges. |
+| Agent teams validation | Confirm: (a) teammates have Canon MCP access (`get_principles`, `record_agent_metrics`), (b) Mailbox messaging works, (c) `TaskCompleted` hook enforces artifacts, (d) plan approval mode works for architect gates. |
+| Regression test | Run 3 flows with the flag off. Diff artifacts against baseline. Zero divergence. |
+| Context pressure test | Run a full feature flow (research → architecture → implement → review → fix → re-review) with the flag on. Verify the lead maintains quality through 6+ spawn cycles without context degradation. |
+| Consistency test | Run fast-path 3 times on the same task. Verify all runs produce comparable artifacts (same structure, same coverage, reasonable variation in prose). |
+
+**Exit criteria:**
+- All 10 flow types validated with flag on (at least smoke-test level).
+- Agent teams validated for wave dispatch (feature or epic flow).
+- Regression: flag off produces byte-identical behavior to baseline.
+- No HIGH-severity integration gap observed in any validation run (cross-reference §3 disposition table).
+- Documented results in `docs/phase-2-validation-results.md`.
+
+**MUST NOT touch:**
+- Any legacy implementation file. Phase 2 is read-only validation.
+- Feature flag default (stays `off`).
+
+### Phase 3 — Deletion
+
+**Goal:** Remove the custom coordination layer. Flip the feature flag default to `on`, then remove the flag entirely after a stable period.
+
+**Preconditions:** Phase 2 complete. All validation criteria met. Human sign-off on Phase 2 results.
+
+**Sub-phase 3a: Flag flip.** Set `CANON_AGENT_TEAMS_MODE=on` as default. Legacy path still exists but is no longer the default. Monitor for regressions over a stability period (recommended: 1 week or 10 successful flows, whichever comes first).
+
+**Sub-phase 3b: Delete coordination layer.** Remove ~130 files / ~35,000 lines:
+
+**Orchestration tools (10 files, ~2,089 lines):**
+
+| File | Lines | What it did |
+|------|-------|-------------|
+| `tools/drive-flow.ts` | 587 | State machine main loop |
+| `tools/drive-flow-helpers.ts` | 537 | Spawn request building, settings injection, HITL helpers |
+| `tools/drive-flow-wave.ts` | 162 | Wave state entry |
+| `tools/drive-flow-wave-lifecycle.ts` | 468 | Wave advancement, merge, cleanup |
+| `tools/inject-wave-event.ts` | 81 | Wave event injection |
+| `tools/resolve-wave-event.ts` | 94 | Wave event resolution |
+| `tools/post-message.ts` | 24 | Agent mailbox write |
+| `tools/get-messages.ts` | 37 | Agent mailbox read |
+| `tools/resolve-after-consultations.ts` | 71 | Post-consultation resolution |
+| `tools/get-spawn-prompt.ts` | 88 | Debug prompt assembly |
+
+**Orchestration engine (3 files, ~632 lines):**
+
+| File | Lines | What it did |
+|------|-------|-------------|
+| `engine/consultation-executor.ts` | 98 | Consultation prompt dispatch |
+| `engine/compete.ts` | 152 | Competitive spawns |
+| `engine/debate.ts` | 382 | Debate protocol |
+
+**Orchestration services (4 files, ~1,394 lines):**
+
+| File | Lines | What it did |
+|------|-------|-------------|
+| `services/wave-briefing.ts` | 89 | Wave summary assembly |
+| `services/context-enrichment.ts` | 553 | Four-section enrichment block |
+| `services/inject-context.ts` | 599 | Context injection resolution |
+| `services/drive-flow-types.ts` | 158 | Drive-flow type definitions |
+
+**Prompt pipeline (14 files, ~2,219 lines):** Entire `features/prompt-pipeline/` directory.
+
+| Subdirectory | Files | Lines |
+|-------------|-------|-------|
+| `tools/` | 3 (assemble-prompt, fanout, validate) | ~740 |
+| `services/` | 9 (all pipeline stages) | ~1,058 |
+| `model/` | 2 (types, tool-profiles) | ~421 |
+
+**Domains (4 files, ~594 lines):**
+
+| File | Lines | What it did |
+|------|-------|-------------|
+| `workspaces/wave-events.ts` | 64 | Wave event types |
+| `workspaces/wave-lifecycle.ts` | 233 | Worktree create/merge/cleanup |
+| `workspaces/wave-variables.ts` | 92 | Variable escaping for waves |
+| `flows/flow-event-channel.ts` | 205 | Mid-flow event channel |
+
+**Flow definitions (31 files, ~3,071 lines):** Entire `flows/` directory including fragments, schema docs, and README.
+
+**Tests (~65 files, ~26,854 lines):**
+
+| Category | Files | Lines |
+|----------|-------|-------|
+| Drive-flow tests | 17 | ~8,896 |
+| Wave event tests | 3 | ~1,318 |
+| Consultation tests | 7 | ~3,212 |
+| Engine tests (compete, debate) | 2 | ~950 |
+| Spawn prompt tests | 4 | ~1,725 |
+| Coordination integration tests | 3 | ~1,576 |
+| Domain wave/flow tests | 5 | ~1,592 |
+| Prompt-pipeline tests | 21 | ~7,585 |
+
+**Registration changes:** Update `mcp-server/src/app/register-orchestration.ts` to remove:
+- `registerWaveEventTools()` call
+- `registerMessagingTools()` call
+- `registerDriveFlowTool()` call
+- Imports for all deleted tool handlers
+
+**Refactoring required:** `enter-and-prepare-state.ts` (KEEP, 482 lines) imports from prompt-pipeline. These imports must be replaced or the file refactored before prompt-pipeline deletion.
+
+**Exit criteria for sub-phase 3b:**
+- `npm run build` passes with zero TypeScript errors.
+- `npm test` passes (all remaining tests green; deleted test count matches expectation).
+- Every file in the delete list is confirmed absent.
+- `register-orchestration.ts` no longer imports deleted modules.
+- `enter-and-prepare-state.ts` refactored to remove prompt-pipeline dependencies.
+- No runtime references to deleted modules (grep confirms zero import paths to deleted files).
+- 10 successful flows run after deletion (at least 1 per flow type).
+
+**Sub-phase 3c: Remove feature flag.** After stable period post-deletion:
+- Remove `CANON_AGENT_TEAMS_MODE` env var checks.
+- Collapse any remaining conditional paths.
+- Update all documentation referencing the flag.
+
+**MUST NOT touch:**
+- Any kept MCP tool implementation.
+- Agent definitions (except `tools` allowlist updates done in Phase 1).
+- Principles, rules, conventions.
+- Hooks infrastructure.
+- Shared libraries (`commit-trailers.ts`, `file-claims.ts`, `matcher.ts`).
+- The MCP server entry point or registration for kept tools.
+
+### Deletion summary
+
+| Category | Files | Lines |
+|----------|-------|-------|
+| Implementation (coordination layer) | ~35 | ~6,928 |
+| Flow definitions + docs | ~31 | ~3,071 |
+| Tests | ~65 | ~26,854 |
+| **Total** | **~131** | **~36,853** |
+
+Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. The remaining code is Canon's value: MCP tools, agent definitions, hooks, principles, shared libraries, and workspace management.
