@@ -32,7 +32,32 @@ domains: []
 
 ### Action
 
-Add `maxTurns` and `permissionMode` frontmatter fields to all 13 agent definitions. These fields enable richer dispatch when `CANON_AGENT_TEAMS_MODE=on`. They have no effect on the legacy `drive_flow` path (which does not read them).
+Add `maxTurns`, `permissionMode`, and `skills` frontmatter fields to all 13 agent definitions. These fields enable richer dispatch when `CANON_AGENT_TEAMS_MODE=on`. They have no effect on the legacy `drive_flow` path (which does not read them).
+
+#### Skills preloading
+
+Add a `skills` field to each agent definition to preload role-specific rules and references. This eliminates runtime Read tool calls for rules, guarantees rules are present (no silent skipping), and reduces per-spawn token overhead.
+
+Per-agent skill preloads:
+
+| Agent | Skills to preload |
+|-------|-------------------|
+| `canon-implementor` | `agent-tdd-required`, `agent-fresh-context`, `agent-structured-triage`, `agent-simplify-before-extending`, `principle-loading`, `status-protocol` |
+| `canon-reviewer` | `agent-cold-review`, `principle-loading`, `status-protocol` |
+| `canon-tester` | `agent-test-the-contract`, `agent-test-sad-paths`, `tester-report-template`, `principle-loading`, `status-protocol` |
+| `canon-security` | `agent-assume-hostile-input`, `security-checklist`, `principle-loading`, `status-protocol` |
+| `canon-architect` | `agent-design-before-code`, `agent-plans-are-prompts`, `agent-surface-assumptions`, `status-protocol` |
+| `canon-researcher` | `agent-scoped-research`, `agent-surface-assumptions`, `agent-evidence-over-intuition`, `status-protocol` |
+| `canon-fixer` | `agent-minimal-fix`, `agent-structured-triage`, `agent-simplify-before-extending`, `status-protocol` |
+| `canon-scribe` | `agent-context-sync`, `agent-missing-artifact`, `status-protocol`, `workspace-logging` |
+| `canon-shipper` | `agent-artifacts-only`, `agent-template-required`, `status-protocol` |
+| `canon-learner` | `agent-evidence-over-intuition`, `learner-dimensions`, `principle-format` |
+| `canon-writer` | `principle-format`, `writer-worked-example` |
+| `canon-guide` | `guide-dashboards`, `status-protocol` |
+
+**Prerequisite**: Each rule/reference file must be registered as a named skill under `skills/canon/`. The skill name matches the filename without extension (e.g., `rules/agent-tdd-required.md` → skill name `agent-tdd-required`).
+
+After adding `skills`, remove the runtime `Read ${CLAUDE_PLUGIN_ROOT}/rules/...` instructions from agent markdown bodies where present — the content will already be in context via skill injection. Keep the rule files themselves for human reference and knowledge graph.
 
 **For each agent, add these fields to the YAML frontmatter (between the `---` delimiters):**
 
@@ -155,7 +180,10 @@ No new tests. Existing tests should continue to pass since only frontmatter fiel
 
 ### Done when
 
-- All 13 agent definitions have `maxTurns` and `permissionMode` fields
+- All 13 agent definitions have `maxTurns`, `permissionMode`, and `skills` fields
+- Skills field lists role-specific rules and references per the preload table above
+- Each referenced skill is registered as a named skill under `skills/canon/`
+- Runtime `Read` instructions for rules removed from agent bodies where they existed
 - Values follow the least-privilege-access principle
-- No other changes to agent files
+- No other changes to agent files beyond frontmatter + rule-read removal
 - `npm run build` and `npm test` pass

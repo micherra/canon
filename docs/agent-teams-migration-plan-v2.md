@@ -98,20 +98,21 @@ User request
 
 ### 2.3 How Claude orchestrates a Canon flow
 
-A concrete example of `fast-path` (bug fix):
+A concrete example of `feature` flow (4–10 file feature):
 
-1. **User says** "fix the broken search" to the Canon lead session.
-2. **Claude reads** `CLAUDE.md`, sees Canon orchestration instructions. Reads the `fast-path` runbook for the recommended step sequence.
-3. **Claude calls** `get_principles` with the target file scope → gets matched principles. Calls `get_file_context` → gets KG summaries. Calls `get_drift_report` → gets recent drift. Assembles this into a research prompt.
-4. **Claude spawns** a `canon-researcher` subagent with the enriched prompt. Waits for result. Gets a research synthesis artifact.
-5. **Claude spawns** a `canon-architect` subagent with the research synthesis as upstream context. Waits for result. Gets a plan index.
+1. **User says** "add dark mode to the settings page" to the Canon lead session.
+2. **Claude reads** `CLAUDE.md`, sees Canon orchestration instructions. Reads the `feature` runbook for the recommended step sequence.
+3. **Claude calls** `init_workspace` to create the workspace. Calls `get_principles` with the target file scope. Calls `get_file_context` for KG summaries. Assembles a research prompt.
+4. **Claude spawns** a `canon-researcher` subagent. The researcher has Canon MCP access via its `tools` allowlist and calls `semantic_search`, `graph_query` directly. Returns a research synthesis artifact.
+5. **Claude spawns** a `canon-architect` subagent with the research synthesis as upstream context. The architect queries the knowledge graph, designs the approach, produces a plan index with wave assignments.
 6. **Claude presents** the plan to the user for approval (native HITL). User approves.
-7. **Claude spawns** a `canon-implementor` subagent with the plan and principles. Waits for result. Gets an implementation summary.
-8. **Claude spawns** a `canon-reviewer` subagent. Waits for result. Gets a review verdict.
-9. **If verdict is not clean**, Claude loops back to step 7 with the review feedback. (Native judgment, not a state transition.)
-10. **Claude calls** `record_agent_metrics`, `store_summaries`, evaluates learn gate, releases file claims. Done.
+7. **Claude creates an agent team** for the implementation wave. Spawns N `canon-implementor` teammates (one per task from the plan index). Teammates self-coordinate via shared task list and Mailbox. `TaskCompleted` hooks enforce artifact production.
+8. **Claude merges** worktrees after the wave completes. Runs inter-wave gates if configured.
+9. **Claude spawns** a `canon-reviewer` subagent. Returns a review verdict.
+10. **If verdict is not clean**, Claude spawns a `canon-fixer` subagent with the review feedback. Loops review → fix until clean.
+11. **Claude calls** `update_board({ operation: "complete_flow" })`, releases file claims, records metrics, evaluates learn gate. Done.
 
-For an `epic` flow with wave tasks, step 7 becomes: Claude creates an agent team, spawns N `canon-implementor` teammates (one per task), they self-coordinate via shared task list and Mailbox, Claude merges worktrees after the wave completes.
+For a `fast-path` flow (simple bug fix), steps 4–6 are skipped — the lead goes straight to spawning a single `canon-implementor` subagent that handles implementation, testing, and self-review in one pass.
 
 ### 2.4 Subagent capabilities (per [Claude Code docs](https://code.claude.com/docs/en/sub-agents))
 
@@ -235,7 +236,7 @@ Every one of the 28 gaps from the integration audit must map to a concrete repla
 | 3 | Workspace worktree creation | `wave-lifecycle.ts` → `createWaveWorktrees` | **native** | Lead creates worktrees via Bash (`git worktree add`) before spawning wave teammates. Lead merges via `git merge` after wave completes. Validated in experiment 3. | Git operations are native Bash commands. No MCP tool needed. |
 | 4 | Context enrichment | `context-enrichment.ts` → `assembleEnrichment` | **mcp** | Lead calls `get_file_context`, `get_drift_report`, `graph_query` to assemble context. Injects results into spawn prompt. Teammates can also call these MCP tools directly. | Enrichment is already decomposed into standalone MCP tools. The 9-stage pipeline was just a fixed composition order. |
 | 5 | Principle loading | `matcher.ts` → prompt pipeline stage 1 | **mcp** | Lead calls `get_principles(file_path, task_description)` → gets matched principles. Injects into spawn prompt. Teammates can also call `get_principles` directly via MCP. | Already a standalone MCP tool. Verified working in this environment (returned matched principles with file scope). |
-| 6 | Commit provenance trailers | `commit-trailers.ts` → `buildProvenanceSection` | **guidance** | CLAUDE.md and agent definitions instruct agents to include Canon trailers in commits. The trailer format (`Canon-Workflow`, `Canon-Agent`, etc.) is documented in the orchestration guidance. | Trailers are a commit message convention. Agents follow instructions; no runtime injection needed. |
+| 6 | Commit provenance trailers | `commit-trailers.ts` → `buildProvenanceSection` | **guidance + hook** | CLAUDE.md and agent definitions instruct agents to include Canon trailers in commits. A PostCommit hook (`post-commit-trailers.sh`) validates trailer presence and blocks commits without `Canon-Workflow` trailer. | Downgrades from programmatic injection to convention, but the PostCommit hook provides enforcement backstop. |
 | 7 | File claims | `file-claims.ts` → `registerClaims` / `releaseClaims` / `checkClaimOverlaps` | **mcp** | `update_board` MCP tool already calls `registerClaims` and `releaseClaims`. Lead calls `update_board` at flow start and completion. For agent teams: native task list with file-locking prevents concurrent claims on the same task. | Claims registration is already an MCP tool side effect. Agent teams add native file-level coordination. |
 | 8 | Post-state effects | `effects.ts` → `executeEffects` | **mcp + native** | Lead calls `store_pr_review` / `write_review` after reviewer completes (persist_review effect). Lead runs contract-checker assertions via Bash (check_postconditions effect). No effect executor needed — the lead IS the effect executor. | Effects are MCP tool calls and shell commands. Claude as lead runs them between steps. |
 | 9 | Wave policy | `WavePolicy { isolation, merge_strategy, on_conflict, gate, coordination }` | **native + guidance** | Runbook wave steps declare merge strategy and conflict handling. Lead creates worktrees (isolation), runs `git merge`/`git rebase` (merge_strategy), presents conflicts to user (on_conflict: hitl), runs shell gates between waves (gate). Agent teams' shared task list handles coordination. | Wave policy becomes lead orchestration logic guided by runbook annotations, not a runtime schema. |
@@ -298,12 +299,14 @@ The migration has three phases. Phase 1 adds guidance (no deletions, no behavior
 | Deliverable | Path | Purpose |
 |------------|------|---------|
 | Orchestration CLAUDE.md | `CLAUDE.md` (update) | Add orchestration discipline: how the lead composes context via MCP tools, when to use subagents vs agent teams, HITL patterns, post-step effects, completion checklist. |
-| Fast-path runbook | `skills/canon/runbooks/fast-path.yaml` | Playbook: research → architecture → HITL → implement → review. Annotates which MCP tools to call at each step, expected artifacts, dispatch mode. |
+| Runbook YAML schema | `skills/canon/runbooks/_schema.yaml` | Canonical commented example defining every field. All runbooks must conform. Prevents schema drift across parallel implementors. |
+| Fast-path runbook | `skills/canon/runbooks/fast-path.yaml` | Playbook: implement → pre-launch-check → ship → learn. Simplest flow, single-agent. |
 | Feature runbook | `skills/canon/runbooks/feature.yaml` | Playbook for 4–10 file features. Includes wave step annotations for parallel implementation. |
 | Refactor runbook | `skills/canon/runbooks/refactor.yaml` | Playbook for restructuring. |
 | Epic runbook | `skills/canon/runbooks/epic.yaml` | Playbook for large cross-cutting changes. Multi-wave with adaptive planning between waves. |
 | Remaining runbooks | `skills/canon/runbooks/{migrate,test-gap,review-only,security-audit,explore}.yaml` | One runbook per legacy flow. |
-| Agent def updates | `agents/*.md` | Add/verify `tools` allowlists for each role so subagent and teammate tool scoping works per docs. |
+| Agent def updates | `agents/*.md` | Add `maxTurns`, `permissionMode` frontmatter. Add `skills` frontmatter to preload role-specific rules and references (e.g., implementor gets `agent-tdd-required`, `principle-loading`; reviewer gets `agent-cold-review`). |
+| Commit trailer hook | `hooks/canon-agent-teams/post-commit-trailers.sh` | PostCommit hook validating Canon-Workflow trailer presence. Closes the enforcement gap from downgrading commit provenance to prompt convention. |
 | Feature flag | Environment variable `CANON_AGENT_TEAMS_MODE` | `off` (default): legacy `drive_flow` path unchanged. `on`: Claude reads runbooks, calls MCP tools, spawns agents natively. |
 
 **Exit criteria:**
@@ -327,21 +330,30 @@ The migration has three phases. Phase 1 adds guidance (no deletions, no behavior
 
 **Deliverables:**
 
-| Deliverable | Purpose |
-|------------|---------|
-| Fast-path smoke test | Run a real bug fix with the flag on. Verify: research synthesis, plan index, HITL gate, implementation summary, review verdict all produced. Compare artifact quality to a legacy run. |
-| Feature flow smoke test | Run a 4–6 file feature with the flag on. Verify wave dispatch via agent teams: shared task list, teammate coordination, worktree merges. |
-| Agent teams validation | Confirm: (a) teammates have Canon MCP access (`get_principles`, `record_agent_metrics`), (b) Mailbox messaging works, (c) `TaskCompleted` hook enforces artifacts, (d) plan approval mode works for architect gates. |
-| Regression test | Run 3 flows with the flag off. Diff artifacts against baseline. Zero divergence. |
-| Context pressure test | Run a full feature flow (research → architecture → implement → review → fix → re-review) with the flag on. Verify the lead maintains quality through 6+ spawn cycles without context degradation. |
-| Consistency test | Run fast-path 3 times on the same task. Verify all runs produce comparable artifacts (same structure, same coverage, reasonable variation in prose). |
+Phase 2 must be planned with the same rigor as Phase 1 — a task index, wave structure, and done criteria. The deliverables below define what Phase 2's task plan must cover.
+
+| Deliverable | Method | Pass criteria |
+|------------|--------|---------------|
+| **Fast-path consistency (3 runs)** | Run the same bug-fix task 3 times with flag on. | All runs produce: implementation summary, review verdict. Artifact structure matches across runs. No MCP tool calls skipped. Post-step effects (metrics, claims) completed in all 3. |
+| **Feature flow equivalence (3 runs)** | Run a 4–6 file feature 3 times with flag on, including wave dispatch via agent teams. | Shared task list created. Teammates coordinate without file conflicts. Worktrees merged. All artifacts produced. Commit trailers present (PostCommit hook validates). |
+| **Epic flow end-to-end (1 run)** | Run a multi-wave epic with flag on. | Research, design, multi-wave implementation, review, fix cycle all complete. Lead maintains quality through 8+ spawn cycles. Context pressure does not degrade output. |
+| **Agent teams MCP validation** | During feature/epic runs, verify teammate MCP access. | Teammates successfully call `get_principles`, `record_agent_metrics`. Principle-grounded output observed. |
+| **Skill preloading validation** | Verify agent definitions with `skills` frontmatter receive preloaded content. | Spawned agents reference preloaded rules without Read tool calls. Confirm via transcript inspection. |
+| **Regression (flag off, 3 flows)** | Run fast-path, feature, and review-only with flag off. | Zero divergence from pre-Phase-1 baseline behavior. |
+| **Integration checklist** | After each run, check every HIGH-severity gap from §3 disposition table. | All 11 HIGH-severity integrations observed functioning in at least one run. Documented per-gap. |
+| **Error handling** | Deliberately trigger: agent spawn failure, MCP tool error during a run. | Lead recovers gracefully. Retries or presents error to user. Does not silently drop the step. |
 
 **Exit criteria:**
-- All 10 flow types validated with flag on (at least smoke-test level).
-- Agent teams validated for wave dispatch (feature or epic flow).
-- Regression: flag off produces byte-identical behavior to baseline.
-- No HIGH-severity integration gap observed in any validation run (cross-reference §3 disposition table).
-- Documented results in `docs/phase-2-validation-results.md`.
+- 3 successful runs each on fast-path and feature flows with flag on. Artifacts consistent across runs.
+- 1 successful end-to-end epic flow with flag on.
+- Agent teams validated for wave dispatch with teammate MCP access confirmed.
+- Skill preloading validated for at least 3 agent types.
+- Regression: flag off produces byte-identical behavior to baseline across 3 flow types.
+- All 11 HIGH-severity integration gaps verified functioning (cross-reference §3).
+- Error handling validated for at least 2 failure scenarios.
+- Commit trailer PostCommit hook fires and validates correctly.
+- Documented results in `docs/phase-2-validation-results.md` with per-run details.
+- Phase 2 task plan reviewed and approved before execution.
 
 **MUST NOT touch:**
 - Any legacy implementation file. Phase 2 is read-only validation.

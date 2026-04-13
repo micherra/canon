@@ -101,10 +101,11 @@ Audit all 13 agent definitions for subagent/teammate readiness. The key changes:
 **New frontmatter fields**: Add fields that enable richer subagent/teammate dispatch:
 - `maxTurns`: Effort budget per agent type. Researchers get a lower budget (15-20 turns), implementors get higher (40-50 turns). This replaces `max_iterations` / `max_revisions` from the flow YAML.
 - `permissionMode`: Per-role permission setting. Researchers get `plan` (read-only), implementors get `auto` (can write), reviewers get `plan`.
+- `skills`: Role-specific rules and references preloaded into agent context at startup. Per Claude Code docs: "The full content of each skill is injected into the subagent's context, not just made available for invocation." This eliminates runtime Read tool calls for rules, guarantees rules are present, and reduces per-spawn token overhead (~2,000–5,500 tokens per agent). Each rule/reference file is registered as a named skill under `skills/canon/`.
 
 These fields are informational in Phase 1 -- the legacy drive_flow path does not read them. They become operational when `CANON_AGENT_TEAMS_MODE=on` and the lead reads agent definitions to configure subagent spawns.
 
-**No behavioral changes**: Agent markdown bodies (instructions, process steps, status protocols) are untouched. Only YAML frontmatter fields are added.
+**Behavioral change (minor)**: Runtime `Read` instructions for rules in agent markdown bodies are removed where they exist, since the content is now preloaded via `skills`. The rule files themselves remain for human reference. This has no effect on the legacy path (which does not use `skills` frontmatter).
 
 #### 4. Feature Flag Wiring
 

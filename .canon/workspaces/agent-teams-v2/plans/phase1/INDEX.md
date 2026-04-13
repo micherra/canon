@@ -2,19 +2,20 @@
 
 | Task | Wave | Depends on | Files | Description |
 |------|------|------------|-------|-------------|
-| phase1-01 | 1 | -- | skills/canon/runbooks/fast-path.yaml | Create fast-path runbook playbook |
+| phase1-00 | 1 | -- | skills/canon/runbooks/_schema.yaml | Define canonical runbook YAML schema (commented example) |
+| phase1-01 | 1 | phase1-00 | skills/canon/runbooks/fast-path.yaml | Create fast-path runbook playbook |
 | phase1-02 | 1 | -- | skills/canon/runbooks/review-only.yaml, skills/canon/runbooks/security-audit.yaml, skills/canon/runbooks/explore.yaml | Create simple runbooks (review-only, security-audit, explore) |
 | phase1-03 | 1 | -- | skills/canon/runbooks/test-gap.yaml, skills/canon/runbooks/adopt.yaml | Create test-gap and adopt runbooks |
 | phase1-04 | 1 | -- | skills/canon/runbooks/feature.yaml, skills/canon/runbooks/refactor.yaml | Create feature and refactor runbooks (medium-tier with wave steps) |
 | phase1-05 | 1 | -- | skills/canon/runbooks/epic.yaml | Create epic runbook (large-tier with multi-wave, consultations) |
 | phase1-06 | 1 | -- | skills/canon/runbooks/migrate.yaml | Create migrate runbook (medium-tier with rollback emphasis) |
-| phase1-07 | 2 | phase1-01 through phase1-06 | agents/*.md (all 13) | Update agent definitions with subagent/teammate frontmatter fields |
+| phase1-07 | 2 | phase1-01 through phase1-06 | agents/*.md (all 13), skills/canon/ (rule/ref skill registrations) | Update agent definitions: maxTurns, permissionMode, skills preloading (role-specific rules + references) |
 | phase1-08 | 2 | phase1-01 through phase1-06 | CLAUDE.md | Update CLAUDE.md with agent-teams orchestration section |
 | phase1-09 | 3 | phase1-07, phase1-08 | All Phase 1 files | Cross-artifact validation and consistency check |
 
 ### Wave Summary
 
-**Wave 1** (6 tasks, parallelizable): Create all 10 runbook YAML files. No dependencies between runbooks -- all can be written in parallel.
+**Wave 1** (7 tasks): Define runbook YAML schema first (phase1-00), then create all 10 runbook YAML files in parallel (phase1-01 through phase1-06). All runbook tasks depend on the schema definition to prevent drift across parallel implementors.
 
 **Wave 2** (2 tasks, parallelizable): Update agent definitions and CLAUDE.md. Depends on Wave 1 because the CLAUDE.md section references runbooks by path, and agent definition updates should be informed by what the runbooks expect of each agent type.
 
@@ -22,7 +23,8 @@
 
 ### File Inventory
 
-**New files (11):**
+**New files (12+):**
+- `skills/canon/runbooks/_schema.yaml` (canonical schema definition)
 - `skills/canon/runbooks/fast-path.yaml`
 - `skills/canon/runbooks/feature.yaml`
 - `skills/canon/runbooks/refactor.yaml`
