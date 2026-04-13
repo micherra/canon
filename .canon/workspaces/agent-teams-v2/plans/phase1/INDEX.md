@@ -9,15 +9,16 @@
 | phase1-04 | 1 | -- | skills/canon/runbooks/feature.yaml, skills/canon/runbooks/refactor.yaml | Create feature and refactor runbooks (medium-tier with wave steps) |
 | phase1-05 | 1 | -- | skills/canon/runbooks/epic.yaml | Create epic runbook (large-tier with multi-wave, consultations) |
 | phase1-06 | 1 | -- | skills/canon/runbooks/migrate.yaml | Create migrate runbook (medium-tier with rollback emphasis) |
-| phase1-07 | 2 | phase1-01 through phase1-06 | agents/*.md (all 13), skills/canon/ (rule/ref skill registrations) | Update agent definitions: maxTurns, permissionMode, skills preloading (role-specific rules + references) |
-| phase1-08 | 2 | phase1-01 through phase1-06 | CLAUDE.md | Update CLAUDE.md with agent-teams orchestration section |
-| phase1-09 | 3 | phase1-07, phase1-08 | All Phase 1 files | Cross-artifact validation and consistency check |
+| phase1-07a | 2 | phase1-01 through phase1-06 | rules/*.md → skills/canon/references/, new `rules/agent-context-check.md` | Register rules as skills: copy/symlink rule files into `skills/canon/references/` so agent `skills:` frontmatter can reference them. Create `agent-context-check` rule for self-serve context verification. |
+| phase1-07b | 2 | phase1-07a | agents/*.md (12 — merge implementor+fixer → engineer) | Update agent definitions: consolidate to `canon-engineer`, add maxTurns, permissionMode, skills preloading, domain primer preloading |
+| phase1-08 | 2 | phase1-01 through phase1-06 | CLAUDE.md | Update CLAUDE.md with agent-teams orchestration section. Include post-subagent artifact check, cross-reference existing error handling, explicit flag boundary statement. |
+| phase1-09 | 3 | phase1-07b, phase1-08 | All Phase 1 files | Cross-artifact validation: runbook-to-flow coverage (including fragment expansion), agent def consistency, skill registration completeness, YAML validity, build/test pass |
 
 ### Wave Summary
 
 **Wave 1** (7 tasks): Define runbook YAML schema first (phase1-00), then create all 10 runbook YAML files in parallel (phase1-01 through phase1-06). All runbook tasks depend on the schema definition to prevent drift across parallel implementors.
 
-**Wave 2** (2 tasks, parallelizable): Update agent definitions and CLAUDE.md. Depends on Wave 1 because the CLAUDE.md section references runbooks by path, and agent definition updates should be informed by what the runbooks expect of each agent type.
+**Wave 2** (3 tasks): Register rules as skills (phase1-07a), then update agent definitions including engineer consolidation (phase1-07b, depends on 07a), plus CLAUDE.md update (phase1-08, parallel with 07a/07b). Agent def updates depend on Wave 1 runbooks.
 
 **Wave 3** (1 task): Cross-artifact validation. Depends on Wave 2 because it checks consistency across all artifacts.
 

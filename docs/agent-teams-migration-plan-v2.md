@@ -77,7 +77,7 @@ User request
 | Layer | What | Why |
 |-------|------|-----|
 | **MCP tools** | `get_principles`, `list_principles`, `get_compliance`, `get_drift_report`, `get_file_context`, `graph_query`, `semantic_search`, `codebase_graph`, `record_agent_metrics`, `post_event`, `show_pr_impact`, `review_code`, `store_pr_review`, `store_summaries` | These ARE Canon. Principles, drift, KG, artifacts, metrics — Claude uses them as a native toolkit. |
-| **Agent definitions** | 12 types in `agents/*.md` (consolidate implementor + fixer → `canon-engineer`) | Valid as both subagent types and agent team teammate types. Per docs: subagents "inherit all tools from the main conversation, including MCP tools" by default. Definitions support `skills` (preload rules + domain primers), `maxTurns` (effort budget), `permissionMode`, `hooks`, `memory`. Each agent includes a context-check step: verify principles are present, self-serve via MCP if not. |
+| **Agent definitions** | 12 types in `agents/*.md` (Phase 1 consolidates implementor + fixer → `canon-engineer`) | Valid as both subagent types and agent team teammate types. Per docs: subagents "inherit all tools from the main conversation, including MCP tools" by default. Definitions support `skills` (preload rules + domain primers), `maxTurns` (effort budget), `permissionMode`, `hooks`, `memory`. Each agent includes a preloaded `agent-context-check` skill instructing it to verify principles are present and self-serve via MCP if not. |
 | **Hooks** | `TaskCompleted`, `TeammateIdle`, `SubagentStart/Stop` scripts | Defense-in-depth artifact enforcement and observability. |
 | **Workspace storage** | `.canon/workspaces/<id>/` | Artifact storage, progress tracking, workspace metadata. |
 | **Shared libraries** | `commit-trailers.ts`, `file-claims.ts`, `matcher.ts` | Principle matching, commit provenance, file ownership — used by MCP tools and available to the lead. |
@@ -153,9 +153,11 @@ In the new model, agents have MCP access and preloaded skills. This creates a **
 2. **Agent self-serves** (fallback path): if the lead's prompt is missing principles or file context, the agent calls the MCP tools itself. Every agent with Canon MCP tools in its `tools` allowlist can independently call `get_principles(file_path, task_description)` to load matched principles.
 3. **Skills guarantee baseline** (hard floor): critical rules and references are preloaded via `skills` frontmatter — they're in agent context regardless of what the lead or agent does. An engineer always has `agent-tdd-required`, a reviewer always has `agent-cold-review`.
 
-Agent definitions should include a **context check step** in their instructions:
+A preloaded skill `agent-context-check` (registered as `rules/agent-context-check.md` → `skills/canon/references/agent-context-check.md`) is injected into every agent via the `skills` frontmatter. It instructs:
 
 > Before starting work, verify you have Canon principles for your target files. If your spawn prompt does not include a `## Principles` section, call `get_principles` with your target file path and task description. Similarly, if you need file context or dependency information, call `get_file_context` or `graph_query` directly.
+
+This is delivered via skill injection (layer 2, medium enforcement), not instruction body changes — agent definition bodies remain untouched.
 
 This is **more resilient** than the legacy pipeline:
 - Legacy: one pipeline → one failure point → silent context loss
@@ -184,6 +186,8 @@ The state machine provided determinism through a single hard enforcement layer. 
 | 6 | Workspace state (filesystem) | Hard | Artifacts on disk at known paths, auditable post-hoc |
 
 **Plus self-healing context (§2.5):** if the lead misses a composition step, agents self-serve via MCP. This means enforcement failures at layer 1 (lead doesn't follow guidance) are compensated by the agent's own MCP access — a resilience property the legacy model did not have.
+
+**Post-subagent artifact check (in CLAUDE.md guidance):** After each subagent returns, the lead verifies expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. This compensates for the lack of hook-based enforcement on subagents (`TaskCompleted` and `TeammateIdle` hooks only apply to agent teams teammates, not subagents).
 
 **Completion verification hook:** A shell script that runs when the lead signals done. Checks:
 - All runbook step artifacts exist at their expected paths
