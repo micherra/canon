@@ -77,7 +77,7 @@ User request
 | Layer | What | Why |
 |-------|------|-----|
 | **MCP tools** | `get_principles`, `list_principles`, `get_compliance`, `get_drift_report`, `get_file_context`, `graph_query`, `semantic_search`, `codebase_graph`, `record_agent_metrics`, `post_event`, `show_pr_impact`, `review_code`, `store_pr_review`, `store_summaries` | These ARE Canon. Principles, drift, KG, artifacts, metrics — Claude uses them as a native toolkit. |
-| **Agent definitions** | 13 types in `agents/*.md` | Valid as both subagent types and agent team teammate types. Per docs: subagents "inherit all tools from the main conversation, including MCP tools" by default. The `tools` allowlist restricts this when set. Definitions also support `mcpServers` (scope Canon MCP to specific roles), `skills` (preload Canon skills), `hooks` (per-agent tool enforcement), `memory` (persistent cross-session learning), and `maxTurns` (effort budget). |
+| **Agent definitions** | 12 types in `agents/*.md` (consolidate implementor + fixer → `canon-engineer`) | Valid as both subagent types and agent team teammate types. Per docs: subagents "inherit all tools from the main conversation, including MCP tools" by default. Definitions support `skills` (preload rules + domain primers), `maxTurns` (effort budget), `permissionMode`, `hooks`, `memory`. Each agent includes a context-check step: verify principles are present, self-serve via MCP if not. |
 | **Hooks** | `TaskCompleted`, `TeammateIdle`, `SubagentStart/Stop` scripts | Defense-in-depth artifact enforcement and observability. |
 | **Workspace storage** | `.canon/workspaces/<id>/` | Artifact storage, progress tracking, workspace metadata. |
 | **Shared libraries** | `commit-trailers.ts`, `file-claims.ts`, `matcher.ts` | Principle matching, commit provenance, file ownership — used by MCP tools and available to the lead. |
@@ -143,26 +143,61 @@ Subagents are far richer than "focused workers that report back." Canon's agent 
 | Consultation (advisory, non-blocking) | **Subagent** | Quick opinion, result returns to lead. |
 | Background housekeeping (janitor, learner) | **Subagent** (background + `memory: project`) | Persistent learning across sessions via memory frontmatter. |
 
-### 2.5 Why this is simpler
+### 2.5 Agent self-serve context (resilience model)
+
+In the legacy model, agents were helpless — they received everything from the 9-stage prompt pipeline and couldn't self-serve. If a pipeline stage failed or was misconfigured, the agent operated with incomplete context silently.
+
+In the new model, agents have MCP access and preloaded skills. This creates a **self-healing context chain**:
+
+1. **Lead composes context** (primary path): calls `get_principles`, `get_file_context`, `get_drift_report` and includes results in the spawn prompt. This is what the CLAUDE.md orchestration guidance instructs.
+2. **Agent self-serves** (fallback path): if the lead's prompt is missing principles or file context, the agent calls the MCP tools itself. Every agent with Canon MCP tools in its `tools` allowlist can independently call `get_principles(file_path, task_description)` to load matched principles.
+3. **Skills guarantee baseline** (hard floor): critical rules and references are preloaded via `skills` frontmatter — they're in agent context regardless of what the lead or agent does. An engineer always has `agent-tdd-required`, a reviewer always has `agent-cold-review`.
+
+Agent definitions should include a **context check step** in their instructions:
+
+> Before starting work, verify you have Canon principles for your target files. If your spawn prompt does not include a `## Principles` section, call `get_principles` with your target file path and task description. Similarly, if you need file context or dependency information, call `get_file_context` or `graph_query` directly.
+
+This is **more resilient** than the legacy pipeline:
+- Legacy: one pipeline → one failure point → silent context loss
+- New: lead composition + agent self-serve + preloaded skills → three independent channels, any one sufficient
+
+### 2.6 Why this is simpler
 
 1. **One orchestrator: Claude.** No custom state machine, no custom scheduler, no transition resolver. Claude reads guidance and uses judgment — the thing it's best at.
 2. **MCP tools as primitives.** Each Canon capability is a standalone MCP tool call, not a pipeline stage wired into a runtime. The lead composes them as needed, not in a fixed 13-stage sequence.
 3. **Native coordination.** Subagents for sequential work, agent teams for parallel work. No custom wave plumbing, no custom message channel, no custom HITL vocabulary.
 4. **Canon's value is untouched.** Principles, drift, KG, artifacts, metrics, commit provenance, file claims — all preserved as MCP tools. What's deleted is only the scheduling machinery.
+5. **Self-healing context.** Agents self-serve missing context via MCP tools. Skills preload critical rules. Three independent context channels vs. one pipeline.
 5. **Agent definitions work as-is.** All 13 agent defs are valid subagent and teammate types. The `tools` allowlist is honored in both paths per [Claude Code docs](https://code.claude.com/docs/en/agent-teams).
 
-### 2.6 The consistency question
+### 2.7 Enforcement model (defense-in-depth)
 
-The risk: Claude might not consistently follow the same process. Two runs of the same task might produce different execution paths.
+The state machine provided determinism through a single hard enforcement layer. The new model replaces it with six layers, each covering different guarantees:
 
-Mitigations:
-- **CLAUDE.md** describes the expected flow patterns and orchestration discipline. Claude reads this on every session.
-- **Runbooks** as suggested playbooks — Claude follows them but can adapt when the situation warrants.
-- **Hooks** as guardrails — `TaskCompleted` enforces artifacts exist, `TeammateIdle` catches premature stops. These are hard enforcement, not Claude judgment.
-- **MCP tool contracts** — `record_agent_metrics`, `store_summaries`, `get_compliance` provide structured feedback loops. Canon's observability surface tells you what actually happened regardless of the execution path.
-- **Agent definitions** constrain each agent's tool access and behavioral instructions. A `canon-researcher` gets Read/Glob/Grep, not Write/Edit. This is enforced by Claude Code, not by Claude's judgment.
+| Layer | Mechanism | Type | What it guarantees |
+|-------|-----------|------|-------------------|
+| 1 | CLAUDE.md + runbooks | Soft | Step ordering, MCP tool composition, dispatch decisions |
+| 2 | Skills preloading | Medium | Critical rules and domain primers always in agent context |
+| 3 | Agent definitions (`tools`, `maxTurns`, `permissionMode`) | Hard | Tool access restrictions, effort budgets, write permissions |
+| 4 | Hooks (`TaskCompleted`, `PostCommit`, completion verification) | Hard | Artifact existence, commit trailers, completion cleanup |
+| 5 | MCP tool contracts (schema validation) | Hard | Input/output shapes for `update_board`, `record_agent_metrics`, `write_*` |
+| 6 | Workspace state (filesystem) | Hard | Artifacts on disk at known paths, auditable post-hoc |
 
-The state machine provided *determinism*. But Canon's flows aren't deterministic today (convergence loops, skip conditions, adaptive waves). And Claude's judgment about "what comes next" is arguably better than a rigid state graph — it can adapt to what it finds without needing a pre-authored transition for every contingency.
+**Plus self-healing context (§2.5):** if the lead misses a composition step, agents self-serve via MCP. This means enforcement failures at layer 1 (lead doesn't follow guidance) are compensated by the agent's own MCP access — a resilience property the legacy model did not have.
+
+**Completion verification hook:** A shell script that runs when the lead signals done. Checks:
+- All runbook step artifacts exist at their expected paths
+- Board state shows "complete" (via workspace file inspection)
+- Claims released (`.canon/claims.json` has no entries for this workflow)
+- Metrics recorded (workspace metrics files present)
+
+Exit 2 if anything is missing — blocks the lead from declaring done prematurely.
+
+**What's genuinely weaker and accepted:**
+- Step ordering is not enforced — Claude may reorder steps. This is accepted as a feature: Claude adapts to what it finds. Artifacts enforce that work happened, regardless of order.
+- Context composition quality varies — the lead may compose richer or thinner prompts across runs. Mitigated by agent self-serve (§2.5) and skills (layer 2).
+
+The state machine provided determinism, but Canon's flows aren't deterministic today (convergence loops, skip conditions, adaptive waves). The enforcement model trades rigid ordering for layered verification — the system checks outcomes (artifacts exist, trailers present, metrics recorded) rather than process (steps executed in sequence).
 
 ### 2.7 Platform capabilities (per Claude Code documentation)
 
