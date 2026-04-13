@@ -428,3 +428,91 @@ The migration has three phases. Phase 1 adds guidance (no deletions, no behavior
 | **Total** | **~131** | **~36,853** |
 
 Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. The remaining code is Canon's value: MCP tools, agent definitions, hooks, principles, shared libraries, and workspace management.
+
+---
+
+## 5. Validation Strategy
+
+### How each phase proves it is complete
+
+**Phase 1 (Orchestration Guidance):** purely additive — validated by review, not testing.
+
+- Human review of all 10 runbooks against their legacy flow counterparts. Each runbook must cover every state in its legacy flow, including HITL gates, wave annotations, and expected artifacts.
+- Human review of CLAUDE.md orchestration section. Must cover: MCP tool composition, dispatch framework (subagent vs team), HITL patterns, post-step effects, completion checklist, commit provenance convention.
+- `npm run build` and `npm test` pass with zero changes to existing code (Phase 1 adds files only).
+- Manual spot check: with flag `off`, run one legacy flow and confirm identical behavior.
+
+**Phase 2 (Validation):** functional equivalence testing.
+
+| Test | Method | Pass criteria |
+|------|--------|--------------|
+| **Fast-path equivalence** | Run the same bug-fix task with flag off (legacy) and flag on (Claude-as-lead). Compare artifact set. | Both runs produce: research synthesis, plan index, implementation summary, review verdict. Structure and coverage are comparable. |
+| **Feature flow with waves** | Run a 4–6 file feature with flag on. Use agent teams for the implementation wave. | Shared task list created. Teammates claim tasks without conflicts. Worktrees created and merged. All artifacts produced. `TaskCompleted` hooks fire. |
+| **Agent teams MCP access** | During the feature flow, verify teammates call Canon MCP tools. | Teammates successfully call `get_principles`, `record_agent_metrics`. Principle-grounded output observed. |
+| **HITL gates** | Run a flow that requires architect approval. | Lead presents the plan to the user. Plan approval mode activates for the teammate. User approves. Implementation proceeds. |
+| **Regression (flag off)** | Run 3 different flow types with flag off. | Zero divergence from baseline behavior. Artifacts byte-for-byte identical if same inputs. |
+| **Consistency (flag on)** | Run fast-path 3 times on the same task with flag on. | All runs produce the same artifact types with comparable quality. No structural omissions across runs. |
+| **Context pressure** | Run a full feature flow end-to-end (6+ spawns: research, architect, implement, review, fix, re-review). | Lead maintains orchestration quality through the final step. No context-related degradation (forgotten MCP calls, missing effects). |
+| **Completion effects** | After any flow with flag on, verify post-completion. | `update_board complete_flow` called. File claims released. Agent metrics recorded. Learn gate evaluated if applicable. |
+
+**Phase 3 (Deletion):** structural integrity.
+
+- `npm run build` passes with zero TypeScript errors after all deletions.
+- `npm test` passes. Expected test count drops by ~65 test files. No unexpected test failures.
+- `grep -r` confirms zero remaining imports to deleted module paths across the entire codebase.
+- `register-orchestration.ts` compiles and registers only kept tools.
+- 10 successful flows post-deletion (at least 1 per flow type) confirming no runtime regressions.
+
+### Rollback path
+
+**Phase 1:** Revert the CLAUDE.md and runbook additions. No code was changed.
+
+**Phase 2:** Flip the feature flag back to `off`. Legacy path runs unchanged.
+
+**Phase 3a (flag flip):** Flip the flag back to `off`. Legacy code is still present.
+
+**Phase 3b (deletion):** `git revert` the deletion commit(s). This is the point of no easy return — all deletion commits must be atomic per-directory to enable targeted reverts. Alternatively, the legacy code exists on main's git history and can be cherry-picked back.
+
+**Phase 3c (flag removal):** No rollback needed — the flag is gone because the legacy path is gone.
+
+---
+
+## 6. Risks
+
+| Risk | Severity | Likelihood | Mitigation |
+|------|----------|------------|------------|
+| **Claude doesn't consistently follow orchestration guidance.** The lead skips MCP tool calls, forgets post-step effects, or doesn't follow the runbook. | HIGH | MEDIUM | CLAUDE.md instructions are authoritative. Hooks enforce artifacts (`TaskCompleted`). Post-flow audit: `update_board complete_flow` validates metrics were recorded. Consistency testing in Phase 2 catches systematic omissions. |
+| **Agent teams is experimental and may change.** The `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` flag may be renamed, behavior may change, or the feature may be deprecated. | HIGH | LOW | Feature flag gating isolates Canon from upstream changes. If agent teams breaks, fall back to subagent-only mode (sequential flows still work; wave parallelism degrades to sequential). Monitor Claude Code changelog. |
+| **The plan may have missed integrations.** The 28-gap audit is thorough but not provably exhaustive. New integrations may have landed since the audit. | MEDIUM | MEDIUM | Phase 2 validation catches functional gaps. Re-audit checkpoint: before Phase 3 deletion, re-run the integration comparison between legacy output and Claude-as-lead output. |
+| **Subagent prompt quality without MCP tools.** Subagents can't call `get_principles` or `get_file_context` — they depend on the lead injecting everything. If the lead's MCP-composed prompt misses something, the subagent operates with incomplete context. | MEDIUM | MEDIUM | Runbooks document which MCP tools to call per step. CLAUDE.md includes a pre-spawn checklist. Phase 2 consistency testing catches systematic omissions. For critical steps, prefer agent teams (teammates have MCP access) over subagents. |
+| **Context window pressure during long flows.** Each spawn cycle adds prompt + response to the lead's context. Epic flows with many waves may exhaust the lead's context window. | MEDIUM | LOW | Context compaction is automatic in Claude Code. Lead persists critical state to workspace artifacts (not just conversation). Phase 2 context pressure test validates this explicitly. |
+| **One team per session limits flow composition.** Agent teams docs: "a lead can only manage one team at a time." Flows that need multiple teams (e.g., epic with research team → implementation team) must tear down and rebuild. | LOW | HIGH | Documented in CLAUDE.md: "Clean up the current team before starting a new one." The lead tears down between phases. This matches the legacy model (one wave at a time). |
+| **No hard abort for stuck agents.** Experiment 11/14 confirmed: no timeout parameter, graceful shutdown only for teammates. | LOW | LOW | Prompt-based budgets. Lead monitors duration. For teammates: graceful shutdown request. Stream idle timeout (~100s) catches stalled agents. |
+| **No path enforcement in worktree isolation.** Experiment 16 confirmed: worktree isolation only sets CWD, not a sandbox. | LOW | LOW | Pre-tool hooks can reject out-of-bounds writes. Agent definitions restrict tool access via `tools` allowlist. This is an existing gap, not introduced by the migration. |
+| **enter-and-prepare-state.ts refactoring risk.** This 482-line file imports from prompt-pipeline (being deleted). Refactoring it incorrectly could break kept MCP tools. | MEDIUM | LOW | Refactor in a dedicated commit before the main deletion. Test thoroughly. The file's responsibility (state entry + prompt assembly) partially overlaps with the deleted pipeline — determine what it still needs vs. what it delegated to the pipeline. |
+
+---
+
+## 7. Out of Scope
+
+The following are explicitly NOT part of this migration:
+
+1. **Rewriting Canon's MCP tools.** The 38 MCP tools stay as-is. Their implementations, schemas, and behavior are unchanged. The migration only removes the scheduling machinery that called them.
+
+2. **Modifying agent definitions.** Agent definitions in `agents/*.md` get `tools` allowlist updates in Phase 1 but no behavioral changes. Their prompt bodies, model selections, and role descriptions are unchanged.
+
+3. **Modifying principles, rules, or conventions.** Canon's 54 principles are untouched. The matcher, compliance checker, and drift system are untouched.
+
+4. **Rewriting the knowledge graph.** `codebase_graph`, `graph_query`, `semantic_search` and their underlying SQLite database are untouched.
+
+5. **Changing the artifact storage layout.** `.canon/workspaces/<id>/` structure stays. Artifact schemas stay. Write tools stay.
+
+6. **Building a custom prompt pipeline replacement.** The v2 architecture does NOT build a new pipeline. Claude calls MCP tools directly. There is no "plan-time pipeline" — that was the earlier draft's design, superseded by the simpler "Claude calls tools" model.
+
+7. **Closing or modifying PR #112.** The v1 Phase 1/2 code on `canon/agent-teams-phase-2` is read-only reference. PR #112 is handled separately by the user.
+
+8. **Executing any phase of this plan.** This document is the plan. Execution is a separate session after the plan is reviewed and approved.
+
+9. **Upstream Claude Code changes.** The plan does not depend on Anthropic shipping new features (timeout parameter, path enforcement, compaction hooks). It works with Claude Code as it exists today. Mitigations for confirmed gaps use existing mechanisms.
+
+10. **Performance optimization of MCP tools.** If Claude-as-lead calling MCP tools is slower than the legacy pipeline calling them internally, that's a future optimization concern, not a migration blocker.
