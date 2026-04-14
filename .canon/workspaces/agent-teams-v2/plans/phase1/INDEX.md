@@ -1,31 +1,35 @@
-## Plan Index: Phase 1 -- Orchestration Guidance for Agent Teams Migration
+## Plan Index: Phase 1 — Orchestration Guidance for Agent Teams Migration
 
-| Task | Wave | Depends on | Files | Description |
-|------|------|------------|-------|-------------|
-| phase1-00 | 1 | -- | skills/canon/runbooks/_schema.yaml | Define canonical runbook YAML schema (commented example) |
-| phase1-01 | 1 | phase1-00 | skills/canon/runbooks/fast-path.yaml | Create fast-path runbook playbook |
-| phase1-02 | 1 | -- | skills/canon/runbooks/review-only.yaml, skills/canon/runbooks/security-audit.yaml, skills/canon/runbooks/explore.yaml | Create simple runbooks (review-only, security-audit, explore) |
-| phase1-03 | 1 | -- | skills/canon/runbooks/test-gap.yaml, skills/canon/runbooks/adopt.yaml | Create test-gap and adopt runbooks |
-| phase1-04 | 1 | -- | skills/canon/runbooks/feature.yaml, skills/canon/runbooks/refactor.yaml | Create feature and refactor runbooks (medium-tier with wave steps) |
-| phase1-05 | 1 | -- | skills/canon/runbooks/epic.yaml | Create epic runbook (large-tier with multi-wave, consultations) |
-| phase1-06 | 1 | -- | skills/canon/runbooks/migrate.yaml | Create migrate runbook (medium-tier with rollback emphasis) |
-| phase1-07a | 2 | phase1-01 through phase1-06 | rules/*.md → skills/canon/references/, new `rules/agent-context-check.md` | Register rules as skills: copy/symlink rule files into `skills/canon/references/` so agent `skills:` frontmatter can reference them. Create `agent-context-check` rule for self-serve context verification. |
-| phase1-07b | 2 | phase1-07a | agents/*.md (12 — merge implementor+fixer → engineer) | Update agent definitions: consolidate to `canon-engineer`, add maxTurns, permissionMode, skills preloading, domain primer preloading |
-| phase1-08 | 2 | phase1-01 through phase1-06 | CLAUDE.md | Update CLAUDE.md with agent-teams orchestration section. Include post-subagent artifact check, cross-reference existing error handling, explicit flag boundary statement. |
-| phase1-09 | 3 | phase1-07b, phase1-08 | All Phase 1 files | Cross-artifact validation: runbook-to-flow coverage (including fragment expansion), agent def consistency, skill registration completeness, YAML validity, build/test pass |
+| Task | Wave | Depends on | Key files | Description |
+|------|------|------------|-----------|-------------|
+| phase1-00 | 1 | — | skills/canon/runbooks/_schema.yaml | Define canonical runbook YAML schema |
+| phase1-01 | 1 | phase1-00 | skills/canon/runbooks/fast-path.yaml | Create fast-path runbook |
+| phase1-02 | 1 | phase1-00 | skills/canon/runbooks/{review-only,security-audit,explore}.yaml | Create simple runbooks (1-3 steps) |
+| phase1-03 | 1 | phase1-00 | skills/canon/runbooks/{test-gap,adopt}.yaml | Create fix-loop runbooks |
+| phase1-04 | 1 | phase1-00 | skills/canon/runbooks/{feature,refactor}.yaml | Create medium-tier runbooks (wave steps) |
+| phase1-05 | 1 | phase1-00 | skills/canon/runbooks/epic.yaml | Create epic runbook (multi-wave, consultations) |
+| phase1-06 | 1 | phase1-00 | skills/canon/runbooks/migrate.yaml | Create migrate runbook (rollback emphasis) |
+| phase1-07 | 2 | Wave 1 | rules/*.md → skills/canon/references/, rules/agent-context-check.md | Register rules as skills, create agent-context-check rule |
+| phase1-08 | 2 | Wave 1 | mcp-server/src/features/orchestration/tools/orchestration-journal.ts | Orchestration journal tool (log_step + verify_completion) |
+| phase1-09 | 2 | Wave 1 | hooks/canon-agent-teams/{post-commit-trailers.sh,completion-verify.sh,hooks.json} | PostCommit trailer hook + completion verification hook |
+| phase1-10 | 3 | Wave 2 | agents/*.md (delete 2, create 1, modify 11) | Engineer consolidation + all agent frontmatter + skills preloading |
+| phase1-11 | 3 | Wave 2 | CLAUDE.md | Agent-teams orchestration section (11 subsections) |
+| phase1-12 | 4 | Wave 3 | VALIDATION-REPORT.md | Cross-artifact validation (10 check categories) |
 
 ### Wave Summary
 
-**Wave 1** (7 tasks): Define runbook YAML schema first (phase1-00), then create all 10 runbook YAML files in parallel (phase1-01 through phase1-06). All runbook tasks depend on the schema definition to prevent drift across parallel implementors.
+**Wave 1** (7 tasks): Define runbook schema, then create all 10 runbook playbooks in parallel. All runbook tasks depend on the schema to prevent drift.
 
-**Wave 2** (3 tasks): Register rules as skills (phase1-07a), then update agent definitions including engineer consolidation (phase1-07b, depends on 07a), plus CLAUDE.md update (phase1-08, parallel with 07a/07b). Agent def updates depend on Wave 1 runbooks.
+**Wave 2** (3 tasks, parallel): Register rules as skills, build orchestration journal tool, write enforcement hooks. No dependencies between these three — they can run in parallel.
 
-**Wave 3** (1 task): Cross-artifact validation. Depends on Wave 2 because it checks consistency across all artifacts.
+**Wave 3** (2 tasks, parallel): Update all agent definitions (engineer consolidation + frontmatter + skills) and write CLAUDE.md orchestration section. These depend on Wave 2 because CLAUDE.md references the journal and hooks, and agent defs reference registered skills.
+
+**Wave 4** (1 task): Cross-artifact validation. Depends on everything. Produces VALIDATION-REPORT.md.
 
 ### File Inventory
 
-**New files (12+):**
-- `skills/canon/runbooks/_schema.yaml` (canonical schema definition)
+**New files (16):**
+- `skills/canon/runbooks/_schema.yaml`
 - `skills/canon/runbooks/fast-path.yaml`
 - `skills/canon/runbooks/feature.yaml`
 - `skills/canon/runbooks/refactor.yaml`
@@ -36,24 +40,33 @@
 - `skills/canon/runbooks/security-audit.yaml`
 - `skills/canon/runbooks/explore.yaml`
 - `skills/canon/runbooks/adopt.yaml`
-- `.canon/workspaces/agent-teams-v2/plans/phase1/VALIDATION-REPORT.md` (output of validation task)
+- `rules/agent-context-check.md`
+- `mcp-server/src/features/orchestration/tools/orchestration-journal.ts`
+- `hooks/canon-agent-teams/post-commit-trailers.sh`
+- `hooks/canon-agent-teams/completion-verify.sh`
+- `agents/canon-engineer.md`
 
-**Modified files (14):**
-- `CLAUDE.md` -- Add agent-teams orchestration section, annotate legacy section
-- `agents/canon-researcher.md` -- Add maxTurns, permissionMode
-- `agents/canon-architect.md` -- Add maxTurns, permissionMode
-- `agents/canon-implementor.md` -- Add maxTurns, permissionMode
-- `agents/canon-reviewer.md` -- Add maxTurns, permissionMode
-- `agents/canon-tester.md` -- Add maxTurns, permissionMode
-- `agents/canon-security.md` -- Add maxTurns, permissionMode
-- `agents/canon-fixer.md` -- Add maxTurns, permissionMode
-- `agents/canon-scribe.md` -- Add maxTurns, permissionMode
-- `agents/canon-shipper.md` -- Add maxTurns, permissionMode
-- `agents/canon-learner.md` -- Add maxTurns, permissionMode
-- `agents/canon-chat.md` -- Add maxTurns, permissionMode
-- `agents/canon-guide.md` -- Add maxTurns, permissionMode
-- `agents/canon-writer.md` -- Add maxTurns, permissionMode
+**Modified files (13):**
+- `CLAUDE.md` — add agent-teams orchestration section, annotate legacy section
+- `agents/.claude/CLAUDE.md` — update roster (12 agents, not 13)
+- `agents/canon-researcher.md` — add maxTurns, permissionMode, skills
+- `agents/canon-architect.md` — add maxTurns, permissionMode, skills
+- `agents/canon-reviewer.md` — add maxTurns, permissionMode, skills
+- `agents/canon-tester.md` — add maxTurns, permissionMode, skills
+- `agents/canon-security.md` — add maxTurns, permissionMode, skills
+- `agents/canon-scribe.md` — add maxTurns, permissionMode, skills
+- `agents/canon-shipper.md` — add maxTurns, permissionMode, skills
+- `agents/canon-learner.md` — add maxTurns, permissionMode, skills
+- `agents/canon-chat.md` — add maxTurns, permissionMode, skills
+- `agents/canon-guide.md` — add maxTurns, permissionMode, skills
+- `agents/canon-writer.md` — add maxTurns, permissionMode, skills
 
-**Deleted files:** None (Phase 1 is additions-only)
+**Deleted files (2):**
+- `agents/canon-implementor.md` (replaced by canon-engineer)
+- `agents/canon-fixer.md` (replaced by canon-engineer)
 
-**TypeScript files modified:** None
+**New TypeScript (1 file, ~50-80 lines):**
+- `mcp-server/src/features/orchestration/tools/orchestration-journal.ts`
+
+**Symlinks (~19):**
+- `rules/agent-*.md` → `skills/canon/references/agent-*.md` (skill registrations)

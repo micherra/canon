@@ -1,334 +1,336 @@
 ---
 task_id: "phase1-04"
 wave: 1
-depends_on: []
-decisions:
-  - "runbook-yaml-structure"
+depends_on:
+  - "phase1-00"
 files:
   - skills/canon/runbooks/feature.yaml
   - skills/canon/runbooks/refactor.yaml
 principles:
-  - simplicity-first
-  - information-hiding
-domains: []
+  - agent-plans-are-prompts
+  - agent-design-before-code
+domains:
+  - orchestration
 ---
 
-## Task: Create feature and refactor runbooks (medium-tier with wave steps)
+## Task: Create feature and refactor runbooks
 
 ### Action
 
-Create two medium-tier runbooks that include wave (parallel) implementation steps. These are the first runbooks that use `dispatch: team` for implementation.
+Create two medium-tier runbooks. Both include `dispatch: team` wave steps for parallel implementation. These are more complex than fast-path — they have design, implementation waves, testing, review, and ship phases.
 
-#### 1. `skills/canon/runbooks/feature.yaml`
+#### 1. `feature.yaml`
+
+Read `flows/feature.md` and its included fragments. The full state sequence is:
+- `design` (single, canon-architect, approval_gate)
+- `checkpoint` (user-checkpoint fragment — approval/revise)
+- `implement` (wave, canon-implementor)
+- `context-sync` (single, canon-scribe)
+- `verify` / `fix-impl` (verify-fix-loop fragment — tester + fixer loop)
+- `review` / `fix-violations` (review-fix-loop fragment)
+- `pre-launch-check` (gate-only)
+- `ship` (single, canon-shipper)
+- `learn` (single, canon-learner, skip_when)
 
 ```yaml
-name: feature
-description: "Design, implement, test, and review a feature (4-10 files)"
-tier: medium
+name: "feature"
+description: "Design, implement in parallel waves, test, review, and ship a feature"
+tier: "medium"
 
 steps:
-  - id: design
-    agent: canon-architect
-    dispatch: subagent
+  - id: "design"
+    agent: "canon-architect"
+    dispatch: "subagent"
     mcp_tools:
       - get_principles
       - get_file_context
       - graph_query
       - semantic_search
+      - init_workspace
+      - log_step
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/DESIGN.md"
-      - "${WORKSPACE}/plans/${slug}/INDEX.md"
-      - "${WORKSPACE}/plans/${slug}/*-PLAN.md"
-      - "${WORKSPACE}/decisions/"
-      - "${WORKSPACE}/context.md"
-    hitl: approval
-    notes: >
-      Spawn canon-architect with the task description, matched principles
-      (full body), and file context. The architect produces a design document,
-      task plans, and plan index. Present the plan to the user for approval.
-      If the user requests revisions, re-spawn the architect with feedback.
-      Max 3 revision rounds. The architect may use competitive synthesis
-      (auto mode) -- spawn multiple architect subagents with different lenses
-      and synthesize their outputs.
+      - "plans/${slug}/DESIGN.md"
+      - "plans/${slug}/INDEX.md"
+      - "plans/${slug}/${task_id}-PLAN.md"
+      - "decisions/"
+      - "context.md"
+    hitl: "approval"
+    skip_when: null
+    notes: |
+      Design the technical approach. Produce design document, task plans
+      with wave assignments, plan index, and decision records. Initialize
+      context.md. Present the plan to the user for approval before
+      implementation. If user requests revisions, re-design (max 3 revisions).
+      Write affected files to board metadata via update_board set_metadata.
 
-  - id: implement
-    agent: canon-implementor
-    dispatch: team
-    mcp_tools:
-      - get_file_context
-    artifacts:
-      - "${WORKSPACE}/plans/${slug}/*-SUMMARY.md"
-    hitl: none
-    notes: >
-      Create an agent team with one canon-implementor teammate per task in the
-      plan index. Each teammate receives its task plan file. Use the shared task
-      list for coordination -- tasks with wave dependencies are auto-unblocked.
-      Create git worktrees for each teammate (git worktree add). After all tasks
-      complete, merge worktrees back. Run post-state effects (check_postconditions)
-      after merge.
-
-  - id: context-sync
-    agent: canon-scribe
-    dispatch: subagent
-    mcp_tools: []
-    artifacts:
-      - "${WORKSPACE}/context.md"
-    hitl: none
-    notes: >
-      Spawn canon-scribe to update CLAUDE.md, context.md, and CONVENTIONS.md
-      based on the implementation changes. The scribe reads git diffs and
-      implementor summaries to identify contract-level changes.
-
-  - id: verify
-    agent: canon-tester
-    dispatch: subagent
+  - id: "implement"
+    agent: "canon-implementor"
+    dispatch: "team"
     mcp_tools:
       - get_principles
       - get_file_context
+      - log_step
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/TEST-REPORT.md"
-    hitl: none
-    notes: >
-      Spawn canon-tester to write integration tests and fill coverage gaps.
-      The tester reads implementor summaries for coverage notes. Runs all tests.
+      - "plans/${slug}/${task_id}-SUMMARY.md"
+    hitl: "none"
+    skip_when: null
+    notes: |
+      Wave execution. Create an agent team from the plan index. Each
+      teammate claims one task from the shared task list. Teammates
+      self-coordinate via Mailbox. TaskCompleted hooks enforce artifact
+      production. After each wave, merge worktrees. Run inter-wave gates
+      if configured. Continue waves until plan index is complete.
 
-  - id: fix-impl
-    agent: canon-fixer
-    dispatch: subagent
+  - id: "context-sync"
+    agent: "canon-scribe"
+    dispatch: "subagent"
     mcp_tools:
-      - get_file_context
+      - log_step
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md"
-    hitl: none
-    skip_when: "All tests pass (tester reports all_passing)"
-    notes: >
-      If tests fail, spawn canon-fixer in test-fix mode. Fix source code to
-      make tests pass, then loop back to verify. Max 3 iterations of the
-      verify/fix loop.
+      - "plans/${slug}/CONTEXT-SYNC.md"
+    hitl: "none"
+    skip_when: "no_contract_changes"
+    notes: |
+      Sync CLAUDE.md, context.md, and CONVENTIONS.md after implementation.
+      Diff source: implementation commits since design. Skip if no contract
+      or convention changes detected.
 
-  - id: review
-    agent: canon-reviewer
-    dispatch: subagent
+  - id: "verify"
+    agent: "canon-tester"
+    dispatch: "subagent"
     mcp_tools:
       - get_principles
       - get_file_context
-      - get_drift_report
+      - log_step
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/REVIEW.md"
-      - "${WORKSPACE}/reviews/"
-    hitl: on_failure
-    notes: >
-      Spawn canon-reviewer for four-stage review (principle compliance, code
-      quality, compliance cross-check, drift-from-plan). Call store_pr_review
-      after review completes (persist_review effect). If BLOCKING, proceed to
-      fix-violations then re-review. Max 3 iterations.
+      - "plans/${slug}/TEST-REPORT.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Write integration tests and fill coverage gaps. Start with Coverage
+      Notes from implementation summaries. Read plan files for risk
+      mitigations sections. If tests reveal source bugs, spawn canon-fixer
+      (test-fix mode), then re-verify. Loop max 2 iterations.
 
-  - id: fix-violations
-    agent: canon-fixer
-    dispatch: subagent
+  - id: "review"
+    agent: "canon-reviewer"
+    dispatch: "subagent"
     mcp_tools:
+      - get_principles
       - get_file_context
-    artifacts: []
-    hitl: none
-    skip_when: "Review verdict is CLEAN or WARNING"
-    notes: >
-      For each BLOCKING violation, spawn canon-fixer in violation-fix mode.
-      Multiple independent violations can be fixed in parallel. After fixing,
-      loop back to review.
+      - review_code
+      - log_step
+    artifacts:
+      - "plans/${slug}/REVIEW.md"
+      - "reviews/"
+    hitl: "checkpoint"
+    skip_when: null
+    notes: |
+      Review changes via git diff. Cross-check against implementation
+      summaries. Read DESIGN.md and INDEX.md for drift-from-plan detection.
+      If blocking violations, spawn canon-fixer (violation-fix mode), then
+      re-review. Loop max 3 iterations. Persist review via store_pr_review.
 
-  - id: pre-launch-check
+  - id: "pre-launch-check"
     agent: null
-    dispatch: subagent
-    mcp_tools: []
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
     artifacts: []
-    hitl: on_failure
-    notes: >
-      Run all discovered quality gates via Bash. If all pass, proceed to ship.
-      If any fail, present to user.
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Gate-only step. Run all discovered quality-check commands. If all
+      pass, proceed to ship. If any fail, present to user.
 
-  - id: ship
-    agent: canon-shipper
-    dispatch: subagent
-    mcp_tools: []
+  - id: "ship"
+    agent: "canon-shipper"
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
+      - update_board
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md"
-    hitl: none
-    notes: >
-      Spawn canon-shipper to synthesize build artifacts into PR description.
+      - "plans/${slug}/PR-DESCRIPTION.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Synthesize build artifacts into PR description. Read all summaries,
+      design doc, test report, review verdict. Run git log for commit
+      history. Call update_board complete_flow at the end.
 
-  - id: learn
-    agent: canon-learner
-    dispatch: subagent
-    mcp_tools: []
+  - id: "learn"
+    agent: "canon-learner"
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
+      - get_drift_report
     artifacts: []
-    hitl: none
-    skip_when: "Learn gate not passed"
-    notes: >
-      Evaluate learn gate. If passed, spawn canon-learner.
+    hitl: "none"
+    skip_when: "learn_gate_not_passed"
+    notes: |
+      Auto-trigger pattern analysis. Analyze transcripts and drift data.
+      Skip if learn gate evaluation fails.
 ```
 
-#### 2. `skills/canon/runbooks/refactor.yaml`
+#### 2. `refactor.yaml`
+
+Read `flows/refactor.md` and its included fragments. The full state sequence is:
+- `analyze` (single, canon-researcher, role: refactor-scope)
+- `checkpoint` (user-checkpoint — approval/revise)
+- `implement` (wave, canon-implementor)
+- `verify` / `fix-impl` (verify-fix-loop)
+- `context-sync` (single, canon-scribe)
+- `review` / `fix-violations` (review-fix-loop)
+- `pre-launch-check` (gate-only)
+- `ship` / `learn` / `done` (ship-done)
 
 ```yaml
-name: refactor
+name: "refactor"
 description: "Behavior-preserving restructuring with continuous test verification"
-tier: medium
+tier: "medium"
 
 steps:
-  - id: analyze
-    agent: canon-researcher
-    dispatch: subagent
+  - id: "analyze"
+    agent: "canon-researcher"
+    dispatch: "subagent"
     mcp_tools:
-      - get_principles
       - get_file_context
       - graph_query
       - semantic_search
+      - init_workspace
+      - log_step
     artifacts:
-      - "${WORKSPACE}/research/refactor-scope.md"
-    hitl: none
-    notes: >
-      Spawn canon-researcher in refactor-scope role. Identifies all affected
-      files, existing test coverage, behavioral contracts to preserve, and
-      dependency map. Recommends wave ordering (files with no dependents first).
-      Present the analysis to user for approval before proceeding.
+      - "research/refactor-scope.md"
+    hitl: "approval"
+    skip_when: null
+    notes: |
+      Analyze refactoring scope. Identify all files affected, existing test
+      coverage, and behavioral contracts to preserve. Map dependencies.
+      Key outputs: file list, test coverage map, behavioral contracts,
+      risk areas, recommended wave ordering (files with no dependents first).
+      Present analysis to user for approval before implementation.
 
-  - id: checkpoint
-    agent: null
-    dispatch: subagent
-    mcp_tools: []
-    artifacts: []
-    hitl: approval
-    notes: >
-      Present the refactoring scope analysis to the user. User approves to
-      proceed or requests revision (loops back to analyze). This is the
-      architect-equivalent approval gate for refactoring flows.
-
-  - id: implement
-    agent: canon-implementor
-    dispatch: team
-    mcp_tools:
-      - get_file_context
-    artifacts:
-      - "${WORKSPACE}/plans/${slug}/*-SUMMARY.md"
-    hitl: none
-    notes: >
-      Create agent team with implementor teammates. CRITICAL: each change must
-      preserve existing behavior. Run existing tests after each change. Gate on
-      test-suite passing between waves. Create worktrees, merge after completion.
-
-  - id: verify
-    agent: canon-tester
-    dispatch: subagent
+  - id: "implement"
+    agent: "canon-implementor"
+    dispatch: "team"
     mcp_tools:
       - get_principles
       - get_file_context
+      - log_step
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/TEST-REPORT.md"
-    hitl: none
-    notes: >
+      - "plans/${slug}/${task_id}-SUMMARY.md"
+    hitl: "none"
+    skip_when: null
+    notes: |
+      CRITICAL: preserve all existing behavior. Wave execution per plan
+      index. Run existing tests after each change to verify nothing breaks.
+      Each wave must leave the test suite green.
+
+  - id: "verify"
+    agent: "canon-tester"
+    dispatch: "subagent"
+    mcp_tools:
+      - get_principles
+      - get_file_context
+      - log_step
+    artifacts:
+      - "plans/${slug}/TEST-REPORT.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
       Run full test suite to verify refactoring preserved behavior. Compare
-      test results against pre-refactor baseline.
+      test results against pre-refactor baseline. If failures, spawn
+      canon-fixer to restore correct behavior (fix source, not tests).
+      Loop max 2 iterations.
 
-  - id: fix-impl
-    agent: canon-fixer
-    dispatch: subagent
+  - id: "context-sync"
+    agent: "canon-scribe"
+    dispatch: "subagent"
     mcp_tools:
-      - get_file_context
+      - log_step
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md"
-    hitl: none
-    skip_when: "All tests pass"
-    notes: >
-      If refactoring broke behavior, fix the implementation (not the tests).
-      Loop back to verify. Max 3 iterations.
+      - "plans/${slug}/CONTEXT-SYNC.md"
+    hitl: "none"
+    skip_when: "no_contract_changes"
+    notes: |
+      Sync docs after implementation. Diff source: implementation commits.
+      Skip if no contract changes.
 
-  - id: context-sync
-    agent: canon-scribe
-    dispatch: subagent
-    mcp_tools: []
-    artifacts:
-      - "${WORKSPACE}/context.md"
-    hitl: none
-    notes: >
-      Spawn canon-scribe to update documentation for structural changes.
-
-  - id: review
-    agent: canon-reviewer
-    dispatch: subagent
+  - id: "review"
+    agent: "canon-reviewer"
+    dispatch: "subagent"
     mcp_tools:
       - get_principles
       - get_file_context
-      - get_drift_report
+      - review_code
+      - log_step
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/REVIEW.md"
-      - "${WORKSPACE}/reviews/"
-    hitl: on_failure
-    notes: >
-      Review refactoring for principle compliance. Max 2 review/fix iterations.
+      - "plans/${slug}/REVIEW.md"
+      - "reviews/"
+    hitl: "checkpoint"
+    skip_when: null
+    notes: |
+      Review refactored code. Focus on behavior preservation and principle
+      compliance. If blocking violations, spawn fixer, re-review. Max 2
+      iterations. Persist review.
 
-  - id: fix-violations
-    agent: canon-fixer
-    dispatch: subagent
-    mcp_tools:
-      - get_file_context
-    artifacts: []
-    hitl: none
-    skip_when: "Review verdict is CLEAN or WARNING"
-    notes: >
-      Fix BLOCKING violations. Loop back to review. Max 2 iterations.
-
-  - id: pre-launch-check
+  - id: "pre-launch-check"
     agent: null
-    dispatch: subagent
-    mcp_tools: []
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
     artifacts: []
-    hitl: on_failure
-    notes: >
-      Run all discovered quality gates.
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Gate-only step. Run discovered quality checks. Fail closed.
 
-  - id: ship
-    agent: canon-shipper
-    dispatch: subagent
-    mcp_tools: []
+  - id: "ship"
+    agent: "canon-shipper"
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
+      - update_board
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md"
-    hitl: none
-    notes: >
-      Synthesize build artifacts into PR description.
+      - "plans/${slug}/PR-DESCRIPTION.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Synthesize PR description from build artifacts.
 
-  - id: learn
-    agent: canon-learner
-    dispatch: subagent
-    mcp_tools: []
+  - id: "learn"
+    agent: "canon-learner"
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
+      - get_drift_report
     artifacts: []
-    hitl: none
-    skip_when: "Learn gate not passed"
-    notes: >
-      Evaluate learn gate. If passed, spawn canon-learner.
+    hitl: "none"
+    skip_when: "learn_gate_not_passed"
+    notes: |
+      Auto-trigger pattern analysis. Skip if learn gate fails.
 ```
-
-**Verify flow coverage**:
-- `feature.md`: states design, implement (wave), context-sync, verify, fix-impl (from fragment), review (from fragment), fix-violations (from fragment), pre-launch-check (from fragment), ship (from fragment), learn (from fragment), checkpoint (from fragment), done. Runbook covers all non-terminal states.
-- `refactor.md`: states analyze, implement (wave), verify (from fragment), fix-impl (from fragment), context-sync (from fragment), review (from fragment), fix-violations (from fragment), pre-launch-check (from fragment), ship (from fragment), learn (from fragment), checkpoint (from fragment), done. Runbook covers all non-terminal states.
 
 ### Canon principles to apply
-
-- **simplicity-first**: Wave steps are described as "create agent team with teammates" rather than introducing wave YAML semantics.
-- **information-hiding**: The lead does not need to know about wave policies, merge strategies, or worktree lifecycle internals -- the runbook says "create worktrees, merge after completion."
+- **agent-plans-are-prompts**: Wave steps must clearly describe the team dispatch pattern — shared task list, Mailbox coordination, TaskCompleted hooks.
+- **agent-design-before-code**: Both runbooks have an explicit design/analysis step before implementation.
 
 ### Tests to write
-
-No tests -- YAML playbook files.
+- No code tests. YAML validation only.
 
 ### Verify
-
 1. Both files exist at `skills/canon/runbooks/{feature,refactor}.yaml`
-2. Valid YAML
-3. Step IDs match legacy flow states
-4. `npm run build` and `npm test` still pass
+2. Both parse as valid YAML
+3. `feature.yaml`: 8 steps covering design through learn
+4. `refactor.yaml`: 8 steps covering analyze through learn
+5. Both have `dispatch: team` on the implement step
+6. HITL patterns: `approval` on design/analyze, `checkpoint` on review, `on_failure` elsewhere
+7. `npm run build` passes
+8. `npm test` passes
 
 ### Done when
-
-- Two runbook files exist and are valid YAML
-- All states from their legacy flows are represented including fragment states
-- Wave/team dispatch is clearly annotated for implementation steps
+- Both runbooks exist and parse as valid YAML
+- Implementation steps use `dispatch: team` for wave execution
+- All states from legacy flows are represented as steps
+- Fix-loop semantics documented in verify and review step notes
+- Build and tests pass unchanged

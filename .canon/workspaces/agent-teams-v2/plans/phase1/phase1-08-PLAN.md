@@ -1,158 +1,184 @@
 ---
 task_id: "phase1-08"
 wave: 2
-depends_on:
-  - "phase1-01"
-  - "phase1-02"
-  - "phase1-03"
-  - "phase1-04"
-  - "phase1-05"
-  - "phase1-06"
+depends_on: []
 files:
-  - CLAUDE.md
+  - mcp-server/src/features/orchestration/tools/orchestration-journal.ts
+  - mcp-server/src/app/register-orchestration.ts
+  - mcp-server/src/features/orchestration/tools/__tests__/orchestration-journal.test.ts
 principles:
-  - simplicity-first
-  - information-hiding
-  - externalize-configuration
-domains: []
+  - errors-are-values
+  - thin-handlers
+  - agent-tdd-required
+domains:
+  - mcp-server
 ---
 
-## Task: Update CLAUDE.md with agent-teams orchestration section
+## Task: Implement orchestration journal MCP tools
 
 ### Action
 
-Add an "Agent Teams Orchestration" section to CLAUDE.md that provides the orchestration discipline for when `CANON_AGENT_TEAMS_MODE=on`. This section is the primary guidance document the lead reads to orchestrate Canon flows natively.
+Write `mcp-server/src/features/orchestration/tools/orchestration-journal.ts` (~50-80 lines) implementing two MCP tools: `log_step` and `verify_completion`. Register them in `register-orchestration.ts` behind `CANON_AGENT_TEAMS_MODE=on`.
 
-**Placement**: Add the new section AFTER the existing "Driving the State Machine" section and BEFORE "Specialist Agents". Annotate the existing section with "(Legacy)" to clarify which section applies when.
+#### 1. Implement `orchestration-journal.ts`
 
-**Changes to make:**
+The file should export two handler functions:
 
-1. **Rename the existing heading** from `## Driving the State Machine` to `## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off)`. Add a one-line note: "This section applies when `CANON_AGENT_TEAMS_MODE` is unset or set to `off`. See the next section for agent-teams mode."
+```typescript
+// orchestration-journal.ts
 
-2. **Add new section** `## Agent Teams Orchestration (CANON_AGENT_TEAMS_MODE=on)` with the following subsections:
+import { toolOk, toolError, type ToolResult } from "@shared/lib/tool-result.ts";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
-```markdown
-## Agent Teams Orchestration (CANON_AGENT_TEAMS_MODE=on)
+interface JournalStep {
+  step_id: string;
+  agent_type: string | null;
+  artifacts_expected: string[];
+  status: "planned" | "started" | "completed" | "skipped";
+  started_at?: string;
+  completed_at?: string;
+  mcp_tools_called?: string[];
+}
 
-This section applies when `CANON_AGENT_TEAMS_MODE=on`. When off or unset, use the legacy "Driving the State Machine" section above.
-
-### Setup
-
-1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` -- Create or resume workspace. Check `preflight_issues` before proceeding.
-2. Read the runbook for the selected flow: `skills/canon/runbooks/{flow-name}.yaml`. This is your step-by-step playbook.
-
-### MCP Tool Composition
-
-Before spawning each agent, compose context by calling Canon MCP tools directly:
-
-| Tool | When to call | What it provides |
-|------|-------------|-----------------|
-| `get_principles` | Before every agent spawn | Matched principles for the target files/task |
-| `get_file_context` | Before implementation and review steps | File summaries, dependencies, graph metrics |
-| `get_drift_report` | Before review steps | Recent drift, compliance trends |
-| `graph_query` | During research and design | Callers, callees, blast radius |
-| `semantic_search` | During research | Conceptual code search |
-| `codebase_graph` | For full graph operations | Generate or query the knowledge graph |
-
-Include the MCP tool outputs in the agent's spawn prompt. Agents also have direct Canon MCP access (listed in their `tools` field) and can call these tools themselves.
-
-### Dispatch Framework
-
-| Step pattern | Dispatch | Example |
-|-------------|----------|---------|
-| Single agent, focused task | Subagent | Research, review, security scan |
-| Sequential pipeline | Chained subagents | Research -> design -> implement -> review |
-| Parallel implementation (wave) | Agent team | Multiple implementors on independent tasks |
-| Advisory opinion | Subagent | Consultation (pattern-check, targeted-research) |
-
-**Subagent dispatch**: Spawn with the agent definition type (e.g., `canon-researcher`). Include isolation: worktree for implementation agents. Include the runbook step's `mcp_tools` outputs in the spawn prompt.
-
-**Agent team dispatch**: For wave steps (implementation across multiple files):
-1. Create git worktrees: `git worktree add .canon/worktrees/{task-id} -b canon-wave/{task-id}`
-2. Create the agent team with one teammate per task from the plan index
-3. Each teammate gets its task plan file as instructions
-4. Teammates coordinate via shared task list (dependencies auto-unblock)
-5. After all tasks complete, merge worktrees: `git merge canon-wave/{task-id}`
-6. Clean up worktrees: `git worktree remove .canon/worktrees/{task-id}`
-
-### HITL Patterns
-
-Handle human-in-the-loop natively:
-- **Plan approval**: Present the architect's design to the user. Ask for approval, revision requests, or rejection. Loop back to design on revisions. Max 3 rounds.
-- **On failure**: When a gate fails, a review is BLOCKING, or an agent reports BLOCKED, present the details to the user and ask how to proceed.
-- **Merge conflicts**: If worktree merges produce conflicts, present the conflicts to the user for resolution.
-- **Wave checkpoints**: At the end of each epic wave, summarize progress and present to the user.
-
-### Post-Step Effects
-
-After certain steps, the lead runs effects:
-- **After review**: Call `store_pr_review` MCP tool to persist the review (persist_review effect).
-- **After implementation**: Run contract-checker assertions if the flow defines postconditions (check_postconditions effect). Use Bash to run the shell commands.
-- **After any step**: Call `record_agent_metrics` to record the agent's performance metrics.
-
-### Commit Provenance
-
-Instruct agents to include Canon trailers in all commits:
-```
-Canon-Workflow: {workflow-slug}
-Canon-Agent: {agent-type}
-Canon-State: {step-id}
-Canon-Task: {task-id}
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-```
-Include the trailer values in each agent's spawn prompt under a `## Commit Provenance` heading.
-
-### Completion Checklist
-
-After the final step (ship or learn):
-1. Call `update_board({ operation: "complete_flow" })` -- aggregates metrics, releases file claims.
-2. Verify all expected artifacts exist in the workspace.
-3. Evaluate the learn gate: run `.canon/learn.sh` via Bash if it exists.
-4. Present a completion summary naming the notable artifacts from each step.
-
-### Runbook Reference
-
-Runbooks live at `skills/canon/runbooks/{flow-name}.yaml`. Each runbook lists:
-- `steps[].id` -- Step identifier
-- `steps[].agent` -- Which agent to spawn (null for gate-only steps)
-- `steps[].dispatch` -- `subagent` or `team`
-- `steps[].mcp_tools` -- MCP tools to call before this step
-- `steps[].artifacts` -- Expected output files
-- `steps[].hitl` -- Whether this step has a user checkpoint
-- `steps[].skip_when` -- Optional skip condition
-- `steps[].notes` -- Detailed guidance for this step
-
-Follow the runbook's step sequence. Adapt when the situation warrants -- the runbook is guidance, not a rigid script.
+interface Journal {
+  version: 1;
+  workspace: string;
+  steps: JournalStep[];
+}
 ```
 
-3. **Do NOT modify** any other section of CLAUDE.md. The intent classification table, specialist agents table, agent spawn error handling, project structure, and reference sections remain unchanged.
+**`logStep` function:**
+
+Input schema:
+- `workspace: string` (required) — workspace path
+- `step_id: string` (required) — step ID from the runbook
+- `agent_type: string | null` (optional) — agent definition name, null for gate-only steps
+- `artifacts_expected: string[]` (optional, default []) — expected artifact paths relative to workspace
+- `status: "planned" | "started" | "completed" | "skipped"` (required)
+- `mcp_tools_called: string[]` (optional) — MCP tools the lead called for this step
+
+Behavior:
+1. Read `${workspace}/journal.json` if it exists; otherwise initialize empty journal.
+2. Find existing step entry by `step_id`. If found, update its `status` and timestamps. If not found, create a new entry.
+3. When `status` is `"started"`, set `started_at` to ISO timestamp.
+4. When `status` is `"completed"`, set `completed_at` to ISO timestamp.
+5. Write updated journal back to `${workspace}/journal.json`.
+6. Return `{ ok: true, step_id, status }`.
+
+Error handling:
+- If `workspace` does not exist, return `toolError("WORKSPACE_NOT_FOUND", ...)`.
+- If `step_id` is empty, return `toolError("INVALID_INPUT", ...)`.
+
+**`verifyCompletion` function:**
+
+Input schema:
+- `workspace: string` (required) — workspace path
+
+Behavior:
+1. Read `${workspace}/journal.json`. If it does not exist, return `toolError("WORKSPACE_NOT_FOUND", "No journal found at workspace")`.
+2. Compute:
+   - `steps_logged`: total steps in journal
+   - `steps_completed`: steps with status "completed"
+   - `steps_missing`: steps with status "started" but not "completed" (started but abandoned)
+   - `steps_skipped`: steps with status "skipped"
+   - `artifacts_expected`: all `artifacts_expected` from completed steps, flattened
+   - `artifacts_missing`: artifacts from `artifacts_expected` that do not exist on disk (resolve paths relative to workspace, allow glob patterns in artifact paths like `plans/${slug}/*.md`)
+3. Return:
+```typescript
+{
+  ok: true,
+  steps_logged: number,
+  steps_completed: number,
+  steps_missing: Array<{ step_id: string; status: string }>,
+  steps_skipped: string[],
+  artifacts_expected: string[],
+  artifacts_missing: string[],
+  complete: boolean  // true when steps_missing is empty AND artifacts_missing is empty
+}
+```
+
+#### 2. Register in `register-orchestration.ts`
+
+Add a new function `registerJournalTools()` that registers both tools. Gate it behind `CANON_AGENT_TEAMS_MODE`:
+
+```typescript
+function registerJournalTools(): void {
+  if (process.env.CANON_AGENT_TEAMS_MODE !== "on") return;
+
+  server.registerTool(
+    "log_step",
+    {
+      description: "Log a step in the orchestration journal. Records step execution for audit trail and completion verification.",
+      inputSchema: {
+        workspace: z.string().describe("Workspace directory path"),
+        step_id: z.string().describe("Step ID from the runbook"),
+        agent_type: z.string().nullable().optional().describe("Agent definition name, null for gate-only steps"),
+        artifacts_expected: z.array(z.string()).optional().describe("Expected artifact paths relative to workspace"),
+        status: z.enum(["planned", "started", "completed", "skipped"]).describe("Step execution status"),
+        mcp_tools_called: z.array(z.string()).optional().describe("MCP tools the lead called for this step"),
+      },
+    },
+    wrapHandler(async (input) => logStep(input)),
+  );
+
+  server.registerTool(
+    "verify_completion",
+    {
+      description: "Verify flow completion by checking the orchestration journal. Returns steps logged, steps missing, and artifacts missing.",
+      inputSchema: {
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    wrapHandler(async (input) => verifyCompletion(input)),
+  );
+}
+```
+
+Call `registerJournalTools()` from `registerOrchestrationTools()`.
+
+#### 3. Write tests
+
+Create `mcp-server/src/features/orchestration/tools/__tests__/orchestration-journal.test.ts`:
+
+Tests to cover:
+1. `logStep` — creates journal.json on first call
+2. `logStep` — updates existing step status from planned → started → completed
+3. `logStep` — adds timestamps on started and completed
+4. `logStep` — returns WORKSPACE_NOT_FOUND for nonexistent workspace
+5. `logStep` — returns INVALID_INPUT for empty step_id
+6. `verifyCompletion` — returns complete: true when all steps completed and artifacts exist
+7. `verifyCompletion` — detects steps_missing (started but not completed)
+8. `verifyCompletion` — detects artifacts_missing when expected files don't exist
+9. `verifyCompletion` — returns WORKSPACE_NOT_FOUND when no journal
+10. `verifyCompletion` — handles skipped steps correctly (not counted as missing)
+
+Use `vitest` and `tmp` directories for workspace fixtures. Follow existing test patterns in `mcp-server/src/features/orchestration/tools/__tests__/`.
 
 ### Canon principles to apply
-
-- **simplicity-first**: The agent-teams section is a self-contained reference. No cross-references to other documents needed for basic orchestration.
-- **information-hiding**: The lead does not need to understand legacy flow YAML, prompt pipelines, or state transitions. The runbook and MCP tools provide everything.
-- **externalize-configuration**: The feature flag is an environment variable, documented as the switch between sections.
+- **errors-are-values**: Both functions return `ToolResult<T>` — never throw for expected conditions. Use `toolError()` and `toolOk()`.
+- **thin-handlers**: Registration code in `register-orchestration.ts` is thin — delegates to handler functions in `orchestration-journal.ts`.
+- **agent-tdd-required**: Write tests alongside the implementation. Each function gets at least 5 test cases.
 
 ### Risk mitigations
-
-- **Risk: Existing CLAUDE.md sections broken by edit** -- Mitigation: Only add new content and rename one heading. Do not rewrite existing content. Verify the full file parses correctly after edit.
-- **Risk: Lead follows wrong section** -- Mitigation: Each section's heading includes the flag condition. The first line of each section states when it applies.
+- **Feature flag isolation**: The `CANON_AGENT_TEAMS_MODE !== "on"` guard ensures these tools are invisible when the flag is off. Verify this in tests.
+- **Concurrent access**: Journal writes should be atomic (write to temp, rename). Follow the pattern from existing Canon workspace files.
+- **Glob patterns in artifacts**: `artifacts_expected` may contain `${slug}` or glob patterns. The verification must handle these — resolve variables from workspace context or skip unresolvable patterns.
 
 ### Tests to write
-
-No new tests. Verify `npm run build` and `npm test` still pass.
+- `mcp-server/src/features/orchestration/tools/__tests__/orchestration-journal.test.ts`: 10 test cases as described above
 
 ### Verify
-
-1. CLAUDE.md contains both the legacy section (annotated) and the new agent-teams section
-2. The agent-teams section covers all six topics: MCP tool composition, dispatch framework, HITL patterns, post-step effects, completion checklist, commit provenance
-3. The legacy section heading is updated to include the flag condition
-4. No other sections of CLAUDE.md are modified
-5. `npm run build` and `npm test` pass
+1. All new tests pass: `cd mcp-server && npx vitest run src/features/orchestration/tools/__tests__/orchestration-journal.test.ts`
+2. Existing tests still pass: `cd mcp-server && npm test`
+3. Build passes: `cd mcp-server && npm run build`
+4. Feature flag gating verified: tools not registered when `CANON_AGENT_TEAMS_MODE` is unset or `off`
+5. `journal.json` written to workspace directory with correct structure
 
 ### Done when
-
-- CLAUDE.md has the agent-teams orchestration section gated by `CANON_AGENT_TEAMS_MODE=on`
-- All six subsections are present and complete
-- Legacy section is annotated but functionally unchanged
-- Feature flag wiring is documented (env var name, default behavior, how to enable)
+- `orchestration-journal.ts` exists with `logStep` and `verifyCompletion` functions (~50-80 lines)
+- Both tools registered in `register-orchestration.ts` behind `CANON_AGENT_TEAMS_MODE=on`
+- 10 test cases written and passing
+- Full test suite passes
+- Build passes
+- Feature flag correctly gates tool registration

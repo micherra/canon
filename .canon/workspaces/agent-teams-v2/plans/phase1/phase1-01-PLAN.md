@@ -1,104 +1,118 @@
 ---
 task_id: "phase1-01"
 wave: 1
-depends_on: []
-decisions:
-  - "runbook-yaml-structure"
+depends_on:
+  - "phase1-00"
 files:
   - skills/canon/runbooks/fast-path.yaml
 principles:
-  - simplicity-first
-  - information-hiding
-domains: []
+  - agent-plans-are-prompts
+domains:
+  - orchestration
 ---
 
-## Task: Create fast-path runbook playbook
+## Task: Create fast-path runbook
 
 ### Action
 
-Create `skills/canon/runbooks/fast-path.yaml` -- the simplest runbook, covering the single-agent fast-path flow.
+Create `skills/canon/runbooks/fast-path.yaml` conforming to `_schema.yaml`. This is the simplest runbook — single-agent, no research, no architecture, no waves.
 
-1. Create directory `skills/canon/runbooks/` if it does not exist.
-2. Write the runbook file following this structure:
+1. Read `flows/fast-path.md` for the legacy state machine definition. The flow has these states:
+   - `execute` (single, canon-implementor) — implement, test, self-review, commit
+   - `pre-launch-check` (single, no agent) — run discovered quality gates
+   - `ship` (single, canon-shipper) — synthesize PR description
+   - `learn` (single, canon-learner, skip_when: learn_gate_not_passed) — auto-trigger pattern analysis
+
+2. Read `_schema.yaml` for the field reference.
+
+3. Write `fast-path.yaml` with:
 
 ```yaml
-name: fast-path
-description: "Single-agent fast path -- implement, test, self-review in one pass"
-tier: small
+name: "fast-path"
+description: "Single-agent fast path — implement, test, self-review in one pass"
+tier: "small"
 
 steps:
-  - id: execute
-    agent: canon-implementor
-    dispatch: subagent
+  - id: "execute"
+    agent: "canon-implementor"
+    dispatch: "subagent"
     mcp_tools:
       - get_principles
       - get_file_context
+      - init_workspace
+      - log_step
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/SUMMARY.md"
-    hitl: none
-    notes: >
-      Spawn a single canon-implementor subagent with the task description,
-      matched principles, and file context. The implementor handles implementation,
-      testing, and self-review in one pass. Include commit provenance trailers
-      in the spawn prompt.
+      - "plans/${slug}/SUMMARY.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      FAST PATH — single-agent mode. The implementor handles implementation
+      (TDD), test verification, self-review against Canon principles, and commit.
+      Summary MUST include a ### Self-Review section with Canon principle
+      compliance declarations and a ### Verification section confirming all
+      tests pass.
 
-  - id: pre-launch-check
+  - id: "pre-launch-check"
     agent: null
-    dispatch: subagent
-    mcp_tools: []
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
     artifacts: []
-    hitl: on_failure
-    notes: >
-      Run all discovered quality gates (test commands, lint commands, build commands)
-      via Bash. If all pass, proceed to ship. If any fail, present the failure to
-      the user for resolution.
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Gate-only step — no agent spawned. The lead collects all discovered
+      quality-check commands (test, lint, build) from the execute step's
+      summary and runs them via Bash. If all pass, proceed. If any fail,
+      present to user. If no gates discovered, fail closed.
 
-  - id: ship
-    agent: canon-shipper
-    dispatch: subagent
-    mcp_tools: []
+  - id: "ship"
+    agent: "canon-shipper"
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
+      - update_board
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md"
-    hitl: none
-    notes: >
-      Spawn canon-shipper to synthesize build artifacts into a PR description.
-      The shipper reads SUMMARY.md, git log, and any test/review reports.
+      - "plans/${slug}/PR-DESCRIPTION.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Synthesize build artifacts into PR description. Reads session.json,
+      board.json, SUMMARY.md. Runs git log for commit history. Checks
+      CHANGELOG.md for format detection.
 
-  - id: learn
-    agent: canon-learner
-    dispatch: subagent
-    mcp_tools: []
+  - id: "learn"
+    agent: "canon-learner"
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
+      - get_drift_report
     artifacts: []
-    hitl: none
-    skip_when: "Learn gate not passed -- check learn gate evaluation before spawning"
-    notes: >
-      Evaluate the learn gate. If it passes, spawn canon-learner to analyze
-      flow execution and propose principle updates. If it does not pass, skip.
+    hitl: "none"
+    skip_when: "learn_gate_not_passed"
+    notes: |
+      Auto-trigger mode. Analyze transcripts and drift data to propose
+      principle/convention updates. Skip if learn gate evaluation fails.
 ```
 
-**Key guidance**: The fast-path runbook is the reference example for all other runbooks. It demonstrates the YAML structure that all 10 runbooks follow. Keep it minimal -- fast-path has no research, no design, no wave tasks.
-
-**Verify the flow coverage**: Compare against `flows/fast-path.md`. The legacy flow has states: `execute`, `pre-launch-check` (from fragment), `ship` (from fragment), `learn` (from fragment), `done` (terminal). The runbook covers all non-terminal states.
+4. Validate the file matches the schema structure from `_schema.yaml`.
 
 ### Canon principles to apply
-
-- **simplicity-first**: The runbook is a flat list of steps. No nesting, no conditionals, no branching. Claude adapts via judgment, not YAML structure.
-- **information-hiding**: Each step encapsulates what the lead needs to know -- which agent, which MCP tools, what artifacts to expect. The lead does not need to know about legacy state transitions.
+- **agent-plans-are-prompts**: The `notes` field for each step IS the spawn guidance. It must be actionable — not a restatement of the agent definition, but specific instructions for this flow context.
 
 ### Tests to write
-
-No tests -- this is a YAML playbook file with no runtime behavior.
+- No code tests. YAML validation only.
 
 ### Verify
-
 1. File exists at `skills/canon/runbooks/fast-path.yaml`
-2. YAML parses without errors: `python3 -c "import yaml; yaml.safe_load(open('skills/canon/runbooks/fast-path.yaml'))"`
-3. Step IDs match legacy flow states: execute, pre-launch-check, ship, learn
-4. `npm run build` still passes (no TypeScript changes)
-5. `npm test` still passes (no test changes)
+2. File parses as valid YAML
+3. Steps cover all 4 states from `flows/fast-path.md`: execute, pre-launch-check, ship, learn
+4. Every step has all required fields per `_schema.yaml`
+5. `npm run build` passes (no TypeScript changes)
+6. `npm test` passes (no test changes)
 
 ### Done when
-
-- `skills/canon/runbooks/fast-path.yaml` exists and is valid YAML
-- All four steps from the legacy fast-path flow are represented
-- The file follows the runbook YAML structure defined in the design document
+- `fast-path.yaml` exists and parses as valid YAML
+- All 4 legacy states are represented as steps with correct agents, dispatch types, and artifacts
+- The `notes` for `execute` includes the self-review and verification requirements from the legacy spawn instructions
+- Build and tests pass unchanged

@@ -1,189 +1,176 @@
 ---
 task_id: "phase1-07"
 wave: 2
-depends_on:
-  - "phase1-01"
-  - "phase1-02"
-  - "phase1-03"
-  - "phase1-04"
-  - "phase1-05"
-  - "phase1-06"
+depends_on: []
 files:
-  - agents/canon-researcher.md
-  - agents/canon-architect.md
-  - agents/canon-implementor.md
-  - agents/canon-reviewer.md
-  - agents/canon-tester.md
-  - agents/canon-security.md
-  - agents/canon-fixer.md
-  - agents/canon-scribe.md
-  - agents/canon-shipper.md
-  - agents/canon-learner.md
-  - agents/canon-chat.md
-  - agents/canon-guide.md
-  - agents/canon-writer.md
+  - rules/agent-context-check.md
+  - skills/canon/references/agent-tdd-required.md
+  - skills/canon/references/agent-fresh-context.md
+  - skills/canon/references/agent-structured-triage.md
+  - skills/canon/references/agent-simplify-before-extending.md
+  - skills/canon/references/agent-cold-review.md
+  - skills/canon/references/agent-assume-hostile-input.md
+  - skills/canon/references/agent-design-before-code.md
+  - skills/canon/references/agent-plans-are-prompts.md
+  - skills/canon/references/agent-surface-assumptions.md
+  - skills/canon/references/agent-scoped-research.md
+  - skills/canon/references/agent-evidence-over-intuition.md
+  - skills/canon/references/agent-minimal-fix.md
+  - skills/canon/references/agent-test-the-contract.md
+  - skills/canon/references/agent-test-sad-paths.md
+  - skills/canon/references/agent-context-sync.md
+  - skills/canon/references/agent-missing-artifact.md
+  - skills/canon/references/agent-artifacts-only.md
+  - skills/canon/references/agent-template-required.md
+  - skills/canon/references/agent-context-check.md
 principles:
-  - least-privilege-access
-  - simplicity-first
-domains: []
+  - agent-plans-are-prompts
+domains:
+  - orchestration
 ---
 
-## Task: Update agent definitions with subagent/teammate frontmatter fields
+## Task: Register rules as skills and create agent-context-check rule
 
 ### Action
 
-Add `maxTurns`, `permissionMode`, and `skills` frontmatter fields to all 13 agent definitions. These fields enable richer dispatch when `CANON_AGENT_TEAMS_MODE=on`. They have no effect on the legacy `drive_flow` path (which does not read them).
+This task makes Canon rules available as Claude Code skills for preloading into agent definitions. It also creates the new `agent-context-check` rule described in §2.5 of the migration plan.
 
-#### Skills preloading
+#### Part 1: Create `agent-context-check` rule
 
-Add a `skills` field to each agent definition to preload role-specific rules and references. This eliminates runtime Read tool calls for rules, guarantees rules are present (no silent skipping), and reduces per-spawn token overhead.
+Create `rules/agent-context-check.md` with the following content structure:
 
-Per-agent skill preloads:
+```markdown
+---
+id: agent-context-check
+severity: rule
+scope: all
+tags: [agent-behavior, context, self-serve]
+---
 
-| Agent | Skills to preload |
-|-------|-------------------|
-| `canon-implementor` | `agent-tdd-required`, `agent-fresh-context`, `agent-structured-triage`, `agent-simplify-before-extending`, `principle-loading`, `status-protocol` |
-| `canon-reviewer` | `agent-cold-review`, `principle-loading`, `status-protocol` |
-| `canon-tester` | `agent-test-the-contract`, `agent-test-sad-paths`, `tester-report-template`, `principle-loading`, `status-protocol` |
-| `canon-security` | `agent-assume-hostile-input`, `security-checklist`, `principle-loading`, `status-protocol` |
-| `canon-architect` | `agent-design-before-code`, `agent-plans-are-prompts`, `agent-surface-assumptions`, `status-protocol` |
-| `canon-researcher` | `agent-scoped-research`, `agent-surface-assumptions`, `agent-evidence-over-intuition`, `status-protocol` |
-| `canon-fixer` | `agent-minimal-fix`, `agent-structured-triage`, `agent-simplify-before-extending`, `status-protocol` |
-| `canon-scribe` | `agent-context-sync`, `agent-missing-artifact`, `status-protocol`, `workspace-logging` |
-| `canon-shipper` | `agent-artifacts-only`, `agent-template-required`, `status-protocol` |
-| `canon-learner` | `agent-evidence-over-intuition`, `learner-dimensions`, `principle-format` |
-| `canon-writer` | `principle-format`, `writer-worked-example` |
-| `canon-guide` | `guide-dashboards`, `status-protocol` |
+# agent-context-check
 
-**Prerequisite**: Each rule/reference file must be registered as a named skill under `skills/canon/`. The skill name matches the filename without extension (e.g., `rules/agent-tdd-required.md` → skill name `agent-tdd-required`).
+## Summary
+Before starting work, verify you have Canon principles for your target files. If context is missing, self-serve via MCP tools.
 
-After adding `skills`, remove the runtime `Read ${CLAUDE_PLUGIN_ROOT}/rules/...` instructions from agent markdown bodies where present — the content will already be in context via skill injection. Keep the rule files themselves for human reference and knowledge graph.
+## Body
+[Full rule text — see content specification below]
 
-**For each agent, add these fields to the YAML frontmatter (between the `---` delimiters):**
-
-#### canon-researcher
-```yaml
-maxTurns: 20
-permissionMode: plan
+## Exceptions
+- Agents that do not have Canon MCP tools in their tools allowlist are exempt.
+- The learn and ship steps where principle loading is not applicable.
 ```
-Rationale: Researchers are read-only investigation agents. Low turn budget (20) because research should be focused. `plan` mode prevents writes.
 
-#### canon-architect
-```yaml
-maxTurns: 30
-permissionMode: plan
+The rule body must instruct agents to:
+1. Check whether the spawn prompt includes a `## Principles` section with matched principles for the target files.
+2. If principles are missing, call `get_principles` with the target file path and task description.
+3. If file context or dependency information is needed and not provided, call `get_file_context` or `graph_query` directly.
+4. This is a fallback path — the lead's pre-spawn composition is the primary context channel. Self-serve only fills gaps.
+
+#### Part 2: Symlink rules into skills/canon/references/
+
+For each rule file in the preload map (from `/tmp/canon-skills-research.md`), create a symlink from `skills/canon/references/{rule-name}.md` pointing to `../../../rules/{rule-name}.md`.
+
+Rules to symlink (18 rules from the preload map, plus `agent-context-check`):
+
+```bash
+cd skills/canon/references/
+
+# Role-specific rules
+ln -sf ../../../rules/agent-tdd-required.md agent-tdd-required.md
+ln -sf ../../../rules/agent-fresh-context.md agent-fresh-context.md
+ln -sf ../../../rules/agent-structured-triage.md agent-structured-triage.md
+ln -sf ../../../rules/agent-simplify-before-extending.md agent-simplify-before-extending.md
+ln -sf ../../../rules/agent-cold-review.md agent-cold-review.md
+ln -sf ../../../rules/agent-assume-hostile-input.md agent-assume-hostile-input.md
+ln -sf ../../../rules/agent-design-before-code.md agent-design-before-code.md
+ln -sf ../../../rules/agent-plans-are-prompts.md agent-plans-are-prompts.md
+ln -sf ../../../rules/agent-surface-assumptions.md agent-surface-assumptions.md
+ln -sf ../../../rules/agent-scoped-research.md agent-scoped-research.md
+ln -sf ../../../rules/agent-evidence-over-intuition.md agent-evidence-over-intuition.md
+ln -sf ../../../rules/agent-minimal-fix.md agent-minimal-fix.md
+ln -sf ../../../rules/agent-test-the-contract.md agent-test-the-contract.md
+ln -sf ../../../rules/agent-test-sad-paths.md agent-test-sad-paths.md
+ln -sf ../../../rules/agent-context-sync.md agent-context-sync.md
+ln -sf ../../../rules/agent-missing-artifact.md agent-missing-artifact.md
+ln -sf ../../../rules/agent-artifacts-only.md agent-artifacts-only.md
+ln -sf ../../../rules/agent-template-required.md agent-template-required.md
+
+# New rule
+ln -sf ../../../rules/agent-context-check.md agent-context-check.md
 ```
-Rationale: Architects design but do not write code. Medium turn budget (30) for complex design tasks with competitive synthesis. `plan` mode prevents writes (architect uses Write only for plan files, which are in the workspace -- but `plan` mode allows this via plan approval).
 
-#### canon-implementor
-```yaml
-maxTurns: 50
-permissionMode: auto
+#### Part 3: Verify all skill names from preload map exist
+
+Cross-reference the preload map from `/tmp/canon-skills-research.md` against actual files in `skills/canon/references/`. Every skill name referenced must resolve to an existing file.
+
+Preload map skill names to verify:
+
+| Skill name | Expected file |
+|-----------|---------------|
+| `agent-tdd-required` | `skills/canon/references/agent-tdd-required.md` |
+| `agent-fresh-context` | `skills/canon/references/agent-fresh-context.md` |
+| `agent-structured-triage` | `skills/canon/references/agent-structured-triage.md` |
+| `agent-simplify-before-extending` | `skills/canon/references/agent-simplify-before-extending.md` |
+| `agent-cold-review` | `skills/canon/references/agent-cold-review.md` |
+| `agent-assume-hostile-input` | `skills/canon/references/agent-assume-hostile-input.md` |
+| `agent-design-before-code` | `skills/canon/references/agent-design-before-code.md` |
+| `agent-plans-are-prompts` | `skills/canon/references/agent-plans-are-prompts.md` |
+| `agent-surface-assumptions` | `skills/canon/references/agent-surface-assumptions.md` |
+| `agent-scoped-research` | `skills/canon/references/agent-scoped-research.md` |
+| `agent-evidence-over-intuition` | `skills/canon/references/agent-evidence-over-intuition.md` |
+| `agent-minimal-fix` | `skills/canon/references/agent-minimal-fix.md` |
+| `agent-test-the-contract` | `skills/canon/references/agent-test-the-contract.md` |
+| `agent-test-sad-paths` | `skills/canon/references/agent-test-sad-paths.md` |
+| `agent-context-sync` | `skills/canon/references/agent-context-sync.md` |
+| `agent-missing-artifact` | `skills/canon/references/agent-missing-artifact.md` |
+| `agent-artifacts-only` | `skills/canon/references/agent-artifacts-only.md` |
+| `agent-template-required` | `skills/canon/references/agent-template-required.md` |
+| `agent-context-check` | `skills/canon/references/agent-context-check.md` |
+| `principle-loading` | `skills/canon/references/principle-loading.md` (already exists) |
+| `status-protocol` | `skills/canon/references/status-protocol.md` (already exists) |
+| `tester-report-template` | `skills/canon/references/tester-report-template.md` (already exists) |
+| `security-checklist` | `skills/canon/references/security-checklist.md` (already exists) |
+| `learner-dimensions` | `skills/canon/references/learner-dimensions.md` (already exists) |
+| `principle-format` | `skills/canon/references/principle-format.md` (already exists) |
+| `writer-worked-example` | `skills/canon/references/writer-worked-example.md` (already exists) |
+| `guide-dashboards` | `skills/canon/references/guide-dashboards.md` (already exists) |
+| `workspace-logging` | `skills/canon/references/workspace-logging.md` (already exists) |
+
+Run verification:
+```bash
+for skill in agent-tdd-required agent-fresh-context agent-structured-triage \
+  agent-simplify-before-extending agent-cold-review agent-assume-hostile-input \
+  agent-design-before-code agent-plans-are-prompts agent-surface-assumptions \
+  agent-scoped-research agent-evidence-over-intuition agent-minimal-fix \
+  agent-test-the-contract agent-test-sad-paths agent-context-sync \
+  agent-missing-artifact agent-artifacts-only agent-template-required \
+  agent-context-check principle-loading status-protocol tester-report-template \
+  security-checklist learner-dimensions principle-format writer-worked-example \
+  guide-dashboards workspace-logging; do
+  if [ ! -e "skills/canon/references/${skill}.md" ]; then
+    echo "MISSING: ${skill}"
+  fi
+done
 ```
-Rationale: Implementors need the highest turn budget for implementation + testing + commits. `auto` mode allows writes without prompting.
-
-#### canon-reviewer
-```yaml
-maxTurns: 25
-permissionMode: plan
-```
-Rationale: Reviewers read code and produce review artifacts. Medium turn budget. `plan` mode prevents writes.
-
-#### canon-tester
-```yaml
-maxTurns: 40
-permissionMode: auto
-```
-Rationale: Testers write test files and run test suites. High turn budget for writing tests + running them + iterating. `auto` mode allows writes.
-
-#### canon-security
-```yaml
-maxTurns: 25
-permissionMode: plan
-```
-Rationale: Security agents scan and report. Do not write code. `plan` mode prevents writes.
-
-#### canon-fixer
-```yaml
-maxTurns: 35
-permissionMode: auto
-```
-Rationale: Fixers write code to fix issues. Medium-high turn budget. `auto` mode allows writes.
-
-#### canon-scribe
-```yaml
-maxTurns: 15
-permissionMode: auto
-```
-Rationale: Scribes update documentation files. Low turn budget (documentation updates are focused). `auto` mode for writes (Edit tool needed).
-
-#### canon-shipper
-```yaml
-maxTurns: 20
-permissionMode: auto
-```
-Rationale: Shippers synthesize artifacts and may create PRs. Low-medium turn budget. `auto` mode for writes and Bash (git, gh).
-
-#### canon-learner
-```yaml
-maxTurns: 25
-permissionMode: auto
-```
-Rationale: Learners analyze patterns and write proposal files. Medium turn budget. `auto` mode for writes.
-
-#### canon-chat
-```yaml
-maxTurns: 30
-permissionMode: plan
-```
-Rationale: Chat agents discuss but do not write code. Medium turn budget for extended conversations. `plan` mode prevents writes.
-
-#### canon-guide
-```yaml
-maxTurns: 20
-permissionMode: plan
-```
-Rationale: Guides are read-only. Low turn budget. `plan` mode prevents writes.
-
-#### canon-writer
-```yaml
-maxTurns: 25
-permissionMode: auto
-```
-Rationale: Writers create/edit principle files. Medium turn budget. `auto` mode for writes.
-
-**Placement**: Add the new fields after the existing `tools:` field (or after the last existing frontmatter field if tools is not present). Maintain existing field order otherwise.
-
-**Do NOT change**: Agent description, model, color, tools list, or any markdown body content.
 
 ### Canon principles to apply
-
-- **least-privilege-access**: `permissionMode: plan` for read-only agents (researcher, architect, reviewer, security, chat, guide). `permissionMode: auto` only for agents that must write files.
-- **simplicity-first**: Only two new fields per agent. No structural changes to agent definitions.
-
-### Risk mitigations
-
-- **Risk: Breaking legacy path** -- The legacy `drive_flow` path does not read `maxTurns` or `permissionMode` from agent definitions. It uses `tool-profiles.ts` for permission mode and flow YAML for iteration limits. Mitigation: Verify `npm test` passes after changes to confirm no parsing issues.
-- **Risk: Incorrect turn budgets** -- Turn budgets may be too low or too high. Mitigation: These are Phase 1 guidance values, tunable in Phase 2 based on validation results. Start with conservative estimates.
+- **agent-plans-are-prompts**: The `agent-context-check` rule IS a prompt — it must be actionable and specific about when and how to self-serve context.
 
 ### Tests to write
-
-No new tests. Existing tests should continue to pass since only frontmatter fields are added.
+- No code tests — this task creates markdown files and symlinks only.
 
 ### Verify
-
-1. All 13 agent files have `maxTurns` and `permissionMode` in their YAML frontmatter
-2. YAML frontmatter still parses correctly for all files: `python3 -c "import yaml; yaml.safe_load(open('agents/canon-researcher.md').read().split('---')[1])"`
-3. `npm run build` passes (no TypeScript changes, but verify nothing depends on strict agent frontmatter parsing)
-4. `npm test` passes
-5. Existing agent markdown body content is unchanged (diff shows only frontmatter additions)
+1. `rules/agent-context-check.md` exists with proper frontmatter (id, severity: rule, scope: all)
+2. All 19 symlinks exist in `skills/canon/references/` and resolve to valid files
+3. All 28 skill names from the preload map resolve to existing files in `skills/canon/references/`
+4. Existing references (principle-loading, status-protocol, etc.) are unchanged
+5. Symlinks point to correct relative paths (`../../../rules/{name}.md`)
+6. `npm run build` passes (no TypeScript changes)
+7. `npm test` passes (no test changes)
 
 ### Done when
-
-- All 13 agent definitions have `maxTurns`, `permissionMode`, and `skills` fields
-- Skills field lists role-specific rules and references per the preload table above
-- Each referenced skill is registered as a named skill under `skills/canon/`
-- Runtime `Read` instructions for rules removed from agent bodies where they existed
-- Values follow the least-privilege-access principle
-- No other changes to agent files beyond frontmatter + rule-read removal
-- `npm run build` and `npm test` pass
+- `rules/agent-context-check.md` exists with self-serve context instructions
+- 19 symlinks created in `skills/canon/references/` pointing to rule files
+- All 28 preload map skill names verified as resolvable files
+- No existing references modified
+- Build and tests pass unchanged

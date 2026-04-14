@@ -1,239 +1,268 @@
 ---
 task_id: "phase1-05"
 wave: 1
-depends_on: []
-decisions:
-  - "runbook-yaml-structure"
+depends_on:
+  - "phase1-00"
 files:
   - skills/canon/runbooks/epic.yaml
 principles:
-  - simplicity-first
-  - information-hiding
-domains: []
+  - agent-plans-are-prompts
+  - agent-design-before-code
+domains:
+  - orchestration
 ---
 
-## Task: Create epic runbook (large-tier with multi-wave, consultations, adaptive replan)
+## Task: Create epic runbook
 
 ### Action
 
-Create `skills/canon/runbooks/epic.yaml` -- the most complex runbook. The epic flow includes parallel research, competitive design synthesis, multi-wave implementation with consultations, testing, security scanning, and review.
+Create `skills/canon/runbooks/epic.yaml` — the most complex runbook. Multi-wave with consultations, competitive design, adaptive replan, and full test/security/review pipeline.
+
+Read `flows/epic.md` and all included fragments. The full state sequence is:
+
+1. `research` (parallel, canon-researcher, roles: [codebase, risk])
+2. `design` (single, canon-architect, compete: 3 lenses, approval_gate)
+3. `checkpoint` (user-checkpoint — approval/revise)
+4. `implement` (wave, canon-implementor, with consultations: before=[plan-review], between=[pattern-check, early-scan, targeted-research], after=[impl-handoff])
+5. `context-sync` (single, canon-scribe)
+6. `test` / `fix-impl` / `context-sync-fix` (test-fix-loop)
+7. `security` / `fix-security` (security-scan)
+8. `review` / `fix-violations` (review-fix-loop, large_diff_threshold: 500)
+9. `pre-launch-check` (gate-only)
+10. `ship` / `learn` / `done` (ship-done)
+
+Additionally, the epic flow has a `debate` block enabling researcher/architect team debates.
 
 ```yaml
-name: epic
-description: "Adaptive epic pipeline -- research, design, multi-wave implementation, test, security, review"
-tier: large
+name: "epic"
+description: "Adaptive epic — research, competitive design, multi-wave implementation with replan, test, security, review"
+tier: "large"
 
 steps:
-  - id: research
-    agent: canon-researcher
-    dispatch: subagent
+  - id: "research"
+    agent: "canon-researcher"
+    dispatch: "subagent"
     mcp_tools:
       - get_principles
       - get_file_context
       - graph_query
       - semantic_search
-      - codebase_graph
+      - init_workspace
+      - log_step
     artifacts:
-      - "${WORKSPACE}/research/codebase.md"
-      - "${WORKSPACE}/research/risk.md"
-    hitl: none
-    notes: >
-      Spawn parallel canon-researcher subagents: one for codebase research,
-      one for risk research. Each produces a research finding document.
-      Both researchers have full Canon MCP access to query the knowledge graph,
-      search semantically, and load file context.
+      - "research/codebase.md"
+      - "research/risk.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Parallel research — spawn two subagents:
+      1. codebase role: architecture, data flow, key abstractions, entry points
+      2. risk role: risks, edge cases, failure modes, migration concerns
+      Both save to research/{role}.md. After completion, the lead
+      assembles a research synthesis for the architect.
 
-  - id: design
-    agent: canon-architect
-    dispatch: subagent
+  - id: "design"
+    agent: "canon-architect"
+    dispatch: "subagent"
     mcp_tools:
       - get_principles
       - get_file_context
       - graph_query
-      - semantic_search
-      - codebase_graph
+      - log_step
+    artifacts:
+      - "plans/${slug}/DESIGN.md"
+      - "plans/${slug}/INDEX.md"
+      - "plans/${slug}/${task_id}-PLAN.md"
+      - "decisions/"
+      - "context.md"
+    hitl: "approval"
+    skip_when: null
+    notes: |
+      Competitive design — spawn 3 subagents with different lenses:
+      performance, simplicity, extensibility. Each produces an independent
+      design. The lead (or a synthesis subagent) merges the best ideas
+      into a single design. Inject risk research findings into the
+      architect's context. Include the North Star template section in
+      the design document with machine-readable done criteria.
+
+      After design: call write_design_brief for structured handoff to
+      implementors. Write affected files to board metadata via
+      update_board set_metadata.
+
+      Present the plan to the user for approval. Max 3 revisions.
+
+  - id: "implement"
+    agent: "canon-implementor"
+    dispatch: "team"
+    mcp_tools:
+      - get_principles
+      - get_file_context
+      - log_step
+    artifacts:
+      - "plans/${slug}/${task_id}-SUMMARY.md"
+    hitl: "none"
+    skip_when: null
+    notes: |
+      Multi-wave execution with adaptive replan. Create an agent team per
+      wave from the plan index. Teammates claim tasks via shared task list.
+
+      BEFORE each wave: spawn a plan-review consultation (canon-architect)
+      to review upcoming wave plans for conflicts and ambiguity. Inject
+      clarifications into implementor prompts.
+
+      BETWEEN waves (from wave 2 onward): spawn three consultations:
+      1. pattern-check (canon-architect): review wave output for pattern
+         drift, convention consistency, and done criteria progress
+      2. early-scan (canon-security): quick security scan of wave changes
+      3. targeted-research (canon-researcher): research open questions
+         from pattern-check (skip if no open questions)
+
+      If pattern-check reports "all done criteria met", skip remaining
+      waves and proceed to context-sync.
+
+      If pattern-check proposes events (add_task, skip_task, reprioritize),
+      the lead adapts the plan accordingly.
+
+      AFTER all waves: spawn impl-handoff consultation (canon-architect)
+      to produce implementation overview for downstream agents.
+
+      Inter-wave gate: test-suite. Max 10 iterations.
+
+  - id: "context-sync"
+    agent: "canon-scribe"
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
+    artifacts:
+      - "plans/${slug}/CONTEXT-SYNC.md"
+    hitl: "none"
+    skip_when: "no_contract_changes"
+    notes: |
+      Sync docs after all implementation waves complete.
+
+  - id: "test"
+    agent: "canon-tester"
+    dispatch: "subagent"
+    mcp_tools:
+      - get_principles
+      - get_file_context
+      - log_step
+    artifacts:
+      - "plans/${slug}/TEST-REPORT.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Write integration tests and fill coverage gaps. Start with Coverage
+      Notes from all implementation summaries. Read plan files for risk
+      mitigations. If tests reveal source bugs:
+      1. Spawn canon-fixer (test-fix mode)
+      2. Optionally spawn context-sync-fix (canon-scribe) if contract changed
+      3. Re-test
+      Loop max 2 iterations.
+
+  - id: "security"
+    agent: "canon-security"
+    dispatch: "subagent"
+    mcp_tools:
+      - get_principles
+      - get_file_context
+      - log_step
+    artifacts:
+      - "plans/${slug}/SECURITY.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Full security scan of all implemented code. Read architect plans
+      (DESIGN.md, INDEX.md) for planned security controls verification.
+      Read implementation summaries for code context. If critical findings,
+      spawn canon-fixer (violation-fix mode) per finding, then re-scan.
+      Max 2 fix iterations. Unresolvable criticals go to user.
+
+  - id: "review"
+    agent: "canon-reviewer"
+    dispatch: "subagent"
+    mcp_tools:
+      - get_principles
+      - get_file_context
+      - review_code
+      - log_step
+    artifacts:
+      - "plans/${slug}/REVIEW.md"
+      - "reviews/"
+    hitl: "checkpoint"
+    skip_when: null
+    notes: |
+      Review all changes. For large diffs (500+ lines), cluster by layer
+      and fan out as parallel subagents. Cross-check implementation
+      summaries. Read DESIGN.md for drift-from-plan detection. If blocking
+      violations, spawn fixer, re-review. Max 3 iterations. Persist review.
+
+  - id: "pre-launch-check"
+    agent: null
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
+    artifacts: []
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Gate-only step. Run all discovered quality checks. Fail closed.
+
+  - id: "ship"
+    agent: "canon-shipper"
+    dispatch: "subagent"
+    mcp_tools:
+      - log_step
       - update_board
     artifacts:
-      - "${WORKSPACE}/plans/${slug}/DESIGN.md"
-      - "${WORKSPACE}/plans/${slug}/INDEX.md"
-      - "${WORKSPACE}/plans/${slug}/*-PLAN.md"
-      - "${WORKSPACE}/decisions/"
-      - "${WORKSPACE}/context.md"
-    hitl: approval
-    notes: >
-      Spawn canon-architect with research findings (especially risk.md).
-      For competitive synthesis: spawn 3 architect subagents with different
-      lenses (performance, simplicity, extensibility), then synthesize their
-      outputs into a unified design. The design MUST include a North Star
-      section with machine-readable done criteria in frontmatter.
-      Present the plan to the user for approval. Max 3 revision rounds.
-      After approval, the architect calls update_board to set affected_files
-      metadata (triggers file claim registration).
+      - "plans/${slug}/PR-DESCRIPTION.md"
+    hitl: "on_failure"
+    skip_when: null
+    notes: |
+      Synthesize PR description from all build artifacts. Include design
+      decisions, implementation waves summary, test coverage, security
+      assessment, and review verdict. Call update_board complete_flow.
 
-  - id: implement
-    agent: canon-implementor
-    dispatch: team
+  - id: "learn"
+    agent: "canon-learner"
+    dispatch: "subagent"
     mcp_tools:
-      - get_file_context
-    artifacts:
-      - "${WORKSPACE}/plans/${slug}/*-SUMMARY.md"
-    hitl: none
-    notes: >
-      Multi-wave implementation. For each wave in the plan index:
-      1. Create agent team with one canon-implementor teammate per task
-      2. Create git worktrees for each teammate
-      3. Teammates coordinate via shared task list and Mailbox
-      4. Gate on test-suite passing between waves
-      5. After wave completes, merge worktrees
-      6. Run between-wave consultations: pattern-check, early-scan,
-         targeted-research (spawn subagents for each)
-      7. Evaluate done criteria from DESIGN.md -- if all met, skip remaining
-         waves and proceed to pre-launch-check (epic_complete transition)
-      8. If not complete, architect may replan remaining waves based on
-         what was learned (adaptive replanning)
-      After final wave, run after-consultations: impl-handoff (spawn subagent).
-      Max 10 waves total. If stuck (no gate progress), present to user.
-
-  - id: context-sync
-    agent: canon-scribe
-    dispatch: subagent
-    mcp_tools: []
-    artifacts:
-      - "${WORKSPACE}/context.md"
-    hitl: none
-    notes: >
-      Spawn canon-scribe to update documentation for implementation changes.
-
-  - id: test
-    agent: canon-tester
-    dispatch: subagent
-    mcp_tools:
-      - get_principles
-      - get_file_context
-    artifacts:
-      - "${WORKSPACE}/plans/${slug}/TEST-REPORT.md"
-    hitl: none
-    notes: >
-      Spawn canon-tester to write integration tests and fill coverage gaps.
-      Focus on cross-task integration testing.
-
-  - id: fix-impl
-    agent: canon-fixer
-    dispatch: subagent
-    mcp_tools:
-      - get_file_context
-    artifacts:
-      - "${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md"
-    hitl: none
-    skip_when: "All tests pass"
-    notes: >
-      Fix source code bugs revealed by tests. Loop back to test. Max 3
-      iterations of the test/fix loop.
-
-  - id: security
-    agent: canon-security
-    dispatch: subagent
-    mcp_tools:
-      - get_principles
-      - get_file_context
-    artifacts:
-      - "${WORKSPACE}/plans/${slug}/SECURITY.md"
-    hitl: on_failure
-    notes: >
-      Spawn canon-security to scan implemented code for vulnerabilities.
-      If critical findings, present to user. If non-critical, proceed to
-      fix-security or review.
-
-  - id: fix-security
-    agent: canon-fixer
-    dispatch: subagent
-    mcp_tools:
-      - get_file_context
-    artifacts: []
-    hitl: none
-    skip_when: "No security findings or all findings are informational"
-    notes: >
-      Fix security vulnerabilities. Preserve behavior, verify with tests.
-      After fixing, re-scan if critical findings remain.
-
-  - id: review
-    agent: canon-reviewer
-    dispatch: subagent
-    mcp_tools:
-      - get_principles
-      - get_file_context
+      - log_step
       - get_drift_report
-    artifacts:
-      - "${WORKSPACE}/plans/${slug}/REVIEW.md"
-      - "${WORKSPACE}/reviews/"
-    hitl: on_failure
-    notes: >
-      Four-stage review. Large diff threshold: 500 lines (higher than default
-      due to epic scope). Call store_pr_review after review completes. If
-      BLOCKING, proceed to fix-violations then re-review. Max 3 iterations.
-
-  - id: fix-violations
-    agent: canon-fixer
-    dispatch: subagent
-    mcp_tools:
-      - get_file_context
     artifacts: []
-    hitl: none
-    skip_when: "Review verdict is CLEAN or WARNING"
-    notes: >
-      Fix BLOCKING violations. Loop back to review.
-
-  - id: pre-launch-check
-    agent: null
-    dispatch: subagent
-    mcp_tools: []
-    artifacts: []
-    hitl: on_failure
-    notes: >
-      Run all discovered quality gates.
-
-  - id: ship
-    agent: canon-shipper
-    dispatch: subagent
-    mcp_tools: []
-    artifacts:
-      - "${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md"
-    hitl: none
-    notes: >
-      Synthesize build artifacts into PR description.
-
-  - id: learn
-    agent: canon-learner
-    dispatch: subagent
-    mcp_tools: []
-    artifacts: []
-    hitl: none
-    skip_when: "Learn gate not passed"
-    notes: >
-      Evaluate learn gate. If passed, spawn canon-learner.
+    hitl: "none"
+    skip_when: "learn_gate_not_passed"
+    notes: |
+      Auto-trigger pattern analysis across all flow transcripts.
+      Skip if learn gate evaluation fails.
 ```
 
-**Verify flow coverage**: Compare against `flows/epic.md`. Legacy states: research (parallel), design (compete), implement (wave+consultations+gate+stuck), context-sync, test (from fragment), fix-impl (from fragment), security (from fragment), fix-security (from fragment), review (from fragment), fix-violations (from fragment), pre-launch-check (from fragment), ship (from fragment), learn (from fragment), done (terminal). Plus consultation fragments: plan-review, pattern-check, early-scan, impl-handoff, targeted-research. The runbook covers all non-terminal states and incorporates consultation handling into the implement step notes.
-
 ### Canon principles to apply
+- **agent-plans-are-prompts**: The implement step's `notes` must thoroughly describe the consultation protocol — what runs before, between, and after waves. This is the most complex orchestration in Canon and the notes are the lead's primary guide.
+- **agent-design-before-code**: The competitive design pattern (3 lenses) must be documented in the design step notes.
 
-- **simplicity-first**: Despite the epic flow's complexity, the runbook is still a flat step list. Multi-wave behavior and consultations are described in step notes, not as YAML nesting.
-- **information-hiding**: Wave management details (worktree creation, merge strategies, consultation scheduling) are encapsulated in the implement step's notes.
+### Risk mitigations
+- **Consultation protocol complexity**: The implement step has 4 types of consultations (plan-review, pattern-check, early-scan, targeted-research). The notes must be explicit about timing (before/between/after) and conditions (min_waves: 2 for between consultations, skip_when for targeted-research).
+- **Adaptive replan**: Pattern-check can propose events that modify the plan. The notes must describe how the lead handles these (apply/reject/adapt).
 
 ### Tests to write
-
-No tests -- YAML playbook file.
+- No code tests. YAML validation only.
 
 ### Verify
-
 1. File exists at `skills/canon/runbooks/epic.yaml`
-2. Valid YAML
-3. All legacy states covered including fragment and consultation states
-4. `npm run build` and `npm test` still pass
+2. Parses as valid YAML
+3. 10 steps covering all states from `flows/epic.md` and its fragments
+4. Implement step has `dispatch: team` and consultation protocol in notes
+5. Design step describes competitive design (3 lenses)
+6. Research step describes parallel roles (codebase, risk)
+7. Fix-loop semantics documented for test, security, and review steps
+8. `npm run build` passes
+9. `npm test` passes
 
 ### Done when
-
-- Epic runbook exists and is valid YAML
-- All states from the legacy epic flow are represented
-- Multi-wave, consultation, adaptive replan, and competitive synthesis are documented in step notes
-- Done criteria evaluation (epic_complete transition) is documented
+- `epic.yaml` exists and parses as valid YAML
+- All 10 steps map to legacy flow states and fragments
+- The consultation protocol (before/between/after waves) is fully described
+- Competitive design pattern documented
+- Adaptive replan mechanism (pattern-check → events → plan adaptation) documented
+- Build and tests pass unchanged
