@@ -42,11 +42,13 @@ Merge `canon-implementor` and `canon-fixer` into `canon-engineer`:
    - **model**: sonnet
    - **maxTurns**: 50
    - **permissionMode**: auto
+   - **memory**: project
    - **skills**: `agent-tdd-required, agent-minimal-fix, agent-fresh-context, agent-structured-triage, agent-simplify-before-extending, agent-context-check, principle-loading, status-protocol, backend-api, backend-data, deprecation, frontend, infrastructure, testing`
    - **Body**: Merge both instruction sets. The agent operates in two modes selected by spawn prompt context:
      - **Implementation mode** (spawned with a task plan): follows the implementor's process (read plan → load principles → implement → test → commit)
      - **Fix mode** (spawned with specific issues to fix): follows the fixer's process (understand issue → load context → minimal fix → verify → commit)
      - Shared sections: tool preference, commit protocol, status protocol, Canon compliance
+     - **Memory instructions**: "Update your agent memory as you discover subsystem patterns, common test setup requirements, recurring gotchas, and fix patterns. This builds institutional knowledge across sessions."
 
 2. Delete `agents/canon-implementor.md`
 3. Delete `agents/canon-fixer.md`
@@ -56,22 +58,31 @@ Merge `canon-implementor` and `canon-fixer` into `canon-engineer`:
 
 #### B. Frontmatter updates for all 12 agents
 
-Add `maxTurns`, `permissionMode`, and `skills` to every agent:
+Add `maxTurns`, `permissionMode`, `memory`, and `skills` to every agent:
 
-| Agent | maxTurns | permissionMode | skills (role-specific, in addition to `agent-context-check` + `status-protocol` for all) |
-|-------|----------|---------------|-------|
-| canon-engineer | 50 | auto | agent-tdd-required, agent-minimal-fix, agent-fresh-context, agent-structured-triage, agent-simplify-before-extending, principle-loading + all 6 domain primers |
-| canon-researcher | 20 | plan | agent-scoped-research, agent-surface-assumptions, agent-evidence-over-intuition |
-| canon-architect | 30 | plan | agent-design-before-code, agent-plans-are-prompts, agent-surface-assumptions + all 6 domain primers |
-| canon-reviewer | 25 | plan | agent-cold-review, principle-loading |
-| canon-tester | 40 | auto | agent-test-the-contract, agent-test-sad-paths, tester-report-template, principle-loading |
-| canon-security | 25 | plan | agent-assume-hostile-input, security-checklist, principle-loading |
-| canon-scribe | 15 | auto | agent-context-sync, agent-missing-artifact, workspace-logging |
-| canon-shipper | 20 | auto | agent-artifacts-only, agent-template-required |
-| canon-learner | 25 | auto | agent-evidence-over-intuition, learner-dimensions, principle-format |
-| canon-chat | 30 | plan | (no role-specific skills beyond agent-context-check + status-protocol) |
-| canon-guide | 20 | plan | guide-dashboards |
-| canon-writer | 25 | auto | principle-format, writer-worked-example |
+| Agent | maxTurns | permissionMode | memory | skills (role-specific, + `agent-context-check` + `status-protocol` for all) |
+|-------|----------|---------------|--------|-------|
+| canon-engineer | 50 | auto | project | agent-tdd-required, agent-minimal-fix, agent-fresh-context, agent-structured-triage, agent-simplify-before-extending, principle-loading + all 6 domain primers |
+| canon-researcher | 20 | plan | project | agent-scoped-research, agent-surface-assumptions, agent-evidence-over-intuition |
+| canon-architect | 30 | plan | project | agent-design-before-code, agent-plans-are-prompts, agent-surface-assumptions + all 6 domain primers |
+| canon-reviewer | 25 | plan | — | agent-cold-review, principle-loading |
+| canon-tester | 40 | auto | — | agent-test-the-contract, agent-test-sad-paths, tester-report-template, principle-loading |
+| canon-security | 25 | plan | — | agent-assume-hostile-input, security-checklist, principle-loading |
+| canon-scribe | 15 | auto | project | agent-context-sync, agent-missing-artifact, workspace-logging |
+| canon-shipper | 20 | auto | — | agent-artifacts-only, agent-template-required |
+| canon-learner | 25 | auto | project | agent-evidence-over-intuition, learner-dimensions, principle-format |
+| canon-chat | 30 | plan | — | (no role-specific skills beyond agent-context-check + status-protocol) |
+| canon-guide | 20 | plan | — | guide-dashboards |
+| canon-writer | 25 | auto | — | principle-format, writer-worked-example |
+
+**Memory rationale**: Five agents get `memory: project` for cross-session learning:
+- **engineer**: Fix patterns, subsystem gotchas, common test setup (roadmap items 18, 19)
+- **researcher**: Codebase topology, where subsystems live, prior research findings
+- **architect**: Design patterns that worked/failed, recurring constraints, tradeoff history
+- **scribe**: Doc landscape knowledge, which CLAUDE.md covers which areas, chronic gaps
+- **learner**: Pattern mining results, principle proposals in progress (its core purpose)
+
+Reviewer explicitly does NOT get memory — `agent-cold-review` rule requires fresh evaluation without anchoring on prior opinions. Other agents (tester, security, shipper, chat, guide, writer) have insufficient cross-session benefit to justify the memory overhead.
 
 #### C. Remove runtime Read instructions
 
