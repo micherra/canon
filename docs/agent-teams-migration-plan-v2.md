@@ -373,16 +373,18 @@ The migration has three phases. Phase 1 adds guidance (no deletions, no behavior
 | Deliverable | Path | Purpose |
 |------------|------|---------|
 | Orchestration CLAUDE.md | `CLAUDE.md` (update) | Add orchestration discipline: how the lead composes context via MCP tools, when to use subagents vs agent teams, HITL patterns, post-step effects, completion checklist. |
-| Runbook format template | `skills/canon/runbooks/_template.md` | Canonical commented example defining every field. All runbooks must conform. Prevents schema drift across parallel implementors. |
-| Fast-path runbook | `skills/canon/runbooks/fast-path.yaml` | Playbook: implement → pre-launch-check → ship → learn. Simplest flow, single-agent. |
-| Feature runbook | `skills/canon/runbooks/feature.yaml` | Playbook for 4–10 file features. Includes wave step annotations for parallel implementation. |
-| Refactor runbook | `skills/canon/runbooks/refactor.yaml` | Playbook for restructuring. |
-| Epic runbook | `skills/canon/runbooks/epic.yaml` | Playbook for large cross-cutting changes. Multi-wave with adaptive planning between waves. |
-| Remaining runbooks | `skills/canon/runbooks/{migrate,test-gap,review-only,security-audit,explore}.yaml` | One runbook per legacy flow. |
+| Runbook format template | `skills/canon/runbooks/_template.md` | Canonical example defining the markdown + YAML frontmatter format. All runbooks conform to this. |
+| Fast-path runbook | `skills/canon/runbooks/fast-path.md` | Implement → pre-launch-check → context-sync → ship → learn. Simplest build flow. |
+| Feature runbook | `skills/canon/runbooks/feature.md` | Design → implement (wave) → verify → review → fix loop → context-sync → ship → learn. Absorbs refactor as a variant annotation. |
+| Epic runbook | `skills/canon/runbooks/epic.md` | Research → design → multi-wave implement → test → security → review → fix loops → context-sync → ship → learn. |
+| Migrate runbook | `skills/canon/runbooks/migrate.md` | Parallel research → design → implement (wave) → verify → security → review → fix → context-sync → ship → learn. |
+| Test-gap runbook | `skills/canon/runbooks/test-gap.md` | Scan → write-tests → fix → review → context-sync. No ship step. |
 | Agent def updates | `agents/*.md` | Add `maxTurns`, `permissionMode` frontmatter. Add `skills` frontmatter to preload role-specific rules and references (e.g., implementor gets `agent-tdd-required`, `principle-loading`; reviewer gets `agent-cold-review`). |
 | Orchestration journal | `mcp-server/src/features/orchestration/tools/orchestration-journal.ts` (~50–80 lines) | `log_step` and `verify_completion` MCP tools. The lead's checklist — records steps executed, completion hook verifies. |
 | Commit trailer hook | `hooks/canon-agent-teams/post-commit-trailers.sh` | PostCommit hook validating Canon-Workflow trailer presence. |
 | Completion verification hook | `hooks/canon-agent-teams/completion-verify.sh` | Calls `verify_completion` journal tool. Blocks "done" if steps or artifacts missing. |
+| SessionStart doc-check hook | `hooks/canon-agent-teams/session-start-doc-check.sh` | Compares HEAD against `.canon/last-scribe-commit`. Nudges lead if documentation may be stale. |
+| SubagentStop scribe-queue hook | `hooks/canon-agent-teams/post-engineer-scribe.sh` | After `canon-engineer` completes, writes `pending-scribe.json` to workspace. Lead runs scribe before completing flow. |
 | Feature flag | Environment variable `CANON_AGENT_TEAMS_MODE` | `off` (default): legacy `drive_flow` path unchanged. `on`: Claude reads runbooks, calls MCP tools, logs to journal, spawns agents natively. |
 
 **Exit criteria:**
