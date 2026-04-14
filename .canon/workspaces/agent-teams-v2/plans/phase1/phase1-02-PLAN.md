@@ -4,9 +4,9 @@ wave: 1
 depends_on:
   - "phase1-00"
 files:
-  - skills/canon/runbooks/review-only.yaml
-  - skills/canon/runbooks/security-audit.yaml
-  - skills/canon/runbooks/explore.yaml
+  - skills/canon/runbooks/review-only.md
+  - skills/canon/runbooks/security-audit.md
+  - skills/canon/runbooks/explore.md
 principles:
   - agent-plans-are-prompts
 domains:
@@ -19,7 +19,7 @@ domains:
 
 Create three simple runbooks (1-3 steps each). These are the simplest flows after fast-path — no implementation waves, no fix loops.
 
-#### 1. `review-only.yaml`
+#### 1. `review-only.md`
 
 Read `flows/review-only.md`. States: `review` (single, canon-reviewer), `done` (terminal).
 
@@ -52,7 +52,7 @@ steps:
       (present to user for resolution).
 ```
 
-#### 2. `security-audit.yaml`
+#### 2. `security-audit.md`
 
 Read `flows/security-audit.md`. States: `security` (single, canon-security), `review` (single, canon-reviewer), `done` (terminal). Includes security-scan fragment with `on_critical: hitl`.
 
@@ -97,7 +97,7 @@ steps:
       workspace. Verdicts: clean/warning (done), blocking (present to user).
 ```
 
-#### 3. `explore.yaml`
+#### 3. `explore.md`
 
 Read `flows/explore.md`. States: `research` (parallel, canon-researcher, roles: [codebase, dependencies?]), `synthesize` (single, canon-architect as analyst), `done` (terminal).
 
@@ -155,12 +155,12 @@ steps:
 - No code tests. YAML validation only for all three files.
 
 ### Verify
-1. All three files exist at `skills/canon/runbooks/{review-only,security-audit,explore}.yaml`
+1. All three files exist at `skills/canon/runbooks/{review-only,security-audit,explore}.md`
 2. All three parse as valid YAML
 3. Steps cover all states from their respective `flows/*.md` files
-4. `review-only.yaml`: 1 step (review)
-5. `security-audit.yaml`: 2 steps (security, review)
-6. `explore.yaml`: 2 steps (research with parallel note, synthesize)
+4. `review-only.md`: 1 step (review)
+5. `security-audit.md`: 2 steps (security, review)
+6. `explore.md`: 2 steps (research with parallel note, synthesize)
 7. `npm run build` passes
 8. `npm test` passes
 

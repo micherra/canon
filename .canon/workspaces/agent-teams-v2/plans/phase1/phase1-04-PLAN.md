@@ -4,8 +4,8 @@ wave: 1
 depends_on:
   - "phase1-00"
 files:
-  - skills/canon/runbooks/feature.yaml
-  - skills/canon/runbooks/refactor.yaml
+  - skills/canon/runbooks/feature.md
+  - skills/canon/runbooks/refactor.md
 principles:
   - agent-plans-are-prompts
   - agent-design-before-code
@@ -19,7 +19,7 @@ domains:
 
 Create two medium-tier runbooks. Both include `dispatch: team` wave steps for parallel implementation. These are more complex than fast-path — they have design, implementation waves, testing, review, and ship phases.
 
-#### 1. `feature.yaml`
+#### 1. `feature.md`
 
 Read `flows/feature.md` and its included fragments. The full state sequence is:
 - `design` (single, canon-architect, approval_gate)
@@ -172,7 +172,7 @@ steps:
       Skip if learn gate evaluation fails.
 ```
 
-#### 2. `refactor.yaml`
+#### 2. `refactor.md`
 
 Read `flows/refactor.md` and its included fragments. The full state sequence is:
 - `analyze` (single, canon-researcher, role: refactor-scope)
@@ -319,10 +319,10 @@ steps:
 - No code tests. YAML validation only.
 
 ### Verify
-1. Both files exist at `skills/canon/runbooks/{feature,refactor}.yaml`
+1. Both files exist at `skills/canon/runbooks/{feature,refactor}.md`
 2. Both parse as valid YAML
-3. `feature.yaml`: 8 steps covering design through learn
-4. `refactor.yaml`: 8 steps covering analyze through learn
+3. `feature.md`: 8 steps covering design through learn
+4. `refactor.md`: 8 steps covering analyze through learn
 5. Both have `dispatch: team` on the implement step
 6. HITL patterns: `approval` on design/analyze, `checkpoint` on review, `on_failure` elsewhere
 7. `npm run build` passes

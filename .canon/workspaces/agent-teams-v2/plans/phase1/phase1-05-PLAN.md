@@ -4,7 +4,7 @@ wave: 1
 depends_on:
   - "phase1-00"
 files:
-  - skills/canon/runbooks/epic.yaml
+  - skills/canon/runbooks/epic.md
 principles:
   - agent-plans-are-prompts
   - agent-design-before-code
@@ -16,7 +16,7 @@ domains:
 
 ### Action
 
-Create `skills/canon/runbooks/epic.yaml` — the most complex runbook. Multi-wave with consultations, competitive design, adaptive replan, and full test/security/review pipeline.
+Create `skills/canon/runbooks/epic.md` — the most complex runbook. Multi-wave with consultations, competitive design, adaptive replan, and full test/security/review pipeline.
 
 Read `flows/epic.md` and all included fragments. The full state sequence is:
 
@@ -249,7 +249,7 @@ steps:
 - No code tests. YAML validation only.
 
 ### Verify
-1. File exists at `skills/canon/runbooks/epic.yaml`
+1. File exists at `skills/canon/runbooks/epic.md`
 2. Parses as valid YAML
 3. 10 steps covering all states from `flows/epic.md` and its fragments
 4. Implement step has `dispatch: team` and consultation protocol in notes
@@ -260,7 +260,7 @@ steps:
 9. `npm test` passes
 
 ### Done when
-- `epic.yaml` exists and parses as valid YAML
+- `epic.md` exists and parses as valid YAML
 - All 10 steps map to legacy flow states and fragments
 - The consultation protocol (before/between/after waves) is fully described
 - Competitive design pattern documented

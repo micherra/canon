@@ -1,7 +1,7 @@
 ---
 done_criteria:
   - id: "dc-01"
-    description: "10 runbook playbooks exist at skills/canon/runbooks/{flow-name}.yaml, each covering every non-terminal state in its legacy flow definition (including fragment-expanded states)"
+    description: "10 runbook playbooks exist at skills/canon/runbooks/{flow-name}.md, each covering every non-terminal state in its legacy flow definition (including fragment-expanded states)"
     testable: "For each runbook, compare step IDs against the expanded state list from the corresponding flows/*.md + included fragments. Zero missing states."
   - id: "dc-02"
     description: "Orchestration journal MCP tool exists with log_step and verify_completion, registered behind CANON_AGENT_TEAMS_MODE=on"
@@ -40,7 +40,7 @@ done_criteria:
 
 #### 1. Runbook playbooks (10 files + schema)
 
-Each runbook is a YAML file at `skills/canon/runbooks/{flow-name}.yaml`. A canonical schema (`_schema.yaml`) defines every field so parallel implementors produce consistent output.
+Each runbook is a YAML file at `skills/canon/runbooks/{flow-name}.md`. A canonical schema (`_template.md`) defines every field so parallel implementors produce consistent output.
 
 Runbook step structure:
 - `id`: matches legacy state name (traceability)

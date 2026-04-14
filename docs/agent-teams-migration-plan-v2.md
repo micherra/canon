@@ -82,7 +82,7 @@ User request
 | **Hooks** | `TaskCompleted`, `TeammateIdle`, `PostCommit`, completion verification | Defense-in-depth artifact enforcement, trailer enforcement, completion verification. |
 | **Workspace storage** | `.canon/workspaces/<id>/` | Artifact storage, progress tracking, workspace metadata. |
 | **Shared libraries** | `commit-trailers.ts`, `file-claims.ts`, `matcher.ts` | Principle matching, commit provenance, file ownership — used by MCP tools and available to the lead. |
-| **Runbooks** | `skills/canon/runbooks/*.yaml` | Lightweight playbooks describing recommended step sequences. Not executable — Claude reads them as guidance. |
+| **Runbooks** | `skills/canon/runbooks/*.md` | Lightweight playbooks describing recommended step sequences. Not executable — Claude reads them as guidance. |
 
 **What goes (the custom coordination layer):**
 
@@ -373,7 +373,7 @@ The migration has three phases. Phase 1 adds guidance (no deletions, no behavior
 | Deliverable | Path | Purpose |
 |------------|------|---------|
 | Orchestration CLAUDE.md | `CLAUDE.md` (update) | Add orchestration discipline: how the lead composes context via MCP tools, when to use subagents vs agent teams, HITL patterns, post-step effects, completion checklist. |
-| Runbook YAML schema | `skills/canon/runbooks/_schema.yaml` | Canonical commented example defining every field. All runbooks must conform. Prevents schema drift across parallel implementors. |
+| Runbook format template | `skills/canon/runbooks/_template.md` | Canonical commented example defining every field. All runbooks must conform. Prevents schema drift across parallel implementors. |
 | Fast-path runbook | `skills/canon/runbooks/fast-path.yaml` | Playbook: implement → pre-launch-check → ship → learn. Simplest flow, single-agent. |
 | Feature runbook | `skills/canon/runbooks/feature.yaml` | Playbook for 4–10 file features. Includes wave step annotations for parallel implementation. |
 | Refactor runbook | `skills/canon/runbooks/refactor.yaml` | Playbook for restructuring. |

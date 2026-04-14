@@ -4,7 +4,7 @@ wave: 1
 depends_on:
   - "phase1-00"
 files:
-  - skills/canon/runbooks/fast-path.yaml
+  - skills/canon/runbooks/fast-path.md
 principles:
   - agent-plans-are-prompts
 domains:
@@ -15,7 +15,7 @@ domains:
 
 ### Action
 
-Create `skills/canon/runbooks/fast-path.yaml` conforming to `_schema.yaml`. This is the simplest runbook — single-agent, no research, no architecture, no waves.
+Create `skills/canon/runbooks/fast-path.md` conforming to `_template.md`. This is the simplest runbook — single-agent, no research, no architecture, no waves.
 
 1. Read `flows/fast-path.md` for the legacy state machine definition. The flow has these states:
    - `execute` (single, canon-implementor) — implement, test, self-review, commit
@@ -23,9 +23,9 @@ Create `skills/canon/runbooks/fast-path.yaml` conforming to `_schema.yaml`. This
    - `ship` (single, canon-shipper) — synthesize PR description
    - `learn` (single, canon-learner, skip_when: learn_gate_not_passed) — auto-trigger pattern analysis
 
-2. Read `_schema.yaml` for the field reference.
+2. Read `_template.md` for the field reference.
 
-3. Write `fast-path.yaml` with:
+3. Write `fast-path.md` with:
 
 ```yaml
 name: "fast-path"
@@ -95,7 +95,7 @@ steps:
       principle/convention updates. Skip if learn gate evaluation fails.
 ```
 
-4. Validate the file matches the schema structure from `_schema.yaml`.
+4. Validate the file matches the schema structure from `_template.md`.
 
 ### Canon principles to apply
 - **agent-plans-are-prompts**: The `notes` field for each step IS the spawn guidance. It must be actionable — not a restatement of the agent definition, but specific instructions for this flow context.
@@ -104,15 +104,15 @@ steps:
 - No code tests. YAML validation only.
 
 ### Verify
-1. File exists at `skills/canon/runbooks/fast-path.yaml`
+1. File exists at `skills/canon/runbooks/fast-path.md`
 2. File parses as valid YAML
 3. Steps cover all 4 states from `flows/fast-path.md`: execute, pre-launch-check, ship, learn
-4. Every step has all required fields per `_schema.yaml`
+4. Every step has all required fields per `_template.md`
 5. `npm run build` passes (no TypeScript changes)
 6. `npm test` passes (no test changes)
 
 ### Done when
-- `fast-path.yaml` exists and parses as valid YAML
+- `fast-path.md` exists and parses as valid YAML
 - All 4 legacy states are represented as steps with correct agents, dispatch types, and artifacts
 - The `notes` for `execute` includes the self-review and verification requirements from the legacy spawn instructions
 - Build and tests pass unchanged

@@ -4,7 +4,7 @@ wave: 1
 depends_on:
   - "phase1-00"
 files:
-  - skills/canon/runbooks/migrate.yaml
+  - skills/canon/runbooks/migrate.md
 principles:
   - agent-plans-are-prompts
   - agent-design-before-code
@@ -16,7 +16,7 @@ domains:
 
 ### Action
 
-Create `skills/canon/runbooks/migrate.yaml` — migration flow with rollback emphasis and security scanning.
+Create `skills/canon/runbooks/migrate.md` — migration flow with rollback emphasis and security scanning.
 
 Read `flows/migrate.md` and its included fragments. The full state sequence is:
 
@@ -221,7 +221,7 @@ steps:
 - No code tests. YAML validation only.
 
 ### Verify
-1. File exists at `skills/canon/runbooks/migrate.yaml`
+1. File exists at `skills/canon/runbooks/migrate.md`
 2. Parses as valid YAML
 3. 10 steps covering all states from `flows/migrate.md` and its fragments
 4. Research step describes two parallel roles (migration-scope, rollback-plan)
@@ -232,7 +232,7 @@ steps:
 9. `npm test` passes
 
 ### Done when
-- `migrate.yaml` exists and parses as valid YAML
+- `migrate.md` exists and parses as valid YAML
 - All states from legacy flow represented as steps with correct agents
 - Rollback emphasis is explicit in research, design, and implement step notes
 - Security step covers migration-specific threats

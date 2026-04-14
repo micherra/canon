@@ -2,13 +2,13 @@
 
 | Task | Wave | Depends on | Key files | Description |
 |------|------|------------|-----------|-------------|
-| phase1-00 | 1 | — | skills/canon/runbooks/_schema.yaml | Define canonical runbook YAML schema |
-| phase1-01 | 1 | phase1-00 | skills/canon/runbooks/fast-path.yaml | Create fast-path runbook |
-| phase1-02 | 1 | phase1-00 | skills/canon/runbooks/{review-only,security-audit,explore}.yaml | Create simple runbooks (1-3 steps) |
-| phase1-03 | 1 | phase1-00 | skills/canon/runbooks/{test-gap,adopt}.yaml | Create fix-loop runbooks |
-| phase1-04 | 1 | phase1-00 | skills/canon/runbooks/{feature,refactor}.yaml | Create medium-tier runbooks (wave steps) |
-| phase1-05 | 1 | phase1-00 | skills/canon/runbooks/epic.yaml | Create epic runbook (multi-wave, consultations) |
-| phase1-06 | 1 | phase1-00 | skills/canon/runbooks/migrate.yaml | Create migrate runbook (rollback emphasis) |
+| phase1-00 | 1 | — | skills/canon/runbooks/_template.md, skills/canon/runbooks/_README.md | Define runbook format (markdown + YAML frontmatter) |
+| phase1-01 | 1 | phase1-00 | skills/canon/runbooks/fast-path.md | Create fast-path runbook |
+| phase1-02 | 1 | phase1-00 | skills/canon/runbooks/{review-only,security-audit,explore}.md | Create simple runbooks (1-3 steps) |
+| phase1-03 | 1 | phase1-00 | skills/canon/runbooks/{test-gap,adopt}.md | Create fix-loop runbooks |
+| phase1-04 | 1 | phase1-00 | skills/canon/runbooks/{feature,refactor}.md | Create medium-tier runbooks (wave steps) |
+| phase1-05 | 1 | phase1-00 | skills/canon/runbooks/epic.md | Create epic runbook (multi-wave, consultations) |
+| phase1-06 | 1 | phase1-00 | skills/canon/runbooks/migrate.md | Create migrate runbook (rollback emphasis) |
 | phase1-07 | 2 | Wave 1 | rules/*.md → skills/canon/references/, rules/agent-context-check.md | Register rules as skills, create agent-context-check rule |
 | phase1-08 | 2 | Wave 1 | mcp-server/src/features/orchestration/tools/orchestration-journal.ts | Orchestration journal tool (log_step + verify_completion) |
 | phase1-09 | 2 | Wave 1 | hooks/canon-agent-teams/{post-commit-trailers.sh,completion-verify.sh,hooks.json} | PostCommit trailer hook + completion verification hook |
@@ -29,17 +29,17 @@
 ### File Inventory
 
 **New files (16):**
-- `skills/canon/runbooks/_schema.yaml`
-- `skills/canon/runbooks/fast-path.yaml`
-- `skills/canon/runbooks/feature.yaml`
-- `skills/canon/runbooks/refactor.yaml`
-- `skills/canon/runbooks/epic.yaml`
-- `skills/canon/runbooks/migrate.yaml`
-- `skills/canon/runbooks/test-gap.yaml`
-- `skills/canon/runbooks/review-only.yaml`
-- `skills/canon/runbooks/security-audit.yaml`
-- `skills/canon/runbooks/explore.yaml`
-- `skills/canon/runbooks/adopt.yaml`
+- `skills/canon/runbooks/_template.md`
+- `skills/canon/runbooks/fast-path.md`
+- `skills/canon/runbooks/feature.md`
+- `skills/canon/runbooks/refactor.md`
+- `skills/canon/runbooks/epic.md`
+- `skills/canon/runbooks/migrate.md`
+- `skills/canon/runbooks/test-gap.md`
+- `skills/canon/runbooks/review-only.md`
+- `skills/canon/runbooks/security-audit.md`
+- `skills/canon/runbooks/explore.md`
+- `skills/canon/runbooks/adopt.md`
 - `rules/agent-context-check.md`
 - `mcp-server/src/features/orchestration/tools/orchestration-journal.ts`
 - `hooks/canon-agent-teams/post-commit-trailers.sh`

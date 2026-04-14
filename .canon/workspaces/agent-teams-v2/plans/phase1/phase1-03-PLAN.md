@@ -4,8 +4,8 @@ wave: 1
 depends_on:
   - "phase1-00"
 files:
-  - skills/canon/runbooks/test-gap.yaml
-  - skills/canon/runbooks/adopt.yaml
+  - skills/canon/runbooks/test-gap.md
+  - skills/canon/runbooks/adopt.md
 principles:
   - agent-plans-are-prompts
 domains:
@@ -18,7 +18,7 @@ domains:
 
 Create two runbooks for fix-loop flows that do not have a ship step. These flows iterate between analysis/testing and fixing until converged.
 
-#### 1. `test-gap.yaml`
+#### 1. `test-gap.md`
 
 Read `flows/test-gap.md`. States: `scan` (single, canon-researcher), `write-tests` (single, canon-tester), `fix-impl` (single, canon-fixer), review-fix-loop fragment (review, fix-violations), `done` (terminal).
 
@@ -101,7 +101,7 @@ steps:
       resolve, then re-review. Loop max 2 iterations.
 ```
 
-#### 2. `adopt.yaml`
+#### 2. `adopt.md`
 
 Read `flows/adopt.md`. States: `scan` (single, canon-researcher), `fix` (parallel-per, canon-fixer), `rescan` (single, canon-researcher), `done` (terminal).
 
@@ -173,10 +173,10 @@ steps:
 - No code tests. YAML validation only.
 
 ### Verify
-1. Both files exist at `skills/canon/runbooks/{test-gap,adopt}.yaml`
+1. Both files exist at `skills/canon/runbooks/{test-gap,adopt}.md`
 2. Both parse as valid YAML
-3. `test-gap.yaml`: 4 steps covering scan, write-tests, fix-impl, review (with fix-loop noted in review notes)
-4. `adopt.yaml`: 3 steps covering scan, fix, rescan
+3. `test-gap.md`: 4 steps covering scan, write-tests, fix-impl, review (with fix-loop noted in review notes)
+4. `adopt.md`: 3 steps covering scan, fix, rescan
 5. Fix-loop semantics documented in notes fields
 6. `npm run build` passes
 7. `npm test` passes

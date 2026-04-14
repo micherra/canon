@@ -20,7 +20,7 @@ Validate consistency across all Phase 1 artifacts. Produce a `VALIDATION-REPORT.
 #### Checks to perform
 
 **1. Runbook coverage (10 checks)**:
-For each runbook in `skills/canon/runbooks/*.yaml`:
+For each runbook in `skills/canon/runbooks/*.md`:
 - Parse the runbook YAML
 - Read the corresponding legacy flow at `flows/{name}.md`
 - Read all fragments included by the flow (e.g., `review-fix-loop`, `verify-fix-loop`, `pre-launch-check`, `ship-done`, etc.)
@@ -29,7 +29,7 @@ For each runbook in `skills/canon/runbooks/*.yaml`:
 - Report any missing states
 
 **2. Runbook schema conformance (10 checks)**:
-For each runbook, validate against `skills/canon/runbooks/_schema.yaml`:
+For each runbook, validate against `skills/canon/runbooks/_template.md`:
 - All required fields present (name, description, tier, steps)
 - Each step has: id, agent, dispatch, mcp_tools, artifacts, hitl, notes
 - `dispatch` is one of: `subagent`, `team`

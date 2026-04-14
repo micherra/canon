@@ -42,7 +42,7 @@ Include these subsections:
 
 **Setup**:
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`.
-2. Read the runbook for the selected flow: `skills/canon/runbooks/{flow-name}.yaml`.
+2. Read the runbook for the selected flow: `skills/canon/runbooks/{flow-name}.md`.
 3. Call `log_step` for each planned step from the runbook (creates the checklist).
 
 **MCP Tool Composition**:
