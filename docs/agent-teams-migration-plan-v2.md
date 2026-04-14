@@ -78,7 +78,8 @@ User request
 |-------|------|-----|
 | **MCP tools** | `get_principles`, `list_principles`, `get_compliance`, `get_drift_report`, `get_file_context`, `graph_query`, `semantic_search`, `codebase_graph`, `record_agent_metrics`, `post_event`, `show_pr_impact`, `review_code`, `store_pr_review`, `store_summaries` | These ARE Canon. Principles, drift, KG, artifacts, metrics — Claude uses them as a native toolkit. |
 | **Agent definitions** | 12 types in `agents/*.md` (Phase 1 consolidates implementor + fixer → `canon-engineer`) | Valid as both subagent types and agent team teammate types. Per docs: subagents "inherit all tools from the main conversation, including MCP tools" by default. Definitions support `skills` (preload rules + domain primers), `maxTurns` (effort budget), `permissionMode`, `hooks`, `memory`. Each agent includes a preloaded `agent-context-check` skill instructing it to verify principles are present and self-serve via MCP if not. |
-| **Hooks** | `TaskCompleted`, `TeammateIdle`, `SubagentStart/Stop` scripts | Defense-in-depth artifact enforcement and observability. |
+| **Orchestration journal** | `log_step`, `verify_completion` MCP tools (~50–80 lines) | The lead's checklist. Records steps executed, artifacts expected. Completion hook verifies. Not a state machine — no scheduling, no forced ordering. |
+| **Hooks** | `TaskCompleted`, `TeammateIdle`, `PostCommit`, completion verification | Defense-in-depth artifact enforcement, trailer enforcement, completion verification. |
 | **Workspace storage** | `.canon/workspaces/<id>/` | Artifact storage, progress tracking, workspace metadata. |
 | **Shared libraries** | `commit-trailers.ts`, `file-claims.ts`, `matcher.ts` | Principle matching, commit provenance, file ownership — used by MCP tools and available to the lead. |
 | **Runbooks** | `skills/canon/runbooks/*.yaml` | Lightweight playbooks describing recommended step sequences. Not executable — Claude reads them as guidance. |
@@ -172,36 +173,70 @@ This is **more resilient** than the legacy pipeline:
 5. **Self-healing context.** Agents self-serve missing context via MCP tools. Skills preload critical rules. Three independent context channels vs. one pipeline.
 5. **Agent definitions work as-is.** All 13 agent defs are valid subagent and teammate types. The `tools` allowlist is honored in both paths per [Claude Code docs](https://code.claude.com/docs/en/agent-teams).
 
-### 2.7 Enforcement model (defense-in-depth)
+### 2.7 Orchestration journal (the lead's checklist)
 
-The state machine provided determinism through a single hard enforcement layer. The new model replaces it with six layers, each covering different guarantees:
+CLAUDE.md guidance alone is prompt engineering — Claude reads it, usually follows it, sometimes doesn't. An earlier Canon iteration tried a separate orchestrator agent, but Claude didn't call it reliably. The solution is neither prose nor a separate agent: it's a **lightweight MCP tool that acts as the lead's checklist**.
+
+The orchestration journal is ~50–80 lines of TypeScript. It provides two MCP tools:
+
+```
+log_step({ workspace, step_id, agent_type, artifacts_expected, mcp_tools_called })
+verify_completion({ workspace }) → { steps_logged, steps_missing, artifacts_missing }
+```
+
+**How it works:**
+
+1. **Flow start:** The lead reads the runbook, calls `init_workspace`, then calls `log_step` for each step it plans to execute. This creates the checklist from the runbook.
+2. **Before each spawn:** The lead calls `log_step` with `status: "started"` and the expected artifacts. This is a natural pre-spawn step — CLAUDE.md instructs it, and the MCP tool schema validates the input.
+3. **After each spawn:** The lead calls `log_step` with `status: "completed"` and the actual artifacts produced. If the artifact is missing, the lead sees the gap immediately.
+4. **Flow end:** The completion verification hook calls `verify_completion`. If any step was started but not completed, or any expected artifact is missing, the hook exits 2 and blocks the lead from declaring done.
+
+**What this provides beyond CLAUDE.md:**
+
+| Property | CLAUDE.md alone | With journal |
+|----------|----------------|-------------|
+| Audit trail | None — conversation compacts away | Structured log in workspace, survives compaction |
+| Completion enforcement | Soft — lead decides it's done | Hard — hook calls `verify_completion`, blocks if incomplete |
+| Skipped step detection | None unless human notices | Journal shows logged vs. completed steps |
+| Post-hoc analysis | Read the conversation (if available) | Read the journal (always available, structured) |
+| MCP composition tracking | None | `mcp_tools_called` field records which tools the lead called per step |
+
+**What this is NOT:**
+- Not a state machine. No transition logic, no forced ordering, no "next state" resolution.
+- Not scheduling. The lead still decides what to do next based on judgment.
+- Not blocking at step boundaries. The lead can skip steps if justified — the journal just records that it did.
+- Not a large addition. ~50–80 lines of TypeScript, one new MCP tool registration, one workspace JSON file.
+
+The journal is to the orchestrator what a task list is to an agent team: a shared record of intent and progress that hooks can verify.
+
+### 2.8 Enforcement model (defense-in-depth)
+
+The state machine provided determinism through a single hard enforcement layer. The new model replaces it with seven layers, each covering different guarantees:
 
 | Layer | Mechanism | Type | What it guarantees |
 |-------|-----------|------|-------------------|
 | 1 | CLAUDE.md + runbooks | Soft | Step ordering, MCP tool composition, dispatch decisions |
 | 2 | Skills preloading | Medium | Critical rules and domain primers always in agent context |
-| 3 | Agent definitions (`tools`, `maxTurns`, `permissionMode`) | Hard | Tool access restrictions, effort budgets, write permissions |
-| 4 | Hooks (`TaskCompleted`, `PostCommit`, completion verification) | Hard | Artifact existence, commit trailers, completion cleanup |
-| 5 | MCP tool contracts (schema validation) | Hard | Input/output shapes for `update_board`, `record_agent_metrics`, `write_*` |
-| 6 | Workspace state (filesystem) | Hard | Artifacts on disk at known paths, auditable post-hoc |
+| 3 | Orchestration journal (`log_step` / `verify_completion`) | Medium-hard | Audit trail of steps executed; completion hook blocks if steps missing |
+| 4 | Agent definitions (`tools`, `maxTurns`, `permissionMode`) | Hard | Tool access restrictions, effort budgets, write permissions |
+| 5 | Hooks (`TaskCompleted`, `PostCommit`, completion verification) | Hard | Artifact existence, commit trailers, completion cleanup |
+| 6 | MCP tool contracts (schema validation) | Hard | Input/output shapes for `update_board`, `record_agent_metrics`, `write_*` |
+| 7 | Workspace state (filesystem) | Hard | Artifacts on disk at known paths, auditable post-hoc |
 
-**Plus self-healing context (§2.5):** if the lead misses a composition step, agents self-serve via MCP. This means enforcement failures at layer 1 (lead doesn't follow guidance) are compensated by the agent's own MCP access — a resilience property the legacy model did not have.
+**Plus self-healing context (§2.5):** if the lead misses a composition step, agents self-serve via MCP.
 
 **Post-subagent artifact check (in CLAUDE.md guidance):** After each subagent returns, the lead verifies expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. This compensates for the lack of hook-based enforcement on subagents (`TaskCompleted` and `TeammateIdle` hooks only apply to agent teams teammates, not subagents).
 
-**Completion verification hook:** A shell script that runs when the lead signals done. Checks:
-- All runbook step artifacts exist at their expected paths
-- Board state shows "complete" (via workspace file inspection)
-- Claims released (`.canon/claims.json` has no entries for this workflow)
-- Metrics recorded (workspace metrics files present)
-
-Exit 2 if anything is missing — blocks the lead from declaring done prematurely.
+**Completion verification hook:** Calls `verify_completion` from the orchestration journal. Blocks the lead from declaring done if:
+- Any step was logged as "started" but not "completed"
+- Any expected artifact is missing from disk
+- Board state is not "complete"
+- Claims are not released
 
 **What's genuinely weaker and accepted:**
-- Step ordering is not enforced — Claude may reorder steps. This is accepted as a feature: Claude adapts to what it finds. Artifacts enforce that work happened, regardless of order.
-- Context composition quality varies — the lead may compose richer or thinner prompts across runs. Mitigated by agent self-serve (§2.5) and skills (layer 2).
-
-The state machine provided determinism, but Canon's flows aren't deterministic today (convergence loops, skip conditions, adaptive waves). The enforcement model trades rigid ordering for layered verification — the system checks outcomes (artifacts exist, trailers present, metrics recorded) rather than process (steps executed in sequence).
+- Step ordering is not enforced — Claude may reorder steps. Accepted as a feature.
+- Context composition quality varies — mitigated by agent self-serve (§2.5) and skills (layer 2).
+- The lead can skip `log_step` calls entirely — but CLAUDE.md instructs it, the MCP tool is in its tools list, and the completion hook catches the gap at the end.
 
 ### 2.7 Platform capabilities (per Claude Code documentation)
 
@@ -345,8 +380,10 @@ The migration has three phases. Phase 1 adds guidance (no deletions, no behavior
 | Epic runbook | `skills/canon/runbooks/epic.yaml` | Playbook for large cross-cutting changes. Multi-wave with adaptive planning between waves. |
 | Remaining runbooks | `skills/canon/runbooks/{migrate,test-gap,review-only,security-audit,explore}.yaml` | One runbook per legacy flow. |
 | Agent def updates | `agents/*.md` | Add `maxTurns`, `permissionMode` frontmatter. Add `skills` frontmatter to preload role-specific rules and references (e.g., implementor gets `agent-tdd-required`, `principle-loading`; reviewer gets `agent-cold-review`). |
-| Commit trailer hook | `hooks/canon-agent-teams/post-commit-trailers.sh` | PostCommit hook validating Canon-Workflow trailer presence. Closes the enforcement gap from downgrading commit provenance to prompt convention. |
-| Feature flag | Environment variable `CANON_AGENT_TEAMS_MODE` | `off` (default): legacy `drive_flow` path unchanged. `on`: Claude reads runbooks, calls MCP tools, spawns agents natively. |
+| Orchestration journal | `mcp-server/src/features/orchestration/tools/orchestration-journal.ts` (~50–80 lines) | `log_step` and `verify_completion` MCP tools. The lead's checklist — records steps executed, completion hook verifies. |
+| Commit trailer hook | `hooks/canon-agent-teams/post-commit-trailers.sh` | PostCommit hook validating Canon-Workflow trailer presence. |
+| Completion verification hook | `hooks/canon-agent-teams/completion-verify.sh` | Calls `verify_completion` journal tool. Blocks "done" if steps or artifacts missing. |
+| Feature flag | Environment variable `CANON_AGENT_TEAMS_MODE` | `off` (default): legacy `drive_flow` path unchanged. `on`: Claude reads runbooks, calls MCP tools, logs to journal, spawns agents natively. |
 
 **Exit criteria:**
 - All 10 runbooks written and reviewed.
