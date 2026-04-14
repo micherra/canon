@@ -40,6 +40,14 @@ If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — u
 
 Include these subsections:
 
+**Pre-Build Gate**:
+Before starting any build flow, evaluate the request:
+- Is the problem clearly defined? Are acceptance criteria explicit?
+- Have alternatives been considered? Is the value proportional to the effort?
+- If any answer is no, spawn `canon-planner` before proceeding to a build runbook.
+- If the request is a clear bug fix or small change with obvious scope, skip to fast-path.
+- The planner produces a structured brief. If it greenlights → proceed. If it asks questions → present to user. If it recommends alternatives → present to user for decision.
+
 **Setup**:
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`.
 2. Read the runbook for the selected flow: `skills/canon/runbooks/{flow-name}.md`.

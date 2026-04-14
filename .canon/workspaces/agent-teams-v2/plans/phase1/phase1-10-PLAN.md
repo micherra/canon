@@ -56,12 +56,35 @@ Merge `canon-implementor` and `canon-fixer` into `canon-engineer`:
 
 **Rationale**: Same skill set (both write code, both need Write/Edit/Bash, both need principles). Different prompting, not different agents. The fixer's `agent-minimal-fix` discipline and the implementor's `agent-tdd-required` discipline are both preloaded as skills — the spawn prompt activates the relevant mode.
 
-#### B. Frontmatter updates for all 12 agents
+#### A2. New canon-planner agent
+
+Create `agents/canon-planner.md`:
+- **description**: "Evaluates build requests before committing to implementation. Clarifies requirements, challenges assumptions, assesses alternatives and value. Produces a structured brief that greenlights, redirects, or asks clarifying questions. Spawned by the lead when a request is vague, assumption-heavy, or lacks clear acceptance criteria."
+- **model**: opus
+- **maxTurns**: 25
+- **permissionMode**: plan
+- **memory**: project
+- **skills**: `agent-surface-assumptions, agent-evidence-over-intuition, agent-context-check, status-protocol`
+- **tools**: `Read, Glob, Grep, WebFetch, mcp__canon__get_principles, mcp__canon__get_file_context, mcp__canon__graph_query, mcp__canon__semantic_search`
+
+**Body**: Instructions covering the planner's five responsibilities:
+1. Requirements clarification — what problem, who benefits, what does success look like
+2. Assumption challenging — surface implicit assumptions, question whether they hold
+3. Alternative evaluation — simpler approaches, configuration vs code, 80/20 solutions
+4. Value assessment — effort estimate vs expected value, is the cost proportional
+5. Brief production — structured output using a new `planning-brief.md` template
+
+**Memory instructions**: "Update your agent memory with: features that were built and their outcomes, requests that were redirected to simpler solutions, patterns of over-engineering, recurring user needs. This builds judgment about what's worth building."
+
+**New template**: Create `templates/planning-brief.md` with sections: Problem Statement, Target Users, Acceptance Criteria, Alternatives Considered, Recommended Approach, Open Questions, Value Assessment.
+
+#### B. Frontmatter updates for all 13 agents
 
 Add `maxTurns`, `permissionMode`, `memory`, and `skills` to every agent:
 
 | Agent | maxTurns | permissionMode | memory | skills (role-specific, + `agent-context-check` + `status-protocol` for all) |
 |-------|----------|---------------|--------|-------|
+| canon-planner | 25 | plan | project | agent-surface-assumptions, agent-evidence-over-intuition |
 | canon-engineer | 50 | auto | project | agent-tdd-required, agent-minimal-fix, agent-fresh-context, agent-structured-triage, agent-simplify-before-extending, principle-loading + all 6 domain primers |
 | canon-researcher | 20 | plan | project | agent-scoped-research, agent-surface-assumptions, agent-evidence-over-intuition |
 | canon-architect | 30 | plan | project | agent-design-before-code, agent-plans-are-prompts, agent-surface-assumptions + all 6 domain primers |
@@ -111,7 +134,7 @@ No new tests. Existing tests should pass since agent definitions are configurati
 
 ### Done when
 
-- 12 agent definitions (not 13) with complete frontmatter
+- 13 agent definitions (delete 2 old, create 2 new, modify 11) with complete frontmatter
 - canon-engineer merges both instruction sets with dual-mode operation
 - All skills in the preload map are referenced
 - All runtime Read instructions for rules removed

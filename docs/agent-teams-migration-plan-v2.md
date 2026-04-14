@@ -77,7 +77,7 @@ User request
 | Layer | What | Why |
 |-------|------|-----|
 | **MCP tools** | `get_principles`, `list_principles`, `get_compliance`, `get_drift_report`, `get_file_context`, `graph_query`, `semantic_search`, `codebase_graph`, `record_agent_metrics`, `post_event`, `show_pr_impact`, `review_code`, `store_pr_review`, `store_summaries` | These ARE Canon. Principles, drift, KG, artifacts, metrics — Claude uses them as a native toolkit. |
-| **Agent definitions** | 12 types in `agents/*.md` (Phase 1 consolidates implementor + fixer → `canon-engineer`) | Valid as both subagent types and agent team teammate types. Per docs: subagents "inherit all tools from the main conversation, including MCP tools" by default. Definitions support `skills` (preload rules + domain primers), `maxTurns` (effort budget), `permissionMode`, `memory` (cross-session learning). Five agents get `memory: project`: engineer (fix patterns, gotchas), researcher (codebase topology), architect (design decision history), scribe (doc landscape), learner (pattern mining). Reviewer explicitly excluded per `agent-cold-review` rule. Each agent includes `agent-context-check` skill for self-serve context verification. |
+| **Agent definitions** | 13 types in `agents/*.md` (Phase 1 consolidates implementor + fixer → `canon-engineer`, adds new `canon-planner`) | Valid as both subagent types and agent team teammate types. Per docs: subagents "inherit all tools from the main conversation, including MCP tools" by default. Definitions support `skills` (preload rules + domain primers), `maxTurns` (effort budget), `permissionMode`, `memory` (cross-session learning). Five agents get `memory: project`: engineer (fix patterns, gotchas), researcher (codebase topology), architect (design decision history), scribe (doc landscape), learner (pattern mining). Planner gets `memory: project` for feature history and value patterns. Reviewer explicitly excluded per `agent-cold-review` rule. Each agent includes `agent-context-check` skill for self-serve context verification. |
 | **Orchestration journal** | `log_step`, `verify_completion` MCP tools (~50–80 lines) | The lead's checklist. Records steps executed, artifacts expected. Completion hook verifies. Not a state machine — no scheduling, no forced ordering. |
 | **Hooks** | `TaskCompleted`, `TeammateIdle`, `PostCommit`, completion verification | Defense-in-depth artifact enforcement, trailer enforcement, completion verification. |
 | **Workspace storage** | `.canon/workspaces/<id>/` | Artifact storage, progress tracking, workspace metadata. |
@@ -97,12 +97,43 @@ User request
 | Session continuation | `applySessionContinuation` | Claude includes context summaries in spawn prompts naturally. |
 | Consultation executor | `consultation-executor.ts` | Claude can spawn an advisory subagent and inject its output — no special mechanism needed. |
 
-### 2.3 How Claude orchestrates a Canon flow
+### 2.3 Pre-build gate (canon-planner)
+
+Claude defaults to action — "add dark mode" → starts building. Canon needs to be smarter. Before committing to any build flow, the lead evaluates whether the request is ready to build:
+
+- Is the problem clearly defined?
+- Are acceptance criteria explicit?
+- Have alternatives been considered?
+- Is the value proportional to the effort?
+
+If any answer is no, the lead spawns `canon-planner` before proceeding to a build runbook. If the request is a clear bug fix or small change with obvious scope, the lead skips straight to fast-path.
+
+**canon-planner** is a new agent that:
+1. **Clarifies requirements** — "What problem are you solving? Who benefits?"
+2. **Challenges assumptions** — "You're assuming users need X. What if Y is the actual need?"
+3. **Evaluates alternatives** — "You could build this, or configure the existing system to do 80% of it."
+4. **Assesses value** — "This would take ~4 agents across 2 waves. Is the value proportional?"
+5. **Produces a brief** — problem statement, target users, acceptance criteria, alternatives considered, recommended approach, open questions
+
+The brief either greenlights the build (lead proceeds to runbook), recommends alternatives (lead presents to user), or asks clarifying questions (lead presents to user, planner runs again with answers).
+
+**Agent definition:**
+- `model: opus` (judgment-heavy, not speed-critical)
+- `permissionMode: plan` (read-only — produces a brief, not code)
+- `maxTurns: 25`
+- `memory: project` (remembers what features have been built, which were successful, patterns of over-engineering)
+- `skills: agent-surface-assumptions, agent-evidence-over-intuition, agent-context-check, status-protocol`
+- Tools: `Read, Glob, Grep, WebFetch, mcp__canon__get_principles, mcp__canon__get_file_context, mcp__canon__graph_query, mcp__canon__semantic_search`
+
+This is not the chat agent (brainstorms) or the researcher (discovers facts). The planner's job is to **push back constructively** — "I could build this, but should I?"
+
+### 2.4 How Claude orchestrates a Canon flow
 
 A concrete example of `feature` flow (4–10 file feature):
 
 1. **User says** "add dark mode to the settings page" to the Canon lead session.
-2. **Claude reads** `CLAUDE.md`, sees Canon orchestration instructions. Reads the `feature` runbook for the recommended step sequence.
+2. **Claude evaluates** the request against the pre-build gate. Requirements are clear, scope is defined. Proceeds to build. (If vague, would spawn canon-planner first.)
+3. **Claude reads** `CLAUDE.md`, sees Canon orchestration instructions. Reads the `feature` runbook for the recommended step sequence.
 3. **Claude calls** `init_workspace` to create the workspace. Calls `get_principles` with the target file scope. Calls `get_file_context` for KG summaries. Assembles a research prompt.
 4. **Claude spawns** a `canon-researcher` subagent. The researcher has Canon MCP access via its `tools` allowlist and calls `semantic_search`, `graph_query` directly. Returns a research synthesis artifact.
 5. **Claude spawns** a `canon-architect` subagent with the research synthesis as upstream context. The architect queries the knowledge graph, designs the approach, produces a plan index with wave assignments.
