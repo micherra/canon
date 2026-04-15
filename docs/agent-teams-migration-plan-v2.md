@@ -597,14 +597,15 @@ Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. T
 
 Independent of the Phase 1–3 migration, several MCP tools should be improved to perform better in the "Canon as toolkit" model. These changes are backward-compatible — they improve existing tools without breaking the legacy path. Can be executed in parallel with any phase.
 
-### P0 — Batch mode for high-frequency tools
+### P0 — Reduce tool calls per spawn
 
 | Tool | Change | Why |
 |------|--------|-----|
 | `get_principles` | Accept `file_paths: string[]` (array) in addition to `file_path: string`. Return deduplicated principles across all files. | The lead calls this before every spawn. For wave tasks with 5 files, that's 5 tool calls → 1 batch call. |
 | `get_file_context` | Accept `file_paths: string[]`. Return context for all files in one response. | Same rationale. Batch saves tool calls and round-trip latency. |
+| `get_context` | **New composite tool.** `get_context({ file_paths, include: ["principles", "file_context", "drift", "graph"] })` returns everything in one call. Replaces the 3-4 separate MCP calls the lead makes before every spawn. Essentially the legacy enrichment service (`context-enrichment.ts`) exposed as a standalone MCP tool — which is what it should have been all along instead of a pipeline stage. | Most impactful simplification. One call replaces three-four. Lead or agent calls once, gets principles + KG summaries + drift signals + graph metrics in one response. |
 
-**Backward-compatible:** existing single-file calls still work. The array parameter is additive.
+**Backward-compatible:** existing single-tool calls still work. `get_context` is additive.
 
 ### P1 — Prepare tools for the new model
 
@@ -614,12 +615,15 @@ Independent of the Phase 1–3 migration, several MCP tools should be improved t
 | `report_result` | Audit and simplify. Strip transition evaluation, convergence detection, wave result handling. Keep board-update and artifact-validation. | ~1,000+ lines, much serving the state machine. Trim to what the new model needs. |
 | `record_agent_metrics` | Add `source` field: `"agent"` (called by agent directly) vs `"lead"` (lead reporting on behalf of subagent from self-reported metrics). | Distinguishes agent-reported vs lead-parsed metrics in analytics. |
 
-### P2 — Cleanup
+### P2 — Consolidation and cleanup
 
 | Tool | Change | Why |
 |------|--------|-----|
-| `update_board` | Audit for unused operations. The new model primarily uses `complete_flow` and `set_metadata`. Operations that serve the state machine (enter, skip, block, transition) become dead code after Phase 3. Document which operations survive. | 558 lines — significant complexity. Knowing what survives guides Phase 3 deletion. |
-| `simulate_flow` | Evaluate: repurpose as runbook dry-run, or delete. If flows are gone, simulation has no target. Could validate runbook step coverage against legacy flow state lists. | Dead tool after Phase 3 unless repurposed. |
+| 6 `write_*` → 1 `write_artifact` | Consolidate `write_plan_index`, `write_test_report`, `write_review`, `write_implementation_summary`, `write_research_synthesis`, `write_design_brief` into one `write_artifact({ type, workspace, data })`. Same schema validation, same machine-readable sidecars, one tool registration instead of six. | Cleaner MCP surface. Agents discover and learn one tool instead of six. Less registration code. |
+| `update_board` | Audit for unused operations. The new model primarily uses `complete_flow` and `set_metadata`. Operations that serve the state machine (enter, skip, block, transition) become dead code after Phase 3. **Consider merging board tracking into the journal** — instead of two parallel tracking systems, the journal becomes the single source of truth for flow state. `update_board` simplifies to just `complete_flow` (analytics aggregation for DriftStore). | 558 lines with significant overlap with the journal. One tracking system is simpler than two. |
+| `init_workspace` | Remove cache prefix (was for prompt pipeline caching — not needed). Remove progress.md seeding (journal replaces this). Keep: dir creation, preflight checks, journal initialization. | Simplifies a 604-line file. Removes dead concerns from the pipeline era. |
+| `report_result` | Strip transition evaluation, convergence detection, wave result handling. Keep: record agent finished, store status + artifacts, update metrics. ~1,000+ lines → ~50 lines. | Most of the code serves the state machine. The new model needs only the recording function. |
+| `simulate_flow` | Evaluate: repurpose as runbook dry-run, or delete. If flows are gone, simulation has no target. | Dead tool after Phase 3 unless repurposed. |
 | `load_flow` | Simplify to `load_runbook` — parse markdown frontmatter YAML instead of flow YAML with fragment resolution. Or delete if the lead can just Read the runbook file directly. | Fragment inclusion, transition validation, state type resolution are all state-machine concerns. |
 
 ### P3 — Intelligent domain classification
