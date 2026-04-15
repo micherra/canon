@@ -75,8 +75,9 @@ For each of the 11 agent definitions:
 - `npm test` passes (including journal tests)
 
 **8. Hooks (1 check)**:
-- All 4 scripts exist and are executable: `post-commit-trailers.sh`, `completion-verify.sh`, `session-start-doc-check.sh`, `post-engineer-scribe.sh`
-- `hooks/canon-agent-teams/hooks.json` registers all 4 hooks with correct event types
+- All 5 scripts exist and are executable: `post-commit-trailers.sh`, `completion-verify.sh`, `session-start-doc-check.sh`, `session-start-kg-check.sh`, `post-engineer-scribe.sh`
+- `hooks/canon-agent-teams/hooks.json` registers all 5 hooks with correct event types
+- KG-check hook correctly detects: missing DB, stale DB (computed_at_commit ≠ HEAD), fresh DB
 
 **9. Domain skills (1 check)**:
 - 12 domain skill files exist under `skills/canon/references/`: backend-api, backend-data, frontend, testing, infrastructure, deprecation, authentication-security, migration-strategy, observability, error-handling, performance, devops-ci

@@ -9,7 +9,7 @@
 | phase1-04 | 1 | phase1-00 | skills/canon/runbooks/test-gap.md | Create test-gap runbook (no ship step) |
 | phase1-05 | 2 | Wave 1 | rules/*.md → skills/canon/references/, domain-primers/*.md → skills/canon/references/, 6 new domain skills, rules/agent-context-check.md | Register rules as skills, migrate domain primers, create 6 new domain skills (authentication-security, migration-strategy, observability, error-handling, performance, devops-ci), create agent-context-check rule |
 | phase1-06 | 2 | Wave 1 | mcp-server/src/features/orchestration/tools/orchestration-journal.ts | Orchestration journal tool (log_step + verify_completion, ~50-80 lines) |
-| phase1-07 | 2 | Wave 1 | hooks/canon-agent-teams/*.sh, hooks/canon-agent-teams/hooks.json | All hooks: PostCommit trailers, completion verify, SessionStart doc-check, SubagentStop scribe-queue |
+| phase1-07 | 2 | Wave 1 | hooks/canon-agent-teams/*.sh, hooks/canon-agent-teams/hooks.json | All hooks: PostCommit trailers, completion verify, SessionStart doc-check, SessionStart KG-check, SubagentStop scribe-queue |
 | phase1-08 | 3 | Wave 2 | agents/*.md (delete 4, create 2, modify 9) | Delete implementor+fixer+guide+chat, add engineer+planner (11 agents). All get maxTurns, permissionMode, memory, skills. |
 | phase1-09 | 3 | Wave 2 | CLAUDE.md | Agent-teams orchestration section (11 subsections). Inline dispatch for removed flows (review, security-audit, explore, adopt). |
 | phase1-10 | 4 | Wave 3 | VALIDATION-REPORT.md | Cross-artifact validation (10 check categories) |
@@ -61,6 +61,7 @@ These legacy flows are NOT converted to runbooks. CLAUDE.md's dispatch section h
 - `hooks/canon-agent-teams/post-commit-trailers.sh`
 - `hooks/canon-agent-teams/completion-verify.sh`
 - `hooks/canon-agent-teams/session-start-doc-check.sh`
+- `hooks/canon-agent-teams/session-start-kg-check.sh`
 - `hooks/canon-agent-teams/post-engineer-scribe.sh`
 - `agents/canon-engineer.md`
 - `agents/canon-planner.md`

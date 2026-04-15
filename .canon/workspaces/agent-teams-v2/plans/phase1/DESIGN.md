@@ -13,8 +13,8 @@ done_criteria:
     description: "CLAUDE.md contains Agent Teams Orchestration section with 12 subsections (pre-build gate + 11 orchestration subsections), gated by CANON_AGENT_TEAMS_MODE=on, with explicit flag boundary. Includes inline dispatch for 4 removed flows."
     testable: "Read CLAUDE.md. Confirm section exists with all 12 subsections including pre-build gate. Confirm inline dispatch table for review, security-audit, explore, adopt. Confirm legacy section annotated. Confirm flag boundary statement at top."
   - id: "dc-05"
-    description: "4 hook scripts exist and are registered: PostCommit trailers, completion verify, SessionStart doc-check, SubagentStop scribe-queue"
-    testable: "All 4 .sh files in hooks/canon-agent-teams/ exist, are executable, and hooks.json registers them."
+    description: "5 hook scripts exist and are registered: PostCommit trailers, completion verify, SessionStart doc-check, SessionStart KG-check, SubagentStop scribe-queue"
+    testable: "All 5 .sh files in hooks/canon-agent-teams/ exist, are executable, and hooks.json registers them."
   - id: "dc-06"
     description: "All rules referenced by agent skills: fields are registered as skills under skills/canon/references/"
     testable: "For each symlink in skills/canon/references/agent-*.md, verify it points to the corresponding rules/*.md file and is not broken."
@@ -112,10 +112,11 @@ The section is placed after the existing "Driving the State Machine" section and
 
 #### 7. Enforcement and automation hooks
 
-Four hook scripts:
+Five hook scripts:
 - `post-commit-trailers.sh` — PostCommit hook validating `Canon-Workflow` trailer presence.
 - `completion-verify.sh` — called at flow end. Invokes `verify_completion` from the journal tool. Exit 2 if steps or artifacts missing.
 - `session-start-doc-check.sh` — SessionStart hook. Compares HEAD against `.canon/last-scribe-commit`. Nudges lead if documentation may be stale.
+- `session-start-kg-check.sh` — SessionStart hook. Checks if `knowledge-graph.db` exists and is fresh (computed_at_commit matches HEAD). If missing or stale, instructs lead to run `codebase_graph` before proceeding. Without a populated KG, `infer_domains`, `get_file_context`, `graph_query`, and `semantic_search` return nothing — agents operate blind.
 - `post-engineer-scribe.sh` — SubagentStop hook. After `canon-engineer` completes, writes `pending-scribe.json` to workspace. Lead runs scribe before completing the flow.
 
 ### Canon alignment
