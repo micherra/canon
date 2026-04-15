@@ -592,6 +592,43 @@ Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. T
 
 ---
 
+## 4b. Parallel Workstream: MCP Tool Improvements
+
+Independent of the Phase 1–3 migration, several MCP tools should be improved to perform better in the "Canon as toolkit" model. These changes are backward-compatible — they improve existing tools without breaking the legacy path. Can be executed in parallel with any phase.
+
+### P0 — Batch mode for high-frequency tools
+
+| Tool | Change | Why |
+|------|--------|-----|
+| `get_principles` | Accept `file_paths: string[]` (array) in addition to `file_path: string`. Return deduplicated principles across all files. | The lead calls this before every spawn. For wave tasks with 5 files, that's 5 tool calls → 1 batch call. |
+| `get_file_context` | Accept `file_paths: string[]`. Return context for all files in one response. | Same rationale. Batch saves tool calls and round-trip latency. |
+
+**Backward-compatible:** existing single-file calls still work. The array parameter is additive.
+
+### P1 — Prepare tools for the new model
+
+| Tool | Change | Why |
+|------|--------|-----|
+| `init_workspace` | Add journal initialization — create `journal.json` when workspace is created. Add legacy workspace detection — warn if workspace has flow state but no journal. | Required for Phase 1 journal tool. The journal needs a workspace file. Legacy detection needed for Phase 3a flag flip safety. |
+| `report_result` | Audit and simplify. Strip transition evaluation, convergence detection, wave result handling. Keep board-update and artifact-validation. | ~1,000+ lines, much serving the state machine. Trim to what the new model needs. |
+| `record_agent_metrics` | Add `source` field: `"agent"` (called by agent directly) vs `"lead"` (lead reporting on behalf of subagent from self-reported metrics). | Distinguishes agent-reported vs lead-parsed metrics in analytics. |
+
+### P2 — Cleanup
+
+| Tool | Change | Why |
+|------|--------|-----|
+| `update_board` | Audit for unused operations. The new model primarily uses `complete_flow` and `set_metadata`. Operations that serve the state machine (enter, skip, block, transition) become dead code after Phase 3. Document which operations survive. | 558 lines — significant complexity. Knowing what survives guides Phase 3 deletion. |
+| `simulate_flow` | Evaluate: repurpose as runbook dry-run, or delete. If flows are gone, simulation has no target. Could validate runbook step coverage against legacy flow state lists. | Dead tool after Phase 3 unless repurposed. |
+| `load_flow` | Simplify to `load_runbook` — parse markdown frontmatter YAML instead of flow YAML with fragment resolution. Or delete if the lead can just Read the runbook file directly. | Fragment inclusion, transition validation, state type resolution are all state-machine concerns. |
+
+### P3 — Nice-to-have
+
+| Tool | Change | Why |
+|------|--------|-----|
+| `get_domain_skills` | New tool: given target file paths, return which domain skills are relevant based on file directory/layer. Automates skill naming in spawn prompts. | Optional convenience — lead can identify domains manually. Useful for consistency. |
+
+---
+
 ## 5. Validation Strategy
 
 ### How each phase proves it is complete
@@ -658,7 +695,7 @@ Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. T
 
 The following are explicitly NOT part of this migration:
 
-1. **Rewriting Canon's MCP tools.** The 38 MCP tools stay as-is. Their implementations, schemas, and behavior are unchanged. The migration only removes the scheduling machinery that called them.
+1. **Rewriting Canon's MCP tools beyond the parallel workstream.** The 38 MCP tools stay functionally unchanged. The parallel workstream (§4b) adds batch modes, simplifies state-machine-dependent tools, and prepares tools for the new model — but these are backward-compatible improvements, not rewrites. The migration itself (Phases 1–3) does not modify MCP tool implementations except adding the orchestration journal.
 
 2. **Modifying agent definitions.** Agent definitions in `agents/*.md` get `tools` allowlist updates in Phase 1 but no behavioral changes. Their prompt bodies, model selections, and role descriptions are unchanged.
 
@@ -676,4 +713,4 @@ The following are explicitly NOT part of this migration:
 
 9. **Upstream Claude Code changes.** The plan does not depend on Anthropic shipping new features (timeout parameter, path enforcement, compaction hooks). It works with Claude Code as it exists today. Mitigations for confirmed gaps use existing mechanisms.
 
-10. **Performance optimization of MCP tools.** If Claude-as-lead calling MCP tools is slower than the legacy pipeline calling them internally, that's a future optimization concern, not a migration blocker.
+10. **Performance optimization beyond §4b.** The parallel workstream covers batch modes and tool simplification. Deeper optimizations (caching, response compression, lazy loading) are deferred unless Phase 2 validation reveals a performance problem.
