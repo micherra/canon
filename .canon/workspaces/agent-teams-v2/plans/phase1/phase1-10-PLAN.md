@@ -100,14 +100,15 @@ Add `maxTurns`, `permissionMode`, `memory`, and `skills` to every agent:
 | canon-tester | 40 | acceptEdits | — | agent-test-the-contract, agent-test-sad-paths, tester-report-template, principle-loading |
 | canon-security | 25 | plan | — | agent-assume-hostile-input, security-checklist, principle-loading |
 | canon-scribe | 15 | acceptEdits | project | agent-context-sync, agent-missing-artifact, workspace-logging |
-| canon-shipper | 20 | auto | — | agent-artifacts-only, agent-template-required |
+| canon-shipper | 20 | acceptEdits | — | agent-artifacts-only, agent-template-required |
 | canon-learner | 25 | acceptEdits | project | agent-evidence-over-intuition, learner-dimensions, principle-format |
 | canon-writer | 25 | acceptEdits | — | principle-format, writer-worked-example |
 
-**Permission model** — three values, declarative, enforced by Claude Code:
+**Permission model** — two values, declarative, enforced by Claude Code:
 - `plan`: read-only. Agent cannot write files. For: researcher, architect, reviewer, security, planner.
-- `acceptEdits`: auto-approves file edits and common filesystem commands scoped to the working directory. For: engineer, tester, scribe, learner, writer.
-- `auto`: auto-mode classifier evaluates all tool calls including Bash. For: shipper (needs git/gh operations).
+- `acceptEdits`: auto-approves file edits and common filesystem commands (`mkdir`, `touch`, `rm`, `mv`, `cp`, `sed`) scoped to the working directory. All other Bash commands prompt. For: engineer, tester, scribe, shipper, learner, writer.
+
+Note: `auto` mode exists but requires Team/Enterprise/API plans (NOT available on Pro or Max per Claude Code docs). The plan uses `acceptEdits` exclusively so Canon works on all plans. When the lead session runs in auto mode, subagent `permissionMode` frontmatter is ignored — the classifier handles everything.
 
 This replaces the legacy `tool-profiles.ts` + `trust-resolver.ts` + `worktree-settings.ts` (~614 lines of runtime permission resolution). One YAML field per agent definition.
 
