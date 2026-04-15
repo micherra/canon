@@ -20,7 +20,7 @@ Create two runbooks for fix-loop flows that do not have a ship step. These flows
 
 #### 1. `test-gap.md`
 
-Read `flows/test-gap.md`. States: `scan` (single, canon-researcher), `write-tests` (single, canon-tester), `fix-impl` (single, canon-fixer), review-fix-loop fragment (review, fix-violations), `done` (terminal).
+Read `flows/test-gap.md`. States: `scan` (single, canon-researcher), `write-tests` (single, canon-tester), `fix-impl` (single, canon-engineer), review-fix-loop fragment (review, fix-violations), `done` (terminal).
 
 ```yaml
 name: "test-gap"
@@ -68,7 +68,7 @@ steps:
       fix-impl. If all passing, proceed to review.
 
   - id: "fix-impl"
-    agent: "canon-fixer"
+    agent: "canon-engineer"
     dispatch: "subagent"
     mcp_tools:
       - get_principles
@@ -97,13 +97,13 @@ steps:
     skip_when: null
     notes: |
       Review the test additions and any source fixes for Canon principle
-      compliance. If blocking violations found, spawn canon-fixer to
+      compliance. If blocking violations found, spawn canon-engineer to
       resolve, then re-review. Loop max 2 iterations.
 ```
 
 #### 2. `adopt.md`
 
-Read `flows/adopt.md`. States: `scan` (single, canon-researcher), `fix` (parallel-per, canon-fixer), `rescan` (single, canon-researcher), `done` (terminal).
+Read `flows/adopt.md`. States: `scan` (single, canon-researcher), `fix` (parallel-per, canon-engineer), `rescan` (single, canon-researcher), `done` (terminal).
 
 ```yaml
 name: "adopt"
@@ -133,7 +133,7 @@ steps:
       and skip remaining steps.
 
   - id: "fix"
-    agent: "canon-fixer"
+    agent: "canon-engineer"
     dispatch: "subagent"
     mcp_tools:
       - get_principles

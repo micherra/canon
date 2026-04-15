@@ -63,7 +63,7 @@ For each of the 11 agent definitions:
 **6. CLAUDE.md orchestration section (1 check)**:
 - Section `## Agent Teams Orchestration (CANON_AGENT_TEAMS_MODE=on)` exists
 - Legacy section annotated as `(CANON_AGENT_TEAMS_MODE=off)`
-- All 12 subsections present (Pre-Build Gate, Setup, MCP Tool Composition, Dispatch Framework, Journal Protocol, Post-Subagent Artifact Check, HITL Patterns, Post-Step Effects, Completion Checklist, Commit Provenance, Error Handling, flag boundary)
+- All 14 subsections present (Pre-Build Gate, Setup, MCP Tool Composition, Dispatch Framework, Journal Protocol, Post-Subagent Artifact Check, HITL Patterns, Post-Step Effects, Completion Checklist, Commit Provenance, Error Handling, flag boundary)
 - Includes inline dispatch table for 4 removed flows (review, security-audit, explore, adopt)
 - References all 5 runbooks by path
 

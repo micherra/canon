@@ -170,5 +170,5 @@ No tests — this is CLAUDE.md content. Validation is in phase1-12.
 
 - CLAUDE.md updated with agent-teams orchestration section
 - Legacy section annotated
-- All 11 subsections present with concrete guidance
+- All 14 subsections present with concrete guidance
 - Flag boundary explicit

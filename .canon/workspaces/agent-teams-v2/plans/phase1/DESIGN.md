@@ -10,8 +10,8 @@ done_criteria:
     description: "11 agent definitions with maxTurns, permissionMode, memory, and skills frontmatter. Engineer consolidation and planner addition complete. Guide and chat removed. All skill references resolve. 6 agents have memory: project."
     testable: "ls agents/canon-*.md returns 11 files. canon-implementor.md, canon-fixer.md, canon-guide.md, canon-chat.md absent. canon-engineer.md and canon-planner.md present. YAML frontmatter parses for all. Every skill name resolves to a file under skills/canon/references/."
   - id: "dc-04"
-    description: "CLAUDE.md contains Agent Teams Orchestration section with 12 subsections (pre-build gate + 11 orchestration subsections), gated by CANON_AGENT_TEAMS_MODE=on, with explicit flag boundary. Includes inline dispatch for 4 removed flows."
-    testable: "Read CLAUDE.md. Confirm section exists with all 12 subsections including pre-build gate. Confirm inline dispatch table for review, security-audit, explore, adopt. Confirm legacy section annotated. Confirm flag boundary statement at top."
+    description: "CLAUDE.md contains Agent Teams Orchestration section with 14 subsections (pre-build gate + 11 orchestration subsections), gated by CANON_AGENT_TEAMS_MODE=on, with explicit flag boundary. Includes inline dispatch for 4 removed flows."
+    testable: "Read CLAUDE.md. Confirm section exists with all 14 subsections including pre-build gate. Confirm inline dispatch table for review, security-audit, explore, adopt. Confirm legacy section annotated. Confirm flag boundary statement at top."
   - id: "dc-05"
     description: "5 hook scripts exist and are registered: PostCommit trailers, completion verify, SessionStart doc-check, SessionStart KG-check, SubagentStop scribe-queue"
     testable: "All 5 .sh files in hooks/canon-agent-teams/ exist, are executable, and hooks.json registers them."
@@ -44,7 +44,7 @@ Each runbook is a markdown file with YAML frontmatter at `skills/canon/runbooks/
 
 Runbook step structure:
 - `id`: matches legacy state name (traceability)
-- `agent`: which agent type to spawn (using the new 12-agent roster)
+- `agent`: which agent type to spawn (using the new 11-agent roster)
 - `dispatch`: `subagent` (sequential) or `team` (parallel wave)
 - `mcp_tools`: which Canon MCP tools the lead should call to compose context
 - `artifacts`: expected output paths
@@ -132,7 +132,7 @@ Five hook scripts:
 1. **Runbooks are markdown with YAML frontmatter, not executable** — consistent with Canon conventions (agents, principles, rules all use this format). No runtime engine, no parser. Claude reads them as guidance. (simplicity-first, patterns-need-justification)
 2. **5 runbooks, not 10** — simple flows (review-only, security-audit, explore, adopt) handled via CLAUDE.md inline dispatch. A 1-step runbook is ceremony without value. (simplicity-first)
 3. **Feature flag is CLAUDE.md-level in Phase 1** — no TypeScript reads the flag except the journal tool registration. (simplicity-first, externalize-configuration)
-4. **Engineer consolidation + planner addition = 13 agents** — delete 2 (implementor, fixer), create 2 (engineer, planner). Net zero agent count change. Engineer merges overlapping roles. Planner adds the missing "should we build this?" gate. (simplicity-first, refactoring-integrity)
+4. **Agent roster: 13 → 11** — delete 4 (implementor, fixer, guide, chat), create 2 (engineer, planner). Engineer merges overlapping code-writing roles. Planner adds the missing "should we build this?" gate. Guide and chat removed — lead handles natively. (simplicity-first, refactoring-integrity)
 5. **Skills delivered via symlinks, not copies** — rules stay in `rules/` as source of truth. Symlinks in `skills/canon/references/` make them discoverable as skills. No file duplication. (information-hiding)
 6. **The journal is the bridge between guidance and enforcement** — CLAUDE.md tells the lead what to do. The journal records what the lead actually did. The hook verifies the record. (explicit-contracts)
 7. **6 agents get memory: project** — planner, engineer, researcher, architect, scribe, learner. Reviewer excluded per agent-cold-review. Cross-session learning is a core capability, not a future enhancement. (information-hiding)

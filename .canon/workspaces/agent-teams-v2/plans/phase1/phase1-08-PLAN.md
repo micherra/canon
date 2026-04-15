@@ -11,6 +11,8 @@ files:
   - templates/planning-brief.md (new — planner output template)
   - agents/canon-implementor.md (delete)
   - agents/canon-fixer.md (delete)
+  - agents/canon-guide.md (delete)
+  - agents/canon-chat.md (delete)
   - agents/canon-researcher.md
   - agents/canon-architect.md
   - agents/canon-reviewer.md
@@ -19,8 +21,6 @@ files:
   - agents/canon-scribe.md
   - agents/canon-shipper.md
   - agents/canon-learner.md
-  - agents/canon-chat.md
-  - agents/canon-guide.md
   - agents/canon-writer.md
 principles:
   - least-privilege-access
@@ -43,9 +43,9 @@ Merge `canon-implementor` and `canon-fixer` into `canon-engineer`:
    - **tools**: union of both — `Read, Write, Edit, Bash, Glob, Grep, WebFetch, mcp__canon__semantic_search, mcp__canon__get_file_context, mcp__canon__graph_query, mcp__canon__codebase_graph, mcp__canon__get_messages, mcp__canon__write_implementation_summary`
    - **model**: sonnet
    - **maxTurns**: 50
-   - **permissionMode**: auto
+   - **permissionMode**: acceptEdits
    - **memory**: project
-   - **skills**: `agent-tdd-required, agent-minimal-fix, agent-fresh-context, agent-structured-triage, agent-simplify-before-extending, agent-context-check, principle-loading, status-protocol, backend-api, backend-data, deprecation, frontend, infrastructure, testing`
+   - **skills**: `agent-tdd-required, agent-minimal-fix, agent-fresh-context, agent-structured-triage, agent-simplify-before-extending, agent-context-check, principle-loading, status-protocol` (domain skills loaded on-demand by lead, NOT preloaded)
    - **Body**: Merge both instruction sets. The agent operates in two modes selected by spawn prompt context:
      - **Implementation mode** (spawned with a task plan): follows the implementor's process (read plan → load principles → implement → test → commit)
      - **Fix mode** (spawned with specific issues to fix): follows the fixer's process (understand issue → load context → minimal fix → verify → commit)
@@ -129,7 +129,7 @@ Where agent bodies contain `Read ${CLAUDE_PLUGIN_ROOT}/rules/agent-...` instruct
 
 ### Canon principles to apply
 
-- **least-privilege-access**: `permissionMode: plan` for read-only roles. `auto` only for roles that write files.
+- **least-privilege-access**: `permissionMode: plan` for read-only roles. `acceptEdits` for roles that write files. No `auto` mode (requires Team/Enterprise plans).
 - **simplicity-first**: Two agents become one. Fewer definitions to maintain.
 - **refactoring-integrity**: The engineer consolidation is a genuine merge of overlapping roles, not a cosmetic rename.
 
@@ -139,12 +139,12 @@ No new tests. Existing tests should pass since agent definitions are configurati
 
 ### Verify
 
-1. `agents/canon-engineer.md` exists with union tool list, correct skills, maxTurns 50, permissionMode auto
+1. `agents/canon-engineer.md` exists with union tool list, correct skills (no domain primers), maxTurns 50, permissionMode acceptEdits, memory project
 2. `agents/canon-implementor.md` and `agents/canon-fixer.md` are deleted
-3. All 12 agent files have `maxTurns`, `permissionMode`, and `skills` in YAML frontmatter
+3. All 11 agent files have `maxTurns`, `permissionMode`, `memory` (where applicable), and `skills` in YAML frontmatter
 4. YAML frontmatter parses for all agents: `for f in agents/canon-*.md; do python3 -c "import yaml; yaml.safe_load(open('$f').read().split('---')[1])"; done`
 5. No runtime `Read ${CLAUDE_PLUGIN_ROOT}/rules/` instructions remain in agent bodies
-6. `agents/.claude/CLAUDE.md` roster table updated to show 12 agents with canon-engineer
+6. `agents/.claude/CLAUDE.md` roster table updated to show 11 agents (canon-engineer, canon-planner present; canon-implementor, canon-fixer, canon-guide, canon-chat absent)
 7. `npm run build` passes
 8. `npm test` passes
 

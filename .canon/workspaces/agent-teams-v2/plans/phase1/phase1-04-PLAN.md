@@ -24,7 +24,7 @@ Create two medium-tier runbooks. Both include `dispatch: team` wave steps for pa
 Read `flows/feature.md` and its included fragments. The full state sequence is:
 - `design` (single, canon-architect, approval_gate)
 - `checkpoint` (user-checkpoint fragment — approval/revise)
-- `implement` (wave, canon-implementor)
+- `implement` (wave, canon-engineer)
 - `context-sync` (single, canon-scribe)
 - `verify` / `fix-impl` (verify-fix-loop fragment — tester + fixer loop)
 - `review` / `fix-violations` (review-fix-loop fragment)
@@ -64,7 +64,7 @@ steps:
       Write affected files to board metadata via update_board set_metadata.
 
   - id: "implement"
-    agent: "canon-implementor"
+    agent: "canon-engineer"
     dispatch: "team"
     mcp_tools:
       - get_principles
@@ -109,7 +109,7 @@ steps:
     notes: |
       Write integration tests and fill coverage gaps. Start with Coverage
       Notes from implementation summaries. Read plan files for risk
-      mitigations sections. If tests reveal source bugs, spawn canon-fixer
+      mitigations sections. If tests reveal source bugs, spawn canon-engineer
       (test-fix mode), then re-verify. Loop max 2 iterations.
 
   - id: "review"
@@ -128,7 +128,7 @@ steps:
     notes: |
       Review changes via git diff. Cross-check against implementation
       summaries. Read DESIGN.md and INDEX.md for drift-from-plan detection.
-      If blocking violations, spawn canon-fixer (violation-fix mode), then
+      If blocking violations, spawn canon-engineer (violation-fix mode), then
       re-review. Loop max 3 iterations. Persist review via store_pr_review.
 
   - id: "pre-launch-check"
@@ -177,7 +177,7 @@ steps:
 Read `flows/refactor.md` and its included fragments. The full state sequence is:
 - `analyze` (single, canon-researcher, role: refactor-scope)
 - `checkpoint` (user-checkpoint — approval/revise)
-- `implement` (wave, canon-implementor)
+- `implement` (wave, canon-engineer)
 - `verify` / `fix-impl` (verify-fix-loop)
 - `context-sync` (single, canon-scribe)
 - `review` / `fix-violations` (review-fix-loop)
@@ -211,7 +211,7 @@ steps:
       Present analysis to user for approval before implementation.
 
   - id: "implement"
-    agent: "canon-implementor"
+    agent: "canon-engineer"
     dispatch: "team"
     mcp_tools:
       - get_principles
@@ -240,7 +240,7 @@ steps:
     notes: |
       Run full test suite to verify refactoring preserved behavior. Compare
       test results against pre-refactor baseline. If failures, spawn
-      canon-fixer to restore correct behavior (fix source, not tests).
+      canon-engineer to restore correct behavior (fix source, not tests).
       Loop max 2 iterations.
 
   - id: "context-sync"

@@ -11,14 +11,14 @@
 | phase1-06 | 2 | Wave 1 | mcp-server/src/features/orchestration/tools/orchestration-journal.ts | Orchestration journal tool (log_step + verify_completion, ~50-80 lines) |
 | phase1-07 | 2 | Wave 1 | hooks/canon-agent-teams/*.sh, hooks/canon-agent-teams/hooks.json | All hooks: PostCommit trailers, completion verify, SessionStart doc-check, SessionStart KG-check, SubagentStop scribe-queue |
 | phase1-08 | 3 | Wave 2 | agents/*.md (delete 4, create 2, modify 9) | Delete implementor+fixer+guide+chat, add engineer+planner (11 agents). All get maxTurns, permissionMode, memory, skills. |
-| phase1-09 | 3 | Wave 2 | CLAUDE.md | Agent-teams orchestration section (11 subsections). Inline dispatch for removed flows (review, security-audit, explore, adopt). |
+| phase1-09 | 3 | Wave 2 | CLAUDE.md | Agent-teams orchestration section (14 subsections). Inline dispatch for removed flows (review, security-audit, explore, adopt). |
 | phase1-10 | 4 | Wave 3 | VALIDATION-REPORT.md | Cross-artifact validation (10 check categories) |
 
 ### Wave Summary
 
 **Wave 1** (5 tasks): Define runbook format, then create all 5 runbook playbooks in parallel. Each runbook includes context-sync (scribe) and learn (learner) as final steps.
 
-**Wave 2** (3 tasks, parallel): Register rules as skills, build orchestration journal tool, write all enforcement hooks (4 scripts). No dependencies between these three.
+**Wave 2** (3 tasks, parallel): Register rules as skills, build orchestration journal tool, write all enforcement hooks (5 scripts). No dependencies between these three.
 
 **Wave 3** (2 tasks, parallel): Update all agent definitions (engineer consolidation + frontmatter + skills) and write CLAUDE.md orchestration section. CLAUDE.md includes inline dispatch for simple intents (review, security-audit, explore, adopt) that don't need runbooks.
 

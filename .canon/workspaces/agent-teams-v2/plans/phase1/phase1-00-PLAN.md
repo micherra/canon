@@ -104,7 +104,7 @@ After all steps complete, run the completion checklist:
 ### Canon principles to apply
 
 - **agent-plans-are-prompts**: The template is self-documenting. An implementor reads only this file and produces a conformant runbook.
-- **agent-design-before-code**: This template defines the contract for all 10 runbooks. Get it right before Wave 1 proceeds.
+- **agent-design-before-code**: This template defines the contract for all 5 runbooks. Get it right before Wave 1 proceeds.
 - **patterns-need-justification**: The markdown-with-YAML-frontmatter pattern is justified by consistency with Canon's existing conventions (agents, principles, rules, templates all use this format).
 
 ### Tests to write

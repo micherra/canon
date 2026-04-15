@@ -18,7 +18,7 @@ domains:
 Create `skills/canon/runbooks/fast-path.md` conforming to `_template.md`. This is the simplest runbook — single-agent, no research, no architecture, no waves.
 
 1. Read `flows/fast-path.md` for the legacy state machine definition. The flow has these states:
-   - `execute` (single, canon-implementor) — implement, test, self-review, commit
+   - `execute` (single, canon-engineer) — implement, test, self-review, commit
    - `pre-launch-check` (single, no agent) — run discovered quality gates
    - `ship` (single, canon-shipper) — synthesize PR description
    - `learn` (single, canon-learner, skip_when: learn_gate_not_passed) — auto-trigger pattern analysis
@@ -34,7 +34,7 @@ tier: "small"
 
 steps:
   - id: "execute"
-    agent: "canon-implementor"
+    agent: "canon-engineer"
     dispatch: "subagent"
     mcp_tools:
       - get_principles

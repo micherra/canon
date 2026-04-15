@@ -203,7 +203,7 @@ This is **more resilient** than the legacy pipeline:
 3. **Native coordination.** Subagents for sequential work, agent teams for parallel work. No custom wave plumbing, no custom message channel, no custom HITL vocabulary.
 4. **Canon's value is untouched.** Principles, drift, KG, artifacts, metrics, commit provenance, file claims — all preserved as MCP tools. What's deleted is only the scheduling machinery.
 5. **Self-healing context.** Agents self-serve missing context via MCP tools. Skills preload critical rules. Three independent context channels vs. one pipeline.
-5. **Agent definitions work as-is.** All 13 agent defs are valid subagent and teammate types. The `tools` allowlist is honored in both paths per [Claude Code docs](https://code.claude.com/docs/en/agent-teams).
+5. **Agent definitions work as-is.** All 11 agent defs are valid subagent and teammate types. The `tools` allowlist is honored in both paths per [Claude Code docs](https://code.claude.com/docs/en/agent-teams).
 
 ### 2.7 Orchestration journal (the lead's checklist)
 
@@ -421,7 +421,7 @@ The migration has three phases. Phase 1 adds guidance (no deletions, no behavior
 | Feature flag | Environment variable `CANON_AGENT_TEAMS_MODE` | `off` (default): legacy `drive_flow` path unchanged. `on`: Claude reads runbooks, calls MCP tools, logs to journal, spawns agents natively. |
 
 **Exit criteria:**
-- All 10 runbooks written and reviewed.
+- All 5 runbooks written and reviewed.
 - CLAUDE.md orchestration section reviewed.
 - Agent definitions carry `tools` allowlists.
 - Feature flag wiring: when `off`, `drive_flow` path is byte-identical to today.
@@ -673,7 +673,7 @@ The lead uses this in the spawn prompt: `"Relevant domain skills: backend-api, a
 
 **Phase 1 (Orchestration Guidance):** purely additive — validated by review, not testing.
 
-- Human review of all 10 runbooks against their legacy flow counterparts. Each runbook must cover every state in its legacy flow, including HITL gates, wave annotations, and expected artifacts.
+- Human review of all 5 runbooks against their legacy flow counterparts. Each runbook must cover every state in its legacy flow, including HITL gates, wave annotations, and expected artifacts.
 - Human review of CLAUDE.md orchestration section. Must cover: MCP tool composition, dispatch framework (subagent vs team), HITL patterns, post-step effects, completion checklist, commit provenance convention.
 - `npm run build` and `npm test` pass with zero changes to existing code (Phase 1 adds files only).
 - Manual spot check: with flag `off`, run one legacy flow and confirm identical behavior.
@@ -720,7 +720,7 @@ The lead uses this in the spawn prompt: `"Relevant domain skills: backend-api, a
 | **Claude doesn't consistently follow orchestration guidance.** The lead skips MCP tool calls, forgets post-step effects, or doesn't follow the runbook. | HIGH | MEDIUM | CLAUDE.md instructions are authoritative. Hooks enforce artifacts (`TaskCompleted`). Post-flow audit: `update_board complete_flow` validates metrics were recorded. Consistency testing in Phase 2 catches systematic omissions. |
 | **Agent teams is experimental and may change.** The `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` flag may be renamed, behavior may change, or the feature may be deprecated. | HIGH | LOW | Feature flag gating isolates Canon from upstream changes. If agent teams breaks, fall back to subagent-only mode (sequential flows still work; wave parallelism degrades to sequential). Monitor Claude Code changelog. |
 | **The plan may have missed integrations.** The 28-gap audit is thorough but not provably exhaustive. New integrations may have landed since the audit. | MEDIUM | MEDIUM | Phase 2 validation catches functional gaps. Re-audit checkpoint: before Phase 3 deletion, re-run the integration comparison between legacy output and Claude-as-lead output. |
-| **Agent definitions may restrict MCP access unintentionally.** If an agent def specifies a `tools` allowlist that omits MCP tools, the subagent loses Canon MCP access. Must ensure agent defs either omit `tools` (inherit all) or include `mcpServers: [canon]` alongside restricted tool lists. | LOW | MEDIUM | Audit all 13 agent definitions in Phase 1. For roles with restricted `tools`, add `mcpServers: [canon]` to preserve MCP access. Test each role's MCP access during Phase 2 validation. |
+| **Agent definitions may restrict MCP access unintentionally.** If an agent def specifies a `tools` allowlist that omits MCP tools, the subagent loses Canon MCP access. Must ensure agent defs either omit `tools` (inherit all) or include `mcpServers: [canon]` alongside restricted tool lists. | LOW | MEDIUM | Audit all 11 agent definitions in Phase 1. For roles with restricted `tools`, add `mcpServers: [canon]` to preserve MCP access. Test each role's MCP access during Phase 2 validation. |
 | **Context window pressure during long flows.** Each spawn cycle adds prompt + response to the lead's context. Epic flows with many waves may exhaust the lead's context window. | MEDIUM | LOW | Context compaction is automatic in Claude Code. Lead persists critical state to workspace artifacts (not just conversation). Phase 2 context pressure test validates this explicitly. |
 | **One team per session limits flow composition.** Agent teams docs: "a lead can only manage one team at a time." Flows that need multiple teams (e.g., epic with research team → implementation team) must tear down and rebuild. | LOW | HIGH | Documented in CLAUDE.md: "Clean up the current team before starting a new one." The lead tears down between phases. This matches the legacy model (one wave at a time). |
 | **No hard abort for stuck agents.** Experiment 11/14 confirmed: no timeout parameter, graceful shutdown only for teammates. | LOW | LOW | Prompt-based budgets. Lead monitors duration. For teammates: graceful shutdown request. Stream idle timeout (~100s) catches stalled agents. |
