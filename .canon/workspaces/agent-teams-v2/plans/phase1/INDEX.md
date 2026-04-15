@@ -10,7 +10,7 @@
 | phase1-05 | 2 | Wave 1 | rules/*.md → skills/canon/references/, rules/agent-context-check.md | Register rules as skills, create agent-context-check rule |
 | phase1-06 | 2 | Wave 1 | mcp-server/src/features/orchestration/tools/orchestration-journal.ts | Orchestration journal tool (log_step + verify_completion, ~50-80 lines) |
 | phase1-07 | 2 | Wave 1 | hooks/canon-agent-teams/*.sh, hooks/canon-agent-teams/hooks.json | All hooks: PostCommit trailers, completion verify, SessionStart doc-check, SubagentStop scribe-queue |
-| phase1-08 | 3 | Wave 2 | agents/*.md (delete 2, create 2, modify 11) | Engineer consolidation + new canon-planner + all agent frontmatter (maxTurns, permissionMode, memory, skills) |
+| phase1-08 | 3 | Wave 2 | agents/*.md (delete 4, create 2, modify 9) | Delete implementor+fixer+guide+chat, add engineer+planner (11 agents). All get maxTurns, permissionMode, memory, skills. |
 | phase1-09 | 3 | Wave 2 | CLAUDE.md | Agent-teams orchestration section (11 subsections). Inline dispatch for removed flows (review, security-audit, explore, adopt). |
 | phase1-10 | 4 | Wave 3 | VALIDATION-REPORT.md | Cross-artifact validation (10 check categories) |
 
@@ -65,15 +65,17 @@ These legacy flows are NOT converted to runbooks. CLAUDE.md's dispatch section h
 - `agents/canon-engineer.md`
 - `agents/canon-planner.md`
 
-**Modified files (13):**
-- `CLAUDE.md` — add agent-teams orchestration section, annotate legacy section
-- `agents/.claude/CLAUDE.md` — update roster (12 agents, not 13)
+**Modified files (11):**
+- `CLAUDE.md` — add agent-teams orchestration section (including guide-dashboards content), annotate legacy section
+- `agents/.claude/CLAUDE.md` — update roster (11 agents)
 - `hooks/canon-agent-teams/hooks.json` — register 4 new hook scripts
-- 10 × `agents/canon-*.md` — add maxTurns, permissionMode, skills
+- 9 × `agents/canon-*.md` — add maxTurns, permissionMode, memory, skills
 
-**Deleted files (2):**
+**Deleted files (4):**
 - `agents/canon-implementor.md` (replaced by canon-engineer)
 - `agents/canon-fixer.md` (replaced by canon-engineer)
+- `agents/canon-guide.md` (lead handles via MCP tools directly)
+- `agents/canon-chat.md` (lead handles natively; planner covers structured evaluation)
 
 **New TypeScript (1 file, ~50-80 lines):**
 - `mcp-server/src/features/orchestration/tools/orchestration-journal.ts`

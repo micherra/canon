@@ -41,8 +41,8 @@ For each agent definition's `skills:` frontmatter list:
 - Verify the named skill exists as a file under `skills/canon/references/` (either directly or via symlink from `rules/`)
 - Report any unresolvable skill names
 
-**4. Agent definition consistency (13 checks)**:
-For each of the 13 agent definitions:
+**4. Agent definition consistency (11 checks)**:
+For each of the 11 agent definitions:
 - YAML frontmatter parses correctly
 - Has `maxTurns` (number), `permissionMode` (valid enum), `skills` (list)
 - Has `memory` field where expected (planner, engineer, researcher, architect, scribe, learner = project; others = absent)
@@ -54,8 +54,11 @@ For each of the 13 agent definitions:
 - `agents/canon-planner.md` exists with opus model and plan permissionMode
 - `agents/canon-implementor.md` does not exist
 - `agents/canon-fixer.md` does not exist
-- `agents/.claude/CLAUDE.md` roster shows 13 agents
+- `agents/canon-guide.md` does not exist
+- `agents/canon-chat.md` does not exist
+- `agents/.claude/CLAUDE.md` roster shows 11 agents
 - `templates/planning-brief.md` exists
+- Guide-dashboards content present in CLAUDE.md orchestration section
 
 **6. CLAUDE.md orchestration section (1 check)**:
 - Section `## Agent Teams Orchestration (CANON_AGENT_TEAMS_MODE=on)` exists

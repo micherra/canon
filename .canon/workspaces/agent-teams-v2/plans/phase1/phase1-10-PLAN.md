@@ -31,7 +31,7 @@ domains: []
 
 ### Action
 
-Three changes to agent definitions:
+Four changes to agent definitions:
 
 #### A. Engineer consolidation
 
@@ -78,7 +78,15 @@ Create `agents/canon-planner.md`:
 
 **New template**: Create `templates/planning-brief.md` with sections: Problem Statement, Target Users, Acceptance Criteria, Alternatives Considered, Recommended Approach, Open Questions, Value Assessment.
 
-#### B. Frontmatter updates for all 13 agents
+#### A3. Remove canon-guide and canon-chat
+
+Delete `agents/canon-guide.md` and `agents/canon-chat.md`.
+
+**Rationale — canon-guide**: The lead session has full Canon MCP access (`get_principles`, `list_principles`, `get_compliance`, `get_drift_report`). When the user asks "what principles apply to auth?" the lead calls MCP tools directly. Spawning a subagent to do what the lead can do itself is overhead. Move the `guide-dashboards` reference content into the CLAUDE.md orchestration section (phase1-09) so the lead can render status dashboards natively.
+
+**Rationale — canon-chat**: Claude handles conversation natively. The planner now covers the structured "should we build this?" evaluation. Chat's remaining purpose (casual discussion, brainstorming) doesn't justify a dedicated agent definition — the lead does this in its main conversation.
+
+#### B. Frontmatter updates for all 11 agents
 
 Add `maxTurns`, `permissionMode`, `memory`, and `skills` to every agent:
 
@@ -94,8 +102,6 @@ Add `maxTurns`, `permissionMode`, `memory`, and `skills` to every agent:
 | canon-scribe | 15 | auto | project | agent-context-sync, agent-missing-artifact, workspace-logging |
 | canon-shipper | 20 | auto | — | agent-artifacts-only, agent-template-required |
 | canon-learner | 25 | auto | project | agent-evidence-over-intuition, learner-dimensions, principle-format |
-| canon-chat | 30 | plan | — | (no role-specific skills beyond agent-context-check + status-protocol) |
-| canon-guide | 20 | plan | — | guide-dashboards |
 | canon-writer | 25 | auto | — | principle-format, writer-worked-example |
 
 **Memory rationale**: Five agents get `memory: project` for cross-session learning:
@@ -134,7 +140,7 @@ No new tests. Existing tests should pass since agent definitions are configurati
 
 ### Done when
 
-- 13 agent definitions (delete 2 old, create 2 new, modify 11) with complete frontmatter
+- 11 agent definitions (delete 4: implementor, fixer, guide, chat; create 2: engineer, planner; modify 9) with complete frontmatter
 - canon-engineer merges both instruction sets with dual-mode operation
 - All skills in the preload map are referenced
 - All runtime Read instructions for rules removed
