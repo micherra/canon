@@ -1,20 +1,20 @@
 ---
 done_criteria:
   - id: "dc-01"
-    description: "10 runbook playbooks exist at skills/canon/runbooks/{flow-name}.md, each covering every non-terminal state in its legacy flow definition (including fragment-expanded states)"
-    testable: "For each runbook, compare step IDs against the expanded state list from the corresponding flows/*.md + included fragments. Zero missing states."
+    description: "5 runbook playbooks exist at skills/canon/runbooks/{flow-name}.md (fast-path, feature, epic, migrate, test-gap), each covering every non-terminal state in its legacy flow definition (including fragment-expanded states). 4 simple flows (review-only, security-audit, explore, adopt) handled via CLAUDE.md inline dispatch."
+    testable: "ls skills/canon/runbooks/*.md returns 5 runbooks + _template.md + _README.md. For each runbook, compare step IDs against the expanded state list from the corresponding flows/*.md + included fragments. Zero missing states."
   - id: "dc-02"
     description: "Orchestration journal MCP tool exists with log_step and verify_completion, registered behind CANON_AGENT_TEAMS_MODE=on"
     testable: "npm run build passes. npm test passes. Tool list inspection with flag on shows log_step and verify_completion. With flag off, tools are absent."
   - id: "dc-03"
-    description: "12 agent definitions (engineer consolidation complete) with maxTurns, permissionMode, and skills frontmatter. All skill references resolve."
-    testable: "ls agents/canon-*.md returns 12 files. canon-implementor.md and canon-fixer.md absent. YAML frontmatter parses for all. Every skill name in skills: field resolves to a file under skills/canon/references/."
+    description: "13 agent definitions (engineer consolidation + planner addition complete) with maxTurns, permissionMode, memory, and skills frontmatter. All skill references resolve. 6 agents have memory: project."
+    testable: "ls agents/canon-*.md returns 13 files. canon-implementor.md and canon-fixer.md absent. canon-engineer.md and canon-planner.md present. YAML frontmatter parses for all. Every skill name in skills: field resolves to a file under skills/canon/references/."
   - id: "dc-04"
-    description: "CLAUDE.md contains Agent Teams Orchestration section with all 11 subsections, gated by CANON_AGENT_TEAMS_MODE=on, with explicit flag boundary"
-    testable: "Read CLAUDE.md. Confirm section exists with all 11 subsections. Confirm legacy section annotated. Confirm flag boundary statement at top."
+    description: "CLAUDE.md contains Agent Teams Orchestration section with 12 subsections (pre-build gate + 11 orchestration subsections), gated by CANON_AGENT_TEAMS_MODE=on, with explicit flag boundary. Includes inline dispatch for 4 removed flows."
+    testable: "Read CLAUDE.md. Confirm section exists with all 12 subsections including pre-build gate. Confirm inline dispatch table for review, security-audit, explore, adopt. Confirm legacy section annotated. Confirm flag boundary statement at top."
   - id: "dc-05"
-    description: "PostCommit trailer hook and completion verification hook exist and are registered"
-    testable: "hooks/canon-agent-teams/post-commit-trailers.sh and completion-verify.sh exist, are executable, and hooks.json registers them."
+    description: "4 hook scripts exist and are registered: PostCommit trailers, completion verify, SessionStart doc-check, SubagentStop scribe-queue"
+    testable: "All 4 .sh files in hooks/canon-agent-teams/ exist, are executable, and hooks.json registers them."
   - id: "dc-06"
     description: "All rules referenced by agent skills: fields are registered as skills under skills/canon/references/"
     testable: "For each symlink in skills/canon/references/agent-*.md, verify it points to the corresponding rules/*.md file and is not broken."
@@ -38,9 +38,9 @@ done_criteria:
 
 ### Approach
 
-#### 1. Runbook playbooks (10 files + schema)
+#### 1. Runbook playbooks (5 files + template)
 
-Each runbook is a YAML file at `skills/canon/runbooks/{flow-name}.md`. A canonical schema (`_template.md`) defines every field so parallel implementors produce consistent output.
+Each runbook is a markdown file with YAML frontmatter at `skills/canon/runbooks/{flow-name}.md` — consistent with Canon's convention for agents, principles, and rules. A canonical template (`_template.md`) defines the format so parallel implementors produce consistent output. Four simple flows (review-only, security-audit, explore, adopt) are handled via inline dispatch in CLAUDE.md — they don't need runbooks.
 
 Runbook step structure:
 - `id`: matches legacy state name (traceability)
@@ -88,21 +88,27 @@ Per the skills research, 21 rules and 6 references are preloaded into agent defi
 
 **Domain primers**: all 6 primers (~1,200 tokens total) preloaded into `canon-engineer` and `canon-architect`. These are task-domain-agnostic agents that work across all domains.
 
-#### 5. CLAUDE.md orchestration section
+#### 5. New canon-planner agent
 
-Eleven subsections covering: setup, MCP tool composition, dispatch framework, journal protocol, post-subagent artifact check, HITL patterns, post-step effects, completion checklist, commit provenance, error handling, and the explicit flag boundary.
+A new agent that the lead spawns before build flows when the request is vague, assumption-heavy, or lacks clear acceptance criteria. The planner clarifies requirements, challenges assumptions, evaluates alternatives, and assesses value proportionality. Produces a structured brief using a new `planning-brief.md` template. Uses `model: opus`, `permissionMode: plan`, `memory: project`.
+
+#### 6. CLAUDE.md orchestration section
+
+Twelve subsections: pre-build gate (spawn planner when request isn't ready), setup, MCP tool composition, dispatch framework, journal protocol, post-subagent artifact check, HITL patterns, post-step effects, completion checklist, commit provenance, error handling, and the explicit flag boundary. Also includes inline dispatch table for 4 removed flows (review, security-audit, explore, adopt).
 
 The section is placed after the existing "Driving the State Machine" section and gated by an explicit flag boundary statement. The existing section is annotated as `(CANON_AGENT_TEAMS_MODE=off)`.
 
-#### 6. Enforcement hooks
+#### 7. Enforcement and automation hooks
 
-Two new hook scripts:
-- `post-commit-trailers.sh` — PostCommit hook validating `Canon-Workflow` trailer presence. Warns on missing trailers (PostCommit cannot block retroactively).
-- `completion-verify.sh` — called by the lead at flow end. Invokes `verify_completion` from the journal tool. Exit 2 if steps or artifacts missing.
+Four hook scripts:
+- `post-commit-trailers.sh` — PostCommit hook validating `Canon-Workflow` trailer presence.
+- `completion-verify.sh` — called at flow end. Invokes `verify_completion` from the journal tool. Exit 2 if steps or artifacts missing.
+- `session-start-doc-check.sh` — SessionStart hook. Compares HEAD against `.canon/last-scribe-commit`. Nudges lead if documentation may be stale.
+- `post-engineer-scribe.sh` — SubagentStop hook. After `canon-engineer` completes, writes `pending-scribe.json` to workspace. Lead runs scribe before completing the flow.
 
 ### Canon alignment
 
-- **simplicity-first** — Runbooks are flat YAML. The journal is ~50 lines. No new runtime engine.
+- **simplicity-first** — Runbooks are markdown with YAML frontmatter. The journal is ~50 lines. No new runtime engine.
 - **information-hiding** — Each runbook encapsulates one flow's knowledge. Each agent definition encapsulates one role's skills. The lead doesn't need to understand legacy state transitions.
 - **least-privilege-access** — `permissionMode: plan` for read-only roles, `auto` only for roles that write. Agent tool lists are minimal per role.
 - **externalize-configuration** — Feature flag is an env var. Runbook selection is data-driven. Skills are declarative frontmatter.
@@ -110,14 +116,16 @@ Two new hook scripts:
 
 ### Decisions made
 
-1. **Runbooks are YAML playbooks, not executable** — no runtime engine, no parser. Claude reads them as guidance. (simplicity-first)
-2. **Feature flag is CLAUDE.md-level in Phase 1** — no TypeScript reads the flag except the journal tool registration. The flag determines which CLAUDE.md section the lead follows. (simplicity-first, externalize-configuration)
-3. **Engineer consolidation in Phase 1, not deferred** — the consolidation is needed for the skills preload map to be correct (can't preload implementation + fix skills into two separate agents without duplication). (simplicity-first)
-4. **Skills delivered via symlinks, not copies** — rules stay in `rules/` as source of truth. Symlinks in `skills/canon/references/` make them discoverable as skills. No file duplication. (information-hiding)
-5. **The journal is the bridge between guidance and enforcement** — CLAUDE.md tells the lead what to do. The journal records what the lead actually did. The hook verifies the record. Three layers working together. (explicit-contracts implied)
-6. **All 6 domain primers preloaded into engineer + architect** — ~1,200 tokens is trivial. Eliminates runtime Read calls and conditional primer loading. (simplicity-first)
-7. **Runbook step IDs match legacy state names** — direct traceability for Phase 2 validation. (explicit-contracts)
-8. **agent-context-check is a preloaded skill, not an instruction body change** — delivers the self-serve context behavior without modifying agent instruction bodies. (information-hiding)
+1. **Runbooks are markdown with YAML frontmatter, not executable** — consistent with Canon conventions (agents, principles, rules all use this format). No runtime engine, no parser. Claude reads them as guidance. (simplicity-first, patterns-need-justification)
+2. **5 runbooks, not 10** — simple flows (review-only, security-audit, explore, adopt) handled via CLAUDE.md inline dispatch. A 1-step runbook is ceremony without value. (simplicity-first)
+3. **Feature flag is CLAUDE.md-level in Phase 1** — no TypeScript reads the flag except the journal tool registration. (simplicity-first, externalize-configuration)
+4. **Engineer consolidation + planner addition = 13 agents** — delete 2 (implementor, fixer), create 2 (engineer, planner). Net zero agent count change. Engineer merges overlapping roles. Planner adds the missing "should we build this?" gate. (simplicity-first, refactoring-integrity)
+5. **Skills delivered via symlinks, not copies** — rules stay in `rules/` as source of truth. Symlinks in `skills/canon/references/` make them discoverable as skills. No file duplication. (information-hiding)
+6. **The journal is the bridge between guidance and enforcement** — CLAUDE.md tells the lead what to do. The journal records what the lead actually did. The hook verifies the record. (explicit-contracts)
+7. **6 agents get memory: project** — planner, engineer, researcher, architect, scribe, learner. Reviewer excluded per agent-cold-review. Cross-session learning is a core capability, not a future enhancement. (information-hiding)
+8. **All 6 domain primers preloaded into engineer + architect** — ~1,200 tokens is trivial. Eliminates runtime Read calls and conditional primer loading. (simplicity-first)
+9. **Scribe/learner automated via hooks** — SessionStart doc-check, SubagentStop scribe-queue, completion-verify ensures both ran. Not just runbook guidance — hook enforcement. (explicit-contracts)
+10. **agent-context-check is a preloaded skill, not an instruction body change** — delivers the self-serve context behavior without modifying agent instruction bodies. (information-hiding)
 
 ### Open questions for user
 
