@@ -139,10 +139,10 @@ A concrete example of `feature` flow (4–10 file feature):
 4. **Claude spawns** a `canon-researcher` subagent. The researcher has Canon MCP access via its `tools` allowlist and calls `semantic_search`, `graph_query` directly. Returns a research synthesis artifact.
 5. **Claude spawns** a `canon-architect` subagent with the research synthesis as upstream context. The architect queries the knowledge graph, designs the approach, produces a plan index with wave assignments.
 6. **Claude presents** the plan to the user for approval (native HITL). User approves.
-7. **Claude creates an agent team** for the implementation wave. Spawns N `canon-implementor` teammates (one per task from the plan index). Teammates self-coordinate via shared task list and Mailbox. `TaskCompleted` hooks enforce artifact production.
+7. **Claude creates an agent team** for the implementation wave. Spawns N `canon-engineer` teammates in implementation mode (one per task from the plan index). Teammates self-coordinate via shared task list and Mailbox. `TaskCompleted` hooks enforce artifact production.
 8. **Claude merges** worktrees after the wave completes. Runs inter-wave gates if configured.
 9. **Claude spawns** a `canon-reviewer` subagent. Returns a review verdict.
-10. **If verdict is not clean**, Claude spawns a `canon-fixer` subagent with the review feedback. Loops review → fix until clean.
+10. **If verdict is not clean**, Claude spawns a `canon-engineer` subagent in fix mode with the review feedback. Loops review → fix until clean.
 11. **Claude calls** `update_board({ operation: "complete_flow" })`, releases file claims, records metrics, evaluates learn gate. Done.
 
 For a `fast-path` flow (simple bug fix), steps 4–6 are skipped — the lead goes straight to spawning a single `canon-implementor` subagent that handles implementation, testing, and self-review in one pass.
@@ -452,6 +452,8 @@ Phase 2 must be planned with the same rigor as Phase 1 — a task index, wave st
 | **Regression (flag off, 3 flows)** | Run fast-path, feature, and review-only with flag off. | Zero divergence from pre-Phase-1 baseline behavior. |
 | **Integration checklist** | After each run, check every HIGH-severity gap from §3 disposition table. | All 11 HIGH-severity integrations observed functioning in at least one run. Documented per-gap. |
 | **Error handling** | Deliberately trigger: agent spawn failure, MCP tool error during a run. | Lead recovers gracefully. Retries or presents error to user. Does not silently drop the step. |
+| **maxTurns exhaustion** | Set engineer maxTurns to 10, give a task that needs more. | Lead detects incomplete result, offers to retry with higher budget. Journal shows step as incomplete. |
+| **Mid-flow resume** | Start a feature flow, complete 3 steps, end the session. Start a new session and say "resume". | Lead reads journal, identifies completed steps, loads artifact context, continues from the right step. |
 
 **Exit criteria:**
 - 3 successful runs each on fast-path and feature flows with flag on. Artifacts consistent across runs.
@@ -475,9 +477,13 @@ Phase 2 must be planned with the same rigor as Phase 1 — a task index, wave st
 
 **Preconditions:** Phase 2 complete. All validation criteria met. Human sign-off on Phase 2 results.
 
-**Sub-phase 3a: Flag flip.** Set `CANON_AGENT_TEAMS_MODE=on` as default. Legacy path still exists but is no longer the default. Monitor for regressions over a stability period (recommended: 1 week or 10 successful flows, whichever comes first).
+**Phase 1 → Phase 2 handoff:** Human reviews Phase 1 validation report. Confirms: all runbooks cover their legacy flows, all agent defs parse, journal tool builds and tests pass, CLAUDE.md section complete. Only then does Phase 2 planning begin.
 
-**Sub-phase 3b: Delete coordination layer.** Remove ~130 files / ~35,000 lines:
+**Phase 2 → Phase 3 handoff:** Human reviews Phase 2 validation results. Confirms: consistency tests pass, all HIGH-severity gaps verified, resume protocol works, maxTurns exhaustion handled. Human sign-off required before any deletion.
+
+**Sub-phase 3a: Flag flip.** Set `CANON_AGENT_TEAMS_MODE=on` as default. Legacy path still exists but is no longer the default. **Pre-flight:** all legacy in-progress workspaces must be completed or abandoned before the flip. Add a check to `init_workspace` that warns if legacy workspace state is detected without a journal. Monitor for regressions (1 week or 10 successful flows, whichever comes first).
+
+**Sub-phase 3b: Delete coordination layer.** Pre-deletion checks: (1) grep `flows/` for non-standard files — if custom flow definitions exist, preserve them or provide a conversion guide; (2) analyze `enter-and-prepare-state.ts` dependencies on prompt-pipeline and refactor in a dedicated commit before main deletion. Then remove ~130 files / ~35,000 lines:
 
 **Orchestration tools (10 files, ~2,089 lines):**
 

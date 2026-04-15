@@ -40,18 +40,50 @@ If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — u
 
 Include these subsections:
 
+**Intent Classification + Runbook Selection**:
+Reproduce the flow selection table from the existing CLAUDE.md, mapped to the new model:
+
+| Signal | Action |
+|--------|--------|
+| Bug fix, small change, 1–3 files | Read `fast-path.md` runbook |
+| New feature, 4–10 files | Read `feature.md` runbook (variant: refactor if restructuring) |
+| Large cross-cutting, 10+ files | Read `epic.md` runbook |
+| Migration, upgrade, "move to X" | Read `migrate.md` runbook |
+| Improve test coverage | Read `test-gap.md` runbook |
+| Review PR or branch | Spawn `canon-reviewer` (no runbook) |
+| Security audit | Spawn `canon-security`, then `canon-reviewer` (no runbook) |
+| Investigate / "how does X work" | Spawn `canon-researcher`(s), synthesize (no runbook) |
+| Scan for violations (via init) | Spawn `canon-engineer` to scan + fix (no runbook) |
+| Create/edit principle | Spawn `canon-writer` (no runbook) |
+| Analyze patterns / learn | Spawn `canon-learner` (no runbook) |
+| Resume interrupted flow | See Resume Protocol below |
+| Vague / unclear request | Spawn `canon-planner` (pre-build gate) |
+
 **Pre-Build Gate**:
 Before starting any build flow, evaluate the request:
 - Is the problem clearly defined? Are acceptance criteria explicit?
 - Have alternatives been considered? Is the value proportional to the effort?
 - If any answer is no, spawn `canon-planner` before proceeding to a build runbook.
 - If the request is a clear bug fix or small change with obvious scope, skip to fast-path.
-- The planner produces a structured brief. If it greenlights → proceed. If it asks questions → present to user. If it recommends alternatives → present to user for decision.
 
 **Setup**:
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`.
 2. Read the runbook for the selected flow: `skills/canon/runbooks/{flow-name}.md`.
 3. Call `log_step` for each planned step from the runbook (creates the checklist).
+
+**Resume Protocol**:
+When resuming a session or the user says "continue" / "resume":
+1. Read the journal file (`journal.json` in the workspace).
+2. Identify the last step with `status: "completed"`.
+3. Read the workspace artifacts produced by completed steps for context.
+4. Continue from the first step with `status: "started"` or the next unstarted step.
+5. If no journal exists, check for legacy workspace state and advise the user.
+
+**Domain Skill Loading**:
+Before spawning an agent, identify relevant domain skills based on the task's target files:
+- Name the relevant skills in the spawn prompt: `"Relevant domain skills: authentication-security, backend-api. Load from skills/canon/references/."`
+- Do NOT read and inject skill file content yourself — the agent reads the named files on its first turn (per `agent-context-check`).
+- This keeps the lead's context clean and puts the Read cost in the agent's fresh context.
 
 **MCP Tool Composition**:
 Table of which Canon MCP tools to call before spawning each step type:
@@ -129,11 +161,14 @@ No tests — this is CLAUDE.md content. Validation is in phase1-12.
 
 1. CLAUDE.md contains `## Agent Teams Orchestration (CANON_AGENT_TEAMS_MODE=on)` section
 2. Existing section renamed to `## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off)`
-3. New section has all 11 subsections listed above
+3. New section has all subsections: Intent Classification + Runbook Selection, Pre-Build Gate, Setup, Resume Protocol, Domain Skill Loading, MCP Tool Composition, Dispatch Framework, Journal Protocol, Post-Subagent Artifact Check, HITL Patterns, Post-Step Effects, Completion Checklist, Commit Provenance, Error Handling
 4. Explicit flag boundary statement at top of new section
 5. Cross-reference to "Agent Spawn Error Handling" present
-6. All 10 runbook paths referenced
-7. Journal protocol documented (log_step before/after each spawn)
+6. Intent table covers all intents: 5 runbook flows + 6 inline dispatches (review, security, explore, adopt, principle, learn) + resume + vague
+7. All 5 runbook paths referenced
+8. Journal protocol documented (log_step before/after each spawn)
+9. Resume protocol documented (read journal, identify last step, continue)
+10. Domain skill loading documented (name skills, agent reads them)
 
 ### Done when
 
