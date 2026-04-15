@@ -621,11 +621,44 @@ Independent of the Phase 1–3 migration, several MCP tools should be improved t
 | `simulate_flow` | Evaluate: repurpose as runbook dry-run, or delete. If flows are gone, simulation has no target. Could validate runbook step coverage against legacy flow state lists. | Dead tool after Phase 3 unless repurposed. |
 | `load_flow` | Simplify to `load_runbook` — parse markdown frontmatter YAML instead of flow YAML with fragment resolution. Or delete if the lead can just Read the runbook file directly. | Fragment inclusion, transition validation, state type resolution are all state-machine concerns. |
 
-### P3 — Nice-to-have
+### P3 — Intelligent domain classification
 
 | Tool | Change | Why |
 |------|--------|-----|
-| `get_domain_skills` | New tool: given target file paths, return which domain skills are relevant based on file directory/layer. Automates skill naming in spawn prompts. | Optional convenience — lead can identify domains manually. Useful for consistency. |
+| `infer_domains` | New MCP tool: given target file paths, return which domain skills are relevant. **Replaces the hardcoded layer mapping** in `.canon/config.json` with KG-inferred classification. | Eliminates manual layer configuration. Domains are inferred from the code itself, not user-maintained directory mappings. |
+
+**How `infer_domains` works:**
+
+Given file paths, the tool classifies domains using three signal layers:
+
+1. **Structural** (from KG): analyze `imports` and `imported_by` edges.
+   - File imports HTTP framework (Express, Fastify, Hono) → `backend-api`
+   - File imports ORM/query builder (Prisma, Drizzle, pg) → `backend-data`
+   - File imports React/Vue/Svelte/DOM APIs → `frontend`
+   - File imports test framework (vitest, jest) → `testing`
+   - File only imported by test files → `testing`
+   - High in-degree, low out-degree → shared/utility (no domain skill needed)
+
+2. **Semantic** (from KG summaries + `semantic_search`): content-based classification.
+   - Auth/session/credential/token handling → `authentication-security`
+   - Migration/schema change/rollback → `migration-strategy`
+   - Logging/metrics/tracing → `observability`
+   - Error handling/retry/circuit breaker → `error-handling`
+   - Cache/perf/optimization/benchmark → `performance`
+   - CI/CD/deploy/Docker/Terraform → `devops-ci`
+   - Accessibility/ARIA/screen reader → `accessibility` (subset of frontend)
+
+3. **Heuristic** (fallback when KG data unavailable): directory path patterns.
+   - `src/api/`, `routes/`, `controllers/` → `backend-api`
+   - `src/db/`, `models/`, `migrations/` → `backend-data`
+   - `src/components/`, `src/pages/`, `src/ui/` → `frontend`
+   - `infra/`, `deploy/`, `.github/` → `devops-ci`
+
+Returns: `{ domains: ["backend-api", "authentication-security"], confidence: "high", source: "structural" }`
+
+The lead uses this in the spawn prompt: `"Relevant domain skills: backend-api, authentication-security."` The agent reads the named skill files on its first turn.
+
+**Deprecation path:** Once `infer_domains` is validated, the hardcoded `layers` mapping in `.canon/config.json` becomes optional fallback configuration — projects can override inferred domains if needed, but the default is inference. The manual mapping is no longer required for new projects.
 
 ---
 
