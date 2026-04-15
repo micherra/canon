@@ -78,10 +78,11 @@ For each of the 11 agent definitions:
 - All 4 scripts exist and are executable: `post-commit-trailers.sh`, `completion-verify.sh`, `session-start-doc-check.sh`, `post-engineer-scribe.sh`
 - `hooks/canon-agent-teams/hooks.json` registers all 4 hooks with correct event types
 
-**9. Domain primers (1 check)**:
-- `canon-engineer` skills include all 6 domain primers
-- `canon-architect` skills include all 6 domain primers
-- No other agent has domain primers (they don't need them)
+**9. Domain skills (1 check)**:
+- 12 domain skill files exist under `skills/canon/references/`: backend-api, backend-data, frontend, testing, infrastructure, deprecation, authentication-security, migration-strategy, observability, error-handling, performance, devops-ci
+- Domain skills are NOT in any agent's `skills:` frontmatter (they're on-demand, loaded by the lead)
+- `domain-primers/` originals migrated (files present in new location)
+- CLAUDE.md orchestration section documents which domain skills to load for each task type
 
 **10. Legacy path regression (1 check)**:
 - `CANON_AGENT_TEAMS_MODE` unset: `npm run build` passes, `npm test` passes

@@ -93,9 +93,9 @@ Add `maxTurns`, `permissionMode`, `memory`, and `skills` to every agent:
 | Agent | maxTurns | permissionMode | memory | skills (role-specific, + `agent-context-check` + `status-protocol` for all) |
 |-------|----------|---------------|--------|-------|
 | canon-planner | 25 | plan | project | agent-surface-assumptions, agent-evidence-over-intuition |
-| canon-engineer | 50 | auto | project | agent-tdd-required, agent-minimal-fix, agent-fresh-context, agent-structured-triage, agent-simplify-before-extending, principle-loading + all 6 domain primers |
+| canon-engineer | 50 | auto | project | agent-tdd-required, agent-minimal-fix, agent-fresh-context, agent-structured-triage, agent-simplify-before-extending, principle-loading |
 | canon-researcher | 20 | plan | project | agent-scoped-research, agent-surface-assumptions, agent-evidence-over-intuition |
-| canon-architect | 30 | plan | project | agent-design-before-code, agent-plans-are-prompts, agent-surface-assumptions + all 6 domain primers |
+| canon-architect | 30 | plan | project | agent-design-before-code, agent-plans-are-prompts, agent-surface-assumptions |
 | canon-reviewer | 25 | plan | — | agent-cold-review, principle-loading |
 | canon-tester | 40 | auto | — | agent-test-the-contract, agent-test-sad-paths, tester-report-template, principle-loading |
 | canon-security | 25 | plan | — | agent-assume-hostile-input, security-checklist, principle-loading |

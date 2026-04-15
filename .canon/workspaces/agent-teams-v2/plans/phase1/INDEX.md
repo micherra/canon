@@ -7,7 +7,7 @@
 | phase1-02 | 1 | phase1-00 | skills/canon/runbooks/feature.md | Create feature runbook (absorbs refactor as variant). Wave steps for parallel implementation. |
 | phase1-03 | 1 | phase1-00 | skills/canon/runbooks/{epic.md,migrate.md} | Create epic + migrate runbooks (large-tier flows) |
 | phase1-04 | 1 | phase1-00 | skills/canon/runbooks/test-gap.md | Create test-gap runbook (no ship step) |
-| phase1-05 | 2 | Wave 1 | rules/*.md → skills/canon/references/, rules/agent-context-check.md | Register rules as skills, create agent-context-check rule |
+| phase1-05 | 2 | Wave 1 | rules/*.md → skills/canon/references/, domain-primers/*.md → skills/canon/references/, 6 new domain skills, rules/agent-context-check.md | Register rules as skills, migrate domain primers, create 6 new domain skills (authentication-security, migration-strategy, observability, error-handling, performance, devops-ci), create agent-context-check rule |
 | phase1-06 | 2 | Wave 1 | mcp-server/src/features/orchestration/tools/orchestration-journal.ts | Orchestration journal tool (log_step + verify_completion, ~50-80 lines) |
 | phase1-07 | 2 | Wave 1 | hooks/canon-agent-teams/*.sh, hooks/canon-agent-teams/hooks.json | All hooks: PostCommit trailers, completion verify, SessionStart doc-check, SubagentStop scribe-queue |
 | phase1-08 | 3 | Wave 2 | agents/*.md (delete 4, create 2, modify 9) | Delete implementor+fixer+guide+chat, add engineer+planner (11 agents). All get maxTurns, permissionMode, memory, skills. |

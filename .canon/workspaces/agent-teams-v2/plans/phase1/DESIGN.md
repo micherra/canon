@@ -78,15 +78,27 @@ Both `agent-tdd-required` and `agent-minimal-fix` are preloaded as skills. The s
 
 **What's preserved**: the fixer's diagnostic process (structured triage, graph-based risk assessment) and the implementor's discipline (TDD, incremental checkpoints) are both in the merged agent's body.
 
-#### 4. Skills preloading
+#### 4. Skills: preloaded rules vs on-demand domain expertise
 
-Per the skills research, 21 rules and 6 references are preloaded into agent definitions via `skills` frontmatter. This eliminates runtime Read tool calls, guarantees rules are present (no silent skipping), and costs 2k-5.5k tokens per agent.
+Two distinct loading mechanisms for two types of knowledge:
 
-**Registration**: rules are symlinked from `rules/*.md` to `skills/canon/references/` so the `skills:` field can reference them by name.
+**Always preloaded** (via `skills:` frontmatter): behavioral rules and universal references. Per Claude Code docs: "The full content of each skill is injected into the subagent's context." These are small (~200 tokens each) and always relevant to the agent's role. They guarantee consistent behavior without runtime Read calls.
 
-**agent-context-check**: a new rule preloaded into ALL agents. Instructs agents to verify they have Canon principles for their target files and self-serve via MCP if their spawn prompt is missing context. This is the delivery mechanism for the self-serve context model (§2.5 of the migration plan).
+Per-agent preload: `agent-context-check` + `status-protocol` for all agents, plus role-specific rules (e.g., `agent-tdd-required` for engineer, `agent-cold-review` for reviewer). Total: ~1.5-2.5k tokens per agent.
 
-**Domain primers**: all 6 primers (~1,200 tokens total) preloaded into `canon-engineer` and `canon-architect`. These are task-domain-agnostic agents that work across all domains.
+**On-demand domain skills** (loaded by lead at spawn time): domain expertise that varies by task. NOT listed in agent `skills:` frontmatter — injected into the spawn prompt by the lead based on the task's scope.
+
+12 domain skill files consolidated under `skills/canon/references/`:
+- 6 existing (moved from `domain-primers/`): `backend-api`, `backend-data`, `frontend`, `testing`, `infrastructure`, `deprecation`
+- 6 new: `authentication-security`, `migration-strategy`, `observability`, `error-handling`, `performance`, `devops-ci`
+
+Each is ~30-40 lines (~200 tokens). The lead reads the task, identifies relevant domains, reads the matching skill files, and includes them in the spawn prompt. Agents can also self-serve by reading skill files directly via `Read` tool.
+
+The CLAUDE.md orchestration section documents which domain skills to load for each task type.
+
+**Registration**: rules are symlinked from `rules/*.md` to `skills/canon/references/`. Domain primers are moved from `domain-primers/*.md` to `skills/canon/references/`. One directory for all reusable knowledge.
+
+**agent-context-check**: a new rule preloaded into ALL agents. Instructs agents to verify they have Canon principles and to self-serve via MCP if their spawn prompt is missing context.
 
 #### 5. New canon-planner agent
 
@@ -123,7 +135,7 @@ Four hook scripts:
 5. **Skills delivered via symlinks, not copies** — rules stay in `rules/` as source of truth. Symlinks in `skills/canon/references/` make them discoverable as skills. No file duplication. (information-hiding)
 6. **The journal is the bridge between guidance and enforcement** — CLAUDE.md tells the lead what to do. The journal records what the lead actually did. The hook verifies the record. (explicit-contracts)
 7. **6 agents get memory: project** — planner, engineer, researcher, architect, scribe, learner. Reviewer excluded per agent-cold-review. Cross-session learning is a core capability, not a future enhancement. (information-hiding)
-8. **All 6 domain primers preloaded into engineer + architect** — ~1,200 tokens is trivial. Eliminates runtime Read calls and conditional primer loading. (simplicity-first)
+8. **Domain skills are on-demand, not preloaded** — domain expertise varies by task. Preloading all 12 into every engineer spawn wastes ~2,400 tokens on irrelevant context. Instead, the lead reads task scope, loads relevant skills (~200 tokens each), and includes in spawn prompt. Agents can also self-serve. (simplicity-first, information-hiding)
 9. **Scribe/learner automated via hooks** — SessionStart doc-check, SubagentStop scribe-queue, completion-verify ensures both ran. Not just runbook guidance — hook enforcement. (explicit-contracts)
 10. **agent-context-check is a preloaded skill, not an instruction body change** — delivers the self-serve context behavior without modifying agent instruction bodies. (information-hiding)
 
