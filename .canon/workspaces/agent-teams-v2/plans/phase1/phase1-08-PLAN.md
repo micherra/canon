@@ -115,6 +115,7 @@ Note: `auto` mode exists but requires Team/Enterprise/API plans (NOT available o
 This replaces the legacy `tool-profiles.ts` + `trust-resolver.ts` + `worktree-settings.ts` (~614 lines of runtime permission resolution). One YAML field per agent definition.
 
 **Memory rationale**: Six agents get `memory: project` for cross-session learning:
+- **planner**: Feature history, value patterns, requests redirected to simpler solutions
 - **engineer**: Fix patterns, subsystem gotchas, common test setup (roadmap items 18, 19)
 - **researcher**: Codebase topology, where subsystems live, prior research findings
 - **architect**: Design patterns that worked/failed, recurring constraints, tradeoff history

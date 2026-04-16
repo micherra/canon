@@ -145,13 +145,13 @@ Cross-reference the existing "Agent Spawn Error Handling" section. The same retr
 
 ### Canon principles to apply
 
-- **simplicity-first**: One section, eleven subsections. No nested conditionals or complex decision trees.
+- **simplicity-first**: One section, fourteen subsections. No nested conditionals or complex decision trees.
 - **information-hiding**: Each subsection is self-contained. The lead reads what it needs for the current step.
 - **externalize-configuration**: Feature flag is an env var. Runbook selection is data-driven.
 
 ### Tests to write
 
-No tests — this is CLAUDE.md content. Validation is in phase1-12.
+No tests — this is CLAUDE.md content. Validation is in phase1-10.
 
 ### Verify
 

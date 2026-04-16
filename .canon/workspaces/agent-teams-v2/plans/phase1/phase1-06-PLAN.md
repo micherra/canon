@@ -131,6 +131,12 @@ function registerJournalTools(): void {
         artifacts_expected: z.array(z.string()).optional().describe("Expected artifact paths relative to workspace"),
         status: z.enum(["planned", "started", "completed", "skipped"]).describe("Step execution status"),
         mcp_tools_called: z.array(z.string()).optional().describe("MCP tools the lead called for this step"),
+        domain_skills_loaded: z.array(z.string()).optional().describe("Domain skills named in spawn prompt for this step"),
+        outcome: z.object({
+          review_verdict: z.string().optional(),
+          test_pass_rate: z.number().optional(),
+          fix_iterations: z.number().optional(),
+        }).optional().describe("Quality signals recorded on completion (§4b P4)"),
       },
     },
     wrapHandler(async (input) => logStep(input)),

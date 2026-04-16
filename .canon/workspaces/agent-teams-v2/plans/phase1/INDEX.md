@@ -69,7 +69,7 @@ These legacy flows are NOT converted to runbooks. CLAUDE.md's dispatch section h
 **Modified files (11):**
 - `CLAUDE.md` — add agent-teams orchestration section (including guide-dashboards content), annotate legacy section
 - `agents/.claude/CLAUDE.md` — update roster (11 agents)
-- `hooks/canon-agent-teams/hooks.json` — register 4 new hook scripts
+- `hooks/canon-agent-teams/hooks.json` — register 5 new hook scripts
 - 9 × `agents/canon-*.md` — add maxTurns, permissionMode, memory, skills
 
 **Deleted files (4):**
