@@ -62,6 +62,8 @@ Input schema:
 - `artifacts_expected: string[]` (optional, default []) — expected artifact paths relative to workspace
 - `status: "planned" | "started" | "completed" | "skipped"` (required)
 - `mcp_tools_called: string[]` (optional) — MCP tools the lead called for this step
+- `domain_skills_loaded: string[]` (optional) — domain skills named in spawn prompt for this step
+- `outcome: { review_verdict?: string, test_pass_rate?: number, fix_iterations?: number }` (optional) — quality signals recorded on completion. Enables self-improving skills analysis (§4b P4).
 
 Behavior:
 1. Read `${workspace}/journal.json` if it exists; otherwise initialize empty journal.
@@ -99,7 +101,14 @@ Behavior:
   steps_skipped: string[],
   artifacts_expected: string[],
   artifacts_missing: string[],
-  complete: boolean  // true when steps_missing is empty AND artifacts_missing is empty
+  complete: boolean,  // true when steps_missing is empty AND artifacts_missing is empty
+  flow_outcome: {    // aggregated quality signals for self-improving skills (§4b P4)
+    domain_skills_used: string[],       // deduplicated across all steps
+    review_verdict: string | null,      // from review step outcome, if present
+    fix_iterations: number,             // count of fix-mode steps
+    total_steps: number,
+    total_duration_ms: number | null     // from first started_at to last completed_at
+  }
 }
 ```
 

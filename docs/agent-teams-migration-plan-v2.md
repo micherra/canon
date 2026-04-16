@@ -665,6 +665,47 @@ The lead uses this in the spawn prompt: `"Relevant domain skills: backend-api, a
 
 **Deprecation path:** Once `infer_domains` is validated, the hardcoded `layers` mapping in `.canon/config.json` becomes optional fallback configuration — projects can override inferred domains if needed, but the default is inference. The manual mapping is no longer required for new projects.
 
+### P4 — Self-improving skills and graph-structured memory
+
+Inspired by [Cognee's self-improving skills architecture](https://www.cognee.ai/blog/deep-dives/building-self-improving-skills-for-agents): skills should be living artifacts that improve through feedback loops, not static files.
+
+**Flow outcome tracking (journal enhancement):**
+
+Add a `flow_outcome` record to the journal's completion data. When `verify_completion` runs at flow end, record:
+- Which domain skills were loaded for each step
+- Which MCP tools each agent called (from `record_agent_metrics`)
+- Quality signals: review verdict (clean/warning/violation), test pass rate, fix iteration count
+- Flow duration and total spawns
+
+This gives the learner structured data to analyze. Instead of mining patterns from git history alone, the learner can answer: "which domain skills correlate with clean review verdicts?" and "which flows consistently need fix cycles?"
+
+**Skill effectiveness tracking:**
+
+Over time, the learner analyzes journal outcome data to recommend:
+- Domain skills that should be loaded more often (high correlation with clean reviews)
+- Domain skills that should be updated (loaded frequently but fix cycles still happen)
+- New skills that should be created (recurring patterns in agent memory that aren't captured in any skill)
+- Agent `maxTurns` adjustments (consistent over/under budget)
+
+**Graph-structured agent memory (future, post-migration):**
+
+Currently agents write freeform `MEMORY.md`. Inspired by [Cognee's custom graph models](https://www.cognee.ai/blog/deep-dives/expanding-custom-graph-models-for-reliable-agent-memory-and-retrieval), memory could become nodes in Canon's KG:
+
+```
+(engineer) --[learned]--> (pattern: "auth module requires JWT setup before tests")
+(pattern) --[applies_to]--> (file: src/auth/session.ts)
+(pattern) --[discovered_in]--> (flow_run: ws-042)
+(pattern) --[effectiveness: 0.9]--> (domain_skill: authentication-security)
+```
+
+Benefits:
+- Memory becomes queryable via `graph_query` — "what do we know about src/auth/?"
+- Cross-agent knowledge sharing — researcher discoveries are visible to the engineer
+- Pruning and weighting — stale patterns decay, frequently confirmed patterns strengthen
+- Cascade expansion — start with known entity types, discover new patterns from execution data
+
+This is a roadmap item, not a Phase 1 deliverable. But the journal outcome tracking in Phase 1 lays the data foundation.
+
 ---
 
 ## 5. Validation Strategy
