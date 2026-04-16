@@ -706,6 +706,41 @@ Benefits:
 
 This is a roadmap item, not a Phase 1 deliverable. But the journal outcome tracking in Phase 1 lays the data foundation.
 
+### P5 — Memory architecture (inspired by [agentmemory](https://github.com/rohitg00/agentmemory))
+
+Canon's `memory: project` currently stores flat `MEMORY.md` files — everything persists equally forever. agentmemory demonstrates three patterns Canon should adopt:
+
+**Memory decay and strengthening:**
+
+Currently all memories have equal weight regardless of age or relevance. Implement Ebbinghaus-style decay: memories lose priority over time unless accessed. Frequently confirmed patterns strengthen.
+
+Implementation: memory entries gain `last_accessed` and `access_count` fields. The learner periodically prunes entries not accessed in N days (configurable, default 30). Entries confirmed by multiple flow runs gain higher weight. This prevents MEMORY.md from growing unbounded and keeps recent, validated knowledge prominent.
+
+**4-tier memory hierarchy:**
+
+agentmemory uses Working → Episodic → Semantic → Procedural. Canon currently has only tier 1 (working memory in the journal). The full hierarchy:
+
+| Tier | What | Canon source | Canon storage |
+|------|------|-------------|---------------|
+| **Working** | Raw observations from current flow | Journal `log_step` entries + `flow_outcome` | `journal.json` (per workspace, ephemeral) |
+| **Episodic** | Compressed flow summaries ("ws-042: built auth module, 3 waves, 2 violations") | Learner produces from journal data at flow end | DriftStore `FlowRunEntry` (already exists) + new `flow_summaries` in agent memory |
+| **Semantic** | Extracted facts and patterns ("auth module requires JWT setup") | Agent `MEMORY.md` entries (current mechanism) | `MEMORY.md` or KG nodes (future) |
+| **Procedural** | Decision patterns that become skills ("when touching auth, run security scan") | Learner analyzes semantic patterns across flows | Proposed skills or principle amendments |
+
+The journal (Phase 1) captures working memory. The learner already produces semantic patterns. What's missing: episodic compression (the learner should write flow summaries to agent memory) and procedural extraction (patterns that recur across N flows become skill or principle candidates).
+
+**Token budget for memory injection:**
+
+agentmemory caps memory injection at ~2,000 tokens per session, achieving 92% reduction vs. full context pasting. Canon should adopt a similar budget: when the lead or agent reads `MEMORY.md`, cap at ~2,000 tokens of the highest-weighted entries (by `access_count × recency`). This prevents memory from consuming disproportionate context.
+
+Implementation: the `agent-context-check` skill (preloaded into all agents) instructs: "When reading your MEMORY.md, read only the top section (up to 2000 tokens). Entries are ordered by relevance — most recent and frequently confirmed first."
+
+**What Canon already does better:**
+- Structural knowledge graph (imports, calls, dependencies) — richer than entity-only graphs
+- Principle-grounded review — memory feeds into a compliance system
+- Artifact contracts — structured outputs, not just free-form observations
+- Journal with `flow_outcome` — structured quality signals, not raw tool-use captures
+
 ---
 
 ## 5. Validation Strategy
