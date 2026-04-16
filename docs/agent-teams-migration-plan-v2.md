@@ -665,6 +665,43 @@ The lead uses this in the spawn prompt: `"Relevant domain skills: backend-api, a
 
 **Deprecation path:** Once `infer_domains` is validated, the hardcoded `layers` mapping in `.canon/config.json` becomes optional fallback configuration — projects can override inferred domains if needed, but the default is inference. The manual mapping is no longer required for new projects.
 
+**Community detection for architectural awareness** (inspired by [Graphify](https://github.com/safishamsi/graphify)):
+
+Canon's KG already detects cycles (`in_cycle`, `cycle_peers`) and computes hub scores (`in_degree`, `out_degree`, `is_hub`). Graphify extends this with Leiden/Louvain community detection — clustering the dependency graph into architectural communities by edge density.
+
+Extension to `codebase_graph`: during graph generation, run community detection on the file-level dependency graph. Store cluster assignments as a `community_id` field on file nodes. This enables:
+- **Architect wave assignment**: files in the same community should be in the same wave (they're tightly coupled)
+- **Domain inference**: communities strongly correlate with domains — a cluster of files that all import Express is likely `backend-api`
+- **Cross-community change risk**: changes spanning multiple communities have higher blast radius
+- **"God nodes"**: files with high betweenness centrality connecting multiple communities — the riskiest files to change
+
+Canon already has `ui/lib/clustering.ts` (PR change story grouping) and `services/diff-cluster.ts` (diff fanout) — this adds a third clustering dimension at the graph level. Exposed via `graph_query` (`community_id` in results) and `get_file_context` (`community` field in `graph_metrics`).
+
+**Confidence-scored edges:**
+
+Canon's KG edges are currently binary — a structural edge exists or it doesn't. Graphify distinguishes `EXTRACTED` (confidence 1.0), `INFERRED` (0.0-1.0), and `AMBIGUOUS` (flagged for review).
+
+Canon should adopt this when adding semantic and co-change edges:
+- **Structural edges** (imports, calls, inheritance): confidence 1.0 — AST-extracted, deterministic
+- **Co-change edges** (already in KG via `co_change_edges.jaccard`): confidence = Jaccard score (0.0-1.0) — already implemented
+- **Semantic edges** (from `infer_domains` and `semantic_search`): confidence = model confidence — new
+- **Decision edges** (from architect decision docs promoted to KG, see §4b P4): confidence 1.0 — human-authored
+
+A `confidence` column on edge tables lets consumers filter: the architect uses all edges for exploration, the reviewer uses only high-confidence edges for violation detection. The `graph_query` tool gains an optional `min_confidence` parameter.
+
+**Design rationale as graph nodes:**
+
+Graphify mines `# NOTE:`, `# IMPORTANT:`, `# HACK:`, `# WHY:` comments and turns them into `rationale_for` graph nodes. Canon's architects produce decision documents at `{workspace}/decisions/` — but these live in workspace artifacts, not in the KG.
+
+After flow completion, the learner could promote decisions to KG nodes:
+```
+(decision: "use-jwt-not-sessions") --[rationale_for]--> (file: src/auth/session.ts)
+(decision) --[made_in]--> (flow_run: ws-042)
+(decision) --[tension_with]--> (principle: stateless-services)
+```
+
+This makes architectural rationale queryable: "why was this designed this way?" answered from the graph, not by re-reading old workspace artifacts. Combined with memory decay (§4b P5), stale decisions that were superseded naturally lose weight.
+
 ### P4 — Self-improving skills and graph-structured memory
 
 Inspired by [Cognee's self-improving skills architecture](https://www.cognee.ai/blog/deep-dives/building-self-improving-skills-for-agents): skills should be living artifacts that improve through feedback loops, not static files.
