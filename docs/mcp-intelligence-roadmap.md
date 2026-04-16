@@ -176,3 +176,99 @@ Cap memory injection at ~2,000 tokens of highest-weighted entries (by `access_co
 - Principle-grounded review — memory feeds into a compliance system
 - Artifact contracts — structured outputs, not free-form observations
 - Journal with `flow_outcome` — structured quality signals, not raw tool-use captures
+
+---
+
+## P6 — Code review intelligence (inspired by [Anthropic's /code-review](https://github.com/anthropics/claude-code/blob/main/plugins/code-review/README.md) and [local-code-review](https://github.com/AlexIzh/local-code-review))
+
+Canon's PR review has a rich MCP app (blast radius, change stories, violation cards) but misses three capabilities the native `/code-review` and local-code-review tools demonstrate. The improvements span three surfaces — terminal, MCP app, and PR comments — each playing to its strengths.
+
+### Surface roles
+
+| Surface | Strength | Canon's role |
+|---------|----------|-------------|
+| **Terminal** | Quick feedback loop. Developer reads, fixes, re-runs. No context switching. | Review → fix → re-review loop. Confidence-scored findings. Structured feedback to engineer. |
+| **MCP App** (`ui://canon/pr-review`) | Rich visualization. Graphs, clusters, blast radius. | Dependency impact, hotspot overlay, change stories, co-change warnings. Read-only — no editing. |
+| **GitHub PR comment** | Persistent. Visible to all reviewers. Line-linked. | Final review output with Canon principle violations and GitHub-linked code references. |
+
+### Confidence scoring for review findings
+
+Canon's reviewer currently gives binary verdicts (clean/warning/violation). Adopt confidence scoring from Anthropic's `/code-review`:
+
+```
+0:   Not confident, likely false positive
+25:  Somewhat confident, might be real
+50:  Moderately confident, real but minor
+75:  Highly confident, real and important
+100: Absolutely certain, definitely real
+```
+
+Default threshold: 80. Findings below threshold are suppressed. The reviewer is opus-powered — it can score its own confidence per finding. This reduces noise and builds trust in the review output.
+
+Implementation: `write_review` MCP tool gains a `confidence` field per violation entry. The MCP app filters by threshold. PR comments only include high-confidence findings.
+
+### Parallel multi-perspective review
+
+Anthropic's `/code-review` spawns 4 agents in parallel: 2× CLAUDE.md compliance, 1× bug detector, 1× history analyzer. Canon should adopt a similar pattern using agent teams:
+
+| Reviewer teammate | Focus | Inputs |
+|-------------------|-------|--------|
+| Principle compliance | Canon principle violations | Matched principles + diff |
+| Bug detection | Logic errors, edge cases | Diff only (not pre-existing) |
+| Security scan | Vulnerabilities, auth issues | Diff + `security-checklist` skill |
+| History context | Patterns from git blame, co-change, hotspots | Git intel data + diff |
+
+Spawn as an agent team (not sequential subagents) — teammates review in parallel, producing independent findings. Lead aggregates with confidence scores and deduplicates.
+
+This replaces Canon's current single-reviewer approach with a team that covers more surface area in the same wall-clock time.
+
+### Inline diff view in MCP app (read-only)
+
+The MCP app currently shows violations as disconnected cards. Add an inline diff view with Shiki syntax highlighting where violations are pinned to their line numbers:
+
+```
+  41 │ } catch (err) {
+  42 │   // silently ignore        ← [VIOLATION: fail-closed-by-default, confidence: 92]
+  43 │ }                               This catch silently swallows the auth error.
+```
+
+Not for editing — the MCP app is a visualization surface. But seeing violations IN CONTEXT on the actual diff is dramatically more useful than a card that says "violation in auth.ts."
+
+Implementation:
+- `show_pr_impact` already has the diff (via `getPrReviewData`)
+- New component: `DiffView.svelte` with Shiki syntax highlighting
+- Violations pinned to line ranges from the review data
+- Toggle between current cluster/card view and inline diff view
+
+### Outdated violation detection
+
+When the engineer fixes code after a review, the re-review should know which violations are potentially resolved. Track which diff lines each violation was pinned to. On re-review:
+- Lines that changed since the last review → violations marked "outdated" (potentially resolved)
+- Lines unchanged → violations persist
+- New lines → new analysis only
+
+Implementation: `store_pr_review` persists line ranges per violation. On re-review, `show_pr_impact` compares stored ranges against current diff. The `review_code` tool gains an `outdated_violations` input so the reviewer knows what to focus on.
+
+### GitHub-linkable output
+
+Canon's review output should produce clickable GitHub line links:
+```
+https://github.com/owner/repo/blob/[full-sha]/src/auth.ts#L42-L48
+```
+
+The shipper uses these when posting PR comments. Requires full SHA (not abbreviated) and `#L` line notation with range.
+
+### Terminal review flow
+
+```
+/canon:review
+  → Lead spawns 3-4 reviewer teammates in parallel
+  → Aggregated findings with confidence scores (threshold 80)
+  → Developer reads terminal output, asks Claude to fix
+  → canon-engineer fixes in terminal
+  → /canon:review again
+    → outdated violations flagged, new analysis on changed lines
+  → Clean → /canon:review --comment posts to PR with GitHub line links
+```
+
+This replaces the current sequential reviewer spawn with a parallel team, adds confidence scoring to reduce noise, and closes the review → fix → re-review loop with outdated detection.
