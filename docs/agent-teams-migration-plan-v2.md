@@ -145,7 +145,7 @@ A concrete example of `feature` flow (4–10 file feature):
 10. **If verdict is not clean**, Claude spawns a `canon-engineer` subagent in fix mode with the review feedback. Loops review → fix until clean.
 11. **Claude calls** `update_board({ operation: "complete_flow" })`, releases file claims, records metrics, evaluates learn gate. Done.
 
-For a `fast-path` flow (simple bug fix), steps 4–6 are skipped — the lead goes straight to spawning a single `canon-implementor` subagent that handles implementation, testing, and self-review in one pass.
+For a `fast-path` flow (simple bug fix), steps 2–6 are skipped — the lead goes straight to spawning a single `canon-engineer` subagent in implementation mode that handles implementation, testing, and self-review in one pass.
 
 ### 2.4 Subagent capabilities (per [Claude Code docs](https://code.claude.com/docs/en/sub-agents))
 
