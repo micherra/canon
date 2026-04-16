@@ -4,186 +4,82 @@ wave: 1
 depends_on:
   - "phase1-00"
 files:
-  - skills/canon/runbooks/test-gap.md
-  - skills/canon/runbooks/adopt.md
+  - skills/canon/runbooks/epic.md
+  - skills/canon/runbooks/migrate.md
 principles:
-  - agent-plans-are-prompts
-domains:
-  - orchestration
+  - simplicity-first
+  - information-hiding
+domains: []
 ---
 
-## Task: Create test-gap and adopt runbooks
+## Task: Create epic and migrate runbooks (large-tier flows)
 
 ### Action
 
-Create two runbooks for fix-loop flows that do not have a ship step. These flows iterate between analysis/testing and fixing until converged.
+Create two runbooks for the most complex Canon flows.
 
-#### 1. `test-gap.md`
+#### 1. `skills/canon/runbooks/epic.md`
 
-Read `flows/test-gap.md`. States: `scan` (single, canon-researcher), `write-tests` (single, canon-tester), `fix-impl` (single, canon-engineer), review-fix-loop fragment (review, fix-violations), `done` (terminal).
+Read `flows/epic.md` for legacy state coverage. Epic is the most complex flow: parallel research, competitive design, multi-wave implementation with consultations, testing, security scanning, and review.
 
-```yaml
-name: "test-gap"
-description: "Analyze test coverage gaps, write tests, verify they pass"
-tier: "small"
+**States to cover** (from epic.md + fragments):
+- `research` (canon-researcher, dispatch: subagent) — parallel research dimensions (codebase + risk)
+- `design` (canon-architect, dispatch: subagent, hitl: approval) — competitive synthesis, produces plan index with wave assignments
+- `implement` (canon-engineer, dispatch: team) — multi-wave. Adaptive: after wave N, architect may replan wave N+1 based on results. Notes should document consultation protocol (before/between/after wave advisory spawns).
+- `test` (canon-tester, dispatch: subagent) — write integration tests, fill coverage gaps
+- `fix-impl` (canon-engineer in fix mode, dispatch: subagent) — fix test failures
+- `security` (canon-security, dispatch: subagent) — security assessment
+- `fix-security` (canon-engineer in fix mode, dispatch: subagent) — fix security findings
+- `context-sync` (canon-scribe, dispatch: subagent) — update documentation
+- `review` (canon-reviewer, dispatch: subagent, hitl: checkpoint) — principle compliance
+- `fix-violations` (canon-engineer in fix mode, dispatch: subagent) — fix violations
+- `pre-launch-check` (no agent, hitl: on_failure) — quality gates
+- `ship` (canon-shipper, dispatch: subagent) — PR description
+- `learn` (canon-learner, dispatch: subagent, skip_when: "learn gate not passed")
 
-steps:
-  - id: "scan"
-    agent: "canon-researcher"
-    dispatch: "subagent"
-    mcp_tools:
-      - get_file_context
-      - graph_query
-      - semantic_search
-      - init_workspace
-      - log_step
-    artifacts:
-      - "research/coverage-scan.md"
-    hitl: "on_failure"
-    skip_when: null
-    notes: |
-      Analyze test coverage for target files. Discover source files and
-      corresponding test files. Identify: untested modules, untested
-      branches, missing edge cases, missing integration tests. Prioritize
-      gaps by risk (code complexity, change frequency, criticality).
-      If no meaningful gaps found, report done with no_gaps — skip
-      remaining steps.
+**Multi-wave notes**: The `implement` step body should document: wave advancement (after wave N completes, lead reads artifacts and decides whether to continue or replan), consultation protocol (spawn advisory subagent between waves), worktree merge strategy.
 
-  - id: "write-tests"
-    agent: "canon-tester"
-    dispatch: "subagent"
-    mcp_tools:
-      - get_principles
-      - get_file_context
-      - log_step
-    artifacts:
-      - "plans/${slug}/TEST-REPORT.md"
-    hitl: "on_failure"
-    skip_when: null
-    notes: |
-      Write tests to fill coverage gaps from the scan. Prioritize by risk.
-      Write integration tests for cross-module interactions, edge case tests
-      for complex logic, regression tests for known-bug areas. Run all tests.
-      If tests reveal source code bugs (implementation_issue), proceed to
-      fix-impl. If all passing, proceed to review.
+#### 2. `skills/canon/runbooks/migrate.md`
 
-  - id: "fix-impl"
-    agent: "canon-engineer"
-    dispatch: "subagent"
-    mcp_tools:
-      - get_principles
-      - get_file_context
-      - graph_query
-      - log_step
-    artifacts:
-      - "plans/${slug}/FIX-SUMMARY.md"
-    hitl: "on_failure"
-    skip_when: null
-    notes: |
-      Mode: test-fix. New tests revealed source code bugs. Fix the source
-      code (not the tests) so tests pass correctly. After fixing, loop back
-      to write-tests to verify and check for remaining gaps.
+Read `flows/migrate.md` for legacy state coverage. Migrate emphasizes rollback planning, parallel research dimensions (migration-scope + rollback-plan), and security scanning.
 
-  - id: "review"
-    agent: "canon-reviewer"
-    dispatch: "subagent"
-    mcp_tools:
-      - get_principles
-      - review_code
-      - log_step
-    artifacts:
-      - "plans/${slug}/REVIEW.md"
-    hitl: "checkpoint"
-    skip_when: null
-    notes: |
-      Review the test additions and any source fixes for Canon principle
-      compliance. If blocking violations found, spawn canon-engineer to
-      resolve, then re-review. Loop max 2 iterations.
-```
+**States to cover** (from migrate.md + fragments):
+- `research` (canon-researcher, dispatch: subagent) — parallel: migration-scope + rollback-plan dimensions
+- `design` (canon-architect, dispatch: subagent, hitl: approval) — competitive synthesis with rollback emphasis
+- `implement` (canon-engineer, dispatch: team) — wave implementation
+- `verify` (canon-engineer in fix mode, dispatch: subagent) — verify migration + rollback
+- `fix-impl` (canon-engineer in fix mode, dispatch: subagent) — fix failures
+- `security` (canon-security, dispatch: subagent) — security assessment
+- `fix-security` (canon-engineer in fix mode, dispatch: subagent) — fix security findings
+- `context-sync` (canon-scribe, dispatch: subagent) — update documentation
+- `review` (canon-reviewer, dispatch: subagent, hitl: checkpoint) — principle compliance
+- `fix-violations` (canon-engineer in fix mode, dispatch: subagent) — fix violations
+- `pre-launch-check` (no agent, hitl: on_failure) — quality gates
+- `ship` (canon-shipper, dispatch: subagent) — PR description
+- `learn` (canon-learner, dispatch: subagent, skip_when: "learn gate not passed")
 
-#### 2. `adopt.md`
-
-Read `flows/adopt.md`. States: `scan` (single, canon-researcher), `fix` (parallel-per, canon-engineer), `rescan` (single, canon-researcher), `done` (terminal).
-
-```yaml
-name: "adopt"
-description: "Scan codebase for principle violations, optionally auto-fix"
-tier: "small"
-
-steps:
-  - id: "scan"
-    agent: "canon-researcher"
-    dispatch: "subagent"
-    mcp_tools:
-      - get_principles
-      - list_principles
-      - get_file_context
-      - init_workspace
-      - log_step
-    artifacts:
-      - "plans/${slug}/ADOPTION-REPORT.md"
-    hitl: "checkpoint"
-    skip_when: null
-    notes: |
-      Scan the codebase for Canon principle applicability. Discover source
-      files, load principles, match by scope and layer. Produce a tiered
-      remediation report (Tier 1: rules, Tier 2: strong-opinions,
-      Tier 3: conventions) with top violation directories and recommended
-      actions. If no rule-severity violations found, report no_violations
-      and skip remaining steps.
-
-  - id: "fix"
-    agent: "canon-engineer"
-    dispatch: "subagent"
-    mcp_tools:
-      - get_principles
-      - get_file_context
-      - graph_query
-      - log_step
-    artifacts: []
-    hitl: "on_failure"
-    skip_when: "no_fix_requested"
-    notes: |
-      Mode: violation-fix. Fix each violation group from the adoption
-      report. For parallel execution, spawn one subagent per violation
-      group. Max 2 iterations per group. If a violation cannot be fixed
-      automatically (requires architectural change), report cannot_fix.
-
-  - id: "rescan"
-    agent: "canon-researcher"
-    dispatch: "subagent"
-    mcp_tools:
-      - get_principles
-      - list_principles
-      - log_step
-    artifacts:
-      - "plans/${slug}/ADOPTION-REPORT.md"
-    hitl: "checkpoint"
-    skip_when: null
-    notes: |
-      Re-scan the codebase after fixes. Same process as initial scan.
-      Save updated report showing remaining violations. Compare with
-      original report to measure improvement.
-```
+**Rollback notes**: The body should emphasize that every implementation step must consider rollback. The research step produces a rollback plan alongside the migration scope.
 
 ### Canon principles to apply
-- **agent-plans-are-prompts**: Fix-loop runbooks must clearly describe the loop semantics in `notes` — which steps loop, what triggers the loop, and what convergence looks like.
+
+- **simplicity-first**: Despite complexity, the runbook is still a linear step list. Claude handles adaptive behavior (replan between waves) via judgment, not YAML branching.
+- **information-hiding**: Each step encapsulates what the lead needs.
 
 ### Tests to write
-- No code tests. YAML validation only.
+
+No code tests. Verify YAML frontmatter parses for both files.
 
 ### Verify
-1. Both files exist at `skills/canon/runbooks/{test-gap,adopt}.md`
-2. Both parse as valid YAML
-3. `test-gap.md`: 4 steps covering scan, write-tests, fix-impl, review (with fix-loop noted in review notes)
-4. `adopt.md`: 3 steps covering scan, fix, rescan
-5. Fix-loop semantics documented in notes fields
-6. `npm run build` passes
-7. `npm test` passes
+
+1. Both files exist and YAML parses
+2. Epic covers all states from epic.md + fragments (13 states)
+3. Migrate covers all states from migrate.md + fragments (13 states)
+4. Both `implement` steps have `dispatch: team`
+5. Epic documents consultation protocol
+6. Migrate documents rollback emphasis
+7. Step IDs match legacy state names
 
 ### Done when
-- Both runbooks exist and parse as valid YAML
-- Each step maps to a legacy flow state with correct agent and dispatch type
-- Loop semantics (write-tests ↔ fix-impl, review ↔ fix-violations) are described in step notes
-- Skip conditions match legacy (`no_fix_requested`, `no_gaps`)
-- Build and tests pass unchanged
+
+- Both runbooks cover all states from their legacy flows
+- Conform to `_template.md` format
