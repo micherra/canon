@@ -2,7 +2,7 @@
 
 | Task | Wave | Depends on | Key files | Description |
 |------|------|------------|-----------|-------------|
-| phase1-00 | 1 | — | skills/canon/runbooks/_template.md, skills/canon/runbooks/_README.md | Define runbook format (markdown + YAML frontmatter) |
+| phase1-00 | 1 | — | templates/runbook-template.md, skills/canon/runbooks/README.md | Define runbook format (markdown + YAML frontmatter) |
 | phase1-01 | 1 | phase1-00 | skills/canon/runbooks/fast-path.md | Create fast-path runbook (simplest build flow) |
 | phase1-02 | 1 | phase1-00 | skills/canon/runbooks/feature.md | Create feature runbook (absorbs refactor as variant). Wave steps for parallel implementation. |
 | phase1-03 | 1 | phase1-00 | skills/canon/runbooks/{epic.md,migrate.md} | Create epic + migrate runbooks (large-tier flows) |
@@ -49,8 +49,8 @@ These legacy flows are NOT converted to runbooks. CLAUDE.md's dispatch section h
 ### File Inventory
 
 **New files (15):**
-- `skills/canon/runbooks/_template.md`
-- `skills/canon/runbooks/_README.md`
+- `templates/runbook-template.md`
+- `skills/canon/runbooks/README.md`
 - `skills/canon/runbooks/fast-path.md`
 - `skills/canon/runbooks/feature.md`
 - `skills/canon/runbooks/epic.md`

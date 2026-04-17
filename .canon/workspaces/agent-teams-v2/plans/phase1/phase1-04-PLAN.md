@@ -18,7 +18,7 @@ domains: []
 Create `skills/canon/runbooks/test-gap.md` — a runbook for analyzing test coverage gaps, writing tests, and reviewing. This flow has no ship step.
 
 1. Read `flows/test-gap.md` for legacy state coverage.
-2. Read `_template.md` for the runbook format.
+2. Read `templates/runbook-template.md` for the runbook format.
 3. Write `test-gap.md` following the template.
 
 **States to cover** (from test-gap.md + fragments):
@@ -52,4 +52,4 @@ No code tests. Verify YAML frontmatter parses.
 ### Done when
 
 - Test-gap runbook covers all states from test-gap.md + fragments
-- Conforms to `_template.md` format
+- Conforms to `templates/runbook-template.md` format

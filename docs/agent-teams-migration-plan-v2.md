@@ -405,7 +405,7 @@ The migration has three phases. Phase 1 adds guidance (no deletions, no behavior
 | Deliverable | Path | Purpose |
 |------------|------|---------|
 | Orchestration CLAUDE.md | `CLAUDE.md` (update) | Add orchestration discipline: how the lead composes context via MCP tools, when to use subagents vs agent teams, HITL patterns, post-step effects, completion checklist. |
-| Runbook format template | `skills/canon/runbooks/_template.md` | Canonical example defining the markdown + YAML frontmatter format. All runbooks conform to this. |
+| Runbook format template | `templates/runbook-template.md` | Canonical example defining the markdown + YAML frontmatter format. All runbooks conform to this. |
 | Fast-path runbook | `skills/canon/runbooks/fast-path.md` | Implement → pre-launch-check → context-sync → ship → learn. Simplest build flow. |
 | Feature runbook | `skills/canon/runbooks/feature.md` | Design → implement (wave) → verify → review → fix loop → context-sync → ship → learn. Absorbs refactor as a variant annotation. |
 | Epic runbook | `skills/canon/runbooks/epic.md` | Research → design → multi-wave implement → test → security → review → fix loops → context-sync → ship → learn. |

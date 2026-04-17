@@ -8,12 +8,12 @@ Four simpler flows (`review-only`, `security-audit`, `explore`, `adopt`) are han
 
 **Runbooks are markdown files with YAML frontmatter.** This matches Canon's existing convention: agents (`agents/*.md`), principles (`principles/**/*.md`), rules (`rules/*.md`), and templates (`templates/*.md`) all use this format. The frontmatter carries structured step metadata the orchestration journal consumes. The body carries prose guidance for the lead.
 
-The canonical template is [`_template.md`](./_template.md). All runbooks in this directory MUST conform to it.
+The canonical template is [`templates/runbook-template.md`](../../../templates/runbook-template.md). All runbooks in this directory MUST conform to it.
 
 ### Naming
 
-- `_template.md` — the canonical template (this format reference)
-- `_README.md` — this file (format documentation)
+- `templates/runbook-template.md` — the canonical template (lives with other Canon artifact templates)
+- `README.md` — this file (format documentation)
 - `{flow-name}.md` — one runbook per build flow; filename matches the flow key used in CLAUDE.md's intent table
 
 ## Frontmatter Schema
@@ -139,7 +139,7 @@ After every subagent returns, the lead checks each path in `steps[].artifacts` e
 3. **List only the MCP tools the lead actually calls for that step.** Empty arrays are fine. If a tool is universal, state it in CLAUDE.md, not in every runbook.
 4. **Be explicit about artifacts.** Every step must list the paths a downstream step or the reviewer will look for. Use `${slug}` and `${task_id}` where the path is task-scoped; `${timestamp}` where the output is time-keyed.
 5. **Body prose is judgment-level guidance, not a script.** Describe intent, trade-offs, and skip conditions. Never restate frontmatter fields.
-6. **Include `context-sync` and `learn` as final steps in every build runbook** (per §1 of the Phase 1 design). `_template.md` shows the canonical shape for both — copy the frontmatter structure and adapt the prose.
+6. **Include `context-sync` and `learn` as final steps in every build runbook** (per §1 of the Phase 1 design). `templates/runbook-template.md` shows the canonical shape for both — copy the frontmatter structure and adapt the prose.
 7. **Use `skip_when` for steps that may legitimately be skipped.** Natural language, not expressions. If the step is always mandatory, leave `skip_when: null`.
 
 ## Verification

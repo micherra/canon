@@ -2,7 +2,7 @@
 done_criteria:
   - id: "dc-01"
     description: "5 runbook playbooks exist at skills/canon/runbooks/{flow-name}.md (fast-path, feature, epic, migrate, test-gap), each as markdown with YAML frontmatter, covering every non-terminal state in its legacy flow (including fragment-expanded states). 4 simple flows (review-only, security-audit, explore, adopt) handled via CLAUDE.md inline dispatch."
-    testable: "ls skills/canon/runbooks/*.md returns 5 runbooks + _template.md + _README.md. For each, compare step IDs against expanded legacy flow states. Zero missing."
+    testable: "ls skills/canon/runbooks/*.md returns 5 runbooks + README.md. templates/runbook-template.md exists. For each runbook, compare step IDs against expanded legacy flow states. Zero missing."
   - id: "dc-02"
     description: "Orchestration journal MCP tool exists with log_step and verify_completion, including flow_outcome tracking (domain_skills_loaded, review_verdict, fix_iterations). Registered behind CANON_AGENT_TEAMS_MODE=on."
     testable: "npm run build && npm test pass. Tool list with flag on shows log_step and verify_completion. With flag off, tools absent. log_step accepts domain_skills_loaded and outcome fields."
@@ -40,7 +40,7 @@ done_criteria:
 
 #### 1. Runbook playbooks (5 files + template)
 
-Markdown files with YAML frontmatter — consistent with Canon's conventions (agents, principles, rules all use this format). A canonical template (`_template.md`) and README define the format. Four simple flows (review-only, security-audit, explore, adopt) are handled via CLAUDE.md inline dispatch.
+Markdown files with YAML frontmatter — consistent with Canon's conventions (agents, principles, rules all use this format). A canonical template (`templates/runbook-template.md`) and a README in `skills/canon/runbooks/` define the format. Four simple flows (review-only, security-audit, explore, adopt) are handled via CLAUDE.md inline dispatch.
 
 5 runbooks: fast-path, feature (absorbs refactor as variant), epic, migrate, test-gap. Each covers every non-terminal state from its legacy flow including fragment-expanded states. Step IDs match legacy state names for traceability.
 

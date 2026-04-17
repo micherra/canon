@@ -82,4 +82,4 @@ No code tests. Verify YAML frontmatter parses for both files.
 ### Done when
 
 - Both runbooks cover all states from their legacy flows
-- Conform to `_template.md` format
+- Conform to `templates/runbook-template.md` format

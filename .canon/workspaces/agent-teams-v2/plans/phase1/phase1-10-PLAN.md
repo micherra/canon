@@ -29,7 +29,7 @@ For each runbook in `skills/canon/runbooks/*.md` (fast-path, feature, epic, migr
 - Report any missing states
 
 **2. Runbook format conformance (5 checks)**:
-For each runbook, validate against `skills/canon/runbooks/_template.md`:
+For each runbook, validate against `templates/runbook-template.md`:
 - Frontmatter parses as YAML without errors
 - Top-level fields present: `name`, `description`, `tier`, `steps`
 - Each step has required fields: `id`, `agent`, `dispatch`, `mcp_tools`, `artifacts`, `hitl`. `skip_when` is optional (null or natural-language string).
