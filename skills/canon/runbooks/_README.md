@@ -48,15 +48,15 @@ steps:
 
 **`steps[].agent`** — The agent type the lead spawns for this step. Must be a valid entry in the Canon agent roster (`agents/canon-*.md`). The lead uses this field to pick the `subagent_type` when calling the Agent tool.
 
-**`steps[].dispatch`** — How the lead spawns the agent for this step (see §2.5 of the migration plan):
+**`steps[].dispatch`** — How the lead spawns the agent for this step (see §2.5 "Dispatch framework" of the migration plan):
 - `subagent` — spawn a single agent via the Agent tool. Use for sequential steps, focused tasks, single artifact. Examples: research, design, review.
 - `team` — create an agent team for parallel wave execution. Use when multiple teammates claim tasks from a shared task list and coordinate via the Mailbox. Examples: parallel implementation across files within a wave.
 
-**`steps[].mcp_tools`** — MCP tools the lead should call BEFORE spawning the agent, to compose context (principles, file context, KG summaries). This is the lead's pre-spawn checklist. Agents also have MCP access and self-serve missing context (see §2.5 of the migration plan), but the primary path is lead-composed.
+**`steps[].mcp_tools`** — MCP tools the lead should call BEFORE spawning the agent, to compose context (principles, file context, KG summaries). This is the lead's pre-spawn checklist. Agents also have MCP access and self-serve missing context (see §2.5 "Agent self-serve context" of the migration plan), but the primary path is lead-composed.
 
 **`steps[].artifacts`** — Expected output paths (relative to the workspace root). After the agent returns, the lead performs a **post-subagent artifact check**: verifies each listed path exists on disk before proceeding to the next step. Missing artifacts block progress and trigger a retry or HITL. The completion verification hook (`verify_completion`) aggregates these checks at flow end.
 
-**`steps[].hitl`** — Human-in-the-loop posture for this step. Maps to Claude's native HITL patterns (see §2.8 of the migration plan):
+**`steps[].hitl`** — Human-in-the-loop posture for this step. Maps to Claude's native HITL patterns (see §2.2 and §2.6 of the migration plan — Claude handles HITL natively; there is no custom breakpoint vocabulary):
 - `none` — lead proceeds without user interaction
 - `approval` — lead presents the artifact to the user and waits for explicit approval before proceeding (e.g., plan approval after design)
 - `checkpoint` — lead surfaces a summary mid-flow so the user can redirect; no blocking approval required
@@ -104,7 +104,7 @@ Because step IDs are stable and match legacy state names, existing analytics, dr
 
 ### Dispatch framework
 
-`steps[].dispatch` is the direct input to the lead's dispatch decision: `subagent` → Agent tool with a single spawn; `team` → agent team creation with N teammates and a shared task list. See §2.5 of the migration plan for the full dispatch rationale.
+`steps[].dispatch` is the direct input to the lead's dispatch decision: `subagent` → Agent tool with a single spawn; `team` → agent team creation with N teammates and a shared task list. See §2.5 "Dispatch framework" of the migration plan for the full rationale.
 
 ### HITL
 
@@ -117,7 +117,7 @@ After every subagent returns, the lead checks each path in `steps[].artifacts` e
 ## Authoring Guidance
 
 1. **Start from the legacy flow.** For each non-terminal state (including fragment-expanded states), create a corresponding step entry. Preserve the state name as `steps[].id` for traceability.
-2. **Choose dispatch per §2.5.** Sequential, single-artifact work → `subagent`. Parallel, multi-file work → `team`.
+2. **Choose dispatch per §2.5 "Dispatch framework".** Sequential, single-artifact work → `subagent`. Parallel, multi-file work → `team`.
 3. **List only the MCP tools that matter.** Every tool in `mcp_tools` should be one the lead calls for that specific step. If a tool is universal, state it in CLAUDE.md, not in every runbook.
 4. **Be explicit about artifacts.** Every step must list the artifact paths a downstream step or the reviewer will look for. Use `${slug}` and `${task_id}` placeholders where the path is task-scoped.
 5. **Body prose is judgment-level guidance, not a script.** Describe intent, trade-offs, and skip conditions. Do not write imperative pseudo-code.
@@ -137,4 +137,4 @@ grep -E '^## (Overview|Steps|Completion)\b' skills/canon/runbooks/<name>.md | wc
 # Every steps[].id has a matching ### heading in the body
 ```
 
-The phase1-00 DONE criterion (`dc-01` in the Phase 1 design) also requires: each runbook's `steps[].id` set covers every non-terminal state in the legacy flow, including fragment-expanded states.
+The Phase 1 design criterion `dc-01` also requires each runbook's `steps[].id` set to cover every non-terminal state in the legacy flow, including fragment-expanded states. That criterion applies to the concrete runbooks (phase1-01..04), not to this template.
