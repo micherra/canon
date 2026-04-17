@@ -30,11 +30,15 @@ For each runbook in `skills/canon/runbooks/*.md` (fast-path, feature, epic, migr
 
 **2. Runbook format conformance (5 checks)**:
 For each runbook, validate against `skills/canon/runbooks/_template.md`:
-- All required fields present (name, description, tier, steps)
-- Each step has: id, agent, dispatch, mcp_tools, artifacts, hitl, notes
+- Frontmatter parses as YAML without errors
+- Top-level fields present: `name`, `description`, `tier`, `steps`
+- Each step has required fields: `id`, `agent`, `dispatch`, `mcp_tools`, `artifacts`, `hitl`. `skip_when` is optional (null or natural-language string).
 - `dispatch` is one of: `subagent`, `team`
 - `hitl` is one of: `none`, `approval`, `checkpoint`, `on_failure`
-- YAML parses without errors
+- `agent` is either a valid entry in the 11-agent roster (`agents/canon-*.md`) or `null` for gate-only steps
+- Body has the three required sections: `## Overview`, `## Steps`, `## Completion`
+- Every `steps[].id` has a matching `### {id}` heading in the `## Steps` section (body-H3 parity)
+- No stray placeholders: `grep -nE '[^$]\{(slug|task_id|timestamp)\}'` returns empty (all placeholders use `${...}` form)
 
 **3. Skill registration completeness (1 check)**:
 For each agent definition's `skills:` frontmatter list:
