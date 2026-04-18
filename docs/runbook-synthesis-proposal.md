@@ -829,6 +829,8 @@ If a step declares `hitl: approval`, that stays regardless of confidence. The ru
 
 ## 13. Phase rollout — Tier 1 / 2 / 3 ordering
 
+> **⚠️ HARD PRECONDITION (Gate A): v2 Phase 1 exit criteria must be met before any v2.1 work begins.** Specifically: `canon-planner` and `canon-engineer` agent definitions must exist (currently they don't — only `canon-implementor` and `canon-fixer` exist), must register with the Canon MCP server, and must be validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`. This is not a soft guideline. Without these agents, v2.1 has nothing to build on. See §16 Gate A and §17 entry gates for the full statement.
+
 The build order for v2.1 inverts from what the earlier proposal draft suggested. The true priority is **dependency**, not implementation cost. Most tagging and observation work is roughly equivalent cost; what matters is which pieces unblock which downstream capabilities.
 
 ### 13.1 Tier 1 — foundational; blocks the learning loops
