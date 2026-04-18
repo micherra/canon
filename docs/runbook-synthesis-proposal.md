@@ -1004,6 +1004,131 @@ Work through the 10 changes iteratively in the PR #115 thread. Each change is a 
 
 ---
 
+## 17. Proposed carve-out: v2.1a / v2.1b / v2.2
+
+Responding to architect change #1 (§16). The current proposal bundles three independent architectural commitments into a single ratification ask; v2's methodology is *additive small steps with hard handoffs*, and this single-ratification framing violates that discipline. The split below carves v2.1 into three sequentially-gated sub-proposals, each scoped to what it can prove on its own.
+
+### 17.1 v2.1a — Vocabulary + synthesis, no substrate
+
+**Scope:**
+
+- §8 Vocabulary — 15 canonical step IDs (or 10 per architect change #6 if cuts are applied)
+- §9 Step schema — `skills:`, `cause:` first-class fields
+- §10 Synthesis contract — MUST / MAY / MUST NOT rules; iterate-until-approved loop
+- `skills/canon/references/runbook-vocabulary.md` — new vocabulary file
+- `skills/canon/references/planner-brief.md` + `skills/canon/references/runbook-synthesis.md` — two skills the planner loads
+- `canon-planner` agent body updated: loads both skills, emits `planning-brief.md` + `runbook.md`, runs the iterate-until-approved loop
+- `templates/runbook-template.md` — already landed on PR #115; becomes the output format for synthesis
+
+**Explicitly out of scope for v2.1a:**
+
+- No lifecycle persistence (no new tables, no MCP tools)
+- No learner role expansion
+- No commit trailer family
+- No structured observation tags on artifacts
+- No memory audit/groom/seed
+- No embeddings or semantic search
+
+**Entry gate:** v2 Phase 1 exit criteria met (architect change #7). `canon-planner` and `canon-engineer` agent definitions must exist and be validated in ≥ 3 successful runs under the feature flag before v2.1a starts.
+
+**Exit criteria:**
+
+- `canon-planner` synthesizes runbooks that conform to the format spec and pass iterate-until-approved
+- At least 5 distinct request types processed end-to-end (bug fix, small feature, refactor, migration, test-gap)
+- User-approval affordance defined at the runtime level (architect change #5)
+- Runbooks execute per the contract; same artifact quality as pre-synthesis static flows
+- Zero new enforcement hooks introduced (additive-only discipline honored)
+
+**What this ratifies on its own:** the synthesis-over-static-files architectural decision. If v2.1a ships and runs well, that's a clean win even if v2.1b and v2.2 never follow. The proposal's central coordination claim is tested independently of the learning-loop claim.
+
+### 17.2 v2.1b — Minimum viable lifecycle persistence
+
+**Scope:**
+
+- One new table: `lifecycle_workspace_snapshots` (aggregate row per completed workspace, per §11.3's schema for that row)
+- One new MCP tool: `snapshot_workspace({ workspace_id })` — called by `completion-verify.sh` at flow completion
+- Structured tags on *three* artifact types only — the minimum needed to run one working learner analysis (per architect change #4):
+  - Review findings: add `principle_id` to each finding (the single highest-value signal per architect review)
+  - Fix summary: add `cause`, `root_cause_tag`
+  - Implementation summary: add `justified_deviations[]`
+- Extend existing `canon-learner` with one new analysis dimension: principle-refinement from per-flow review data (§6.1). No template, no design-decision, no memory analyses.
+
+**Explicitly out of scope for v2.1b:**
+
+- No embeddings / semantic search (`similar_to` filter deferred)
+- No commit trailer family
+- No design-decision, research-finding, or test-report tags
+- No memory audit/groom/seed; no `memory_cited` tag
+- No cross-target analyses
+- No weekly digest format
+- No retention-tier policy (keep everything until we have data showing we need to prune)
+- No additional learner output dimensions beyond principle refinement
+
+**Entry gate:** v2.1a has shipped and produced ≥ 20 synthesized runbooks in real use. Without that corpus, v2.1b's principle-refinement analysis has no data to run against.
+
+**Exit criteria:**
+
+- One concrete principle-refinement proposal produced by the learner against real lifecycle data
+- Proposal accepted by a human reviewer and applied as an actual edit to a principle file
+- End-to-end loop closed: observation → pattern → proposal → accepted refinement in the repository
+- Schema migration against `drift-schema.ts` executes cleanly and is reversible
+- `snapshot_workspace` handles the failure cases listed in architect question #4 (what happens if snapshot fails, workspace already torn down, etc.)
+
+**What this ratifies on its own:** the learning-loop claim. A single real observation → pattern → proposal → refinement cycle, end-to-end, against one artifact class (principles). Everything else in §§4–7 is "expand the surface once this loop demonstrably closes."
+
+### 17.3 v2.2 — Surface expansion
+
+**Scope (all contingent on v2.1b success):**
+
+- Additional structured tags (design decision, task plan, research finding, test report, HITL events — per §5.2 full matrix)
+- Additional lifecycle tables (`lifecycle_synthesized_runbooks` with stage/iteration tracking, `lifecycle_step_executions`, `lifecycle_hitl_events`, `lifecycle_runbook_deviations`)
+- Embeddings + `similar_to` semantic search (§11.4 filter)
+- Memory citation tag + audit/groom analyses (§7 partial — grooming and audit only; seeding stays v2.3+)
+- Cross-target correlation analyses (§6 full gallery)
+- Weekly learning digest format (§6.8)
+- Commit trailer family — only if `git blame`-level provenance proves necessary in practice
+- Tiered retention policy — only once storage data warrants it
+
+**Explicitly out of scope for v2.2:**
+
+- Memory seeding for new agents (§7.3) — v2.3 at earliest; high-risk automated-writeback to agent state
+- Agent-prompt refinement targets in §4 matrix — requires separate design pass on "learner writes to agents/*.md"
+- Knowledge graph priors in §4 matrix — requires separate design pass on "learner writes to knowledge-graph.db"
+- Vocabulary meta-refinement (learner proposes new step IDs) — requires demonstrated stability first
+
+**Entry gate:** v2.1b has shipped ≥ 3 principle-refinement proposals, of which ≥ 1 has been accepted and applied. Without that track record, scope expansion is premature.
+
+**Exit criteria:** per-expansion — each new refinement target added under v2.2 must demonstrate a completed observation → refinement cycle before the next target is enabled.
+
+### 17.4 What this split changes about §§3–15
+
+§§3, 5, 8, 9, 10 align cleanly with v2.1a + v2.1b — they describe infrastructure and architecture independent of scope phase.
+
+§§4, 6, 7 are heavily expanded beyond what v2.1a/b deliver; they become *aspirational scope for v2.2*. Those sections need an explicit "scope marker" per subsection indicating which phase it lands in (v2.1a / v2.1b / v2.2 / later). Architect change #6 covers the reduction of §4; §7 is cut entirely (architect change #2); §6's gallery is marked as v2.2 analyses with only §6.1 landing in v2.1b.
+
+§11 is sharply cut in v2.1b (one table, one tool) and expanded back in v2.2. §11.5 retention policy defers to v2.2 (architect note). §11.8 phase impact rewrites per the split.
+
+§12 confidence scoring stays as observational data captured in v2.1a (emitted but not persisted) and persisted in v2.1b (stored with the snapshot). Calibration analyses are v2.2.
+
+§13 phase rollout rewrites entirely per this split. The current Tier 1/2/3 framing collapses into v2.1a/b/2.2 framing, which is cleaner.
+
+§14 migration plan amendments narrows to the minimal set needed for v2.1a + v2.1b. Many of the currently-listed amendments (§4b P4/P5 promotion, §6 Risks additions for cross-target concerns, §7 out-of-scope additions) become v2.2 amendments.
+
+A full rewrite of §§3–15 under this split is substantial but mechanical once the carve-out is ratified. Doing that rewrite is architect change #1 in full.
+
+### 17.5 Why the split is the right response to the architect review
+
+The architect's core critique was "you're asking for one ratification of three independent architectural commitments with a lot of speculative surface." This split:
+
+- **Isolates the risks.** v2.1a proves synthesis works without being hostage to persistence design decisions. v2.1b proves the learning loop closes without being hostage to memory/embeddings/trailers. v2.2 expands only after each prior step earned the right.
+- **Re-instates v2's methodology.** Each sub-proposal is independently additive and has a clean exit. v2's discipline holds.
+- **Produces evidence at each gate.** v2.1a produces real synthesized runbooks; v2.1b produces one real refinement proposal; v2.2 expands based on what the corpus actually shows.
+- **Makes rollback tractable.** If v2.1b's loop doesn't close, v2.1a's synthesis-over-static decision still stands — we don't have to revert the whole v2.1 bundle.
+
+The cost is longer elapsed time before the full v2.1 vision ships. The benefit is that each piece earns ratification on its own merits and the architecture can self-correct between phases.
+
+---
+
 ## Appendix A: Conversation provenance
 
 This proposal emerged from the PR #115 review thread on branch `claude/runbook-template-format-dM3LJ`. Key conversation beats, chronologically:
