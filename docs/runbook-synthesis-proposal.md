@@ -914,19 +914,26 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 
 **Revision naming:** `docs/agent-teams-migration-plan-v2.1.md` as a new file; v2 preserved for history. v2.1 frontmatter references v2 as its supersedent.
 
-## 15. Open questions
+## 15. Open questions and resolutions
 
-General questions (persistence-specific ones are in §11.9):
+General questions (persistence-specific ones are in §11.9). Resolved entries note the decision and where in the proposal it's captured.
+
+### Open
 
 1. **Planner output location** — `plans/${slug}/runbook.md` alongside brief, or distinct location? Lean: same directory as brief for cohesion.
 2. **`cause` extensibility** — any step besides `fix` need `cause`? Defer until evidence.
-3. **Vocabulary versioning** — if a runbook is synthesized against v1 and resumed later under v2, how does resume work? Options: lock to synthesis-time version (cleanest); regenerate on vocab change; warn-and-proceed. Lean: lock for determinism during a single build.
 4. **Learner loop ownership** — Phase 2 establishes baseline; who owns continuous refinement afterward? Planner auto-tunes from learner output (P5 territory) or humans curate proposals weekly? Probably the latter initially (supervised); automation is a later promotion.
 5. **CLAUDE.md intent classification minimum** — with all build requests routing to planner, what's the minimal residual intent set? Greetings, questions, chat — defer to a separate design pass.
-6. **Seed-bundle format** — if memory seeding lands in v2.1 (not v2.2), what's the artifact format? A new `templates/memory-seed.md`? Merges with existing memory-file format? Defer.
-7. **Observation-schema evolution** — when a new structured tag is worth promoting to first-class column vs. staying in `extra_tags` JSON? Criterion: observed across N flows in ≥M agents' outputs → promote.
-8. **HITL event categorization** — our event types (`approval`, `clarification`, `redirect`, `reject`, `abort`, `iterate`) cover the current model. Are we missing any? Particularly for the iteration loop.
+6. **Seed-bundle format** — moved with §7 to v2.3+ (architect change #2; see Appendix B).
 9. **Tier 2 timing** — land all observation tags simultaneously or roll per-artifact? Lean: simultaneous (one coordinated pass) unless a specific tag needs design work first.
+
+### Resolved (per architect change #9)
+
+3. **Vocabulary versioning across resume** — RESOLVED. Approach: regenerate-with-workspace-context on vocab major-version delta where the locked runbook references a removed entry. Vocab evolution follows semver-style discipline (minor=additive, major=removal-allowed-after-deprecation-cycle). Most resumes do not trigger regen because most evolution is additive. See §8.2 for evolution discipline; §11.3 schema for `vocabulary_version`, `stage: regenerated`, and `original_runbook_id`.
+
+7. **Observation-schema evolution** — RESOLVED. Closed schema for v2.1: fields enumerated in §5.2 are the complete list; agents that emit other fields have them dropped by the indexer (no `extra_tags` JSON catch-all). Schema evolution requires explicit versioned migration. See §5.7 for full policy. Future v2.2+ possibility: learner-proposed schema additions from observed prose patterns — out of scope for v2.1.
+
+8. **HITL event categorization** — RESOLVED. Final enum: `approval` / `clarification` / `redirect` / `reject` / `abort` / `iterate` / `modify` / `escalate` / `consult`. Plus a `phase` dimension on every event: `synthesis` / `execution` / `post_execution`. See §11.3 `lifecycle_hitl_events` schema.
 
 ## 16. Status and next steps
 
