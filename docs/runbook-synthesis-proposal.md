@@ -880,6 +880,7 @@ All lightweight structured tag additions. Same cost profile across the board; no
 Plus:
 - **Synthesis skill versioning** — each synthesis records which skill version produced it
 - **Memory citation prompt guidance** — added to six memory-bearing agent definitions
+- **`Canon-Deviation*` commit trailer family** — `commit-trailers.ts` extension; PostCommit hook validates trailer-vs-summary parity; indexer populates `lifecycle_deviations` during snapshot (see §5.6, §11.3)
 
 Cost: one coordinated schema migration + template edits + agent prompt updates. Cheaper as a single pass than sequencing.
 
@@ -944,6 +945,7 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 | §5 Phase 2 validation | Add: learner analyses gallery runs produce first weekly digests; confidence signals correlate with outcomes; memory groomed per schedule; first proposals accepted into principle / skill / template refinements. |
 | §6 Risks | Add: "Planner emits inconsistent runbooks across similar requests" (mitigated by iterate-until-approved + deviation tracking); "Vocabulary drift" (LOW — versioned change process); "Observation tag compliance" (LOW — hybrid schema tolerates missing fields). |
 | §7 Out of scope | Add: "Cross-repo learning (memory sharing across Canon installs). Autonomous confidence-based gating. Real-time write-through to lifecycle DB (per-run snapshot only in v2.1)." |
+| §4 Phase 1 deliverables (trailer addition) | Extend `commit-trailers.ts` with `Canon-Deviation`, `Canon-Deviation-Rationale`, `Canon-Deviation-Decision` trailer family. PostCommit hook validates trailer-vs-`justified_deviations` parity. Engineer agent prompt updated to emit trailer alongside summary tag. Reviewer agent prompt updated to check for authorizing trailer before flagging principle violations. |
 
 **Revision naming:** `docs/agent-teams-migration-plan-v2.1.md` as a new file; v2 preserved for history. v2.1 frontmatter references v2 as its supersedent.
 
