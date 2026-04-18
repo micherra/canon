@@ -382,6 +382,22 @@ Total: **15 entries** (13 functional + 2 mandatory tail).
 | `monitor` | No Canon ops/deploy flow today; add later if one emerges |
 | `release` | Subsumed into `ship` unless release automation becomes distinct |
 
+### 8.2 Vocabulary evolution discipline
+
+The vocabulary is versioned and evolves under semver-style discipline:
+
+- **Minor versions are additive only.** New step IDs, new default values, new optional fields. Existing runbooks remain valid.
+- **Major versions may remove or rename entries**, but only after a deprecation cycle.
+- **Deprecation cycle:** at least one minor version where the entry is marked deprecated (still functional, but emits a deprecation notice). Removal happens in the next major version. Runbooks synthesized during the deprecation window get a warning at synthesis time.
+
+**Resume implications** (relevant to §11.3 `lifecycle_synthesized_runbooks.vocabulary_version` and §15 resolved-question #3):
+
+- Resume against a *minor-version-newer* vocab → locked runbook continues to work fine; no user prompt needed
+- Resume against a *major-version-newer* vocab where the locked runbook references a removed entry → regeneration required (user approval gated, planner re-synthesizes with full workspace context per §17.1 entry gate semantics)
+- Resume against a vocab that deprecated (but did not remove) a referenced entry → continues with notice; user may opt to abandon and regenerate
+
+This discipline keeps regeneration rare. Most vocab evolution is additive and never triggers a resume regen path at all.
+
 ## 9. Step schema — first-class fields
 
 Every step in a synthesized runbook carries structural fields (from `templates/runbook-template.md`), plus three domain-oriented axes:
