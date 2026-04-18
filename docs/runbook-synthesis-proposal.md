@@ -475,4 +475,42 @@ Rejected for v2.1 as a general mechanism. Real variants today (`implement` behav
 
 Promote `mode:` to a first-class field in a future vocabulary revision if synthesis rules proliferate beyond 3–4 variants.
 
-<!-- BATCH 6 MARKER: sections 10 onward to be populated in subsequent commits -->
+## 10. Synthesis contract
+
+Rules the planner (via `runbook-synthesis.md` skill) MUST follow when emitting a runbook. These invariants replace the structural guarantees static runbooks used to provide.
+
+### 10.1 Planner MUST
+
+1. **Include mandatory tail.** Every build runbook ends with `context-sync` followed by `learn`. Not optional, not reorderable.
+2. **Use canonical step IDs only.** Any step ID not in `runbook-vocabulary.md` is a synthesis error.
+3. **Preserve default agent / dispatch / HITL** unless overriding with explicit justification in the brief body.
+4. **Validate `skills:` names strictly** against `skills/canon/references/` at synthesis time.
+5. **Use `${slug}` / `${task_id}` / `${timestamp}` placeholders** per the runbook format spec.
+6. **Include a one-paragraph Overview** explaining why this step sequence was chosen.
+7. **Emit body H3 prose per step** with intent, skip-when elaboration, and coordination notes (per `skills/canon/runbooks/README.md`).
+8. **Apply contract pairings** from synthesis rules:
+   - Behavior-preserving `implement` → mandatory-following `verify` with "no behavior changes" criterion
+   - `migrate` → paired rollback artifact
+   - `security` findings → at least one `fix` step with `cause: security` before `ship`
+   - `review` verdict not clean → `fix` with `cause: review` loop until clean
+
+### 10.2 Planner MAY
+
+- **Reorder steps** (`security` before `review` for auth-sensitive changes)
+- **Skip optional steps** (`design` for scoped fixes; `test` for doc-only changes)
+- **Repeat steps** (two `review` passes for risky migrations; multiple `fix` cycles)
+- **Expand a single step into multiple waves** (`implement` split into wave 1 = core + wave 2 = extensions)
+
+### 10.3 Planner MUST NOT
+
+- **Invent new step IDs.** Adding a vocabulary entry is a deliberate versioned change, not a per-run decision.
+- **Remove baseline HITL** from step defaults. The runbook's declared `hitl:` posture stays regardless of any signal.
+- **Skip mandatory tail** regardless of flow size or user preference.
+
+### 10.4 Iteration, not one-shot
+
+The contract applies across the full planner-user iteration loop. The planner proposes a runbook; the user reviews; either approves or requests changes. If the user's requested change would violate a MUST (e.g., "skip context-sync"), the planner pushes back. If the change is within MAY, the planner adapts and re-emits. Iteration continues until the user approves.
+
+This means "the planner's output" is really "the finally-approved runbook", which may differ from the initial proposal. Both are captured in the lifecycle corpus — initial and approved versions — so the learner can analyze iteration patterns.
+
+<!-- BATCH 7 MARKER: sections 11 onward to be populated in subsequent commits -->
