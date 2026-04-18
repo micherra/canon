@@ -57,4 +57,116 @@ Five pieces work together:
 
 Every build request routes to `canon-planner`. The lead then executes the synthesized runbook by calling `log_step`, spawning per step, verifying artifacts, handling HITL — same orchestration loop as the static-runbook model, with one change: the runbook file is `plans/${slug}/runbook.md` (synthesized per build) instead of `skills/canon/runbooks/<flow>.md` (standing).
 
-_(Sections 4–9 to follow in subsequent batches: vocabulary, step schema fields, synthesis contract, confidence scoring, phase rollout, impact on existing plan, open questions.)_
+## 4. Vocabulary
+
+The canonical set of step IDs Canon knows. Adding a new ID is a versioned change (like adding a principle — deliberate, reviewed). The vocabulary is stored at `skills/canon/references/runbook-vocabulary.md` and loaded as a skill by any agent that needs to understand runbook structure.
+
+| Step ID | Default agent | Dispatch | Default HITL | Purpose |
+|---------|---------------|----------|--------------|---------|
+| `research` | canon-researcher | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift). Absorbs legacy `scan`. |
+| `design` | canon-architect | subagent | approval | Plan index + design decisions |
+| `spike` | canon-engineer | subagent | none | Time-boxed exploratory prototype; produces findings, not shipped code |
+| `implement` | canon-engineer | subagent or team | none | Build code with TDD/BDD. `team` when wave-parallel. Absorbs legacy `write-tests` via TDD. |
+| `migrate` | canon-engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact) |
+| `verify` | canon-engineer | subagent | on_failure | Run existing tests / gates post-change |
+| `test` | canon-tester | subagent | none | Net-new integration tests; coverage-gap fills |
+| `benchmark` | canon-tester | subagent | on_failure | Performance verification against baseline |
+| `security` | canon-security | subagent | none | Security assessment |
+| `review` | canon-reviewer | subagent | checkpoint | Principle compliance (absorbs legacy `audit` via scope) |
+| `fix` | canon-engineer | subagent | on_failure | Fix mode. Required: `cause: test-failure \| security \| review \| verify` |
+| `pre-launch-check` | null | n/a | on_failure | Gate-only — lead runs discovered checks via Bash |
+| `ship` | canon-shipper | subagent | on_failure | PR description synthesis (absorbs legacy `release` unless distinct release flow emerges) |
+| `context-sync` | canon-scribe | subagent | none | Doc sync — **mandatory tail** |
+| `learn` | canon-learner | subagent | none | Pattern analysis — **mandatory tail** |
+
+Total: **15 entries** (13 functional + 2 mandatory tail).
+
+### Explicitly dropped candidates
+
+| Dropped | Why |
+|---------|-----|
+| `scan` | Scope of `research` |
+| `map` | Covered by `codebase_graph` MCP tool + SessionStart KG-check hook; not a per-flow step |
+| `triage` | Scope of `research` (ranked-list output) |
+| `profile` | Speculative — no Canon perf flow today; add via versioned-change process if one emerges |
+| `risk-assessment` | Scope of `research` with `skills: [risk-analysis]` |
+| `refactor` | Handled via synthesis rule — `implement` with a mandatory-following `verify`; promote to `mode: refactor` if evidence warrants |
+| `smoke` | Scope of `verify` |
+| `audit` | Scope of `review` |
+| `rollback-prep` | Paired artifact of `migrate`; handled in synthesis rule, not a separate step |
+| `monitor` | No Canon ops/deploy flow today; add later if one emerges |
+| `release` | Subsumed into `ship` unless release automation becomes distinct |
+
+## 5. Step schema — first-class fields
+
+Every step in a synthesized runbook carries the same structural fields (from `templates/runbook-template.md`), **plus** three domain-oriented axes introduced by this proposal:
+
+### 5.1 `skills:` — what domain expertise to load
+
+General-purpose: any step can declare domain primers to load from `skills/canon/references/`. Agents read named skills on their first turn via `agent-context-check`.
+
+```yaml
+- id: implement
+  agent: canon-engineer
+  dispatch: team
+  skills:
+    - backend-api
+    - authentication-security
+  mcp_tools: [get_principles, get_file_context]
+  artifacts: ["plans/${slug}/${task_id}-SUMMARY.md"]
+  hitl: none
+```
+
+**Validation:** strict. The planner validates every name in `skills:` against the file list in `skills/canon/references/` at synthesis time. Unresolvable names are a synthesis error, not a warning.
+
+**Why declarative, not inline prose:** (a) planner decides skill selection once at synthesis, not per-spawn; (b) journal's existing `domain_skills_loaded` field captures the list verbatim for learner analysis; (c) multiple skills per step compose cleanly (auth + backend-api); (d) no step-specific `domain` / `scope` / `cause` field proliferation.
+
+### 5.2 `cause:` — analytic lineage + default skill hint (fix-specific)
+
+Used only on `fix` (and potentially future re-work steps). Carries two signals in one field:
+
+1. **Analytic:** which upstream step triggered this fix (for outcome correlation — test-failure fixes have different shape than security fixes)
+2. **Skill hint:** a default primer to auto-add to `skills:` (e.g., `cause: review` → `review-feedback-handling`)
+
+```yaml
+- id: fix
+  agent: canon-engineer
+  cause: security               # analytic + hints at authentication-security skill
+  skills:
+    - authentication-security   # explicit additional primer
+  mcp_tools: [get_principles, get_file_context]
+  artifacts: ["plans/${slug}/FIX-SUMMARY.md"]
+  hitl: on_failure
+```
+
+### 5.3 `mode:` — deferred for now
+
+Rejected for v2.1 as a general mechanism. The two real variants today (`implement.mode: refactor`, `implement.mode: migrate`) are handled via rules in `runbook-synthesis.md`:
+
+- "When the task is behavior-preserving, synthesize `implement` with skill `refactor-methodology` and a mandatory-following `verify` step whose body prose specifies 'no behavior changes' as the pass criterion."
+- "When the task is a schema/data migration, synthesize `migrate` (not `implement`) paired with a rollback-prep artifact."
+
+If synthesis rules proliferate beyond 3–4 variants, promote `mode` to a first-class field in a vocabulary revision. For now, inline the rules.
+
+### 5.4 Full frontmatter example (security-triggered fix with domain primers)
+
+```yaml
+- id: fix
+  agent: canon-engineer
+  dispatch: subagent
+  cause: security
+  skills:
+    - authentication-security
+    - backend-api
+  mcp_tools:
+    - get_principles
+    - get_file_context
+  artifacts:
+    - "plans/${slug}/FIX-SUMMARY.md"
+  hitl: on_failure
+  skip_when: null
+```
+
+Body H3 prose for this step covers intent ("address security findings"), composition hints beyond `mcp_tools` (which template to reference for FIX-SUMMARY), and HITL posture. Body does NOT restate the frontmatter fields — per the authoring rule in `skills/canon/runbooks/README.md`.
+
+_(Sections 6–9 to follow: synthesis contract, confidence scoring, phase rollout, impact on existing plan, open questions.)_
