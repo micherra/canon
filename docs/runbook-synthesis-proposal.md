@@ -535,7 +535,8 @@ One row per synthesis event (initial proposal OR approved final — both persist
 | `synthesizer_agent` | TEXT | Usually `canon-planner` |
 | `vocabulary_version` | TEXT | Version of `runbook-vocabulary.md` this was synthesized against |
 | `synthesis_skill_version` | TEXT | Version of `runbook-synthesis.md` used |
-| `stage` | TEXT | `proposed` / `approved` — distinguishes initial from user-iterated-final |
+| `stage` | TEXT | `proposed` / `approved` / `regenerated` — `regenerated` rows are emitted when a resume across vocab major versions triggers re-synthesis (per §8.2 + §15 resolved #3); they reference the original via `original_runbook_id` |
+| `original_runbook_id` | INTEGER FK nullable | Set on `regenerated` rows; points to the originally-approved runbook this re-synthesis succeeds |
 | `iteration_index` | INTEGER | 0 = first proposal; N = Nth iteration during user review |
 | `confidence` | REAL | 0.0–1.0 |
 | `confidence_signals` | JSON | `[{signal, value}]` |
@@ -574,7 +575,8 @@ One row per user intervention.
 | `id` | INTEGER PK | |
 | `runbook_id` | INTEGER FK | |
 | `step_execution_id` | INTEGER FK nullable | Null when outside a specific step |
-| `event_type` | TEXT | `approval` / `clarification` / `redirect` / `reject` / `abort` / `iterate` |
+| `event_type` | TEXT | `approval` / `clarification` / `redirect` / `reject` / `abort` / `iterate` / `modify` / `escalate` / `consult` (per §15 resolved #8) |
+| `phase` | TEXT | `synthesis` / `execution` / `post_execution` (per §15 resolved #8) — distinguishes when in the flow lifecycle the event occurred |
 | `posture` | TEXT | Step's declared `hitl` or `unscheduled` / `plan-approval` |
 | `input_summary` | TEXT | Bounded, no verbatim |
 | `outcome` | TEXT | `proceeded` / `rerouted` / `aborted` |
