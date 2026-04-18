@@ -674,6 +674,32 @@ Aggregate row per completed/abandoned workspace. Joins to existing `FlowRunEntry
 
 The `commit_range_*` fields bridge lifecycle data to git — the code-change axis. `query_workspace_history` can JOIN lifecycle rows with `git log --grep="Canon-Workflow: ${slug}"` for full provenance.
 
+#### `lifecycle_deviations`
+
+One row per `Canon-Deviation` commit trailer observed in the lifecycle corpus. Populated by the indexer during `snapshot_workspace` by scanning commits in the workspace's `commit_range`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | INTEGER PK | |
+| `workspace_id` | TEXT | Links to `lifecycle_workspace_snapshots.workspace_id` |
+| `commit_sha` | TEXT | Indexed — direct lookup from `git blame` output |
+| `principle_id` | TEXT | Parsed from `Canon-Deviation:` trailer value |
+| `rationale_short` | TEXT | Parsed from `Canon-Deviation-Rationale:` trailer (bounded) |
+| `decision_id` | TEXT | Nullable — from `Canon-Deviation-Decision:` trailer if present |
+| `author_agent` | TEXT | From `Canon-Agent` trailer on the same commit |
+| `step_id` | TEXT | From `Canon-State` trailer on the same commit |
+| `files_affected` | JSON | Paths changed in the commit (from `git show --name-only`) |
+| `observed_at` | TIMESTAMP | Commit timestamp |
+
+This table becomes a first-class signal for the learner (see §6 gallery). Queries it enables:
+
+- *"Which principles are most often deviated from, and with what rationales?"* → candidates for scope refinement or convention carve-out
+- *"Are deviations clustered in specific subsystems?"* → candidate for a subsystem-scoped convention
+- *"For principle P, which rationales recur?"* → if the same rationale appears N+ times, it should probably be promoted from per-commit annotation into the principle's own text (e.g., "this principle does not apply in context X")
+- *"Agent X has authored N deviations for principle P — is X interpreting P differently than others?"* → calibration signal for agent prompts or the principle's wording
+
+Retention: `lifecycle_deviations` rows are small (under 1KB each even with metadata); retain permanently unless explicit archive policy dictates otherwise. The full commit history in git is the source of truth; this table is a queryable index.
+
 ### 11.4 New MCP tools
 
 #### `snapshot_workspace({ workspace_id }) → { snapshot_id, runbook_id, deviations_detected }`
