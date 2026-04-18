@@ -513,4 +513,37 @@ The contract applies across the full planner-user iteration loop. The planner pr
 
 This means "the planner's output" is really "the finally-approved runbook", which may differ from the initial proposal. Both are captured in the lifecycle corpus — initial and approved versions — so the learner can analyze iteration patterns.
 
-<!-- BATCH 7 MARKER: sections 11 onward to be populated in subsequent commits -->
+## 11. Lifecycle persistence — the substrate for the learning system
+
+Everything in §3–§7 depends on one piece of infrastructure: a durable, queryable record of what happened in each flow that survives workspace cleanup. Workspaces under `.canon/workspaces/<id>/` are ephemeral by design — they're scratch, not record. Without repo-level persistence, observations are lost and the learning loop can't close.
+
+This section locks in the storage decision and sketches schemas. It is the load-bearing layer under the rest of the proposal.
+
+### 11.1 Storage decision
+
+**Extend `.canon/drift-db.sqlite` with new `lifecycle_*` tables. Per-run snapshot at flow completion.**
+
+Rationale:
+
+- Drift analytics and lifecycle persistence have the same underlying concern: time-series record of execution. Calling it "drift" vs. "lifecycle" is naming; the data model is continuous.
+- Existing infrastructure already handles schema migrations, query layer, and retention policy hooks. Don't duplicate it.
+- New tables use a `lifecycle_` prefix to partition from existing drift tables and keep the mission boundary explicit.
+- JOINs with the existing `FlowRunEntry` table are natural — same `workspace_id` key.
+
+Rejected alternatives:
+
+- *New dedicated DB (`.canon/lifecycle.db`)* — two DBs, duplicate infrastructure, cross-DB JOINs need app-level work.
+- *Pure JSONL append-log* — simple but every query is a scan; no joins; structured queries need an import step. Reserve JSONL for raw event capture if direct DB writes become a bottleneck.
+
+Fallback if drift-db feels overloaded: Kappa pattern — raw events append to JSONL (`runbook-history.jsonl`, `hitl-events.jsonl`), materialized into drift-db tables on demand via a `refresh_lifecycle_index` MCP tool. Don't build now; keep as escape hatch.
+
+### 11.2 Persistence boundary — per-run snapshot
+
+Workspace files are the source of truth *while a flow is running*. At flow completion, `snapshot_workspace({ workspace_id })` reads the workspace and materializes a structured lifecycle record.
+
+- `completion-verify.sh` hook is the natural trigger — verify, snapshot, then the workspace can be safely cleaned up
+- Janitor processes also call `snapshot_workspace` before deleting abandoned workspaces, preserving partial state
+
+**In-progress flows are queried from the workspace, not the DB.** Real-time dashboards / mid-run interventions are out of scope for v1. If they emerge as a need, upgrade to write-through later — the snapshot table schema is the same either way.
+
+<!-- BATCH 8 MARKER: sections 11.3 onward to be populated in subsequent commits -->
