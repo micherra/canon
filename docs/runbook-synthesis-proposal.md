@@ -546,23 +546,65 @@ Everything in §3–§7 depends on one piece of infrastructure: a durable, query
 
 This section locks in the storage decision and sketches schemas. It is the load-bearing layer under the rest of the proposal.
 
-### 11.1 Storage decision
+### 11.1 Storage decision — v2.1b minimum; full schema deferred to v2.2
 
-**Extend `.canon/drift-db.sqlite` with new `lifecycle_*` tables. Per-run snapshot at flow completion.**
+**v2.1b ships ONE new table** (`lifecycle_workspace_snapshots`) extending `.canon/drift-db.sqlite`, with per-run snapshot at flow completion. **The full §11.3 schema (five tables) defers to v2.2.**
 
-Rationale:
+This resolves architect change #8 by adopting option (c): explicitly scope v2.1b to the minimum single-table persistence and defer the full §11 substrate decision. The architect's concern was that earlier drafts rejected the JSONL-first alternative in one dismissive sentence — meaning the storage decision was under-examined for a substantial schema. Scoping v2.1b to one table makes the decision small enough that drift-db is the obvious fit, and gives v2.2 a legitimate re-decision point when schema expansion would warrant it.
 
-- Drift analytics and lifecycle persistence have the same underlying concern: time-series record of execution. Calling it "drift" vs. "lifecycle" is naming; the data model is continuous.
-- Existing infrastructure already handles schema migrations, query layer, and retention policy hooks. Don't duplicate it.
-- New tables use a `lifecycle_` prefix to partition from existing drift tables and keep the mission boundary explicit.
-- JOINs with the existing `FlowRunEntry` table are natural — same `workspace_id` key.
+#### Concrete v2.1b migration
 
-Rejected alternatives:
+Single schema migration against `mcp-server/src/platform/storage/drift/drift-schema.ts`:
 
-- *New dedicated DB (`.canon/lifecycle.db`)* — two DBs, duplicate infrastructure, cross-DB JOINs need app-level work.
-- *Pure JSONL append-log* — simple but every query is a scan; no joins; structured queries need an import step. Reserve JSONL for raw event capture if direct DB writes become a bottleneck.
+```sql
+-- v2.1b migration: add lifecycle_workspace_snapshots
+CREATE TABLE lifecycle_workspace_snapshots (
+  id INTEGER PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  approved_runbook_id INTEGER,          -- NULL in v2.1b (lifecycle_synthesized_runbooks not yet created)
+  outcome TEXT NOT NULL,                 -- 'complete' | 'aborted' | 'abandoned'
+  total_iterations_to_approve INTEGER,
+  total_steps_executed INTEGER,
+  total_steps_skipped INTEGER,
+  total_hitl_events INTEGER,
+  total_deviations INTEGER,
+  flow_duration_ms INTEGER,
+  commit_range_first TEXT,
+  commit_range_last TEXT,
+  snapshotted_at TIMESTAMP NOT NULL
+);
 
-Fallback if drift-db feels overloaded: Kappa pattern — raw events append to JSONL (`runbook-history.jsonl`, `hitl-events.jsonl`), materialized into drift-db tables on demand via a `refresh_lifecycle_index` MCP tool. Don't build now; keep as escape hatch.
+CREATE INDEX idx_lifecycle_workspace_snapshots_slug
+  ON lifecycle_workspace_snapshots(slug);
+CREATE INDEX idx_lifecycle_workspace_snapshots_snapshotted_at
+  ON lifecycle_workspace_snapshots(snapshotted_at);
+```
+
+Drift-db already has a migration runner. Adding this table is ~20 lines of schema DDL plus a migration version bump. Reversible — `DROP TABLE lifecycle_workspace_snapshots` if rollback is required. No data loss in that case because v2.1b's scope also ships `snapshot_workspace` as the sole writer; if the table goes, the writer goes with it.
+
+#### Why drift-db extension for v2.1b (not a separate DB, not JSONL-first)
+
+- **Drift analytics and lifecycle persistence share the same concern** (time-series record of execution). Calling it "drift" vs "lifecycle" is naming; the data model is continuous.
+- **Existing migration infrastructure handles the one-table addition for free.** A new DB would need its own migration story for zero real benefit at this scope.
+- **JOINs with existing `FlowRunEntry` are natural** — same `workspace_id` key.
+- **For one table with ~one row per workspace completion**, JSONL-first's main appeal (write-path simplicity) doesn't pay for itself — the write volume is trivial (maybe 10s of rows per day in active use). The structured-read need is real from day one: the learner's §6.1 principle-refinement analysis needs to JOIN against existing `drift_store` review-finding tables, filter by workspace_id / principle_id / timestamp. That's a native SQLite operation against a small table; the JSONL alternative would require an import step or line-by-line scan.
+
+#### Why v2.2 legitimately revisits this decision
+
+When v2.2's schema expands to ~5 tables with higher-volume rows (step_executions per flow, hitl_events per iteration), the calculus changes. The architect's JSONL-first concern becomes a real design choice at that scope:
+
+- **Write volume grows** — step_executions and hitl_events could produce 10–50 rows per flow, not 1. Per-row DB writes under SQLite's write lock become a real consideration.
+- **Existing Canon JSONL patterns** (`.canon/learning.jsonl`, `.canon/flow-runs.jsonl`) suggest append-log is Canon's native pattern for event streams.
+- **Materialization via a `refresh_lifecycle_index` MCP tool** (Kappa-style — raw events append to JSONL, structured tables built lazily) becomes a legitimate alternative to direct DB writes.
+
+**v2.2 decision is explicitly deferred.** Rather than designing the full §11.3 schema now and pre-committing to drift-db for all of it, v2.2 chooses between:
+
+- Direct drift-db extension (five more tables)
+- JSONL-first with SQLite materialization (Kappa pattern)
+- Hybrid — critical path in drift-db; high-volume events in JSONL
+
+The choice depends on observed data volume and query patterns from v2.1b's deployment. v2.2's scope expansion proposal will include a concrete storage-decision ADR informed by that real data.
 
 ### 11.2 Persistence boundary — per-run snapshot
 
