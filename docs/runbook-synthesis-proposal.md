@@ -207,13 +207,15 @@ The lifecycle indexer scans `git log --grep=Canon-Workflow:${slug}` during `snap
 
 ## 6. Learner analyses gallery
 
-Concrete examples of query → pattern → proposal flows the learner runs against the lifecycle corpus. These are illustrative, not exhaustive — each one shows the data-to-value path and what infrastructure it depends on.
+> **⚠️ ALL NUMBERS IN THIS SECTION ARE FABRICATED — ILLUSTRATIVE ONLY.** They describe *hypothetical* query results to demonstrate the data-to-value path; **they are not measurements from actual Canon usage**. Per architect change #4 (§16), one real end-to-end trace against today's Canon data (drift-db, learning.jsonl, git log) is required before ratification. Actual numbers will replace these illustrations at that point, or the analysis will be removed if the trace shows it can't produce acceptable proposals from available data.
+
+Concrete *illustrative* examples of query → pattern → proposal flows the learner would run against the lifecycle corpus. Each one shows the data-to-value path and what infrastructure it depends on.
 
 ### 6.1 Principle refinement from review findings
 
 **Query:** "Across the last 50 flows, which principles had review findings, and what was the fix-iteration cost per principle?"
 
-**Result (illustrative):**
+**Hypothetical result (fabricated):**
 
 | Principle | Findings | Avg fix iterations |
 |-----------|----------|-------------------|
@@ -221,25 +223,25 @@ Concrete examples of query → pattern → proposal flows the learner runs again
 | `error-bubbling` | 8 | 1.2 |
 | `result-types` | 15 | **3.1** |
 
-**Pattern:** `result-types` takes 3× the fix iterations. Either the principle is ambiguous or hard to apply.
+**Pattern (if this were the data):** `result-types` takes 3× the fix iterations. Either the principle is ambiguous or hard to apply.
 
 **Follow-up query:** "For `result-types` fixes, what did fix summaries say?"
 
-**Result:** 10 of 15 mentioned "unclear how to apply to callback-style APIs."
+**Hypothetical follow-up result (fabricated):** 10 of 15 mentioned "unclear how to apply to callback-style APIs."
 
-**Proposal:** structured patch to `principles/result-types.md` narrowing scope or adding a callback-case example.
+**Proposal (conditional on real data showing this shape):** structured patch to `principles/result-types.md` narrowing scope or adding a callback-case example.
 
 **Depends on:** `principle_id` on review findings; fix summary `cause` and `root_cause_tag`.
+
+**Architect change #4 target:** this is the analysis to hand-run against real data before ratification. If real data shows this pattern, it's the first learner win; if not, we've learned the analysis design needs revision.
 
 ### 6.2 Plan refinement from deviations
 
 **Query:** "Across recent runbooks, which had 3+ deviations?"
 
-**Result:** 8 runbooks with deviations; of those, 6 had a `security` step *added* by the lead that the planner hadn't synthesized.
+**Hypothetical result (fabricated):** 8 runbooks with deviations; of those, 6 had a `security` step *added* by the lead that the planner hadn't synthesized. Follow-up: all 6 touched `src/auth/**` or `src/api/**/session*`.
 
-**Follow-up:** "What did those 6 requests have in common?" → all touched `src/auth/**` or `src/api/**/session*`.
-
-**Proposal:** update `runbook-synthesis.md` — *"when affected files match auth paths, include `security` step by default."*
+**Proposal (conditional):** update `runbook-synthesis.md` — *"when affected files match auth paths, include `security` step by default."*
 
 **Depends on:** `lifecycle_runbook_deviations` table; file-path tagging on requests.
 
@@ -247,7 +249,7 @@ Concrete examples of query → pattern → proposal flows the learner runs again
 
 **Query:** "For `fix` steps with `cause: security`, which skill combinations correlate with fewer iterations?"
 
-**Result:**
+**Hypothetical result (fabricated):**
 
 | Skills combination | Avg fix iterations |
 |-------------------|---------------------|
@@ -256,25 +258,17 @@ Concrete examples of query → pattern → proposal flows the learner runs again
 | `[authentication-security, backend-api]` | 1.4 |
 | `[authentication-security, error-handling]` | **1.1** |
 
-**Pattern:** auth-security alone isn't enough — co-loading `error-handling` correlates with much cleaner fixes.
+**Proposal (conditional on real data showing this shape):** update `runbook-synthesis.md` — *"for `fix` with `cause: security`, include both `authentication-security` AND `error-handling` in `skills:` by default."*
 
-**Proposal:** update `runbook-synthesis.md` — *"for `fix` with `cause: security`, include both `authentication-security` AND `error-handling` in `skills:` by default."*
-
-**Depends on:** journal's `domain_skills_loaded` + `cause` + fix outcome tracking.
+**Depends on:** journal's `domain_skills_loaded` + `cause` + fix outcome tracking. Note: this is a 3-way join and the most aspirational analysis in the gallery — architect flagged it as hardest to deliver.
 
 ### 6.4 Decomposition quality from task-plan tags
 
 **Query:** "Correlate task `file_count` with downstream fix-iteration count per task."
 
-**Result:**
+**Hypothetical result (fabricated):** 1–2 files → 0.3 avg fix iterations; 3–5 files → 1.2 avg; 6+ files → 3.1 avg (20% with test failures).
 
-- 1–2 files: 0.3 avg fix iterations
-- 3–5 files: 1.2 avg
-- 6+ files: 3.1 avg (20% had test failures)
-
-**Pattern:** tasks spanning 6+ files are systematically harder; architect is under-decomposing.
-
-**Proposal:** update `templates/task-plan.md` with explicit guidance ("aim for 2–4 files per task"); add new rule `agent-task-right-sizing.md`.
+**Proposal (conditional):** update `templates/task-plan.md` with explicit guidance ("aim for 2–4 files per task"); add new rule `agent-task-right-sizing.md`.
 
 **Depends on:** `file_count` on task-plan frontmatter; linking tasks to downstream fix events.
 
@@ -282,11 +276,9 @@ Concrete examples of query → pattern → proposal flows the learner runs again
 
 **Query:** "For design decisions where `options_considered = 1`, what's the reversal rate in later flows?"
 
-**Result:** 40% reversal rate vs. 8% when `options_considered ≥ 3`.
+**Hypothetical result (fabricated):** 40% reversal rate vs. 8% when `options_considered ≥ 3`.
 
-**Pattern:** single-option designs correlate with rework; architects converge too fast.
-
-**Proposal:** update `canon-architect.md` or create `agent-explore-alternatives` rule.
+**Proposal (conditional):** update `canon-architect.md` or create `agent-explore-alternatives` rule.
 
 **Depends on:** `options_considered` on design-decision frontmatter; decision-reversal detection across flows.
 
@@ -294,11 +286,9 @@ Concrete examples of query → pattern → proposal flows the learner runs again
 
 **Query:** "Across recent implementation logs, which template sections are routinely empty?"
 
-**Result:** "External Evidence" present in 8% of logs; "Verified Facts" in 15%; "Assumptions" in 62%.
+**Hypothetical result (fabricated):** "External Evidence" present in 8% of logs; "Verified Facts" in 15%; "Assumptions" in 62%.
 
-**Pattern:** first two sections aren't earning their place.
-
-**Proposal:** revise `templates/implementation-log.md` — drop External Evidence and Verified Facts, or tighten their conditional guidance.
+**Proposal (conditional):** revise `templates/implementation-log.md` — drop sections that aren't earning their place.
 
 **Depends on:** per-section completeness tracking (could be derived post-hoc by the indexer scanning artifacts).
 
@@ -306,40 +296,33 @@ Concrete examples of query → pattern → proposal flows the learner runs again
 
 **Query:** "At which steps do users most often intervene during iteration?"
 
-**Result:** `design` (12 interventions across 20 flows) vs. `research` (3 across 20).
+**Hypothetical result (fabricated):** `design` interventions far outnumber `research` interventions per flow.
 
-**Pattern:** planner's proposed designs need more user iteration than its research steps.
-
-**Proposal:** amend `runbook-synthesis.md` — for design steps, include planner's confidence-signals inline in the brief; surface open questions explicitly.
+**Proposal (conditional):** amend `runbook-synthesis.md` — for design steps, include planner's confidence-signals inline in the brief; surface open questions explicitly.
 
 **Depends on:** `lifecycle_hitl_events` table; step-level linkage.
 
-### 6.8 What a learner run actually produces
+### 6.8 What a learner run might produce (hypothetical)
 
-Weekly, the learner runs these analyses (and more) in parallel. Output is a single digest:
+Weekly, the learner would run these analyses in parallel and output a single digest. Hypothetical shape (fabricated; digest format will be designed once v2.2 scope is reached):
 
 ```
-# Canon Learning Digest — Week of 2026-04-21
+# Canon Learning Digest — Week of [date]
 
 ## High-confidence proposals (≥ 0.9)
 - Refine principle `result-types` (§6.1) — structured patch attached
 - Add task-right-sizing rule (§6.4) — draft rule attached
-- Update engineer memory M14 (auth TTL correction, §7) — patch attached
 
 ## Medium-confidence proposals (0.7–0.9)
 - Auth-path synthesis default (§6.2) — patch to runbook-synthesis.md
 - Security fix skill combo (§6.3) — patch to runbook-synthesis.md
-- Consolidate architect memory items M8/M14/M22 (§7) — patch attached
 
 ## Observations accumulating (below threshold)
-- Design options-count correlation (§6.5) — 12 observations; needs ~20 to cross
-- Template section dead zones (§6.6) — pattern visible; waiting for 0.7 threshold
-
-## Seed bundle available
-- `canon-security-auditor` seed memory ready if you want to onboard
+- Design options-count correlation (§6.5) — not enough observations yet
+- Template section dead zones (§6.6) — pattern visible; below threshold
 ```
 
-Human reviews ~30 minutes per week, accepts/rejects proposals, refinements land. Each week's digest is a measurable increment of Canon's quality-up trajectory.
+Digest format, review cadence, and acceptance workflow are all **hypothetical**; final shape will be designed if and when v2.2 reaches the point of producing cross-target analyses. V2.1b's single-analysis deliverable (principle refinement from §6.1) does not require the digest format — a single proposal in `.canon/proposed-learnings/` is sufficient.
 
 ## 7. Agent memory audit / groom / seed — DEFERRED to v2.2+
 
