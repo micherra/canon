@@ -97,34 +97,48 @@ Lifecycle persistence isn't an implementation detail — it's the thing that mak
 
 ## 4. Refinement targets matrix
 
-The full surface of Canon artifacts the learning system can refine:
+The surface of Canon artifacts the learning system can refine across the v2.1 + v2.2 horizon. Per architect change #6, the original 11-row matrix was reduced to **5 in-scope targets** for the v2.1+v2.2 horizon, plus **4 deferred to later** and **1 cut entirely**. The reduction reflects two principles:
 
-| Target | Location | What gets refined |
-|--------|----------|-------------------|
-| **Principles** | `principles/*.md` | Scope narrowing, severity promotion/demotion, wording clarifications, new principles from recurring patterns |
-| **Conventions** | `.canon/CONVENTIONS.md` | Established patterns observed across N flows; graduation to principles when warranted |
-| **Runbook synthesis skill** | `skills/canon/references/runbook-synthesis.md` | Default step selection, skill-selection patterns, contract pairings, request-shape recognition |
-| **Planning brief skill** | `skills/canon/references/planner-brief.md` | Strategic analysis patterns, open-question framing, value-assessment accuracy |
-| **Domain skills** | `skills/canon/references/*.md` | Primer content accuracy, co-loading patterns, gaps where a new primer is warranted |
-| **Templates** | `templates/*.md` | Section utility (drop dead sections), placeholder clarity, structured-tag additions |
-| **Agent definitions** | `agents/*.md` | Prompt refinements, `skills:` frontmatter, preloaded rules |
-| **Agent rules** | `rules/*.md` | Clarify wording that led to misapplication; add new rules from observed needs |
-| **Vocabulary** | `skills/canon/references/runbook-vocabulary.md` | Step ID additions when compound sequences recur; usage-driven defaults |
-| **Agent memory** | `.claude/memory/{agent}/*` | Stale entry correction, redundant consolidation, citation-based pruning, seed bundles for new agents |
-| **Knowledge graph priors** | `knowledge-graph.db` | Observed file relationships, domain inferences, confidence-weighted edges |
+- Each refinement target needs its own evidence threshold, cadence, review process, and output format. The original matrix hand-waved these. Limiting scope means each in-scope target gets actual specification work.
+- Some refinement targets (agent definitions, agent rules, vocabulary, knowledge graph priors) are *new write scopes* for the learner with serious trust implications. They deserve their own design passes, not a row in a bulleted table.
 
-Today's learner produces proposals mostly in the first two rows. Under v2.1, it can target any row.
+### 4.1 In scope (5 targets)
 
-Each target has its own evidence threshold (see §12), cadence (weekly / monthly / quarterly), and review process. Principle changes warrant more scrutiny than template tweaks. The learner emits at the appropriate threshold per target.
+| Target | Phase | Location | What gets refined |
+|--------|-------|----------|-------------------|
+| **Principles** | v2.1b | `principles/*.md` | Scope narrowing, severity promotion/demotion, wording clarifications, new principles from recurring patterns. The first refinement target — the only one v2.1b ships. Today's learner already produces principle proposals; v2.1b expands the data feeding them. |
+| **Conventions** | v2.2 | `.canon/CONVENTIONS.md` | Established patterns observed across N flows; graduation to principles when warranted. Today's learner already produces convention proposals; v2.2 expands the corpus. |
+| **Runbook synthesis skill** | v2.2 | `skills/canon/references/runbook-synthesis.md` | Default step selection, skill-selection patterns, contract pairings, request-shape recognition. Required for synthesis to learn (per §3.1's argument that synthesis is load-bearing for plan-quality learning). |
+| **Planning brief skill** | v2.2 | `skills/canon/references/planner-brief.md` | Strategic analysis patterns, open-question framing, value-assessment accuracy. Lower-risk write scope (skill file, not agent prompts). |
+| **Templates** | v2.2 | `templates/*.md` | Section utility (drop dead sections), placeholder clarity, structured-tag additions. Lowest blast radius among in-scope targets. |
 
-### 4.1 Shared vs. target-specific analyses
+**Phase markers:** v2.1b ships principle refinement only (per §17.2). The other four become available in v2.2 once v2.1b's loop demonstrably closes (≥ 3 accepted principle-refinement proposals per §17.2 exit criteria). Each in-scope target needs explicit per-target spec for evidence threshold, cadence, and output format before its v2.2 slot starts.
 
-Some analyses produce proposals for a single target; others correlate across targets.
+### 4.2 Deferred to v2.2+ (4 targets)
 
-- **Single-target:** "Principle P's fix-iteration cost is 3× the baseline → refine P." Target: principles.
-- **Cross-target:** "Agents that load `authentication-security` skill during `fix` steps with `cause: security` have 40% fewer iterations. Two proposals emit: (a) update `runbook-synthesis.md` to auto-include that skill for security fixes, (b) update `authentication-security` domain skill to highlight the most-cited patterns."
+| Target | Original location | Why deferred |
+|--------|------------------|--------------|
+| **Domain skills** | `skills/canon/references/*.md` | Per-skill writes need clearer change-acceptance criteria; defer until in-scope skill-target work (synthesis + planner brief) has established the pattern. |
+| **Agent definitions** | `agents/*.md` | New write scope (today's learner only writes to `.canon/proposed-learnings/`). Letting the learner edit agent prompts is a trust expansion that needs its own design pass. |
+| **Agent rules** | `rules/*.md` | Same trust scope as agent definitions; both need a coordinated write-permission design before either lands. |
+| **Vocabulary** | `skills/canon/references/runbook-vocabulary.md` | Meta-circular — the learner proposing changes to the canonical step list it depends on for synthesis is a self-modifying loop with subtle stability implications. Needs explicit stability design (vocab versioning per §8.2 is a prerequisite, not a complete answer). |
 
-Cross-target analyses are the highest-value signal — they show connected improvements across Canon's stack.
+Agent memory was originally a row here too; cut to v2.2+ (audit/groom) and v2.3+ (seeding) via architect change #2 — see §7 status note + Appendix B.
+
+### 4.3 Cut entirely (1 target)
+
+**Knowledge graph priors** (`knowledge-graph.db`) — **cut from the learning system's refinement target set.** The KG is its own subsystem with its own confidence story (computed from code structure, semantic neighborhoods, file relationships). The learner writing to KG priors based on flow-corpus statistics is a substantial architectural commitment that doesn't belong in this proposal at all.
+
+If automated KG refinement ever becomes desirable, it is a separate Canon system designed against the KG's own data model and confidence semantics — not a row added to this matrix. The runbook-synthesis learning loop and the KG remain independent.
+
+### 4.4 Single-target vs. cross-target analyses (in-scope set only)
+
+Within the 5 in-scope targets, some analyses produce single-target proposals; others correlate across targets:
+
+- **Single-target:** "Principle P's fix-iteration cost is elevated → refine P." Target: principles.
+- **Cross-target (v2.2):** observation patterns that suggest connected refinements to synthesis-skill *and* a domain-skill, or template *and* a principle. Cross-target proposals are higher-signal but require more analysis surface; defer to v2.2 once v2.1b's single-target loop is demonstrably working.
+
+Cross-target analyses against the deferred targets (agent defs, vocabulary, etc.) wait for those targets' own ratification.
 
 ## 5. Observation mechanism — hybrid structured tags + prose
 
