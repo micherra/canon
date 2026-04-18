@@ -619,7 +619,9 @@ Workspace files are the source of truth *while a flow is running*. At flow compl
 
 All under the `lifecycle_` prefix in `drift-db.sqlite`.
 
-#### `lifecycle_synthesized_runbooks`
+**Phase scoping per §11.1:** Only `lifecycle_workspace_snapshots` ships in v2.1b. The other four tables below (`lifecycle_synthesized_runbooks`, `lifecycle_step_executions`, `lifecycle_hitl_events`, `lifecycle_runbook_deviations`) **defer to v2.2**, contingent on v2.1b's loop-closure evidence and a reconsidered storage decision (drift-db extension vs. JSONL-first). They are documented here so the v2.2 scope has a reference shape, not because any of them land in v2.1.
+
+#### `lifecycle_synthesized_runbooks` *(v2.2 — deferred)*
 
 **One row per synthesis event — every iteration is persisted.** Initial proposal, any intermediate iterations produced during planner-user review, and the approved final all get rows. Only the `stage: approved` row is executed against; intermediates are available to the learner for calibration and iteration-pattern analyses (per §10.5 user approval resolution).
 
@@ -640,7 +642,7 @@ All under the `lifecycle_` prefix in `drift-db.sqlite`.
 | `brief_summary` | TEXT | Bounded summary; no verbatim user input |
 | `synthesized_at` | TIMESTAMP | |
 
-#### `lifecycle_step_executions`
+#### `lifecycle_step_executions` *(v2.2 — deferred)*
 
 One row per executed or skipped step (of the approved runbook).
 
@@ -662,7 +664,7 @@ One row per executed or skipped step (of the approved runbook).
 | `outcome` | JSON | `{review_verdict, fix_iterations, test_pass_rate, memory_cited, ...}` |
 | `started_at`, `completed_at` | TIMESTAMP | |
 
-#### `lifecycle_hitl_events`
+#### `lifecycle_hitl_events` *(v2.2 — deferred)*
 
 One row per user intervention.
 
@@ -678,7 +680,7 @@ One row per user intervention.
 | `outcome` | TEXT | `proceeded` / `rerouted` / `aborted` |
 | `occurred_at` | TIMESTAMP | |
 
-#### `lifecycle_runbook_deviations`
+#### `lifecycle_runbook_deviations` *(v2.2 — deferred)*
 
 One row per observed deviation between approved runbook and actual execution.
 
@@ -693,9 +695,9 @@ One row per observed deviation between approved runbook and actual execution.
 
 Computed during snapshot by diffing approved `step_ids` vs. actual `step_executions` sequence.
 
-#### `lifecycle_workspace_snapshots`
+#### `lifecycle_workspace_snapshots` ***(v2.1b — ships first)***
 
-Aggregate row per completed/abandoned workspace. Joins to existing `FlowRunEntry`.
+Aggregate row per completed/abandoned workspace. Joins to existing `FlowRunEntry`. This is the single table v2.1b delivers per §11.1; all other `lifecycle_*` tables defer to v2.2.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -720,9 +722,13 @@ The `commit_range_*` fields bridge lifecycle data to git — the code-change axi
 
 ### 11.4 New MCP tools
 
-#### `snapshot_workspace({ workspace_id }) → { snapshot_id, runbook_id, deviations_detected }`
+#### `snapshot_workspace({ workspace_id }) → { snapshot_id }` ***(v2.1b — ships first)***
 
-Reads the workspace (runbook.md, brief.md, journal entries, artifact paths, git log with trailers) and materializes them into the lifecycle tables. Triggered by:
+**v2.1b scope:** writes a row to `lifecycle_workspace_snapshots` only. Does not populate the other tables (they don't exist in v2.1b). Return shape is minimal: `{ snapshot_id }`.
+
+**v2.2 scope (when other tables exist):** expanded to return `{ snapshot_id, runbook_id, deviations_detected }` and write to all `lifecycle_*` tables.
+
+Reads the workspace (runbook.md, brief.md, journal entries, artifact paths, git log) and materializes the structured summary into the DB. Triggered by:
 
 - `completion-verify.sh` hook after successful flow completion (primary)
 - Janitor / cleanup processes before deleting an abandoned workspace
@@ -730,9 +736,9 @@ Reads the workspace (runbook.md, brief.md, journal entries, artifact paths, git 
 
 Idempotent — re-running against the same workspace updates the existing snapshot.
 
-#### `query_workspace_history({ filters, projection }) → rows`
+#### `query_workspace_history({ filters, projection }) → rows` *(v2.2 — deferred)*
 
-Structured query interface for the learner and human introspection.
+Structured query interface for the learner and human introspection. Deferred to v2.2 because most useful filters require the `lifecycle_*` tables that v2.2 adds (step executions, HITL events, deviations). For v2.1b's single-analysis scope (principle refinement per §6.1), the learner queries `lifecycle_workspace_snapshots` + existing drift-store review-finding tables directly; no dedicated query tool needed yet.
 
 Supported filters (initial):
 
