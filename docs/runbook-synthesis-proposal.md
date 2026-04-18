@@ -892,4 +892,51 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 
 **Revision naming:** `docs/agent-teams-migration-plan-v2.1.md` as a new file; v2 preserved for history. v2.1 frontmatter references v2 as its supersedent.
 
-<!-- BATCH 14 MARKER: sections 15 onward to be populated in subsequent commits -->
+## 15. Open questions
+
+General questions (persistence-specific ones are in §11.9):
+
+1. **Planner output location** — `plans/${slug}/runbook.md` alongside brief, or distinct location? Lean: same directory as brief for cohesion.
+2. **`cause` extensibility** — any step besides `fix` need `cause`? Defer until evidence.
+3. **Vocabulary versioning** — if a runbook is synthesized against v1 and resumed later under v2, how does resume work? Options: lock to synthesis-time version (cleanest); regenerate on vocab change; warn-and-proceed. Lean: lock for determinism during a single build.
+4. **Learner loop ownership** — Phase 2 establishes baseline; who owns continuous refinement afterward? Planner auto-tunes from learner output (P5 territory) or humans curate proposals weekly? Probably the latter initially (supervised); automation is a later promotion.
+5. **CLAUDE.md intent classification minimum** — with all build requests routing to planner, what's the minimal residual intent set? Greetings, questions, chat — defer to a separate design pass.
+6. **Seed-bundle format** — if memory seeding lands in v2.1 (not v2.2), what's the artifact format? A new `templates/memory-seed.md`? Merges with existing memory-file format? Defer.
+7. **Observation-schema evolution** — when a new structured tag is worth promoting to first-class column vs. staying in `extra_tags` JSON? Criterion: observed across N flows in ≥M agents' outputs → promote.
+8. **HITL event categorization** — our event types (`approval`, `clarification`, `redirect`, `reject`, `abort`, `iterate`) cover the current model. Are we missing any? Particularly for the iteration loop.
+9. **Tier 2 timing** — land all observation tags simultaneously or roll per-artifact? Lean: simultaneous (one coordinated pass) unless a specific tag needs design work first.
+
+## 16. Status and next steps
+
+This document is a **draft proposal**. It is not yet ratified.
+
+**Next concrete step:** once the PR #115 conversation concludes, promote this draft into `docs/agent-teams-migration-plan-v2.1.md` with the §14 amendments applied against v2.
+
+**Do NOT:**
+- Start the new Wave 1 tasks (vocabulary, brief/synthesis skills) based on this draft. Ratify v2.1 first.
+- Start Phase 1.5 work (schema migration, snapshot tool) based on this draft. Same reason.
+- Amend Phase 1 plan files in `.canon/workspaces/agent-teams-v2/plans/phase1/` yet. They're pre-v2.1 spec; editing preemptively conflates this draft with the ratified plan.
+
+**Who reviews:** Canon maintainers per the same review process that produced v2. Particular attention to §3 (learning system), §11 (lifecycle persistence), §13 (phase rollout).
+
+---
+
+## Appendix A: Conversation provenance
+
+This proposal emerged from the PR #115 review thread on branch `claude/runbook-template-format-dM3LJ`. Key conversation beats, chronologically:
+
+1. **PR opened** for `phase1-00` (runbook format template) — static-runbook model assumed
+2. **Review pass 1** surfaced drift between DESIGN.md schema and phase1-01 / phase1-10 plans; amended
+3. **User observation** — *"runbooks as guidance for Claude-native orchestration — does this open the door for dynamic, plan-specific runbooks?"*
+4. **Proposal for Option A** (vocabulary + synthesis) surfaced; iterated on
+5. **Scope expansion** — lifecycle persistence surfaced as necessary substrate because workspaces are cleaned up
+6. **User reframe** — *"maybe the planner should just iterate on the runbook until user approval"* — collapsed confidence gating, recipes-as-separate-concept, escape hatches
+7. **User push** — *"have we lost sight of Canon's purpose?"* — honest audit; realized most of the proposal was coordination-layer architecture rather than Canon-value-aligned
+8. **User refinement** — *"Canon is an agentic team that builds grounded in best practices; ensure the work drives quality up"* — quality-up as the lodestar
+9. **User push further** — *"how does the system as a whole learn with each interaction?"* — reframed as unified learning system across every Canon artifact
+10. **User push again** — *"can we use this for agent memory audit and seed?"* — memory as a first-class refinement target
+11. **User critical check** — *"is this infra or Canon's purpose?"* — honest conclusion: learning loop is the actual Canon-purpose win; synthesis is load-bearing for the plan-quality arm of that loop
+12. **This rewrite** — restructures the proposal around the learning-system headline; lifecycle persistence promoted to cornerstone; synthesis reframed as load-bearing mechanism, not coordination aesthetic
+
+The conversation is the source; this document is the durable artifact.
+
