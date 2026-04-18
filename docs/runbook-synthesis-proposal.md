@@ -176,34 +176,26 @@ When an agent loads its project memory and actually uses an entry, it declares t
 
 Implementation is a prompt addition in the agent definition: *"when your output uses information from your project memory, list the cited memory entry IDs in your structured output's `memory_cited` field."* Small change; enables whole memory-audit dimension of the learning system.
 
-### 5.6 Commit trailers as a second observation channel
+### 5.6 Commit trailers — DROPPED from v2.1
 
-Beyond structured tags in artifacts, commit trailers are the second observation channel — specifically for code-line-level provenance that survives workspace tear-down and lives in git forever.
+**Status:** Cut from v2.1 per architect review (change #3 in §16). The `Canon-Deviation*` trailer family + PostCommit parity hook + `lifecycle_deviations` indexed table together created three sources of truth for the same event with significant ergonomic and consistency hazards. The summary tag (`justified_deviations[]` in implementation summaries, captured in `lifecycle_step_executions.outcome` per §11.3) gives the learner everything it needs for pattern detection. `git blame`-level provenance is mostly post-hoc debugging, not day-to-day workflow.
 
-**Canon-Deviation trailer family** (new):
+**Architect's specific concerns** (paraphrased; full reasoning in PR #115 review thread):
 
-```
-Canon-Deviation: <principle-id>
-Canon-Deviation-Rationale: <short reason>
-Canon-Deviation-Decision: <decision-id, optional>
-```
+1. Three sources of truth (summary tag, trailer, DB row) with silent drift potential
+2. PostCommit parity hook adds user-facing friction — engineers must amend commits to satisfy it; conflicts with v2's "agents produce natural prose" ethos
+3. Ingestion fragility — string-typed trailer names with typos silently drop per the additive-tolerance philosophy; errors are invisible
+4. Immutable git history × mutable principle IDs — trailer text cannot be retroactively updated when principle IDs are renamed; constrains principle evolution
 
-When an engineer writes code that intentionally deviates from a principle, they record both:
-1. A `justified_deviations[]` entry in their implementation summary (§5.2 structured tag)
-2. A `Canon-Deviation*` trailer on the specific commit where the deviating code lands
+**What stays:**
 
-The trailer is the durable second layer. It survives workspace tear-down, is readable via standard `git log` / `git blame`, and gives future readers direct line ↔ rationale linkage without needing Canon-specific tooling.
+- `justified_deviations[]` structured tag on implementation summaries (§5.2)
+- Captured in `lifecycle_step_executions.outcome` (§11.3); queryable via JSON extraction
+- The learner's principle-refinement analyses (§6.1) work from the summary-tag source alone
 
-**Why both the summary tag and the trailer:**
+**What was preserved:** original trailer-family design moved to **Appendix C** for reference if v2.2+ needs `git blame`-level provenance demonstrably.
 
-| Channel | Lifetime | Granularity | Consumer |
-|---------|----------|-------------|----------|
-| `justified_deviations[]` tag in summary | Retained per §11 retention tiers | Per-flow (all deviations in this flow) | Learner pattern detection |
-| `Canon-Deviation*` trailer in commit | Forever in git history | Per-commit (specific code lines) | Blame / review / audit |
-
-The lifecycle indexer scans `git log --grep=Canon-Workflow:${slug}` during `snapshot_workspace` to extract trailer data into the corpus (see §11.3 `lifecycle_deviations` table). The reviewer agent cross-references trailers when assessing principle compliance — commits with authorizing trailers treat the deviation as intentional; commits without treat it as a defect.
-
-**Validation via PostCommit hook:** when an implementation summary declares a `justified_deviations` entry, every commit in the step's range must carry a matching `Canon-Deviation` trailer. Hook exits 2 if missing, with a message instructing the engineer to amend or add the trailer.
+**Revisit criterion:** add trailers if a real workflow emerges where `git blame` on a deviating line is the necessary entry point for some user task. Until then, the summary tag + DB index path covers analytic needs.
 
 ### 5.7 Schema policy — closed for v2.1
 
@@ -1180,6 +1172,55 @@ The corpus is distilled expert context for the repo. When:
 - **Incorrect consolidation:** M8/M14/M22 "describe the same thing" is a similarity judgment that can lose nuance. Mitigation: surface consolidation proposals with the original items side-by-side; require explicit accept.
 - **Seed-stale-calcifies:** a new agent seeded from a corpus containing outdated patterns inherits them as baseline. Mitigation: freshness-weight seed candidates heavily; cap seed bundle age.
 - **Automated writeback to agent state:** the learner writing to `.claude/memory/{agent}/*` is a new write scope beyond today's `.canon/proposed-learnings/` scope. Requires separate trust / audit design.
+
+---
+
+## Appendix C: Deferred — `Canon-Deviation*` commit trailer family (preserved design)
+
+Cut from v2.1 per architect change #3 (see §5.6 status note for rationale). Preserved here for reference if `git blame`-level provenance proves necessary in a future revision.
+
+### Original design
+
+When an engineer wrote code that intentionally deviated from a principle, they would record both:
+
+1. A `justified_deviations[]` entry in their implementation summary (§5.2 structured tag)
+2. A `Canon-Deviation*` trailer on the specific commit where the deviating code lands
+
+**Trailer family:**
+
+```
+Canon-Deviation: <principle-id>
+Canon-Deviation-Rationale: <short reason>
+Canon-Deviation-Decision: <decision-id, optional>
+```
+
+**Two-channel rationale (as originally framed):**
+
+| Channel | Lifetime | Granularity | Consumer |
+|---------|----------|-------------|----------|
+| `justified_deviations[]` tag in summary | Retained per §11 retention tiers | Per-flow (all deviations in this flow) | Learner pattern detection |
+| `Canon-Deviation*` trailer in commit | Forever in git history | Per-commit (specific code lines) | Blame / review / audit |
+
+**Indexer plan (originally):** the lifecycle indexer would scan `git log --grep=Canon-Workflow:${slug}` during `snapshot_workspace` to extract trailer data into a `lifecycle_deviations` table. The reviewer agent would cross-reference trailers when assessing principle compliance — commits with authorizing trailers would treat the deviation as intentional.
+
+**Validation hook (originally):** PostCommit hook would validate that every commit in a step's range carried a matching `Canon-Deviation` trailer when the implementation summary declared a `justified_deviations` entry. Hook exits 2 if missing.
+
+### Why this was cut
+
+See §5.6 for the architect's four concerns and the cost-value summary. In short: the summary tag plus DB index covers the learner's needs; the trailer adds a third source of truth, ergonomic friction via the parity hook, ingestion fragility, and constraints on principle-ID evolution that aren't paid for by the marginal `git blame` benefit.
+
+### Revisit criterion
+
+Add this layer back if a real workflow emerges where `git blame` on a deviating line is the necessary entry point for some user task (audit, compliance, retroactive review). The decision is reversible: introducing the trailer family later is additive; the data model in `lifecycle_step_executions.outcome.justified_deviations` is preserved meanwhile.
+
+### Risks if re-introduced
+
+When this re-enters scope, the architect's four concerns must be addressed:
+
+- **Three sources of truth:** decide the canonical source (probably the trailer; summary tag becomes a cache; DB row a derived index). Document the consistency story.
+- **Hook friction:** make the parity hook *advisory* (warn, don't block) rather than enforced; or scope enforcement narrowly (only on PR-merge commits, say).
+- **Ingestion fragility:** type the trailer names — fail loudly on unknown trailers in the `Canon-*` namespace rather than silently drop.
+- **Principle ID stability:** require principle IDs to be forever-stable as a Canon discipline (renames disallowed; renames are delete + create with a new ID).
 
 ---
 
