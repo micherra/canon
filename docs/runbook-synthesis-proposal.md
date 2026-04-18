@@ -631,31 +631,7 @@ Aggregate row per completed/abandoned workspace. Joins to existing `FlowRunEntry
 
 The `commit_range_*` fields bridge lifecycle data to git — the code-change axis. `query_workspace_history` can JOIN lifecycle rows with `git log --grep="Canon-Workflow: ${slug}"` for full provenance.
 
-#### `lifecycle_deviations`
-
-One row per `Canon-Deviation` commit trailer observed in the lifecycle corpus. Populated by the indexer during `snapshot_workspace` by scanning commits in the workspace's `commit_range`.
-
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | INTEGER PK | |
-| `workspace_id` | TEXT | Links to `lifecycle_workspace_snapshots.workspace_id` |
-| `commit_sha` | TEXT | Indexed — direct lookup from `git blame` output |
-| `principle_id` | TEXT | Parsed from `Canon-Deviation:` trailer value |
-| `rationale_short` | TEXT | Parsed from `Canon-Deviation-Rationale:` trailer (bounded) |
-| `decision_id` | TEXT | Nullable — from `Canon-Deviation-Decision:` trailer if present |
-| `author_agent` | TEXT | From `Canon-Agent` trailer on the same commit |
-| `step_id` | TEXT | From `Canon-State` trailer on the same commit |
-| `files_affected` | JSON | Paths changed in the commit (from `git show --name-only`) |
-| `observed_at` | TIMESTAMP | Commit timestamp |
-
-This table becomes a first-class signal for the learner (see §6 gallery). Queries it enables:
-
-- *"Which principles are most often deviated from, and with what rationales?"* → candidates for scope refinement or convention carve-out
-- *"Are deviations clustered in specific subsystems?"* → candidate for a subsystem-scoped convention
-- *"For principle P, which rationales recur?"* → if the same rationale appears N+ times, it should probably be promoted from per-commit annotation into the principle's own text (e.g., "this principle does not apply in context X")
-- *"Agent X has authored N deviations for principle P — is X interpreting P differently than others?"* → calibration signal for agent prompts or the principle's wording
-
-Retention: `lifecycle_deviations` rows are small (under 1KB each even with metadata); retain permanently unless explicit archive policy dictates otherwise. The full commit history in git is the source of truth; this table is a queryable index.
+> **Note:** earlier versions of this proposal included a `lifecycle_deviations` table populated from `Canon-Deviation*` commit trailers. That table and its source trailers were dropped per architect change #3 (see §5.6 status note + Appendix C). Justified deviations now live in `lifecycle_step_executions.outcome.justified_deviations` JSON, populated from the implementation-summary structured tag. Learner queries that need deviation data extract from that JSON. If query performance becomes a problem, materializing a `lifecycle_deviations` view from the JSON is a v2.2+ option.
 
 ### 11.4 New MCP tools
 
@@ -836,8 +812,8 @@ All lightweight structured tag additions. Same cost profile across the board; no
 
 Plus:
 - **Synthesis skill versioning** — each synthesis records which skill version produced it
-- **Memory citation prompt guidance** — added to six memory-bearing agent definitions
-- **`Canon-Deviation*` commit trailer family** — `commit-trailers.ts` extension; PostCommit hook validates trailer-vs-summary parity; indexer populates `lifecycle_deviations` during snapshot (see §5.6, §11.3)
+
+(Earlier draft included memory citation prompt guidance and the Canon-Deviation trailer family. Both removed per architect changes #2 and #3 — see §5.6, §7, Appendices B and C.)
 
 Cost: one coordinated schema migration + template edits + agent prompt updates. Cheaper as a single pass than sequencing.
 
@@ -900,9 +876,8 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 | §4b P4 "Self-improving skills" | **Promote** from roadmap item to active Phase 2 validation work — the learning system makes P4 operational. |
 | §4b P5 "Memory architecture" | **Partially promote** — memory audit + grooming become part of v2.1 (Phase 1.5 + 2). Seeding may slip to v2.2. |
 | §5 Phase 2 validation | Add: learner analyses gallery runs produce first weekly digests; confidence signals correlate with outcomes; memory groomed per schedule; first proposals accepted into principle / skill / template refinements. |
-| §6 Risks | Add: "Planner emits inconsistent runbooks across similar requests" (mitigated by iterate-until-approved + deviation tracking); "Vocabulary drift" (LOW — versioned change process); "Observation tag compliance" (LOW — hybrid schema tolerates missing fields). |
+| §6 Risks | Add: "Planner emits inconsistent runbooks across similar requests" (mitigated by iterate-until-approved + deviation tracking); "Vocabulary drift" (LOW — versioned change process); "Observation tag compliance" (LOW — closed schema per §5.7 + indexer drops unknown fields). |
 | §7 Out of scope | Add: "Cross-repo learning (memory sharing across Canon installs). Autonomous confidence-based gating. Real-time write-through to lifecycle DB (per-run snapshot only in v2.1)." |
-| §4 Phase 1 deliverables (trailer addition) | Extend `commit-trailers.ts` with `Canon-Deviation`, `Canon-Deviation-Rationale`, `Canon-Deviation-Decision` trailer family. PostCommit hook validates trailer-vs-`justified_deviations` parity. Engineer agent prompt updated to emit trailer alongside summary tag. Reviewer agent prompt updated to check for authorizing trailer before flagging principle violations. |
 
 **Revision naming:** `docs/agent-teams-migration-plan-v2.1.md` as a new file; v2 preserved for history. v2.1 frontmatter references v2 as its supersedent.
 
