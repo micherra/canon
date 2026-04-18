@@ -734,4 +734,66 @@ None are answerable from workspace files alone (cleaned up) or git alone (coordi
 4. **Query cost** — `query_workspace_history` over years of data could become slow. Indexing strategy? Probably not a concern at single-dev repo scale; worth revisiting at team scale.
 5. **Cross-repo learning** — teams wanting Canon to learn from multiple repos' lifecycles need cross-repo memory. Out of scope for v2.1 but worth flagging the boundary.
 
-<!-- BATCH 11 MARKER: sections 12 onward to be populated in subsequent commits -->
+## 12. Confidence scoring
+
+Reframed for v2.1: confidence is a **surfaced signal during iteration**, not a gating mechanism. Under the iterate-until-approved planner loop, the user is always the approval gate; confidence informs the user during iteration, doesn't decide for them.
+
+### 12.1 Schema
+
+In the synthesized runbook frontmatter:
+
+```yaml
+confidence: 0.0-1.0
+confidence_signals:
+  - {signal: "novelty",           value: 0.7}
+  - {signal: "scope_clarity",     value: 0.9}
+  - {signal: "domain_coverage",   value: 0.8}
+  - {signal: "dependency_drift",  value: 0.6}
+  - {signal: "question_count",    value: 0.85}
+```
+
+### 12.2 Signals
+
+| Signal | Meaning | How computed |
+|--------|---------|--------------|
+| `novelty` | Has Canon built something like this before? | Planner's `memory: project` + `query_workspace_history({ similar_to: brief_summary })` |
+| `scope_clarity` | Does the request have concrete acceptance criteria? | Planner analysis of brief; fewer open questions ⇒ higher |
+| `domain_coverage` | Are relevant domain primers available? | Ratio of affected file-layers with ≥1 matching primer in `skills/canon/references/` |
+| `dependency_drift` | How much has changed in target files since related work? | `get_drift_report` + recent commit density |
+| `question_count` | Open questions remaining in the brief? | Inverse of count, clamped |
+
+Overall `confidence` combines signals with equal weighting initially. As lifecycle data accumulates, the learner proposes weight refinements based on observed correlation between each signal and flow outcome.
+
+### 12.3 How confidence is used — surfaced, not gated
+
+During iteration, the planner presents the runbook with confidence + signals visible to the user:
+
+> *"Proposed runbook confidence: 0.62. Scope clarity is low (open questions: how should X behave in edge case Y; what's the rollback boundary); novelty is low (no similar past runs); other signals are strong. Want me to dig into the open questions, or proceed with this plan?"*
+
+The user can:
+- **Proceed** — the runbook is approved as-is
+- **Iterate** — ask the planner to refine (address open questions, explore alternatives, adjust a specific step)
+- **Override** — supply their own content for one or more steps
+- **Abandon** — stop here; request is too ambiguous to execute
+
+No autonomous threshold, no gate. Confidence is display information.
+
+### 12.4 What confidence is for (even without gating)
+
+Three durable roles:
+
+1. **User decision support.** Helps the user decide whether to iterate, dig deeper, or proceed.
+2. **Learner calibration.** Over time, correlate confidence with actual outcomes. A miscalibrated planner (uniformly 0.95, or uniformly 0.5) is detectable in the corpus. Proposals refine the signal weights.
+3. **Process analytics.** Aggregate confidence trends — are they rising? Is the planner getting more sure as Canon accumulates experience in a repo?
+
+None of these require gating behavior; all benefit from persisted scores in `lifecycle_synthesized_runbooks`.
+
+### 12.5 HITL invariant — confidence never removes baseline
+
+An invariant worth stating explicitly:
+
+> Confidence affects the **ceiling** of iteration depth (low confidence → more iteration warranted), never the **floor** of HITL posture specified in the runbook.
+
+If a step declares `hitl: approval`, that stays regardless of confidence. The runbook's HITL postures are contracts, not suggestions. Confidence might *add* a user checkpoint; it never removes one.
+
+<!-- BATCH 12 MARKER: sections 13 onward to be populated in subsequent commits -->
