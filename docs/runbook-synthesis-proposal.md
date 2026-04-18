@@ -796,4 +796,74 @@ An invariant worth stating explicitly:
 
 If a step declares `hitl: approval`, that stays regardless of confidence. The runbook's HITL postures are contracts, not suggestions. Confidence might *add* a user checkpoint; it never removes one.
 
-<!-- BATCH 12 MARKER: sections 13 onward to be populated in subsequent commits -->
+## 13. Phase rollout — Tier 1 / 2 / 3 ordering
+
+The build order for v2.1 inverts from what the earlier proposal draft suggested. The true priority is **dependency**, not implementation cost. Most tagging and observation work is roughly equivalent cost; what matters is which pieces unblock which downstream capabilities.
+
+### 13.1 Tier 1 — foundational; blocks the learning loops
+
+Without these, observations have no keys to anchor on. Nothing else works until Tier 1 is in place.
+
+1. **`principle_id` threading in review findings** — foundation for principle refinement analyses
+2. **Deviation capture in `log_step`** — foundation for plan refinement analyses
+3. **Lifecycle persistence schema** (`lifecycle_*` tables, `snapshot_workspace` MCP tool) — the substrate itself
+
+### 13.2 Tier 2 — observation enrichment; lands in parallel or concurrently
+
+All lightweight structured tag additions. Same cost profile across the board; no reason to serialize them.
+
+| Artifact | Tags |
+|----------|------|
+| Fix summary | `cause`, `root_cause_tag`, `upstream_step_id` |
+| Task plan | `task_id`, `dependencies[]`, `file_count`, `principle_ids[]` |
+| Design decision | `decision_id`, `options_considered`, `chosen_option_tag`, `rationale_tags[]` |
+| Research finding | `dimensions_explored[]`, `risks_surfaced[]` |
+| Implementation summary | `compliance_declared_for[]`, `justified_deviations[]`, `memory_cited[]` |
+| Test report | `tests_added`, `coverage_delta` |
+| HITL events | captured via journal hooks + `log_step` outcome field |
+
+Plus:
+- **Synthesis skill versioning** — each synthesis records which skill version produced it
+- **Memory citation prompt guidance** — added to six memory-bearing agent definitions
+
+Cost: one coordinated schema migration + template edits + agent prompt updates. Cheaper as a single pass than sequencing.
+
+### 13.3 Tier 3 — learner analyses; built on the corpus Tiers 1+2 produce
+
+Once the corpus exists, the learner analyzes it.
+
+- **Principle-refinement analyses** (§6.1) — single-target, fast to implement once data exists
+- **Plan-refinement analyses** (§6.2) — single-target
+- **Skill-effectiveness analyses** (§6.3) — cross-target (synthesis skill + domain skills)
+- **Decomposition / design quality** (§6.4, §6.5)
+- **Template health** (§6.6)
+- **HITL pattern analysis** (§6.7)
+- **Memory audit / groom** (§7.1–7.2)
+- **Memory seeding** (§7.3) — heavier; may slip to v2.2
+- **Cross-run dashboards / digests** — weekly learning-digest format
+
+Cost per analysis: low-medium. Each is mostly a query + summarization template. The learner agent gains a new output dimension per analysis.
+
+### 13.4 Revised phase plan
+
+| Phase | Content |
+|-------|---------|
+| Phase 1 (already spec'd, additive-only) | Journal, hooks, agent def updates, skills registration. Unchanged from v2; now understood as foundation for Tier 1. |
+| **Phase 1.5 (new in v2.1)** | Tier 1 + all of Tier 2. One coordinated schema migration + template + agent-prompt pass. Plus: `canon-planner` synthesis rewrite (brief + synthesis skills, iterate-until-approved loop), `runbook-vocabulary.md`, updated `runbook-synthesis.md`. |
+| Phase 2 (validation) | Learner analyses (Tier 3) run against the corpus. Observational — no autonomous thresholds, just calibration and correlation. Produces first weekly digests. Humans grade proposals; refinements land. |
+| Phase 3 (deletion) | Unchanged from v2. Removes legacy state-machine / prompt-pipeline / flow YAML runtime / coordination infrastructure after Phase 2 validation passes. |
+
+Phase 1.5 is the critical addition. It's where the learning substrate and the synthesis architecture land together. Without it, Phase 2 validation has nothing to validate.
+
+### 13.5 Revised Phase 1 task inventory
+
+| Task | Status | Note |
+|------|--------|------|
+| phase1-00 (runbook format) | DONE on PR #115 | Output format for synthesis |
+| phase1-01..04 (5 runbook files) | **ABANDONED** | Replaced by vocabulary-based synthesis |
+| phase1-05..09 | Unchanged / lightly extended | See §14 |
+| phase1-10 (validation) | **Refactored** | Validates vocabulary + synthesis behavior, not 5 static files |
+
+Wave 1 shrinks from 5 tasks to 2 in Phase 1 (vocabulary + brief/synthesis skills). Phase 1.5 adds the lifecycle + observation work as a new batch.
+
+<!-- BATCH 13 MARKER: sections 14 onward to be populated in subsequent commits -->
