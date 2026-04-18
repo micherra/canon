@@ -645,4 +645,59 @@ Aggregate row per completed/abandoned workspace. Joins to existing `FlowRunEntry
 
 The `commit_range_*` fields bridge lifecycle data to git — the code-change axis. `query_workspace_history` can JOIN lifecycle rows with `git log --grep="Canon-Workflow: ${slug}"` for full provenance.
 
-<!-- BATCH 9 MARKER: sections 11.4 onward to be populated in subsequent commits -->
+### 11.4 New MCP tools
+
+#### `snapshot_workspace({ workspace_id }) → { snapshot_id, runbook_id, deviations_detected }`
+
+Reads the workspace (runbook.md, brief.md, journal entries, artifact paths, git log with trailers) and materializes them into the lifecycle tables. Triggered by:
+
+- `completion-verify.sh` hook after successful flow completion (primary)
+- Janitor / cleanup processes before deleting an abandoned workspace
+- Manual invocation via a future `/canon:snapshot` slash command
+
+Idempotent — re-running against the same workspace updates the existing snapshot.
+
+#### `query_workspace_history({ filters, projection }) → rows`
+
+Structured query interface for the learner and human introspection.
+
+Supported filters (initial):
+
+```
+confidence_range: [min, max]
+has_step: step_id
+fix_cause: cause_value
+outcome: outcome_value
+synthesized_after: timestamp
+skill_loaded: skill_name
+deviated: true | false
+step_id_executed: step_id
+iterations_to_approve_range: [min, max]
+similar_to: text_query   # semantic match against brief_summary
+memory_cited: item_id
+```
+
+Projection selects which tables to join and which columns to return — default is a compact summary (slug, outcome, confidence, total_steps, deviations, iterations_to_approve).
+
+### 11.5 Retention policy
+
+**Tiered default:**
+
+- **Most recent 100 snapshots:** full detail across all `lifecycle_*` tables
+- **100 to 1 year old:** aggregate — keep `lifecycle_workspace_snapshots` + `lifecycle_synthesized_runbooks` (approved stage only), drop per-row detail for executions / hitl / deviations (folded into snapshot aggregates)
+- **> 1 year:** drop entirely, or export to cold storage via `.canon/archive/`
+
+Janitor process runs retention (SessionStart hook or cron-equivalent). Settings in `.canon/retention.toml` (new) or extended Canon config.
+
+Tunable per project — teams may favor historical depth (N=1000) or space (aggregate more aggressively).
+
+### 11.6 Privacy and sharing
+
+Lifecycle data includes condensed records of user requests and interventions. Safe defaults:
+
+- **No verbatim user input in DB.** `brief_summary`, `input_summary`, `reason_summary` all auto-generated, bounded (e.g., 280 chars). Full brief lives in workspace markdown (reachable until cleanup), referenced by path not content.
+- **Secret-detection pass** — summary generation runs a basic pattern match (API keys, tokens) before persisting; matches elided.
+- **Local-only by default.** `.canon/drift-db.sqlite` is gitignored; lifecycle tables inherit.
+- **Team sharing is out of scope for v2.1.** If/when Canon grows team features, a separate "shared" DB (committed to a dedicated repo, or a hosted service) handles cross-machine sync.
+
+<!-- BATCH 10 MARKER: sections 11.7 onward to be populated in subsequent commits -->
