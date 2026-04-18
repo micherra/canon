@@ -341,78 +341,23 @@ Weekly, the learner runs these analyses (and more) in parallel. Output is a sing
 
 Human reviews ~30 minutes per week, accepts/rejects proposals, refinements land. Each week's digest is a measurable increment of Canon's quality-up trajectory.
 
-## 7. Agent memory audit / groom / seed
+## 7. Agent memory audit / groom / seed — DEFERRED to v2.2+
 
-Agent project memory is another refinement target. Per the migration plan, six agents get `memory: project` — planner, engineer, researcher, architect, scribe, learner. Memory accumulates across sessions, and without grooming it **degrades**:
+**Status:** Cut from v2.1 per architect review (change #2 in §16). Automated writes to agent memory files (`.claude/memory/{agent}/*`) based on corpus statistics are high-risk: the failure modes are real (groom away rarely-cited-but-critical knowledge; consolidate memory items incorrectly and lose a nuance; seed a new agent with stale patterns that calcify into its new baseline). That risk is not worth taking on before v2.1b has demonstrated the base learner produces trustworthy proposals on lower-risk targets (principles, conventions, synthesis skill).
 
-- **Stale** — agent remembers pattern X; codebase refactored to Y months ago
-- **Wrong** — agent generalized from 2 observations that don't hold at corpus scale
-- **Redundant** — same observation written multiple times in slightly different phrasings
-- **Stranded** — memory references file paths that no longer exist
-- **Overconfident** — agent wrote "always use A"; subsequent flows used B cleanly
+**Phasing:**
 
-All of this is detectable from the corpus once `memory_cited` tagging (§5.5) is in place.
+- **v2.2** — memory audit (staleness detection, corpus cross-check, overconfidence detection) + memory grooming (citation-driven pruning, consolidation, budget management). Contingent on v2.1b demonstrating ≥ 3 accepted principle-refinement proposals. The `memory_cited` structured tag (§5.5) is the load-bearing signal; it moves to v2.2 scope alongside the memory analyses.
+- **v2.3+** — memory seeding for new agents and fresh repos. The seed-bundle format is its own artifact design; defer further until v2.2's audit/groom produces enough accumulated memory data to seed from.
 
-### 7.1 Memory audit — analyses
+**Upstream references that change:**
 
-**Staleness check:** "For each memory item citing a file path, does the path still exist?"
-→ Proposal: prune deleted paths; rewrite renamed paths.
+- §5.5 (memory citation tag) — the `memory_cited` field moves to v2.2 scope alongside audit/groom. Not captured in v2.1b.
+- §4 refinement matrix — "Agent memory" row becomes v2.2 scope.
+- §13 rollout — memory citation prompt guidance (currently in Tier 2) moves to v2.2 work.
+- §17.3 v2.2 scope — already lists this correctly.
 
-**Cross-check against corpus:** "Memory claims `auth uses JWT with 15-min TTL`. What does recent corpus say?"
-→ 12 flows in last 60 days used 60-min TTL.
-→ Proposal: update memory — "Auth uses JWT with 60-min TTL (corrected: was 15-min until March 2026)."
-
-**Overconfidence detection:** "Memory says `always use Result<T,E> everywhere`. Corpus pattern?"
-→ 35 of 40 flows used Result; 5 used exceptions (in low-level parsers, per documented convention).
-→ Proposal: refine memory — "Prefer Result<T,E> except in low-level parsers (see `exceptions-at-boundaries`)."
-
-### 7.2 Memory grooming — keeping what's useful
-
-**Citation tracking:** "Across recent agent outputs, which memory items were cited vs. ignored?"
-→ Requires `memory_cited: [item_id]` structured tag on specialist outputs (§5.5).
-→ Item M27 cited 0 times across 50 flows; items M1–M20 cited 40+ times each.
-→ Proposal: prune M27.
-
-**Consolidation:** "Which memory items make overlapping claims?"
-→ Items M8, M14, M22 describe the same auth hook-ordering gotcha in different phrasings.
-→ Proposal: consolidate to single authoritative entry.
-
-**Budget management:** "Agent's memory exceeds N tokens; rank by recent-citation-weighted utility and prune bottom quartile."
-→ Automatic maintenance once citation data exists.
-
-### 7.3 Memory seeding — warm-starting new agents or repos
-
-The corpus is distilled expert context for the repo. When:
-
-- A new agent role is introduced (future `canon-security-auditor`)
-- Canon is installed in a new repo
-- An agent's memory is intentionally reset
-- An existing agent's role expands
-
-…seed memory from the corpus instead of starting cold.
-
-**Seed-candidate analysis:** for a fresh `canon-engineer` memory in this repo, pull from the existing corpus:
-
-- Codebase invariants (patterns with >90% consistency across 6+ months)
-- Design decisions with zero reversal rate
-- Subsystem-specific gotchas (recurring root causes that took 3+ iterations initially but converged)
-- Principle-application examples (fixes where `cause = review` and principle correctly applied)
-
-**Output:** a seed bundle — structured memory entries ranked by signal strength — that becomes the new agent's starting memory.
-
-### 7.4 What this adds infrastructure-wise
-
-Small extensions over §5 / §11:
-
-| Addition | Effort | Where |
-|----------|--------|-------|
-| `memory_cited` structured tag on specialist outputs | Small | Template update + lifecycle schema |
-| Learner file-read access to `.claude/memory/{agent}/*` | Small | Learner tool allowlist |
-| Memory-patch output format (add/update/remove item) | Small | Learner proposal template |
-| Seed-bundle format | Medium | New artifact template |
-| Memory citation prompt guidance in agent bodies | Small | Agent definitions |
-
-Audit + grooming land in v2.1 alongside principle refinement — same learner, additional output dimension. Seeding is heavier (seed-bundle format, cross-agent transfer logic) and can slip to v2.2 unless there's a forcing function.
+**Design content preserved:** The original §7 design (audit analyses, grooming analyses, seed-bundle concept, infrastructure table) is moved to **Appendix B** for reference when v2.2 is drafted.
 
 ## 8. Vocabulary
 
@@ -1126,6 +1071,88 @@ The architect's core critique was "you're asking for one ratification of three i
 - **Makes rollback tractable.** If v2.1b's loop doesn't close, v2.1a's synthesis-over-static decision still stands — we don't have to revert the whole v2.1 bundle.
 
 The cost is longer elapsed time before the full v2.1 vision ships. The benefit is that each piece earns ratification on its own merits and the architecture can self-correct between phases.
+
+---
+
+## Appendix B: Deferred — agent memory audit / groom / seed (v2.2+ design)
+
+Preserved from §7 when it was cut from v2.1 scope per architect change #2. Reference material for when v2.2 is drafted.
+
+### Agent memory context
+
+Per the migration plan, six agents get `memory: project` — planner, engineer, researcher, architect, scribe, learner. Memory accumulates across sessions, and without grooming it **degrades**:
+
+- **Stale** — agent remembers pattern X; codebase refactored to Y months ago
+- **Wrong** — agent generalized from 2 observations that don't hold at corpus scale
+- **Redundant** — same observation written multiple times in slightly different phrasings
+- **Stranded** — memory references file paths that no longer exist
+- **Overconfident** — agent wrote "always use A"; subsequent flows used B cleanly
+
+All of this is detectable from the corpus once `memory_cited` tagging (originally §5.5, now v2.2 scope) is in place.
+
+### Memory audit analyses (v2.2 proposed scope)
+
+**Staleness check:** "For each memory item citing a file path, does the path still exist?"
+→ Proposal: prune deleted paths; rewrite renamed paths.
+
+**Cross-check against corpus:** "Memory claims `auth uses JWT with 15-min TTL`. What does recent corpus say?"
+→ [illustrative] 12 flows in last 60 days used 60-min TTL.
+→ Proposal: update memory — "Auth uses JWT with 60-min TTL (corrected: was 15-min until March 2026)."
+
+**Overconfidence detection:** "Memory says `always use Result<T,E> everywhere`. Corpus pattern?"
+→ [illustrative] 35 of 40 flows used Result; 5 used exceptions (in low-level parsers, per documented convention).
+→ Proposal: refine memory — "Prefer Result<T,E> except in low-level parsers (see `exceptions-at-boundaries`)."
+
+### Memory grooming analyses (v2.2 proposed scope)
+
+**Citation tracking:** "Across recent agent outputs, which memory items were cited vs. ignored?"
+→ Requires `memory_cited: [item_id]` structured tag on specialist outputs.
+→ [illustrative] Item M27 cited 0 times across 50 flows; items M1–M20 cited 40+ times each.
+→ Proposal: prune M27.
+
+**Consolidation:** "Which memory items make overlapping claims?"
+→ [illustrative] Items M8, M14, M22 describe the same auth hook-ordering gotcha in different phrasings.
+→ Proposal: consolidate to single authoritative entry.
+
+**Budget management:** "Agent's memory exceeds N tokens; rank by recent-citation-weighted utility and prune bottom quartile."
+→ Automatic maintenance once citation data exists.
+
+### Memory seeding (v2.3+ proposed scope)
+
+The corpus is distilled expert context for the repo. When:
+
+- A new agent role is introduced (future `canon-security-auditor`)
+- Canon is installed in a new repo
+- An agent's memory is intentionally reset
+- An existing agent's role expands
+
+…seed memory from the corpus instead of starting cold.
+
+**Seed-candidate analysis:** for a fresh `canon-engineer` memory in this repo, pull from the existing corpus:
+
+- Codebase invariants (patterns with >90% consistency across 6+ months)
+- Design decisions with zero reversal rate
+- Subsystem-specific gotchas (recurring root causes that took 3+ iterations initially but converged)
+- Principle-application examples (fixes where `cause = review` and principle correctly applied)
+
+**Output:** a seed bundle — structured memory entries ranked by signal strength — that becomes the new agent's starting memory.
+
+### Infrastructure additions required (for whenever v2.2 runs)
+
+| Addition | Effort | Where |
+|----------|--------|-------|
+| `memory_cited` structured tag on specialist outputs | Small | Template update + lifecycle schema |
+| Learner file-read access to `.claude/memory/{agent}/*` | Small | Learner tool allowlist |
+| Memory-patch output format (add/update/remove item) | Small | Learner proposal template |
+| Seed-bundle format | Medium | New artifact template |
+| Memory citation prompt guidance in agent bodies | Small | Agent definitions |
+
+### Key risks to address before v2.2 ratifies this work
+
+- **Groom-away-critical-knowledge:** memory item cited rarely but covering a critical edge case might be pruned incorrectly by citation-weighted policy. Mitigation: require human review of every prune proposal before apply.
+- **Incorrect consolidation:** M8/M14/M22 "describe the same thing" is a similarity judgment that can lose nuance. Mitigation: surface consolidation proposals with the original items side-by-side; require explicit accept.
+- **Seed-stale-calcifies:** a new agent seeded from a corpus containing outdated patterns inherits them as baseline. Mitigation: freshness-weight seed candidates heavily; cap seed bundle age.
+- **Automated writeback to agent state:** the learner writing to `.claude/memory/{agent}/*` is a new write scope beyond today's `.canon/proposed-learnings/` scope. Requires separate trust / audit design.
 
 ---
 
