@@ -965,16 +965,42 @@ General questions (persistence-specific ones are in §11.9):
 
 ## 16. Status and next steps
 
-This document is a **draft proposal**. It is not yet ratified.
+**Status: DRAFT — REVISE before ratification.** A critical architectural review conducted in the PR #115 thread (summary in Appendix A) returned a *revise* recommendation with 10 concrete changes required before this can become v2.1. The proposal's headline (unified learning loop) and tactical decision (synthesis over static runbooks) are defensible; the surrounding infrastructure is over-scoped relative to what can be proven in one pass.
 
-**Next concrete step:** once the PR #115 conversation concludes, promote this draft into `docs/agent-teams-migration-plan-v2.1.md` with the §14 amendments applied against v2.
+### Outstanding changes required before ratification
+
+Tracked as the work list for converging toward v2.1. Each is a concrete modification to this document or a concrete pre-ratification validation step.
+
+1. **Split this proposal into v2.1a / v2.1b / v2.2** — see §17 for the carve-out. The current single-ratification framing bundles three independent architectural commitments and violates v2's additive-small-steps discipline.
+2. **Cut §7 (memory audit / groom / seed) entirely from v2.1.** Highest-risk section; automated writes to agent memory without a demonstrated base learner. Defer to v2.2+ once the principle/synthesis loop is demonstrated.
+3. **Drop the `Canon-Deviation*` commit trailer family (§5.6)** and its PostCommit parity hook. Keep `justified_deviations[]` in the implementation summary tag. Revisit once `git blame`-level provenance is demonstrated to matter.
+4. **Require one real end-to-end trace before ratification.** Hand-run the §6.1 principle-refinement analysis against Canon's *existing* data (`.canon/drift-db.sqlite`, `.canon/learning.jsonl`, git log) and produce one actually-acceptable refinement proposal. The minimum infrastructure needed for that single working trace becomes the real v2.1b scope — not §11 in full.
+5. **Specify the user-approval affordance** (§10.4 and §14 row on §2.3). What does "approve" look like at the MCP/runtime level? Is there a fast-path for trivial requests that skips the full iteration loop? Quantify the planner-synchronous UX cost.
+6. **Replace §4's 10-target refinement matrix** with a 3-target matrix: principles, conventions, synthesis skill. Mark the rest as "candidates for v2.2+ once the 3-target loop is demonstrated."
+7. **Add hard precondition to Phase 1.5 (and v2.1a/b):** v2 Phase 1 exit criteria met — `canon-planner` and `canon-engineer` agent definitions exist, register, and have been validated in ≥ 3 successful runs under the feature flag. No v2.1 work before that.
+8. **Commit to a storage decision with migration math.** Either (a) reference `drift-schema.ts` with concrete migration DDL for the proposed tables; (b) adopt JSONL-first and defer materialization; or (c) explicitly scope to v2.1b minimum (one table) and defer §11 in full. Current §11.1 rejects the JSONL alternative in one dismissive sentence — that needs a real rebuttal or reconsideration.
+9. **Promote §15 open questions #3 (vocabulary versioning across resume), #7 (observation-schema evolution), #8 (HITL event categorization) to blocking decisions.** Resolve in-document before ratification; do not defer.
+10. **Remove or unambiguously mark the illustrative numbers in §6 as fabricated.** Current phrasing ("40% reversal rate vs. 8%", "3× fix iterations") invites reading as evidence of expected outcomes. Either replace with real measurements from the trace required in #4, or explicitly label as "illustrative scenario, not measurement."
+
+### Gates before ratification
+
+- **Gate A (existence):** v2 Phase 1 exit criteria met (canon-planner + canon-engineer defs validated). Without this, v2.1 has no planner agent to hang synthesis off.
+- **Gate B (evidence):** item #4 above — one real refinement proposal produced by running a §6-style analysis against today's data. Without this, §3's learning-loop claim is unvalidated.
+- **Gate C (scope discipline):** items #2, #3, #6 executed; split per §17 committed. Without this, the proposal stays at v2.1-as-one-thing scope.
+
+All three gates must be clear before converting this draft into `docs/agent-teams-migration-plan-v2.1.md`.
+
+### Next concrete step
+
+Work through the 10 changes iteratively in the PR #115 thread. Each change is a scoped amendment to this document; commit per change. After all 10 are addressed, re-run the architect review. Only then promote to v2.1.
 
 **Do NOT:**
-- Start the new Wave 1 tasks (vocabulary, brief/synthesis skills) based on this draft. Ratify v2.1 first.
-- Start Phase 1.5 work (schema migration, snapshot tool) based on this draft. Same reason.
-- Amend Phase 1 plan files in `.canon/workspaces/agent-teams-v2/plans/phase1/` yet. They're pre-v2.1 spec; editing preemptively conflates this draft with the ratified plan.
 
-**Who reviews:** Canon maintainers per the same review process that produced v2. Particular attention to §3 (learning system), §11 (lifecycle persistence), §13 (phase rollout).
+- Start v2.1a, v2.1b, or v2.2 work based on this draft. Changes 1–10 must land and the gates must pass first.
+- Amend Phase 1 plan files in `.canon/workspaces/agent-teams-v2/plans/phase1/` yet. They're the pre-v2.1 spec; editing preemptively conflates this draft with the ratified plan.
+- Mark `phase1-01..04` abandoned (as §13.5 currently proposes). Those design plans represent the natural first corpus for validating the synthesis skill against ground-truth reference runbooks.
+
+**Who reviews (next round):** Canon maintainers per the review process that produced v2, plus a follow-up architect pass after changes 1–10 land.
 
 ---
 
