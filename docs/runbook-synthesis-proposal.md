@@ -256,4 +256,99 @@ This prevents a calibration failure from silently removing guardrails.
 
 …but `T_low` and `T_high` are determined by Phase 2b data, not guessed at Phase 1.
 
-_(Sections 8–9 to follow: phase rollout impact, impact on v2 plan, open questions.)_
+## 8. Phase rollout
+
+### 8.1 Phase 1 task inventory (revised)
+
+| Task | Status | Change vs. v2 |
+|------|--------|---------------|
+| phase1-00 (runbook format) | DONE on PR #115 | Unchanged — format spec for synthesis output |
+| phase1-01 (fast-path runbook) | **ABANDONED** | Replaced by vocabulary-based synthesis |
+| phase1-02 (feature runbook) | **ABANDONED** | ditto |
+| phase1-03 (epic + migrate runbooks) | **ABANDONED** | ditto |
+| phase1-04 (test-gap runbook) | **ABANDONED** | ditto |
+| **NEW: phase1-01-v2.1 (step vocabulary)** | Wave 1 | `skills/canon/references/runbook-vocabulary.md` — 15 canonical step IDs |
+| **NEW: phase1-02-v2.1 (synthesis + brief skills)** | Wave 1 | `skills/canon/references/runbook-synthesis.md` and `skills/canon/references/planner-brief.md` |
+| phase1-05 (skills registration) | Unchanged | The new skills register alongside existing ones |
+| phase1-06 (orchestration journal) | Unchanged | Already captures `domain_skills_loaded` per §4b P4 |
+| phase1-07 (hooks) | Unchanged | Artifact enforcement unchanged at step level |
+| phase1-08 (agent defs) | **Scope expands** | `canon-planner` body shrinks: loads brief + synthesis skills, emits both artifacts |
+| phase1-09 (CLAUDE.md) | **Simpler** | No intent classification table; all build requests → planner |
+| phase1-10 (validation) | **Refactored** | See §8.2 below |
+
+Wave 1 shrinks from 5 tasks to 2. Wave 3 complexity drops in phase1-09. Total Phase 1 deliverable count decreases net-of-additions.
+
+### 8.2 phase1-10 validation changes
+
+**Removed checks:**
+- "Runbook coverage against 5 legacy flows" (no longer applicable)
+- "5 runbook format conformance" (no longer applicable)
+
+**Added checks:**
+- **Vocabulary conformance** — sample N synthesized runbooks from a Phase 2a calibration batch; every step ID in the vocabulary file
+- **Mandatory tail present** — every synthesized build runbook ends with `context-sync` + `learn`
+- **Planner output shape** — every `canon-planner` spawn produces both `planning-brief.md` AND `runbook.md` artifacts
+- **Confidence schema** — planner emits valid `confidence` scalar (0.0–1.0) + `confidence_signals` list (Phase 1: schema only; data quality deferred to Phase 2)
+- **Journal captures `domain_skills_loaded`** — schema-level check in Phase 1
+- **`skills:` strict validation** — synthesized runbook references only skill files that exist
+
+### 8.3 Phase 2 additions
+
+Phase 2 gains two new validation tracks:
+
+- **Skill effectiveness baseline** (§4b P4 of migration plan) — run N varied requests; tag outcomes; establish baseline correlations between `domain_skills_loaded` and outcome metrics (review verdict, fix iterations, test pass rate). The learner refines from this baseline.
+- **Confidence calibration validation** — Phase 2a (all runs pause) collects paired (confidence, human-quality) samples. Phase 2b picks threshold from calibration curve and tests it.
+
+## 9. Impact on `docs/agent-teams-migration-plan-v2.md`
+
+The following sections need amendment for v2.1:
+
+| Section | Change |
+|---------|--------|
+| §2.2 "What stays" (Runbooks row) | Replace "Lightweight playbooks describing recommended step sequences" with "Canonical step vocabulary + synthesis skill. Runbooks are synthesized per plan by `canon-planner`." |
+| §2.3 "Pre-build gate (canon-planner)" | Expand planner responsibilities to include runbook synthesis. Note the two-skill split (brief + synthesis). |
+| §2.4 "How Claude orchestrates a Canon flow" | Update example to show planner emitting both brief + runbook; step 3 becomes "reads `plans/${slug}/runbook.md`" instead of "reads the `feature` runbook". |
+| §2.6 "Why this is simpler" | Add a bullet: "Seven: no hardcoded flow taxonomy. Every build request routes through `canon-planner`; the runbook is synthesized, not selected from a library." |
+| §2.8 Layer 1 | Amend: "CLAUDE.md + runbook-synthesis.md skill" (not runbooks plural). |
+| §3 row 23 ("Variable interpolation: deprecate") | Unchanged — still deprecate, now more emphatically since runbooks are per-plan. |
+| §4 Phase 1 deliverables table | Replace rows for `fast-path.md` / `feature.md` / `epic.md` / `migrate.md` / `test-gap.md` with rows for `runbook-vocabulary.md` / `runbook-synthesis.md` / `planner-brief.md`. |
+| §4b P4 "Self-improving skills" | Promote from roadmap item to Phase 2 validation requirement — skill effectiveness baseline is now part of proving synthesis works. |
+| §6 Risks | Add: "Planner emits inconsistent runbooks across similar requests" (MEDIUM), "Planner drops mandatory tail" (MEDIUM — mitigated by completion hook), "Vocabulary drift" (LOW — versioned change process). |
+
+Revision naming: `docs/agent-teams-migration-plan-v2.1.md` as a new file, with v2 preserved for history. v2.1 frontmatter references v2 as its supersedent.
+
+## 10. Open questions
+
+1. **Planner output location** — `plans/${slug}/runbook.md` sits alongside other planning artifacts. Or should synthesized runbooks have a distinct location (`runbooks/${slug}.md`)? Leaning: keep under `plans/${slug}/` for cohesion with the brief.
+2. **`cause` extensibility** — does any step besides `fix` need `cause`? Candidates: a future `audit` step (cause = compliance-drift vs. periodic-check) if audit gets promoted from review-scope to its own step. Defer until evidence.
+3. **Runbook versioning** — if a runbook is synthesized and then resumed in a later session with a newer vocabulary, how does resume work? Options: (a) lock runbook to vocabulary version at synthesis; (b) regenerate if vocabulary has changed; (c) warn and proceed. Lean: (a) for determinism during a build.
+4. **Learner loop ownership** — Phase 2 establishes the skill-effectiveness baseline, but who owns the continuous refinement after? Planner auto-tunes skill selection from learner output, or humans review learner output and update the synthesis skill manually? Probably the latter for now (supervised learning); automatic tuning is a §4b P5 roadmap item.
+5. **CLAUDE.md intent classification** — with all build requests routing to planner, the intent table simplifies dramatically, but we still need to handle non-build intents (greetings, questions, chat). Define the minimal residual intent set.
+6. **Phase 2a sample size** — how many paired (confidence, human-quality) samples are needed for calibration? Depends on confidence variance. Suggest starting with N=30 and extending if the curve is noisy.
+
+## 11. Status and next steps
+
+This document is a **draft proposal**. It is not yet ratified.
+
+**Next concrete step:** once the PR #115 conversation concludes, promote this draft into `docs/agent-teams-migration-plan-v2.1.md` as the canonical revision, with the sections in §9 edited directly against v2.
+
+**Do NOT:**
+- Start the new Wave 1 tasks (vocabulary + synthesis/brief skills) based on this draft. Ratify v2.1 first.
+- Amend Phase 1 plan files in `.canon/workspaces/agent-teams-v2/plans/phase1/` yet. They're the pre-v2.1 spec; editing them preemptively conflates this draft with the ratified plan.
+
+**Who reviews:** Canon maintainers per the same review process that produced v2.
+
+---
+
+## Appendix A: Conversation provenance
+
+This proposal emerged from the PR #115 review thread on branch `claude/runbook-template-format-dM3LJ`. Key conversation beats, chronologically:
+
+1. PR opened for `phase1-00` (runbook format template) — static-runbook model assumed
+2. Review pass surfaced drift between DESIGN.md schema and phase1-01 / phase1-10 plans; amended
+3. User observation: "runbooks as guidance for Claude-native orchestration — does this open the door for dynamic, plan-specific runbooks?"
+4. Proposal for Option A (vocabulary + synthesis) surfaced; iterated on
+5. Decisions crystallized across several rounds (see §2)
+6. This document captures the outcome so context isn't lost to compaction
+
+The conversation is the source; this document is the durable artifact.
