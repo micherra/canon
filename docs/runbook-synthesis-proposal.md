@@ -750,12 +750,13 @@ None are answerable from workspace files alone (cleaned up) or git alone (coordi
 
 | Phase | Lifecycle persistence work |
 |-------|---------------------------|
-| Phase 1 | No change — still additive. Journal's `domain_skills_loaded` field is the schema foundation. |
-| **Phase 1.5** | Schema migration adding `lifecycle_*` tables. `snapshot_workspace` + `query_workspace_history` MCP tools. `completion-verify.sh` hook extended to call snapshot. Retention policy stub. |
-| Phase 2 | Learner analyses (§6, §7) run against the snapshot corpus. Calibration exercises become observational. |
+| v2 Phase 1 | No change — still additive. Journal's `domain_skills_loaded` field is the schema foundation. |
+| **v2.1a** (per §17.1) | No persistence work; vocabulary + synthesis only. |
+| **v2.1b** (per §17.2) | Minimum schema migration: `lifecycle_workspace_snapshots` (one table) + `snapshot_workspace` MCP tool + `completion-verify.sh` hook extension. No embeddings, no other tables. |
+| **v2.2** | Schema expansion — additional `lifecycle_*` tables (synthesized_runbooks with iteration tracking, step_executions, hitl_events, runbook_deviations) + `query_workspace_history` MCP tool + retention policy stub. Contingent on v2.1b loop closing. |
 | Phase 3 | No direct impact — lifecycle persistence is additive. |
 
-**Phase 1.5 justification:** synthesis ships workable without persistence, but without persistence, the learning system (§3) can't close. Phase 1.5 is the bridge that makes v2.1's learning-system headline real. Phase 1 stays additive-only per the v2 plan's constraint; Phase 1.5 adds the substrate; Phase 2 validates the learning loops.
+**Persistence-as-substrate justification:** synthesis ships workable without persistence (v2.1a alone), but without persistence, the learning system (§3) can't close. v2.1b is the minimum bridge that makes the learning-system headline real with one analysis end-to-end; v2.2 expands the corpus once that loop is demonstrated. v2 Phase 1 stays additive-only per the v2 plan's constraint.
 
 ### 11.9 Open questions specific to persistence
 
@@ -880,25 +881,37 @@ Cost per analysis: low-medium. Each is mostly a query + summarization template. 
 
 ### 13.4 Revised phase plan
 
+The actual release-level phasing lives in §17 (v2.1a / v2.1b / v2.2 carve-out). This subsection shows how the Tier 1/2/3 work-ordering above maps onto those release phases:
+
 | Phase | Content |
 |-------|---------|
-| Phase 1 (already spec'd, additive-only) | Journal, hooks, agent def updates, skills registration. Unchanged from v2; now understood as foundation for Tier 1. |
-| **Phase 1.5 (new in v2.1)** | Tier 1 + all of Tier 2. One coordinated schema migration + template + agent-prompt pass. Plus: `canon-planner` synthesis rewrite (brief + synthesis skills, iterate-until-approved loop), `runbook-vocabulary.md`, updated `runbook-synthesis.md`. |
-| Phase 2 (validation) | Learner analyses (Tier 3) run against the corpus. Observational — no autonomous thresholds, just calibration and correlation. Produces first weekly digests. Humans grade proposals; refinements land. |
+| v2 Phase 1 (already spec'd, additive-only) | Journal, hooks, agent def updates, skills registration. Unchanged from v2 plan. **Hard precondition for any v2.1 work — see §13 callout above.** |
+| **v2.1a** (per §17.1) | `canon-planner` synthesis rewrite (brief + synthesis skills, iterate-until-approved loop), `runbook-vocabulary.md`, `runbook-synthesis.md`, `planner-brief.md`. No persistence work, no enforcement hooks. |
+| **v2.1b** (per §17.2) | Minimum lifecycle persistence: `lifecycle_workspace_snapshots` (one table) + `snapshot_workspace` MCP tool + three structured tags (`principle_id` on review findings, `cause`/`root_cause_tag` on fix summaries, `justified_deviations[]` on impl summaries) + one learner analysis dimension (principle refinement from §6.1). One coordinated schema migration + template + agent-prompt pass. |
+| **v2.2** (per §17.3) | Surface expansion: additional `lifecycle_*` tables, additional structured tags, embeddings, `query_workspace_history` MCP tool, additional learner analyses (Tier 3 minus principle-refinement). Each expansion gated on v2.1b evidence. |
+| Phase 2 (validation) | Real-data validation runs across the v2.1a/b corpus. Observational — no autonomous thresholds, just calibration and correlation. Architect change #4's real end-to-end trace gate applies here. |
 | Phase 3 (deletion) | Unchanged from v2. Removes legacy state-machine / prompt-pipeline / flow YAML runtime / coordination infrastructure after Phase 2 validation passes. |
 
-Phase 1.5 is the critical addition. It's where the learning substrate and the synthesis architecture land together. Without it, Phase 2 validation has nothing to validate.
+The split per §17 means **v2.1a alone is a workable shipping milestone** if v2.1b is delayed — synthesis ships and works without persistence. v2.1b is the bridge to the learning system; its absence doesn't break v2.1a.
+
+(Note: earlier drafts of this proposal used "Phase 1.5" terminology to describe what is now §17's v2.1a + v2.1b. That label is retired; the architect's concern that "Phase 1.5" was Phase 2-scale work wearing Phase 1.5 clothes is addressed by the §17 split into release-level phases with explicit gates.)
 
 ### 13.5 Revised Phase 1 task inventory
 
 | Task | Status | Note |
 |------|--------|------|
-| phase1-00 (runbook format) | DONE on PR #115 | Output format for synthesis |
-| phase1-01..04 (5 runbook files) | **ABANDONED** | Replaced by vocabulary-based synthesis |
-| phase1-05..09 | Unchanged / lightly extended | See §14 |
-| phase1-10 (validation) | **Refactored** | Validates vocabulary + synthesis behavior, not 5 static files |
+| phase1-00 (runbook format) | DONE on PR #115 | Output format for synthesis; lives at `templates/runbook-template.md` + `skills/canon/runbooks/README.md`. |
+| phase1-01..04 (5 static runbook files) | **ABANDONED** for v2.1 | Replaced by vocabulary-based synthesis (v2.1a). The static-file work doesn't ship. |
+| phase1-05 (skills registration) | **Stays — required v2 Phase 1 deliverable** | Domain skills + agent rules registered under `skills/canon/references/`. v2.1's synthesis and observation tagging both depend on this. |
+| phase1-06 (orchestration journal) | **Stays — required v2 Phase 1 deliverable** | Journal's `domain_skills_loaded`, outcome fields, and HITL events feed the v2.1b lifecycle substrate. |
+| phase1-07 (hooks) | **Stays — required v2 Phase 1 deliverable** | `completion-verify.sh` will be extended in v2.1b to call `snapshot_workspace`. |
+| **phase1-08 (agent definitions)** | **Stays — REQUIRED v2 Phase 1 deliverable; this is Gate A** | Creates `canon-planner` and `canon-engineer` agent definitions. **v2.1 cannot start without this.** Currently `canon-implementor` and `canon-fixer` exist; phase1-08 merges them into `canon-engineer` and adds the new `canon-planner`. |
+| phase1-09 (CLAUDE.md orchestration section) | **Stays — required v2 Phase 1 deliverable** | Becomes simpler under v2.1 (no 9-flow intent table, just route to planner) but the section itself is still required. |
+| phase1-10 (validation) | **Refactored** | Validates vocabulary + synthesis behavior, not 5 static files. Runs against v2.1a deliverables. |
 
-Wave 1 shrinks from 5 tasks to 2 in Phase 1 (vocabulary + brief/synthesis skills). Phase 1.5 adds the lifecycle + observation work as a new batch.
+**The key clarification:** marking phase1-01..04 abandoned does NOT mean abandoning all of v2 Phase 1. **phase1-05 through phase1-10 stay as v2 Phase 1 deliverables**, and **phase1-08 in particular is the agent-creation work that v2.1 absolutely depends on** (Gate A). v2.1 builds *on top of* v2 Phase 1; it doesn't replace it.
+
+v2.1a's new task work — `runbook-vocabulary.md` + `runbook-synthesis.md` + `planner-brief.md` + `canon-planner` synthesis-rewrite prompt — is *additional* to phase1-05..10, not a substitute.
 
 ## 14. Migration plan amendments — v2.1 delta against v2
 
@@ -917,9 +930,9 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 | §2.8 Layer 1 | Amend: "CLAUDE.md + vocabulary + synthesis skill" (not runbooks plural). |
 | §3 row 23 (variable interpolation: deprecate) | Unchanged — still deprecate |
 | §3 row 27 (skip conditions: native) | Unchanged — still native, in `skip_when` field |
-| §4 Phase 1 deliverables table | Replace fast-path / feature / epic / migrate / test-gap rows with vocabulary + brief + synthesis skill rows. Add Phase 1.5 task block (schema migration, snapshot tool, observation tags). |
+| §4 Phase 1 deliverables table | Replace fast-path / feature / epic / migrate / test-gap rows with vocabulary + brief + synthesis skill rows (v2.1a). Add v2.1b task block (schema migration, snapshot tool, three observation tags) per §17. **Do not remove phase1-05..10 rows** — they remain required v2 Phase 1 deliverables that v2.1 builds on. |
 | §4b P4 "Self-improving skills" | **Promote** from roadmap item to active Phase 2 validation work — the learning system makes P4 operational. |
-| §4b P5 "Memory architecture" | **Partially promote** — memory audit + grooming become part of v2.1 (Phase 1.5 + 2). Seeding may slip to v2.2. |
+| §4b P5 "Memory architecture" | Cut from v2.1 entirely per architect change #2 (§7 status note). Memory audit + grooming defer to v2.2; seeding to v2.3+. |
 | §5 Phase 2 validation | Add: learner analyses gallery runs produce first weekly digests; confidence signals correlate with outcomes; memory groomed per schedule; first proposals accepted into principle / skill / template refinements. |
 | §6 Risks | Add: "Planner emits inconsistent runbooks across similar requests" (mitigated by iterate-until-approved + deviation tracking); "Vocabulary drift" (LOW — versioned change process); "Observation tag compliance" (LOW — closed schema per §5.7 + indexer drops unknown fields). |
 | §7 Out of scope | Add: "Cross-repo learning (memory sharing across Canon installs). Autonomous confidence-based gating. Real-time write-through to lifecycle DB (per-run snapshot only in v2.1)." |
@@ -961,7 +974,7 @@ Tracked as the work list for converging toward v2.1. Each is a concrete modifica
 4. **Require one real end-to-end trace before ratification.** Hand-run the §6.1 principle-refinement analysis against Canon's *existing* data (`.canon/drift-db.sqlite`, `.canon/learning.jsonl`, git log) and produce one actually-acceptable refinement proposal. The minimum infrastructure needed for that single working trace becomes the real v2.1b scope — not §11 in full. *Open — runtime work; gate documented in §16 Gate B.*
 5. ✅ **Specify the user-approval affordance** (§10.4 and §14 row on §2.3). *Done — §10.5 resolves: conversational mechanism; lead interprets natural-language signals; ambiguity triggers clarification; lightweight proposals for trivial work (thin-gate-no-skip) replace autodispatched fast-path; NO confidence-based skip; all iterations persisted with execution only against stage:approved. §11.3 intro updated to explicitly state every iteration gets a row.*
 6. ✅ **Replace §4's 10-target refinement matrix** with a reduced matrix. *Done — §4 now has 5 in-scope targets (principles, conventions, synthesis skill, planning brief skill, templates) with phase markers, 4 deferred to v2.2+ (domain skills, agent defs, agent rules, vocabulary), and 1 cut entirely (knowledge graph priors). Per-target rationale in §4.1–§4.3.*
-7. **Add hard precondition to Phase 1.5 (and v2.1a/b):** v2 Phase 1 exit criteria met — `canon-planner` and `canon-engineer` agent definitions exist, register, and have been validated in ≥ 3 successful runs under the feature flag. No v2.1 work before that. *Mostly done — Gate A in §16, entry gates in §17.1 and §17.2 cover this; can strengthen with explicit §13 sweep if needed.*
+7. ✅ **Add hard precondition to v2.1a/b:** v2 Phase 1 exit criteria met — `canon-planner` and `canon-engineer` agent definitions exist, register, and have been validated in ≥ 3 successful runs under the feature flag. No v2.1 work before that. *Done — prominent Gate A callout at top of §13, retired "Phase 1.5" terminology in §13.4 / §11.8 in favor of §17's v2.1a/b/v2.2 framing, clarified §13.5 that phase1-05..10 stay as required v2 Phase 1 deliverables (especially phase1-08 which creates the agent definitions).*
 8. **Commit to a storage decision with migration math.** Either (a) reference `drift-schema.ts` with concrete migration DDL for the proposed tables; (b) adopt JSONL-first and defer materialization; or (c) explicitly scope to v2.1b minimum (one table) and defer §11 in full. Current §11.1 rejects the JSONL alternative in one dismissive sentence — that needs a real rebuttal or reconsideration. *Open.*
 9. ✅ **Promote §15 open questions #3 (vocabulary versioning across resume), #7 (observation-schema evolution), #8 (HITL event categorization) to blocking decisions.** *Done — resolutions captured in §8.2 + §11.3 + §5.7; §15 reorganized into Open + Resolved subsections.*
 10. ✅ **Remove or unambiguously mark the illustrative numbers in §6 as fabricated.** *Done — top-of-section warning callout + per-analysis "Hypothetical result (fabricated)" markers.*
