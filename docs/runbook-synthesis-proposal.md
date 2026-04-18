@@ -176,6 +176,35 @@ When an agent loads its project memory and actually uses an entry, it declares t
 
 Implementation is a prompt addition in the agent definition: *"when your output uses information from your project memory, list the cited memory entry IDs in your structured output's `memory_cited` field."* Small change; enables whole memory-audit dimension of the learning system.
 
+### 5.6 Commit trailers as a second observation channel
+
+Beyond structured tags in artifacts, commit trailers are the second observation channel — specifically for code-line-level provenance that survives workspace tear-down and lives in git forever.
+
+**Canon-Deviation trailer family** (new):
+
+```
+Canon-Deviation: <principle-id>
+Canon-Deviation-Rationale: <short reason>
+Canon-Deviation-Decision: <decision-id, optional>
+```
+
+When an engineer writes code that intentionally deviates from a principle, they record both:
+1. A `justified_deviations[]` entry in their implementation summary (§5.2 structured tag)
+2. A `Canon-Deviation*` trailer on the specific commit where the deviating code lands
+
+The trailer is the durable second layer. It survives workspace tear-down, is readable via standard `git log` / `git blame`, and gives future readers direct line ↔ rationale linkage without needing Canon-specific tooling.
+
+**Why both the summary tag and the trailer:**
+
+| Channel | Lifetime | Granularity | Consumer |
+|---------|----------|-------------|----------|
+| `justified_deviations[]` tag in summary | Retained per §11 retention tiers | Per-flow (all deviations in this flow) | Learner pattern detection |
+| `Canon-Deviation*` trailer in commit | Forever in git history | Per-commit (specific code lines) | Blame / review / audit |
+
+The lifecycle indexer scans `git log --grep=Canon-Workflow:${slug}` during `snapshot_workspace` to extract trailer data into the corpus (see §11.3 `lifecycle_deviations` table). The reviewer agent cross-references trailers when assessing principle compliance — commits with authorizing trailers treat the deviation as intentional; commits without treat it as a defect.
+
+**Validation via PostCommit hook:** when an implementation summary declares a `justified_deviations` entry, every commit in the step's range must carry a matching `Canon-Deviation` trailer. Hook exits 2 if missing, with a message instructing the engineer to amend or add the trailer.
+
 ## 6. Learner analyses gallery
 
 Concrete examples of query → pattern → proposal flows the learner runs against the lifecycle corpus. These are illustrative, not exhaustive — each one shows the data-to-value path and what infrastructure it depends on.
