@@ -62,4 +62,68 @@ Explicit decisions made in the PR #115 review thread, in order:
 
 ## 3. Canon's learning system
 
-<!-- BATCH 1 MARKER: sections below to be populated in subsequent commits -->
+Canon's quality-up story depends on a single mechanism applied across every dimension of what it produces:
+
+**Observation → Pattern → Proposal → Refinement**
+
+- **Observation** — a single data point from a flow. "In flow X, review found principle P violation on file Y; fix took N iterations; the fix summary cited root cause Z."
+- **Pattern** — recurring observations across multiple flows. "10 recent flows showed principle P violations on auth-related files; 8 shared the same underlying cause."
+- **Proposal** — a concrete refinement suggestion grounded in the pattern. Structured patch to an artifact (principle file, skill, template, memory entry, agent prompt, vocabulary entry).
+- **Refinement** — an accepted proposal applied to the relevant Canon artifact.
+
+Every interaction contributes observations to a growing corpus. The learner periodically mines that corpus for patterns and emits proposals. Human review accepts or rejects; accepted proposals land as refinements. Over weeks and months, Canon's principles sharpen, its synthesis skill learns common request shapes, its templates lose dead sections, its agents' memories stay groomed, and its domain skills reflect what actually works.
+
+This is the **unified learning loop**. There isn't one for principles and one for plans — there's one mechanism with many refinement targets.
+
+### 3.1 Why synthesis is load-bearing for this
+
+Static runbooks break the plan-quality arm of this loop. A hand-written `fast-path.md` never learns — whoever wrote it wrote it once. Whatever observations accumulate about how fast-path runs play out have no feedback path into the file.
+
+Synthesized runbooks close that loop. Each run is a data point: planner proposed X, user iterated to Y, execution produced outcome Z. The learner sees the pattern ("planner consistently misses `security` step for auth-touching requests"), proposes a synthesis-skill refinement ("when affected files match auth paths, include `security` by default"), and the next synthesis does better.
+
+Static runbooks serve principle refinement fine — the corpus still captures review findings, fixes, and deviations. But they obstruct plan refinement entirely. Synthesis is what makes Canon learn at the plan layer, not just the principle layer.
+
+### 3.2 Why the learner is the engine
+
+The `canon-learner` agent is the orchestrator of this mechanism. Today it mostly produces principle and convention suggestions. Under v2.1, its role expands: it analyzes the full corpus, detects patterns, and emits proposals targeting *any* Canon artifact.
+
+One agent, many query types, many output targets. Same learner, richer analyses.
+
+### 3.3 Why lifecycle persistence is the substrate
+
+Observations only compound if they're captured durably. Workspace files are ephemeral — cleaned up after flows complete. Without persistence, each run's signal is lost. With persistence (see §11), each run contributes to a permanent corpus the learner can mine.
+
+Lifecycle persistence isn't an implementation detail — it's the thing that makes the whole learning system possible.
+
+## 4. Refinement targets matrix
+
+The full surface of Canon artifacts the learning system can refine:
+
+| Target | Location | What gets refined |
+|--------|----------|-------------------|
+| **Principles** | `principles/*.md` | Scope narrowing, severity promotion/demotion, wording clarifications, new principles from recurring patterns |
+| **Conventions** | `.canon/CONVENTIONS.md` | Established patterns observed across N flows; graduation to principles when warranted |
+| **Runbook synthesis skill** | `skills/canon/references/runbook-synthesis.md` | Default step selection, skill-selection patterns, contract pairings, request-shape recognition |
+| **Planning brief skill** | `skills/canon/references/planner-brief.md` | Strategic analysis patterns, open-question framing, value-assessment accuracy |
+| **Domain skills** | `skills/canon/references/*.md` | Primer content accuracy, co-loading patterns, gaps where a new primer is warranted |
+| **Templates** | `templates/*.md` | Section utility (drop dead sections), placeholder clarity, structured-tag additions |
+| **Agent definitions** | `agents/*.md` | Prompt refinements, `skills:` frontmatter, preloaded rules |
+| **Agent rules** | `rules/*.md` | Clarify wording that led to misapplication; add new rules from observed needs |
+| **Vocabulary** | `skills/canon/references/runbook-vocabulary.md` | Step ID additions when compound sequences recur; usage-driven defaults |
+| **Agent memory** | `.claude/memory/{agent}/*` | Stale entry correction, redundant consolidation, citation-based pruning, seed bundles for new agents |
+| **Knowledge graph priors** | `knowledge-graph.db` | Observed file relationships, domain inferences, confidence-weighted edges |
+
+Today's learner produces proposals mostly in the first two rows. Under v2.1, it can target any row.
+
+Each target has its own evidence threshold (see §12), cadence (weekly / monthly / quarterly), and review process. Principle changes warrant more scrutiny than template tweaks. The learner emits at the appropriate threshold per target.
+
+### 4.1 Shared vs. target-specific analyses
+
+Some analyses produce proposals for a single target; others correlate across targets.
+
+- **Single-target:** "Principle P's fix-iteration cost is 3× the baseline → refine P." Target: principles.
+- **Cross-target:** "Agents that load `authentication-security` skill during `fix` steps with `cause: security` have 40% fewer iterations. Two proposals emit: (a) update `runbook-synthesis.md` to auto-include that skill for security fixes, (b) update `authentication-security` domain skill to highlight the most-cited patterns."
+
+Cross-target analyses are the highest-value signal — they show connected improvements across Canon's stack.
+
+<!-- BATCH 2 MARKER: sections 5 onward to be populated in subsequent commits -->
