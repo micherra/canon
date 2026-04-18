@@ -700,4 +700,38 @@ Lifecycle data includes condensed records of user requests and interventions. Sa
 - **Local-only by default.** `.canon/drift-db.sqlite` is gitignored; lifecycle tables inherit.
 - **Team sharing is out of scope for v2.1.** If/when Canon grows team features, a separate "shared" DB (committed to a dedicated repo, or a hosted service) handles cross-machine sync.
 
-<!-- BATCH 10 MARKER: sections 11.7 onward to be populated in subsequent commits -->
+### 11.7 What this unlocks (concretely)
+
+Once lifecycle snapshots land, these queries become first-class — and they're how the learner analyses in §6 and §7 actually run:
+
+- *"All `fix` executions with `cause: security` where confidence was 0.6–0.8 — what were the outcomes?"*
+- *"Synthesized runbooks where the lead deviated by skipping `review` — subsequent regression rate?"*
+- *"For auth-touching requests, which `skills:` combinations correlate with fewer fix iterations?"*
+- *"Runbooks synthesized against vocabulary v1.2 vs. v1.3 — outcome deltas?"*
+- *"Workspaces where HITL events exceeded N — common root causes?"*
+- *"Total iterations-to-approve trending over time?"* — a direct planner-quality metric
+- *"Which memory items were cited across ≥ N flows in the last 30 days?"* — memory grooming signal
+- *"Design decisions with `options_considered = 1` — reversal rate?"* — architect-quality metric
+
+None are answerable from workspace files alone (cleaned up) or git alone (coordination data missing). The snapshot DB is the join point.
+
+### 11.8 Phase impact
+
+| Phase | Lifecycle persistence work |
+|-------|---------------------------|
+| Phase 1 | No change — still additive. Journal's `domain_skills_loaded` field is the schema foundation. |
+| **Phase 1.5** | Schema migration adding `lifecycle_*` tables. `snapshot_workspace` + `query_workspace_history` MCP tools. `completion-verify.sh` hook extended to call snapshot. Retention policy stub. |
+| Phase 2 | Learner analyses (§6, §7) run against the snapshot corpus. Calibration exercises become observational. |
+| Phase 3 | No direct impact — lifecycle persistence is additive. |
+
+**Phase 1.5 justification:** synthesis ships workable without persistence, but without persistence, the learning system (§3) can't close. Phase 1.5 is the bridge that makes v2.1's learning-system headline real. Phase 1 stays additive-only per the v2 plan's constraint; Phase 1.5 adds the substrate; Phase 2 validates the learning loops.
+
+### 11.9 Open questions specific to persistence
+
+1. **Schema versioning in SQLite** — drift-db's migration story for the new tables. Canon already has some migration infrastructure; reuse vs. extend.
+2. **`brief_summary` generation** — planner emits it (cheap, authoritative) vs. post-hoc summarizer in `snapshot_workspace` (more flexible). Lean: planner emits.
+3. **Deviation severity** — a skipped optional step vs. a skipped mandatory tail are different weights. Categorize in schema via severity field, or derive at query time?
+4. **Query cost** — `query_workspace_history` over years of data could become slow. Indexing strategy? Probably not a concern at single-dev repo scale; worth revisiting at team scale.
+5. **Cross-repo learning** — teams wanting Canon to learn from multiple repos' lifecycles need cross-repo memory. Out of scope for v2.1 but worth flagging the boundary.
+
+<!-- BATCH 11 MARKER: sections 12 onward to be populated in subsequent commits -->
