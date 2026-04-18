@@ -385,4 +385,44 @@ Small extensions over §5 / §11:
 
 Audit + grooming land in v2.1 alongside principle refinement — same learner, additional output dimension. Seeding is heavier (seed-bundle format, cross-agent transfer logic) and can slip to v2.2 unless there's a forcing function.
 
-<!-- BATCH 4 MARKER: sections 8 onward to be populated in subsequent commits -->
+## 8. Vocabulary
+
+The canonical set of step IDs Canon knows. Adding a new ID is a versioned change (like adding a principle — deliberate, reviewed). The vocabulary is stored at `skills/canon/references/runbook-vocabulary.md` and loaded as a skill by any agent that needs to understand runbook structure.
+
+| Step ID | Default agent | Dispatch | Default HITL | Purpose |
+|---------|---------------|----------|--------------|---------|
+| `research` | canon-researcher | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift). Absorbs legacy `scan`. |
+| `design` | canon-architect | subagent | approval | Plan index + design decisions |
+| `spike` | canon-engineer | subagent | none | Time-boxed exploratory prototype; produces findings, not shipped code |
+| `implement` | canon-engineer | subagent or team | none | Build code with TDD/BDD. `team` when wave-parallel. Absorbs legacy `write-tests` via TDD. |
+| `migrate` | canon-engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact) |
+| `verify` | canon-engineer | subagent | on_failure | Run existing tests / gates post-change |
+| `test` | canon-tester | subagent | none | Net-new integration tests; coverage-gap fills |
+| `benchmark` | canon-tester | subagent | on_failure | Performance verification against baseline |
+| `security` | canon-security | subagent | none | Security assessment |
+| `review` | canon-reviewer | subagent | checkpoint | Principle compliance (absorbs legacy `audit` via scope) |
+| `fix` | canon-engineer | subagent | on_failure | Fix mode. Required: `cause: test-failure \| security \| review \| verify` |
+| `pre-launch-check` | null | n/a | on_failure | Gate-only — lead runs discovered checks via Bash |
+| `ship` | canon-shipper | subagent | on_failure | PR description synthesis (absorbs legacy `release` unless distinct release flow emerges) |
+| `context-sync` | canon-scribe | subagent | none | Doc sync — **mandatory tail** |
+| `learn` | canon-learner | subagent | none | Pattern analysis — **mandatory tail** |
+
+Total: **15 entries** (13 functional + 2 mandatory tail).
+
+### 8.1 Explicitly dropped candidates
+
+| Dropped | Why |
+|---------|-----|
+| `scan` | Scope of `research` |
+| `map` | Covered by `codebase_graph` MCP tool + SessionStart KG-check hook; not a per-flow step |
+| `triage` | Scope of `research` (ranked-list output) |
+| `profile` | Speculative — no Canon perf flow today; add via versioned-change process if one emerges |
+| `risk-assessment` | Scope of `research` with `skills: [risk-analysis]` |
+| `refactor` | Handled via synthesis rule — `implement` with mandatory-following `verify`; promote to `mode: refactor` if evidence warrants |
+| `smoke` | Scope of `verify` |
+| `audit` | Scope of `review` |
+| `rollback-prep` | Paired artifact of `migrate`; handled in synthesis rule, not a separate step |
+| `monitor` | No Canon ops/deploy flow today; add later if one emerges |
+| `release` | Subsumed into `ship` unless release automation becomes distinct |
+
+<!-- BATCH 5 MARKER: sections 9 onward to be populated in subsequent commits -->
