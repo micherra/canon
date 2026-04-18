@@ -546,4 +546,103 @@ Workspace files are the source of truth *while a flow is running*. At flow compl
 
 **In-progress flows are queried from the workspace, not the DB.** Real-time dashboards / mid-run interventions are out of scope for v1. If they emerge as a need, upgrade to write-through later — the snapshot table schema is the same either way.
 
-<!-- BATCH 8 MARKER: sections 11.3 onward to be populated in subsequent commits -->
+### 11.3 New tables
+
+All under the `lifecycle_` prefix in `drift-db.sqlite`.
+
+#### `lifecycle_synthesized_runbooks`
+
+One row per synthesis event (initial proposal OR approved final — both persisted to support iteration analysis).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | INTEGER PK | |
+| `workspace_id` | TEXT | Links to existing `FlowRunEntry.workspace_id` |
+| `slug` | TEXT | Workspace slug |
+| `synthesizer_agent` | TEXT | Usually `canon-planner` |
+| `vocabulary_version` | TEXT | Version of `runbook-vocabulary.md` this was synthesized against |
+| `synthesis_skill_version` | TEXT | Version of `runbook-synthesis.md` used |
+| `stage` | TEXT | `proposed` / `approved` — distinguishes initial from user-iterated-final |
+| `iteration_index` | INTEGER | 0 = first proposal; N = Nth iteration during user review |
+| `confidence` | REAL | 0.0–1.0 |
+| `confidence_signals` | JSON | `[{signal, value}]` |
+| `step_ids` | JSON | Ordered list of canonical step IDs |
+| `brief_summary` | TEXT | Bounded summary; no verbatim user input |
+| `synthesized_at` | TIMESTAMP | |
+
+#### `lifecycle_step_executions`
+
+One row per executed or skipped step (of the approved runbook).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | INTEGER PK | |
+| `runbook_id` | INTEGER FK | `lifecycle_synthesized_runbooks.id` (approved stage) |
+| `step_id` | TEXT | Canonical vocabulary ID |
+| `step_index` | INTEGER | Ordinal position |
+| `agent_type` | TEXT | Nullable for gate-only steps |
+| `dispatch` | TEXT | `subagent` / `team` / null |
+| `skills_loaded` | JSON | Array of skill names actually loaded |
+| `cause` | TEXT | Nullable — for fix steps |
+| `mcp_tools_called` | JSON | Pre-spawn composition tools |
+| `artifacts_expected` | JSON | From runbook |
+| `artifacts_produced` | JSON | On disk post-step |
+| `status` | TEXT | `started` / `completed` / `skipped` / `failed` |
+| `skip_reason` | TEXT | Nullable |
+| `outcome` | JSON | `{review_verdict, fix_iterations, test_pass_rate, memory_cited, ...}` |
+| `started_at`, `completed_at` | TIMESTAMP | |
+
+#### `lifecycle_hitl_events`
+
+One row per user intervention.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | INTEGER PK | |
+| `runbook_id` | INTEGER FK | |
+| `step_execution_id` | INTEGER FK nullable | Null when outside a specific step |
+| `event_type` | TEXT | `approval` / `clarification` / `redirect` / `reject` / `abort` / `iterate` |
+| `posture` | TEXT | Step's declared `hitl` or `unscheduled` / `plan-approval` |
+| `input_summary` | TEXT | Bounded, no verbatim |
+| `outcome` | TEXT | `proceeded` / `rerouted` / `aborted` |
+| `occurred_at` | TIMESTAMP | |
+
+#### `lifecycle_runbook_deviations`
+
+One row per observed deviation between approved runbook and actual execution.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | INTEGER PK | |
+| `runbook_id` | INTEGER FK | |
+| `deviation_type` | TEXT | `step_added` / `step_skipped` / `step_reordered` / `step_repeated` / `step_modified` |
+| `step_id_affected` | TEXT | Canonical step ID |
+| `reason_summary` | TEXT | Bounded |
+| `detected_at` | TIMESTAMP | |
+
+Computed during snapshot by diffing approved `step_ids` vs. actual `step_executions` sequence.
+
+#### `lifecycle_workspace_snapshots`
+
+Aggregate row per completed/abandoned workspace. Joins to existing `FlowRunEntry`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | INTEGER PK | |
+| `workspace_id` | TEXT | FK-by-convention to `FlowRunEntry` |
+| `slug` | TEXT | |
+| `approved_runbook_id` | INTEGER FK | |
+| `outcome` | TEXT | `complete` / `aborted` / `abandoned` |
+| `total_iterations_to_approve` | INTEGER | How many planner-user rounds |
+| `total_steps_executed` | INTEGER | |
+| `total_steps_skipped` | INTEGER | |
+| `total_hitl_events` | INTEGER | |
+| `total_deviations` | INTEGER | |
+| `flow_duration_ms` | INTEGER | |
+| `commit_range_first` | TEXT | First SHA with Canon-Workflow trailer matching slug |
+| `commit_range_last` | TEXT | Last such SHA — joins to git history |
+| `snapshotted_at` | TIMESTAMP | |
+
+The `commit_range_*` fields bridge lifecycle data to git — the code-change axis. `query_workspace_history` can JOIN lifecycle rows with `git log --grep="Canon-Workflow: ${slug}"` for full provenance.
+
+<!-- BATCH 9 MARKER: sections 11.4 onward to be populated in subsequent commits -->
