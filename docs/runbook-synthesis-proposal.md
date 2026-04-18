@@ -866,4 +866,30 @@ Phase 1.5 is the critical addition. It's where the learning substrate and the sy
 
 Wave 1 shrinks from 5 tasks to 2 in Phase 1 (vocabulary + brief/synthesis skills). Phase 1.5 adds the lifecycle + observation work as a new batch.
 
-<!-- BATCH 13 MARKER: sections 14 onward to be populated in subsequent commits -->
+## 14. Migration plan amendments — v2.1 delta against v2
+
+Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1:
+
+| Section | Change |
+|---------|--------|
+| §1 "What v1 got right" | Add: "Canon's learning loop is the durable quality-up mechanism; synthesis is what makes plan quality learnable alongside principles." |
+| §2.2 "What stays" (Runbooks row) | Replace "Lightweight playbooks describing recommended step sequences" with "Canonical step vocabulary + synthesis skill. Runbooks synthesized per plan by `canon-planner` via iterate-until-approved loop." |
+| §2.3 "Pre-build gate (canon-planner)" | Expand planner responsibilities: emits both `planning-brief.md` AND `runbook.md` per flow; iterates with user until approval. Two-skill split (`planner-brief.md` + `runbook-synthesis.md`); agent body shrinks to skill loading + output contract. |
+| §2.4 "How Claude orchestrates a Canon flow" | Update example: planner proposes runbook, iterates with user, user approves; lead executes approved runbook with lifecycle capture. |
+| §2.5 (duplicate #1 — Dispatch framework) | Unchanged — `dispatch: subagent | team` stays the same |
+| §2.5 (duplicate #2 — Self-serve context) | Expand: agents also emit structured tags (§5) for learning-system observations |
+| §2.6 "Why this is simpler" | Add bullet: "Canon's whole stack improves from every interaction — principles, synthesis skill, templates, agent memory, vocabulary — via the unified learning system." |
+| §2.7 (Orchestration journal) | Expand: journal's `domain_skills_loaded`, outcome fields, and new HITL-event capture feed the lifecycle-persistence substrate (§11). |
+| §2.8 Layer 1 | Amend: "CLAUDE.md + vocabulary + synthesis skill" (not runbooks plural). |
+| §3 row 23 (variable interpolation: deprecate) | Unchanged — still deprecate |
+| §3 row 27 (skip conditions: native) | Unchanged — still native, in `skip_when` field |
+| §4 Phase 1 deliverables table | Replace fast-path / feature / epic / migrate / test-gap rows with vocabulary + brief + synthesis skill rows. Add Phase 1.5 task block (schema migration, snapshot tool, observation tags). |
+| §4b P4 "Self-improving skills" | **Promote** from roadmap item to active Phase 2 validation work — the learning system makes P4 operational. |
+| §4b P5 "Memory architecture" | **Partially promote** — memory audit + grooming become part of v2.1 (Phase 1.5 + 2). Seeding may slip to v2.2. |
+| §5 Phase 2 validation | Add: learner analyses gallery runs produce first weekly digests; confidence signals correlate with outcomes; memory groomed per schedule; first proposals accepted into principle / skill / template refinements. |
+| §6 Risks | Add: "Planner emits inconsistent runbooks across similar requests" (mitigated by iterate-until-approved + deviation tracking); "Vocabulary drift" (LOW — versioned change process); "Observation tag compliance" (LOW — hybrid schema tolerates missing fields). |
+| §7 Out of scope | Add: "Cross-repo learning (memory sharing across Canon installs). Autonomous confidence-based gating. Real-time write-through to lifecycle DB (per-run snapshot only in v2.1)." |
+
+**Revision naming:** `docs/agent-teams-migration-plan-v2.1.md` as a new file; v2 preserved for history. v2.1 frontmatter references v2 as its supersedent.
+
+<!-- BATCH 14 MARKER: sections 15 onward to be populated in subsequent commits -->
