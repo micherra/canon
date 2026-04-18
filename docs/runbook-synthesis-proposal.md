@@ -425,4 +425,54 @@ Total: **15 entries** (13 functional + 2 mandatory tail).
 | `monitor` | No Canon ops/deploy flow today; add later if one emerges |
 | `release` | Subsumed into `ship` unless release automation becomes distinct |
 
-<!-- BATCH 5 MARKER: sections 9 onward to be populated in subsequent commits -->
+## 9. Step schema — first-class fields
+
+Every step in a synthesized runbook carries structural fields (from `templates/runbook-template.md`), plus three domain-oriented axes:
+
+### 9.1 `skills:` — what domain expertise to load
+
+General-purpose: any step can declare domain primers to load from `skills/canon/references/`. Agents read named skills on their first turn via `agent-context-check`.
+
+```yaml
+- id: implement
+  agent: canon-engineer
+  dispatch: team
+  skills:
+    - backend-api
+    - authentication-security
+  mcp_tools: [get_principles, get_file_context]
+  artifacts: ["plans/${slug}/${task_id}-SUMMARY.md"]
+  hitl: none
+```
+
+**Validation:** strict. The planner validates every `skills:` name against the file list in `skills/canon/references/` at synthesis time. Unresolvable names are a synthesis error.
+
+**Why declarative, not inline prose:** planner decides skill selection at synthesis; journal's `domain_skills_loaded` field captures the list verbatim; multiple skills per step compose cleanly; no step-specific `domain` / `scope` field proliferation.
+
+### 9.2 `cause:` — analytic lineage + skill hint (fix-specific)
+
+Used on `fix` (and potentially future re-work steps). Carries two signals:
+
+1. **Analytic:** which upstream step triggered this fix (for outcome correlation)
+2. **Skill hint:** a default primer the planner auto-adds to `skills:` (e.g., `cause: review` → `review-feedback-handling`)
+
+```yaml
+- id: fix
+  agent: canon-engineer
+  cause: security                 # analytic + hints at authentication-security skill
+  skills:
+    - authentication-security     # explicit additional primer
+  artifacts: ["plans/${slug}/FIX-SUMMARY.md"]
+  hitl: on_failure
+```
+
+### 9.3 `mode:` — deferred
+
+Rejected for v2.1 as a general mechanism. Real variants today (`implement` behavior-preserving refactor, `migrate` schema/data) are handled via rules in `runbook-synthesis.md`:
+
+- "When the task is behavior-preserving, synthesize `implement` with skill `refactor-methodology` and mandatory-following `verify` with 'no behavior changes' criterion."
+- "Schema/data migrations synthesize `migrate` (not `implement`), paired with rollback artifact."
+
+Promote `mode:` to a first-class field in a future vocabulary revision if synthesis rules proliferate beyond 3–4 variants.
+
+<!-- BATCH 6 MARKER: sections 10 onward to be populated in subsequent commits -->
