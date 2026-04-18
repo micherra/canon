@@ -126,4 +126,54 @@ Some analyses produce proposals for a single target; others correlate across tar
 
 Cross-target analyses are the highest-value signal — they show connected improvements across Canon's stack.
 
-<!-- BATCH 2 MARKER: sections 5 onward to be populated in subsequent commits -->
+## 5. Observation mechanism — hybrid structured tags + prose
+
+The learning system needs observations captured at flow time, stored durably (§11), and queryable cross-run. Two viable approaches existed: everything upfront-structured, or everything post-hoc extracted. Neither is ideal.
+
+**Decision: hybrid.** Specialist agents produce their normal prose artifacts unchanged. They add lightweight **structured tags** in frontmatter for the highest-value signals. The learner reads both — tags are high-confidence signals consumed directly; prose is fallback for richer analysis when needed.
+
+### 5.1 Why hybrid
+
+- **Upfront-only structured:** rigid; heavy authoring burden; schema changes cascade to every agent. Over-engineers the observation layer before we know what's useful.
+- **Post-hoc-only extraction:** extraction quality varies; LLM token cost per flow; latency. Spends tokens extracting what agents could have emitted directly.
+- **Hybrid:** low authoring burden (small frontmatter additions); high-value signals are structured and direct; prose stays natural for deeper analysis. Schemas evolve gradually as useful fields become clear.
+
+### 5.2 First-pass structured tags per artifact
+
+Low-burden additions to existing templates. Agents already produce this information in prose; promoting the most-useful bits to structured fields is cheap.
+
+| Artifact | Structured frontmatter fields |
+|----------|------------------------------|
+| Planning brief | `confidence` scalar + `confidence_signals[]`, `request_shape_tag`, `alternatives_considered` count |
+| Synthesized runbook | (§9 covers step schema; `vocabulary_version` on frontmatter) |
+| Research finding | `dimensions_explored[]`, `risks_surfaced[]`, `confidence_per_dimension{}` |
+| Design decision | `decision_id`, `options_considered` count, `chosen_option_tag`, `rationale_tags[]` |
+| Task plan | `task_id`, `dependencies[]`, `file_count`, `principle_ids[]` |
+| Implementation summary | `compliance_declared_for: [principle_id]`, `justified_deviations: [{principle_id, reason_short}]`, `memory_cited: [item_id]` |
+| Test report | `tests_added` count, `coverage_delta`, `tests_paired_with_principle_ids[]` |
+| Review finding | `principle_id` per finding, `severity`, `file_path` |
+| Fix summary | `cause`, `root_cause_tag`, `upstream_step_id` |
+| HITL event | `event_type`, `posture`, `outcome`, `step_id_affected` (often null) |
+
+### 5.3 Tag discipline — rules the indexer follows
+
+- **Tags are optional.** Missing fields don't fail ingestion. Indexer tolerates absence; learner treats missing as "no signal from this field" rather than error.
+- **Tags are additive.** Agents can include fields not in the first-pass schema; indexer stores them as a generic `extra_tags` JSON blob. Useful fields get promoted to first-class columns in a later schema revision.
+- **Prose stays authoritative.** When a tag and prose disagree, prose wins for factual questions; tag wins for aggregate analysis. (The learner flags tag-prose disagreement as a data-quality signal.)
+- **Secret / PII scrubbing.** Tag values pass through a basic secret-pattern match before persistence. Free-text short-summary fields are bounded (e.g., 280 chars).
+
+### 5.4 What about richer analysis the tags don't capture?
+
+Prose extraction remains available for the learner when it wants richer context than tags provide. E.g., if the learner detects a pattern in design-decision outcomes but wants to understand *why* architects chose certain options, it reads the `rationale_tags[]` tag first, falls back to scanning the prose body of the decision artifact if the tags aren't sufficient.
+
+This is a small number of LLM calls per week (at learner cadence), not per flow. Avoids the token cost of per-flow extraction while preserving the ability to dig deeper when analysis requires it.
+
+### 5.5 Memory citation — a specific observation worth calling out
+
+One structured tag deserves highlighting because it enables memory grooming (§7): `memory_cited: [item_id]` on agent outputs.
+
+When an agent loads its project memory and actually uses an entry, it declares the citation. This gives the learner a direct signal about which memory entries earn their place. Entries cited across many flows are valuable; entries never cited are candidates for pruning.
+
+Implementation is a prompt addition in the agent definition: *"when your output uses information from your project memory, list the cited memory entry IDs in your structured output's `memory_cited` field."* Small change; enables whole memory-audit dimension of the learning system.
+
+<!-- BATCH 3 MARKER: sections 6 onward to be populated in subsequent commits -->
