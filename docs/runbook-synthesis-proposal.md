@@ -579,7 +579,7 @@ All under the `lifecycle_` prefix in `drift-db.sqlite`.
 
 #### `lifecycle_synthesized_runbooks`
 
-One row per synthesis event (initial proposal OR approved final — both persisted to support iteration analysis).
+**One row per synthesis event — every iteration is persisted.** Initial proposal, any intermediate iterations produced during planner-user review, and the approved final all get rows. Only the `stage: approved` row is executed against; intermediates are available to the learner for calibration and iteration-pattern analyses (per §10.5 user approval resolution).
 
 | Column | Type | Notes |
 |--------|------|-------|
