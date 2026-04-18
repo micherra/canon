@@ -511,6 +511,35 @@ The contract applies across the full planner-user iteration loop. The planner pr
 
 This means "the planner's output" is really "the finally-approved runbook", which may differ from the initial proposal. Both are captured in the lifecycle corpus — initial and approved versions — so the learner can analyze iteration patterns.
 
+### 10.5 User approval affordance
+
+Resolved per architect change #5 (§16).
+
+**Mechanism: conversational.** The lead interprets user messages for approval signals. The user never invokes a slash command or MCP tool directly; from their perspective, approval is natural — "looks good", "yes go", "approved", "let's proceed" all signal approval. Ambiguous cases ("looks good, but change X first" / "mostly yes") are clarification events, not approval events; the lead asks explicitly rather than auto-approving.
+
+**Internal journal record:** when the lead infers approval, it records the approved stage via the journal MCP tool (creating a `lifecycle_synthesized_runbooks` row with `stage: approved`, per §11.3). The approval record is internal bookkeeping, not a user-facing mechanism.
+
+**Ambiguity handling:** if the user's message is ambiguous or partial, the lead asks rather than proceeds. Example: *"Approving the full runbook? Step `design` shows low confidence — proceed with it as-specified, or dig into the open questions first?"* No auto-approve on ambiguity.
+
+**Lightweight proposals for trivial work.** The planner calibrates proposal *depth* to request complexity:
+
+- Trivial bug fix → 1-step runbook (just `implement`), one-line overview, approval clears in seconds with "go"
+- Small feature → 3–4 step runbook, brief overview, user skims in seconds
+- Complex epic → multi-wave runbook, full overview, iteration may take multiple rounds
+
+This replaces the old autodispatched fast-path (no gate, no visibility) with a **thin-gate-no-skip** pattern: every request goes through the planner, but trivial work produces a trivial plan that clears in seconds. Arguably *more efficient* than the original fast-path because the user has visibility and the journal has a record, at minimal latency cost.
+
+The planner does NOT fall back to a "skip approval when confidence ≥ threshold" mechanism. Decision #10 (iterate-until-approved) stands. Friction is addressed by making the proposal light, not by skipping the gate.
+
+**Friction acknowledgment.** Every build request now has a synchronous planner round-trip — this is a material change from today's autodispatched fast-path. Mitigation is the lightweight-proposal principle above. Phase 2 validation will measure actual round-trip cost for the trivial-request case; if it's intolerable in practice, revisit this subsection.
+
+**Iteration persistence.** Per user direction (architect change #5 resolution): **all iterations are persisted**, but only the `stage: approved` row is executed against.
+
+- Each iteration gets one row in `lifecycle_synthesized_runbooks` (`stage: proposed` for intermediates; `stage: approved` for the final version; `stage: regenerated` per §8.2 if vocab version changed mid-flow)
+- `iteration_index` tracks ordinality within a flow (0 = first proposal, N = approved final)
+- `lifecycle_workspace_snapshots.approved_runbook_id` points to the single `stage: approved` row per workspace
+- Intermediate iterations available to the learner for calibration analyses (planner-quality trends, iteration-pattern detection, confidence-vs-iteration-count correlation) but never executed against
+
 ## 11. Lifecycle persistence — the substrate for the learning system
 
 Everything in §3–§7 depends on one piece of infrastructure: a durable, queryable record of what happened in each flow that survives workspace cleanup. Workspaces under `.canon/workspaces/<id>/` are ephemeral by design — they're scratch, not record. Without repo-level persistence, observations are lost and the learning loop can't close.
