@@ -176,4 +176,213 @@ When an agent loads its project memory and actually uses an entry, it declares t
 
 Implementation is a prompt addition in the agent definition: *"when your output uses information from your project memory, list the cited memory entry IDs in your structured output's `memory_cited` field."* Small change; enables whole memory-audit dimension of the learning system.
 
-<!-- BATCH 3 MARKER: sections 6 onward to be populated in subsequent commits -->
+## 6. Learner analyses gallery
+
+Concrete examples of query → pattern → proposal flows the learner runs against the lifecycle corpus. These are illustrative, not exhaustive — each one shows the data-to-value path and what infrastructure it depends on.
+
+### 6.1 Principle refinement from review findings
+
+**Query:** "Across the last 50 flows, which principles had review findings, and what was the fix-iteration cost per principle?"
+
+**Result (illustrative):**
+
+| Principle | Findings | Avg fix iterations |
+|-----------|----------|-------------------|
+| `thin-handlers` | 12 | 1.1 |
+| `error-bubbling` | 8 | 1.2 |
+| `result-types` | 15 | **3.1** |
+
+**Pattern:** `result-types` takes 3× the fix iterations. Either the principle is ambiguous or hard to apply.
+
+**Follow-up query:** "For `result-types` fixes, what did fix summaries say?"
+
+**Result:** 10 of 15 mentioned "unclear how to apply to callback-style APIs."
+
+**Proposal:** structured patch to `principles/result-types.md` narrowing scope or adding a callback-case example.
+
+**Depends on:** `principle_id` on review findings; fix summary `cause` and `root_cause_tag`.
+
+### 6.2 Plan refinement from deviations
+
+**Query:** "Across recent runbooks, which had 3+ deviations?"
+
+**Result:** 8 runbooks with deviations; of those, 6 had a `security` step *added* by the lead that the planner hadn't synthesized.
+
+**Follow-up:** "What did those 6 requests have in common?" → all touched `src/auth/**` or `src/api/**/session*`.
+
+**Proposal:** update `runbook-synthesis.md` — *"when affected files match auth paths, include `security` step by default."*
+
+**Depends on:** `lifecycle_runbook_deviations` table; file-path tagging on requests.
+
+### 6.3 Skill effectiveness from `domain_skills_loaded` × outcome
+
+**Query:** "For `fix` steps with `cause: security`, which skill combinations correlate with fewer iterations?"
+
+**Result:**
+
+| Skills combination | Avg fix iterations |
+|-------------------|---------------------|
+| `[]` | 3.8 |
+| `[authentication-security]` | 2.3 |
+| `[authentication-security, backend-api]` | 1.4 |
+| `[authentication-security, error-handling]` | **1.1** |
+
+**Pattern:** auth-security alone isn't enough — co-loading `error-handling` correlates with much cleaner fixes.
+
+**Proposal:** update `runbook-synthesis.md` — *"for `fix` with `cause: security`, include both `authentication-security` AND `error-handling` in `skills:` by default."*
+
+**Depends on:** journal's `domain_skills_loaded` + `cause` + fix outcome tracking.
+
+### 6.4 Decomposition quality from task-plan tags
+
+**Query:** "Correlate task `file_count` with downstream fix-iteration count per task."
+
+**Result:**
+
+- 1–2 files: 0.3 avg fix iterations
+- 3–5 files: 1.2 avg
+- 6+ files: 3.1 avg (20% had test failures)
+
+**Pattern:** tasks spanning 6+ files are systematically harder; architect is under-decomposing.
+
+**Proposal:** update `templates/task-plan.md` with explicit guidance ("aim for 2–4 files per task"); add new rule `agent-task-right-sizing.md`.
+
+**Depends on:** `file_count` on task-plan frontmatter; linking tasks to downstream fix events.
+
+### 6.5 Design quality from decision tags
+
+**Query:** "For design decisions where `options_considered = 1`, what's the reversal rate in later flows?"
+
+**Result:** 40% reversal rate vs. 8% when `options_considered ≥ 3`.
+
+**Pattern:** single-option designs correlate with rework; architects converge too fast.
+
+**Proposal:** update `canon-architect.md` or create `agent-explore-alternatives` rule.
+
+**Depends on:** `options_considered` on design-decision frontmatter; decision-reversal detection across flows.
+
+### 6.6 Template health from section-completeness
+
+**Query:** "Across recent implementation logs, which template sections are routinely empty?"
+
+**Result:** "External Evidence" present in 8% of logs; "Verified Facts" in 15%; "Assumptions" in 62%.
+
+**Pattern:** first two sections aren't earning their place.
+
+**Proposal:** revise `templates/implementation-log.md` — drop External Evidence and Verified Facts, or tighten their conditional guidance.
+
+**Depends on:** per-section completeness tracking (could be derived post-hoc by the indexer scanning artifacts).
+
+### 6.7 HITL pattern analysis
+
+**Query:** "At which steps do users most often intervene during iteration?"
+
+**Result:** `design` (12 interventions across 20 flows) vs. `research` (3 across 20).
+
+**Pattern:** planner's proposed designs need more user iteration than its research steps.
+
+**Proposal:** amend `runbook-synthesis.md` — for design steps, include planner's confidence-signals inline in the brief; surface open questions explicitly.
+
+**Depends on:** `lifecycle_hitl_events` table; step-level linkage.
+
+### 6.8 What a learner run actually produces
+
+Weekly, the learner runs these analyses (and more) in parallel. Output is a single digest:
+
+```
+# Canon Learning Digest — Week of 2026-04-21
+
+## High-confidence proposals (≥ 0.9)
+- Refine principle `result-types` (§6.1) — structured patch attached
+- Add task-right-sizing rule (§6.4) — draft rule attached
+- Update engineer memory M14 (auth TTL correction, §7) — patch attached
+
+## Medium-confidence proposals (0.7–0.9)
+- Auth-path synthesis default (§6.2) — patch to runbook-synthesis.md
+- Security fix skill combo (§6.3) — patch to runbook-synthesis.md
+- Consolidate architect memory items M8/M14/M22 (§7) — patch attached
+
+## Observations accumulating (below threshold)
+- Design options-count correlation (§6.5) — 12 observations; needs ~20 to cross
+- Template section dead zones (§6.6) — pattern visible; waiting for 0.7 threshold
+
+## Seed bundle available
+- `canon-security-auditor` seed memory ready if you want to onboard
+```
+
+Human reviews ~30 minutes per week, accepts/rejects proposals, refinements land. Each week's digest is a measurable increment of Canon's quality-up trajectory.
+
+## 7. Agent memory audit / groom / seed
+
+Agent project memory is another refinement target. Per the migration plan, six agents get `memory: project` — planner, engineer, researcher, architect, scribe, learner. Memory accumulates across sessions, and without grooming it **degrades**:
+
+- **Stale** — agent remembers pattern X; codebase refactored to Y months ago
+- **Wrong** — agent generalized from 2 observations that don't hold at corpus scale
+- **Redundant** — same observation written multiple times in slightly different phrasings
+- **Stranded** — memory references file paths that no longer exist
+- **Overconfident** — agent wrote "always use A"; subsequent flows used B cleanly
+
+All of this is detectable from the corpus once `memory_cited` tagging (§5.5) is in place.
+
+### 7.1 Memory audit — analyses
+
+**Staleness check:** "For each memory item citing a file path, does the path still exist?"
+→ Proposal: prune deleted paths; rewrite renamed paths.
+
+**Cross-check against corpus:** "Memory claims `auth uses JWT with 15-min TTL`. What does recent corpus say?"
+→ 12 flows in last 60 days used 60-min TTL.
+→ Proposal: update memory — "Auth uses JWT with 60-min TTL (corrected: was 15-min until March 2026)."
+
+**Overconfidence detection:** "Memory says `always use Result<T,E> everywhere`. Corpus pattern?"
+→ 35 of 40 flows used Result; 5 used exceptions (in low-level parsers, per documented convention).
+→ Proposal: refine memory — "Prefer Result<T,E> except in low-level parsers (see `exceptions-at-boundaries`)."
+
+### 7.2 Memory grooming — keeping what's useful
+
+**Citation tracking:** "Across recent agent outputs, which memory items were cited vs. ignored?"
+→ Requires `memory_cited: [item_id]` structured tag on specialist outputs (§5.5).
+→ Item M27 cited 0 times across 50 flows; items M1–M20 cited 40+ times each.
+→ Proposal: prune M27.
+
+**Consolidation:** "Which memory items make overlapping claims?"
+→ Items M8, M14, M22 describe the same auth hook-ordering gotcha in different phrasings.
+→ Proposal: consolidate to single authoritative entry.
+
+**Budget management:** "Agent's memory exceeds N tokens; rank by recent-citation-weighted utility and prune bottom quartile."
+→ Automatic maintenance once citation data exists.
+
+### 7.3 Memory seeding — warm-starting new agents or repos
+
+The corpus is distilled expert context for the repo. When:
+
+- A new agent role is introduced (future `canon-security-auditor`)
+- Canon is installed in a new repo
+- An agent's memory is intentionally reset
+- An existing agent's role expands
+
+…seed memory from the corpus instead of starting cold.
+
+**Seed-candidate analysis:** for a fresh `canon-engineer` memory in this repo, pull from the existing corpus:
+
+- Codebase invariants (patterns with >90% consistency across 6+ months)
+- Design decisions with zero reversal rate
+- Subsystem-specific gotchas (recurring root causes that took 3+ iterations initially but converged)
+- Principle-application examples (fixes where `cause = review` and principle correctly applied)
+
+**Output:** a seed bundle — structured memory entries ranked by signal strength — that becomes the new agent's starting memory.
+
+### 7.4 What this adds infrastructure-wise
+
+Small extensions over §5 / §11:
+
+| Addition | Effort | Where |
+|----------|--------|-------|
+| `memory_cited` structured tag on specialist outputs | Small | Template update + lifecycle schema |
+| Learner file-read access to `.claude/memory/{agent}/*` | Small | Learner tool allowlist |
+| Memory-patch output format (add/update/remove item) | Small | Learner proposal template |
+| Seed-bundle format | Medium | New artifact template |
+| Memory citation prompt guidance in agent bodies | Small | Agent definitions |
+
+Audit + grooming land in v2.1 alongside principle refinement — same learner, additional output dimension. Seeding is heavier (seed-bundle format, cross-agent transfer logic) and can slip to v2.2 unless there's a forcing function.
+
+<!-- BATCH 4 MARKER: sections 8 onward to be populated in subsequent commits -->
