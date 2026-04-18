@@ -169,4 +169,91 @@ If synthesis rules proliferate beyond 3–4 variants, promote `mode` to a first-
 
 Body H3 prose for this step covers intent ("address security findings"), composition hints beyond `mcp_tools` (which template to reference for FIX-SUMMARY), and HITL posture. Body does NOT restate the frontmatter fields — per the authoring rule in `skills/canon/runbooks/README.md`.
 
-_(Sections 6–9 to follow: synthesis contract, confidence scoring, phase rollout, impact on existing plan, open questions.)_
+## 6. Synthesis contract
+
+Rules the planner (via `runbook-synthesis.md` skill) MUST follow when emitting a runbook. These are the invariants that replace the structural guarantees static runbooks used to provide.
+
+### 6.1 Planner MUST
+
+1. **Include mandatory tail.** Every build runbook ends with `context-sync` followed by `learn`. Not optional, not reorderable.
+2. **Use canonical step IDs only.** Any step ID not in `runbook-vocabulary.md` is a synthesis error.
+3. **Preserve default agent / dispatch / HITL** unless overriding with explicit justification in the planning brief.
+4. **Validate `skills:` names strictly** against `skills/canon/references/` at synthesis time.
+5. **Use `${slug}` / `${task_id}` / `${timestamp}` placeholders** per the runbook format spec. No bare `{slug}` / `{task_id}` / `{timestamp}`.
+6. **Include a one-paragraph Overview** in the runbook body explaining why this step sequence was chosen (the "why" the vocabulary+frontmatter can't capture).
+7. **Emit body H3 prose per step** with intent, skip-when elaboration, and wave/HITL coordination notes — per the authoring rule in `skills/canon/runbooks/README.md` ("prose covers why/skip/coordination, never restates frontmatter").
+8. **Apply contract pairings** from synthesis rules:
+   - Behavior-preserving `implement` (refactor) → mandatory-following `verify` with "no behavior changes" criterion in body prose
+   - `migrate` → paired rollback artifact in the step's `artifacts:` list
+   - `security` findings → at least one `fix` step with `cause: security` before `ship`
+   - `review` verdict not clean → `fix` with `cause: review` loop until clean
+
+### 6.2 Planner MAY
+
+- **Reorder steps** (e.g., `security` before `review` for auth-sensitive changes).
+- **Skip optional steps** (`design` for scoped fixes with obvious approach; `test` for doc-only changes).
+- **Repeat steps** (two `review` passes for risky migrations; multiple `fix` cycles).
+- **Expand a single step into multiple waves** (`implement` split into wave 1 = core + wave 2 = extensions).
+
+### 6.3 Planner MUST NOT
+
+- **Invent new step IDs.** Adding a vocabulary entry is a deliberate versioned change, not a per-run decision.
+- **Remove baseline HITL** from step defaults based on confidence score. Confidence may only add HITL on top, never remove (see §7.3).
+- **Skip mandatory tail** regardless of flow size or confidence.
+
+## 7. Confidence scoring
+
+The planner emits a scalar confidence value with each synthesized runbook, along with per-signal contributions. Confidence is a calibration signal and a HITL amplifier — never a HITL-removal mechanism.
+
+### 7.1 Schema
+
+```yaml
+# In synthesized runbook frontmatter
+confidence: 0.0-1.0
+confidence_signals:
+  - {signal: "novelty",           value: 0.7}
+  - {signal: "scope_clarity",     value: 0.9}
+  - {signal: "domain_coverage",   value: 0.8}
+  - {signal: "dependency_drift",  value: 0.6}
+  - {signal: "question_count",    value: 0.85}
+```
+
+### 7.2 Signals
+
+| Signal | Meaning | How computed |
+|--------|---------|--------------|
+| `novelty` | Has Canon built something like this before? | Planner's `memory: project` semantic search on past plans |
+| `scope_clarity` | Does the request have concrete acceptance criteria? | Planner's analysis of the brief; fewer open questions ⇒ higher |
+| `domain_coverage` | Are relevant domain primers available for the affected layers? | Ratio of affected file-layers with ≥1 matching primer in `skills/canon/references/` |
+| `dependency_drift` | How much has changed in the target files since the last related work? | `get_drift_report` + recent commit density in target files |
+| `question_count` | How many open questions remain in the brief after analysis? | Inversely proportional to the count; clamped |
+
+Overall `confidence` is a weighted combination (weights tuned during Phase 2 calibration — Phase 1 ships with equal weighting as a placeholder).
+
+### 7.3 Confidence as HITL amplifier
+
+Critical principle: confidence affects the **ceiling** of autonomy, not the **floor**. The baseline HITL in a synthesized runbook (`architect approval`, `review checkpoint`, etc.) stays regardless of score.
+
+- **Low confidence** → *add* HITL (extra checkpoints, harder approval gates, additional user presentation)
+- **High confidence** → *baseline* HITL (the runbook's specified posture)
+- **Never:** high confidence → *less* HITL than the runbook specifies
+
+This prevents a calibration failure from silently removing guardrails.
+
+### 7.4 Gating behavior — deferred to Phase 2 calibration
+
+**Phase 1** ships confidence as **observable only** — planner emits the score and signals; journal captures them; nothing gates on the value. This lets us collect a calibration sample without trusting an untrusted signal.
+
+**Phase 2a (calibration sub-phase)** — *all* synthesized runbooks pause for human review regardless of confidence. Collect N paired (confidence, human-quality) samples. Build calibration curve.
+
+**Phase 2b (threshold validation)** — from the calibration curve, pick the confidence level above which human-graded quality was ≥95%. Test that threshold: runs above proceed autonomously; runs below pause for review. Observe.
+
+**Phase 3 rollout** — production threshold derived from Phase 2b data. Final gating behavior likely lands somewhere like:
+
+- `confidence < T_low` → planner presents brief with open questions; lead surfaces to user before executing
+- `T_low ≤ confidence < T_high` → proceeds, but adds one `hitl: checkpoint` at a risky step; baseline HITL preserved
+- `confidence ≥ T_high` → proceeds per synthesized runbook as-is
+
+…but `T_low` and `T_high` are determined by Phase 2b data, not guessed at Phase 1.
+
+_(Sections 8–9 to follow: phase rollout impact, impact on v2 plan, open questions.)_
