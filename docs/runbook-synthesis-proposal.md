@@ -205,6 +205,25 @@ The lifecycle indexer scans `git log --grep=Canon-Workflow:${slug}` during `snap
 
 **Validation via PostCommit hook:** when an implementation summary declares a `justified_deviations` entry, every commit in the step's range must carry a matching `Canon-Deviation` trailer. Hook exits 2 if missing, with a message instructing the engineer to amend or add the trailer.
 
+### 5.7 Schema policy — closed for v2.1
+
+Per §15 resolved-question #7: **the structured-tag schema is closed for v2.1**. The fields enumerated in §5.2 are the complete list. Agents that emit fields outside this list have those fields **dropped** by the indexer; nothing is silently captured in a generic `extra_tags` JSON blob.
+
+**Rationale:**
+
+- We don't yet have signal on which extra fields agents would invent. Designing a promotion path before any data exists is premature optimization.
+- SQLite JSON queryability is decent but real query performance comes from indexed columns; an open `extra_tags` blob accumulates unstructured data that never gets the column treatment unless explicitly promoted.
+- A closed schema forces every additional signal through a deliberate schema-change review, which is a healthy forcing function.
+
+**How to evolve the schema** (when a new field is wanted):
+
+1. Propose a schema change as a versioned migration against `drift-schema.ts`
+2. Update the relevant template + agent prompt
+3. Migrate existing data if applicable
+4. Same review cadence as Canon principle changes
+
+**Future possibility (v2.2+, not in v2.1):** the learner could analyze patterns in agent prose outputs, detect recurring fields agents *would* like to emit, and propose schema additions automatically. This is a natural extension of the learning system but explicitly out of scope for v2.1; it would require the learner to have demonstrated trustworthy proposals on principle/synthesis-skill targets first.
+
 ## 6. Learner analyses gallery
 
 > **⚠️ ALL NUMBERS IN THIS SECTION ARE FABRICATED — ILLUSTRATIVE ONLY.** They describe *hypothetical* query results to demonstrate the data-to-value path; **they are not measurements from actual Canon usage**. Per architect change #4 (§16), one real end-to-end trace against today's Canon data (drift-db, learning.jsonl, git log) is required before ratification. Actual numbers will replace these illustrations at that point, or the analysis will be removed if the trace shows it can't produce acceptable proposals from available data.
