@@ -1111,3 +1111,171 @@ Remove ~130 files / ~35,000 lines of legacy coordination infrastructure after Ph
 - **3c:** Remove feature flag after stable period
 
 See v2 §4 Phase 3 for the full file deletion list and validation checkpoints. v2.1 inherits Phase 3 unchanged.
+
+---
+
+## 11. Parallel Workstream — MCP & Intelligence Roadmap (amended from v2 §4b)
+
+This workstream is independent of Phases 1–3. All changes are backward-compatible. v2.1 amendments to v2's priority list:
+
+| Priority | Focus | Key deliverable | v2.1 status |
+|----------|-------|----------------|-------------|
+| **P0** | Reduce tool calls per spawn | `get_context` composite tool (1 call replaces 3-4) | Unchanged from v2. |
+| **P1** | Prepare tools for new model | Journal init in `init_workspace`, `report_result` simplification | Unchanged from v2. |
+| **P2** | Consolidation and cleanup | 6 `write_*` → 1 `write_artifact`, board/journal merge | Unchanged from v2. |
+| **P3** | KG intelligence | `infer_domains`, community detection, confidence-scored edges, design rationale nodes | Unchanged from v2. |
+| **P4** | Self-improving skills | Flow outcome tracking, skill effectiveness analysis, graph-structured memory | **PROMOTED** — v2.1's learning system (§3) makes P4 operational. Phase 2 validation explicitly exercises P4 via skill-effectiveness analyses (§10.5). |
+| **P5** | Memory architecture | Ebbinghaus decay, 4-tier hierarchy, token budgets | **CUT from v2.1** — memory audit + grooming defer to v2.2; memory seeding to v2.3+. Memory remains future work; v2.1 does not specify it. |
+
+v2.1 promotes P4 from roadmap to active Phase 2 validation work. P5 is explicitly deferred beyond v2.1 per architect review (automated writes to agent memory are high-risk without proven base learner; see §3.3 deferral notes).
+
+---
+
+## 12. Validation Strategy
+
+v2.1's validation strategy is defined across two sections:
+
+- **Phase-by-phase validation** — §10.5 (Phase 2 deliverables table)
+- **Gates controlling ratification and phase transitions** — §15 (Ratification gates A/B/C)
+
+Phase 2 validation (§10.5) exercises synthesis consistency, iterate-until-approved quality, learner-baseline (Gate B), confidence calibration, regression against legacy path, HIGH-severity integration coverage, error handling, maxTurns exhaustion, mid-flow resume, and vocabulary version resume. Each is a concrete pass-criterion in the §10.5 table.
+
+### 12.1 How each phase proves it is complete
+
+**v2 Phase 1 (Gate A in §15):** agent roster has `canon-planner` and `canon-engineer`; both validated in ≥ 3 runs under `CANON_AGENT_TEAMS_MODE=on`.
+
+**v2.1a (§10.2 exit):** planner synthesizes working runbooks; L1 + L4 observed to prevent intent misclassification; 5 distinct request types processed end-to-end.
+
+**v2.1b (Gate B in §15):** ≥ 1 accepted principle-refinement proposal produced from real lifecycle data; learning loop observably closes.
+
+**v2.2 (per-expansion):** each new refinement target lands with a completed observation → refinement cycle before the next is enabled.
+
+**Phase 2 overall:** §10.5 deliverables all pass per-criterion.
+
+**Phase 3 (unchanged from v2):** structural integrity — builds pass, tests pass, deleted modules have no remaining imports.
+
+### 12.2 Rollback path
+
+**v2.1a:** revert the CLAUDE.md amendments + remove `canon-workspace-check.sh` hook + revert the canon-planner agent-body changes. Legacy behavior restored.
+
+**v2.1b:** drop `lifecycle_workspace_snapshots` table + revert `snapshot_workspace` MCP tool + remove structured tags from relevant templates + revert the learner's principle-refinement dimension. v2.1a stays.
+
+**v2.2:** per-expansion rollback; each v2.2 addition should be independently reversible.
+
+**Phase 2 flag:** `CANON_AGENT_TEAMS_MODE=off` returns to legacy `drive_flow` path throughout all of v2.1 (gated the same way as v2).
+
+**Phase 3 deletion:** `git revert` the deletion commit(s). Same as v2 — all deletion commits atomic per-directory.
+
+---
+
+## 13. Risks (amended from v2 §6)
+
+v2's risks carry forward; v2.1 adds synthesis- and learning-loop-specific risks.
+
+| Risk | Severity | Likelihood | Mitigation |
+|------|----------|------------|------------|
+| Claude doesn't consistently follow orchestration guidance (from v2) | HIGH | MEDIUM | CLAUDE.md instructions are authoritative. Hooks enforce artifacts. L1 + L4 (v2.1a addition) address intent misclassification specifically. Consistency testing in Phase 2. |
+| Agent teams is experimental and may change (from v2) | HIGH | LOW | Feature flag gating isolates Canon from upstream changes. |
+| Missed integrations (from v2) | MEDIUM | MEDIUM | Phase 2 validation catches functional gaps. |
+| Agent definitions may restrict MCP access unintentionally (from v2) | LOW | MEDIUM | Audit all 11 agent definitions in Phase 1. |
+| Context window pressure during long flows (from v2) | MEDIUM | LOW | Context compaction automatic. Lead persists state to artifacts and lifecycle snapshots. |
+| One team per session (from v2) | LOW | HIGH | Lead tears down between phases — same as legacy. |
+| No hard abort for stuck agents (from v2) | LOW | LOW | Prompt-based budgets; `maxTurns`; lead monitors. |
+| No path enforcement in worktree isolation (from v2) | LOW | LOW | Pre-tool hooks; agent `tools` allowlist; L4 PreToolUse backstop. |
+| `enter-and-prepare-state.ts` refactoring risk (from v2) | MEDIUM | LOW | Refactor in dedicated commit before main deletion. |
+| Orchestration journal is a single point of enforcement (from v2) | MEDIUM | MEDIUM | CLAUDE.md instructs `log_step`. Completion hook blocks if zero journal entries. |
+| **Planner emits inconsistent runbooks across similar requests** (v2.1 addition) | MEDIUM | MEDIUM | Iterate-until-approved filters bad runbooks before execution. Deviation tracking (v2.2) surfaces systematic synthesis errors. |
+| **Intent misclassification drift** (v2.1 addition) | MEDIUM | MEDIUM | L1 (per-message re-classification discipline) + L4 (hard PreToolUse hook blocks Edit/Write/Bash without active Canon workspace). Defense in depth. |
+| **Vocabulary drift** (v2.1 addition) | LOW | LOW | Versioned change process; semver discipline per §5.1. |
+| **Observation tag compliance** (v2.1 addition) | LOW | LOW | Closed schema per §4.6; indexer drops unknown fields. |
+| **LLM overconfidence skews confidence signals** (v2.1 addition) | MEDIUM | HIGH | Six mitigations per §7.4; calibration validated in Phase 2; learner detects systematic overconfidence in v2.2. Confidence is advisory (§7.3), not gating. |
+| **Learner expands write scope too aggressively** (v2.1 addition) | MEDIUM | LOW | §3.3 reduced refinement targets from 11 to 5; agent definitions, agent rules, vocabulary, memory all explicitly deferred. KG priors cut entirely. Supervised curation (§3.4) in v2.1; automation only after sustained trustworthy period. |
+
+---
+
+## 14. Out of Scope (amended from v2 §7)
+
+The following are explicitly NOT part of this migration:
+
+1. **Rewriting Canon's MCP tools beyond the parallel workstream** (from v2). The 38 MCP tools stay functionally unchanged. v2.1 adds `snapshot_workspace` (v2.1b) and potentially `query_workspace_history` (v2.2) but does not rewrite existing tools.
+2. **Modifying agent definitions beyond what v2 Phase 1 and v2.1a do** (amended from v2). v2 Phase 1 updates frontmatter (`tools`, `permissionMode`, `maxTurns`, `skills`, `memory`); v2.1a rewrites the `canon-planner` body to load brief + synthesis skills. No other agent body changes.
+3. **Modifying principles, rules, or conventions** (from v2). Canon's 54 principles are untouched by the v2.1 migration itself (though v2.1's learning system produces refinements over time — that's the intended mechanism, not a scope violation).
+4. **Rewriting the knowledge graph** (from v2). `codebase_graph`, `graph_query`, `semantic_search` untouched.
+5. **Changing the artifact storage layout** (from v2 base; amended). `.canon/workspaces/<id>/` structure stays; `.canon/drift-db.sqlite` gains one table in v2.1b. Full schema expansion is v2.2.
+6. **Building a custom prompt pipeline replacement** (from v2). v2.1's `runbook-synthesis.md` skill is guidance text the planner reads — it is not a plan-time pipeline. Claude calls MCP tools directly.
+7. **Closing or modifying PR #112** (from v2).
+8. **Executing any phase of this plan.** This document is the plan. Execution is separate sessions after ratification (Gate A) completes.
+9. **Upstream Claude Code changes.** The plan does not depend on new Claude Code features.
+10. **Performance optimization beyond §11.** The parallel workstream covers batch modes and tool simplification.
+11. **Cross-repo learning** (v2.1 addition). Memory sharing across Canon installs is explicitly deferred; local-only retention per §8.7.
+12. **Autonomous confidence-based gating** (v2.1 addition). Confidence is advisory only (§7.3); no confidence-level allows skipping user approval or modifying HITL postures.
+13. **Real-time write-through to lifecycle DB** (v2.1 addition). Per-run snapshot at flow completion only; v2.2 may reconsider for dashboards/monitoring.
+14. **Agent memory audit / groom / seed** (v2.1 addition). Deferred to v2.2 (audit + grooming) and v2.3+ (seeding) per architect review. Memory is future work; v2.1 ratification does not include it.
+15. **Knowledge-graph priors refinement** (v2.1 addition). Cut entirely per §3.3 — the KG is its own subsystem; automated refinement via flow-corpus statistics is not part of the runbook-synthesis learning system.
+
+---
+
+## 15. Ratification gates
+
+Three gates control v2.1 ratification. **Gate A is the substantive blocker** — Gate B was confirmed runnable via schema inspection (see §15.2); Gate C is already done.
+
+### 15.1 Gate A (existence) — THE BLOCKER
+
+v2 Phase 1 exit criteria met:
+
+- `canon-planner` agent definition exists and registers with the Canon MCP server
+- `canon-engineer` agent definition exists and registers
+- Both validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
+
+**Current state (as of this draft):** Gate A is NOT met. The Canon repository currently has `canon-implementor` and `canon-fixer` — not `canon-planner` or `canon-engineer`. Those agents are created via `phase1-08` (v2 Phase 1 task). Until that task completes and the agents are validated, v2.1a cannot start.
+
+Without Gate A, v2.1 has no planner agent to hang synthesis off. Gate B cannot be followed by action even if it clears.
+
+### 15.2 Gate B (evidence) — already clearable
+
+One real refinement proposal produced by running a §4.1-style analysis against today's data.
+
+**Gate B is runnable today against the existing drift-db schema.** `violations.principle_id` has been indexed since v1 (see `mcp-server/src/platform/storage/drift/drift-schema.ts`). The finding-count-per-principle query is trivial:
+
+```sql
+SELECT principle_id, COUNT(DISTINCT review_id) AS findings
+FROM violations
+GROUP BY principle_id
+ORDER BY findings DESC;
+```
+
+Fix-iteration cost requires review-over-review comparison via a ~30-line SQL script. No v2.1b infrastructure needed to run the trace.
+
+Gate B can clear before v2.1a / v2.1b ship. It's a process step, not a v2.1-dependent doc item.
+
+### 15.3 Gate C (scope discipline) — done
+
+Scope reductions from architect review applied:
+
+- §7 (agent memory audit/groom/seed) cut from v2.1; deferred per v2.2+ and v2.3+
+- Canon-Deviation* commit trailer family dropped; design preserved for future re-introduction if `git blame`-level provenance proves necessary
+- §3.3 refinement-targets matrix reduced from 11 to 5 in-scope, 4 deferred, 1 cut entirely
+- v2.1a / v2.1b / v2.2 split per §10.2–10.4
+
+All three scope-reduction items applied in the proposal document on PR #115 and carried forward into v2.1 here.
+
+### 15.4 Process
+
+When Gate A, Gate B, and Gate C all pass:
+
+1. Canon maintainer reviews this draft for final polish
+2. If approved, promote `docs/agent-teams-migration-plan-v2.1-draft.md` or this file to the canonical `docs/agent-teams-migration-plan-v2.1.md` (if separate-file draft was used; if this IS `v2.1.md` already, just drop the DRAFT status header)
+3. v2 plan remains at `docs/agent-teams-migration-plan-v2.md` for history
+4. v2.1a Wave 1 tasks are planned and executed
+
+### 15.5 Expected timeline
+
+- **Gate A** — completion of v2 Phase 1 tasks, particularly phase1-08 (create `canon-planner` and `canon-engineer`) and phase1-10 (validation). Depends on v2 Phase 1 execution schedule.
+- **Gate B** — ~30 minutes of SQL scripting against existing drift-db once Gate A is clear. Independent of Gate A, but meaningless to clear before Gate A (no action available if Gate B clears first).
+- **Gate C** — done.
+
+**Do NOT:**
+
+- Start v2.1a, v2.1b, or v2.2 work based on this draft. Gate A must pass first.
+- Amend Phase 1 plan files in `.canon/workspaces/agent-teams-v2/plans/phase1/` preemptively. They're pre-v2.1 spec; edit them as part of v2.1 ratification, not ahead of it.
+- Delete the companion `docs/runbook-synthesis-proposal.md` document. That file is the conversation log of three architect review cycles and design decisions; it stays as history alongside this ratifiable spec.
