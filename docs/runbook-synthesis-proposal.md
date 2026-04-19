@@ -345,7 +345,7 @@ Digest format, review cadence, and acceptance workflow are all **hypothetical**;
 
 - §5.5 (memory citation tag) — the `memory_cited` field moves to v2.2 scope alongside audit/groom. Not captured in v2.1b.
 - §4 refinement matrix — "Agent memory" row becomes v2.2 scope.
-- §13 rollout — memory citation prompt guidance (currently in Tier 2) moves to v2.2 work.
+- §13 rollout — memory citation prompt guidance moves to v2.2 work (not in v2.1b's in-scope observation tags).
 - §17.3 v2.2 scope — already lists this correctly.
 
 **Design content preserved:** The original §7 design (audit analyses, grooming analyses, seed-bundle concept, infrastructure table) is moved to **Appendix B** for reference when v2.2 is drafted.
@@ -859,67 +859,22 @@ An invariant worth stating explicitly:
 
 If a step declares `hitl: approval`, that stays regardless of confidence. The runbook's HITL postures are contracts, not suggestions. Confidence might *add* a user checkpoint; it never removes one.
 
-## 13. Phase rollout — Tier 1 / 2 / 3 ordering
+## 13. Phase rollout
 
 > **⚠️ HARD PRECONDITION (Gate A): v2 Phase 1 exit criteria must be met before any v2.1 work begins.** Specifically: `canon-planner` and `canon-engineer` agent definitions must exist (currently they don't — only `canon-implementor` and `canon-fixer` exist), must register with the Canon MCP server, and must be validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`. This is not a soft guideline. Without these agents, v2.1 has nothing to build on. See §16 Gate A and §17 entry gates for the full statement.
 
-The build order for v2.1 inverts from what the earlier proposal draft suggested. The true priority is **dependency**, not implementation cost. Most tagging and observation work is roughly equivalent cost; what matters is which pieces unblock which downstream capabilities.
+The release-level phasing for v2.1 lives in §17 (v2.1a / v2.1b / v2.2 carve-out — authoritative). This section maps that release phasing onto the v2 plan's Phase 1 / 2 / 3 structure and clarifies what's required from v2 Phase 1 as a precondition.
 
-### 13.1 Tier 1 — foundational; blocks the learning loops
+(Earlier drafts of §13 included "Tier 1 / 2 / 3" ordering — foundational / enrichment / analyses. That framing was retired in second-round cleanup because it described a larger pre-carve-out scope than §17's actual v2.1a/b ship. §17 is authoritative; §13 below is purely the release-phase and Phase 1 dependency mapping.)
 
-Without these, observations have no keys to anchor on. Nothing else works until Tier 1 is in place.
-
-1. **`principle_id` threading in review findings** — foundation for principle refinement analyses
-2. **Deviation capture in `log_step`** — foundation for plan refinement analyses
-3. **Lifecycle persistence schema** (`lifecycle_*` tables, `snapshot_workspace` MCP tool) — the substrate itself
-
-### 13.2 Tier 2 — observation enrichment; lands in parallel or concurrently
-
-All lightweight structured tag additions. Same cost profile across the board; no reason to serialize them.
-
-| Artifact | Tags |
-|----------|------|
-| Fix summary | `cause`, `root_cause_tag`, `upstream_step_id` |
-| Task plan | `task_id`, `dependencies[]`, `file_count`, `principle_ids[]` |
-| Design decision | `decision_id`, `options_considered`, `chosen_option_tag`, `rationale_tags[]` |
-| Research finding | `dimensions_explored[]`, `risks_surfaced[]` |
-| Implementation summary | `compliance_declared_for[]`, `justified_deviations[]` (`memory_cited[]` deferred to v2.2 per §7) |
-| Test report | `tests_added`, `coverage_delta` |
-| HITL events | captured via journal hooks + `log_step` outcome field |
-
-Plus:
-- **Synthesis skill versioning** — each synthesis records which skill version produced it
-
-(Earlier draft included memory citation prompt guidance and the Canon-Deviation trailer family. Both removed per architect changes #2 and #3 — see §7 status note, Appendices B and C.)
-
-Cost: one coordinated schema migration + template edits + agent prompt updates. Cheaper as a single pass than sequencing.
-
-### 13.3 Tier 3 — learner analyses; built on the corpus Tiers 1+2 produce
-
-Once the corpus exists, the learner analyzes it.
-
-- **Principle-refinement analyses** (§6.1) — single-target, fast to implement once data exists
-- **Plan-refinement analyses** (§6.2) — single-target
-- **Skill-effectiveness analyses** (§6.3) — cross-target (synthesis skill + domain skills)
-- **Decomposition / design quality** (§6.4, §6.5)
-- **Template health** (§6.6)
-- **HITL pattern analysis** (§6.7)
-- **Memory audit / groom** (§7.1–7.2)
-- **Memory seeding** (§7.3) — heavier; may slip to v2.2
-- **Cross-run dashboards / digests** — weekly learning-digest format
-
-Cost per analysis: low-medium. Each is mostly a query + summarization template. The learner agent gains a new output dimension per analysis.
-
-### 13.4 Revised phase plan
-
-The actual release-level phasing lives in §17 (v2.1a / v2.1b / v2.2 carve-out). This subsection shows how the Tier 1/2/3 work-ordering above maps onto those release phases:
+### 13.1 Release-phase mapping
 
 | Phase | Content |
 |-------|---------|
 | v2 Phase 1 (already spec'd, additive-only) | Journal, hooks, agent def updates, skills registration. Unchanged from v2 plan. **Hard precondition for any v2.1 work — see §13 callout above.** |
 | **v2.1a** (per §17.1) | `canon-planner` synthesis rewrite (brief + synthesis skills, iterate-until-approved loop), `runbook-vocabulary.md`, `runbook-synthesis.md`, `planner-brief.md`. No persistence work, no enforcement hooks. |
 | **v2.1b** (per §17.2) | Minimum lifecycle persistence: `lifecycle_workspace_snapshots` (one table) + `snapshot_workspace` MCP tool + three structured tags (`principle_id` on review findings, `cause`/`root_cause_tag` on fix summaries, `justified_deviations[]` on impl summaries) + one learner analysis dimension (principle refinement from §6.1). One coordinated schema migration + template + agent-prompt pass. |
-| **v2.2** (per §17.3) | Surface expansion: additional `lifecycle_*` tables, additional structured tags, embeddings, `query_workspace_history` MCP tool, additional learner analyses (Tier 3 minus principle-refinement). Each expansion gated on v2.1b evidence. |
+| **v2.2** (per §17.3) | Surface expansion: additional `lifecycle_*` tables, additional structured tags, embeddings, `query_workspace_history` MCP tool, additional learner analyses beyond v2.1b's principle refinement. Each expansion gated on v2.1b evidence. |
 | Phase 2 (validation) | Real-data validation runs across the v2.1a/b corpus. Observational — no autonomous thresholds, just calibration and correlation. Architect change #4's real end-to-end trace gate applies here. |
 | Phase 3 (deletion) | Unchanged from v2. Removes legacy state-machine / prompt-pipeline / flow YAML runtime / coordination infrastructure after Phase 2 validation passes. |
 
@@ -927,7 +882,7 @@ The split per §17 means **v2.1a alone is a workable shipping milestone** if v2.
 
 (Note: earlier drafts of this proposal used "Phase 1.5" terminology to describe what is now §17's v2.1a + v2.1b. That label is retired; the architect's concern that "Phase 1.5" was Phase 2-scale work wearing Phase 1.5 clothes is addressed by the §17 split into release-level phases with explicit gates.)
 
-### 13.5 Revised Phase 1 task inventory
+### 13.2 Revised Phase 1 task inventory
 
 | Task | Status | Note |
 |------|--------|------|
@@ -1000,11 +955,11 @@ Tracked as the work list for converging toward v2.1. Each is a concrete modifica
 
 1. ✅ **Split this proposal into v2.1a / v2.1b / v2.2** — see §17 for the carve-out. *Done.*
 2. ✅ **Cut §7 (memory audit / groom / seed) entirely from v2.1.** Defer to v2.2+ (audit/groom) and v2.3+ (seeding). *Done — §7 status note + Appendix B preservation.*
-3. ✅ **Drop the `Canon-Deviation*` commit trailer family** and its PostCommit parity hook. Keep `justified_deviations[]` in the implementation summary tag. *Done — original design preserved in Appendix C; §5.6 status note removed in second-round cleanup (trailer work was always additions to existing trailers; main-body section was redundant with Appendix C); §11.3 and §13.2 / §14 references updated.*
+3. ✅ **Drop the `Canon-Deviation*` commit trailer family** and its PostCommit parity hook. Keep `justified_deviations[]` in the implementation summary tag. *Done — original design preserved in Appendix C; main-body status section was removed in second-round cleanup (trailer work was always additions to existing trailers; main-body section was redundant with Appendix C); §11.3 and §14 references updated.*
 4. **Require one real end-to-end trace before ratification.** Hand-run the §6.1 principle-refinement analysis against Canon's *existing* data (`.canon/drift-db.sqlite`, `.canon/learning.jsonl`, git log) and produce one actually-acceptable refinement proposal. The minimum infrastructure needed for that single working trace becomes the real v2.1b scope — not §11 in full. *Open — runtime work; gate documented in §16 Gate B.*
 5. ✅ **Specify the user-approval affordance** (§10.4 and §14 row on §2.3). *Done — §10.5 resolves: conversational mechanism; lead interprets natural-language signals; ambiguity triggers clarification; lightweight proposals for trivial work (thin-gate-no-skip) replace autodispatched fast-path; NO confidence-based skip; all iterations persisted with execution only against stage:approved. §11.3 intro updated to explicitly state every iteration gets a row.*
 6. ✅ **Replace §4's 10-target refinement matrix** with a reduced matrix. *Done — §4 now has 5 in-scope targets (principles, conventions, synthesis skill, planning brief skill, templates) with phase markers, 4 deferred to v2.2+ (domain skills, agent defs, agent rules, vocabulary), and 1 cut entirely (knowledge graph priors). Per-target rationale in §4.1–§4.3.*
-7. ✅ **Add hard precondition to v2.1a/b:** v2 Phase 1 exit criteria met — `canon-planner` and `canon-engineer` agent definitions exist, register, and have been validated in ≥ 3 successful runs under the feature flag. No v2.1 work before that. *Done — prominent Gate A callout at top of §13, retired "Phase 1.5" terminology in §13.4 / §11.8 in favor of §17's v2.1a/b/v2.2 framing, clarified §13.5 that phase1-05..10 stay as required v2 Phase 1 deliverables (especially phase1-08 which creates the agent definitions).*
+7. ✅ **Add hard precondition to v2.1a/b:** v2 Phase 1 exit criteria met — `canon-planner` and `canon-engineer` agent definitions exist, register, and have been validated in ≥ 3 successful runs under the feature flag. No v2.1 work before that. *Done — prominent Gate A callout at top of §13, retired "Phase 1.5" terminology in §11.8 in favor of §17's v2.1a/b/v2.2 framing, §13.2 clarifies that phase1-05..10 stay as required v2 Phase 1 deliverables (especially phase1-08 which creates the agent definitions).*
 8. ✅ **Commit to a storage decision with migration math.** *Done — adopted option (c) per user direction: v2.1b ships one table (`lifecycle_workspace_snapshots`) with concrete SQL migration DDL against `drift-schema.ts` (§11.1). Full §11.3 schema deferred to v2.2, which explicitly revisits the drift-db-vs-JSONL-first decision based on observed v2.1b data volume. §11.3 and §11.4 have per-element v2.1b/v2.2 phase markers so scope is unambiguous.*
 9. ✅ **Promote §15 open questions #3 (vocabulary versioning across resume), #7 (observation-schema evolution), #8 (HITL event categorization) to blocking decisions.** *Done — resolutions captured in §8.2 + §11.3 + §5.6; §15 reorganized into Open + Resolved subsections.*
 10. ✅ **Remove or unambiguously mark the illustrative numbers in §6 as fabricated.** *Done — top-of-section warning callout + per-analysis "Hypothetical result (fabricated)" markers.*
@@ -1025,7 +980,7 @@ Work through the 10 changes iteratively in the PR #115 thread. Each change is a 
 
 - Start v2.1a, v2.1b, or v2.2 work based on this draft. Changes 1–10 must land and the gates must pass first.
 - Amend Phase 1 plan files in `.canon/workspaces/agent-teams-v2/plans/phase1/` yet. They're the pre-v2.1 spec; editing preemptively conflates this draft with the ratified plan.
-- Mark `phase1-01..04` abandoned (as §13.5 currently proposes). Those design plans represent the natural first corpus for validating the synthesis skill against ground-truth reference runbooks.
+- Mark `phase1-01..04` abandoned (as §13.2 currently proposes). Those design plans represent the natural first corpus for validating the synthesis skill against ground-truth reference runbooks.
 
 **Who reviews (next round):** Canon maintainers per the review process that produced v2, plus a follow-up architect pass after changes 1–10 land.
 
@@ -1137,7 +1092,7 @@ Responding to architect change #1 (§16). The current proposal bundles three ind
 
 §12 confidence scoring stays as observational data captured in v2.1a (emitted but not persisted) and persisted in v2.1b (stored with the snapshot). Calibration analyses are v2.2.
 
-§13 phase rollout rewrites entirely per this split. The current Tier 1/2/3 framing collapses into v2.1a/b/2.2 framing, which is cleaner.
+§13 phase rollout was rewritten in second-round cleanup per this split. The prior Tier 1/2/3 framing was retired in favor of v2.1a/b/2.2 from §17; §13 is now purely the release-phase + Phase 1 dependency mapping.
 
 §14 migration plan amendments narrows to the minimal set needed for v2.1a + v2.1b. Many of the currently-listed amendments (§4b P4/P5 promotion, §6 Risks additions for cross-target concerns, §7 out-of-scope additions) become v2.2 amendments.
 
