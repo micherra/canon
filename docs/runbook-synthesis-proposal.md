@@ -1177,6 +1177,28 @@ The cost is longer elapsed time before the full v2.1 vision ships. The benefit i
 
 ---
 
+## Appendix A: Conversation provenance
+
+This proposal emerged from the PR #115 review thread on branch `claude/runbook-template-format-dM3LJ`. Key conversation beats, chronologically:
+
+1. **PR opened** for `phase1-00` (runbook format template) — static-runbook model assumed
+2. **Review pass 1** surfaced drift between DESIGN.md schema and phase1-01 / phase1-10 plans; amended
+3. **User observation** — *"runbooks as guidance for Claude-native orchestration — does this open the door for dynamic, plan-specific runbooks?"*
+4. **Proposal for Option A** (vocabulary + synthesis) surfaced; iterated on
+5. **Scope expansion** — lifecycle persistence surfaced as necessary substrate because workspaces are cleaned up
+6. **User reframe** — *"maybe the planner should just iterate on the runbook until user approval"* — collapsed confidence gating, recipes-as-separate-concept, escape hatches
+7. **User push** — *"have we lost sight of Canon's purpose?"* — honest audit; realized most of the proposal was coordination-layer architecture rather than Canon-value-aligned
+8. **User refinement** — *"Canon is an agentic team that builds grounded in best practices; ensure the work drives quality up"* — quality-up as the lodestar
+9. **User push further** — *"how does the system as a whole learn with each interaction?"* — reframed as unified learning system across every Canon artifact
+10. **User push again** — *"can we use this for agent memory audit and seed?"* — memory as a first-class refinement target
+11. **User critical check** — *"is this infra or Canon's purpose?"* — honest conclusion: learning loop is the actual Canon-purpose win; synthesis is load-bearing for the plan-quality arm of that loop
+12. **First architect review** — REVISE-before-ratification recommendation with 10 concrete changes; 9 addressed in-document across many small commits, 1 (real end-to-end trace) deferred to runtime gate
+13. **Second architect review** — REVISE again but much smaller scope; core architecture sound; residuals were cross-reference consistency issues from the additive-revision approach
+
+The conversation is the source; this document is the durable artifact.
+
+---
+
 ## Appendix B: Deferred — agent memory audit / groom / seed (v2.2+ design)
 
 Preserved from §7 when it was cut from v2.1 scope per architect change #2. Reference material for when v2.2 is drafted.
@@ -1308,22 +1330,4 @@ When this re-enters scope, the architect's four concerns must be addressed:
 
 ---
 
-## Appendix A: Conversation provenance
-
-This proposal emerged from the PR #115 review thread on branch `claude/runbook-template-format-dM3LJ`. Key conversation beats, chronologically:
-
-1. **PR opened** for `phase1-00` (runbook format template) — static-runbook model assumed
-2. **Review pass 1** surfaced drift between DESIGN.md schema and phase1-01 / phase1-10 plans; amended
-3. **User observation** — *"runbooks as guidance for Claude-native orchestration — does this open the door for dynamic, plan-specific runbooks?"*
-4. **Proposal for Option A** (vocabulary + synthesis) surfaced; iterated on
-5. **Scope expansion** — lifecycle persistence surfaced as necessary substrate because workspaces are cleaned up
-6. **User reframe** — *"maybe the planner should just iterate on the runbook until user approval"* — collapsed confidence gating, recipes-as-separate-concept, escape hatches
-7. **User push** — *"have we lost sight of Canon's purpose?"* — honest audit; realized most of the proposal was coordination-layer architecture rather than Canon-value-aligned
-8. **User refinement** — *"Canon is an agentic team that builds grounded in best practices; ensure the work drives quality up"* — quality-up as the lodestar
-9. **User push further** — *"how does the system as a whole learn with each interaction?"* — reframed as unified learning system across every Canon artifact
-10. **User push again** — *"can we use this for agent memory audit and seed?"* — memory as a first-class refinement target
-11. **User critical check** — *"is this infra or Canon's purpose?"* — honest conclusion: learning loop is the actual Canon-purpose win; synthesis is load-bearing for the plan-quality arm of that loop
-12. **This rewrite** — restructures the proposal around the learning-system headline; lifecycle persistence promoted to cornerstone; synthesis reframed as load-bearing mechanism, not coordination aesthetic
-
-The conversation is the source; this document is the durable artifact.
 
