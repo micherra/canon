@@ -873,6 +873,26 @@ Confidence is surfaced to the user during iteration per §10.5 and §12.3. It do
 
 The user — not confidence — decides how much iteration is warranted before approval. Confidence is the display that informs that decision.
 
+### 12.6 Rescoring across iterations
+
+*v2.1a scope.*
+
+Under iterate-until-approved (§10.5), the runbook may go through N rounds before the user approves it. Confidence is **re-evaluated at each iteration, not emitted once at the initial proposal**.
+
+Mechanics:
+
+- Each `stage: proposed` row in `lifecycle_synthesized_runbooks` records its own `confidence` and `confidence_signals` for that iteration
+- `iteration_index` preserves the trajectory (iteration 0: 0.62 because scope clarity is low; iteration 1: 0.78 after user clarifications; ...; `stage: approved`: 0.88 after final refinement)
+- Re-scoring happens at the start of each planner response during iteration — when the user provides clarifications, redirections, or modifications, the planner re-synthesizes the runbook AND re-evaluates confidence against the updated context
+
+**Why per-iteration, not per-flow:**
+
+- The initial-proposal score is an input to the user's first iteration decision; later scores inform subsequent decisions
+- Trajectory is itself a learner signal (§12.4): *"Does confidence rise smoothly across iterations (good calibration — planner responds to new information) or stay flat / spike irregularly (planner not integrating user input)?"*
+- Without per-iteration rescoring, an initial overconfidence compounds — the user never sees the planner revise downward as complications surface
+
+**Storage cost:** negligible. Confidence + signals fit in the existing `lifecycle_synthesized_runbooks` columns; no schema change needed for this.
+
 ## 13. Phase rollout
 
 > **⚠️ HARD PRECONDITION (Gate A): v2 Phase 1 exit criteria must be met before any v2.1 work begins.** Specifically: `canon-planner` and `canon-engineer` agent definitions must exist (currently they don't — only `canon-implementor` and `canon-fixer` exist), must register with the Canon MCP server, and must be validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`. This is not a soft guideline. Without these agents, v2.1 has nothing to build on. See §16 Gate A and §17 entry gates for the full statement.
