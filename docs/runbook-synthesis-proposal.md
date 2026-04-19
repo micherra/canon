@@ -1031,9 +1031,11 @@ Tracked as the work list for converging toward v2.1. Each is a concrete modifica
 
 ### Gates before ratification
 
-- **Gate A (existence):** v2 Phase 1 exit criteria met (canon-planner + canon-engineer defs validated). Without this, v2.1 has no planner agent to hang synthesis off.
-- **Gate B (evidence):** item #4 above — one real refinement proposal produced by running a §6-style analysis against today's data. Without this, §3's learning-loop claim is unvalidated. **Gate B is runnable today against the existing drift-db schema** — `violations.principle_id` has been indexed since v1 (see `mcp-server/src/platform/storage/drift/drift-schema.ts`). The §6.1 finding-count-per-principle query is trivial (`SELECT principle_id, COUNT(DISTINCT review_id) FROM violations GROUP BY principle_id`); fix-iteration cost requires review-over-review comparison via a 30-line SQL script. No v2.1b infrastructure needed to run the trace.
-- **Gate C (scope discipline):** items #2, #3, #6 executed; split per §17 committed. Without this, the proposal stays at v2.1-as-one-thing scope.
+**Gate A is the substantive blocker.** Gate B was confirmed runnable against today's schema (see below); Gate C is editorial (items #2, #3, #6 are done). Gate A depends on v2 Phase 1 work not yet complete — the canon-planner and canon-engineer agent definitions don't exist yet (only canon-implementor and canon-fixer). Until v2 Phase 1 exits (phase1-08 ships the agents; phase1-09 lands CLAUDE.md orchestration; ≥ 3 validated runs under `CANON_AGENT_TEAMS_MODE=on`), v2.1 cannot start regardless of how polished this proposal gets. **The gates in priority order:**
+
+- **Gate A (existence) — THE BLOCKER:** v2 Phase 1 exit criteria met (canon-planner + canon-engineer defs exist, register, validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`). Without this, v2.1 has no planner agent to hang synthesis off and Gate B cannot be followed by action even if it clears.
+- **Gate B (evidence) — already clearable:** item #4 above — one real refinement proposal produced by running a §6-style analysis against today's data. Without this, §3's learning-loop claim is unvalidated. **Gate B is runnable today against the existing drift-db schema** — `violations.principle_id` has been indexed since v1 (see `mcp-server/src/platform/storage/drift/drift-schema.ts`). The §6.1 finding-count-per-principle query is trivial (`SELECT principle_id, COUNT(DISTINCT review_id) FROM violations GROUP BY principle_id`); fix-iteration cost requires review-over-review comparison via a 30-line SQL script. No v2.1b infrastructure needed to run the trace.
+- **Gate C (scope discipline) — done:** items #2, #3, #6 executed; split per §17 committed. Items done means this gate is effectively cleared; ratification blocker has always been A (and optionally B).
 
 All three gates must be clear before converting this draft into `docs/agent-teams-migration-plan-v2.1.md`.
 
