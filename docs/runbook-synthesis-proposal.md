@@ -893,6 +893,32 @@ Mechanics:
 
 **Storage cost:** negligible. Confidence + signals fit in the existing `lifecycle_synthesized_runbooks` columns; no schema change needed for this.
 
+### 12.7 Overconfidence mitigation
+
+LLMs systematically skew toward overconfidence. Without explicit mitigations, the planner will emit 0.9+ on most requests and the signal becomes noise. Mitigations are required from day one of v2.1a; some extend into v2.2.
+
+| # | Mitigation | Scope | Mechanism |
+|---|-----------|-------|-----------|
+| 1 | **Signal decomposition is primary** | v2.1a | Overall `confidence` is *computed from* the 5 per-signal scores (`novelty`, `scope_clarity`, `domain_coverage`, `dependency_drift`, `question_count`), not emitted holistically. Forces the planner to articulate per-signal uncertainty rather than a vibe check. Synthesis skill specifies how signals combine. |
+| 2 | **Articulate the unknowns** | v2.1a | Before emitting confidence, the planner must list what information WOULD raise confidence if available (as part of the brief's open-questions section). If it can't list anything, confidence caps at 0.75 regardless of per-signal scores. Synthesis skill enforces this rule. |
+| 3 | **Cold-start defaults low** | v2.1a (static rule) / v2.1b (corpus check) | Novelty signal starts near 0 when there's no corpus match; domain-coverage starts low when no matching primers exist. Overall confidence starts low and climbs as evidence accumulates. v2.1a enforces via synthesis-skill rule; v2.1b sharpens via actual corpus lookup. |
+| 4 | **Corpus anchoring** | v2.2 | Planner calls `query_workspace_history({ similar_to: brief_summary })` to compare against prior flows. No close matches → novelty and domain_coverage both pushed down. Replaces LLM-internal vibe with corpus-grounded evidence. Requires `query_workspace_history` (v2.2 per §11.4) plus embedded summary search. |
+| 5 | **Conservative prompt guidance** | v2.1a | Explicit in `runbook-synthesis.md`: *"Under-confidence is safer than over-confidence. Surface uncertainty; don't hide it. Compare against what you actually know. If you're not sure, say so."* Nudges baseline below calibrated-mean to counter LLM overconfidence bias. |
+| 6 | **Learner calibration detection** | v2.2 | Learner tracks confidence-vs-outcome correlation over time. Uniform overconfidence (e.g., 0.85+ stated, <60% clean outcomes) is a detectable pattern. Learner proposes dampening adjustments to the synthesis skill. Post-hoc safety net for the v2.1a mitigations. |
+
+**Acknowledged residual risk:** even with all six mitigations, confidence as an LLM-emitted scalar is inherently suspect. The v2.1a mitigations (decomposition, unknowns list, cold-start low, prompt guidance) should produce non-trivial variance but aren't calibration guarantees. **The strongest safety net is #6 (learner calibration detection)**, which is a v2.2 mechanism — meaning v2.1a/b ships with unvalidated confidence calibration.
+
+This is acceptable because confidence is advisory (§12.5), not a gating mechanism. Miscalibration during v2.1a/b doesn't break anything critical; it just makes the surfaced signal less trustworthy than it eventually will be. Users should treat v2.1a/b confidence as "directional indicator" not "precise probability" until v2.2 learner calibration catches up.
+
+**What the v2.1a synthesis skill MUST specify** (so these mitigations are enforceable rules, not soft guidelines):
+
+- Concrete formula for combining the 5 per-signal scores into overall `confidence` (e.g., weighted arithmetic mean with specified initial weights)
+- The `articulate-unknowns → cap-at-0.75` rule
+- The cold-start low-default rules for novelty and domain_coverage
+- Conservative-bias prompt language verbatim
+
+These specifications live in `runbook-synthesis.md` (the skill file), not in the planner agent body — so they evolve independently of the agent definition and can be refined via the v2.2 learner feedback loop without touching the agent.
+
 ## 13. Phase rollout
 
 > **⚠️ HARD PRECONDITION (Gate A): v2 Phase 1 exit criteria must be met before any v2.1 work begins.** Specifically: `canon-planner` and `canon-engineer` agent definitions must exist (currently they don't — only `canon-implementor` and `canon-fixer` exist), must register with the Canon MCP server, and must be validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`. This is not a soft guideline. Without these agents, v2.1 has nothing to build on. See §16 Gate A and §17 entry gates for the full statement.
