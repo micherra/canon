@@ -1096,7 +1096,9 @@ Responding to architect change #1 (§16). The current proposal bundles three ind
 - At least 5 distinct request types processed end-to-end (bug fix, small feature, refactor, migration, test-gap)
 - User-approval affordance defined at the runtime level (architect change #5)
 - Runbooks execute per the contract; same artifact quality as pre-synthesis static flows
-- Zero new enforcement hooks introduced (additive-only discipline honored)
+- L1 (CLAUDE.md re-classification discipline) + L4 (`canon-workspace-check.sh` PreToolUse hook) shipped; observed in action against intent-misclassification scenarios
+
+*Note:* v2.1a introduces **one** new enforcement hook (L4). The earlier draft's "zero new enforcement hooks" criterion was a v2-Phase-1-discipline carry-over that doesn't apply to v2.1a — v2.1a is post-Phase-1. L4 is a deliberate enforcement addition justified by the intent-misclassification drift concern (§15 Resolved — CLAUDE.md residual intent set). It's the only new enforcement in v2.1a; everything else remains additive / non-blocking.
 
 **What this ratifies on its own:** the synthesis-over-static-files architectural decision. If v2.1a ships and runs well, that's a clean win even if v2.1b and v2.2 never follow. The proposal's central coordination claim is tested independently of the learning-loop claim.
 
