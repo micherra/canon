@@ -851,13 +851,27 @@ Three durable roles:
 
 None of these require gating behavior; all benefit from persisted scores in `lifecycle_synthesized_runbooks`.
 
-### 12.5 HITL invariant — confidence never removes baseline
+### 12.5 HITL invariant — confidence is advisory, not a modifier
 
-An invariant worth stating explicitly:
+Confidence is surfaced to the user during iteration per §10.5 and §12.3. It does NOT modify the runbook's HITL postures — neither at synthesis time nor at runtime.
 
-> Confidence affects the **ceiling** of iteration depth (low confidence → more iteration warranted), never the **floor** of HITL posture specified in the runbook.
+- If a step declares `hitl: approval`, that stays approval. No confidence level allows skipping it.
+- If a step declares `hitl: none`, that stays none. Low confidence does NOT auto-insert a checkpoint.
+- The synthesis skill picks HITL postures from step-type defaults (per the vocabulary in §8); confidence is not an input to that choice.
 
-If a step declares `hitl: approval`, that stays regardless of confidence. The runbook's HITL postures are contracts, not suggestions. Confidence might *add* a user checkpoint; it never removes one.
+**What confidence IS for:**
+
+- Surfacing uncertainty to the user ("I'm 0.62 confident because scope clarity is low")
+- Informing the user's decision to iterate more before approving
+- Feeding the learner for calibration analyses (§12.4)
+
+**What confidence is NOT for:**
+
+- Modifying the runbook's HITL postures (at synthesis or runtime)
+- Bypassing user approval for high-confidence proposals
+- Auto-adding checkpoints — that's the user's judgment during iteration, not a synthesis rule
+
+The user — not confidence — decides how much iteration is warranted before approval. Confidence is the display that informs that decision.
 
 ## 13. Phase rollout
 
