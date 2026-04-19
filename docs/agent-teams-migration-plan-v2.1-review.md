@@ -118,24 +118,32 @@ One area for improvement: the v2.2 entry gate ("v2.1b has shipped ≥ 3 proposal
 
 ### 4.1 HIGH-severity
 
-#### HIGH-1 — L4 hook blast radius is under-specified
+#### HIGH-1 — L4 hook needs a principled allowlist and an intent-routing expansion
 
-**Concern.** §6.5 specifies `canon-workspace-check.sh` as a PreToolUse hook that blocks `Edit` / `Write` / `Bash`-that-modifies-code when no active Canon workspace exists for the current flow. §2.10 layer 5 describes the same hook. Neither section specifies how the hook determines:
-
-- What counts as "modifies code" for Bash (every Bash call? only commits? only shell that invokes editors?)
-- What counts as "the current flow" (branch match? directory match? conversation turn?)
-- How the hook behaves during legitimate non-build Canon activity (doc edits, principle authoring via `canon-writer`, slash-command operations)
+**Concern.** §6.5 specifies `canon-workspace-check.sh` as a PreToolUse hook that blocks `Edit` / `Write` / `Bash`-that-modifies-code when no active Canon workspace exists for the current flow. §2.10 layer 5 describes the same hook. As written, the spec leaves the predicate ("modifies code") and the flow-detection rule ("matching the current branch") hand-wavy, and it does not address non-`build` intents that also edit tracked files.
 
 **Evidence.** v2.1.md:296 (`Blocks 'Edit' / 'Write' / 'Bash'-that-modifies-code when no active Canon workspace exists`); v2.1.md:682 (`Detection: checks for an active .canon/workspaces/<slug>/ matching the current branch`).
 
-**Why this is HIGH.** A pre-tool hook is by definition an interruptive force. Blocking legitimate edits is worse than the drift it prevents, because Canon loses user trust the first time it blocks a one-line doc fix. The branch-match detection ("matching the current branch") is plausible but shipped ambiguous — Canon workspaces can be shared across branches for agent-team flows, and a user on a doc-only branch with no active workspace is not in the class the hook is protecting against.
+**Resolution framing.** The ambiguity collapses under a single principle: **any change to a tracked file belongs in a Canon flow (branch + PR).** Anything gitignored is out-of-scope for L4 by construction. This makes the predicate well-defined and resolves the false-positive concern that would otherwise make the hook user-hostile.
+
+Under that framing:
+
+- **The allowlist is `.gitignore`.** `git check-ignore` is the oracle. Tracked → in-scope for L4. Gitignored → out-of-scope.
+- **"Bash-that-modifies-code" gets a real predicate.** Parse Bash args, resolve target paths, run `git check-ignore` on each target. If any target is tracked, block. Known false-negative modes (paths hidden inside `bash -c`, unresolved shell expansions) are bounded and acceptable — the primary interactive surface is Edit / Write anyway.
+- **"Current flow" becomes branch-scoped.** Workspace at `.canon/workspaces/<slug>/` with a branch-slug mapping. Wave-parallel worktrees inherit the parent workspace; teammates and subagents see the workspace their parent created.
+- **The non-build exceptions collapse.** Doc edits, principle authoring, one-line typos — none of these are legit edits-outside-Canon. They are Canon intents that should create workspaces. The fix is in the intent-routing layer, not in L4's allowlist.
+
+**Why this is still HIGH.** The framing resolves the blast-radius worry, but two architectural gaps remain that block shipping L4:
+
+- **R1 — Intent-routing expansion is unspecified.** CLAUDE.md today routes `build` / `explore` / `test` / `review` / `security` through `load_flow` + `init_workspace`. `principle` (canon-writer), `learn` (canon-learner), and any future `docs` intent are all real tracked-file-editing activities that under this framing need workspace-creating paths. v2.1 does not specify this expansion. Without it, L4 blocks legitimate canon-writer and canon-learner runs. This is not trivial: each intent needs its own workspace template (what artifacts, what hooks, what completion criteria) or a shared "lightweight-flow" pattern.
+- **R2 — Bootstrap window.** Between the user's first message and `init_workspace` completion, the lead must be able to call the MCP tools needed to set up the flow. In practice this is a non-issue (workspace creation is an MCP call, not Edit/Write), but the spec should assert it explicitly so the hook doesn't race the bootstrap.
 
 **Recommended action.** Before v2.1a ships L4:
 
-1. Specify the full decision table: `(tool, argument-pattern, branch-state, workspace-state) → {allow, block-with-message, allow-with-warning}`
-2. Enumerate legitimate pre-build states the hook must allow (doc edits outside `.canon/`, principle authoring sessions, slash-command invocations, non-code changes)
-3. Ship with a bypass for explicit user-declared intent (e.g., `CANON_BYPASS_WORKSPACE_CHECK=1` for a single command, or a clear message path telling the user how to unblock)
-4. Validate L4 against a checklist of false-positive scenarios in Phase 2
+1. **Make the allowlist = `.gitignore`** explicit in §6.5. Replace "Bash-that-modifies-code" with a concrete predicate: "Bash invocations whose resolved target paths include any tracked file." Cite `git check-ignore` as the oracle.
+2. **Expand intent routing.** Add a §6.6 (or extend §6.4) specifying that every Canon intent that edits tracked files must route through a workspace-creating flow. Enumerate the currently unrouted intents (`principle`, `learn`, `docs`) and assign each either a dedicated lightweight flow or a shared "content" flow pattern that calls `init_workspace`.
+3. **Assert the bootstrap contract.** In §6.5, state that L4 is evaluated after the lead has had the chance to call `init_workspace`. Specifically, L4 fires on the first Edit / Write / tracked-file-Bash call; the lead's MCP tool calls to create the workspace are not Edit / Write and are never blocked.
+4. **Phase 2 checklist.** Validate L4 against a small scenario list: (a) user edits tracked doc file on a non-build branch → routed to content flow; (b) canon-writer run → creates workspace, L4 passes; (c) `bash -c 'sed -i ...'` on tracked file without workspace → blocked; (d) `.canon/workspaces/` internal writes during active flow → allowed.
 
 #### HIGH-2 — Iterate-until-approved friction is acknowledged but untested
 
