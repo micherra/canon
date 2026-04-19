@@ -971,7 +971,7 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 | §2.4 "How Claude orchestrates a Canon flow" | Update example: planner proposes runbook, iterates with user, user approves; lead executes approved runbook with lifecycle capture. |
 | §2.5 (duplicate #1 — Dispatch framework) | Unchanged — `dispatch: subagent | team` stays the same |
 | §2.5 (duplicate #2 — Self-serve context) | Expand: agents also emit structured tags (§5) for learning-system observations |
-| §2.6 "Why this is simpler" | Add bullet: "Canon's whole stack improves from every interaction — principles, conventions, synthesis skill, planning brief skill, templates — via the unified learning system." (5 in-scope refinement targets per §4.1; `agent memory` and `vocabulary` are deferred to v2.2+ per §4.2, and KG priors are cut entirely per §4.3.) |
+| §2.6 "Why this is simpler" | Add bullet: "Canon's whole stack improves from every interaction — principles, conventions, synthesis skill, planning brief skill, templates — via the unified learning system." (5 in-scope refinement targets per §4.1; `vocabulary` is deferred to v2.2+ per §4.2; `agent memory` is deferred to v2.2+ per the §4.2 note + §7 status; KG priors are cut entirely per §4.3.) |
 | §2.7 (Orchestration journal) | Expand: journal's `domain_skills_loaded`, outcome fields, and new HITL-event capture feed the lifecycle-persistence substrate (§11). |
 | §2.8 Layer 1 | Amend: "CLAUDE.md + vocabulary + synthesis skill" (not runbooks plural). |
 | §3 row 23 (variable interpolation: deprecate) | Unchanged — still deprecate |
