@@ -163,7 +163,7 @@ Low-burden additions to existing templates. Agents already produce this informat
 | Research finding | `dimensions_explored[]`, `risks_surfaced[]`, `confidence_per_dimension{}` |
 | Design decision | `decision_id`, `options_considered` count, `chosen_option_tag`, `rationale_tags[]` |
 | Task plan | `task_id`, `dependencies[]`, `file_count`, `principle_ids[]` |
-| Implementation summary | `compliance_declared_for: [principle_id]`, `justified_deviations: [{principle_id, reason_short}]`, `memory_cited: [item_id]` |
+| Implementation summary | `compliance_declared_for: [principle_id]`, `justified_deviations: [{principle_id, reason_short}]`. (`memory_cited: [item_id]` tag deferred to v2.2 — see §7 status note.) |
 | Test report | `tests_added` count, `coverage_delta`, `tests_paired_with_principle_ids[]` |
 | Review finding | `principle_id` per finding, `severity`, `file_path` |
 | Fix summary | `cause`, `root_cause_tag`, `upstream_step_id` |
@@ -171,8 +171,8 @@ Low-burden additions to existing templates. Agents already produce this informat
 
 ### 5.3 Tag discipline — rules the indexer follows
 
-- **Tags are optional.** Missing fields don't fail ingestion. Indexer tolerates absence; learner treats missing as "no signal from this field" rather than error.
-- **Tags are additive.** Agents can include fields not in the first-pass schema; indexer stores them as a generic `extra_tags` JSON blob. Useful fields get promoted to first-class columns in a later schema revision.
+- **Tags are optional.** Missing fields don't fail ingestion. Indexer tolerates absence within the declared schema; learner treats missing as "no signal from this field" rather than error.
+- **Schema is closed** (per §5.7 resolution). Agents emitting fields outside §5.2's list have those fields *dropped* by the indexer; no `extra_tags` JSON catch-all. Schema evolution requires a versioned migration, not per-flow accretion.
 - **Prose stays authoritative.** When a tag and prose disagree, prose wins for factual questions; tag wins for aggregate analysis. (The learner flags tag-prose disagreement as a data-quality signal.)
 - **Secret / PII scrubbing.** Tag values pass through a basic secret-pattern match before persistence. Free-text short-summary fields are bounded (e.g., 280 chars).
 
@@ -182,13 +182,17 @@ Prose extraction remains available for the learner when it wants richer context 
 
 This is a small number of LLM calls per week (at learner cadence), not per flow. Avoids the token cost of per-flow extraction while preserving the ability to dig deeper when analysis requires it.
 
-### 5.5 Memory citation — a specific observation worth calling out
+### 5.5 Memory citation — DEFERRED to v2.2 (see §7)
 
-One structured tag deserves highlighting because it enables memory grooming (§7): `memory_cited: [item_id]` on agent outputs.
+The `memory_cited: [item_id]` tag was originally specified here as a structured signal enabling memory grooming. It has moved to v2.2 scope alongside the §7 memory audit/groom work (architect change #2 / §16 status).
 
-When an agent loads its project memory and actually uses an entry, it declares the citation. This gives the learner a direct signal about which memory entries earn their place. Entries cited across many flows are valuable; entries never cited are candidates for pruning.
+When v2.2 picks this up, the original design is:
 
-Implementation is a prompt addition in the agent definition: *"when your output uses information from your project memory, list the cited memory entry IDs in your structured output's `memory_cited` field."* Small change; enables whole memory-audit dimension of the learning system.
+> When an agent loads its project memory and actually uses an entry, it declares the citation. This gives the learner a direct signal about which memory entries earn their place. Entries cited across many flows are valuable; entries never cited are candidates for pruning.
+>
+> Implementation is a prompt addition in the agent definition: *"when your output uses information from your project memory, list the cited memory entry IDs in your structured output's `memory_cited` field."*
+
+Until v2.2 ratifies memory grooming, the tag is not emitted, not captured, and not referenced by v2.1 scope. See Appendix B for the full v2.2+ memory-work design preserved for reference.
 
 ### 5.6 Commit trailers — DROPPED from v2.1
 
