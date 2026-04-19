@@ -999,10 +999,9 @@ General questions (persistence-specific ones are in §11.9). Resolved entries no
 
 1. **Planner output location** — `plans/${slug}/runbook.md` alongside brief, or distinct location? Lean: same directory as brief for cohesion.
 2. **`cause` extensibility** — any step besides `fix` need `cause`? Defer until evidence.
-4. **Learner loop ownership** — Phase 2 establishes baseline; who owns continuous refinement afterward? Planner auto-tunes from learner output (P5 territory) or humans curate proposals weekly? Probably the latter initially (supervised); automation is a later promotion.
-5. **CLAUDE.md intent classification minimum** — with all build requests routing to planner, what's the minimal residual intent set? Greetings, questions, chat — defer to a separate design pass.
-6. **Seed-bundle format** — moved with §7 to v2.3+ (architect change #2; see Appendix B).
-9. **Tier 2 timing** — land all observation tags simultaneously or roll per-artifact? Lean: simultaneous (one coordinated pass) unless a specific tag needs design work first.
+3. **Learner loop ownership** — Phase 2 establishes baseline; who owns continuous refinement afterward? Planner auto-tunes from learner output (P5 territory) or humans curate proposals weekly? Probably the latter initially (supervised); automation is a later promotion.
+4. **CLAUDE.md intent classification minimum** — with all build requests routing to planner, what's the minimal residual intent set? Greetings, questions, chat — defer to a separate design pass.
+5. **Seed-bundle format** — moved with §7 to v2.3+ (architect change #2; see Appendix B).
 
 ### Resolved (per architect change #9)
 
@@ -1061,7 +1060,7 @@ Responding to architect change #1 (§16). The current proposal bundles three ind
 
 **Scope:**
 
-- §8 Vocabulary — 15 canonical step IDs (or 10 per architect change #6 if cuts are applied)
+- §8 Vocabulary — 15 canonical step IDs (unchanged; architect change #6 was the §4 refinement-target matrix reduction, not a vocabulary cut)
 - §9 Step schema — `skills:`, `cause:` first-class fields
 - §10 Synthesis contract — MUST / MAY / MUST NOT rules; iterate-until-approved loop
 - `skills/canon/references/runbook-vocabulary.md` — new vocabulary file
