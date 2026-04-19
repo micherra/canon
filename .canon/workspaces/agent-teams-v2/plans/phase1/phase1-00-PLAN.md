@@ -1,16 +1,21 @@
 ---
 task_id: "phase1-00"
 wave: 1
+status: ABANDONED
+superseded_by: docs/agent-teams-migration-plan-v2.1.md (v2.1a synthesis skill)
 depends_on: []
 files:
-  - templates/runbook-template.md
-  - skills/canon/runbooks/README.md
+  - (deleted — templates/runbook-template.md and skills/canon/runbooks/README.md were created per this plan and then DELETED in PR #115 per v2.1 review)
 principles:
   - agent-plans-are-prompts
   - agent-design-before-code
   - patterns-need-justification
 domains: []
 ---
+
+> **⚠️ ABANDONED PER v2.1.** This task's deliverables (`templates/runbook-template.md` and `skills/canon/runbooks/README.md`) were created on PR #115 and subsequently DELETED in the same PR after v2.1's synthesis-based runbook architecture was ratified. Under v2.1, the runbook format is defined by `skills/canon/references/runbook-synthesis.md` (a v2.1a Wave 1 deliverable), not by a separate template + README. This plan is retained as historical record.
+>
+> **Do NOT execute this plan.** See `docs/agent-teams-migration-plan-v2.1.md` §§5, 10.2 for the v2.1 equivalent work.
 
 ## Task: Define the canonical runbook format
 
