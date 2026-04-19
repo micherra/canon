@@ -1096,10 +1096,10 @@ Responding to architect change #1 (§16). The current proposal bundles three ind
 
 - One new table: `lifecycle_workspace_snapshots` (aggregate row per completed workspace, per §11.3's schema for that row)
 - One new MCP tool: `snapshot_workspace({ workspace_id })` — called by `completion-verify.sh` at flow completion
-- Structured tags on *three* artifact types only — the minimum needed to run one working learner analysis (per architect change #4):
-  - Review findings: add `principle_id` to each finding (the single highest-value signal per architect review)
-  - Fix summary: add `cause`, `root_cause_tag`
-  - Implementation summary: add `justified_deviations[]`
+- Structured tag work on three artifact types — the minimum needed to run one working learner analysis (per architect change #4). **Schema inspection (second-round) clarified what's new vs. what already exists:**
+  - **Review findings: `principle_id` already exists** in the drift-db `violations` table (indexed since v1 per `drift-schema.ts`). v2.1b work is *ensuring consistent reviewer population* — may require review-template amendments or reviewer-agent prompt updates to guarantee the field is always supplied. Not a schema change.
+  - **Fix summary: add `cause`, `root_cause_tag`** — genuinely new. Fix summaries today live as workspace markdown with unstructured prose; v2.1b adds frontmatter tags + indexer capture.
+  - **Implementation summary: add `justified_deviations[]`** — genuinely new. Same as above — prose today; structured frontmatter tag in v2.1b.
 - Extend existing `canon-learner` with one new analysis dimension: principle-refinement from per-flow review data (§6.1). No template, no design-decision, no memory analyses.
 
 **Explicitly out of scope for v2.1b:**
