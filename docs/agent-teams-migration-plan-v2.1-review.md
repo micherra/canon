@@ -114,4 +114,110 @@ One area for improvement: the v2.2 entry gate ("v2.1b has shipped ≥ 3 proposal
 
 ---
 
-*Remaining sections: HIGH/MEDIUM/LOW concerns, rewrite guidance for v2 — appended in subsequent commits.*
+## 4. Concerns
+
+### 4.1 HIGH-severity
+
+#### HIGH-1 — L4 hook blast radius is under-specified
+
+**Concern.** §6.5 specifies `canon-workspace-check.sh` as a PreToolUse hook that blocks `Edit` / `Write` / `Bash`-that-modifies-code when no active Canon workspace exists for the current flow. §2.10 layer 5 describes the same hook. Neither section specifies how the hook determines:
+
+- What counts as "modifies code" for Bash (every Bash call? only commits? only shell that invokes editors?)
+- What counts as "the current flow" (branch match? directory match? conversation turn?)
+- How the hook behaves during legitimate non-build Canon activity (doc edits, principle authoring via `canon-writer`, slash-command operations)
+
+**Evidence.** v2.1.md:296 (`Blocks 'Edit' / 'Write' / 'Bash'-that-modifies-code when no active Canon workspace exists`); v2.1.md:682 (`Detection: checks for an active .canon/workspaces/<slug>/ matching the current branch`).
+
+**Why this is HIGH.** A pre-tool hook is by definition an interruptive force. Blocking legitimate edits is worse than the drift it prevents, because Canon loses user trust the first time it blocks a one-line doc fix. The branch-match detection ("matching the current branch") is plausible but shipped ambiguous — Canon workspaces can be shared across branches for agent-team flows, and a user on a doc-only branch with no active workspace is not in the class the hook is protecting against.
+
+**Recommended action.** Before v2.1a ships L4:
+
+1. Specify the full decision table: `(tool, argument-pattern, branch-state, workspace-state) → {allow, block-with-message, allow-with-warning}`
+2. Enumerate legitimate pre-build states the hook must allow (doc edits outside `.canon/`, principle authoring sessions, slash-command invocations, non-code changes)
+3. Ship with a bypass for explicit user-declared intent (e.g., `CANON_BYPASS_WORKSPACE_CHECK=1` for a single command, or a clear message path telling the user how to unblock)
+4. Validate L4 against a checklist of false-positive scenarios in Phase 2
+
+#### HIGH-2 — Iterate-until-approved friction is acknowledged but untested
+
+**Concern.** §6.3 acknowledges that every build request now has a synchronous planner round-trip. This is a material change from today's autodispatched fast-path. §6.2's mitigation is the "lightweight-proposal" pattern — trivial requests get 1-step runbooks cleared in seconds. But the plan does not measure whether this actually holds until Phase 2.
+
+**Evidence.** v2.1.md:664–667 (`Every build request now has a synchronous planner round-trip... Phase 2 validation will measure actual round-trip cost for the trivial-request case; if it's intolerable in practice, revisit this section`).
+
+**Why this is HIGH.** If trivial-request latency is intolerable in Phase 2, the remediation surface is large. Options are: (a) reintroduce a skip path (contradicts §6.2's "thin-gate-no-skip" decision), (b) parallelize planner with early execution (non-trivial rework), (c) ship a more lightweight planner path (possible but requires spec). Discovering this at Phase 2 means paying for a full design re-cycle during validation rather than before v2.1a ships.
+
+**Recommended action.** Before v2.1a ships:
+
+1. Define a concrete latency target for trivial-request iteration 0 (e.g., "planner emits first proposal within N seconds of user message, where N ≤ 15")
+2. Spike the lightweight-proposal path against 3 representative trivial requests before committing to v2.1a
+3. If the spike shows latency > 2× current fast-path, pause v2.1a and design a mitigation before committing to iterate-until-approved
+
+#### HIGH-3 — Confidence signal is user-facing without calibration
+
+**Concern.** §7 makes `confidence` + `confidence_signals[]` visible during iteration. §7.3 makes it advisory (not gating). §7.4 acknowledges LLM overconfidence bias and specifies six mitigations, but also states "v2.1a/b ships with unvalidated confidence calibration." Calibration detection happens in v2.2 via the learner.
+
+**Evidence.** v2.1.md:762 (`v2.1a/b ships with unvalidated confidence calibration. Users should treat v2.1a/b confidence as 'directional indicator' not 'precise probability' until v2.2 learner calibration catches up`).
+
+**Why this is HIGH.** Confidence is user-facing. Users make real decisions during iteration based on it — "0.62 is low, let me clarify more" or "0.91, this is fine." If the first months of v2.1 produce consistently mis-calibrated scores (systematically high because LLMs skew that way), users will (a) calibrate their own expectations off the noisy signal, or (b) learn to ignore it. Either outcome damages the signal's long-term value. The v2.2 learner calibration is the correct remediation, but it runs on data that was collected under miscalibrated conditions.
+
+**Recommended action.** Before v2.1a ships:
+
+1. Present confidence with an explicit miscalibration disclaimer in the user-facing rendering ("directional indicator; calibration pending v2.2")
+2. Collect calibration pairs (confidence, human-graded quality) from v2.1a day one, not as a Phase 2 deliverable — so v2.2 has a clean corpus from day one
+3. Consider capping displayed confidence at 0.8 in v2.1a (prevent 0.95-range scores from training users that high confidence means anything specific)
+
+### 4.2 MEDIUM-severity
+
+#### MEDIUM-1 — v2.2 entry gate is volume-based, not quality-based
+
+**Concern.** §10.4's entry gate ("≥ 3 proposals, ≥ 1 accepted") counts proposals and acceptances but does not measure whether accepted refinements improved anything.
+
+**Evidence.** v2.1.md:1067 (`Entry gate: v2.1b has shipped ≥ 3 principle-refinement proposals, of which ≥ 1 has been accepted and applied`).
+
+**Recommended action.** Add a qualitative criterion to §10.4 entry gate: "and the accepted proposal produces a measurable reduction in the corresponding principle's violation rate over the next N flows after application, OR a human reviewer explicitly signs off that the refinement improved principle clarity." This makes the gate outcome-grounded.
+
+#### MEDIUM-2 — Synthesis skill becomes the new single point of failure
+
+**Concern.** v2 specified 5 hand-authored runbook files; v2.1 replaces them with 1 vocabulary + 2 skills. A bug in the synthesis skill propagates to every flow type simultaneously. v2's 5-file model had natural redundancy (fast-path drift didn't affect feature flows); v2.1's 3-file model does not.
+
+**Evidence.** v2.1.md:45–50 (5 static files → 1 vocabulary + 2 skills + iterate-until-approved loop); §5.3 is the full contract surface.
+
+**Recommended action.** Two complementary mitigations:
+
+1. Maintain a **synthesis regression suite**: 5–10 canonical test requests (bug fix, small feature, migration, etc.) with expected runbook shapes. Re-run on every synthesis-skill change to catch drift.
+2. Add synthesis-skill changes to the weekly learner-curation review cadence (§3.4) so changes have human sign-off before landing.
+
+#### MEDIUM-3 — Orchestration journal remains single point of completion enforcement
+
+**Concern.** v2 flagged this as MEDIUM / MEDIUM; v2.1 extends the journal with `domain_skills_loaded` and `outcome` fields (§2.9), increasing dependence on the journal being populated. The completion hook blocks if entries are missing, but nothing prevents the lead from calling `log_step` with sparse data.
+
+**Evidence.** v2.1.md:265–270 (`domain_skills_loaded` field; `outcome` field); v2.md line 672 (original MEDIUM risk).
+
+**Recommended action.** Strengthen `verify_completion` to also check field completeness, not just step completeness. If `log_step` was called but `mcp_tools_called` or `domain_skills_loaded` is empty for steps where they are expected, flag as warning. Journal-field quality becomes part of the completion gate.
+
+#### MEDIUM-4 — Vocabulary resume on major-version change is thin
+
+**Concern.** §5.1 specifies that locked-runbook resumes across major vocab versions trigger a regeneration with full workspace context. The regeneration re-runs the planner and requires user re-approval. But the spec does not address: what if the user rejects the regenerated runbook? Is the prior approved runbook still executable? Does the flow abort? Resume semantics across vocab boundaries are under-specified.
+
+**Evidence.** v2.1.md:572–573 (`Locked-runbook resumes continue with the synthesis-time vocab unless a referenced entry was removed in a later major version. If removed, the planner regenerates the runbook...`).
+
+**Recommended action.** Spec the full state-transition graph for vocab-version resume: (prior-approved runbook exists, vocab removed entry) → (regen proposed) → {regen-approved: execute new; regen-rejected: offer to abort or continue under deprecated vocab with warning}. Decide whether deprecated-vocab continuation is permitted.
+
+#### MEDIUM-5 — Lifecycle DB and workspace are both "sources of truth" at different times
+
+**Concern.** §8.2 says workspace is source of truth while the flow runs; `lifecycle_workspace_snapshots` is source of truth after. The boundary is `snapshot_workspace` at completion. This is fine for analytics but means mid-run dashboards cannot exist without reading the workspace directly, and the workspace layout is ephemeral. Any tool that needs to "show me what's happening in active flows" must read per-flow workspace files.
+
+**Evidence.** v2.1.md:822–829 (`In-progress flows are queried from the workspace, not the DB. Real-time dashboards / mid-run interventions are out of scope for v1`).
+
+**Recommended action.** Accepted as a v2.1 scope decision, but document in §14 Out of Scope (not just §8.2) so future work sees it as a deliberate choice. Current §14 does not list this.
+
+### 4.3 LOW-severity
+
+- **LOW-1.** v2 source doc has duplicate section numbers (§2.4, §2.5, §2.7 appear twice). v2.1 does not inherit the duplication, but rewriting v2 to align with v2.1 should renumber cleanly.
+- **LOW-2.** Naming: "v2.1a / v2.1b / v2.2" plus "v2 Phase 1 / Phase 2 / Phase 3" is a dense labeling scheme. Consider a summary table in §10 with every phase label and its one-line scope, so readers have a single disambiguation reference.
+- **LOW-3.** §3.5 introduces cross-target analyses for v2.2 but does not bound the analysis budget. "Cross-target proposals are higher-signal but require more analysis surface" — the learner could spend unbounded compute on correlation queries. Add a soft budget (e.g., ≤ N cross-target analyses per curation cycle).
+- **LOW-4.** §4.2 lists `memory_cited: [item_id]` as deferred to v2.2 alongside memory work — but §10.4 defers memory itself to v2.2 audit / v2.3+ seeding. The deferral boundary is correct; just note the two references for consistency.
+- **LOW-5.** Confidence signal `novelty` is described as "Planner's `memory: project` + `query_workspace_history`" in §7.2 but `query_workspace_history` is v2.2. What computes novelty in v2.1a/b? Presumably the planner's memory alone — spec this explicitly.
+
+---
+
+*Remaining section: rewrite guidance for v2 — appended in the next commit.*
