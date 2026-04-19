@@ -1049,15 +1049,25 @@ All three gates must be clear before converting this draft into `docs/agent-team
 
 ### Next concrete step
 
-Work through the 10 changes iteratively in the PR #115 thread. Each change is a scoped amendment to this document; commit per change. After all 10 are addressed, re-run the architect review. Only then promote to v2.1.
+All 10 first-round architect changes are addressed in-document (9 as text changes, #4 as a runtime gate verified clearable via schema inspection). All 5 second-round concerns are resolved in-document. Third-round review confirmed architecture convergence.
+
+The remaining path to ratification:
+
+1. **Final editorial scrub pass** — any residuals surfaced by the third-round review fix (this batch closes them)
+2. **Gate A (the only real blocker)** — v2 Phase 1 completes: `canon-planner` and `canon-engineer` agent definitions land via `phase1-08`, register, and are validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
+3. **Gate B (runnable today)** — hand-run the §6.1 principle-refinement analysis against today's drift-db (confirmed schema-supported — `violations.principle_id` indexed since v1); produce one accepted refinement proposal
+4. **Promote this draft to `docs/agent-teams-migration-plan-v2.1.md`** with the §14 amendments applied against v2
+
+Gates B and C can clear independently; Gate A depends on Phase 1 work not on this PR.
 
 **Do NOT:**
 
-- Start v2.1a, v2.1b, or v2.2 work based on this draft. Changes 1–10 must land and the gates must pass first.
-- Amend Phase 1 plan files in `.canon/workspaces/agent-teams-v2/plans/phase1/` yet. They're the pre-v2.1 spec; editing preemptively conflates this draft with the ratified plan.
-- Mark `phase1-01..04` abandoned (as §13.2 currently proposes). Those design plans represent the natural first corpus for validating the synthesis skill against ground-truth reference runbooks.
+- Start v2.1a, v2.1b, or v2.2 work based on this draft. Gate A must pass (v2 Phase 1 exit criteria) before any v2.1 work begins.
+- Amend Phase 1 plan files in `.canon/workspaces/agent-teams-v2/plans/phase1/` preemptively. They're pre-v2.1 spec; edit them as part of v2.1 ratification, not ahead of it.
 
-**Who reviews (next round):** Canon maintainers per the review process that produced v2, plus a follow-up architect pass after changes 1–10 land.
+(The `phase1-01..04` abandonment is settled in §13.2 and across the proposal — it is v2.1a's deliberate replacement of static runbooks with synthesis. The "do not abandon those plans" guidance from earlier drafts no longer applies.)
+
+**Who reviews (next round):** Canon maintainers per the review process that produced v2. Third architect review is complete; a fourth pass can verify the editorial scrub's residuals before Gate A clears.
 
 ---
 
