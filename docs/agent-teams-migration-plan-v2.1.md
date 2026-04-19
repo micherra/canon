@@ -21,6 +21,12 @@ The v1 plan correctly identified six durable ideas, all of which still hold in v
 5. **Phased rollout with scoped boundaries.** One migration step at a time, each independently verifiable.
 6. **Principles and artifacts as the engine's product.** Canon's differentiation lives in those two layers; the coordination layer is commodity scheduling.
 
+### 1.1a What v1 got wrong (pointer to v2 §1)
+
+v1's hypothesis scoped the migration as "replace `drive_flow` with runbooks" and treated everything else as internal plumbing. In reality, `drive_flow` was the composition surface for approximately 20 cross-cutting services (prompt pipeline, context enrichment, tool profile resolution, worktree lifecycle, file claims, commit trailers, HITL breakpoints, wave policy, post-state effects, session continuation, flow event channel, learn gate, flow analytics, and more). v1's Phase 1/2 code produced a SpawnDescriptor carrying only role / task / prompt / artifact fields and missed 27 integrations (11 HIGH severity). v1 was abandoned; the gap audit and rationale are fully documented in v2 §1. v2.1 inherits that diagnosis.
+
+The v2 → v2.1 delta is additive — v2.1 does not reopen v1's decisions.
+
 ### 1.2 What v2 got right
 
 v2's core insight superseded v1's scope:
@@ -215,7 +221,7 @@ In the new model, agents have MCP access and preloaded skills. This creates a **
 2. **Agent self-serves** (fallback path): if the lead's prompt is missing principles or file context, the agent calls the MCP tools itself. Every agent with Canon MCP tools in its `tools` allowlist can independently call `get_principles(file_path, task_description)` to load matched principles.
 3. **Skills guarantee baseline** (hard floor): critical rules and references are preloaded via `skills` frontmatter — they're in agent context regardless of what the lead or agent does. An engineer always has `agent-tdd-required`, a reviewer always has `agent-cold-review`.
 
-A preloaded skill `agent-context-check` is injected into every agent via the `skills` frontmatter. It instructs:
+A preloaded skill `agent-context-check` (registered as `rules/agent-context-check.md` → `skills/canon/references/agent-context-check.md`) is injected into every agent via the `skills` frontmatter. It instructs:
 
 > Before starting work, verify you have Canon principles for your target files. If your spawn prompt does not include a `## Principles` section, call `get_principles` with your target file path and task description. Similarly, if you need file context or dependency information, call `get_file_context` or `graph_query` directly.
 
@@ -258,7 +264,7 @@ verify_completion({ workspace }) → { steps_logged, steps_missing, artifacts_mi
 
 **v2.1 extensions:**
 
-- **`domain_skills_loaded` field** — captures which skills the agent loaded per step. Enables skill-effectiveness analyses (§4, §7 learner dimensions).
+- **`domain_skills_loaded` field** — captures which skills the agent loaded per step. Enables skill-effectiveness analyses (§4 observation mechanism + §3.2 learner dimensions).
 - **`outcome` field** — typed per-step outcome (review verdict, fix iterations, test pass rate). Feeds Phase 2 calibration.
 - **Snapshot integration** — completion-verify hook extends to invoke `snapshot_workspace` after `verify_completion` clears.
 
@@ -942,7 +948,7 @@ Every one of the 28 gaps from the integration audit must map to a concrete repla
 | **hook** (Claude Code hooks) | 1 | Activity logging (with MCP backup) |
 | **deprecate** | 1 | Variable interpolation |
 
-**Zero gaps require new code beyond what v2.1 already adds** (synthesis skills, lifecycle persistence substrate, L4 hook). Every HIGH-severity integration still maps to an existing MCP tool, a native Claude capability, or a combination. v2.1's additions (vocabulary + synthesis + learning substrate) are purely on top of what v2 specifies.
+**v2.1 adds a small, well-scoped increment of new code** on top of v2's zero-new-code claim for the coordination-layer deletion: synthesis skills (vocabulary + brief + synthesis), the `snapshot_workspace` MCP tool (v2.1b), the `lifecycle_workspace_snapshots` schema migration (v2.1b), three structured-tag additions to templates (v2.1b), the `canon-workspace-check.sh` PreToolUse hook (v2.1a L4), and updated `canon-planner` agent body. Every HIGH-severity integration from v2 still maps to an existing MCP tool, a native Claude capability, or a combination. v2.1's additions are purely on top of what v2 specifies.
 
 ---
 
@@ -965,7 +971,7 @@ v2.1 reorganizes v2's phased rollout as follows:
 
 **Preconditions:** None. Can start immediately.
 
-**Key v2 Phase 1 deliverables** (names condensed from v2 §4):
+**Key v2 Phase 1 deliverables** (v2's static runbook rows removed per §1.3 synthesis replacement; remaining deliverables unchanged from v2 §4):
 
 | Deliverable | Path | Purpose |
 |------------|------|---------|
@@ -986,7 +992,9 @@ v2.1 reorganizes v2's phased rollout as follows:
 
 - `canon-planner` and `canon-engineer` agent definitions exist and register with the Canon MCP server
 - Both validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
-- CLAUDE.md has initial orchestration section (v2.1a will amend further)
+- CLAUDE.md has orchestration section matching v2 §4 Phase 1 deliverables (MCP tool composition, dispatch framework, HITL patterns, completion checklist); v2.1a will amend further per §10.2
+- All 5 hook scripts exist, are executable, and register in `hooks/canon-agent-teams/hooks.json`
+- Skill preloading validated for at least 3 agent types (spawned agents reference preloaded rules without extra Read tool calls — confirm via transcript inspection)
 - `npm run build` and `npm test` pass
 
 ### 10.2 v2.1a — Vocabulary + synthesis (no substrate)
@@ -1046,7 +1054,7 @@ v2.1 reorganizes v2's phased rollout as follows:
 - No retention-tier policy
 - No additional learner output dimensions beyond principle refinement
 
-**Exit criteria** (Gate B — architect change #4):
+**Exit criteria** (Gate B, defined in §15.2):
 
 - ≥ 1 concrete principle-refinement proposal produced by the learner against real lifecycle data
 - Proposal accepted by a human reviewer and applied as an actual edit to a principle file
@@ -1264,7 +1272,7 @@ All three scope-reduction items applied in the proposal document on PR #115 and 
 When Gate A, Gate B, and Gate C all pass:
 
 1. Canon maintainer reviews this draft for final polish
-2. If approved, promote `docs/agent-teams-migration-plan-v2.1-draft.md` or this file to the canonical `docs/agent-teams-migration-plan-v2.1.md` (if separate-file draft was used; if this IS `v2.1.md` already, just drop the DRAFT status header)
+2. Drop the DRAFT status from the header; update header to "RATIFIED — supersedes v2"
 3. v2 plan remains at `docs/agent-teams-migration-plan-v2.md` for history
 4. v2.1a Wave 1 tasks are planned and executed
 
