@@ -220,4 +220,75 @@ One area for improvement: the v2.2 entry gate ("v2.1b has shipped ≥ 3 proposal
 
 ---
 
-*Remaining section: rewrite guidance for v2 — appended in the next commit.*
+## 5. Rewrite guidance for v2
+
+The v2 document (`docs/agent-teams-migration-plan-v2.md`, 698 lines) becomes the **v2.1-aligned implementation plan** — the document an executor reads to actually run the migration. v2.1 stays as the architectural source. v2's structure is adapted section by section:
+
+### 5.1 Preserve (copy forward, minor polish only)
+
+- **v2 §1 "What v1 got right" / "What v1 got wrong"** → preserve. This is the diagnostic foundation; v2.1 §1.1a explicitly inherits it. Retain the 27-gap audit reference and the Phase 1/2 abandonment note.
+- **v2 §3 Integration Disposition Table (HIGH / MEDIUM / LOW, 27 rows)** → preserve wholesale. Becomes rewritten v2's Integration Disposition section (renumber per new section layout). Mirrors v2.1 §9.
+- **v2 §7 Out of Scope (items 1–10)** → preserve, extend with v2.1 additions (items 11–15 from v2.1 §14).
+- **v2 §4 Phase 2 deletion file list and validation checkpoints** (v2 §4 Phase 3 sub-phases 3a/3b/3c) → preserve wholesale. v2.1 inherits Phase 3 unchanged.
+
+### 5.2 Replace (rewrite with v2.1 content)
+
+- **v2 §2 Target Architecture** → rewrite per v2.1 §2. Replace the single "Canon-as-toolkit" diagram with the iterate-until-approved flow (v2.1 §2.2). Add §§2.3 (planner v2.1 responsibilities), 2.4 (orchestration example with iterate-until-approved), 2.9 (orchestration journal with v2.1 extensions), 2.10 (8-layer defense-in-depth including L4).
+- **v2 §4 Phase 1 Deliverables table** → remove the 5 static runbook file rows (`phase1-01..04`). Keep agent def updates (now creating `canon-planner` and `canon-engineer` via `phase1-08`), orchestration journal, commit trailer hook, completion verification hook, SessionStart hooks, SubagentStop hook, feature flag. Add explicit note that `phase1-05..10` remain required and Gate A depends on `phase1-08`.
+- **v2 §6 Risks (10 rows)** → replace table with v2.1 §13's 15-row table. New v2.1 risks: planner runbook inconsistency, intent misclassification drift (L1+L4), vocab drift, observation tag compliance, LLM overconfidence, learner scope creep. Carry forward all v2 risks.
+
+### 5.3 Add (net new sections in rewritten v2)
+
+- **§ Learning system** → v2.1 §3 content. Observation → pattern → proposal → refinement mechanism; 5 in-scope refinement targets; supervised curation model. Include §3.3 target matrix as-is.
+- **§ Observation mechanism** → v2.1 §4 content (hybrid structured tags + prose; closed schema per §4.6; HITL event taxonomy per §4.5).
+- **§ Synthesis architecture** → v2.1 §5 content. 15-ID vocabulary; step schema (`skills:`, `cause:`); synthesis contract (MUST / MAY / MUST NOT); iterate-until-approved loop.
+- **§ User-approval affordance** → v2.1 §6 content. Conversational mechanism, lightweight proposals for trivial work, L1 (re-classification discipline), L4 (pre-write gate + hook), friction acknowledgment.
+- **§ Confidence scoring** → v2.1 §7 content. Schema, signals, HITL invariant (confidence is advisory), overconfidence mitigations, per-iteration rescoring.
+- **§ Lifecycle persistence substrate** → v2.1 §8 content. `lifecycle_workspace_snapshots` table (v2.1b), `snapshot_workspace` MCP tool (v2.1b), `query_workspace_history` (deferred to v2.2), drift-db extension rationale, retention policy, privacy and sharing.
+- **§ Ratification gates** → v2.1 §15 content. Gate A (existence — THE BLOCKER), Gate B (evidence — runnable today), Gate C (scope discipline — done). Include expected timeline (§15.5) and the "Do NOT" list.
+
+### 5.4 Restructure (phase layout)
+
+Rewritten v2's phase section replaces v2 §4 with v2.1 §10's structure:
+
+```
+v2 Phase 1 (Gate A) → v2.1a → v2.1b (Gate B) → v2.2 → Phase 2 → Phase 3
+```
+
+Each phase gets its own subsection with entry gate, scope, out-of-scope, exit criteria. Phase 2 validation table (v2.1 §10.5) replaces v2 §4 Phase 2 table.
+
+### 5.5 Header metadata
+
+The rewritten v2 header should carry:
+
+- **Status:** REVISED — implementation plan aligned with v2.1 architecture
+- **Supersedes:** v1 (`docs/agent-teams-migration-plan.md`)
+- **Aligned with:** `docs/agent-teams-migration-plan-v2.1.md` (architectural source)
+- **Last updated:** 2026-04-19
+- Retain v2's audit-source reference (28-gap integration audit)
+
+v2.1 remains the architectural document; v2 becomes the ratifiable executable plan. Both ship; neither is deleted.
+
+### 5.6 Do NOT
+
+- **Do NOT delete v2.1.** It is the architectural source of truth. Rewriting v2 does not invalidate v2.1.
+- **Do NOT delete `docs/runbook-synthesis-proposal.md`** (the PR #115 synthesis conversation log) — per v2.1 §15.5.
+- **Do NOT amend Phase 1 plan files in `.canon/workspaces/agent-teams-v2/plans/phase1/` preemptively** — per v2.1 §15.5. Those are pre-v2.1 spec; edit them as part of v2.1 ratification, not ahead of it.
+- **Do NOT drop v2's 27-gap audit.** It is v2's most important contribution and the reason v2 existed. Rewritten v2 must preserve the Integration Disposition Table in full.
+
+---
+
+## Summary
+
+| Dimension | Assessment |
+|-----------|-----------|
+| Architectural soundness | Sound with conditions |
+| Integration preservation | No reopening; additions layer above v2's 27 dispositions |
+| Phasing | Disciplined; Gate A is the correct blocker |
+| Ratification | 3 gates concrete; Gate B runnable today |
+| HIGH-severity blockers | 3 (L4 blast radius, friction untested, confidence uncalibrated) |
+| MEDIUM concerns | 5 |
+| LOW / nits | 5 |
+| Rewrite scope for v2 | Preserve 4 sections, replace 3, add 7, restructure phases |
+
+Proceed with v2 rewrite once the three HIGH-severity concerns have a documented resolution path in v2.1 or are accepted as ship-with residual risks with explicit owner + mitigation plan.
