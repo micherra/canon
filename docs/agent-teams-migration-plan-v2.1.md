@@ -109,7 +109,7 @@ User request
 | **Lifecycle DB** (v2.1b) | `.canon/drift-db.sqlite` with `lifecycle_workspace_snapshots` table | Durable per-flow record surviving workspace cleanup. Substrate for the learning system (§4). |
 | **Shared libraries** | `commit-trailers.ts`, `file-claims.ts`, `matcher.ts` | Principle matching, commit provenance, file ownership — used by MCP tools and available to the lead. |
 | **Step vocabulary + synthesis skill** (v2.1a, replaces static runbooks) | `skills/canon/references/runbook-vocabulary.md`, `skills/canon/references/runbook-synthesis.md`, `skills/canon/references/planner-brief.md` | The canonical set of step IDs Canon knows + the rules the planner follows to compose a runbook from them. Replaces the 5 hardcoded runbook files v2 specified. Runbooks are now synthesized per plan by `canon-planner`. |
-| **Runbook output format** | `templates/runbook-template.md`, `skills/canon/runbooks/README.md` | The shape a synthesized runbook takes. Already landed on PR #115 (phase1-00). |
+| **Runbook output format** | Defined by the synthesis skill (`skills/canon/references/runbook-synthesis.md`, v2.1a deliverable) | The shape a synthesized runbook takes is an internal contract between canon-planner and the lead. v2.1a Wave 1 writes the synthesis skill; no separate template or standing format doc. Earlier PR #115 landed a template + README (phase1-00); those were deleted — single source of truth is the synthesis skill itself. |
 
 **What goes (the custom coordination layer, unchanged from v2):**
 
@@ -574,7 +574,7 @@ Total: **15 entries** (13 functional + 2 mandatory tail).
 
 ### 5.2 Step schema — first-class fields
 
-Every step in a synthesized runbook carries structural fields (from `templates/runbook-template.md`), plus three domain-oriented axes:
+Every step in a synthesized runbook carries structural fields defined by the synthesis skill (`skills/canon/references/runbook-synthesis.md`, v2.1a), plus three domain-oriented axes:
 
 **`skills:` — what domain expertise to load.** General-purpose: any step can declare domain primers to load from `skills/canon/references/`. Agents read named skills on their first turn via `agent-context-check`.
 
@@ -611,7 +611,7 @@ Rules the planner (via `runbook-synthesis.md` skill) MUST follow when emitting a
 4. **Validate `skills:` names strictly** against `skills/canon/references/` at synthesis time.
 5. **Use `${slug}` / `${task_id}` / `${timestamp}` placeholders** per the runbook format spec.
 6. **Include a one-paragraph Overview** explaining why this step sequence was chosen.
-7. **Emit body H3 prose per step** with intent, skip-when elaboration, and coordination notes (per `skills/canon/runbooks/README.md`).
+7. **Emit body H3 prose per step** with intent, skip-when elaboration, and coordination notes. Rules live in the synthesis skill itself (`skills/canon/references/runbook-synthesis.md`).
 8. **Apply contract pairings** from synthesis rules:
    - Behavior-preserving `implement` → mandatory-following `verify` with "no behavior changes" criterion
    - `migrate` → paired rollback artifact
@@ -976,7 +976,7 @@ v2.1 reorganizes v2's phased rollout as follows:
 | Deliverable | Path | Purpose |
 |------------|------|---------|
 | Orchestration CLAUDE.md (initial version) | `CLAUDE.md` | Orchestration discipline. (v2.1a will amend this further — see §10.2.) |
-| Runbook format template | `templates/runbook-template.md` | Output format for synthesized runbooks. (Already landed on PR #115; this is phase1-00.) |
+| Runbook format | Defined by the synthesis skill (v2.1a deliverable, not v2 Phase 1). | No separate template or standing format doc. Single source of truth is the synthesis skill. v2 phase1-00 (which produced `templates/runbook-template.md` + `skills/canon/runbooks/README.md`) is ABANDONED in v2.1 — those artifacts were deleted to avoid drift with the synthesis skill that v2.1a writes. |
 | Agent def updates | `agents/*.md` | Add `maxTurns`, `permissionMode`, `skills` frontmatter. Create `canon-engineer` and `canon-planner` via `phase1-08`. Remove `canon-implementor`, `canon-fixer`, `canon-guide`, `canon-chat`. |
 | Orchestration journal tool | `mcp-server/src/features/orchestration/tools/orchestration-journal.ts` | `log_step` and `verify_completion` MCP tools. |
 | Commit trailer hook | `hooks/canon-agent-teams/post-commit-trailers.sh` | PostCommit hook validating Canon-Workflow trailer presence. |
@@ -1022,7 +1022,7 @@ v2.1 reorganizes v2's phased rollout as follows:
 
 **Exit criteria:**
 
-- `canon-planner` synthesizes runbooks that conform to `templates/runbook-template.md` and pass iterate-until-approved
+- `canon-planner` synthesizes runbooks per the rules in `skills/canon/references/runbook-synthesis.md` and passes iterate-until-approved
 - At least 5 distinct request types processed end-to-end (bug fix, small feature, refactor, migration, test-gap equivalent)
 - L1 + L4 shipped; observed in action against intent-misclassification scenarios
 - Runbooks execute per the contract; same artifact quality as pre-synthesis static flows
