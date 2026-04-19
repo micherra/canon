@@ -18,7 +18,7 @@ domains: []
 Create `skills/canon/runbooks/feature.md` — the medium-tier runbook covering 4–10 file features. Also absorbs the refactor flow as a variant annotation.
 
 1. Read `flows/feature.md` and `flows/refactor.md` for legacy state coverage.
-2. Read `_template.md` for the runbook format.
+2. Read `templates/runbook-template.md` for the runbook format.
 3. Write `feature.md` following the template.
 
 **States to cover** (from feature.md + fragments):
@@ -59,4 +59,4 @@ No code tests. Verify YAML frontmatter parses.
 
 - Feature runbook covers all states from feature.md + fragments
 - Refactor variant documented
-- Conforms to `_template.md` format
+- Conforms to `templates/runbook-template.md` format

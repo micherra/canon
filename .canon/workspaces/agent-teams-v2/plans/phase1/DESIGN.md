@@ -1,8 +1,17 @@
 ---
+# NOTE (v2.1): dc-01 is SUPERSEDED by v2.1's synthesis architecture — see
+# docs/agent-teams-migration-plan-v2.1.md §§5, 10.2. Static runbook files
+# (fast-path / feature / epic / migrate / test-gap) are ABANDONED; runbooks
+# are synthesized per plan by canon-planner via a vocabulary + synthesis
+# skill. The template + README dc-01 mentions (templates/runbook-template.md
+# and skills/canon/runbooks/README.md) were deleted in PR #115.
+# Other dc-* items (dc-02 through dc-07) remain applicable except where
+# v2.1 amends (see §10 of v2.1 plan).
 done_criteria:
   - id: "dc-01"
-    description: "5 runbook playbooks exist at skills/canon/runbooks/{flow-name}.md (fast-path, feature, epic, migrate, test-gap), each as markdown with YAML frontmatter, covering every non-terminal state in its legacy flow (including fragment-expanded states). 4 simple flows (review-only, security-audit, explore, adopt) handled via CLAUDE.md inline dispatch."
-    testable: "ls skills/canon/runbooks/*.md returns 5 runbooks + _template.md + _README.md. For each, compare step IDs against expanded legacy flow states. Zero missing."
+    status: "SUPERSEDED_BY_V2_1"
+    description: "[ABANDONED per v2.1] 5 runbook playbooks exist at skills/canon/runbooks/{flow-name}.md — replaced by vocabulary-based synthesis. The synthesis skill runbook-synthesis.md (v2.1a Wave 1 deliverable) is the runbook-format source of truth."
+    testable: "N/A — no static runbook files under v2.1."
   - id: "dc-02"
     description: "Orchestration journal MCP tool exists with log_step and verify_completion, including flow_outcome tracking (domain_skills_loaded, review_verdict, fix_iterations). Registered behind CANON_AGENT_TEAMS_MODE=on."
     testable: "npm run build && npm test pass. Tool list with flag on shows log_step and verify_completion. With flag off, tools absent. log_step accepts domain_skills_loaded and outcome fields."
@@ -40,7 +49,7 @@ done_criteria:
 
 #### 1. Runbook playbooks (5 files + template)
 
-Markdown files with YAML frontmatter — consistent with Canon's conventions (agents, principles, rules all use this format). A canonical template (`_template.md`) and README define the format. Four simple flows (review-only, security-audit, explore, adopt) are handled via CLAUDE.md inline dispatch.
+Markdown files with YAML frontmatter — consistent with Canon's conventions (agents, principles, rules all use this format). A canonical template (`templates/runbook-template.md`) and a README in `skills/canon/runbooks/` define the format. Four simple flows (review-only, security-audit, explore, adopt) are handled via CLAUDE.md inline dispatch.
 
 5 runbooks: fast-path, feature (absorbs refactor as variant), epic, migrate, test-gap. Each covers every non-terminal state from its legacy flow including fragment-expanded states. Step IDs match legacy state names for traceability.
 

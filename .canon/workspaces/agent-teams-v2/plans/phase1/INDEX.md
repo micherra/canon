@@ -1,18 +1,20 @@
 ## Plan Index: Phase 1 — Orchestration Guidance for Agent Teams Migration
 
-| Task | Wave | Depends on | Key files | Description |
-|------|------|------------|-----------|-------------|
-| phase1-00 | 1 | — | skills/canon/runbooks/_template.md, skills/canon/runbooks/_README.md | Define runbook format (markdown + YAML frontmatter) |
-| phase1-01 | 1 | phase1-00 | skills/canon/runbooks/fast-path.md | Create fast-path runbook (simplest build flow) |
-| phase1-02 | 1 | phase1-00 | skills/canon/runbooks/feature.md | Create feature runbook (absorbs refactor as variant). Wave steps for parallel implementation. |
-| phase1-03 | 1 | phase1-00 | skills/canon/runbooks/{epic.md,migrate.md} | Create epic + migrate runbooks (large-tier flows) |
-| phase1-04 | 1 | phase1-00 | skills/canon/runbooks/test-gap.md | Create test-gap runbook (no ship step) |
-| phase1-05 | 2 | Wave 1 | rules/*.md → skills/canon/references/, domain-primers/*.md → skills/canon/references/, 6 new domain skills, rules/agent-context-check.md | Register rules as skills, migrate domain primers, create 6 new domain skills (authentication-security, migration-strategy, observability, error-handling, performance, devops-ci), create agent-context-check rule |
-| phase1-06 | 2 | Wave 1 | mcp-server/src/features/orchestration/tools/orchestration-journal.ts | Orchestration journal tool (log_step + verify_completion, ~50-80 lines) |
-| phase1-07 | 2 | Wave 1 | hooks/canon-agent-teams/*.sh, hooks/canon-agent-teams/hooks.json | All hooks: PostCommit trailers, completion verify, SessionStart doc-check, SessionStart KG-check, SubagentStop scribe-queue |
-| phase1-08 | 3 | Wave 2 | agents/*.md (delete 4, create 2, modify 9) | Delete implementor+fixer+guide+chat, add engineer+planner (11 agents). All get maxTurns, permissionMode, memory, skills. |
-| phase1-09 | 3 | Wave 2 | CLAUDE.md | Agent-teams orchestration section (14 subsections). Inline dispatch for removed flows (review, security-audit, explore, adopt). |
-| phase1-10 | 4 | Wave 3 | VALIDATION-REPORT.md | Cross-artifact validation (10 check categories) |
+> **⚠️ SUPERSEDED BY v2.1:** tasks phase1-00 through phase1-04 are **ABANDONED** per the v2.1 plan (`docs/agent-teams-migration-plan-v2.1.md`). The static-runbook-files approach has been replaced by vocabulary-based synthesis (canon-planner emits runbooks from a canonical step vocabulary). phase1-05..09 remain REQUIRED v2 Phase 1 deliverables — v2.1 builds on top of them. phase1-10 (validation) is REFACTORED per v2.1 — see v2.1 §10.5. phase1-00's landed artifacts (`templates/runbook-template.md` + `skills/canon/runbooks/README.md`) were DELETED in PR #115 in favor of the synthesis skill (`skills/canon/references/runbook-synthesis.md`, v2.1a Wave 1 deliverable).
+
+| Task | Wave | Depends on | Key files | Description | v2.1 status |
+|------|------|------------|-----------|-------------|-------------|
+| phase1-00 | 1 | — | (deleted) | ~~Define runbook format (markdown + YAML frontmatter)~~ | **ABANDONED**; runbook format defined by v2.1a synthesis skill |
+| phase1-01 | 1 | phase1-00 | ~~skills/canon/runbooks/fast-path.md~~ | ~~Create fast-path runbook~~ | **ABANDONED**; no static runbook files in v2.1 |
+| phase1-02 | 1 | phase1-00 | ~~skills/canon/runbooks/feature.md~~ | ~~Create feature runbook~~ | **ABANDONED** |
+| phase1-03 | 1 | phase1-00 | ~~skills/canon/runbooks/{epic.md,migrate.md}~~ | ~~Create epic + migrate runbooks~~ | **ABANDONED** |
+| phase1-04 | 1 | phase1-00 | ~~skills/canon/runbooks/test-gap.md~~ | ~~Create test-gap runbook~~ | **ABANDONED** |
+| phase1-05 | 2 | Wave 1 | rules/*.md → skills/canon/references/, domain-primers/*.md → skills/canon/references/, 6 new domain skills, rules/agent-context-check.md | Register rules as skills, migrate domain primers, create 6 new domain skills, create agent-context-check rule | **REQUIRED** (v2 Phase 1; v2.1 builds on this) |
+| phase1-06 | 2 | Wave 1 | mcp-server/src/features/orchestration/tools/orchestration-journal.ts | Orchestration journal tool (log_step + verify_completion) | **REQUIRED** |
+| phase1-07 | 2 | Wave 1 | hooks/canon-agent-teams/*.sh, hooks/canon-agent-teams/hooks.json | All hooks: PostCommit trailers, completion verify, SessionStart doc-check, SessionStart KG-check, SubagentStop scribe-queue | **REQUIRED** (v2.1a adds one more hook: `canon-workspace-check.sh` / L4) |
+| phase1-08 | 3 | Wave 2 | agents/*.md (delete 4, create 2, modify 9) | Delete implementor+fixer+guide+chat, add engineer+planner (11 agents) | **REQUIRED — GATE A for v2.1** (creates canon-planner + canon-engineer) |
+| phase1-09 | 3 | Wave 2 | CLAUDE.md | Agent-teams orchestration section | **REQUIRED**; v2.1a will amend further (L1 re-classification discipline) |
+| phase1-10 | 4 | Wave 3 | VALIDATION-REPORT.md | Cross-artifact validation | **REFACTORED** per v2.1 §10.5 (validates vocabulary + synthesis behavior, not 5 static runbook files) |
 
 ### Wave Summary
 
@@ -49,8 +51,8 @@ These legacy flows are NOT converted to runbooks. CLAUDE.md's dispatch section h
 ### File Inventory
 
 **New files (15):**
-- `skills/canon/runbooks/_template.md`
-- `skills/canon/runbooks/_README.md`
+- `templates/runbook-template.md`
+- `skills/canon/runbooks/README.md`
 - `skills/canon/runbooks/fast-path.md`
 - `skills/canon/runbooks/feature.md`
 - `skills/canon/runbooks/epic.md`

@@ -1,9 +1,11 @@
 ---
 task_id: "phase1-00"
 wave: 1
+status: ABANDONED
+superseded_by: docs/agent-teams-migration-plan-v2.1.md (v2.1a synthesis skill)
 depends_on: []
 files:
-  - skills/canon/runbooks/_template.md
+  - (deleted — templates/runbook-template.md and skills/canon/runbooks/README.md were created per this plan and then DELETED in PR #115 per v2.1 review)
 principles:
   - agent-plans-are-prompts
   - agent-design-before-code
@@ -11,16 +13,20 @@ principles:
 domains: []
 ---
 
+> **⚠️ ABANDONED PER v2.1.** This task's deliverables (`templates/runbook-template.md` and `skills/canon/runbooks/README.md`) were created on PR #115 and subsequently DELETED in the same PR after v2.1's synthesis-based runbook architecture was ratified. Under v2.1, the runbook format is defined by `skills/canon/references/runbook-synthesis.md` (a v2.1a Wave 1 deliverable), not by a separate template + README. This plan is retained as historical record.
+>
+> **Do NOT execute this plan.** See `docs/agent-teams-migration-plan-v2.1.md` §§5, 10.2 for the v2.1 equivalent work.
+
 ## Task: Define the canonical runbook format
 
 ### Action
 
-Create `skills/canon/runbooks/_template.md` — a canonical runbook template using markdown with YAML frontmatter, consistent with Canon's existing convention (agents, principles, rules, templates all use this format).
+Create `templates/runbook-template.md` — a canonical runbook template using markdown with YAML frontmatter, consistent with Canon's existing convention (agents, principles, rules, templates all use this format). The template lives alongside other Canon artifact templates; per-directory README lives at `skills/canon/runbooks/README.md`.
 
 Runbooks are **markdown files with YAML frontmatter**, not pure YAML. The frontmatter carries structured step metadata (machine-readable for the journal tool). The body carries prose guidance for each step (human-readable for the lead and reviewers).
 
 1. Create the directory `skills/canon/runbooks/` if it does not exist.
-2. Write `_template.md`:
+2. Write `templates/runbook-template.md`:
 
 ```markdown
 ---
@@ -91,7 +97,7 @@ After all steps complete, run the completion checklist:
 4. Evaluate learn gate
 ```
 
-3. Add a `_README.md` in the same directory documenting:
+3. Add a `skills/canon/runbooks/README.md` in the same directory documenting:
    - Runbook format: markdown with YAML frontmatter (consistent with Canon conventions)
    - Frontmatter fields: `name`, `description`, `tier`, `steps[]` with `id`, `agent`, `dispatch`, `mcp_tools`, `artifacts`, `hitl`
    - Body sections: Overview, Steps (one H3 per step with prose guidance), Completion
@@ -113,14 +119,14 @@ No code tests. Manual verification: YAML frontmatter parses correctly.
 
 ### Verify
 
-1. `skills/canon/runbooks/_template.md` exists
-2. YAML frontmatter parses: `python3 -c "import yaml; yaml.safe_load(open('skills/canon/runbooks/_template.md').read().split('---')[1])"`
+1. `templates/runbook-template.md` exists
+2. YAML frontmatter parses: `python3 -c "import yaml; yaml.safe_load(open('templates/runbook-template.md').read().split('---')[1])"`
 3. Body contains Overview, Steps, and Completion sections
-4. `_README.md` documents the format convention
+4. `skills/canon/runbooks/README.md` documents the format convention
 5. `npm run build` and `npm test` pass unchanged
 
 ### Done when
 
-- `_template.md` exists with complete frontmatter schema and prose body example
-- `_README.md` documents the format and field semantics
+- `templates/runbook-template.md` exists with complete frontmatter schema and prose body example
+- `skills/canon/runbooks/README.md` documents the format and field semantics
 - A second implementor can read only these files and produce a conformant runbook
