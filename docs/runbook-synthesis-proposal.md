@@ -995,10 +995,18 @@ General questions (persistence-specific ones are in §11.9). Resolved entries no
 
 1. **Planner output location** — `plans/${slug}/runbook.md` alongside brief, or distinct location? Lean: same directory as brief for cohesion.
 2. **`cause` extensibility** — any step besides `fix` need `cause`? Defer until evidence.
-3. **Learner loop ownership** — Phase 2 establishes baseline; who owns continuous refinement afterward? Planner auto-tunes from learner output (P5 territory) or humans curate proposals weekly? Probably the latter initially (supervised); automation is a later promotion.
-4. **Seed-bundle format** — moved with §7 to v2.3+ (architect change #2; see Appendix B).
+3. **Seed-bundle format** — moved with §7 to v2.3+ (architect change #2; see Appendix B).
 
 ### Resolved
+
+**Learner loop ownership** — RESOLVED (per second-round architect concern + user direction). **Canon maintainer-equivalent curates weekly.** A human reviewer reads the learner's proposals in `.canon/proposed-learnings/{timestamp}/` once per week, accepts or rejects each, and applies accepted proposals as real edits to the relevant artifact (principle file, skill, template, etc.). Rejected proposals are logged with a reason and dismissed; the learner reads this log to avoid re-suggesting dismissed items.
+
+- Cadence: weekly (adjustable based on signal volume)
+- Review artifact: the existing `.canon/proposed-learnings/{timestamp}/` directory the learner already produces
+- Apply mechanism: manual edits by the reviewer (the learner's proposals include structured patches where possible; reviewer applies)
+- Dismissal log: `.canon/learning.jsonl` (already exists) records accepted/dismissed decisions
+
+Automation (planner auto-tunes from learner output without human curation) is explicit §4b P5 territory — deferred beyond v2.1 unless the supervised loop proves trustworthy and high-quality for a sustained period first.
 
 **CLAUDE.md intent classification minimum** — RESOLVED (per second-round architect concern + user direction). With all build requests routing to planner, the non-build intent set (greetings, questions, chat, writer, learner, review/security/explore inline dispatches) routes as in v2 with one critical addition: **intent is classified per-message, not per-session**. Every user message re-classifies; chat/question sessions that pivot to a build request route the pivot message through planner. Enforced via L1 (CLAUDE.md rule) + L4 (new `canon-workspace-check.sh` PreToolUse hook that blocks code-modification tools without an active Canon workspace). See §14 amendment rows on §4 Phase 1 deliverables (CLAUDE.md + new hook) and §17.1 v2.1a scope.
 
