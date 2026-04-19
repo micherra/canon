@@ -1,57 +1,69 @@
 # agentkb + pi.dev vs Canon
 
 **Sources:**
-- https://github.com/isaac-flath/agentkb (raw README: https://raw.githubusercontent.com/isaac-flath/agentkb/main/README.md) — **source unreachable** (HTTP 404 on raw README)
-- https://pi.dev — **source unreachable** (HTTP 403 on landing page)
+- https://github.com/isaac-flath/agentkb (HTML landing page — reachable)
+- https://pi.dev — source unreachable despite fallbacks (403 on direct, archive.org mirror blocked)
+
 **Date:** 2026-04-19
-**Status:** Both primary sources were unreachable within the time budget. Per task instructions, no retries and no fallback searches were attempted. This report records the unreachability and frames what a follow-up pass would need to produce.
 
 ---
 
 ## isaac-flath/agentkb
 
-Source unreachable. Based solely on the repository name ("agentkb" = agent knowledge base) from an author known for fast-ai-adjacent tooling, the project is plausibly a lightweight convention for giving coding agents a durable, file-backed knowledge base that accumulates across sessions. Without the README, a responsible comparison cannot be made — the table below lists the concept slot but classifies every idea as unknown pending a successful fetch.
+agentkb is a **local-first, file-backed memory system for coding agents** — a structured knowledge base that persists across sessions, organized into four specialized stores (Wiki, Chats, Communications, Skills) with per-store retrieval strategies. Source data lives in plain markdown/JSONL, indexes (FTS5 + PLAID semantic) are ephemeral and rebuilt from source, and every store syncs via git.
 
 | Idea | Classification | Canon equivalent or gap |
 |------|----------------|-------------------------|
-| (README contents) | **Unknown — source unreachable** | n/a — rerun fetch required before classification |
-| Agent-visible knowledge base (inferred from name only) | **Unverified** | Canon has principles (`principles/`), the knowledge graph (`mcp-server/src/features/knowledge-graph/`), drift reports, and workspace `progress.md` — all of which are durable, agent-readable knowledge. Overlap is likely but cannot be confirmed. |
+| "Amnesia problem" framing — agents lack continuity across sessions | **Partial overlap** | Canon addresses continuity through `board.json` / workspace resume, `progress.md`, drift logs (`.canon/` JSONL store), and the principle library. No cross-session *conversational* memory — Canon resumes flow state, not dialogue context. |
+| Four specialized stores (Wiki / Chats / Communications / Skills) | **Partial overlap** | Canon has principles (`principles/`), templates, agent definitions, and the KG — all specialized artifact types, but not organized as an agent-queryable "memory" with mixed retrieval. No chat-history store. |
+| Consolidation workflow (agent extracts insights from chats → permanent wiki entries) | **Novel** | Canon has `canon:canon-learner` for pattern analysis and `canon:canon-writer` for principle authoring, but no scheduled "distill past sessions into durable knowledge" loop. Closest analog: the learner reviewing drift reports. |
+| Plain markdown source + ephemeral indexes | **Duplicate** | Canon's principles and artifacts are markdown-first; the KG SQLite DB is rebuilt from source (`bounded-context-map.md`). Same pattern. |
+| Git-backed sync per store | **Partial overlap** | Canon's principles and agent definitions live in the repo (git-tracked); `.canon/` runtime data is local-only. No cross-machine sync story. |
+| Full-text + semantic + RRF hybrid retrieval | **Duplicate** | Canon has `semantic_search` and `graph_query` in `mcp-server/src/features/knowledge-graph/` with hybrid ranking. RRF specifically not used, but combined signals are. |
+| Traceability DB — every query + expansion + ranking + result logged | **Novel** | Canon logs agent metrics (`record_agent_metrics`) and drift events but does not log KG/semantic search queries as an auditable trail. |
+| Skills store loaded directly by agents | **Duplicate** | Canon's `skills/canon/` slash commands and `rules/` files are loaded per-agent at runtime. Same pattern, narrower scope. |
+| Chats store (exported Claude Code / Pi transcripts, searchable markdown) | **Novel** | Canon has no transcript archive. Session output is ephemeral unless captured in `progress.md`. |
+| Local-first / data ownership | **Duplicate** | Canon runs entirely on-device against the local working tree and SQLite. |
 
 ---
 
 ## pi.dev
 
-Source unreachable (HTTP 403 — likely bot/CDN challenge on the landing page, not a content issue). No description can be given without seeing the page; the product could be an evals/monitoring platform, an agent infra play, or something unrelated. The comparison table is therefore empty pending a successful fetch.
+Source unreachable despite fallbacks. Both the direct URL (`https://www.pi.dev`, HTTP 403 — likely bot challenge) and the archive.org mirror (`web.archive.org/web/2026/https://pi.dev`, blocked by the WebFetch allowlist) could not be fetched. No responsible comparison is possible.
 
 | Idea | Classification | Canon equivalent or gap |
 |------|----------------|-------------------------|
-| (Landing page contents) | **Unknown — source unreachable** | n/a — rerun fetch required before classification |
+| (Landing page contents) | **Unknown — source unreachable despite fallbacks** | n/a — retry from a browser-capable fetcher or a different network path required before classification |
 
 ---
 
 ## Worth adopting (2-4 items)
 
-- **None identified.** With both primary sources unreachable, no adoption recommendations can be made in good faith. Speculating from product names alone would produce advice uncorrelated with the actual projects.
-- **Action item:** Rerun the fetch with a browser-style User-Agent (for pi.dev's 403) and verify the correct default branch / README path for agentkb (the 404 suggests `main/README.md` is wrong — the repo may use `master`, or the README may be named differently).
+### 1. Consolidation workflow — scheduled distillation of sessions into durable principles
+
+agentkb's standout move is the **chat → wiki consolidation** step: an agent reads recent sessions and synthesizes durable insights into permanent entries. Canon has the pieces (`canon-learner` reads drift, `canon-writer` authors principles) but no regular loop that sweeps completed workspaces for crystallizable patterns. Adding a `canon:distill` command (or a post-flow hook) that hands recent `progress.md` + drift events to the learner for principle-candidate extraction would close this gap.
+
+**Fit:** Good. Slots into the existing learner/writer pair; no orchestrator change.
+
+### 2. Chat/session transcript store as a searchable artifact
+
+agentkb treats exported agent conversations as first-class, searchable markdown. Canon's `progress.md` per workspace is the closest primitive but is scoped to a single flow and not cross-queryable. A cross-workspace transcript index — even just FTS over `progress.md` files in `.canon/workspaces/` — would give the learner and guide richer historical context and make "how did we handle X last time?" answerable.
+
+**Fit:** Moderate. Storage cost is real; retrieval belongs in the knowledge-graph bounded context.
+
+### 3. Query traceability log for KG and semantic search
+
+agentkb logs every query, expansion, and ranking decision for evaluation and debugging. Canon logs agent-level metrics but not individual KG/semantic-search calls. Adding a lightweight query log (JSONL, mirroring the drift store) would let Canon evaluate retrieval quality and tune ranking without guessing — useful as the KG grows.
+
+**Fit:** Good. Additive to `mcp-server/src/features/diagnostics/`; orchestrator untouched.
 
 ---
 
 ## Non-fits
 
-- **None identifiable.** Non-fit classification requires knowing what the project actually proposes. Deferred until sources are reachable.
-
----
-
-## Follow-up Fetch Plan
-
-When rerunning this research:
-
-1. **agentkb** — try `https://github.com/isaac-flath/agentkb` (HTML landing) first to confirm default branch and README filename. The 404 on `raw.githubusercontent.com/.../main/README.md` indicates either the branch is `master` or the README has a different path. Use `gh api repos/isaac-flath/agentkb` to resolve default branch deterministically.
-2. **pi.dev** — the 403 suggests CloudFront or similar bot protection. Try `https://www.pi.dev`, `https://pi.dev/about`, or a documented product URL. If still blocked, consult cached sources (archive.org) or the company's GitHub org if one exists.
-3. Once both are reachable, classify ideas against Canon using the same five-bucket schema used in `codeflow-comparison.md`: Duplicate, Partial overlap, Novel, Non-fit, Already-deferred.
-
----
-
-## Summary of the Fit Assessment
-
-Unable to assess. Both sources were unreachable on first fetch and the task's no-retry / no-search constraint prevents recovery within this pass. This document exists as a placeholder so the failed attempt is visible in `docs/research/` and the follow-up fetch plan is preserved for the next attempt. Do not draw conclusions from this report's empty tables — they reflect fetch failure, not an absence of interesting ideas in either project.
+| Idea | Why it conflicts |
+|---|---|
+| **Communications store (X/Twitter threads)** | Canon's scope is the local codebase and its agents. Ingesting social media threads as agent memory is orthogonal to Canon's value loop. |
+| **agentkb as a drop-in replacement for Canon's principle/KG system** | Canon's principles are prescriptive (rules agents enforce), not just retrievable notes. Replacing `principles/` with a generic wiki store would lose the compliance/drift machinery (`get_compliance`, `get_drift_report`). |
+| **Per-store independent git repos for sync** | Canon's artifacts live in the project repo on purpose — principles travel with the code they govern. Splitting them into sync-able side-repos would fragment the compliance story. |
+| **pi.dev ideas** | Unassessable; source unreachable despite fallbacks. |
