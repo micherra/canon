@@ -117,3 +117,90 @@ User request
 | Message channel | `post_message`, `get_messages` | Agent teams' Mailbox replaces this. |
 | Session continuation | `applySessionContinuation` | Claude includes context summaries in spawn prompts naturally. |
 | Consultation executor | `consultation-executor.ts` | Claude can spawn an advisory subagent and inject its output — no special mechanism needed. |
+
+### 2.3 Pre-build gate — canon-planner (expanded for v2.1)
+
+Claude defaults to action — "add dark mode" → starts building. Canon needs to be smarter. Before committing to any build flow, the lead evaluates whether the request is ready to build:
+
+- Is the problem clearly defined?
+- Are acceptance criteria explicit?
+- Have alternatives been considered?
+- Is the value proportional to the effort?
+
+If any answer is no, the lead surfaces the brief with open questions and iterates with the user. v2.1 goes further: **every build request routes through `canon-planner`**, not just vague ones. The planner produces two artifacts per build and iterates with the user until approval.
+
+**canon-planner v2.1 responsibilities:**
+
+1. **Clarifies requirements** — "What problem are you solving? Who benefits?"
+2. **Challenges assumptions** — "You're assuming users need X. What if Y is the actual need?"
+3. **Evaluates alternatives** — "You could build this, or configure the existing system to do 80% of it."
+4. **Assesses value** — "This would take ~4 agents across 2 waves. Is the value proportional?"
+5. **Produces a planning brief** — `plans/${slug}/planning-brief.md`: problem statement, target users, acceptance criteria, alternatives considered, recommended approach, open questions
+6. **Synthesizes a runbook** — `plans/${slug}/runbook.md`: step sequence composed from the canonical vocabulary (§5.1) per the synthesis contract (§5.3)
+7. **Iterates with the user** until approval — conversational mechanism; intermediate iterations persisted to lifecycle DB for analytics (§6, §8)
+
+Agents are asymmetric by design:
+- **Strategic (brief):** value assessment, alternatives, clarifying questions
+- **Mechanical (synthesis):** vocabulary-based step composition, HITL posture, artifact paths
+
+These are distinct mental modes. v2.1 captures them as two skill files — `planner-brief.md` and `runbook-synthesis.md` — that the planner loads. The agent body shrinks to: load these skills, emit both artifacts, run the iterate-until-approved loop.
+
+**Agent definition (v2.1 updated):**
+- `model: opus` (judgment-heavy, not speed-critical)
+- `permissionMode: plan` (read-only — produces a brief + runbook, not code)
+- `maxTurns: 40` (iteration loop may take several rounds)
+- `memory: project` (remembers what features have been built, which were successful, patterns of over-engineering)
+- `skills: planner-brief, runbook-synthesis, agent-surface-assumptions, agent-evidence-over-intuition, agent-context-check, status-protocol`
+- Tools: `Read, Glob, Grep, WebFetch, mcp__canon__get_principles, mcp__canon__get_file_context, mcp__canon__graph_query, mcp__canon__semantic_search`
+
+This is not the chat agent (brainstorms, removed in v2) or the researcher (discovers facts). The planner's job is to **push back constructively** — "I could build this, but should I? Here's the plan and the questions."
+
+### 2.4 How Claude orchestrates a Canon flow (amended — iterate-until-approved)
+
+A concrete example of a medium build — "add dark mode to the settings page":
+
+1. **User says** "add dark mode to the settings page" to the Canon lead session.
+2. **Claude classifies intent** (per-message; §10.2 L1 rule). This is a build request → routes to `canon-planner`.
+3. **Claude spawns `canon-planner`.** Planner loads `planner-brief` and `runbook-synthesis` skills. Reads user request; calls `get_principles` with target-file scope; calls `get_file_context` for KG summaries. Produces `planning-brief.md` + initial `runbook.md` + confidence score with signals.
+4. **Claude presents** the brief + proposed runbook to the user with its confidence signals. User reviews.
+5. **User iterates** — maybe requests clarification ("what about the mobile view?"), redirects ("skip the design step — it's a simple CSS change"), modifies ("use theme variable X, not Y"). Each iteration re-spawns the planner with workspace context; planner re-scores confidence; new runbook row persisted to lifecycle DB.
+6. **User approves** the final runbook. Lead calls `approve_runbook` internally; `lifecycle_synthesized_runbooks.stage` transitions to `approved`.
+7. **Claude calls** `init_workspace` to create the workspace per `lifecycle_workspace_snapshots.workspace_id`.
+8. **Claude executes the approved runbook step by step.** For each step: calls MCP tools to compose context per the step's `mcp_tools` field; spawns the step's declared `agent` via `dispatch: subagent` or `team`; verifies artifacts exist at declared paths before proceeding.
+9. **Agents do the work.** Both subagents and teammates have Canon MCP access; they call `get_principles`, `get_file_context`, `graph_query` directly.
+10. **Claude handles HITL** at declared step postures (`approval` / `checkpoint` / `on_failure`). Confidence doesn't modify HITL; it's advisory only (§7.2).
+11. **Review + fix loop** if the runbook includes it. Fix is a step with `cause:` set — see §5.2.
+12. **Claude calls** `update_board({ operation: "complete_flow" })`, releases file claims, records metrics. `completion-verify.sh` fires, calls `verify_completion` and then `snapshot_workspace({ workspace_id })`. Workspace gets torn down after snapshot. Done.
+
+For a **trivial bug fix** (lightweight proposal — §6.2):
+- Steps 1-6 still happen, but the planner synthesizes a 1-step runbook with a one-line overview; user approves in seconds with "go"
+- Steps 7-12 run against that minimal runbook
+
+Thin-gate-no-skip pattern: every build goes through planner, but trivial work produces trivial plans that clear quickly.
+
+### 2.5 Subagent capabilities (unchanged from v2; per [Claude Code docs](https://code.claude.com/docs/en/sub-agents))
+
+Subagents are far richer than "focused workers that report back." Canon's agent definitions can leverage the full subagent frontmatter:
+
+| Capability | Frontmatter field | Canon application |
+|-----------|-------------------|-------------------|
+| **MCP access** | Default: inherits all tools including MCP. `tools` restricts. | Subagents call `get_principles`, `record_agent_metrics`, `get_file_context` directly. No lead injection needed. |
+| **Scoped MCP** | `mcpServers: [canon]` | Reference the Canon MCP server by name for roles that restrict `tools`. Inline definitions also supported. |
+| **Preloaded skills** | `skills: [skill-name]` | Inject Canon skills into subagent context at startup. Subagents don't inherit parent skills — must be explicit. |
+| **Per-agent hooks** | `hooks: { PreToolUse: [...] }` | Tool enforcement scoped to a role: block destructive commands for researchers, validate SQL for db-reader. |
+| **Persistent memory** | `memory: project` | Cross-session learning at user, project, or local scope. Maps to roadmap items 18 (short-term memory) and 19 (error/fix memory). |
+| **Effort budget** | `maxTurns: N` | Limits agentic turns before stopping. Native effort budget — partially addresses the timeout gap (experiment 11/14). |
+| **Permission mode** | `permissionMode: auto` | Per-role permissions without settings.local.json. `acceptEdits`, `auto`, `plan`, `dontAsk` available. |
+| **Isolation** | `isolation: worktree` | Git worktree per spawn. Automatic cleanup if no changes. |
+| **Model selection** | `model: haiku` | Route cheap tasks to Haiku, expensive tasks to Opus. Per-role cost optimization. |
+
+### 2.6 Dispatch framework (unchanged from v2)
+
+| Step pattern | Primitive | Rationale |
+|-------------|-----------|-----------|
+| Single agent, focused task, artifact goes to next step | **Subagent** | Fast, focused, returns result to lead. Has full MCP access. |
+| Sequential pipeline (research → design → implement → review) | **Subagents** (chained) | Each step is independent; only the artifact connects them. Each subagent has its own MCP context. |
+| Parallel implementation across files (wave tasks) | **Agent team** | Teammates coordinate via Mailbox, shared task list, file locking. |
+| Debate / competing hypotheses | **Agent team** | Teammates challenge each other's findings directly. |
+| Consultation (advisory, non-blocking) | **Subagent** | Quick opinion, result returns to lead. |
+| Background housekeeping (janitor, learner) | **Subagent** (background + `memory: project`) | Persistent learning across sessions via memory frontmatter. |
