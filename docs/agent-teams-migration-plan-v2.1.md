@@ -235,3 +235,119 @@ This is **more resilient** than the legacy pipeline:
 6. **Agent definitions work as-is.** All 11 agent defs are valid subagent and teammate types.
 7. **Canon's whole stack improves from every interaction** (v2.1 addition). The learning system (§4) is one mechanism — observation → pattern → proposal → refinement — applied across every Canon artifact type. Principles, conventions, synthesis skill, planning brief skill, and templates are the five in-scope v2.1 refinement targets (§4.3); the mechanism is uniform; the learner curates weekly.
 8. **Runbooks as data, not files** (v2.1 addition). The 5 static runbook files v2 specified are replaced by 1 vocabulary file + 2 skills; runbooks are synthesized per plan by `canon-planner`. Plan quality becomes learnable where static runbooks couldn't learn.
+
+### 2.9 Orchestration journal (the lead's checklist; amended for v2.1)
+
+CLAUDE.md guidance alone is prompt engineering — Claude reads it, usually follows it, sometimes doesn't. The solution is neither prose nor a separate agent: it's a **lightweight MCP tool that acts as the lead's checklist**.
+
+The orchestration journal provides two MCP tools:
+
+```
+log_step({ workspace, step_id, agent_type, artifacts_expected, mcp_tools_called, domain_skills_loaded, outcome })
+verify_completion({ workspace }) → { steps_logged, steps_missing, artifacts_missing, flow_outcome }
+```
+
+**How it works:**
+
+1. **Flow start:** Lead reads the synthesized runbook and calls `log_step` for each planned step. Creates the checklist.
+2. **Before each spawn:** `log_step` with `status: "started"` + expected artifacts.
+3. **After each spawn:** `log_step` with `status: "completed"` + actual artifacts.
+4. **Skipped steps:** `log_step` with `status: "skipped"` + reason (from synthesized `skip_when`).
+5. **Flow end:** `completion-verify.sh` hook calls `verify_completion`. Blocks the lead from declaring done if any step is missing or any expected artifact is missing.
+6. **Snapshot** (v2.1b addition): after `verify_completion` clears, the hook calls `snapshot_workspace({ workspace_id })` which materializes the workspace into `lifecycle_workspace_snapshots`. Workspace can then be torn down.
+
+**v2.1 extensions:**
+
+- **`domain_skills_loaded` field** — captures which skills the agent loaded per step. Enables skill-effectiveness analyses (§4, §7 learner dimensions).
+- **`outcome` field** — typed per-step outcome (review verdict, fix iterations, test pass rate). Feeds Phase 2 calibration.
+- **Snapshot integration** — completion-verify hook extends to invoke `snapshot_workspace` after `verify_completion` clears.
+
+**What this provides beyond CLAUDE.md:**
+
+| Property | CLAUDE.md alone | With journal |
+|----------|----------------|-------------|
+| Audit trail | None — conversation compacts away | Structured log in workspace + lifecycle DB, survives compaction and workspace teardown |
+| Completion enforcement | Soft — lead decides it's done | Hard — hook calls `verify_completion`, blocks if incomplete |
+| Skipped step detection | None unless human notices | Journal shows logged vs. completed vs. skipped |
+| Post-hoc analysis | Read the conversation (if available) | Query `lifecycle_workspace_snapshots`; structured, always available |
+| Skill-effectiveness tracking (v2.1) | None | `domain_skills_loaded` correlated with `outcome` → learner input |
+
+**What this is NOT:**
+- Not a state machine. No transition logic, no forced ordering, no "next state" resolution.
+- Not scheduling. The lead still decides what to do next based on judgment.
+- Not blocking at step boundaries. The lead can skip steps if justified — the journal records the skip.
+
+### 2.10 Enforcement model — defense-in-depth (amended for v2.1)
+
+The state machine provided determinism through a single hard enforcement layer. v2.1 replaces it with **eight** layers (v2 had seven; v2.1 adds L4 PreToolUse hook):
+
+| Layer | Mechanism | Type | What it guarantees |
+|-------|-----------|------|-------------------|
+| 1 | CLAUDE.md + vocabulary + synthesis skill | Soft | Step ordering, MCP tool composition, dispatch decisions, **per-message intent re-classification** (v2.1 L1 addition) |
+| 2 | Skills preloading | Medium | Critical rules and domain primers always in agent context |
+| 3 | Orchestration journal (`log_step` / `verify_completion`) | Medium-hard | Audit trail of steps executed; completion hook blocks if steps missing |
+| 4 | Agent definitions (`tools`, `maxTurns`, `permissionMode`) | Hard | Tool access restrictions, effort budgets, write permissions |
+| 5 | **`canon-workspace-check.sh` PreToolUse hook (v2.1a L4 addition)** | Hard | Blocks `Edit` / `Write` / `Bash`-that-modifies-code when no active Canon workspace exists for the current flow. Backstops L1 against intent-misclassification drift. |
+| 6 | Hooks (`TaskCompleted`, `PostCommit`, `completion-verify.sh`) | Hard | Artifact existence, commit trailers, completion cleanup, lifecycle snapshot |
+| 7 | MCP tool contracts (schema validation) | Hard | Input/output shapes for `update_board`, `record_agent_metrics`, `write_*`, `snapshot_workspace` (v2.1b) |
+| 8 | Workspace state + lifecycle DB | Hard | Artifacts on disk at known paths while workspace exists; structured record in lifecycle DB surviving workspace cleanup |
+
+**Plus self-healing context (§2.7):** if the lead misses a composition step, agents self-serve via MCP.
+
+**Post-subagent artifact check (in CLAUDE.md guidance):** After each subagent returns, the lead verifies expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Compensates for the lack of hook-based enforcement on subagents (`TaskCompleted` and `TeammateIdle` hooks only apply to agent teams teammates, not subagents).
+
+**Completion verification hook** (`completion-verify.sh`): calls `verify_completion` + then `snapshot_workspace` (v2.1b addition). Blocks the lead from declaring done if:
+- Any step was logged as "started" but not "completed"
+- Any expected artifact is missing from disk
+- Board state is not "complete"
+- Claims are not released
+- Snapshot fails (v2.1b)
+
+**Canon-bypass check hook** (`canon-workspace-check.sh`, v2.1a L4 addition): blocks `Edit` / `Write` / `Bash` code-modification when no active Canon workspace exists for the current flow. Prevents Claude from drifting out of Canon during session transitions (e.g., chat/question session pivoting to build request, lead continuing with native tools rather than re-routing through planner).
+
+**What's genuinely weaker and accepted:**
+- Step ordering is not enforced — Claude may reorder steps. Accepted as a feature.
+- Context composition quality varies — mitigated by agent self-serve (§2.7) and skills (layer 2).
+- The lead can skip `log_step` calls entirely — but CLAUDE.md instructs it, the MCP tool is in its tools list, and the completion hook catches the gap at the end.
+- Confidence signals may be miscalibrated initially (LLM overconfidence bias) — mitigations in §7.4; learner calibration in v2.2.
+
+### 2.11 Platform capabilities (unchanged from v2; per [Claude Code documentation](https://code.claude.com/docs/en/sub-agents))
+
+#### Subagent capabilities
+
+| Capability | Documentation quote / summary | Canon application |
+|-----------|------------------------------|-------------------|
+| **MCP inheritance** | "By default, subagents inherit all tools from the main conversation, including MCP tools." | Subagents call `get_principles`, `record_agent_metrics`, `get_file_context` directly. No lead injection needed. |
+| **`tools` allowlist** | Restricts inherited tools when set. | Canon agent defs can restrict per-role tool access. Omitting `tools` inherits everything including Canon MCP. |
+| **`mcpServers`** | "Give a subagent access to MCP servers." | Agent defs can reference `canon` MCP server by name for roles that restrict `tools` but still need Canon access. |
+| **`skills`** | "Subagents don't inherit skills from the parent conversation; you must list them explicitly." | Preload Canon skills per agent role. |
+| **`hooks`** | Per-subagent lifecycle hooks (PreToolUse, etc.) | Tool enforcement scoped to a role. |
+| **`memory`** | Persistent directory that "survives across conversations." Scopes: user, project, local. | Native cross-session learning. |
+| **`maxTurns`** | "Maximum number of agentic turns before the subagent stops." | Native effort budget. |
+| **`permissionMode`** | Per-subagent override. | Per-role permissions. |
+| **`isolation: worktree`** | "Run the subagent in a temporary git worktree." Automatic cleanup if no changes. | Native worktree isolation per spawn. |
+| **`model`** | Per-subagent model selection. | Route cheap tasks to Haiku, expensive tasks to Opus. |
+
+#### Agent teams capabilities
+
+| Capability | Documentation quote / summary | Canon application |
+|-----------|------------------------------|-------------------|
+| **MCP access** | "Each teammate loads the same project context as a regular session: CLAUDE.md, MCP servers, and skills." | Teammates have full Canon MCP access. |
+| **Mailbox** | Direct teammate-to-teammate messaging. | Replaces custom `post_message` / `get_messages` and flow event channel. |
+| **Plan approval** | "The teammate works in read-only plan mode until the lead approves their approach." | Maps directly to Canon's architect approval gate. Native HITL. |
+| **Shared task list** | Dependencies auto-unblock. "Task claiming uses file locking to prevent race conditions." | Replaces custom wave task coordination. |
+| **`tools` honored** | "The teammate honors that definition's tools allowlist and model." | Canon agent definitions enforce tool scope for teammates. |
+| **Graceful shutdown** | The lead sends a shutdown request; teammate can approve or reject. | Partial abort for long-running teammates. |
+| **Hooks** | `TeammateIdle`, `TaskCreated`, `TaskCompleted` (exit 2 prevents completion). | Artifact enforcement and idle backstop. |
+
+#### Limitations
+
+| Limitation | Source | Impact |
+|-----------|--------|--------|
+| One team per session | Agent teams docs | Lead cleans up between flow phases. |
+| No nested teams | Agent teams docs | Teammates cannot spawn teams. |
+| No session resumption for teammates | Agent teams docs | Cross-session resume via artifacts only. |
+| Subagents cannot spawn other subagents | Subagent docs | Single delegation depth. Lead orchestrates all spawning. |
+| Skills not inherited by subagents | Subagent docs | Must list explicitly in `skills` frontmatter. |
+| No compaction visibility | Neither docs | No hook for context compaction. Mitigate with reasoning checkpoints in artifacts. |
+| No path enforcement | Neither docs | Worktree isolation sets CWD only, not a sandbox. Mitigate with per-agent `hooks` (PreToolUse) and L4 (`canon-workspace-check.sh`). |
