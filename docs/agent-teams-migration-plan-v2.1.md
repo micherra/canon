@@ -204,3 +204,34 @@ Subagents are far richer than "focused workers that report back." Canon's agent 
 | Debate / competing hypotheses | **Agent team** | Teammates challenge each other's findings directly. |
 | Consultation (advisory, non-blocking) | **Subagent** | Quick opinion, result returns to lead. |
 | Background housekeeping (janitor, learner) | **Subagent** (background + `memory: project`) | Persistent learning across sessions via memory frontmatter. |
+
+### 2.7 Agent self-serve context (resilience model, unchanged from v2)
+
+In the legacy model, agents were helpless — they received everything from the 9-stage prompt pipeline and couldn't self-serve. If a pipeline stage failed or was misconfigured, the agent operated with incomplete context silently.
+
+In the new model, agents have MCP access and preloaded skills. This creates a **self-healing context chain**:
+
+1. **Lead composes context** (primary path): calls `get_principles`, `get_file_context`, `get_drift_report` and includes results in the spawn prompt. This is what the CLAUDE.md orchestration guidance instructs.
+2. **Agent self-serves** (fallback path): if the lead's prompt is missing principles or file context, the agent calls the MCP tools itself. Every agent with Canon MCP tools in its `tools` allowlist can independently call `get_principles(file_path, task_description)` to load matched principles.
+3. **Skills guarantee baseline** (hard floor): critical rules and references are preloaded via `skills` frontmatter — they're in agent context regardless of what the lead or agent does. An engineer always has `agent-tdd-required`, a reviewer always has `agent-cold-review`.
+
+A preloaded skill `agent-context-check` is injected into every agent via the `skills` frontmatter. It instructs:
+
+> Before starting work, verify you have Canon principles for your target files. If your spawn prompt does not include a `## Principles` section, call `get_principles` with your target file path and task description. Similarly, if you need file context or dependency information, call `get_file_context` or `graph_query` directly.
+
+This is delivered via skill injection (layer 2, medium enforcement), not instruction body changes — agent definition bodies remain untouched.
+
+This is **more resilient** than the legacy pipeline:
+- Legacy: one pipeline → one failure point → silent context loss
+- New: lead composition + agent self-serve + preloaded skills → three independent channels, any one sufficient
+
+### 2.8 Why this is simpler (amended for v2.1)
+
+1. **One orchestrator: Claude.** No custom state machine, no custom scheduler, no transition resolver. Claude reads guidance and uses judgment — the thing it's best at.
+2. **MCP tools as primitives.** Each Canon capability is a standalone MCP tool call, not a pipeline stage wired into a runtime. The lead composes them as needed, not in a fixed 13-stage sequence.
+3. **Native coordination.** Subagents for sequential work, agent teams for parallel work. No custom wave plumbing, no custom message channel, no custom HITL vocabulary.
+4. **Canon's value is untouched.** Principles, drift, KG, artifacts, metrics, commit provenance, file claims — all preserved as MCP tools. What's deleted is only the scheduling machinery.
+5. **Self-healing context.** Agents self-serve missing context via MCP tools. Skills preload critical rules. Three independent context channels vs. one pipeline.
+6. **Agent definitions work as-is.** All 11 agent defs are valid subagent and teammate types.
+7. **Canon's whole stack improves from every interaction** (v2.1 addition). The learning system (§4) is one mechanism — observation → pattern → proposal → refinement — applied across every Canon artifact type. Principles, conventions, synthesis skill, planning brief skill, and templates are the five in-scope v2.1 refinement targets (§4.3); the mechanism is uniform; the learner curates weekly.
+8. **Runbooks as data, not files** (v2.1 addition). The 5 static runbook files v2 specified are replaced by 1 vocabulary file + 2 skills; runbooks are synthesized per plan by `canon-planner`. Plan quality becomes learnable where static runbooks couldn't learn.
