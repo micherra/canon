@@ -882,3 +882,64 @@ Lifecycle data includes condensed records of user requests and interventions. Sa
 - **Secret-detection pass** — summary generation runs a basic pattern match (API keys, tokens) before persisting; matches elided.
 - **Local-only by default.** `.canon/drift-db.sqlite` is gitignored; lifecycle tables inherit.
 - **Team sharing is out of scope for v2.1.** If/when Canon grows team features, a separate "shared" DB handles cross-machine sync.
+
+---
+
+## 9. Integration Disposition Table (unchanged from v2)
+
+Every one of the 28 gaps from the integration audit must map to a concrete replacement or an explicit deprecation. The "v2 home" column shows where each integration lives in the new architecture. Dispositions: **native** (Claude or Claude Code handles it), **mcp** (Canon MCP tool stays as-is), **hook** (enforcement via Claude Code hooks), **guidance** (CLAUDE.md / runbook instructions), **deprecate** (intentionally dropped with rationale).
+
+### 9.1 HIGH severity
+
+| # | Integration | Legacy path | Disposition | v2 Home | Rationale |
+|---|------------|-------------|-------------|---------|-----------|
+| 1 | Auto-approve settings injection | `worktree-settings.ts` → `injectSettingsIntoRequests` | **native** | Replaced entirely by `permissionMode` frontmatter in agent definitions. `acceptEdits` for all code-writing agents (engineer, tester, scribe, shipper, learner, writer), `plan` for read-only agents (researcher, architect, reviewer, security, planner). No `auto` mode (requires Team/Enterprise). `acceptEdits` works on all plans. Two YAML values replace ~614 lines of permission infrastructure. | Simpler AND more secure — `acceptEdits` is scoped to working directory. |
+| 2 | Tool profile resolution | `tool-profiles.ts` → `resolveToolProfile` | **native** | Replaced by `tools` allowlist + `permissionMode` in agent definitions. Both declarative YAML, enforced by Claude Code. `tool-profiles.ts` (322 lines), `trust-resolver.ts` (156 lines), `worktree-settings.ts` (136 lines) all deletable. | Declarative over computed. |
+| 3 | Workspace worktree creation | `wave-lifecycle.ts` → `createWaveWorktrees` | **native** | Lead creates worktrees via Bash (`git worktree add`) before spawning wave teammates. Lead merges via `git merge` after wave completes. | Git operations are native Bash. |
+| 4 | Context enrichment | `context-enrichment.ts` → `assembleEnrichment` | **mcp** | Lead calls `get_file_context`, `get_drift_report`, `graph_query` to assemble context. Teammates can also call these MCP tools directly. | Already decomposed into MCP tools. |
+| 5 | Principle loading | `matcher.ts` → prompt pipeline stage 1 | **mcp** | Lead calls `get_principles(file_path, task_description)`. | Already a standalone MCP tool. |
+| 6 | Commit provenance trailers | `commit-trailers.ts` → `buildProvenanceSection` | **guidance + hook** | CLAUDE.md and agent definitions instruct trailers. `post-commit-trailers.sh` hook validates `Canon-Workflow` trailer presence. | PostCommit hook is enforcement backstop. |
+| 7 | File claims | `file-claims.ts` | **mcp** | `update_board` MCP tool calls `registerClaims` / `releaseClaims`. Agent teams add native file-locking. | Already an MCP tool side effect. |
+| 8 | Post-state effects | `effects.ts` → `executeEffects` | **mcp + native** | Lead calls `store_pr_review` / `write_review` after reviewer. Runs contract-checker assertions via Bash. | Effects are MCP tool calls + shell commands. |
+| 9 | Wave policy | `WavePolicy` | **native + guidance** | Runbook wave steps declare merge strategy and conflict handling. Lead orchestrates via Bash + native HITL. | Wave policy becomes lead orchestration logic guided by synthesized runbook. |
+| 10 | HITL breakpoint presentation | Five breakpoint shapes | **native** | Claude handles HITL natively. No custom breakpoint vocabulary. | Claude's conversational HITL is richer than fixed shapes. |
+| 11 | Workspace bootstrap | `init_workspace` | **mcp** | `init_workspace` MCP tool stays. | Already a standalone MCP tool. |
+
+### 9.2 MEDIUM severity
+
+| # | Integration | Legacy path | Disposition | v2 Home |
+|---|------------|-------------|-------------|---------|
+| 12 | Session continuation | `applySessionContinuation` | **native** | Claude naturally includes relevant context in spawn prompts. |
+| 13 | Inter-wave gates | `WavePolicy.gate` | **native** | Lead runs shell gates between waves via Bash. |
+| 14 | Wave briefing assembly | `wave-briefing.ts` | **native** | Lead summarizes prior wave results in next wave's spawn prompts. |
+| 15 | Consultation prompts | `consultation-executor.ts` | **native** | Lead spawns an advisory subagent; no special executor. |
+| 16 | Discovered gates / postconditions | `report_result` | **mcp** | Agents call `report_result` MCP tool. |
+| 17 | Agent metrics recording | `record_agent_metrics` | **mcp** | Teammates call `record_agent_metrics` directly via MCP. |
+| 18 | Agent activity logging | `post_event` | **mcp + hook** | Teammates call `post_event` directly via MCP. |
+| 19 | Drift tracking / review persistence | `persist_review` effect → DriftStore | **mcp** | Lead calls `store_pr_review` / `write_review` MCP tool. |
+| 20 | Learn gate evaluation | `evaluateLearnGate` | **guidance** | CLAUDE.md instructs the lead to check learn gate at flow completion. |
+| 21 | Flow run analytics | `update_board complete_flow` | **mcp** | Lead calls `update_board({ operation: "complete_flow" })` at flow end. |
+| 22 | Flow event channel drain | `drainFlowEvents` | **native** | Subagents return structured response; teammates message lead via Mailbox. |
+
+### 9.3 LOW severity
+
+| # | Integration | Legacy path | Disposition | v2 Home |
+|---|------------|-------------|-------------|---------|
+| 23 | Variable interpolation | `${WORKSPACE}`, `${slug}`, etc. | **deprecate** | Runbooks use structured fields; Claude constructs prompts directly. Exception: `${slug}` / `${task_id}` / `${timestamp}` in `artifacts:` paths are lead-substituted workspace metadata per v2.1, not general templating. |
+| 24 | Template loading | `injectTemplates` | **guidance** | Agent definitions reference templates. Agents read templates from `templates/` as needed. |
+| 25 | Competitive / debate protocols | `compete.count`, `synthesis` | **native** | Lead spawns an agent team with N teammates and competing instructions. |
+| 26 | Parallel roles | `type: parallel` with `roles: [...]` | **native** | Lead spawns multiple subagents or teammates. |
+| 27 | Skip conditions | `skip_when` | **native** | Claude evaluates skip conditions via judgment. |
+| 28 | Stuck detection / iteration caps | `max_iterations`, `stuck_when`, `max_revisions` | **guidance + hook** | CLAUDE.md instructs budget limits; `TeammateIdle` hook; `record_agent_metrics`. |
+
+### 9.4 Summary
+
+| Disposition | Count | Examples |
+|-------------|-------|---------|
+| **native** (Claude / Claude Code) | 12 | HITL, session continuation, wave briefing, skip conditions, parallel roles, debate |
+| **mcp** (Canon MCP tool stays) | 10 | Principles, enrichment, file claims, metrics, drift, analytics, workspace bootstrap |
+| **guidance** (CLAUDE.md / vocabulary + synthesis skill — v2.1 update) | 4 | Commit provenance, learn gate, templates, budget limits |
+| **hook** (Claude Code hooks) | 1 | Activity logging (with MCP backup) |
+| **deprecate** | 1 | Variable interpolation |
+
+**Zero gaps require new code beyond what v2.1 already adds** (synthesis skills, lifecycle persistence substrate, L4 hook). Every HIGH-severity integration still maps to an existing MCP tool, a native Claude capability, or a combination. v2.1's additions (vocabulary + synthesis + learning substrate) are purely on top of what v2 specifies.
