@@ -194,28 +194,7 @@ When v2.2 picks this up, the original design is:
 
 Until v2.2 ratifies memory grooming, the tag is not emitted, not captured, and not referenced by v2.1 scope. See Appendix B for the full v2.2+ memory-work design preserved for reference.
 
-### 5.6 Commit trailers — DROPPED from v2.1
-
-**Status:** Cut from v2.1 per architect review (change #3 in §16). The `Canon-Deviation*` trailer family + PostCommit parity hook + `lifecycle_deviations` indexed table together created three sources of truth for the same event with significant ergonomic and consistency hazards. The summary tag (`justified_deviations[]` in implementation summaries, captured in `lifecycle_step_executions.outcome` per §11.3) gives the learner everything it needs for pattern detection. `git blame`-level provenance is mostly post-hoc debugging, not day-to-day workflow.
-
-**Architect's specific concerns** (paraphrased; full reasoning in PR #115 review thread):
-
-1. Three sources of truth (summary tag, trailer, DB row) with silent drift potential
-2. PostCommit parity hook adds user-facing friction — engineers must amend commits to satisfy it; conflicts with v2's "agents produce natural prose" ethos
-3. Ingestion fragility — string-typed trailer names with typos silently drop per the additive-tolerance philosophy; errors are invisible
-4. Immutable git history × mutable principle IDs — trailer text cannot be retroactively updated when principle IDs are renamed; constrains principle evolution
-
-**What stays:**
-
-- `justified_deviations[]` structured tag on implementation summaries (§5.2)
-- Captured in `lifecycle_step_executions.outcome` (§11.3); queryable via JSON extraction
-- The learner's principle-refinement analyses (§6.1) work from the summary-tag source alone
-
-**What was preserved:** original trailer-family design moved to **Appendix C** for reference if v2.2+ needs `git blame`-level provenance demonstrably.
-
-**Revisit criterion:** add trailers if a real workflow emerges where `git blame` on a deviating line is the necessary entry point for some user task. Until then, the summary tag + DB index path covers analytic needs.
-
-### 5.7 Schema policy — closed for v2.1
+### 5.6 Schema policy — closed for v2.1
 
 Per §15 resolved-question #7: **the structured-tag schema is closed for v2.1**. The fields enumerated in §5.2 are the complete list. Agents that emit fields outside this list have those fields **dropped** by the indexer; nothing is silently captured in a generic `extra_tags` JSON blob.
 
