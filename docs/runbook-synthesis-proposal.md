@@ -904,7 +904,7 @@ All lightweight structured tag additions. Same cost profile across the board; no
 | Task plan | `task_id`, `dependencies[]`, `file_count`, `principle_ids[]` |
 | Design decision | `decision_id`, `options_considered`, `chosen_option_tag`, `rationale_tags[]` |
 | Research finding | `dimensions_explored[]`, `risks_surfaced[]` |
-| Implementation summary | `compliance_declared_for[]`, `justified_deviations[]`, `memory_cited[]` |
+| Implementation summary | `compliance_declared_for[]`, `justified_deviations[]` (`memory_cited[]` deferred to v2.2 per §7) |
 | Test report | `tests_added`, `coverage_delta` |
 | HITL events | captured via journal hooks + `log_step` outcome field |
 
@@ -977,7 +977,7 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 | §2.4 "How Claude orchestrates a Canon flow" | Update example: planner proposes runbook, iterates with user, user approves; lead executes approved runbook with lifecycle capture. |
 | §2.5 (duplicate #1 — Dispatch framework) | Unchanged — `dispatch: subagent | team` stays the same |
 | §2.5 (duplicate #2 — Self-serve context) | Expand: agents also emit structured tags (§5) for learning-system observations |
-| §2.6 "Why this is simpler" | Add bullet: "Canon's whole stack improves from every interaction — principles, synthesis skill, templates, agent memory, vocabulary — via the unified learning system." |
+| §2.6 "Why this is simpler" | Add bullet: "Canon's whole stack improves from every interaction — principles, conventions, synthesis skill, planning brief skill, templates — via the unified learning system." (5 in-scope refinement targets per §4.1; `agent memory` and `vocabulary` are deferred to v2.2+ per §4.2, and KG priors are cut entirely per §4.3.) |
 | §2.7 (Orchestration journal) | Expand: journal's `domain_skills_loaded`, outcome fields, and new HITL-event capture feed the lifecycle-persistence substrate (§11). |
 | §2.8 Layer 1 | Amend: "CLAUDE.md + vocabulary + synthesis skill" (not runbooks plural). |
 | §3 row 23 (variable interpolation: deprecate) | Unchanged — still deprecate |
@@ -985,7 +985,7 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 | §4 Phase 1 deliverables table | Replace fast-path / feature / epic / migrate / test-gap rows with vocabulary + brief + synthesis skill rows (v2.1a). Add v2.1b task block (schema migration, snapshot tool, three observation tags) per §17. **Do not remove phase1-05..10 rows** — they remain required v2 Phase 1 deliverables that v2.1 builds on. |
 | §4b P4 "Self-improving skills" | **Promote** from roadmap item to active Phase 2 validation work — the learning system makes P4 operational. |
 | §4b P5 "Memory architecture" | Cut from v2.1 entirely per architect change #2 (§7 status note). Memory audit + grooming defer to v2.2; seeding to v2.3+. |
-| §5 Phase 2 validation | Add: learner analyses gallery runs produce first weekly digests; confidence signals correlate with outcomes; memory groomed per schedule; first proposals accepted into principle / skill / template refinements. |
+| §5 Phase 2 validation | Add: for v2.1b, exit criterion is ≥ 1 accepted principle-refinement proposal produced end-to-end from real data (Gate B). v2.2 expands validation to additional refinement targets (conventions, synthesis skill, planning brief skill, templates) contingent on v2.1b closure. Confidence signals observed and correlated with outcomes throughout. *Memory grooming is not in Phase 2 validation — deferred with §7 to v2.2+.* |
 | §6 Risks | Add: "Planner emits inconsistent runbooks across similar requests" (mitigated by iterate-until-approved + deviation tracking); "Vocabulary drift" (LOW — versioned change process); "Observation tag compliance" (LOW — closed schema per §5.7 + indexer drops unknown fields). |
 | §7 Out of scope | Add: "Cross-repo learning (memory sharing across Canon installs). Autonomous confidence-based gating. Real-time write-through to lifecycle DB (per-run snapshot only in v2.1)." |
 
