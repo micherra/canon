@@ -527,3 +527,104 @@ The structured-tag schema is closed for v2.1. Fields enumerated in §4.2 are the
 4. Same review cadence as Canon principle changes
 
 **Future possibility (v2.2+, not in v2.1):** the learner could analyze patterns in agent prose outputs, detect recurring fields agents *would* like to emit, and propose schema additions automatically. This is a natural extension of the learning system but explicitly out of scope for v2.1.
+
+---
+
+## 5. Synthesis architecture — vocabulary, step schema, contract
+
+v2.1 replaces v2's 5 hardcoded runbook files (fast-path, feature, epic, migrate, test-gap) with a vocabulary-based synthesis system. The planner composes a plan-specific runbook from a canonical step vocabulary; the runbook's frontmatter metadata feeds the orchestration journal; the runbook's body prose guides the lead through step-by-step execution.
+
+### 5.1 Vocabulary
+
+The canonical set of step IDs Canon knows. Adding a new ID is a versioned change (like adding a principle — deliberate, reviewed). The vocabulary lives at `skills/canon/references/runbook-vocabulary.md` and is loaded as a skill by any agent that needs to understand runbook structure.
+
+| Step ID | Default agent | Dispatch | Default HITL | Purpose |
+|---------|---------------|----------|--------------|---------|
+| `research` | canon-researcher | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift). |
+| `design` | canon-architect | subagent | approval | Plan index + design decisions |
+| `spike` | canon-engineer | subagent | none | Time-boxed exploratory prototype; produces findings, not shipped code |
+| `implement` | canon-engineer | subagent or team | none | Build code with TDD/BDD. `team` when wave-parallel. |
+| `migrate` | canon-engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact) |
+| `verify` | canon-engineer | subagent | on_failure | Run existing tests / gates post-change |
+| `test` | canon-tester | subagent | none | Net-new integration tests; coverage-gap fills |
+| `benchmark` | canon-tester | subagent | on_failure | Performance verification against baseline |
+| `security` | canon-security | subagent | none | Security assessment |
+| `review` | canon-reviewer | subagent | checkpoint | Principle compliance |
+| `fix` | canon-engineer | subagent | on_failure | Fix mode. Required: `cause: test-failure \| security \| review \| verify` |
+| `pre-launch-check` | null | n/a | on_failure | Gate-only — lead runs discovered checks via Bash |
+| `ship` | canon-shipper | subagent | on_failure | PR description synthesis |
+| `context-sync` | canon-scribe | subagent | none | Doc sync — **mandatory tail** |
+| `learn` | canon-learner | subagent | none | Pattern analysis — **mandatory tail** |
+
+Total: **15 entries** (13 functional + 2 mandatory tail).
+
+**Vocabulary evolution discipline** (semver-style):
+
+- **Minor versions are additive only.** New step IDs, new default values, new optional fields. Existing runbooks remain valid.
+- **Major versions may remove or rename entries**, but only after a deprecation cycle.
+- **Deprecation cycle:** at least one minor version where the entry is marked deprecated (still functional, but emits a deprecation notice). Removal happens in the next major version.
+
+**Resume behavior across vocab versions:** locked-runbook resumes continue with the synthesis-time vocab unless a referenced entry was removed in a later major version. If removed, the planner regenerates the runbook with full workspace context (original brief + prior approved runbook + steps executed + artifacts produced + HITL events from prior session), presented for re-approval. Most vocab evolution is additive → no regen triggered.
+
+### 5.2 Step schema — first-class fields
+
+Every step in a synthesized runbook carries structural fields (from `templates/runbook-template.md`), plus three domain-oriented axes:
+
+**`skills:` — what domain expertise to load.** General-purpose: any step can declare domain primers to load from `skills/canon/references/`. Agents read named skills on their first turn via `agent-context-check`.
+
+```yaml
+- id: implement
+  agent: canon-engineer
+  dispatch: team
+  skills:
+    - backend-api
+    - authentication-security
+  mcp_tools: [get_principles, get_file_context]
+  artifacts: ["plans/${slug}/${task_id}-SUMMARY.md"]
+  hitl: none
+```
+
+Validation: **strict**. The planner validates every `skills:` name against the file list in `skills/canon/references/` at synthesis time. Unresolvable names are a synthesis error.
+
+**`cause:` — analytic lineage + skill hint (fix-specific).** Used on `fix` (and potentially future re-work steps). Carries two signals:
+
+1. Analytic: which upstream step triggered this fix (for outcome correlation)
+2. Skill hint: a default primer the planner auto-adds to `skills:` (e.g., `cause: review` → `review-feedback-handling`)
+
+**`mode:` — deferred.** The `mode` field for step behavioral variants (e.g., `implement` in refactor mode vs. fresh mode) is deferred. Real variants today are handled via synthesis rules in `runbook-synthesis.md`. Promote `mode:` to a first-class field in a future vocabulary revision if synthesis rules proliferate beyond 3–4 variants.
+
+### 5.3 Synthesis contract
+
+Rules the planner (via `runbook-synthesis.md` skill) MUST follow when emitting a runbook.
+
+**Planner MUST:**
+
+1. **Include mandatory tail.** Every build runbook ends with `context-sync` followed by `learn`.
+2. **Use canonical step IDs only.** Any step ID not in `runbook-vocabulary.md` is a synthesis error.
+3. **Preserve default agent / dispatch / HITL** unless overriding with explicit justification in the brief body.
+4. **Validate `skills:` names strictly** against `skills/canon/references/` at synthesis time.
+5. **Use `${slug}` / `${task_id}` / `${timestamp}` placeholders** per the runbook format spec.
+6. **Include a one-paragraph Overview** explaining why this step sequence was chosen.
+7. **Emit body H3 prose per step** with intent, skip-when elaboration, and coordination notes (per `skills/canon/runbooks/README.md`).
+8. **Apply contract pairings** from synthesis rules:
+   - Behavior-preserving `implement` → mandatory-following `verify` with "no behavior changes" criterion
+   - `migrate` → paired rollback artifact
+   - `security` findings → at least one `fix` step with `cause: security` before `ship`
+   - `review` verdict not clean → `fix` with `cause: review` loop until clean
+
+**Planner MAY:**
+
+- Reorder steps (`security` before `review` for auth-sensitive changes)
+- Skip optional steps (`design` for scoped fixes; `test` for doc-only changes)
+- Repeat steps (two `review` passes for risky migrations; multiple `fix` cycles)
+- Expand a single step into multiple waves
+
+**Planner MUST NOT:**
+
+- Invent new step IDs. Adding a vocabulary entry is a deliberate versioned change, not a per-run decision.
+- Remove baseline HITL from step defaults. The runbook's declared `hitl:` posture stays regardless of confidence signal.
+- Skip mandatory tail regardless of flow size or user preference.
+
+### 5.4 Iteration, not one-shot
+
+The contract applies across the full planner-user iteration loop. Each iteration re-spawns the planner with full workspace context; intermediate iterations are persisted as separate rows in `lifecycle_synthesized_runbooks` per §8. Only the `stage: approved` row is executed against.
