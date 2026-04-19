@@ -628,3 +628,60 @@ Rules the planner (via `runbook-synthesis.md` skill) MUST follow when emitting a
 ### 5.4 Iteration, not one-shot
 
 The contract applies across the full planner-user iteration loop. Each iteration re-spawns the planner with full workspace context; intermediate iterations are persisted as separate rows in `lifecycle_synthesized_runbooks` per §8. Only the `stage: approved` row is executed against.
+
+---
+
+## 6. User-approval affordance
+
+Under the iterate-until-approved model, the user is always the approval gate. This section defines what approval looks like at the runtime/MCP level.
+
+### 6.1 Mechanism: conversational
+
+The lead interprets user messages for approval signals. The user never invokes a slash command or MCP tool directly; from their perspective, approval is natural — "looks good", "yes go", "approved", "let's proceed" all signal approval. Ambiguous cases ("looks good, but change X first" / "mostly yes") are clarification events, not approval events; the lead asks explicitly rather than auto-approving.
+
+**Internal journal record:** when the lead infers approval, it records the approved stage via the journal MCP tool (creating a `lifecycle_synthesized_runbooks` row with `stage: approved`). The approval record is internal bookkeeping, not a user-facing mechanism.
+
+**Ambiguity handling:** if the user's message is ambiguous or partial, the lead asks rather than proceeds. Example: *"Approving the full runbook? Step `design` shows low confidence — proceed with it as-specified, or dig into the open questions first?"* No auto-approve on ambiguity.
+
+### 6.2 Lightweight proposals for trivial work
+
+The planner calibrates proposal *depth* to request complexity:
+
+- Trivial bug fix → 1-step runbook (just `implement`), one-line overview, approval clears in seconds with "go"
+- Small feature → 3–4 step runbook, brief overview, user skims in seconds
+- Complex epic → multi-wave runbook, full overview, iteration may take multiple rounds
+
+This replaces the old autodispatched fast-path (no gate, no visibility) with a **thin-gate-no-skip** pattern: every request goes through the planner, but trivial work produces a trivial plan that clears in seconds. Arguably *more efficient* than the original fast-path because the user has visibility and the journal has a record, at minimal latency cost.
+
+The planner does NOT fall back to a "skip approval when confidence ≥ threshold" mechanism. Decision: iterate-until-approved stands. Friction is addressed by making the proposal light, not by skipping the gate.
+
+### 6.3 Friction acknowledgment
+
+Every build request now has a synchronous planner round-trip — this is a material change from today's autodispatched fast-path. Mitigation is the lightweight-proposal principle above. Phase 2 validation will measure actual round-trip cost for the trivial-request case; if it's intolerable in practice, revisit this section.
+
+### 6.4 Intent re-classification discipline (L1)
+
+**Intent is classified per user message, not per session.** Every user message re-classifies; chat/question sessions that pivot to a build request route the pivot message through planner. Don't let conversational continuity carry forward across intent-class boundaries.
+
+CLAUDE.md instruction (soft enforcement):
+
+> Re-classify every user message. If the current message is a build request, route to planner regardless of prior conversation flow. Chat/question history doesn't make subsequent builds "chat."
+
+### 6.5 Pre-write gate + Canon-bypass detection (L4)
+
+Before the lead uses `Edit`, `Write`, or `Bash` for code changes:
+
+> **Verify Canon routing.** Ask: "Is this request currently routed through a Canon build flow (planner + approved runbook)?" If no, stop. Present the build request to the user and route through planner. Editing code outside a Canon flow is the failure mode this rule prevents.
+
+L1 is soft (prompt discipline). L4 is the hard backstop: a PreToolUse hook `canon-workspace-check.sh` that blocks `Edit` / `Write` / `Bash`-that-modifies-code when no active Canon workspace exists for the current flow. Detection: checks for an active `.canon/workspaces/<slug>/` matching the current branch.
+
+Defense in depth: L1 is the soft path (Claude usually does the right thing); L4 is the hard floor (if Claude fails to re-classify, the hook catches it before uncontrolled code modification).
+
+### 6.6 Iteration persistence
+
+All iterations are persisted, but only the `stage: approved` row is executed against.
+
+- Each iteration gets one row in `lifecycle_synthesized_runbooks` (`stage: proposed` for intermediates; `stage: approved` for the final version; `stage: regenerated` per §5.1 if vocab version changed mid-flow)
+- `iteration_index` tracks ordinality within a flow (0 = first proposal, N = approved final)
+- `lifecycle_workspace_snapshots.approved_runbook_id` points to the single `stage: approved` row per workspace
+- Intermediate iterations available to the learner for calibration analyses (planner-quality trends, iteration-pattern detection, confidence-vs-iteration-count correlation) but never executed against
