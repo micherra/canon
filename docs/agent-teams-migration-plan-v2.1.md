@@ -685,3 +685,89 @@ All iterations are persisted, but only the `stage: approved` row is executed aga
 - `iteration_index` tracks ordinality within a flow (0 = first proposal, N = approved final)
 - `lifecycle_workspace_snapshots.approved_runbook_id` points to the single `stage: approved` row per workspace
 - Intermediate iterations available to the learner for calibration analyses (planner-quality trends, iteration-pattern detection, confidence-vs-iteration-count correlation) but never executed against
+
+---
+
+## 7. Confidence scoring
+
+Confidence is a **surfaced signal during iteration**, not a gating mechanism. Under the iterate-until-approved planner loop, the user is always the approval gate; confidence informs the user during iteration, doesn't decide for them.
+
+### 7.1 Schema
+
+In the synthesized runbook frontmatter:
+
+```yaml
+confidence: 0.0-1.0
+confidence_signals:
+  - {signal: "novelty",           value: 0.7}
+  - {signal: "scope_clarity",     value: 0.9}
+  - {signal: "domain_coverage",   value: 0.8}
+  - {signal: "dependency_drift",  value: 0.6}
+  - {signal: "question_count",    value: 0.85}
+```
+
+### 7.2 Signals
+
+| Signal | Meaning | How computed |
+|--------|---------|--------------|
+| `novelty` | Has Canon built something like this before? | Planner's `memory: project` + `query_workspace_history({ similar_to: brief_summary })` (v2.2) |
+| `scope_clarity` | Does the request have concrete acceptance criteria? | Planner analysis of brief; fewer open questions ⇒ higher |
+| `domain_coverage` | Are relevant domain primers available? | Ratio of affected file-layers with ≥1 matching primer in `skills/canon/references/` |
+| `dependency_drift` | How much has changed in target files since related work? | `get_drift_report` + recent commit density |
+| `question_count` | Open questions remaining in the brief? | Inverse of count, clamped |
+
+Overall `confidence` combines signals with equal weighting initially. As lifecycle data accumulates, the learner proposes weight refinements based on observed correlation between each signal and flow outcome.
+
+### 7.3 HITL invariant — confidence is advisory, not a modifier
+
+Confidence is surfaced to the user during iteration. It does NOT modify the runbook's HITL postures — neither at synthesis time nor at runtime.
+
+- If a step declares `hitl: approval`, that stays approval. No confidence level allows skipping it.
+- If a step declares `hitl: none`, that stays none. Low confidence does NOT auto-insert a checkpoint.
+- The synthesis skill picks HITL postures from step-type defaults (per the vocabulary in §5.1); confidence is not an input to that choice.
+
+**What confidence IS for:**
+
+- Surfacing uncertainty to the user ("I'm 0.62 confident because scope clarity is low")
+- Informing the user's decision to iterate more before approving
+- Feeding the learner for calibration analyses (§7.5)
+
+**What confidence is NOT for:**
+
+- Modifying the runbook's HITL postures (at synthesis or runtime)
+- Bypassing user approval for high-confidence proposals
+- Auto-adding checkpoints — that's the user's judgment during iteration, not a synthesis rule
+
+The user — not confidence — decides how much iteration is warranted before approval. Confidence is the display that informs that decision.
+
+### 7.4 Overconfidence mitigation
+
+LLMs systematically skew toward overconfidence. Without explicit mitigations, the planner will emit 0.9+ on most requests and the signal becomes noise. Mitigations are required from day one of v2.1a; some extend into v2.2.
+
+| # | Mitigation | Scope | Mechanism |
+|---|-----------|-------|-----------|
+| 1 | **Signal decomposition is primary** | v2.1a | Overall `confidence` is *computed from* the 5 per-signal scores, not emitted holistically. Forces the planner to articulate per-signal uncertainty rather than a vibe check. |
+| 2 | **Articulate the unknowns** | v2.1a | Before emitting confidence, the planner must list what information WOULD raise confidence if available. If it can't list anything, confidence caps at 0.75 regardless of per-signal scores. |
+| 3 | **Cold-start defaults low** | v2.1a / v2.1b | Novelty signal starts near 0 when no corpus match; domain-coverage low when no matching primers. Overall confidence starts low and climbs as evidence accumulates. |
+| 4 | **Corpus anchoring** | v2.2 | Planner calls `query_workspace_history({ similar_to: brief_summary })` to compare against prior flows. No close matches → novelty and domain_coverage both pushed down. |
+| 5 | **Conservative prompt guidance** | v2.1a | Explicit in `runbook-synthesis.md`: *"Under-confidence is safer than over-confidence. Surface uncertainty; don't hide it."* |
+| 6 | **Learner calibration detection** | v2.2 | Learner tracks confidence-vs-outcome correlation. Uniform overconfidence is a detectable pattern. Learner proposes dampening adjustments. |
+
+**Acknowledged residual risk:** even with all six mitigations, confidence as an LLM-emitted scalar is inherently suspect. v2.1a/b ships with unvalidated confidence calibration. Users should treat v2.1a/b confidence as "directional indicator" not "precise probability" until v2.2 learner calibration catches up.
+
+This is acceptable because confidence is advisory (§7.3), not a gating mechanism. Miscalibration during v2.1a/b doesn't break anything critical.
+
+### 7.5 Rescoring across iterations (v2.1a scope)
+
+Under iterate-until-approved (§6), the runbook may go through N rounds before the user approves it. Confidence is **re-evaluated at each iteration, not emitted once at the initial proposal**.
+
+- Each `stage: proposed` row in `lifecycle_synthesized_runbooks` records its own `confidence` and `confidence_signals` for that iteration
+- `iteration_index` preserves the trajectory (iteration 0: 0.62; iteration 1: 0.78 after user clarifications; ...; `stage: approved`: 0.88 after final refinement)
+- Rescoring happens at the start of each planner response during iteration
+
+**Why per-iteration, not per-flow:**
+
+- Later scores inform subsequent decisions; trajectory is itself a learner signal
+- Without per-iteration rescoring, initial overconfidence compounds — the user never sees the planner revise downward as complications surface
+
+Storage cost: negligible. Confidence + signals fit in the existing `lifecycle_synthesized_runbooks` columns; no schema change needed.
