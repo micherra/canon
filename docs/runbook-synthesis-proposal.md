@@ -172,7 +172,7 @@ Low-burden additions to existing templates. Agents already produce this informat
 ### 5.3 Tag discipline — rules the indexer follows
 
 - **Tags are optional.** Missing fields don't fail ingestion. Indexer tolerates absence within the declared schema; learner treats missing as "no signal from this field" rather than error.
-- **Schema is closed** (per §5.7 resolution). Agents emitting fields outside §5.2's list have those fields *dropped* by the indexer; no `extra_tags` JSON catch-all. Schema evolution requires a versioned migration, not per-flow accretion.
+- **Schema is closed** (per §5.6 resolution). Agents emitting fields outside §5.2's list have those fields *dropped* by the indexer; no `extra_tags` JSON catch-all. Schema evolution requires a versioned migration, not per-flow accretion.
 - **Prose stays authoritative.** When a tag and prose disagree, prose wins for factual questions; tag wins for aggregate analysis. (The learner flags tag-prose disagreement as a data-quality signal.)
 - **Secret / PII scrubbing.** Tag values pass through a basic secret-pattern match before persistence. Free-text short-summary fields are bounded (e.g., 280 chars).
 
@@ -701,7 +701,7 @@ Aggregate row per completed/abandoned workspace. Joins to existing `FlowRunEntry
 
 The `commit_range_*` fields bridge lifecycle data to git — the code-change axis. `query_workspace_history` can JOIN lifecycle rows with `git log --grep="Canon-Workflow: ${slug}"` for full provenance.
 
-> **Note:** earlier versions of this proposal included a `lifecycle_deviations` table populated from `Canon-Deviation*` commit trailers. That table and its source trailers were dropped per architect change #3 (see §5.6 status note + Appendix C). Justified deviations now live in `lifecycle_step_executions.outcome.justified_deviations` JSON, populated from the implementation-summary structured tag. Learner queries that need deviation data extract from that JSON. If query performance becomes a problem, materializing a `lifecycle_deviations` view from the JSON is a v2.2+ option.
+> **Note:** earlier versions of this proposal included a `lifecycle_deviations` table populated from `Canon-Deviation*` commit trailers. That table and its source trailers were dropped per architect change #3 (see Appendix C for the preserved design and rationale). Justified deviations now live in `lifecycle_step_executions.outcome.justified_deviations` JSON, populated from the implementation-summary structured tag. Learner queries that need deviation data extract from that JSON. If query performance becomes a problem, materializing a `lifecycle_deviations` view from the JSON is a v2.2+ option.
 
 ### 11.4 New MCP tools
 
@@ -890,7 +890,7 @@ All lightweight structured tag additions. Same cost profile across the board; no
 Plus:
 - **Synthesis skill versioning** — each synthesis records which skill version produced it
 
-(Earlier draft included memory citation prompt guidance and the Canon-Deviation trailer family. Both removed per architect changes #2 and #3 — see §5.6, §7, Appendices B and C.)
+(Earlier draft included memory citation prompt guidance and the Canon-Deviation trailer family. Both removed per architect changes #2 and #3 — see §7 status note, Appendices B and C.)
 
 Cost: one coordinated schema migration + template edits + agent prompt updates. Cheaper as a single pass than sequencing.
 
@@ -965,7 +965,7 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 | §4b P4 "Self-improving skills" | **Promote** from roadmap item to active Phase 2 validation work — the learning system makes P4 operational. |
 | §4b P5 "Memory architecture" | Cut from v2.1 entirely per architect change #2 (§7 status note). Memory audit + grooming defer to v2.2; seeding to v2.3+. |
 | §5 Phase 2 validation | Add: for v2.1b, exit criterion is ≥ 1 accepted principle-refinement proposal produced end-to-end from real data (Gate B). v2.2 expands validation to additional refinement targets (conventions, synthesis skill, planning brief skill, templates) contingent on v2.1b closure. Confidence signals observed and correlated with outcomes throughout. *Memory grooming is not in Phase 2 validation — deferred with §7 to v2.2+.* |
-| §6 Risks | Add: "Planner emits inconsistent runbooks across similar requests" (mitigated by iterate-until-approved + deviation tracking); "Vocabulary drift" (LOW — versioned change process); "Observation tag compliance" (LOW — closed schema per §5.7 + indexer drops unknown fields). |
+| §6 Risks | Add: "Planner emits inconsistent runbooks across similar requests" (mitigated by iterate-until-approved + deviation tracking); "Vocabulary drift" (LOW — versioned change process); "Observation tag compliance" (LOW — closed schema per §5.6 + indexer drops unknown fields). |
 | §7 Out of scope | Add: "Cross-repo learning (memory sharing across Canon installs). Autonomous confidence-based gating. Real-time write-through to lifecycle DB (per-run snapshot only in v2.1)." |
 
 **Revision naming:** `docs/agent-teams-migration-plan-v2.1.md` as a new file; v2 preserved for history. v2.1 frontmatter references v2 as its supersedent.
@@ -986,7 +986,7 @@ General questions (persistence-specific ones are in §11.9). Resolved entries no
 
 3. **Vocabulary versioning across resume** — RESOLVED. Approach: regenerate-with-workspace-context on vocab major-version delta where the locked runbook references a removed entry. Vocab evolution follows semver-style discipline (minor=additive, major=removal-allowed-after-deprecation-cycle). Most resumes do not trigger regen because most evolution is additive. See §8.2 for evolution discipline; §11.3 schema for `vocabulary_version`, `stage: regenerated`, and `original_runbook_id`.
 
-7. **Observation-schema evolution** — RESOLVED. Closed schema for v2.1: fields enumerated in §5.2 are the complete list; agents that emit other fields have them dropped by the indexer (no `extra_tags` JSON catch-all). Schema evolution requires explicit versioned migration. See §5.7 for full policy. Future v2.2+ possibility: learner-proposed schema additions from observed prose patterns — out of scope for v2.1.
+7. **Observation-schema evolution** — RESOLVED. Closed schema for v2.1: fields enumerated in §5.2 are the complete list; agents that emit other fields have them dropped by the indexer (no `extra_tags` JSON catch-all). Schema evolution requires explicit versioned migration. See §5.6 for full policy. Future v2.2+ possibility: learner-proposed schema additions from observed prose patterns — out of scope for v2.1.
 
 8. **HITL event categorization** — RESOLVED. Final enum: `approval` / `clarification` / `redirect` / `reject` / `abort` / `iterate` / `modify` / `escalate` / `consult`. Plus a `phase` dimension on every event: `synthesis` / `execution` / `post_execution`. See §11.3 `lifecycle_hitl_events` schema.
 
@@ -1000,13 +1000,13 @@ Tracked as the work list for converging toward v2.1. Each is a concrete modifica
 
 1. ✅ **Split this proposal into v2.1a / v2.1b / v2.2** — see §17 for the carve-out. *Done.*
 2. ✅ **Cut §7 (memory audit / groom / seed) entirely from v2.1.** Defer to v2.2+ (audit/groom) and v2.3+ (seeding). *Done — §7 status note + Appendix B preservation.*
-3. ✅ **Drop the `Canon-Deviation*` commit trailer family (§5.6)** and its PostCommit parity hook. Keep `justified_deviations[]` in the implementation summary tag. *Done — §5.6 status note + Appendix C preservation; §11.3 and §13.2 / §14 references updated.*
+3. ✅ **Drop the `Canon-Deviation*` commit trailer family** and its PostCommit parity hook. Keep `justified_deviations[]` in the implementation summary tag. *Done — original design preserved in Appendix C; §5.6 status note removed in second-round cleanup (trailer work was always additions to existing trailers; main-body section was redundant with Appendix C); §11.3 and §13.2 / §14 references updated.*
 4. **Require one real end-to-end trace before ratification.** Hand-run the §6.1 principle-refinement analysis against Canon's *existing* data (`.canon/drift-db.sqlite`, `.canon/learning.jsonl`, git log) and produce one actually-acceptable refinement proposal. The minimum infrastructure needed for that single working trace becomes the real v2.1b scope — not §11 in full. *Open — runtime work; gate documented in §16 Gate B.*
 5. ✅ **Specify the user-approval affordance** (§10.4 and §14 row on §2.3). *Done — §10.5 resolves: conversational mechanism; lead interprets natural-language signals; ambiguity triggers clarification; lightweight proposals for trivial work (thin-gate-no-skip) replace autodispatched fast-path; NO confidence-based skip; all iterations persisted with execution only against stage:approved. §11.3 intro updated to explicitly state every iteration gets a row.*
 6. ✅ **Replace §4's 10-target refinement matrix** with a reduced matrix. *Done — §4 now has 5 in-scope targets (principles, conventions, synthesis skill, planning brief skill, templates) with phase markers, 4 deferred to v2.2+ (domain skills, agent defs, agent rules, vocabulary), and 1 cut entirely (knowledge graph priors). Per-target rationale in §4.1–§4.3.*
 7. ✅ **Add hard precondition to v2.1a/b:** v2 Phase 1 exit criteria met — `canon-planner` and `canon-engineer` agent definitions exist, register, and have been validated in ≥ 3 successful runs under the feature flag. No v2.1 work before that. *Done — prominent Gate A callout at top of §13, retired "Phase 1.5" terminology in §13.4 / §11.8 in favor of §17's v2.1a/b/v2.2 framing, clarified §13.5 that phase1-05..10 stay as required v2 Phase 1 deliverables (especially phase1-08 which creates the agent definitions).*
 8. ✅ **Commit to a storage decision with migration math.** *Done — adopted option (c) per user direction: v2.1b ships one table (`lifecycle_workspace_snapshots`) with concrete SQL migration DDL against `drift-schema.ts` (§11.1). Full §11.3 schema deferred to v2.2, which explicitly revisits the drift-db-vs-JSONL-first decision based on observed v2.1b data volume. §11.3 and §11.4 have per-element v2.1b/v2.2 phase markers so scope is unambiguous.*
-9. ✅ **Promote §15 open questions #3 (vocabulary versioning across resume), #7 (observation-schema evolution), #8 (HITL event categorization) to blocking decisions.** *Done — resolutions captured in §8.2 + §11.3 + §5.7; §15 reorganized into Open + Resolved subsections.*
+9. ✅ **Promote §15 open questions #3 (vocabulary versioning across resume), #7 (observation-schema evolution), #8 (HITL event categorization) to blocking decisions.** *Done — resolutions captured in §8.2 + §11.3 + §5.6; §15 reorganized into Open + Resolved subsections.*
 10. ✅ **Remove or unambiguously mark the illustrative numbers in §6 as fabricated.** *Done — top-of-section warning callout + per-analysis "Hypothetical result (fabricated)" markers.*
 
 ### Gates before ratification
@@ -1262,7 +1262,16 @@ The corpus is distilled expert context for the repo. When:
 
 ## Appendix C: Deferred — `Canon-Deviation*` commit trailer family (preserved design)
 
-Cut from v2.1 per architect change #3 (see §5.6 status note for rationale). Preserved here for reference if `git blame`-level provenance proves necessary in a future revision.
+Cut from v2.1 per architect change #3. The proposed `Canon-Deviation*` trailers were *additions* layered on top of Canon's existing commit-trailer machinery (Canon-Workflow / Canon-Agent / Canon-State / Canon-Task — which stay unchanged). The additions are preserved here for reference if `git blame`-level provenance proves necessary in a future revision.
+
+**Why this was cut** (architect's four specific concerns):
+
+1. **Three sources of truth** (summary tag, trailer, DB row) with silent drift potential
+2. **PostCommit parity hook** adds user-facing friction — engineers must amend commits to satisfy it; conflicts with v2's "agents produce natural prose" ethos
+3. **Ingestion fragility** — string-typed trailer names with typos silently drop per the additive-tolerance philosophy; errors are invisible
+4. **Immutable git history × mutable principle IDs** — trailer text cannot be retroactively updated when principle IDs are renamed; constrains principle evolution
+
+The summary tag (`justified_deviations[]` in implementation summaries, captured in `lifecycle_step_executions.outcome` per §11.3) gives the learner everything it needs for pattern detection. `git blame`-level provenance is mostly post-hoc debugging, not day-to-day workflow.
 
 ### Original design
 
@@ -1292,7 +1301,7 @@ Canon-Deviation-Decision: <decision-id, optional>
 
 ### Why this was cut
 
-See §5.6 for the architect's four concerns and the cost-value summary. In short: the summary tag plus DB index covers the learner's needs; the trailer adds a third source of truth, ergonomic friction via the parity hook, ingestion fragility, and constraints on principle-ID evolution that aren't paid for by the marginal `git blame` benefit.
+The four architect concerns above drove the decision. Cost-value summary: the summary tag plus DB index covers the learner's needs; the trailer adds a third source of truth, ergonomic friction via the parity hook, ingestion fragility, and constraints on principle-ID evolution that aren't paid for by the marginal `git blame` benefit.
 
 ### Revisit criterion
 
