@@ -996,10 +996,13 @@ General questions (persistence-specific ones are in §11.9). Resolved entries no
 1. **Planner output location** — `plans/${slug}/runbook.md` alongside brief, or distinct location? Lean: same directory as brief for cohesion.
 2. **`cause` extensibility** — any step besides `fix` need `cause`? Defer until evidence.
 3. **Learner loop ownership** — Phase 2 establishes baseline; who owns continuous refinement afterward? Planner auto-tunes from learner output (P5 territory) or humans curate proposals weekly? Probably the latter initially (supervised); automation is a later promotion.
-4. **CLAUDE.md intent classification minimum** — with all build requests routing to planner, what's the minimal residual intent set? Greetings, questions, chat — defer to a separate design pass.
-5. **Seed-bundle format** — moved with §7 to v2.3+ (architect change #2; see Appendix B).
+4. **Seed-bundle format** — moved with §7 to v2.3+ (architect change #2; see Appendix B).
 
-### Resolved (per architect change #9)
+### Resolved
+
+**CLAUDE.md intent classification minimum** — RESOLVED (per second-round architect concern + user direction). With all build requests routing to planner, the non-build intent set (greetings, questions, chat, writer, learner, review/security/explore inline dispatches) routes as in v2 with one critical addition: **intent is classified per-message, not per-session**. Every user message re-classifies; chat/question sessions that pivot to a build request route the pivot message through planner. Enforced via L1 (CLAUDE.md rule) + L4 (new `canon-workspace-check.sh` PreToolUse hook that blocks code-modification tools without an active Canon workspace). See §14 amendment rows on §4 Phase 1 deliverables (CLAUDE.md + new hook) and §17.1 v2.1a scope.
+
+**Per architect change #9** (original first-round):
 
 3. **Vocabulary versioning across resume** — RESOLVED. Approach: regenerate-with-workspace-context on vocab major-version delta where the locked runbook references a removed entry. Vocab evolution follows semver-style discipline (minor=additive, major=removal-allowed-after-deprecation-cycle). Most resumes do not trigger regen because most evolution is additive. See §8.2 for evolution discipline; §11.3 schema for `vocabulary_version`, `stage: regenerated`, and `original_runbook_id`.
 
