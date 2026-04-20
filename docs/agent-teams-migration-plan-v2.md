@@ -377,17 +377,87 @@ This section cites the authoritative Claude Code documentation. Both subagents a
 
 ---
 
-<!--
-  §§3–8 reserved for cross-cutting v2.1 additions:
-    §3  Canon's learning system
-    §4  Observation mechanism — hybrid structured tags + prose
-    §5  Synthesis architecture — vocabulary, step schema, contract
-    §6  User-approval affordance (iterate-until-approved)
-    §7  Confidence scoring
-    §8  Lifecycle persistence substrate
-  Each lands in a subsequent commit. Integration Disposition Table
-  remains §9 unchanged in content.
--->
+## 3. Canon's learning system
+
+Canon's quality-up story depends on a single mechanism applied across every dimension of what it produces:
+
+**Observation → Pattern → Proposal → Refinement**
+
+- **Observation** — a single data point from a flow. "In flow X, review found principle P violation on file Y; fix took N iterations; the fix summary cited root cause Z."
+- **Pattern** — recurring observations across multiple flows. "10 recent flows showed principle P violations on auth-related files; 8 shared the same underlying cause."
+- **Proposal** — a concrete refinement suggestion grounded in the pattern. Structured patch to an artifact.
+- **Refinement** — an accepted proposal applied to the relevant Canon artifact.
+
+Every interaction contributes observations to a growing corpus. The learner periodically mines that corpus for patterns and emits proposals. A Canon maintainer-equivalent curates weekly (§3.4). Accepted proposals land as refinements. Over weeks and months, Canon's principles sharpen, its synthesis skill learns common request shapes, its templates lose dead sections, and its domain skills reflect what actually works.
+
+This is the **unified learning loop**. There isn't one for principles and one for plans — there's one mechanism with many refinement targets.
+
+### 3.1 Why synthesis is load-bearing for this
+
+Static runbooks break the plan-quality arm of this loop. A hand-written `fast-path.md` never learns — whoever wrote it wrote it once. Whatever observations accumulate about how fast-path runs play out have no feedback path into the file.
+
+Synthesized runbooks close that loop. Each run is a data point: planner proposed X, user iterated to Y, execution produced outcome Z. The learner sees the pattern ("planner consistently misses `security` step for auth-touching requests"), proposes a synthesis-skill refinement ("when affected files match auth paths, include `security` by default"), and the next synthesis does better.
+
+Static runbooks serve principle refinement fine — the corpus still captures review findings, fixes, and deviations. But they obstruct plan refinement entirely. Synthesis is what makes Canon learn at the plan layer, not just the principle layer.
+
+### 3.2 Why the learner is the engine
+
+The `canon-learner` agent is the orchestrator of this mechanism. Today it mostly produces principle and convention suggestions. Under v2.1, its role expands modestly: it analyzes the v2.1 scope's five refinement targets (§3.3) and emits proposals. Full expansion to all possible targets is v2.2+ (§3.5).
+
+One agent, multiple query types, multiple output targets. Same learner, richer analyses.
+
+### 3.3 Refinement targets matrix
+
+The surface of Canon artifacts the learning system can refine across the v2.1 + v2.2 horizon. Reduced from an 11-target matrix in earlier drafts per architect review. v2.1 has **5 in-scope targets**, **4 deferred to v2.2+**, and **1 cut entirely**.
+
+**In scope (5 targets):**
+
+| Target | Phase | Location | What gets refined |
+|--------|-------|----------|-------------------|
+| **Principles** | v2.1b | `principles/*.md` | Scope narrowing, severity promotion/demotion, wording clarifications, new principles from recurring patterns. First refinement target — the only one v2.1b ships. Today's learner already produces principle proposals; v2.1b expands the data feeding them. |
+| **Conventions** | v2.2 | `.canon/CONVENTIONS.md` | Established patterns observed across N flows; graduation to principles when warranted. |
+| **Runbook synthesis skill** | v2.2 | `skills/canon/references/runbook-synthesis.md` | Default step selection, skill-selection patterns, contract pairings, request-shape recognition. Required for synthesis to learn. |
+| **Planning brief skill** | v2.2 | `skills/canon/references/planner-brief.md` | Strategic analysis patterns, open-question framing, value-assessment accuracy. Lower-risk write scope (skill file, not agent prompts). |
+| **Templates** | v2.2 | `templates/*.md` | Section utility (drop dead sections), placeholder clarity, structured-tag additions. Lowest blast radius. |
+
+v2.1b ships principle refinement only. The other four become available in v2.2 once v2.1b's loop demonstrably closes (≥ 1 accepted principle-refinement proposal per §15 Gate B / §10.3 v2.1b exit).
+
+**Deferred to v2.2+ (4 targets):**
+
+| Target | Original location | Why deferred |
+|--------|------------------|--------------|
+| Domain skills | `skills/canon/references/*.md` | Per-skill writes need clearer change-acceptance criteria; defer until in-scope skill-target work has established the pattern. |
+| Agent definitions | `agents/*.md` | New write scope (today's learner only writes to `.canon/proposed-learnings/`). Letting the learner edit agent prompts needs its own trust/audit design pass. |
+| Agent rules | `rules/*.md` | Same trust scope as agent definitions. |
+| Vocabulary | `skills/canon/references/runbook-vocabulary.md` | Meta-circular — the learner proposing changes to the canonical step list it depends on for synthesis is a self-modifying loop needing explicit stability design. |
+
+Agent memory is also deferred (audit/groom → v2.2; seeding → v2.3+). Memory-related writes are a new write scope with serious failure modes (groom-away-critical-knowledge, incorrect consolidation, stale-seed calcification) — deferred until the base learner proves trustworthy on lower-risk targets first.
+
+**Cut entirely (1 target):**
+
+**Knowledge graph priors** (`knowledge-graph.db`) — cut from the learning system's refinement target set. The KG is its own subsystem with its own confidence story (computed from code structure, semantic neighborhoods, file relationships). Automated KG refinement based on flow-corpus statistics is a separate architectural commitment that doesn't belong in this proposal. If automated KG refinement ever becomes desirable, it is a separate Canon system designed against the KG's own data model and confidence semantics.
+
+### 3.4 Learner-loop curation ownership
+
+**A Canon maintainer-equivalent curates weekly.** A human reviewer reads the learner's proposals in `.canon/proposed-learnings/{timestamp}/` once per week, accepts or rejects each, and applies accepted proposals as real edits to the relevant artifact (principle file, skill, template). Rejected proposals are logged with a reason in `.canon/learning.jsonl` and dismissed; the learner reads this log to avoid re-suggesting dismissed items.
+
+- Cadence: weekly (adjustable based on signal volume)
+- Review artifact: the existing `.canon/proposed-learnings/{timestamp}/` directory the learner already produces
+- Apply mechanism: manual edits by the reviewer (the learner's proposals include structured patches where possible; reviewer applies)
+- Dismissal log: `.canon/learning.jsonl` (already exists) records accepted/dismissed decisions
+
+Automation (planner auto-tunes from learner output without human curation) is §11 P5 territory — deferred beyond v2.1 unless the supervised loop proves trustworthy and high-quality for a sustained period first.
+
+### 3.5 Single-target vs. cross-target analyses
+
+Within the 5 in-scope targets, some analyses produce single-target proposals; others correlate across targets:
+
+- **Single-target:** "Principle P's fix-iteration cost is elevated → refine P." Target: principles.
+- **Cross-target (v2.2):** observation patterns that suggest connected refinements to the synthesis skill *and* a domain skill, or template *and* a principle. Cross-target proposals are higher-signal but require more analysis surface; defer to v2.2 once v2.1b's single-target loop is demonstrably working.
+
+Cross-target analyses against the deferred targets (agent defs, vocabulary, etc.) wait for those targets' own ratification.
+
+---
 
 ## 9. Integration Disposition Table
 
