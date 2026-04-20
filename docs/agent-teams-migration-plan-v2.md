@@ -1,10 +1,16 @@
-# Canon → Agent Teams Migration Plan v2
+# Canon → Agent Teams Migration Plan
 
-**Status:** proposed — supersedes v1 (`docs/agent-teams-migration-plan.md`)
+**Status:** REVISED — v2.1-aligned implementation plan
 **Owner:** Canon maintainers
-**Last updated:** 2026-04-12
-**Source material:** `docs/v2-plan-kickoff-prompt.md` on `canon/agent-teams-phase-2`; 28-gap integration audit (2026-04-11)
+**Last updated:** 2026-04-19
 **Supersedes:** `docs/agent-teams-migration-plan.md` (v1, 2026-04-10)
+**Aligned with:** `docs/agent-teams-migration-plan-v2.1.md` (architectural source)
+**Architect review:** `docs/agent-teams-migration-plan-v2.1-review.md` (concerns + rewrite guidance)
+**Source material:** `docs/v2-plan-kickoff-prompt.md` on `canon/agent-teams-phase-2`; 28-gap integration audit (2026-04-11)
+
+> **Relationship to v2.1.** v2.1 is the architectural source of truth — it defines the target architecture, synthesis model, learning loop, lifecycle persistence, and ratification gates. **This document is the executable implementation plan that lands v2.1.** A reader running the migration works from this document; a reader understanding *why* the migration has its shape reads v2.1. Both ship; neither is deleted.
+>
+> **Do not start v2.1a or v2.1b work without first clearing the architect review** (`docs/agent-teams-migration-plan-v2.1-review.md`). The review identifies two HIGH-severity concerns that should have a documented resolution path before implementation begins.
 
 ---
 
