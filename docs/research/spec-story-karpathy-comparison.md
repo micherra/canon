@@ -1,11 +1,11 @@
-# SpecStory + Karpathy Rant vs. Canon — Comparison
+# SpecStory + Karpathy LLM Wiki vs. Canon — Comparison
 
 **Sources:**
 1. SpecStory — https://specstory.com / https://github.com/specstoryai (landing page WebFetch returned 403; synthesized from WebSearch snippets and company description)
-2. Karpathy tweet — https://x.com/karpathy/status/2039805659525644595 (WebFetch 403, as expected for X). Content reconstructed from news/blog mirrors surfaced via WebSearch; actual tweet text not verified verbatim.
+2. Karpathy's LLM Wiki gist — https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f (fetched verbatim from the HTML gist page on 2026-04-20)
 
-**Date:** 2026-04-19
-**Purpose:** Catalog ideas from (a) SpecStory, a chat-capture + spec-driven-development tool for AI coding, and (b) Karpathy's "AI coding rant" distilled by Forrest Chang into a `CLAUDE.md`. Classify against Canon and surface adoption candidates.
+**Date:** 2026-04-19 (Karpathy section rewritten 2026-04-20 against the primary-source gist)
+**Purpose:** Catalog ideas from (a) SpecStory, a chat-capture + spec-driven-development tool for AI coding, and (b) Karpathy's "LLM Wiki" gist — an architectural pattern for LLM-maintained personal knowledge bases. Classify against Canon and surface adoption candidates.
 
 ---
 
@@ -31,54 +31,62 @@ SpecStory is a commercial tool (Jake/Sean/Greg, late 2024) that automatically **
 
 ---
 
-## Source 2 — Karpathy's LLM knowledge-base architecture (compiler analogy)
+## Source 2 — Karpathy's "LLM Wiki" gist
 
-**Article unreachable.** A second attempt was made against the MindStudio write-up (`https://www.mindstudio.ai/blog/karpathy-llm-knowledge-base-architecture-compiler-analogy`) which returned 403 on direct WebFetch; the `web.archive.org` mirror is blocked by the WebFetch allowlist. Combined with the earlier VentureBeat 403, no primary source for Karpathy's proposal has been fetched. The section below is retained as provisional reconstruction from secondary snippets and is **not verified** against Karpathy's actual KB/compiler-architecture proposal. The headline claim — a knowledge-base architecture, framed via a compiler analogy, that bypasses RAG — remains unaddressed below.
+### What it is
 
-### What it is (unverified)
+Karpathy proposes a **persistent, LLM-maintained personal wiki** as an alternative to RAG over raw documents. Instead of re-retrieving fragments at every query, the LLM incrementally builds and maintains an interlinked markdown knowledge base — "compiled once and then *kept current*, not re-derived on every query" — sitting between the user and their curated sources. The architecture is three layers (immutable raw sources, LLM-owned wiki pages, a `CLAUDE.md`/`AGENTS.md` schema file) plus three operations (ingest, query, lint), with `index.md` (content catalog) and `log.md` (chronological append-only record) as navigation aids.
 
-A short observational tweet from Karpathy listing recurring failure modes of LLM coding agents. Forrest Chang distilled it into a reusable `CLAUDE.md` ("andrej-karpathy-skills") that encodes four behavioral principles. The reconstructed failure modes (from mirror articles, not verified verbatim from the tweet):
-
-- **Wrong assumptions without checking** — agents infer instead of reading the code/docs
-- **Over-complication** — agents add speculative abstractions and features
-- **Drive-by edits to unrelated code** — side-effect changes outside the task scope
-- (A fourth behavioral principle is cited in coverage but not clearly named; likely about not fabricating APIs/ensuring grounding)
+Key verbatim framings: "Obsidian is the IDE; the LLM is the programmer; the wiki is the codebase." "The wiki is a persistent, compounding artifact." "The tedious part of maintaining a knowledge base is not the reading or the thinking — it's the bookkeeping."
 
 ### Idea inventory
 
-| # | Karpathy / Chang CLAUDE.md idea | Classification | Canon equivalent / gap |
+| # | Karpathy LLM Wiki idea | Classification | Canon equivalent / gap |
 |---|---|---|---|
-| 1 | Don't make assumptions — check the code/docs first | **Duplicate** | Canon's researcher runs before implementor in every medium+ flow; principle severity `rule` can enforce "no unverified claims"; file-context and KG injection ensure the implementor has ground truth. Orientation calls are metricized (`roadmap.md:10`). |
-| 2 | Don't over-complicate / no speculative abstractions | **Partial overlap** | This is a classic Canon `strong-opinion` shape (see principle counts in `CLAUDE.md` — 33 strong-opinions). Likely already encoded as a simplicity/YAGNI principle, but a named "scope discipline" principle may be worth adding explicitly if absent. |
-| 3 | Don't edit unrelated code (scope discipline) | **Partial overlap** | Canon tracks files-changed per workspace and has `file claims` + worktree isolation (`canon-reference.md:86, 120`). The reviewer catches out-of-scope changes. But there is no pre-write hook that *rejects* edits outside the declared task scope — it's a post-hoc review concern, not a runtime guardrail. |
-| 4 | Encode these rules into a `CLAUDE.md` that every agent reads | **Duplicate** | Canon's entire architecture is CLAUDE.md-per-directory plus principle injection via hooks (`hooks/principle-inject.sh`). More structured: severity levels, layer-specific matching, drift tracking. |
-| 5 | Treat LLM coding failure modes as engineering problems with written rules | **Duplicate** | The Canon principles library (54 principles across rules/strong-opinions/conventions) is exactly this, at industrial scale. |
-| 6 | Lightweight: one file, copy-paste, share publicly | **Non-fit** | Canon is a full harness (MCP server, state machine, worktrees, SQLite). The "one CLAUDE.md you paste" shape is architecturally incompatible with Canon, though Canon can consume such a file per-directory. |
-| 7 | "AI coding agent failure-mode catalog" as a reusable artifact | **Novel-ish** | Canon has principles but no curated "failure modes this principle prevents" cross-index. Agents see principles; they don't see "this rule exists because agents keep doing X." |
+| 1 | LLM builds a persistent, interlinked wiki from sources (bypassing RAG) | **Partial overlap** | Canon maintains scribe-synced `CLAUDE.md` per directory and a structured knowledge graph of the codebase, but there is no general-purpose wiki-maintainer agent that ingests external sources (articles, papers, transcripts) into an LLM-owned page collection. Canon's artifacts are task-scoped (plans, reviews, progress), not an accreting knowledge corpus. |
+| 2 | Three layers: immutable raw sources / LLM-owned wiki / schema file | **Partial overlap** | Canon has an analogous separation — source code (immutable-ish substrate), Canon-owned artifacts (`plans/`, `REVIEW.md`, drift), and `CLAUDE.md`/principles as the schema. But Canon's "wiki layer" is a set of task artifacts plus the KG; it is not a navigable cross-linked markdown corpus. |
+| 3 | Three operations: ingest, query, lint | **Partial overlap** | Canon has ingest-shaped activity (scribe syncs `CLAUDE.md` from diffs; KG rebuilds from source) and lint-shaped activity (drift reports, `get_compliance`, reviewer). Query is `semantic_search`/`graph_query`. But ingest-from-external-sources is absent, and there is no scheduled "lint the wiki" pass — Canon's drift is compliance-of-code, not consistency-across-pages. |
+| 4 | `index.md` (content catalog) + `log.md` (chronological append-only) as navigation | **Partial overlap** | Canon's `board.json` is a structured per-workspace state record and `progress.md` is a per-workspace chronological log. No repo-wide `index.md` catalog across workspaces; no append-only global `log.md` with a parseable `## [YYYY-MM-DD] type \| title` convention. agentkb's chronological chats store is closer to this than Canon is. |
+| 5 | Schema file (`CLAUDE.md`/`AGENTS.md`) that encodes wiki conventions and workflows | **Duplicate** | Canon is built around CLAUDE.md-per-directory plus principle injection hooks (`hooks/principle-inject.sh`). The shape is exactly this, just specialized to code-governance rather than knowledge-base conventions. |
+| 6 | "Good query answers can be filed back into the wiki as new pages" — explorations compound | **Novel** | Canon's `explore` flow produces a research brief but there is no standing convention for folding exploration outputs into a durable cross-queryable artifact. Results stay inside the workspace; they don't compound. |
+| 7 | Wiki-lint pass: contradictions, stale claims, orphan pages, missing cross-references | **Partial overlap** | Canon's drift report and `get_compliance` lint code-vs-principles. There is no analogous lint over Canon's own artifacts (`CLAUDE.md`s contradicting each other; stale plans; principles without backing examples). |
+| 8 | Git-backed markdown repo as the storage substrate | **Duplicate** | Canon's principles and artifacts are markdown in git; `.canon/` runtime is local. Same substrate. |
+| 9 | LLM-generated wiki is *owned* by the LLM — human curates sources and asks questions | **Partial overlap** | Canon's scribe owns `CLAUDE.md` sync and agents own their artifacts, but the human is still the primary author of principles and plans in practice. Karpathy's stance ("You read it; the LLM writes it") is more extreme than Canon's current division. |
+| 10 | Pattern is abstract / modular — copy the idea, your agent instantiates the specifics | **Non-fit** | Canon is a concrete harness with fixed state machines, hooks, and schemas. "Share the pattern, let the agent instantiate it" is orthogonal to Canon's shape, though Canon could *host* a wiki-maintainer flow as one more flow definition. |
+
+### Overlap with agentkb
+
+Karpathy's wiki architecture overlaps materially with **agentkb's four-store memory model** (see `docs/research/agentkb-pi-comparison.md`). Both treat an LLM-maintained markdown knowledge base as durable infrastructure between the user and raw inputs; both use plain markdown + git as the substrate; both rely on a chronological append-only log. The differences: agentkb partitions into four typed stores (Wiki / Chats / Communications / Skills) with per-store retrieval, while Karpathy's proposal is a single wiki with `index.md` as the retrieval primitive (and `qmd` as an optional hybrid search upgrade). agentkb's **consolidation workflow** (chats → wiki entries) is the operational analog of Karpathy's ingest + "file query answers back into the wiki" pattern. The adoption candidate below is deliberately scoped to pair with the consolidation workflow already called out in `agentkb-pi-comparison.md` Adoption #1, rather than duplicating it.
 
 ---
 
 ## Adoption Candidates
 
-### 1. Scope-enforcement pre-write hook (from Karpathy #3)
+### 1. Append-only chronological log with parseable prefix (from Karpathy #4)
 
-Canon tracks file claims and reviewer catches out-of-scope edits after the fact. A **pre-write hook** that checks `Edit`/`Write` targets against the workspace's declared affected-files set and warns (or blocks on `rule` severity) would move scope discipline from post-hoc review into runtime. Fits Canon's hook model (`hooks/principle-inject.sh` pattern). Cheap; high-value for Karpathy's most cited failure.
+Canon has per-workspace `progress.md` but no global `log.md` that records ingests, flow completions, principle additions, and lint passes across the whole project in chronological order. Adopting Karpathy's `## [YYYY-MM-DD] type | title` prefix convention (grep-parseable in one line) and writing to a repo-level `.canon/log.md` would give the learner, the guide, and humans a single timeline of "what happened here" without scanning each workspace. Pairs directly with agentkb's chronological chats store framing (`agentkb-pi-comparison.md` Adoption #2).
 
-**Fit:** Good. Hook-layer addition, orchestrator untouched. Pairs with existing file-claim infrastructure.
+**Fit:** Good. Additive; writes occur at flow transitions and principle events. Orchestrator untouched beyond a single append at `complete_flow`.
 
-### 2. Failure-mode annotations on principles (from Karpathy #7)
+### 2. Wiki-lint pass over Canon's own artifacts (from Karpathy #7)
 
-Each principle could carry an optional `mitigates:` field listing the LLM failure modes it addresses ("over-abstraction", "fabricated API", "unverified assumption"). The `get_principles` tool could surface this so agents see *why* a rule exists, and the learner could cluster principles by failure mode they prevent. Makes the principle library legible as a failure-mode defense, not just a style guide.
+Canon lints code against principles but not its own artifacts against each other. A new lint pass — contradictions between `CLAUDE.md`s, orphan principles with no usages, stale plans referencing renamed files, principles without backing examples — would apply Karpathy's wiki-health operation to Canon's own meta-layer. Slots into the diagnostics bounded context alongside `get_drift_report`.
 
-**Fit:** Good. Metadata extension; no behavior change required. Slots into the principle frontmatter schema and the `list_principles` output.
+**Fit:** Good. Reuses the scribe and learner; surfaces via a new `get_artifact_drift` tool or an extension to `get_drift_report`.
 
-### 3. Transcript-to-spec extractor (from SpecStory #8 + roadmap Item 28)
+### 3. Compounding exploration — file `explore` outputs into a durable artifact (from Karpathy #6)
+
+Karpathy's "good query answers can be filed back into the wiki" insight maps cleanly onto Canon's `explore` flow: today the research brief lives inside the workspace and doesn't accrete anywhere. A convention (or a scribe step) that promotes notable `explore` findings into a project-level `docs/notes/` or equivalent — cross-referenced by topic — would make Canon's explorations compound over time instead of scattering. Overlaps with agentkb's consolidation workflow (`agentkb-pi-comparison.md` Adoption #1); implement the two together.
+
+**Fit:** Good. Additive scribe responsibility; no orchestrator change.
+
+### 4. Transcript-to-spec extractor (from SpecStory #8 + roadmap Item 28)
 
 SpecStory's "chats as durable intent" collides cleanly with Canon roadmap **Item 28 (Idea-to-Spec Flow)**. Canon already records agent transcripts via `get_transcript`; what's missing is an extractor that mines a conversational `explore` or `chat` session and emits a structured spec artifact usable as input to `feature`/`epic`. This validates and sharpens Item 28 — the spec output format matters, and treating transcripts as the raw material is the right primitive.
 
 **Fit:** Good. Reshapes Item 28 rather than adding new scope. Uses existing transcript storage; adds a new artifact template + a spec-synthesis agent role.
 
-### 4. Cross-workspace transcript search (from SpecStory #3)
+### 5. Cross-workspace transcript search (from SpecStory #3)
 
 `get_transcript` reads one state's transcript. A cross-workspace full-text search over historical agent transcripts would let the learner find recurring patterns ("every time we touch the migration module, the researcher asks about X") and let humans retrieve "what did we decide about Y last month?" without re-reading plans. Complements roadmap **Item 20 (Workflow Pattern Mining)** — patterns are more findable with searchable transcripts than by scanning structured metrics alone.
 
@@ -96,6 +104,9 @@ SpecStory's "chats as durable intent" collides cleanly with Canon roadmap **Item
 | **Treating full raw chat transcripts as the primary artifact** | Canon's artifacts are structured (plans, reviews, progress, principles). Raw dialogue is secondary data; structured extractions (spec, decision record, principle candidate) are what agents and humans actually consume. The Item 28 reshape above uses transcripts as *input* to synthesis — not as the output. |
 | **Public chat-as-social-artifact sharing** | SpecStory frames transcripts as shareable public artifacts. Canon's transcripts can leak credentials, internal code, and decisions not meant for external consumption; no public-sharing affordance is appropriate. |
 | **Spec-Driven Development as the only entry point** | Canon's flow library deliberately spans the size spectrum (fast-path → epic). Forcing a comprehensive upfront spec on every task would regress the fast-path's whole reason for existing. Item 28 adds SDD as an *option* for the "I don't know what I want" case, not as a default. |
+| **Karpathy's wiki as a replacement for Canon's principle/KG layer** | Karpathy's wiki is an evolving free-form knowledge corpus owned by the LLM; Canon's principles are prescriptive, drift-tracked, and compliance-scored. Swapping in a generic wiki store would lose severity levels, the compliance machinery, and the reviewer's enforcement surface. A wiki-maintainer *flow* is additive; a wiki-as-substrate is not. |
+| **"LLM writes everything, human only curates sources"** | Karpathy's extreme authorship split fits a personal knowledge base where style and taste are local. Canon's principles are shared team infrastructure — humans must author them to retain accountability for what the agents enforce. Automated principle authoring is a `canon-writer` *draft* step, not an ownership shift. |
+| **Obsidian as the primary reading surface** | Canon's reading surfaces are Claude Code, MCP apps, and the repo file tree. Depending on Obsidian would add a second tool to the loop without replacing anything Canon already ships. |
 
 ---
 
@@ -103,6 +114,6 @@ SpecStory's "chats as durable intent" collides cleanly with Canon roadmap **Item
 
 **SpecStory** and Canon agree on "intent is durable," but SpecStory builds it around raw chat capture across IDEs while Canon builds it around structured artifacts (plans, principles, drift, scribe-synced `CLAUDE.md`s). The productive overlap is exactly the Idea-to-Spec flow (roadmap Item 28) — SpecStory validates that taking conversation seriously as input to specs is worth doing, and suggests the transcript as the right raw material. Cross-tool aggregation and public chat sharing are non-fits.
 
-**Karpathy's rant** is a compressed version of what Canon's principles library already does: codify LLM failure modes as written rules the agents read. The two ideas worth stealing are (a) a **runtime scope-enforcement hook** that catches drive-by edits before they happen (Canon currently only catches them in review), and (b) **failure-mode annotations** on principles so the rules are legible as "why this exists," not just "what to do." Both are cheap additions that sharpen Canon's existing framing.
+**Karpathy's LLM Wiki** is an architectural pattern for LLM-maintained personal knowledge bases — explicitly framed as an alternative to RAG-over-raw-documents. It overlaps substantially with agentkb's four-store memory model (chronological log, markdown substrate, LLM-owned consolidation); the two should be read together. Three ideas transfer cleanly: (a) a **repo-level `log.md`** with Karpathy's parseable `## [date] type | title` convention as a single project timeline; (b) a **wiki-lint pass** applied to Canon's own artifacts (contradictions between CLAUDE.md's, orphan principles, stale plans) mirroring `get_drift_report` at the meta-layer; and (c) **compounding explorations** — promoting notable `explore` outputs into a durable cross-referenced corpus instead of letting them die in the workspace. Karpathy's wiki as a *substrate replacement* for principles is a non-fit; his `CLAUDE.md`-as-schema framing is already how Canon works.
 
-Everything else is either already covered (researcher-before-implementor, CLAUDE.md per directory, local-first) or architecturally incompatible (one-file harness, cross-IDE SaaS).
+Everything else is either already covered (markdown + git substrate, CLAUDE.md schema, local-first) or architecturally incompatible (LLM as sole author, Obsidian as the reading surface, cross-IDE SaaS, one-file harness).
