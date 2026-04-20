@@ -242,14 +242,16 @@ This is **more resilient** than the legacy pipeline:
 - Legacy: one pipeline → one failure point → silent context loss
 - New: lead composition + agent self-serve + preloaded skills → three independent channels, any one sufficient
 
-### 2.6 Why this is simpler
+### 2.8 Why this is simpler (amended for v2.1)
 
 1. **One orchestrator: Claude.** No custom state machine, no custom scheduler, no transition resolver. Claude reads guidance and uses judgment — the thing it's best at.
 2. **MCP tools as primitives.** Each Canon capability is a standalone MCP tool call, not a pipeline stage wired into a runtime. The lead composes them as needed, not in a fixed 13-stage sequence.
 3. **Native coordination.** Subagents for sequential work, agent teams for parallel work. No custom wave plumbing, no custom message channel, no custom HITL vocabulary.
 4. **Canon's value is untouched.** Principles, drift, KG, artifacts, metrics, commit provenance, file claims — all preserved as MCP tools. What's deleted is only the scheduling machinery.
 5. **Self-healing context.** Agents self-serve missing context via MCP tools. Skills preload critical rules. Three independent context channels vs. one pipeline.
-5. **Agent definitions work as-is.** All 11 agent defs are valid subagent and teammate types. The `tools` allowlist is honored in both paths per [Claude Code docs](https://code.claude.com/docs/en/agent-teams).
+6. **Agent definitions work as-is.** All 11 agent defs are valid subagent and teammate types. The `tools` allowlist is honored in both paths.
+7. **Canon's whole stack improves from every interaction** (v2.1 addition). The learning system is one mechanism — observation → pattern → proposal → refinement — applied across every Canon artifact type. Principles, conventions, synthesis skill, planning brief skill, and templates are the five in-scope v2.1 refinement targets; the mechanism is uniform; the learner curates weekly (see §3).
+8. **Runbooks as data, not files** (v2.1 addition). v2's 5 static runbook files are replaced by 1 vocabulary file + 2 skills; runbooks are synthesized per plan by `canon-planner`. Plan quality becomes learnable where static runbooks couldn't learn (see §5).
 
 ### 2.7 Orchestration journal (the lead's checklist)
 
