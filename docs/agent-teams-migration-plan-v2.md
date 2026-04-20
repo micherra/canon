@@ -253,70 +253,84 @@ This is **more resilient** than the legacy pipeline:
 7. **Canon's whole stack improves from every interaction** (v2.1 addition). The learning system is one mechanism — observation → pattern → proposal → refinement — applied across every Canon artifact type. Principles, conventions, synthesis skill, planning brief skill, and templates are the five in-scope v2.1 refinement targets; the mechanism is uniform; the learner curates weekly (see §3).
 8. **Runbooks as data, not files** (v2.1 addition). v2's 5 static runbook files are replaced by 1 vocabulary file + 2 skills; runbooks are synthesized per plan by `canon-planner`. Plan quality becomes learnable where static runbooks couldn't learn (see §5).
 
-### 2.7 Orchestration journal (the lead's checklist)
+### 2.9 Orchestration journal (the lead's checklist; v2.1 extensions)
 
-CLAUDE.md guidance alone is prompt engineering — Claude reads it, usually follows it, sometimes doesn't. An earlier Canon iteration tried a separate orchestrator agent, but Claude didn't call it reliably. The solution is neither prose nor a separate agent: it's a **lightweight MCP tool that acts as the lead's checklist**.
+CLAUDE.md guidance alone is prompt engineering — Claude reads it, usually follows it, sometimes doesn't. The solution is neither prose nor a separate agent: it's a **lightweight MCP tool that acts as the lead's checklist**.
 
-The orchestration journal is ~50–80 lines of TypeScript. It provides two MCP tools:
+The orchestration journal provides two MCP tools:
 
 ```
-log_step({ workspace, step_id, agent_type, artifacts_expected, mcp_tools_called })
-verify_completion({ workspace }) → { steps_logged, steps_missing, artifacts_missing }
+log_step({ workspace, step_id, agent_type, artifacts_expected, mcp_tools_called, domain_skills_loaded, outcome })
+verify_completion({ workspace }) → { steps_logged, steps_missing, artifacts_missing, flow_outcome }
 ```
 
 **How it works:**
 
-1. **Flow start:** The lead reads the runbook, calls `init_workspace`, then calls `log_step` for each step it plans to execute. This creates the checklist from the runbook.
-2. **Before each spawn:** The lead calls `log_step` with `status: "started"` and the expected artifacts. This is a natural pre-spawn step — CLAUDE.md instructs it, and the MCP tool schema validates the input.
-3. **After each spawn:** The lead calls `log_step` with `status: "completed"` and the actual artifacts produced. If the artifact is missing, the lead sees the gap immediately.
-4. **Flow end:** The completion verification hook calls `verify_completion`. If any step was started but not completed, or any expected artifact is missing, the hook exits 2 and blocks the lead from declaring done.
+1. **Flow start:** Lead reads the synthesized runbook and calls `log_step` for each planned step. Creates the checklist.
+2. **Before each spawn:** `log_step` with `status: "started"` plus expected artifacts.
+3. **After each spawn:** `log_step` with `status: "completed"` plus actual artifacts.
+4. **Skipped steps:** `log_step` with `status: "skipped"` plus reason (from the synthesized `skip_when`).
+5. **Flow end:** `completion-verify.sh` hook calls `verify_completion`. Blocks the lead from declaring done if any step is missing or any expected artifact is missing.
+6. **Snapshot** (v2.1b addition): after `verify_completion` clears, the hook calls `snapshot_workspace({ workspace_id })` which materializes the workspace into `lifecycle_workspace_snapshots`. Workspace can then be torn down.
+
+**v2.1 extensions to the journal:**
+
+- **`domain_skills_loaded` field** — captures which skills the agent loaded per step. Enables skill-effectiveness analyses (learner input; see §3).
+- **`outcome` field** — typed per-step outcome (review verdict, fix iterations, test pass rate). Feeds Phase 2 calibration.
+- **Snapshot integration** — `completion-verify.sh` extends to invoke `snapshot_workspace` after `verify_completion` clears.
 
 **What this provides beyond CLAUDE.md:**
 
 | Property | CLAUDE.md alone | With journal |
 |----------|----------------|-------------|
-| Audit trail | None — conversation compacts away | Structured log in workspace, survives compaction |
+| Audit trail | None — conversation compacts away | Structured log in workspace + lifecycle DB, survives compaction and workspace teardown |
 | Completion enforcement | Soft — lead decides it's done | Hard — hook calls `verify_completion`, blocks if incomplete |
-| Skipped step detection | None unless human notices | Journal shows logged vs. completed steps |
-| Post-hoc analysis | Read the conversation (if available) | Read the journal (always available, structured) |
-| MCP composition tracking | None | `mcp_tools_called` field records which tools the lead called per step |
+| Skipped step detection | None unless human notices | Journal shows logged vs. completed vs. skipped |
+| Post-hoc analysis | Read the conversation (if available) | Query `lifecycle_workspace_snapshots`; structured, always available |
+| Skill-effectiveness tracking (v2.1) | None | `domain_skills_loaded` correlated with `outcome` → learner input |
 
 **What this is NOT:**
 - Not a state machine. No transition logic, no forced ordering, no "next state" resolution.
 - Not scheduling. The lead still decides what to do next based on judgment.
-- Not blocking at step boundaries. The lead can skip steps if justified — the journal just records that it did.
-- Not a large addition. ~50–80 lines of TypeScript, one new MCP tool registration, one workspace JSON file.
+- Not blocking at step boundaries. The lead can skip steps if justified — the journal records the skip.
 
 The journal is to the orchestrator what a task list is to an agent team: a shared record of intent and progress that hooks can verify.
 
-### 2.8 Enforcement model (defense-in-depth)
+### 2.10 Enforcement model — defense-in-depth (amended for v2.1)
 
-The state machine provided determinism through a single hard enforcement layer. The new model replaces it with seven layers, each covering different guarantees:
+The state machine provided determinism through a single hard enforcement layer. v2.1 replaces it with **eight** layers (v2 had seven; v2.1 adds L4 as the PreToolUse hook backstop):
 
 | Layer | Mechanism | Type | What it guarantees |
 |-------|-----------|------|-------------------|
-| 1 | CLAUDE.md + runbooks | Soft | Step ordering, MCP tool composition, dispatch decisions |
+| 1 | CLAUDE.md + vocabulary + synthesis skill | Soft | Step ordering, MCP tool composition, dispatch decisions, **per-message intent re-classification** (v2.1 L1 addition) |
 | 2 | Skills preloading | Medium | Critical rules and domain primers always in agent context |
-| 3 | Orchestration journal (`log_step` / `verify_completion`) | Medium-hard | Audit trail of steps executed; completion hook blocks if steps missing |
+| 3 | Orchestration journal (`log_step` / `verify_completion`) | Medium-hard | Audit trail of steps executed, skills loaded, per-step outcomes; completion hook blocks if steps missing |
 | 4 | Agent definitions (`tools`, `maxTurns`, `permissionMode`) | Hard | Tool access restrictions, effort budgets, write permissions |
-| 5 | Hooks (`TaskCompleted`, `PostCommit`, completion verification) | Hard | Artifact existence, commit trailers, completion cleanup |
-| 6 | MCP tool contracts (schema validation) | Hard | Input/output shapes for `update_board`, `record_agent_metrics`, `write_*` |
-| 7 | Workspace state (filesystem) | Hard | Artifacts on disk at known paths, auditable post-hoc |
+| 5 | **`canon-workspace-check.sh` PreToolUse hook (v2.1a L4 addition)** | Hard | Blocks `Edit` / `Write` / `Bash`-that-modifies-code when no active Canon workspace exists for the current flow. Backstops L1 against intent-misclassification drift. |
+| 6 | Hooks (`TaskCompleted`, `PostCommit`, `completion-verify.sh`) | Hard | Artifact existence, commit trailers, completion cleanup, lifecycle snapshot |
+| 7 | MCP tool contracts (schema validation) | Hard | Input/output shapes for `update_board`, `record_agent_metrics`, `write_*`, `snapshot_workspace` (v2.1b) |
+| 8 | Workspace state + lifecycle DB | Hard | Artifacts on disk at known paths while workspace exists; structured record in lifecycle DB surviving workspace cleanup |
 
-**Plus self-healing context (§2.5):** if the lead misses a composition step, agents self-serve via MCP.
+**Plus self-healing context (§2.7):** if the lead misses a composition step, agents self-serve via MCP.
 
-**Post-subagent artifact check (in CLAUDE.md guidance):** After each subagent returns, the lead verifies expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. This compensates for the lack of hook-based enforcement on subagents (`TaskCompleted` and `TeammateIdle` hooks only apply to agent teams teammates, not subagents).
+**Post-subagent artifact check (in CLAUDE.md guidance):** After each subagent returns, the lead verifies expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Compensates for the lack of hook-based enforcement on subagents (`TaskCompleted` and `TeammateIdle` hooks apply only to agent teams teammates, not subagents).
 
-**Completion verification hook:** Calls `verify_completion` from the orchestration journal. Blocks the lead from declaring done if:
+**Completion verification hook** (`completion-verify.sh`): calls `verify_completion` + then `snapshot_workspace` (v2.1b addition). Blocks the lead from declaring done if:
 - Any step was logged as "started" but not "completed"
 - Any expected artifact is missing from disk
 - Board state is not "complete"
 - Claims are not released
+- Snapshot fails (v2.1b)
+
+**Canon-bypass check hook** (`canon-workspace-check.sh`, v2.1a L4 addition): blocks `Edit` / `Write` / `Bash` code-modification when no active Canon workspace exists for the current flow. Prevents Claude from drifting out of Canon during session transitions (e.g., chat/question session pivoting to build request, lead continuing with native tools rather than re-routing through planner).
+
+> **Implementation note.** The architect review flags L4's predicate as needing a principled allowlist (`.gitignore`-based) and an intent-routing expansion so that `principle`, `learn`, and `docs` intents also create workspaces. Both items must be resolved before v2.1a ships L4. See `docs/agent-teams-migration-plan-v2.1-review.md` §4.1 HIGH-1.
 
 **What's genuinely weaker and accepted:**
 - Step ordering is not enforced — Claude may reorder steps. Accepted as a feature.
-- Context composition quality varies — mitigated by agent self-serve (§2.5) and skills (layer 2).
+- Context composition quality varies — mitigated by agent self-serve (§2.7) and skills (layer 2).
 - The lead can skip `log_step` calls entirely — but CLAUDE.md instructs it, the MCP tool is in its tools list, and the completion hook catches the gap at the end.
+- Confidence signals may be miscalibrated initially (LLM overconfidence bias) — mitigations in §7.4; learner calibration in v2.2.
 
 ### 2.7 Platform capabilities (per Claude Code documentation)
 
