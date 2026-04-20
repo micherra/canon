@@ -459,6 +459,100 @@ Cross-target analyses against the deferred targets (agent defs, vocabulary, etc.
 
 ---
 
+## 4. Observation mechanism — hybrid structured tags + prose
+
+The learning system needs observations captured at flow time, stored durably (§8), and queryable cross-run. Two viable approaches existed: everything upfront-structured, or everything post-hoc extracted. Neither is ideal.
+
+**Decision: hybrid.** Specialist agents produce their normal prose artifacts unchanged. They add lightweight **structured tags** in frontmatter for the highest-value signals. The learner reads both — tags are high-confidence signals consumed directly; prose is fallback for richer analysis when needed.
+
+### 4.1 Why hybrid
+
+- **Upfront-only structured:** rigid; heavy authoring burden; schema changes cascade to every agent. Over-engineers the observation layer before we know what's useful.
+- **Post-hoc-only extraction:** extraction quality varies; LLM token cost per flow; latency. Spends tokens extracting what agents could have emitted directly.
+- **Hybrid:** low authoring burden (small frontmatter additions); high-value signals are structured and direct; prose stays natural for deeper analysis.
+
+### 4.2 First-pass structured tags per artifact
+
+Low-burden additions to existing templates. Agents already produce this information in prose; promoting the most-useful bits to structured fields is cheap.
+
+| Artifact | Structured frontmatter fields |
+|----------|------------------------------|
+| Planning brief | `confidence_signals[]`, `request_shape_tag`, `alternatives_considered` count |
+| Synthesized runbook | `vocabulary_version`; per-step schema in §5.2 |
+| Research finding | `dimensions_explored[]`, `risks_surfaced[]`, `confidence_per_dimension{}` |
+| Design decision | `decision_id`, `options_considered` count, `chosen_option_tag`, `rationale_tags[]` |
+| Task plan | `task_id`, `dependencies[]`, `file_count`, `principle_ids[]` |
+| Implementation summary | `compliance_declared_for: [principle_id]`, `justified_deviations: [{principle_id, reason_short}]` (`memory_cited: [item_id]` deferred to v2.2 alongside memory work) |
+| Test report | `tests_added` count, `coverage_delta`, `tests_paired_with_principle_ids[]` |
+| Review finding | `principle_id` per finding (already in drift-db `violations` table since v1), `severity`, `file_path` |
+| Fix summary | `cause`, `root_cause_tag`, `upstream_step_id` |
+| HITL event | `event_type`, `posture`, `outcome`, `phase`, `step_id_affected` (often null) |
+
+> **Planning brief note.** v2.1 §7.1 includes an aggregate `confidence: 0.0-1.0` scalar alongside `confidence_signals[]` in the planning brief frontmatter. Per architect review HIGH-2 (see `docs/agent-teams-migration-plan-v2.1-review.md` §4.1), the user-facing aggregate scalar should be dropped in favor of per-signal display only; the aggregate remains as internal planner state and as a lifecycle-DB column for v2.2 calibration. The tag row above reflects that adjustment.
+
+**What's new vs. what already exists** (per v2.1 scope inspection):
+
+- **Review finding `principle_id`** — already exists in drift-db `violations` table (indexed since v1). v2.1b work is *ensuring reviewer consistently populates* the field, not schema addition. May require review-template or reviewer-agent prompt updates.
+- **Fix summary `cause` / `root_cause_tag`** — genuinely new. Fix summaries today live as workspace markdown with unstructured prose.
+- **Implementation summary `justified_deviations[]`** — genuinely new. Prose today; structured frontmatter in v2.1b.
+
+v2.1b scope (the three highest-value tags) = the two genuinely new ones above plus ensuring `principle_id` is populated. Other tags land in v2.2.
+
+### 4.3 Tag discipline — rules the indexer follows
+
+- **Tags are optional.** Missing fields don't fail ingestion. Indexer tolerates absence within the declared schema; learner treats missing as "no signal from this field" rather than error.
+- **Schema is closed** (per §4.6 resolution). Agents emitting fields outside §4.2's list have those fields *dropped* by the indexer; no `extra_tags` JSON catch-all. Schema evolution requires a versioned migration, not per-flow accretion.
+- **Prose stays authoritative.** When a tag and prose disagree, prose wins for factual questions; tag wins for aggregate analysis. (The learner flags tag-prose disagreement as a data-quality signal.)
+- **Secret / PII scrubbing.** Tag values pass through a basic secret-pattern match before persistence. Free-text short-summary fields are bounded (e.g., 280 chars).
+
+### 4.4 What about richer analysis the tags don't capture?
+
+Prose extraction remains available for the learner when it wants richer context than tags provide. E.g., if the learner detects a pattern in design-decision outcomes but wants to understand *why* architects chose certain options, it reads the `rationale_tags[]` tag first, falls back to scanning the prose body of the decision artifact if the tags aren't sufficient.
+
+This is a small number of LLM calls per week (at learner cadence), not per flow. Avoids the token cost of per-flow extraction while preserving the ability to dig deeper when analysis requires it.
+
+### 4.5 HITL event categorization
+
+The event-type enum is expanded from v2's implicit list of five breakpoint shapes to nine explicit event types plus a phase dimension:
+
+```yaml
+event_type: approval | clarification | redirect | reject | abort | iterate | modify | escalate | consult
+phase: synthesis | execution | post_execution
+```
+
+- **`approval`** — user approves the runbook or a step posture
+- **`clarification`** — user provides clarifying info
+- **`redirect`** — user redirects to a different approach
+- **`reject`** — user rejects the proposal
+- **`abort`** — user aborts the flow
+- **`iterate`** — user asks for another iteration (synthesis-phase only)
+- **`modify`** — user supplies their own content (distinct from redirect; overrides planner output)
+- **`escalate`** — user asks for a different specialist
+- **`consult`** — user triggers an advisory subagent
+
+Phase distinguishes *when* in the flow lifecycle the event occurred: `synthesis` (during planner-user iteration), `execution` (during runbook execution after approval), `post_execution` (after all steps complete). The same event type can mean different things at different phases. A `redirect` during synthesis is "steer the plan"; a `redirect` during execution is "halt and adjust mid-flow." The analytic signal is `event_type × phase`.
+
+### 4.6 Schema policy — closed for v2.1
+
+The structured-tag schema is closed for v2.1. Fields enumerated in §4.2 are the complete list. Agents that emit fields outside this list have those fields **dropped** by the indexer; nothing is silently captured in a generic `extra_tags` JSON blob.
+
+**Rationale:**
+
+- We don't yet have signal on which extra fields agents would invent. Designing a promotion path before any data exists is premature optimization.
+- SQLite JSON queryability is decent but real query performance comes from indexed columns; an open `extra_tags` blob accumulates unstructured data that never gets the column treatment unless explicitly promoted.
+- A closed schema forces every additional signal through a deliberate schema-change review, which is a healthy forcing function.
+
+**How to evolve the schema** (when a new field is wanted):
+
+1. Propose a schema change as a versioned migration against `drift-schema.ts`
+2. Update the relevant template + agent prompt
+3. Migrate existing data if applicable
+4. Same review cadence as Canon principle changes
+
+**Future possibility (v2.2+, not in v2.1):** the learner could analyze patterns in agent prose outputs, detect recurring fields agents *would* like to emit, and propose schema additions automatically. This is a natural extension of the learning system but explicitly out of scope for v2.1.
+
+---
+
 ## 9. Integration Disposition Table
 
 Every one of the 28 gaps from the integration audit must map to a concrete replacement or an explicit deprecation. The "v2 home" column shows where each integration lives in the new architecture. Dispositions: **native** (Claude or Claude Code handles it), **mcp** (Canon MCP tool stays as-is), **hook** (enforcement via Claude Code hooks), **guidance** (CLAUDE.md / runbook instructions), **deprecate** (intentionally dropped with rationale).
