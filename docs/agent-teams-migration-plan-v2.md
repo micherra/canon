@@ -1331,47 +1331,42 @@ v2.1 promotes P4 from roadmap to active Phase 2 validation work. P5 is explicitl
 
 ## 12. Validation Strategy
 
-### How each phase proves it is complete
+Validation is defined across two sections:
 
-**Phase 1 (Orchestration Guidance):** purely additive — validated by review, not testing.
+- **Phase-by-phase deliverables** — §10.5 (Phase 2 deliverables table with pass criteria for synthesis consistency, iterate-until-approved quality, cold-start vs. steady-state friction, learner baseline, confidence calibration, HIGH-severity integration coverage, error handling, maxTurns exhaustion, mid-flow resume, vocabulary version resume).
+- **Gates controlling ratification and phase transitions** — §15 (Ratification gates A / B / C).
 
-- Human review of all 5 runbooks against their legacy flow counterparts. Each runbook must cover every state in its legacy flow, including HITL gates, wave annotations, and expected artifacts.
-- Human review of CLAUDE.md orchestration section. Must cover: MCP tool composition, dispatch framework (subagent vs team), HITL patterns, post-step effects, completion checklist, commit provenance convention.
-- `npm run build` and `npm test` pass with zero changes to existing code (Phase 1 adds files only).
-- Manual spot check: with flag `off`, run one legacy flow and confirm identical behavior.
+This section summarizes how each phase proves it is complete and documents the rollback path.
 
-**Phase 2 (Validation):** functional equivalence testing.
+### 12.1 How each phase proves it is complete
 
-| Test | Method | Pass criteria |
-|------|--------|--------------|
-| **Fast-path equivalence** | Run the same bug-fix task with flag off (legacy) and flag on (Claude-as-lead). Compare artifact set. | Both runs produce: research synthesis, plan index, implementation summary, review verdict. Structure and coverage are comparable. |
-| **Feature flow with waves** | Run a 4–6 file feature with flag on. Use agent teams for the implementation wave. | Shared task list created. Teammates claim tasks without conflicts. Worktrees created and merged. All artifacts produced. `TaskCompleted` hooks fire. |
-| **Agent teams MCP access** | During the feature flow, verify teammates call Canon MCP tools. | Teammates successfully call `get_principles`, `record_agent_metrics`. Principle-grounded output observed. |
-| **HITL gates** | Run a flow that requires architect approval. | Lead presents the plan to the user. Plan approval mode activates for the teammate. User approves. Implementation proceeds. |
-| **Regression (flag off)** | Run 3 different flow types with flag off. | Zero divergence from baseline behavior. Artifacts byte-for-byte identical if same inputs. |
-| **Consistency (flag on)** | Run fast-path 3 times on the same task with flag on. | All runs produce the same artifact types with comparable quality. No structural omissions across runs. |
-| **Context pressure** | Run a full feature flow end-to-end (6+ spawns: research, architect, implement, review, fix, re-review). | Lead maintains orchestration quality through the final step. No context-related degradation (forgotten MCP calls, missing effects). |
-| **Completion effects** | After any flow with flag on, verify post-completion. | `update_board complete_flow` called. File claims released. Agent metrics recorded. Learn gate evaluated if applicable. |
+**v2 Phase 1 (Gate A, §15.1):** agent roster has `canon-planner` and `canon-engineer`; both validated in ≥ 3 runs under `CANON_AGENT_TEAMS_MODE=on`; all 5 hooks registered; skill preloading validated for ≥ 3 agent types; `npm run build` and `npm test` pass.
 
-**Phase 3 (Deletion):** structural integrity.
+**v2.1a (§10.2 exit):** planner synthesizes working runbooks per the synthesis contract; L1 + L4 observed to prevent intent misclassification; 5 distinct request types processed end-to-end; cold-start friction spike passes (review MEDIUM-6).
 
-- `npm run build` passes with zero TypeScript errors after all deletions.
-- `npm test` passes. Expected test count drops by ~65 test files. No unexpected test failures.
-- `grep -r` confirms zero remaining imports to deleted module paths across the entire codebase.
-- `register-orchestration.ts` compiles and registers only kept tools.
-- 10 successful flows post-deletion (at least 1 per flow type) confirming no runtime regressions.
+**v2.1b (Gate B, §15.2):** ≥ 1 accepted principle-refinement proposal produced from real lifecycle data; learning loop observably closes; schema migration clean and reversible.
 
-### Rollback path
+**v2.2 (per-expansion):** each new refinement target lands with a completed observation → refinement cycle before the next is enabled. Review MEDIUM-1 quality criterion applies to the v2.2 entry gate.
 
-**Phase 1:** Revert the CLAUDE.md and runbook additions. No code was changed.
+**Phase 2 overall (§10.5):** all 15 deliverables pass per-criterion — synthesis consistency, iterate-until-approved quality, cold-start vs. steady-state friction, learner baseline, confidence calibration (per-signal, deterministic-first), regression, integration coverage, error handling, maxTurns exhaustion, mid-flow resume, vocabulary version resume, agent-teams MCP, skill preloading, feature equivalence, epic end-to-end.
 
-**Phase 2:** Flip the feature flag back to `off`. Legacy path runs unchanged.
+**Phase 3 (unchanged from v2):** structural integrity — `npm run build` passes with zero TypeScript errors; `npm test` passes (expected test count drops by ~65 files); zero remaining imports to deleted module paths; `register-orchestration.ts` registers only kept tools; 10 successful flows post-deletion confirming no runtime regressions.
 
-**Phase 3a (flag flip):** Flip the flag back to `off`. Legacy code is still present.
+### 12.2 Rollback path
+
+**v2.1a:** revert the CLAUDE.md amendments + remove `canon-workspace-check.sh` (L4) + revert the `canon-planner` agent-body changes. v2 Phase 1 behavior restored.
+
+**v2.1b:** drop `lifecycle_workspace_snapshots` table + revert `snapshot_workspace` MCP tool + remove the three structured tags + revert the learner's principle-refinement dimension. v2.1a stays.
+
+**v2.2:** per-expansion rollback; each v2.2 addition should be independently reversible.
+
+**Phase 2 flag:** `CANON_AGENT_TEAMS_MODE=off` returns to legacy `drive_flow` path throughout all of v2.1 (gated the same way as v2).
+
+**Phase 3a (flag flip):** flip `CANON_AGENT_TEAMS_MODE` default back to `off`. Legacy code is still present.
 
 **Phase 3b (deletion):** `git revert` the deletion commit(s). This is the point of no easy return — all deletion commits must be atomic per-directory to enable targeted reverts. Alternatively, the legacy code exists on main's git history and can be cherry-picked back.
 
-**Phase 3c (flag removal):** No rollback needed — the flag is gone because the legacy path is gone.
+**Phase 3c (flag removal):** no rollback needed — the flag is gone because the legacy path is gone.
 
 ---
 
