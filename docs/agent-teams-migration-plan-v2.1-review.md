@@ -297,9 +297,9 @@ v2.1 remains the architectural document; v2 becomes the ratifiable executable pl
 | Integration preservation | No reopening; additions layer above v2's 27 dispositions |
 | Phasing | Disciplined; Gate A is the correct blocker |
 | Ratification | 3 gates concrete; Gate B runnable today |
-| HIGH-severity blockers | 3 (L4 blast radius, friction untested, confidence uncalibrated) |
-| MEDIUM concerns | 5 |
+| HIGH-severity blockers | 2 (L4 hook + intent-routing expansion; user-facing aggregate confidence scalar) |
+| MEDIUM concerns | 6 |
 | LOW / nits | 5 |
 | Rewrite scope for v2 | Preserve 4 sections, replace 3, add 7, restructure phases |
 
-Proceed with v2 rewrite once the three HIGH-severity concerns have a documented resolution path in v2.1 or are accepted as ship-with residual risks with explicit owner + mitigation plan.
+Proceed with v2 rewrite once the two HIGH-severity concerns have a documented resolution path in v2.1 or are accepted as ship-with residual risks with explicit owner + mitigation plan.
