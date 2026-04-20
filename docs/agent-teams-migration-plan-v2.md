@@ -332,38 +332,38 @@ The state machine provided determinism through a single hard enforcement layer. 
 - The lead can skip `log_step` calls entirely — but CLAUDE.md instructs it, the MCP tool is in its tools list, and the completion hook catches the gap at the end.
 - Confidence signals may be miscalibrated initially (LLM overconfidence bias) — mitigations in §7.4; learner calibration in v2.2.
 
-### 2.7 Platform capabilities (per Claude Code documentation)
+### 2.11 Platform capabilities (per Claude Code documentation)
 
-This section replaces an earlier experimental validation section. The original 18 experiments were run using the Agent tool in a web environment where Canon's MCP server was not connected. This produced a flawed conclusion that subagents lacked MCP access — corrected twice after reviewing the actual documentation. Rather than present environment-limited experiments as evidence, this section cites the authoritative Claude Code documentation directly.
+This section cites the authoritative Claude Code documentation. Both subagents and teammates have full Canon MCP access when properly configured.
 
 #### Subagent capabilities ([docs](https://code.claude.com/docs/en/sub-agents))
 
 | Capability | Documentation quote / summary | Canon application |
 |-----------|------------------------------|-------------------|
 | **MCP inheritance** | "By default, subagents inherit all tools from the main conversation, including MCP tools." | Subagents call `get_principles`, `record_agent_metrics`, `get_file_context` directly. No lead injection needed. |
-| **`tools` allowlist** | Restricts inherited tools when set. "A tool listed in both [tools and disallowedTools] is removed." | Canon agent defs can restrict per-role tool access. Omitting `tools` inherits everything including Canon MCP. |
-| **`mcpServers`** | "Give a subagent access to MCP servers." Reference by name or inline. "String references share the parent session's connection." | Agent defs can reference `canon` MCP server by name for roles that restrict `tools` but still need Canon access. |
-| **`skills`** | "Subagents don't inherit skills from the parent conversation; you must list them explicitly." Full content injected at startup. | Preload Canon skills per agent role. |
-| **`hooks`** | Per-subagent lifecycle hooks (PreToolUse, etc.) | Tool enforcement scoped to a role — block destructive commands for researchers, validate queries for db-readers. |
-| **`memory`** | Persistent directory that "survives across conversations." Scopes: user, project, local. | Maps directly to roadmap items 18 (short-term memory) and 19 (error/fix memory). Native cross-session learning. |
-| **`maxTurns`** | "Maximum number of agentic turns before the subagent stops." | Native effort budget. Replaces custom `max_iterations` / `max_revisions`. |
-| **`permissionMode`** | Per-subagent override: `default`, `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`, `plan`. | Per-role permissions without worktree settings.local.json. |
+| **`tools` allowlist** | Restricts inherited tools when set. | Canon agent defs can restrict per-role tool access. Omitting `tools` inherits everything including Canon MCP. |
+| **`mcpServers`** | "Give a subagent access to MCP servers." Reference by name or inline. | Agent defs can reference `canon` MCP server by name for roles that restrict `tools` but still need Canon access. |
+| **`skills`** | "Subagents don't inherit skills from the parent conversation; you must list them explicitly." | Preload Canon skills per agent role. |
+| **`hooks`** | Per-subagent lifecycle hooks (PreToolUse, etc.) | Tool enforcement scoped to a role. |
+| **`memory`** | Persistent directory that "survives across conversations." Scopes: user, project, local. | Native cross-session learning. |
+| **`maxTurns`** | "Maximum number of agentic turns before the subagent stops." | Native effort budget. |
+| **`permissionMode`** | Per-subagent override. | Per-role permissions without `settings.local.json`. |
 | **`isolation: worktree`** | "Run the subagent in a temporary git worktree." Automatic cleanup if no changes. | Native worktree isolation per spawn. |
-| **`model`** | Per-subagent model selection: `sonnet`, `opus`, `haiku`, or `inherit`. | Route cheap tasks (research) to Haiku, expensive tasks (implementation) to Opus. |
+| **`model`** | Per-subagent model selection. | Route cheap tasks to Haiku, expensive tasks to Opus. |
 
 #### Agent teams capabilities ([docs](https://code.claude.com/docs/en/agent-teams))
 
 | Capability | Documentation quote / summary | Canon application |
 |-----------|------------------------------|-------------------|
 | **MCP access** | "Each teammate loads the same project context as a regular session: CLAUDE.md, MCP servers, and skills." | Teammates have full Canon MCP access. |
-| **Mailbox** | "When teammates send messages, they're delivered automatically to recipients." Direct teammate-to-teammate messaging. | Replaces custom `post_message` / `get_messages` and flow event channel. |
+| **Mailbox** | Direct teammate-to-teammate messaging. | Replaces custom `post_message` / `get_messages` and flow event channel. |
 | **Plan approval** | "The teammate works in read-only plan mode until the lead approves their approach." | Maps directly to Canon's architect approval gate. Native HITL. |
 | **Shared task list** | Dependencies auto-unblock. "Task claiming uses file locking to prevent race conditions." | Replaces custom wave task coordination. |
 | **`tools` honored** | "The teammate honors that definition's tools allowlist and model." | Canon agent definitions enforce tool scope for teammates. |
-| **Graceful shutdown** | "The lead sends a shutdown request. The teammate can approve or reject." | Partial abort for long-running teammates. |
-| **Hooks** | `TeammateIdle` (exit 2 keeps teammate working), `TaskCreated`, `TaskCompleted` (exit 2 prevents completion). | Artifact enforcement and idle backstop. |
+| **Graceful shutdown** | Lead sends a shutdown request; teammate can approve or reject. | Partial abort for long-running teammates. |
+| **Hooks** | `TeammateIdle`, `TaskCreated`, `TaskCompleted` (exit 2 prevents completion). | Artifact enforcement and idle backstop. |
 
-#### Limitations (from both docs)
+#### Limitations
 
 | Limitation | Source | Impact |
 |-----------|--------|--------|
@@ -373,21 +373,7 @@ This section replaces an earlier experimental validation section. The original 1
 | Subagents cannot spawn other subagents | Subagent docs | Single delegation depth. Lead orchestrates all spawning. |
 | Skills not inherited by subagents | Subagent docs | Must list explicitly in `skills` frontmatter. |
 | No compaction visibility | Neither docs | No hook for context compaction. Mitigate with reasoning checkpoints in artifacts. |
-| No path enforcement | Neither docs | Worktree isolation sets CWD only, not a sandbox. Mitigate with per-agent `hooks` (PreToolUse). |
-
-#### Phase 2 validation requirements
-
-The following must be validated end-to-end with Canon's MCP server connected in a local environment (not this web session):
-
-1. Subagents successfully call Canon MCP tools (`get_principles`, `record_agent_metrics`, `get_file_context`).
-2. Agent definitions with `tools` restrictions plus `mcpServers: [canon]` retain Canon MCP access.
-3. `maxTurns` stops a subagent at the configured limit.
-4. `memory: project` persists and is readable across sessions.
-5. `skills` preloading injects Canon skill content into subagent context.
-6. Agent teams: teammates call Canon MCP tools, Mailbox delivers messages, `TaskCompleted` hook fires with exit 2 blocking, plan approval mode activates.
-7. Full fast-path flow end-to-end: lead calls MCP tools → spawns subagents → verifies artifacts → runs effects → completes.
-
-**Architecture confidence:** HIGH. The documentation confirms that both subagents and teammates have full Canon MCP access and that subagent definitions natively support effort budgets, persistent memory, scoped hooks, per-role permissions, and model selection. These capabilities replace several custom Canon mechanisms. The architecture requires no new code — only orchestration guidance (CLAUDE.md, runbooks, agent definition updates) and deletion of the legacy coordination layer.
+| No path enforcement | Neither docs | Worktree isolation sets CWD only, not a sandbox. Mitigate with per-agent `hooks` (PreToolUse) and L4 (`canon-workspace-check.sh`). |
 
 ---
 
