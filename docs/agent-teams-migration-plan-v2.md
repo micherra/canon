@@ -1149,40 +1149,47 @@ The migration runs in five sequential steps plus a deletion phase:
 
 **Preconditions:** Phase 1 complete. MCP server connected (Canon MCP tools available to the lead session).
 
-**Deliverables:**
+**Preconditions:** v2.1a and v2.1b complete. MCP server connected.
 
-Phase 2 must be planned with the same rigor as Phase 1 — a task index, wave structure, and done criteria. The deliverables below define what Phase 2's task plan must cover.
+**Deliverables** (extended from v2 with synthesis- and learning-specific rows):
 
 | Deliverable | Method | Pass criteria |
 |------------|--------|---------------|
-| **Fast-path consistency (3 runs)** | Run the same bug-fix task 3 times with flag on. | All runs produce: implementation summary, review verdict. Artifact structure matches across runs. No MCP tool calls skipped. Post-step effects (metrics, claims) completed in all 3. |
-| **Feature flow equivalence (3 runs)** | Run a 4–6 file feature 3 times with flag on, including wave dispatch via agent teams. | Shared task list created. Teammates coordinate without file conflicts. Worktrees merged. All artifacts produced. Commit trailers present (PostCommit hook validates). |
-| **Epic flow end-to-end (1 run)** | Run a multi-wave epic with flag on. | Research, design, multi-wave implementation, review, fix cycle all complete. Lead maintains quality through 8+ spawn cycles. Context pressure does not degrade output. |
+| **Synthesis consistency (3 runs)** | Run the same bug-fix task 3 times via planner-synthesized runbook. | All runs produce: implementation summary, review verdict. Artifact structure matches across runs. |
+| **Feature flow equivalence (3 runs)** | Run a 4–6 file feature 3 times, including wave dispatch via agent teams. | Shared task list created. Teammates coordinate without file conflicts. Worktrees merged. All artifacts produced. Commit trailers present. |
+| **Epic flow end-to-end (1 run)** | Run a multi-wave epic. | Research, design, multi-wave implementation, review, fix cycle all complete. |
+| **Iterate-until-approved quality** | Run N flows with planner-user iteration. Measure iteration count per request; manually grade runbook quality on approval. | Iteration count sensible; approval-quality trend good. |
+| **Cold-start vs. steady-state friction** | Measure iteration-0 latency for trivial requests during first 5 flows (cold-start) vs. after ≥ 20 flows of the same shape (steady-state). Per review MEDIUM-6. | Steady-state shows material improvement over cold-start; trend attributable to corpus anchoring, not noise. |
+| **Learner baseline (Gate B)** | v2.1b's end-to-end loop closes at least once in real use. | ≥ 1 accepted principle-refinement proposal (Gate B met). |
+| **Confidence calibration** | Collect paired (per-signal score, human-graded quality) samples across N flows; compute calibration curve per signal. | Per-signal scores correlate with quality rather than uniform high/low. Deterministic signals (domain_coverage, dependency_drift) calibrate first; LLM self-assessment signals tracked separately for v2.2 decision per review §4.1 HIGH-2. |
+| **Regression (flag off, 3 flows)** | Run fast-path, feature, and review-only with flag off. | Zero divergence from pre-Phase-1 baseline behavior. |
 | **Agent teams MCP validation** | During feature/epic runs, verify teammate MCP access. | Teammates successfully call `get_principles`, `record_agent_metrics`. Principle-grounded output observed. |
 | **Skill preloading validation** | Verify agent definitions with `skills` frontmatter receive preloaded content. | Spawned agents reference preloaded rules without Read tool calls. Confirm via transcript inspection. |
-| **Regression (flag off, 3 flows)** | Run fast-path, feature, and review-only with flag off. | Zero divergence from pre-Phase-1 baseline behavior. |
-| **Integration checklist** | After each run, check every HIGH-severity gap from §3 disposition table. | All 11 HIGH-severity integrations observed functioning in at least one run. Documented per-gap. |
-| **Error handling** | Deliberately trigger: agent spawn failure, MCP tool error during a run. | Lead recovers gracefully. Retries or presents error to user. Does not silently drop the step. |
+| **Integration checklist** | After each run, check every HIGH-severity gap from §9 disposition table. | All 11 HIGH-severity integrations observed functioning in at least one run. Documented per-gap. |
+| **Error handling** | Deliberately trigger: agent spawn failure, MCP tool error, snapshot failure. | Lead recovers gracefully. Does not silently drop the step. |
 | **maxTurns exhaustion** | Set engineer maxTurns to 10, give a task that needs more. | Lead detects incomplete result, offers to retry with higher budget. Journal shows step as incomplete. |
-| **Mid-flow resume** | Start a feature flow, complete 3 steps, end the session. Start a new session and say "resume". | Lead reads journal, identifies completed steps, loads artifact context, continues from the right step. |
+| **Mid-flow resume** | Start a feature flow, complete 3 steps, end the session. Resume in a new session. | Lead reads journal + snapshot-or-workspace, continues from the right step. |
+| **Vocabulary version resume** | Intentionally advance vocab major version mid-flow against a runbook referencing the removed entry. | Planner regenerates with workspace context per §5.1; user re-approves. See also review MEDIUM-4 — decide whether deprecated-vocab continuation is permitted. |
 
 **Exit criteria:**
-- 3 successful runs each on fast-path and feature flows with flag on. Artifacts consistent across runs.
-- 1 successful end-to-end epic flow with flag on.
-- Agent teams validated for wave dispatch with teammate MCP access confirmed.
-- Skill preloading validated for at least 3 agent types.
-- Regression: flag off produces byte-identical behavior to baseline across 3 flow types.
-- All 11 HIGH-severity integration gaps verified functioning (cross-reference §3).
-- Error handling validated for at least 2 failure scenarios.
-- Commit trailer PostCommit hook fires and validates correctly.
-- Documented results in `docs/phase-2-validation-results.md` with per-run details.
-- Phase 2 task plan reviewed and approved before execution.
+
+- All deliverables above pass per-criterion
+- 3 successful runs each on synthesis consistency and feature flows
+- 1 successful end-to-end epic flow
+- Gate B met (≥ 1 accepted principle-refinement proposal)
+- Cold-start vs. steady-state friction measurement shows expected learning-loop effect
+- Regression: flag off produces byte-identical behavior to baseline across 3 flow types
+- All 11 HIGH-severity integration gaps verified functioning (cross-reference §9)
+- Error handling validated for at least 3 failure scenarios
+- Documented results in `docs/phase-2-validation-results.md` with per-run details
+- Phase 2 task plan reviewed and approved before execution
 
 **MUST NOT touch:**
+
 - Any legacy implementation file. Phase 2 is read-only validation.
 - Feature flag default (stays `off`).
 
-### Phase 3 — Deletion
+### 10.6 Phase 3 — Deletion
 
 **Goal:** Remove the custom coordination layer. Flip the feature flag default to `on`, then remove the flag entirely after a stable period.
 
