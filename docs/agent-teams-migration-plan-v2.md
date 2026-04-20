@@ -1049,9 +1049,103 @@ The migration runs in five sequential steps plus a deletion phase:
 - Any flow YAML under `flows/`
 - Any existing MCP tool implementation
 
-### Phase 2 — Validation (no deletions)
+### 10.2 v2.1a — Vocabulary + synthesis (no substrate)
 
-**Goal:** Prove that Claude-as-lead with `CANON_AGENT_TEAMS_MODE=on` produces equivalent results to the legacy `drive_flow` path for every flow type.
+**Entry gate:** Gate A (§10.1 exit criteria met).
+
+**Scope:**
+
+- §5 Vocabulary — 15 canonical step IDs in `skills/canon/references/runbook-vocabulary.md`
+- §5 Step schema — `skills:`, `cause:` first-class fields
+- §5.3 Synthesis contract — MUST / MAY / MUST NOT rules; iterate-until-approved loop
+- `skills/canon/references/planner-brief.md` + `skills/canon/references/runbook-synthesis.md` — two skills the planner loads
+- `canon-planner` agent body updated: loads both skills, emits `planning-brief.md` + `runbook.md`, runs the iterate-until-approved loop
+- **CLAUDE.md intent-classification amendment (L1)** — per-message re-classification discipline + pre-write gate (§6.4, §6.5)
+- **New PreToolUse hook `canon-workspace-check.sh` (L4)** — blocks code-modification tools when no active Canon workspace exists for the current flow. Registered in `hooks/canon-agent-teams/hooks.json`
+
+> **Implementation gate.** Before L4 ships, resolve the architect-review HIGH-1 items: (1) make the allowlist `.gitignore`-based with `git check-ignore` as the oracle; (2) expand intent routing so `principle` / `learn` / any future `docs` intent also route through workspace-creating paths; (3) assert the bootstrap contract so L4 cannot race `init_workspace`. See `docs/agent-teams-migration-plan-v2.1-review.md` §4.1 HIGH-1.
+
+**Explicitly out of scope for v2.1a:**
+
+- No lifecycle persistence (no new tables, no MCP tools beyond what v2 Phase 1 provides)
+- No learner role expansion
+- No commit trailer family additions
+- No structured observation tags on artifacts
+- No memory audit/groom/seed
+- No embeddings or semantic search
+
+**Exit criteria:**
+
+- `canon-planner` synthesizes runbooks per the rules in `skills/canon/references/runbook-synthesis.md` and passes iterate-until-approved
+- At least 5 distinct request types processed end-to-end (bug fix, small feature, refactor, migration, test-gap equivalent)
+- L1 + L4 shipped; observed in action against intent-misclassification scenarios
+- Runbooks execute per the contract; same artifact quality as pre-synthesis static flows
+- **Cold-start friction spike passes** (per review MEDIUM-6): 3 trivial requests (typo fix, small rename, one-line config change) have iteration-0 latency within the documented target
+
+### 10.3 v2.1b — Minimum viable lifecycle persistence
+
+**Entry gate:** v2.1a has shipped and produced ≥ 20 synthesized runbooks in real use.
+
+**Scope:**
+
+- One new table: `lifecycle_workspace_snapshots` (per §8.1 SQL DDL)
+- One new MCP tool: `snapshot_workspace({ workspace_id })` — called by `completion-verify.sh` at flow completion
+- Three structured tag additions:
+  - Review findings: ensure `principle_id` is consistently populated (already in drift-db schema since v1)
+  - Fix summary: add `cause`, `root_cause_tag` (genuinely new; prose-to-frontmatter)
+  - Implementation summary: add `justified_deviations[]` (genuinely new)
+- Extend existing `canon-learner` with one new analysis dimension: principle-refinement from per-flow review data (§3.1 illustrative query → pattern → proposal)
+
+**Explicitly out of scope for v2.1b:**
+
+- No embeddings / semantic search
+- No commit trailer family
+- No design-decision, research-finding, or test-report tags
+- No memory audit/groom/seed; no `memory_cited` tag
+- No cross-target analyses
+- No weekly digest format (proposals go to `.canon/proposed-learnings/{timestamp}/`; human curator reads weekly per §3.4)
+- No retention-tier policy
+- No additional learner output dimensions beyond principle refinement
+
+**Exit criteria (Gate B, defined in §15.2):**
+
+- ≥ 1 concrete principle-refinement proposal produced by the learner against real lifecycle data
+- Proposal accepted by a human reviewer and applied as an actual edit to a principle file
+- End-to-end loop closed: observation → pattern → proposal → accepted refinement
+- Schema migration against `drift-schema.ts` executes cleanly and is reversible
+- `snapshot_workspace` handles failure cases (workspace already torn down, partial state, etc.)
+
+### 10.4 v2.2 — Surface expansion
+
+**Entry gate:** v2.1b has shipped ≥ 3 principle-refinement proposals, of which ≥ 1 has been accepted and applied.
+
+> **Review note (MEDIUM-1).** The entry gate as specified counts proposals and acceptances but does not measure whether accepted refinements improved anything. Before shipping v2.2, add a qualitative criterion: "the accepted proposal produces a measurable reduction in the corresponding principle's violation rate over the next N flows after application, OR a human reviewer explicitly signs off that the refinement improved principle clarity." See `docs/agent-teams-migration-plan-v2.1-review.md` §4.2 MEDIUM-1.
+
+**Scope (all contingent on v2.1b success):**
+
+- Additional structured tags (design decision, task plan, research finding, test report, HITL events)
+- Additional lifecycle tables (`lifecycle_synthesized_runbooks` with iteration tracking, `lifecycle_step_executions`, `lifecycle_hitl_events`, `lifecycle_runbook_deviations`)
+- Embeddings + `similar_to` semantic search
+- Memory citation tag + audit/groom analyses (memory seeding stays v2.3+)
+- Cross-target correlation analyses (bounded per review LOW-3)
+- Weekly learning digest format
+- Tiered retention policy — only once storage data warrants it
+- Storage decision re-examined at this scope (drift-db extension vs. JSONL-first vs. hybrid) per §8.5
+- Confidence calibration: with paired outcome data, v2.2 may introduce confidence-driven gating or surface the aggregate scalar; gate eligibility must honor the deterministic/observable-signal rule (see review §4.1 HIGH-2 discussion)
+
+**Explicitly out of scope for v2.2:**
+
+- Memory seeding for new agents (v2.3+ at earliest)
+- Agent-prompt refinement targets in §3.3 deferred matrix
+- Agent-rule refinement targets in §3.3 deferred matrix
+- Vocabulary meta-refinement
+- Knowledge graph priors (cut entirely per §3.3)
+
+**Exit criteria:** per-expansion — each new refinement target added under v2.2 must demonstrate a completed observation → refinement cycle before the next target is enabled.
+
+### 10.5 Phase 2 — Validation (no deletions)
+
+**Goal:** Prove that Claude-as-lead with v2.1a + v2.1b produces equivalent or better results than the legacy `drive_flow` path for every flow type.
 
 **Preconditions:** Phase 1 complete. MCP server connected (Canon MCP tools available to the lead session).
 
