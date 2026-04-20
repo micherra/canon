@@ -54,6 +54,31 @@ The v1 plan's Phase 2 code (`lead-mode.ts` on `canon/agent-teams-phase-2`) produ
 
 **Phase 1 and Phase 2 are abandoned.** Their code lives on `canon/agent-teams-phase-2` and `claude/canon-agent-teams-migration-gICh6` as read-only reference. The only v1 artifact on main is `docs/agent-teams-migration-plan.md`.
 
+### What v2.1 adds on top of v2
+
+v2 (2026-04-12 draft) specified the architecture — Canon-as-Claude's-toolkit, 27-integration disposition table, three-phase rollout with feature-flag gating. v2.1 (2026-04-19, the architectural source this plan aligns to) preserves every v2 decision and adds two cross-cutting capabilities:
+
+1. **Synthesis replaces static runbooks.** v2 specified 5 hand-authored runbook files (fast-path, feature, epic, migrate, test-gap). v2.1 replaces those files with a canonical 15-ID step vocabulary, a `runbook-synthesis.md` skill that defines the composition contract, and a `planner-brief.md` skill that produces the strategic brief. `canon-planner` iterates with the user until approval; only the approved runbook executes. Static runbooks couldn't learn; synthesized runbooks close the plan-quality arm of the learning loop.
+
+2. **Unified learning loop across Canon's artifact stack.** v2 preserved principles, drift, and commit provenance as MCP tools but didn't articulate how Canon improves from every interaction. v2.1 makes this explicit: observation → pattern → proposal → refinement is one mechanism applied across five in-scope refinement targets (principles, conventions, synthesis skill, planning brief skill, templates). Four additional targets are deferred to v2.2+ and one (KG priors) is cut entirely. The learner's role expands from principle-only to the full five-target matrix.
+
+v2.1 also adds one new enforcement layer (L4: `canon-workspace-check.sh` PreToolUse hook) that backstops the per-message intent re-classification discipline (L1, added to CLAUDE.md). Everything else — integration dispositions, agent roster, MCP tools, workspace storage, permission model, phased rollout with feature-flag gating — is preserved from v2.
+
+### What this plan reorganizes
+
+Because v2.1 adds substantial architecture (synthesis, learning loop, lifecycle persistence), the execution phasing expands from v2's three phases into a five-step rollout:
+
+```
+v2 Phase 1 (Gate A)
+  → v2.1a (synthesis + L1 + L4)
+    → v2.1b (minimum viable lifecycle persistence, Gate B)
+      → v2.2 (surface expansion, contingent)
+        → Phase 2 (validation)
+          → Phase 3 (deletion, unchanged from v2)
+```
+
+v2 Phase 1 remains a hard precondition: `canon-planner` and `canon-engineer` agent definitions must exist and be validated in ≥ 3 runs under `CANON_AGENT_TEAMS_MODE=on` before any v2.1 work begins. See §10 for the full phase boundaries.
+
 ---
 
 ## 2. Target Architecture
