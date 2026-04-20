@@ -170,24 +170,28 @@ This is not the chat agent (brainstorms, removed in v2) or the researcher (disco
 
 **Trivial requests still clear quickly.** The planner calibrates proposal depth to request complexity: a one-line typo fix produces a 1-step runbook with a one-line overview, approval clears in seconds with "go." A multi-wave epic produces a full brief and may iterate several rounds. v2 had a two-path fast-path / feature split; v2.1 replaces it with one path (planner) whose *output* scales with complexity. See §6 for the iterate-until-approved mechanism and §6.2 for the lightweight-proposal pattern.
 
-### 2.4 How Claude orchestrates a Canon flow
+### 2.4 How Claude orchestrates a Canon flow (iterate-until-approved)
 
-A concrete example of `feature` flow (4–10 file feature):
+A concrete example of a medium build — "add dark mode to the settings page":
 
 1. **User says** "add dark mode to the settings page" to the Canon lead session.
-2. **Claude evaluates** the request against the pre-build gate. Requirements are clear, scope is defined. Proceeds to build. (If vague, would spawn canon-planner first.)
-3. **Claude reads** `CLAUDE.md`, sees Canon orchestration instructions. Reads the `feature` runbook for the recommended step sequence.
-3. **Claude calls** `init_workspace` to create the workspace. Calls `get_principles` with the target file scope. Calls `get_file_context` for KG summaries. Assembles a research prompt.
-4. **Claude spawns** a `canon-researcher` subagent. The researcher has Canon MCP access via its `tools` allowlist and calls `semantic_search`, `graph_query` directly. Returns a research synthesis artifact.
-5. **Claude spawns** a `canon-architect` subagent with the research synthesis as upstream context. The architect queries the knowledge graph, designs the approach, produces a plan index with wave assignments.
-6. **Claude presents** the plan to the user for approval (native HITL). User approves.
-7. **Claude creates an agent team** for the implementation wave. Spawns N `canon-engineer` teammates in implementation mode (one per task from the plan index). Teammates self-coordinate via shared task list and Mailbox. `TaskCompleted` hooks enforce artifact production.
-8. **Claude merges** worktrees after the wave completes. Runs inter-wave gates if configured.
-9. **Claude spawns** a `canon-reviewer` subagent. Returns a review verdict.
-10. **If verdict is not clean**, Claude spawns a `canon-engineer` subagent in fix mode with the review feedback. Loops review → fix until clean.
-11. **Claude calls** `update_board({ operation: "complete_flow" })`, releases file claims, records metrics, evaluates learn gate. Done.
+2. **Claude classifies intent** (per-message, per L1 re-classification discipline; see §6.4). This is a build request → routes to `canon-planner`.
+3. **Claude spawns `canon-planner`.** Planner loads `planner-brief` and `runbook-synthesis` skills. Reads user request; calls `get_principles` with target-file scope; calls `get_file_context` for KG summaries. Produces `planning-brief.md` + initial `runbook.md` + confidence signals.
+4. **Claude presents** the brief + proposed runbook to the user, including the per-signal confidence breakdown. User reviews.
+5. **User iterates.** Possible paths: clarification ("what about the mobile view?"), redirect ("skip the design step — it's a CSS change"), modification ("use theme variable X, not Y"). Each iteration re-spawns the planner with full workspace context; new runbook row persisted to the lifecycle DB.
+6. **User approves** the final runbook. Lead records the approval internally; the approved runbook row is the one executed against.
+7. **Claude calls** `init_workspace` to create the workspace. Calls MCP tools per the runbook's per-step `mcp_tools` field to compose context for the first step.
+8. **Claude executes the approved runbook step by step.** For each step: calls MCP tools to compose context per the step's `mcp_tools` field; spawns the step's declared agent via `dispatch: subagent` or `team`; verifies artifacts exist at declared paths before proceeding.
+9. **Agents do the work.** Both subagents and teammates have Canon MCP access; they call `get_principles`, `get_file_context`, `graph_query` directly.
+10. **Claude handles HITL** at declared step postures (`approval` / `checkpoint` / `on_failure`). Confidence does not modify HITL postures — it is advisory only (see §7.3).
+11. **Review + fix loop** if the runbook includes it. Fix is a step with `cause:` set (see §5.2).
+12. **Claude calls** `update_board({ operation: "complete_flow" })`, releases file claims, records metrics. `completion-verify.sh` fires, calls `verify_completion` and then `snapshot_workspace({ workspace_id })`. Workspace is torn down after snapshot. Done.
 
-For a `fast-path` flow (simple bug fix), steps 2–6 are skipped — the lead goes straight to spawning a single `canon-engineer` subagent in implementation mode that handles implementation, testing, and self-review in one pass.
+For a **trivial bug fix** (lightweight proposal — see §6.2):
+- Steps 1–6 still happen, but the planner synthesizes a 1-step runbook with a one-line overview; user approves in seconds with "go."
+- Steps 7–12 run against that minimal runbook.
+
+**Thin-gate-no-skip pattern.** Every build routes through planner, but trivial work produces trivial plans that clear quickly. There is no autodispatched fast-path that skips synthesis or approval.
 
 ### 2.4 Subagent capabilities (per [Claude Code docs](https://code.claude.com/docs/en/sub-agents))
 
