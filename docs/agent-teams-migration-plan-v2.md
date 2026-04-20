@@ -135,7 +135,7 @@ User request
 | Session continuation | `applySessionContinuation` | Claude includes context summaries in spawn prompts naturally. |
 | Consultation executor | `consultation-executor.ts` | Claude can spawn an advisory subagent directly — no special mechanism needed. |
 
-### 2.3 Pre-build gate (canon-planner)
+### 2.3 Pre-build gate — canon-planner (v2.1 iterate-until-approved)
 
 Claude defaults to action — "add dark mode" → starts building. Canon needs to be smarter. Before committing to any build flow, the lead evaluates whether the request is ready to build:
 
@@ -144,26 +144,31 @@ Claude defaults to action — "add dark mode" → starts building. Canon needs t
 - Have alternatives been considered?
 - Is the value proportional to the effort?
 
-If any answer is no, the lead spawns `canon-planner` before proceeding to a build runbook. If the request is a clear bug fix or small change with obvious scope, the lead skips straight to fast-path.
+v2's pre-build gate made this a conditional call to `canon-planner` (spawn only if the request was vague). v2.1 changes this to an unconditional rule: **every build request routes through `canon-planner`**, not just vague ones. The planner produces two artifacts per build and iterates with the user until approval.
 
-**canon-planner** is a new agent that:
+**canon-planner v2.1 responsibilities:**
+
 1. **Clarifies requirements** — "What problem are you solving? Who benefits?"
 2. **Challenges assumptions** — "You're assuming users need X. What if Y is the actual need?"
 3. **Evaluates alternatives** — "You could build this, or configure the existing system to do 80% of it."
 4. **Assesses value** — "This would take ~4 agents across 2 waves. Is the value proportional?"
-5. **Produces a brief** — problem statement, target users, acceptance criteria, alternatives considered, recommended approach, open questions
+5. **Produces a planning brief** — `plans/${slug}/planning-brief.md`: problem statement, target users, acceptance criteria, alternatives considered, recommended approach, open questions.
+6. **Synthesizes a runbook** — `plans/${slug}/runbook.md`: step sequence composed from the canonical vocabulary (see §5.1) per the synthesis contract (see §5.3).
+7. **Iterates with the user until approval** — conversational mechanism; intermediate iterations persisted to the lifecycle DB for analytics.
 
-The brief either greenlights the build (lead proceeds to runbook), recommends alternatives (lead presents to user), or asks clarifying questions (lead presents to user, planner runs again with answers).
+The planner's job is asymmetric: strategic for the brief (value assessment, alternatives, clarifying questions), mechanical for the synthesis (vocabulary-based step composition, HITL posture, artifact paths). v2.1 captures these as two skill files — `planner-brief.md` and `runbook-synthesis.md` — that the planner loads. The agent body shrinks to: load these skills, emit both artifacts, run the iterate-until-approved loop.
 
-**Agent definition:**
+**Agent definition (v2.1):**
 - `model: opus` (judgment-heavy, not speed-critical)
-- `permissionMode: plan` (read-only — produces a brief, not code)
-- `maxTurns: 25`
+- `permissionMode: plan` (read-only — produces a brief + runbook, not code)
+- `maxTurns: 40` (iteration loop may take several rounds)
 - `memory: project` (remembers what features have been built, which were successful, patterns of over-engineering)
-- `skills: agent-surface-assumptions, agent-evidence-over-intuition, agent-context-check, status-protocol`
+- `skills: planner-brief, runbook-synthesis, agent-surface-assumptions, agent-evidence-over-intuition, agent-context-check, status-protocol`
 - Tools: `Read, Glob, Grep, WebFetch, mcp__canon__get_principles, mcp__canon__get_file_context, mcp__canon__graph_query, mcp__canon__semantic_search`
 
-This is not the chat agent (brainstorms) or the researcher (discovers facts). The planner's job is to **push back constructively** — "I could build this, but should I?"
+This is not the chat agent (brainstorms, removed in v2) or the researcher (discovers facts). The planner's job is to **push back constructively** — "I could build this, but should I? Here's the plan and the questions."
+
+**Trivial requests still clear quickly.** The planner calibrates proposal depth to request complexity: a one-line typo fix produces a 1-step runbook with a one-line overview, approval clears in seconds with "go." A multi-wave epic produces a full brief and may iterate several rounds. v2 had a two-path fast-path / feature split; v2.1 replaces it with one path (planner) whose *output* scales with complexity. See §6 for the iterate-until-approved mechanism and §6.2 for the lightweight-proposal pattern.
 
 ### 2.4 How Claude orchestrates a Canon flow
 
