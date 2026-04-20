@@ -1314,16 +1314,18 @@ Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. T
 
 See **`docs/mcp-intelligence-roadmap.md`** for the full roadmap of MCP tool improvements, KG intelligence enhancements, self-improving skills, and memory architecture.
 
-This workstream is independent of Phases 1–3. All changes are backward-compatible. Summary of priorities:
+This workstream is independent of Phases 1–3. All changes are backward-compatible. v2.1 amendments to v2's priority list:
 
-| Priority | Focus | Key deliverable |
-|----------|-------|----------------|
-| **P0** | Reduce tool calls per spawn | `get_context` composite tool (1 call replaces 3-4) |
-| **P1** | Prepare tools for new model | Journal init in `init_workspace`, `report_result` simplification |
-| **P2** | Consolidation and cleanup | 6 `write_*` → 1 `write_artifact`, board/journal merge |
-| **P3** | KG intelligence | `infer_domains`, community detection, confidence-scored edges, design rationale nodes |
-| **P4** | Self-improving skills | Flow outcome tracking, skill effectiveness analysis, graph-structured memory |
-| **P5** | Memory architecture | Ebbinghaus decay, 4-tier hierarchy, token budgets |
+| Priority | Focus | Key deliverable | v2.1 status |
+|----------|-------|----------------|-------------|
+| **P0** | Reduce tool calls per spawn | `get_context` composite tool (1 call replaces 3-4) | Unchanged from v2. |
+| **P1** | Prepare tools for new model | Journal init in `init_workspace`, `report_result` simplification | Unchanged from v2. |
+| **P2** | Consolidation and cleanup | 6 `write_*` → 1 `write_artifact`, board/journal merge | Unchanged from v2. |
+| **P3** | KG intelligence | `infer_domains`, community detection, confidence-scored edges, design rationale nodes | Unchanged from v2. |
+| **P4** | Self-improving skills | Flow outcome tracking, skill effectiveness analysis, graph-structured memory | **PROMOTED** — v2.1's learning system (§3) makes P4 operational. Phase 2 validation explicitly exercises P4 via skill-effectiveness analyses (§10.5 `domain_skills_loaded` + `outcome` correlation). |
+| **P5** | Memory architecture | Ebbinghaus decay, 4-tier hierarchy, token budgets | **CUT from v2.1** — memory audit + grooming defer to v2.2; memory seeding to v2.3+. Memory remains future work; v2.1 does not specify it (per §3.3 deferred matrix). |
+
+v2.1 promotes P4 from roadmap to active Phase 2 validation work. P5 is explicitly deferred beyond v2.1 per architect review (automated writes to agent memory are high-risk without a proven base learner; see §3.3 deferral notes).
 
 ---
 
