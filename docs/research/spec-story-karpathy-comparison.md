@@ -31,9 +31,9 @@ SpecStory is a commercial tool (Jake/Sean/Greg, late 2024) that automatically **
 
 ---
 
-## Source 2 — Karpathy's AI coding rant → CLAUDE.md
+## Source 2 — Karpathy's LLM knowledge-base architecture (compiler analogy)
 
-**Article unreachable.** The VentureBeat URL (`karpathy-shares-llm-knowledge-base-architecture-that-bypasses-rag-with-an`) returned 403 on direct WebFetch and the `web.archive.org` mirror was blocked by the WebFetch allowlist. The section below was drafted from secondary-source snippets before the direct article was attempted and has NOT been verified against Karpathy's actual proposal. The VB headline specifically advertises a **knowledge-base architecture that bypasses RAG** — a claim the content below does not address. Treat this section as provisional pending a reachable primary source.
+**Article unreachable.** A second attempt was made against the MindStudio write-up (`https://www.mindstudio.ai/blog/karpathy-llm-knowledge-base-architecture-compiler-analogy`) which returned 403 on direct WebFetch; the `web.archive.org` mirror is blocked by the WebFetch allowlist. Combined with the earlier VentureBeat 403, no primary source for Karpathy's proposal has been fetched. The section below is retained as provisional reconstruction from secondary snippets and is **not verified** against Karpathy's actual KB/compiler-architecture proposal. The headline claim — a knowledge-base architecture, framed via a compiler analogy, that bypasses RAG — remains unaddressed below.
 
 ### What it is (unverified)
 
