@@ -732,6 +732,99 @@ All iterations are persisted (in v2.2 schema), but only the `stage: approved` ro
 
 ---
 
+## 7. Confidence scoring
+
+Confidence is a **surfaced signal during iteration**, not a gating mechanism. Under the iterate-until-approved planner loop, the user is always the approval gate; confidence informs the user during iteration, doesn't decide for them.
+
+### 7.1 Schema (v2.1-review adjusted)
+
+v2.1 §7.1 originally specified a user-facing aggregate `confidence: 0.0-1.0` scalar alongside per-signal scores. Per architect review HIGH-2 (see `docs/agent-teams-migration-plan-v2.1-review.md` §4.1), the user-facing aggregate is dropped in favor of per-signal display only. The aggregate still computes internally and persists to the lifecycle DB for v2.2 calibration.
+
+**User-facing** in the synthesized runbook frontmatter:
+
+```yaml
+confidence_signals:
+  - {signal: "novelty",           value: 0.7}
+  - {signal: "scope_clarity",     value: 0.9}
+  - {signal: "domain_coverage",   value: 0.8}
+  - {signal: "dependency_drift",  value: 0.6}
+  - {signal: "question_count",    value: 0.85}
+```
+
+**Internal (not user-facing):** a planner-computed aggregate scalar that persists to `lifecycle_workspace_snapshots` (v2.1b) for outcome correlation. Used by the learner for v2.2 calibration analyses. Never displayed to the user in v2.1a/b.
+
+**Rationale.** Three of the five signals (`novelty` in v2.1a, `scope_clarity`, `question_count`) are LLM self-assessment — the planner grading its own work. An aggregate rolling these up inherits overconfidence skew. Per-signal scores have concrete referents ("scope_clarity: 0.3" points at something the user can clarify); the holistic scalar is a vibe-check that invites misuse. Dropping the user-facing aggregate preserves the "surface uncertainty" UX via per-signal display while avoiding the uncalibrated-scalar problem.
+
+### 7.2 Signals
+
+| Signal | Meaning | How computed |
+|--------|---------|--------------|
+| `novelty` | Has Canon built something like this before? | Planner's `memory: project` in v2.1a; `query_workspace_history({ similar_to: brief_summary })` in v2.2 |
+| `scope_clarity` | Does the request have concrete acceptance criteria? | Planner analysis of brief; fewer open questions ⇒ higher |
+| `domain_coverage` | Are relevant domain primers available? | Ratio of affected file-layers with ≥ 1 matching primer in `skills/canon/references/` |
+| `dependency_drift` | How much has changed in target files since related work? | `get_drift_report` + recent commit density |
+| `question_count` | Open questions remaining in the brief? | Inverse of count, clamped |
+
+Overall internal aggregate combines signals with equal weighting initially. As lifecycle data accumulates, the learner proposes weight refinements based on observed correlation between each signal and flow outcome.
+
+### 7.3 HITL invariant — confidence is advisory, not a modifier
+
+Confidence is surfaced to the user during iteration (per-signal display). It does NOT modify the runbook's HITL postures — neither at synthesis time nor at runtime.
+
+- If a step declares `hitl: approval`, that stays approval. No confidence level allows skipping it.
+- If a step declares `hitl: none`, that stays none. Low confidence does NOT auto-insert a checkpoint.
+- The synthesis skill picks HITL postures from step-type defaults (per the vocabulary in §5.1); confidence is not an input to that choice.
+
+**What confidence IS for:**
+
+- Surfacing uncertainty to the user via per-signal display ("scope_clarity is 0.3 — let's tighten the acceptance criteria")
+- Informing the user's decision to iterate more before approving
+- Feeding the learner for calibration analyses (§7.5)
+
+**What confidence is NOT for:**
+
+- Modifying the runbook's HITL postures (at synthesis or runtime)
+- Bypassing user approval for high-confidence proposals
+- Auto-adding checkpoints — that's the user's judgment during iteration, not a synthesis rule
+- A user-facing holistic vibe-check (per §7.1 review adjustment)
+
+The user — not confidence — decides how much iteration is warranted before approval.
+
+### 7.4 Overconfidence mitigation
+
+LLMs systematically skew toward overconfidence. Without explicit mitigations, the planner will emit 0.9+ on most requests and the signal becomes noise. Mitigations are required from day one of v2.1a; some extend into v2.2.
+
+| # | Mitigation | Scope | Mechanism |
+|---|-----------|-------|-----------|
+| 1 | **Signal decomposition is primary** | v2.1a | Per-signal scores are what the user sees. Forces the planner to articulate per-signal uncertainty rather than a vibe check. (Reinforced by §7.1 review adjustment — aggregate dropped from user-facing schema.) |
+| 2 | **Articulate the unknowns** | v2.1a | Before emitting signals, the planner must list what information WOULD raise confidence if available. If it can't list anything, internal aggregate caps at 0.75 regardless of per-signal scores. |
+| 3 | **Cold-start defaults low** | v2.1a / v2.1b | `novelty` starts near 0 when no corpus match; `domain_coverage` low when no matching primers. Internal aggregate starts low and climbs as evidence accumulates. |
+| 4 | **Corpus anchoring** | v2.2 | Planner calls `query_workspace_history({ similar_to: brief_summary })` to compare against prior flows. No close matches → `novelty` and `domain_coverage` both pushed down. |
+| 5 | **Conservative prompt guidance** | v2.1a | Explicit in `runbook-synthesis.md`: *"Under-confidence is safer than over-confidence. Surface uncertainty; don't hide it."* |
+| 6 | **Learner calibration detection** | v2.2 | Learner tracks per-signal-vs-outcome correlation (more actionable than aggregate correlation). Uniform overconfidence on any signal is a detectable pattern. Learner proposes dampening adjustments. |
+
+**Acknowledged residual risk:** even with all six mitigations, confidence emitted by an LLM is inherently suspect. v2.1a/b ships with unvalidated calibration. Internal aggregate is used for lifecycle-DB storage only; user sees per-signal scores.
+
+This is acceptable because (a) confidence is advisory (§7.3), not a gating mechanism, and (b) per-signal scores are more verifiable than an aggregate. Miscalibration during v2.1a/b doesn't break anything critical, and per-signal data accrues cleanly from day one for v2.2 calibration.
+
+### 7.5 Rescoring across iterations (v2.1a scope)
+
+Under iterate-until-approved (§6), the runbook may go through N rounds before the user approves it. Per-signal scores are **re-evaluated at each iteration, not emitted once at the initial proposal**.
+
+- Each `stage: proposed` row in `lifecycle_synthesized_runbooks` (v2.2) records its own per-signal scores and internal aggregate
+- v2.1b records per-signal scores on the approved runbook only (via `lifecycle_workspace_snapshots.approved_runbook_id` → runbook frontmatter)
+- `iteration_index` (v2.2) preserves the trajectory (iteration 0: 0.62 internal aggregate; iteration 1: 0.78 after user clarifications; …; `stage: approved`: 0.88)
+- Rescoring happens at the start of each planner response during iteration
+
+**Why per-iteration:**
+
+- Later scores inform subsequent decisions; trajectory is itself a learner signal
+- Without per-iteration rescoring, initial overconfidence compounds — the user never sees the planner revise per-signal scores downward as complications surface
+
+Storage cost: negligible. Per-signal scores + internal aggregate fit in the existing lifecycle schema; no additional schema change beyond §8.1.
+
+---
+
 ## 9. Integration Disposition Table
 
 Every one of the 28 gaps from the integration audit must map to a concrete replacement or an explicit deprecation. The "v2 home" column shows where each integration lives in the new architecture. Dispositions: **native** (Claude or Claude Code handles it), **mcp** (Canon MCP tool stays as-is), **hook** (enforcement via Claude Code hooks), **guidance** (CLAUDE.md / runbook instructions), **deprecate** (intentionally dropped with rationale).
