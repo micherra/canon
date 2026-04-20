@@ -825,6 +825,117 @@ Storage cost: negligible. Per-signal scores + internal aggregate fit in the exis
 
 ---
 
+## 8. Lifecycle persistence substrate
+
+Everything in §§3–7 depends on one piece of infrastructure: a durable, queryable record of what happened in each flow that survives workspace cleanup. Workspaces under `.canon/workspaces/<id>/` are ephemeral by design — they're scratch, not record. Without repo-level persistence, observations are lost and the learning loop can't close.
+
+### 8.1 Storage decision — v2.1b minimum; full schema deferred to v2.2
+
+**v2.1b ships ONE new table** (`lifecycle_workspace_snapshots`) extending `.canon/drift-db.sqlite`, with per-run snapshot at flow completion. **The full schema (additional tables) defers to v2.2.**
+
+Rationale: drift analytics and lifecycle persistence share the same underlying concern (time-series record of execution). Existing infrastructure already handles schema migrations and the query layer. Adding one table for v2.1b is trivially small; postponing the full schema to v2.2 avoids over-committing before real data demonstrates which tables are needed.
+
+**Concrete v2.1b migration** (against `mcp-server/src/platform/storage/drift/drift-schema.ts`):
+
+```sql
+-- v2.1b migration: add lifecycle_workspace_snapshots
+CREATE TABLE lifecycle_workspace_snapshots (
+  id INTEGER PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  approved_runbook_id INTEGER,          -- NULL in v2.1b (lifecycle_synthesized_runbooks not yet created)
+  outcome TEXT NOT NULL,                 -- 'complete' | 'aborted' | 'abandoned'
+  total_iterations_to_approve INTEGER,
+  total_steps_executed INTEGER,
+  total_steps_skipped INTEGER,
+  total_hitl_events INTEGER,
+  total_deviations INTEGER,
+  flow_duration_ms INTEGER,
+  commit_range_first TEXT,
+  commit_range_last TEXT,
+  snapshotted_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX idx_lifecycle_workspace_snapshots_slug
+  ON lifecycle_workspace_snapshots(slug);
+CREATE INDEX idx_lifecycle_workspace_snapshots_snapshotted_at
+  ON lifecycle_workspace_snapshots(snapshotted_at);
+```
+
+Drift-db already has a migration runner. Adding this table is ~20 lines of schema DDL + a migration version bump. Reversible — `DROP TABLE lifecycle_workspace_snapshots` if rollback is required.
+
+### 8.2 Persistence boundary — per-run snapshot
+
+Workspace files are the source of truth *while a flow is running*. At flow completion, `snapshot_workspace({ workspace_id })` reads the workspace and materializes a structured lifecycle record.
+
+- `completion-verify.sh` hook is the natural trigger — verify, snapshot, then the workspace can be safely cleaned up
+- Janitor processes also call `snapshot_workspace` before deleting abandoned workspaces, preserving partial state
+
+In-progress flows are queried from the workspace, not the DB. Real-time dashboards and mid-run interventions are out of scope for v2.1 (see §14; flagged in the architect review as MEDIUM-5 — document the decision explicitly rather than leaving it implicit).
+
+### 8.3 New MCP tools
+
+**`snapshot_workspace({ workspace_id }) → { snapshot_id }`** (v2.1b — ships first)
+
+v2.1b scope: writes a row to `lifecycle_workspace_snapshots` only. Does not populate additional tables (they don't exist in v2.1b). Return shape is minimal.
+
+v2.2 scope (when other tables exist): expanded to return `{ snapshot_id, runbook_id, deviations_detected }` and write to all `lifecycle_*` tables.
+
+Triggered by:
+
+- `completion-verify.sh` hook after successful flow completion (primary)
+- Janitor / cleanup processes before deleting an abandoned workspace
+
+Idempotent — re-running against the same workspace updates the existing snapshot.
+
+**`query_workspace_history({ filters, projection }) → rows`** (v2.2 — deferred)
+
+Structured query interface for the learner and human introspection. Deferred to v2.2 because most useful filters require the `lifecycle_*` tables that v2.2 adds. For v2.1b's single-analysis scope (principle refinement), the learner queries `lifecycle_workspace_snapshots` + existing drift-store review-finding tables directly.
+
+### 8.4 Why drift-db extension (not a separate DB, not JSONL-first)
+
+- **Drift analytics and lifecycle persistence share the same concern** (time-series record of execution).
+- **Existing migration infrastructure handles the one-table addition for free.** A new DB would need its own migration story for zero real benefit at this scope.
+- **JOINs with existing `FlowRunEntry` are natural** — same `workspace_id` key.
+- **For one table with ~one row per workspace completion**, JSONL-first's main appeal (write-path simplicity) doesn't pay for itself — the write volume is trivial. The structured-read need is real from day one: the learner's principle-refinement analysis needs to JOIN against `drift_store.violations` (see §15 Gate B), filter by `workspace_id` / `principle_id` / `timestamp`. That's a native SQLite operation against a small table.
+
+### 8.5 Why v2.2 legitimately revisits this decision
+
+When v2.2's schema expands to ~5 tables with higher-volume rows (step executions per flow, HITL events per iteration), the calculus changes. JSONL-first becomes a real design choice at that scope:
+
+- Write volume grows — step_executions and hitl_events could produce 10–50 rows per flow
+- Existing Canon JSONL patterns (`.canon/learning.jsonl`, `.canon/flow-runs.jsonl`) suggest append-log is Canon's native pattern for event streams
+- Materialization via a `refresh_lifecycle_index` MCP tool (Kappa-style — raw events append to JSONL, structured tables built lazily) becomes a legitimate alternative
+
+**v2.2 decision is explicitly deferred.** Rather than designing the full schema now and pre-committing to drift-db for all of it, v2.2 chooses between:
+
+- Direct drift-db extension (five more tables)
+- JSONL-first with SQLite materialization (Kappa pattern)
+- Hybrid — critical path in drift-db; high-volume events in JSONL
+
+The choice depends on observed data volume and query patterns from v2.1b's deployment. v2.2's scope expansion proposal will include a concrete storage-decision ADR informed by that real data.
+
+### 8.6 Retention policy
+
+Tiered default for v2.2 (v2.1b's one table has no meaningful retention policy yet):
+
+- Most recent 100 snapshots — full detail across all `lifecycle_*` tables
+- 100 to 1 year old — aggregate; keep `lifecycle_workspace_snapshots` + top-level rows; drop per-row detail
+- &gt; 1 year — drop entirely, or export to `.canon/archive/`
+
+Janitor process runs retention (SessionStart hook or scheduled). Settings in `.canon/retention.toml` (new) or extended Canon config.
+
+### 8.7 Privacy and sharing
+
+Lifecycle data includes condensed records of user requests and interventions. Safe defaults:
+
+- **No verbatim user input in DB.** Summary fields are auto-generated, bounded (280 chars). Full brief lives in workspace markdown, referenced by path not content.
+- **Secret-detection pass** — summary generation runs a basic pattern match (API keys, tokens) before persisting; matches elided.
+- **Local-only by default.** `.canon/drift-db.sqlite` is gitignored; lifecycle tables inherit.
+- **Team sharing is out of scope for v2.1.** If/when Canon grows team features, a separate "shared" DB handles cross-machine sync.
+
+---
+
 ## 9. Integration Disposition Table
 
 Every one of the 28 gaps from the integration audit must map to a concrete replacement or an explicit deprecation. The "v2 home" column shows where each integration lives in the new architecture. Dispositions: **native** (Claude or Claude Code handles it), **mcp** (Canon MCP tool stays as-is), **hook** (enforcement via Claude Code hooks), **guidance** (CLAUDE.md / runbook instructions), **deprecate** (intentionally dropped with rationale).
