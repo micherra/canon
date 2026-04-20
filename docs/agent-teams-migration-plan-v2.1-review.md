@@ -159,19 +159,22 @@ Under that framing:
 2. Spike the lightweight-proposal path against 3 representative trivial requests before committing to v2.1a
 3. If the spike shows latency > 2× current fast-path, pause v2.1a and design a mitigation before committing to iterate-until-approved
 
-#### HIGH-3 — Confidence signal is user-facing without calibration
+#### HIGH-3 — User-facing aggregate confidence scalar invites overconfidence-driven misuse
 
-**Concern.** §7 makes `confidence` + `confidence_signals[]` visible during iteration. §7.3 makes it advisory (not gating). §7.4 acknowledges LLM overconfidence bias and specifies six mitigations, but also states "v2.1a/b ships with unvalidated confidence calibration." Calibration detection happens in v2.2 via the learner.
+**Concern.** §7.1's frontmatter schema surfaces both `confidence: 0.0-1.0` (aggregate scalar) and `confidence_signals[]` (per-signal breakdown) to the user during iteration. Three of the five signals (`novelty` in v2.1a, `scope_clarity`, `question_count`) are LLM self-assessment — the planner grading its own work. The aggregate that rolls these up inherits the overconfidence skew §7.4 acknowledges. Shipping a user-facing scalar invites users to vibe-check a number that mostly reflects the LLM's self-assessment, not outcome-predictive signal. §7.4 mitigation 1 ("Signal decomposition is primary") correctly identifies per-signal articulation as the defense against vibe-checking; the user-facing aggregate partially undoes that mitigation.
 
-**Evidence.** v2.1.md:762 (`v2.1a/b ships with unvalidated confidence calibration. Users should treat v2.1a/b confidence as 'directional indicator' not 'precise probability' until v2.2 learner calibration catches up`).
+**Evidence.** v2.1.md:703–713 (schema with both `confidence` and `confidence_signals[]` user-facing); v2.1.md:717–723 (signal-computation table — three of five are LLM self-assessment); v2.1.md:755 (mitigation 1 notes aggregate is *computed from* the per-signal scores).
 
-**Why this is HIGH.** Confidence is user-facing. Users make real decisions during iteration based on it — "0.62 is low, let me clarify more" or "0.91, this is fine." If the first months of v2.1 produce consistently mis-calibrated scores (systematically high because LLMs skew that way), users will (a) calibrate their own expectations off the noisy signal, or (b) learn to ignore it. Either outcome damages the signal's long-term value. The v2.2 learner calibration is the correct remediation, but it runs on data that was collected under miscalibrated conditions.
+**Why this is HIGH.** Users make real decisions during iteration based on displayed numbers. If the aggregate systematically skews high, users approve too early and bad plans execute. If users learn to ignore the number, Canon has trained its users off a signal before calibration data even exists to improve it. Per-signal scores are more defensible to surface — "scope_clarity: 0.3" points the user at something concrete to clarify — but the holistic scalar has no such concrete referent in v2.1a/b.
 
-**Recommended action.** Before v2.1a ships:
+**Recommended action.** Small, targeted spec change:
 
-1. Present confidence with an explicit miscalibration disclaimer in the user-facing rendering ("directional indicator; calibration pending v2.2")
-2. Collect calibration pairs (confidence, human-graded quality) from v2.1a day one, not as a Phase 2 deliverable — so v2.2 has a clean corpus from day one
-3. Consider capping displayed confidence at 0.8 in v2.1a (prevent 0.95-range scores from training users that high confidence means anything specific)
+1. **§7.1 schema:** drop `confidence: 0.0-1.0` from the user-facing runbook frontmatter. Keep `confidence_signals[]` as the per-signal display surface.
+2. **Internal only:** the aggregate still computes inside the planner and persists to `lifecycle_workspace_snapshots` (or a future `lifecycle_synthesized_runbooks` row) for v2.2 learner calibration. Not user-visible.
+3. **§7.3 clarification:** reinforce that per-signal scores are the user-facing uncertainty surface; aggregate confidence is internal infrastructure for v2.2 calibration.
+4. **v2.2 decision point:** after calibration data accrues, authors decide whether to surface the aggregate at all — maybe per-signal display is sufficient.
+
+This preserves every v2.1a/b data collection pathway while avoiding the vibe-check UX. No architectural rework, no gate redesign, no deferred scope.
 
 ### 4.2 MEDIUM-severity
 
