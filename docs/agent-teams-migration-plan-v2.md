@@ -1428,3 +1428,74 @@ The following are explicitly NOT part of this migration:
 14. **Agent memory audit / groom / seed** (v2.1 addition). Deferred to v2.2 (audit + grooming) and v2.3+ (seeding) per architect review. Memory is future work; v2.1 ratification does not include it.
 
 15. **Knowledge-graph priors refinement** (v2.1 addition). Cut entirely per §3.3 — the KG is its own subsystem; automated refinement via flow-corpus statistics is not part of the runbook-synthesis learning system.
+
+---
+
+## 15. Ratification gates
+
+Three gates control ratification of this plan. **Gate A is the substantive blocker** — Gate B was confirmed runnable via schema inspection (see §15.2); Gate C is already done.
+
+### 15.1 Gate A (existence) — THE BLOCKER
+
+v2 Phase 1 exit criteria met:
+
+- `canon-planner` agent definition exists and registers with the Canon MCP server
+- `canon-engineer` agent definition exists and registers
+- Both validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
+
+**Current state:** Gate A is NOT met. The Canon repository currently has `canon-implementor` and `canon-fixer` — not `canon-planner` or `canon-engineer`. Those agents are created via `phase1-08` (v2 Phase 1 task). Until that task completes and the agents are validated, v2.1a cannot start.
+
+Without Gate A, this plan has no planner agent to hang synthesis off. Gate B cannot be followed by action even if it clears.
+
+> **Before v2.1a begins**, the architect review's HIGH-severity items must also be resolved: (1) L4 hook allowlist design (`.gitignore`-based) + intent-routing expansion for `principle` / `learn` / `docs` — see `docs/agent-teams-migration-plan-v2.1-review.md` §4.1 HIGH-1. The review's HIGH-2 adjustment (drop user-facing aggregate confidence scalar) is already reflected in §7.1 of this plan.
+
+### 15.2 Gate B (evidence) — already clearable
+
+One real refinement proposal produced by running a §3.1-style analysis against today's data.
+
+**Gate B is runnable today against the existing drift-db schema.** `violations.principle_id` has been indexed since v1 (see `mcp-server/src/platform/storage/drift/drift-schema.ts`). The finding-count-per-principle query is trivial:
+
+```sql
+SELECT principle_id, COUNT(DISTINCT review_id) AS findings
+FROM violations
+GROUP BY principle_id
+ORDER BY findings DESC;
+```
+
+Fix-iteration cost requires review-over-review comparison via a ~30-line SQL script. No v2.1b infrastructure needed to run the trace.
+
+Gate B can clear before v2.1a / v2.1b ship. It is a process step, not a v2.1-dependent doc item.
+
+### 15.3 Gate C (scope discipline) — done
+
+Scope reductions from architect review applied:
+
+- Agent memory audit/groom/seed cut from v2.1; deferred to v2.2+ and v2.3+
+- Canon-Deviation* commit trailer family dropped; design preserved for future re-introduction if `git blame`-level provenance proves necessary
+- §3.3 refinement-targets matrix reduced from 11 to 5 in-scope, 4 deferred, 1 cut entirely
+- v2.1a / v2.1b / v2.2 split per §10.2–10.4
+
+All three scope-reduction items applied in the proposal document on PR #115 and carried forward into this plan.
+
+### 15.4 Process
+
+When Gate A, Gate B, and Gate C all pass:
+
+1. Canon maintainer reviews this plan for final polish
+2. Drop the REVISED status from the header; update to "RATIFIED — implementation plan aligned with v2.1"
+3. v2.1 remains at `docs/agent-teams-migration-plan-v2.1.md` as the architectural source
+4. The architect review at `docs/agent-teams-migration-plan-v2.1-review.md` is resolved item-by-item (HIGH concerns closed or accepted as residual risks with explicit owners)
+5. v2.1a Wave 1 tasks are planned and executed
+
+### 15.5 Expected timeline
+
+- **Gate A** — completion of v2 Phase 1 tasks, particularly `phase1-08` (create `canon-planner` and `canon-engineer`) and `phase1-10` (validation). Depends on v2 Phase 1 execution schedule.
+- **Gate B** — ~30 minutes of SQL scripting against existing drift-db once Gate A is clear. Independent of Gate A, but meaningless to clear before Gate A (no action available if Gate B clears first).
+- **Gate C** — done.
+
+### 15.6 Do NOT
+
+- Start v2.1a, v2.1b, or v2.2 work based on this plan until Gate A passes and the architect-review HIGH concerns are resolved.
+- Amend v2 Phase 1 task files in `.canon/workspaces/agent-teams-v2/plans/phase1/` preemptively. They are pre-v2.1 spec; edit them as part of v2.1 ratification, not ahead of it.
+- Delete the companion `docs/runbook-synthesis-proposal.md` document. That file is the conversation log of three architect review cycles and design decisions; it stays as history alongside this ratifiable plan.
+- Delete `docs/agent-teams-migration-plan-v2.1.md` — it remains the architectural source of truth.
