@@ -1399,22 +1399,32 @@ v2's risks carry forward; v2.1 adds synthesis- and learning-loop-specific risks.
 
 The following are explicitly NOT part of this migration:
 
-1. **Rewriting Canon's MCP tools beyond the parallel workstream.** The 38 MCP tools stay functionally unchanged. The parallel workstream (§4b) adds batch modes, simplifies state-machine-dependent tools, and prepares tools for the new model — but these are backward-compatible improvements, not rewrites. The migration itself (Phases 1–3) does not modify MCP tool implementations except adding the orchestration journal.
+1. **Rewriting Canon's MCP tools beyond the parallel workstream** (from v2). The 38 MCP tools stay functionally unchanged. v2.1 adds `snapshot_workspace` (v2.1b) and potentially `query_workspace_history` (v2.2) but does not rewrite existing tools.
 
-2. **Modifying agent definitions.** Agent definitions in `agents/*.md` get `tools` allowlist updates in Phase 1 but no behavioral changes. Their prompt bodies, model selections, and role descriptions are unchanged.
+2. **Modifying agent definitions beyond what v2 Phase 1 and v2.1a do** (amended from v2). v2 Phase 1 updates frontmatter (`tools`, `permissionMode`, `maxTurns`, `skills`, `memory`) and creates `canon-planner` + `canon-engineer` (phase1-08). v2.1a rewrites the `canon-planner` body to load brief + synthesis skills. No other agent body changes.
 
-3. **Modifying principles, rules, or conventions.** Canon's 54 principles are untouched. The matcher, compliance checker, and drift system are untouched.
+3. **Modifying principles, rules, or conventions** (from v2). Canon's 54 principles are untouched by the v2.1 migration itself (though v2.1's learning system produces refinements over time — that's the intended mechanism, not a scope violation).
 
-4. **Rewriting the knowledge graph.** `codebase_graph`, `graph_query`, `semantic_search` and their underlying SQLite database are untouched.
+4. **Rewriting the knowledge graph** (from v2). `codebase_graph`, `graph_query`, `semantic_search` untouched.
 
-5. **Changing the artifact storage layout.** `.canon/workspaces/<id>/` structure stays. Artifact schemas stay. Write tools stay.
+5. **Changing the artifact storage layout** (amended from v2). `.canon/workspaces/<id>/` structure stays. `.canon/drift-db.sqlite` gains one table in v2.1b (`lifecycle_workspace_snapshots`). Full schema expansion is v2.2.
 
-6. **Building a custom prompt pipeline replacement.** The v2 architecture does NOT build a new pipeline. Claude calls MCP tools directly. There is no "plan-time pipeline" — that was the earlier draft's design, superseded by the simpler "Claude calls tools" model.
+6. **Building a custom prompt pipeline replacement** (from v2). v2.1's `runbook-synthesis.md` skill is guidance text the planner reads — it is not a plan-time pipeline. Claude calls MCP tools directly.
 
-7. **Closing or modifying PR #112.** The v1 Phase 1/2 code on `canon/agent-teams-phase-2` is read-only reference. PR #112 is handled separately by the user.
+7. **Closing or modifying PR #112** (from v2).
 
-8. **Executing any phase of this plan.** This document is the plan. Execution is a separate session after the plan is reviewed and approved.
+8. **Executing any phase of this plan.** This document is the ratifiable implementation plan. Execution is separate sessions after ratification (Gate A, §15) completes.
 
-9. **Upstream Claude Code changes.** The plan does not depend on Anthropic shipping new features (timeout parameter, path enforcement, compaction hooks). It works with Claude Code as it exists today. Mitigations for confirmed gaps use existing mechanisms.
+9. **Upstream Claude Code changes.** The plan does not depend on new Claude Code features (timeout parameter, path enforcement, compaction hooks). It works with Claude Code as it exists today.
 
-10. **Performance optimization beyond §4b.** The parallel workstream covers batch modes and tool simplification. Deeper optimizations (caching, response compression, lazy loading) are deferred unless Phase 2 validation reveals a performance problem.
+10. **Performance optimization beyond §11.** The parallel workstream covers batch modes and tool simplification.
+
+11. **Cross-repo learning** (v2.1 addition). Memory sharing across Canon installs is explicitly deferred; local-only retention per §8.7.
+
+12. **Autonomous confidence-based gating** (v2.1 addition). Confidence is advisory only in v2.1a/b (§7.3); no confidence-level allows skipping user approval or modifying HITL postures. The user-facing aggregate scalar is dropped in v2.1a/b per review HIGH-2; only per-signal scores are surfaced. v2.2 may reintroduce an aggregate and/or confidence-driven gating, but only under the deterministic/outcome-calibrated signal rule articulated in the review discussion of §7.
+
+13. **Real-time write-through to lifecycle DB** (v2.1 addition). Per-run snapshot at flow completion only (§8.2). Mid-run dashboards and real-time interventions are explicitly out of scope; in-progress flows are queried from the workspace, not the DB. Per review MEDIUM-5.
+
+14. **Agent memory audit / groom / seed** (v2.1 addition). Deferred to v2.2 (audit + grooming) and v2.3+ (seeding) per architect review. Memory is future work; v2.1 ratification does not include it.
+
+15. **Knowledge-graph priors refinement** (v2.1 addition). Cut entirely per §3.3 — the KG is its own subsystem; automated refinement via flow-corpus statistics is not part of the runbook-synthesis learning system.
