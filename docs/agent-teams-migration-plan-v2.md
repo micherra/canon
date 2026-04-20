@@ -377,7 +377,19 @@ This section cites the authoritative Claude Code documentation. Both subagents a
 
 ---
 
-## 3. Integration Disposition Table
+<!--
+  §§3–8 reserved for cross-cutting v2.1 additions:
+    §3  Canon's learning system
+    §4  Observation mechanism — hybrid structured tags + prose
+    §5  Synthesis architecture — vocabulary, step schema, contract
+    §6  User-approval affordance (iterate-until-approved)
+    §7  Confidence scoring
+    §8  Lifecycle persistence substrate
+  Each lands in a subsequent commit. Integration Disposition Table
+  remains §9 unchanged in content.
+-->
+
+## 9. Integration Disposition Table
 
 Every one of the 28 gaps from the integration audit must map to a concrete replacement or an explicit deprecation. The "v2 home" column shows where each integration lives in the new architecture. Dispositions: **native** (Claude or Claude Code handles it), **mcp** (Canon MCP tool stays as-is), **hook** (enforcement via Claude Code hooks), **guidance** (CLAUDE.md / runbook instructions), **deprecate** (intentionally dropped with rationale).
 
@@ -438,7 +450,7 @@ Every one of the 28 gaps from the integration audit must map to a concrete repla
 
 ---
 
-## 4. Phase Boundaries
+## 10. Phase Boundaries
 
 The migration has three phases. Phase 1 adds guidance (no deletions, no behavior change). Phase 2 validates (no deletions, feature-flagged behavior change). Phase 3 deletes (removes ~130 files / ~35,000 lines behind a verified flag flip).
 
@@ -641,7 +653,7 @@ Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. T
 
 ---
 
-## 4b. Parallel Workstream: MCP & Intelligence Roadmap
+## 11. Parallel Workstream — MCP & Intelligence Roadmap
 
 See **`docs/mcp-intelligence-roadmap.md`** for the full roadmap of MCP tool improvements, KG intelligence enhancements, self-improving skills, and memory architecture.
 
@@ -658,7 +670,7 @@ This workstream is independent of Phases 1–3. All changes are backward-compati
 
 ---
 
-## 5. Validation Strategy
+## 12. Validation Strategy
 
 ### How each phase proves it is complete
 
@@ -704,7 +716,7 @@ This workstream is independent of Phases 1–3. All changes are backward-compati
 
 ---
 
-## 6. Risks
+## 13. Risks
 
 | Risk | Severity | Likelihood | Mitigation |
 |------|----------|------------|------------|
@@ -721,7 +733,7 @@ This workstream is independent of Phases 1–3. All changes are backward-compati
 
 ---
 
-## 7. Out of Scope
+## 14. Out of Scope
 
 The following are explicitly NOT part of this migration:
 
