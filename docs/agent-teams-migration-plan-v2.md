@@ -95,12 +95,17 @@ What the state machine does NOT provide is Canon's actual value: principle-groun
 
 ```
 User request
-  → Claude (lead) reads CLAUDE.md + agent defs + runbook
-  → Claude calls Canon MCP tools to compose context
-  → Claude spawns subagents or creates agent team
+  → Claude (lead) reads CLAUDE.md + agent defs
+  → Classifies intent per-message (L1 re-classification discipline)
+  → Build intent: spawns canon-planner
+      → Planner emits planning-brief.md + runbook.md
+      → Iterates with user until approval
+  → Claude calls Canon MCP tools to compose context for each step
+  → Claude spawns subagents or creates agent team per synthesized runbook
   → Agents work (both subagents and teammates have Canon MCP access)
   → Claude handles HITL, effects, completion natively
   → Claude calls Canon MCP tools for analytics and cleanup
+  → completion-verify.sh snapshots the workspace to lifecycle DB
 ```
 
 **What stays (Canon's value):**
@@ -108,26 +113,27 @@ User request
 | Layer | What | Why |
 |-------|------|-----|
 | **MCP tools** | `get_principles`, `list_principles`, `get_compliance`, `get_drift_report`, `get_file_context`, `graph_query`, `semantic_search`, `codebase_graph`, `record_agent_metrics`, `post_event`, `show_pr_impact`, `review_code`, `store_pr_review`, `store_summaries` | These ARE Canon. Principles, drift, KG, artifacts, metrics — Claude uses them as a native toolkit. |
-| **Agent definitions** | 11 types in `agents/*.md` (Phase 1: delete implementor + fixer + guide + chat, add engineer + planner) | Valid as both subagent types and agent team teammate types. Per docs: subagents "inherit all tools from the main conversation, including MCP tools" by default. Definitions support `skills` (preload rules + domain primers), `maxTurns` (effort budget), `permissionMode`, `memory` (cross-session learning). Six agents get `memory: project`: planner (feature history), engineer (fix patterns), researcher (codebase topology), architect (design history), scribe (doc landscape), learner (pattern mining). Reviewer excluded per `agent-cold-review` rule. Guide and chat removed — lead handles these natively via MCP tools and conversation. Each agent includes `agent-context-check` skill for self-serve context verification. |
-| **Orchestration journal** | `log_step`, `verify_completion` MCP tools (~50–80 lines) | The lead's checklist. Records steps executed, artifacts expected. Completion hook verifies. Not a state machine — no scheduling, no forced ordering. |
-| **Domain skills** | 12 skill files in `skills/canon/references/` (6 existing primers + 6 new) | Domain expertise loaded on-demand by the lead based on task scope — NOT preloaded into agent frontmatter. Lead reads relevant skills and includes in spawn prompt. Agents can also self-serve. |
-| **Hooks** | `TaskCompleted`, `TeammateIdle`, `PostCommit`, `SessionStart`, `SubagentStop`, completion verification | Artifact enforcement, trailer enforcement, doc staleness detection, scribe queuing, completion verification. |
-| **Workspace storage** | `.canon/workspaces/<id>/` | Artifact storage, progress tracking, workspace metadata. |
-| **Shared libraries** | `commit-trailers.ts`, `file-claims.ts`, `matcher.ts` | Principle matching, commit provenance, file ownership — used by MCP tools and available to the lead. |
-| **Runbooks** | `skills/canon/runbooks/*.md` | Lightweight playbooks describing recommended step sequences. Not executable — Claude reads them as guidance. |
+| **Agent definitions** | 11 types in `agents/*.md` (v2 Phase 1: delete implementor + fixer + guide + chat, add engineer + planner) | Valid as both subagent types and agent team teammate types. Definitions support `skills` (preload rules + domain primers), `maxTurns` (effort budget), `permissionMode`, `memory`. Six agents get `memory: project`: planner (feature history), engineer (fix patterns), researcher (codebase topology), architect (design history), scribe (doc landscape), learner (pattern mining). Reviewer excluded per `agent-cold-review` rule. Guide and chat removed — lead handles these natively. Each agent includes `agent-context-check` skill for self-serve context verification. |
+| **Orchestration journal** | `log_step`, `verify_completion` MCP tools | The lead's checklist. Records steps executed, artifacts expected, domain skills loaded, per-step outcome. Completion hook verifies. Not a state machine — no scheduling, no forced ordering. |
+| **Domain skills** | 12 skill files in `skills/canon/references/` (6 existing + 6 new) | Domain expertise loaded on-demand by the lead or agent based on task scope. |
+| **Step vocabulary + synthesis skills** (new in v2.1a) | `skills/canon/references/runbook-vocabulary.md`, `skills/canon/references/runbook-synthesis.md`, `skills/canon/references/planner-brief.md` | The canonical set of step IDs Canon knows + the rules the planner follows to compose a runbook from them. Replaces v2's 5 hardcoded runbook files. |
+| **Hooks** | `TaskCompleted`, `TeammateIdle`, `PostCommit`, `SessionStart`, `SubagentStop`, `completion-verify.sh`, `canon-workspace-check.sh` (new in v2.1a — L4) | Artifact enforcement, trailer enforcement, doc staleness detection, scribe queuing, completion verification, Canon-bypass detection. |
+| **Workspace storage** | `.canon/workspaces/<id>/` | Artifact storage, progress tracking. Ephemeral — snapshotted to lifecycle DB at completion, then torn down. |
+| **Lifecycle DB** (new in v2.1b) | `.canon/drift-db.sqlite` extended with `lifecycle_workspace_snapshots` table | Durable per-flow record surviving workspace cleanup. Substrate for the learning system. |
+| **Shared libraries** | `commit-trailers.ts`, `file-claims.ts`, `matcher.ts` | Principle matching, commit provenance, file ownership. |
 
-**What goes (the custom coordination layer):**
+**What goes (the custom coordination layer — deleted in Phase 3):**
 
 | Component | File(s) | Why it's deletable |
 |-----------|---------|-------------------|
 | State machine runtime | `drive-flow.ts`, `drive-flow-helpers.ts`, `drive-flow-wave.ts`, `drive-flow-wave-lifecycle.ts` | Claude sequences steps natively. |
-| 9-stage prompt pipeline | `features/prompt-pipeline/` (all stages) | Claude calls MCP tools directly to compose context before spawning. Each MCP tool is a standalone capability, not a pipeline stage. |
-| Flow YAML runtime | Parser, validator, fragment inclusion, transition matcher | Claude reads runbooks for guidance; no executable state machine needed. |
+| 9-stage prompt pipeline | `features/prompt-pipeline/` (all stages) | Claude calls MCP tools directly to compose context before spawning. |
+| Flow YAML runtime | Parser, validator, fragment inclusion, transition matcher | Claude reads vocabulary + synthesis skill for guidance; no executable state machine needed. |
 | Wave event plumbing | `inject_wave_event`, `resolve_wave_event`, flow event channel | Agent teams' native Mailbox + task list replace custom wave coordination. |
 | Custom HITL vocabulary | Five breakpoint shapes, convergence exhausted, gate failure | Claude handles HITL natively. Agent teams' plan approval mode covers architect gates. |
 | Message channel | `post_message`, `get_messages` | Agent teams' Mailbox replaces this. |
 | Session continuation | `applySessionContinuation` | Claude includes context summaries in spawn prompts naturally. |
-| Consultation executor | `consultation-executor.ts` | Claude can spawn an advisory subagent and inject its output — no special mechanism needed. |
+| Consultation executor | `consultation-executor.ts` | Claude can spawn an advisory subagent directly — no special mechanism needed. |
 
 ### 2.3 Pre-build gate (canon-planner)
 
