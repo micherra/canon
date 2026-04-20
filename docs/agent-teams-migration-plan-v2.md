@@ -999,42 +999,51 @@ Every one of the 28 gaps from the integration audit must map to a concrete repla
 
 ## 10. Phase Boundaries
 
-The migration has three phases. Phase 1 adds guidance (no deletions, no behavior change). Phase 2 validates (no deletions, feature-flagged behavior change). Phase 3 deletes (removes ~130 files / ~35,000 lines behind a verified flag flip).
+> **⚠️ HARD PRECONDITION (Gate A): v2 Phase 1 exit criteria must be met before any v2.1 work begins.** `canon-planner` and `canon-engineer` agent definitions must exist (currently they don't — only `canon-implementor` and `canon-fixer` exist), must register with the Canon MCP server, and must be validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`. This is not a soft guideline. Without these agents, v2.1 has nothing to build on. See §15 Gate A.
 
-### Phase 1 — Orchestration Guidance (additions only)
+The migration runs in five sequential steps plus a deletion phase:
+
+- **v2 Phase 1** (§10.1) — orchestration guidance: journal, hooks, agent def updates, skills registration. Additive-only. Completes before any v2.1 work starts.
+- **v2.1a** (§10.2) — vocabulary + synthesis skills + canon-planner rewrite + L1 (CLAUDE.md re-classification) + L4 (canon-workspace-check hook). Ships synthesis over static runbooks.
+- **v2.1b** (§10.3) — minimum viable lifecycle persistence: one table + one MCP tool + three structured tags + one learner analysis dimension. Proves the learning loop closes end-to-end.
+- **v2.2** (§10.4) — surface expansion contingent on v2.1b evidence.
+- **Phase 2** (§10.5) — validation, extended from v2 with synthesis-specific and learning-specific deliverables.
+- **Phase 3** (§10.6) — deletion, unchanged from v2.
+
+### 10.1 v2 Phase 1 — Orchestration Guidance (additions only)
 
 **Goal:** Give Claude everything it needs to orchestrate Canon flows natively, without touching the legacy code path.
 
 **Preconditions:** None. Can start immediately.
 
-**Deliverables:**
+**Key deliverables** (v2's static runbook authoring rows removed — runbook format is now defined by the synthesis skill shipped in v2.1a, not a Phase 1 deliverable):
 
 | Deliverable | Path | Purpose |
 |------------|------|---------|
-| Orchestration CLAUDE.md | `CLAUDE.md` (update) | Add orchestration discipline: how the lead composes context via MCP tools, when to use subagents vs agent teams, HITL patterns, post-step effects, completion checklist. |
-| Runbook format template | `templates/runbook-template.md` | Canonical example defining the markdown + YAML frontmatter format. All runbooks conform to this. |
-| Fast-path runbook | `skills/canon/runbooks/fast-path.md` | Implement → pre-launch-check → context-sync → ship → learn. Simplest build flow. |
-| Feature runbook | `skills/canon/runbooks/feature.md` | Design → implement (wave) → verify → review → fix loop → context-sync → ship → learn. Absorbs refactor as a variant annotation. |
-| Epic runbook | `skills/canon/runbooks/epic.md` | Research → design → multi-wave implement → test → security → review → fix loops → context-sync → ship → learn. |
-| Migrate runbook | `skills/canon/runbooks/migrate.md` | Parallel research → design → implement (wave) → verify → security → review → fix → context-sync → ship → learn. |
-| Test-gap runbook | `skills/canon/runbooks/test-gap.md` | Scan → write-tests → fix → review → context-sync. No ship step. |
-| Agent def updates | `agents/*.md` | Add `maxTurns`, `permissionMode` frontmatter. Add `skills` frontmatter to preload role-specific rules and references (e.g., implementor gets `agent-tdd-required`, `principle-loading`; reviewer gets `agent-cold-review`). |
-| Orchestration journal | `mcp-server/src/features/orchestration/tools/orchestration-journal.ts` (~50–80 lines) | `log_step` and `verify_completion` MCP tools. The lead's checklist — records steps executed, completion hook verifies. |
+| Orchestration CLAUDE.md (initial version) | `CLAUDE.md` (update) | Orchestration discipline: how the lead composes context via MCP tools, when to use subagents vs agent teams, HITL patterns, post-step effects, completion checklist. v2.1a will amend this further — see §10.2. |
+| Runbook format | Defined by the synthesis skill (v2.1a deliverable, not v2 Phase 1) | No separate template or standing format doc. Single source of truth is the synthesis skill. v2's `phase1-00` (which produced `templates/runbook-template.md` + `skills/canon/runbooks/README.md`) is ABANDONED in v2.1 — those artifacts were deleted to avoid drift with the synthesis skill that v2.1a writes. |
+| Agent def updates | `agents/*.md` | Add `maxTurns`, `permissionMode`, `skills` frontmatter. **Create `canon-engineer` and `canon-planner` via `phase1-08`.** Remove `canon-implementor`, `canon-fixer`, `canon-guide`, `canon-chat`. |
+| Orchestration journal tool | `mcp-server/src/features/orchestration/tools/orchestration-journal.ts` | `log_step` and `verify_completion` MCP tools. See §2.9 for the v2.1-extended signature. |
 | Commit trailer hook | `hooks/canon-agent-teams/post-commit-trailers.sh` | PostCommit hook validating Canon-Workflow trailer presence. |
-| Completion verification hook | `hooks/canon-agent-teams/completion-verify.sh` | Calls `verify_completion` journal tool. Blocks "done" if steps or artifacts missing. |
+| Completion verification hook | `hooks/canon-agent-teams/completion-verify.sh` | Calls `verify_completion` journal tool. Blocks "done" if steps or artifacts missing. (v2.1b extends to call `snapshot_workspace` after verify clears.) |
 | SessionStart doc-check hook | `hooks/canon-agent-teams/session-start-doc-check.sh` | Compares HEAD against `.canon/last-scribe-commit`. Nudges lead if documentation may be stale. |
-| SessionStart KG-check hook | `hooks/canon-agent-teams/session-start-kg-check.sh` | Checks if `knowledge-graph.db` exists and is fresh (computed_at_commit matches HEAD). If missing or stale, instructs lead to run `codebase_graph` before proceeding. |
+| SessionStart KG-check hook | `hooks/canon-agent-teams/session-start-kg-check.sh` | Checks `knowledge-graph.db` freshness. |
 | SubagentStop scribe-queue hook | `hooks/canon-agent-teams/post-engineer-scribe.sh` | After `canon-engineer` completes, writes `pending-scribe.json` to workspace. Lead runs scribe before completing flow. |
-| Feature flag | Environment variable `CANON_AGENT_TEAMS_MODE` | `off` (default): legacy `drive_flow` path unchanged. `on`: Claude reads runbooks, calls MCP tools, logs to journal, spawns agents natively. |
+| Feature flag | Environment variable `CANON_AGENT_TEAMS_MODE` | `off` (default): legacy `drive_flow` path unchanged. `on`: Claude orchestrates natively. |
 
-**Exit criteria:**
-- All 5 runbooks written and reviewed.
-- CLAUDE.md orchestration section reviewed.
-- Agent definitions carry `tools` allowlists.
-- Feature flag wiring: when `off`, `drive_flow` path is byte-identical to today.
-- `npm test` passes, `npm run build` passes with zero new errors.
+**Important clarification:** v2's `phase1-01..04` (the 5 static runbook authoring tasks) are abandoned, but **`phase1-05` through `phase1-10` remain required v2 Phase 1 deliverables**. `phase1-08` in particular is the agent-creation work that v2.1 depends on (Gate A). v2.1 builds *on top of* v2 Phase 1; it does not replace it.
+
+**Exit criteria (Gate A):**
+
+- `canon-planner` and `canon-engineer` agent definitions exist and register with the Canon MCP server
+- Both validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
+- CLAUDE.md has orchestration section matching §2 (MCP tool composition, dispatch framework, HITL patterns, completion checklist); v2.1a will amend further per §10.2
+- All 5 hook scripts exist, are executable, and register in `hooks/canon-agent-teams/hooks.json`
+- Skill preloading validated for at least 3 agent types (spawned agents reference preloaded rules without extra Read tool calls — confirm via transcript inspection)
+- `npm run build` and `npm test` pass
 
 **MUST NOT touch:**
+
 - Any file under `mcp-server/src/features/orchestration/`
 - Any file under `mcp-server/src/features/prompt-pipeline/`
 - Any flow YAML under `flows/`
