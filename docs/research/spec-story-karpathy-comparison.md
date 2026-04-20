@@ -33,7 +33,9 @@ SpecStory is a commercial tool (Jake/Sean/Greg, late 2024) that automatically **
 
 ## Source 2 — Karpathy's AI coding rant → CLAUDE.md
 
-### What it is
+**Article unreachable.** The VentureBeat URL (`karpathy-shares-llm-knowledge-base-architecture-that-bypasses-rag-with-an`) returned 403 on direct WebFetch and the `web.archive.org` mirror was blocked by the WebFetch allowlist. The section below was drafted from secondary-source snippets before the direct article was attempted and has NOT been verified against Karpathy's actual proposal. The VB headline specifically advertises a **knowledge-base architecture that bypasses RAG** — a claim the content below does not address. Treat this section as provisional pending a reachable primary source.
+
+### What it is (unverified)
 
 A short observational tweet from Karpathy listing recurring failure modes of LLM coding agents. Forrest Chang distilled it into a reusable `CLAUDE.md` ("andrej-karpathy-skills") that encodes four behavioral principles. The reconstructed failure modes (from mirror articles, not verified verbatim from the tweet):
 
