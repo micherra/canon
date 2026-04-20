@@ -193,7 +193,7 @@ For a **trivial bug fix** (lightweight proposal — see §6.2):
 
 **Thin-gate-no-skip pattern.** Every build routes through planner, but trivial work produces trivial plans that clear quickly. There is no autodispatched fast-path that skips synthesis or approval.
 
-### 2.4 Subagent capabilities (per [Claude Code docs](https://code.claude.com/docs/en/sub-agents))
+### 2.5 Subagent capabilities (per [Claude Code docs](https://code.claude.com/docs/en/sub-agents))
 
 Subagents are far richer than "focused workers that report back." Canon's agent definitions can leverage the full subagent frontmatter:
 
@@ -211,7 +211,7 @@ Subagents are far richer than "focused workers that report back." Canon's agent 
 
 **Key correction from experiment 18:** The experiment tested in an environment where the Canon MCP server wasn't connected. In a properly configured environment, subagents inherit Canon MCP tools by default. Both subagents and teammates have full Canon MCP access. The "subagent prompt quality" risk in the earlier draft was unfounded.
 
-### 2.5 Dispatch framework
+### 2.6 Dispatch framework
 
 | Step pattern | Primitive | Rationale |
 |-------------|-----------|-----------|
@@ -222,7 +222,7 @@ Subagents are far richer than "focused workers that report back." Canon's agent 
 | Consultation (advisory, non-blocking) | **Subagent** | Quick opinion, result returns to lead. |
 | Background housekeeping (janitor, learner) | **Subagent** (background + `memory: project`) | Persistent learning across sessions via memory frontmatter. |
 
-### 2.5 Agent self-serve context (resilience model)
+### 2.7 Agent self-serve context (resilience model)
 
 In the legacy model, agents were helpless — they received everything from the 9-stage prompt pipeline and couldn't self-serve. If a pipeline stage failed or was misconfigured, the agent operated with incomplete context silently.
 
