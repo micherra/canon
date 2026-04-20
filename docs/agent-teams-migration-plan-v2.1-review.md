@@ -145,21 +145,7 @@ Under that framing:
 3. **Assert the bootstrap contract.** In §6.5, state that L4 is evaluated after the lead has had the chance to call `init_workspace`. Specifically, L4 fires on the first Edit / Write / tracked-file-Bash call; the lead's MCP tool calls to create the workspace are not Edit / Write and are never blocked.
 4. **Phase 2 checklist.** Validate L4 against a small scenario list: (a) user edits tracked doc file on a non-build branch → routed to content flow; (b) canon-writer run → creates workspace, L4 passes; (c) `bash -c 'sed -i ...'` on tracked file without workspace → blocked; (d) `.canon/workspaces/` internal writes during active flow → allowed.
 
-#### HIGH-2 — Iterate-until-approved friction is acknowledged but untested
-
-**Concern.** §6.3 acknowledges that every build request now has a synchronous planner round-trip. This is a material change from today's autodispatched fast-path. §6.2's mitigation is the "lightweight-proposal" pattern — trivial requests get 1-step runbooks cleared in seconds. But the plan does not measure whether this actually holds until Phase 2.
-
-**Evidence.** v2.1.md:664–667 (`Every build request now has a synchronous planner round-trip... Phase 2 validation will measure actual round-trip cost for the trivial-request case; if it's intolerable in practice, revisit this section`).
-
-**Why this is HIGH.** If trivial-request latency is intolerable in Phase 2, the remediation surface is large. Options are: (a) reintroduce a skip path (contradicts §6.2's "thin-gate-no-skip" decision), (b) parallelize planner with early execution (non-trivial rework), (c) ship a more lightweight planner path (possible but requires spec). Discovering this at Phase 2 means paying for a full design re-cycle during validation rather than before v2.1a ships.
-
-**Recommended action.** Before v2.1a ships:
-
-1. Define a concrete latency target for trivial-request iteration 0 (e.g., "planner emits first proposal within N seconds of user message, where N ≤ 15")
-2. Spike the lightweight-proposal path against 3 representative trivial requests before committing to v2.1a
-3. If the spike shows latency > 2× current fast-path, pause v2.1a and design a mitigation before committing to iterate-until-approved
-
-#### HIGH-3 — User-facing aggregate confidence scalar invites overconfidence-driven misuse
+#### HIGH-2 — User-facing aggregate confidence scalar invites overconfidence-driven misuse
 
 **Concern.** §7.1's frontmatter schema surfaces both `confidence: 0.0-1.0` (aggregate scalar) and `confidence_signals[]` (per-signal breakdown) to the user during iteration. Three of the five signals (`novelty` in v2.1a, `scope_clarity`, `question_count`) are LLM self-assessment — the planner grading its own work. The aggregate that rolls these up inherits the overconfidence skew §7.4 acknowledges. Shipping a user-facing scalar invites users to vibe-check a number that mostly reflects the LLM's self-assessment, not outcome-predictive signal. §7.4 mitigation 1 ("Signal decomposition is primary") correctly identifies per-signal articulation as the defense against vibe-checking; the user-facing aggregate partially undoes that mitigation.
 
@@ -220,6 +206,20 @@ This preserves every v2.1a/b data collection pathway while avoiding the vibe-che
 **Evidence.** v2.1.md:822–829 (`In-progress flows are queried from the workspace, not the DB. Real-time dashboards / mid-run interventions are out of scope for v1`).
 
 **Recommended action.** Accepted as a v2.1 scope decision, but document in §14 Out of Scope (not just §8.2) so future work sees it as a deliberate choice. Current §14 does not list this.
+
+#### MEDIUM-6 — Cold-start iterate-until-approved friction is acknowledged but unmeasured pre-ship
+
+**Concern.** §6.3 acknowledges that every build request now has a synchronous planner round-trip. §6.2's mitigation is the "lightweight-proposal" pattern — trivial requests get 1-step runbooks cleared in seconds. The mitigation strategy is sound architecturally (friction is a deliberate bet on the self-healing learning loop — as `memory: project` fills and corpus anchoring matures, common request shapes synthesize faster) but the cold-start period before the loop self-heals is unmeasured pre-ship.
+
+**Evidence.** v2.1.md:664–667 (`Every build request now has a synchronous planner round-trip... Phase 2 validation will measure actual round-trip cost for the trivial-request case; if it's intolerable in practice, revisit this section`).
+
+**Why this is MEDIUM, not HIGH.** The architectural bet is correct: pay friction upfront to grow the corpus that makes friction disappear. Counter-arguments to gating (approval-by-inaction anti-pattern for code commits; bimodal data is harder for the learner; cold-start is temporary) make the v2.1 design defensible. The residual risk is only the cold-start tolerability window — if it's too painful, users bail before the loop heals.
+
+**Recommended action.** Lightweight pre-ship validation, not architectural rework:
+
+1. **Pre-ship spike** (before v2.1a commits): run the planner against 3 representative trivial requests (typo fix, small rename, one-line config change). Measure iteration-0 latency from user message to first proposal. Cheap to do — answers the tolerability question before Phase 2.
+2. **Phase 2 cold-start vs. steady-state measurement:** §10.5 should measure both separately. Cold-start (fresh memory, empty corpus) vs. steady-state (after ≥ 20 flows of the same shape) are different regimes.
+3. **Exit criterion:** if cold-start iteration-0 is > 2× current fast-path and shows no improvement trend over the first 20 flows, revisit §6.2. Absence of improvement — not absolute latency — is the red flag, because absolute latency is supposed to drop as the loop heals.
 
 ### 4.3 LOW-severity
 
