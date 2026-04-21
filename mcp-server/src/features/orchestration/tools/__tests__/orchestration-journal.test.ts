@@ -150,6 +150,31 @@ describe("verifyCompletion", () => {
     expect(result.steps_completed).toBe(1);
   });
 
+  test("counts planned steps as missing (PR #119 P1 fix)", async () => {
+    // A planned step that never transitioned must block completion —
+    // otherwise a forgotten checklist item slips past the gate.
+    await logStep({ status: "planned", step_id: "s1", workspace });
+    await logStep({ status: "completed", step_id: "s2", workspace });
+
+    const result = await verifyCompletion({ workspace });
+    assertOk(result);
+    expect(result.complete).toBe(false);
+    expect(result.steps_missing).toEqual([{ status: "planned", step_id: "s1" }]);
+    expect(result.steps_completed).toBe(1);
+  });
+
+  test("mixed planned + started are both reported as missing", async () => {
+    await logStep({ status: "planned", step_id: "s1", workspace });
+    await logStep({ status: "started", step_id: "s2", workspace });
+    await logStep({ status: "completed", step_id: "s3", workspace });
+
+    const result = await verifyCompletion({ workspace });
+    assertOk(result);
+    expect(result.complete).toBe(false);
+    expect(result.steps_missing).toHaveLength(2);
+    expect(result.steps_missing.map((s) => s.step_id).sort()).toEqual(["s1", "s2"]);
+  });
+
   test("detects artifacts_missing when expected files don't exist", async () => {
     await logStep({
       artifacts_expected: ["nope.md"],
@@ -211,6 +236,31 @@ describe("verifyCompletion", () => {
       || result.flow_outcome.total_duration_ms === null).toBe(true);
   });
 
+  test("review_verdict reports the LAST verdict, not the first (review→fix→re-review)", async () => {
+    await logStep({
+      outcome: { review_verdict: "block" },
+      status: "completed",
+      step_id: "review-1",
+      workspace,
+    });
+    await logStep({
+      outcome: { fix_iterations: 2 },
+      status: "completed",
+      step_id: "fix",
+      workspace,
+    });
+    await logStep({
+      outcome: { review_verdict: "approve" },
+      status: "completed",
+      step_id: "review-2",
+      workspace,
+    });
+
+    const result = await verifyCompletion({ workspace });
+    assertOk(result);
+    expect(result.flow_outcome.review_verdict).toBe("approve");
+  });
+
   test("glob patterns in artifacts_expected resolve against workspace contents", async () => {
     mkdirSync(join(workspace, "plans", "my-slug"), { recursive: true });
     writeFileSync(join(workspace, "plans", "my-slug", "DESIGN.md"), "# D\n");
@@ -229,7 +279,7 @@ describe("verifyCompletion", () => {
     expect(result.artifacts_missing).toEqual([]);
   });
 
-  test("unresolved ${variable} patterns are treated as present (not false-negatives)", async () => {
+  test("unresolved ${variable} patterns are surfaced via artifacts_skipped_unresolved", async () => {
     await logStep({
       artifacts_expected: ["plans/${slug}/DESIGN.md"],
       status: "completed",
@@ -239,7 +289,10 @@ describe("verifyCompletion", () => {
 
     const result = await verifyCompletion({ workspace });
     assertOk(result);
+    // Not a false-negative: we don't claim the file is missing.
     expect(result.artifacts_missing).toEqual([]);
+    // But we DO surface that the lead should double-check the substitution.
+    expect(result.artifacts_skipped_unresolved).toEqual(["plans/${slug}/DESIGN.md"]);
     expect(result.complete).toBe(true);
   });
 });
