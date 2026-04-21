@@ -8,7 +8,7 @@ Planned improvements to Canon, grouped by when you'll likely see them. Everythin
 
 Claude Code shipped native agent teams (experimental, v2.1.32+). Experimental runs on 2026-04-10 confirmed that dynamic teammate spawning, per-teammate spawn prompts, a durable shared task list (`CLAUDE_CODE_TASK_LIST_ID`), and a full hook lifecycle (`SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `TeammateIdle`) are all reliable. That collapses the reason Canon's custom coordination layer exists, and reframes several items further down the list.
 
-Authoritative plan: `docs/agent-teams-migration-plan.md`. Phase 1 work tracked on branch `canon/agent-teams-phase-1`.
+Authoritative plan: `docs/agent-teams-migration-plan-v2.md` (v2.1-aligned implementation plan; v1 abandoned before implementation). Architectural source: `docs/agent-teams-migration-plan-v2.1.md`. Phase 1 work tracked on branch `canon/agent-teams-phase-1`.
 
 ### 0.1 Replace the flow state machine with agent teams
 
