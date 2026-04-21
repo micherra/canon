@@ -1,0 +1,44 @@
+{
+  "description": "Canon agent-teams hooks — commit trailer validation, doc/KG staleness nudges, and scribe queuing. All scripts no-op unless CANON_AGENT_TEAMS_MODE=on. The completion-verify.sh script is NOT registered here; the lead invokes it explicitly from the CLAUDE.md completion checklist before declaring a flow done.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/post-commit-trailers.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/session-start-doc-check.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/session-start-kg-check.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/post-engineer-scribe.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
