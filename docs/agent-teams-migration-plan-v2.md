@@ -1308,6 +1308,8 @@ The migration runs in five sequential steps plus a deletion phase:
 
 Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. The remaining code is Canon's value: MCP tools, agent definitions, hooks, principles, shared libraries, and workspace management.
 
+**v2.1 / v2.1b additions are kept, not deleted.** Phase 3 removes only the pre-v2.1 coordination layer listed above. Specifically, the following v2.1a / v2.1b additions remain on main post-Phase-3: `skills/canon/references/runbook-vocabulary.md`, `runbook-synthesis.md`, `planner-brief.md`, `content-flow.md`, `learner-principle-refinement.md`; `hooks/canon-agent-teams/canon-workspace-check.sh`; the `lifecycle_workspace_snapshots` table + migration; `snapshot_workspace` MCP tool; template additions (`fix-summary.md` tags, `implementation-log.md` `justified_deviations[]`); review-checklist `principle_id` discipline; canon-planner + canon-engineer + canon-writer + canon-learner amendments.
+
 ---
 
 ## 11. Parallel Workstream — MCP & Intelligence Roadmap

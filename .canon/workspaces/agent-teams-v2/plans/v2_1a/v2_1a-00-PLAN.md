@@ -1,7 +1,7 @@
 ---
 task_id: "v2_1a-00"
 wave: 1
-depends_on: []
+depends_on: ["v2_1a-pre"]
 decisions:
   - "dc-01"
 files:

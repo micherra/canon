@@ -6,7 +6,8 @@
 
 | Task | Wave | Depends on | Key files | Description |
 |------|------|------------|-----------|-------------|
-| v2_1a-00 | 1 | — | `skills/canon/references/runbook-vocabulary.md` | Create canonical 15-ID step vocabulary with versioned-change discipline |
+| v2_1a-pre | 0 | — | `docs/v2.1a-preflight.md` | Pre-flight environment verification (Gate A state, phase1-10 amendment status, agent frontmatter, test conventions, migration-runner convention, worktree metadata). Files remediation tasks for any gaps before Wave 1 begins. |
+| v2_1a-00 | 1 | v2_1a-pre | `skills/canon/references/runbook-vocabulary.md` | Create canonical 15-ID step vocabulary with versioned-change discipline |
 | v2_1a-01 | 2 | v2_1a-00 | `skills/canon/references/planner-brief.md` | Create strategic-brief skill defining planning-brief.md contract |
 | v2_1a-02 | 2 | v2_1a-00 | `skills/canon/references/runbook-synthesis.md` | Create synthesis skill with MUST/MAY/MUST NOT contract, step schema, iterate-until-approved loop |
 | v2_1a-03 | 3 | v2_1a-01, v2_1a-02 | `agents/canon-planner.md` | Rewrite canon-planner body to load both skills, emit brief+runbook, run iterate-until-approved |
@@ -18,7 +19,9 @@
 
 ### Wave Summary
 
-**Wave 1** (1 task): Create canonical step vocabulary. No dependencies — foundation for all downstream skills.
+**Wave 0** (1 task): Pre-flight environment verification. Must pass before Wave 1 begins. Absorbs fresh-review findings that require filesystem facts.
+
+**Wave 1** (1 task): Create canonical step vocabulary. Depends on Wave 0 pre-flight.
 
 **Wave 2** (3 tasks, parallel): Planner-brief and runbook-synthesis skills (both depend on Wave 1 vocabulary); intent-routing expansion (no deps — moved from Wave 3 per fresh review; canon-writer/canon-learner routing doesn't require the synthesis skills).
 
