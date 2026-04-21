@@ -34,22 +34,68 @@ fi
 
 # Parse via node (required in Canon environments per MCP server engine reqs).
 # Emits a single JSON blob on stdout, or exits non-zero on parse error.
+#
+# Semantics must mirror features/orchestration/tools/orchestration-journal.ts
+# so the hook and the MCP tool agree. In particular:
+#   - planned + started both count as "missing" (not just started).
+#   - Glob patterns in artifact paths (*, ?, [...]) are expanded — a
+#     pattern is missing only when no match exists on disk.
+#   - ${var} template fragments are surfaced via artifacts_skipped_unresolved
+#     but do not count as missing.
 RESULT=$(WORKSPACE="$WORKSPACE" JOURNAL="$JOURNAL" node -e '
   const fs = require("fs");
   const path = require("path");
   const workspace = process.env.WORKSPACE;
   const journal = JSON.parse(fs.readFileSync(process.env.JOURNAL, "utf8"));
   const steps = journal.steps || [];
-  const missing = steps.filter(s => s.status === "started");
+  const missing = steps.filter(s => s.status === "planned" || s.status === "started");
   const completed = steps.filter(s => s.status === "completed");
   const skipped = steps.filter(s => s.status === "skipped");
 
+  function segmentRegex(segment) {
+    const escaped = segment.replace(/[.+^${}()|\\]/g, "\\$&");
+    const pattern = escaped.replace(/\*/g, ".*").replace(/\?/g, ".");
+    return new RegExp("^" + pattern + "$");
+  }
+
+  function globMatch(base, segs) {
+    if (!fs.existsSync(base)) return false;
+    try { if (!fs.statSync(base).isDirectory()) return false; } catch { return false; }
+    const [head, ...rest] = segs;
+    if (!head) return true;
+    const re = segmentRegex(head);
+    for (const entry of fs.readdirSync(base)) {
+      if (!re.test(entry)) continue;
+      const next = path.join(base, entry);
+      if (rest.length === 0) return true;
+      try {
+        if (fs.statSync(next).isDirectory() && globMatch(next, rest)) return true;
+      } catch { /* broken symlink, etc */ }
+    }
+    return false;
+  }
+
+  function artifactExists(art) {
+    const full = path.isAbsolute(art) ? art : path.resolve(workspace, art);
+    if (!/[*?[]/.test(art)) return fs.existsSync(full);
+    const segs = full.split(/[\\/]/);
+    let prefixIdx = 0;
+    while (prefixIdx < segs.length && !/[*?[]/.test(segs[prefixIdx] || "")) prefixIdx++;
+    const prefix = segs.slice(0, prefixIdx).join("/") || "/";
+    const patternSegs = segs.slice(prefixIdx);
+    if (patternSegs.length === 0) return fs.existsSync(prefix);
+    return globMatch(prefix, patternSegs);
+  }
+
   const artifactsMissing = [];
+  const artifactsSkippedUnresolved = [];
   for (const step of completed) {
     for (const art of (step.artifacts_expected || [])) {
-      if (art.includes("${")) continue; // unresolved template variable — skip
-      const full = path.resolve(workspace, art);
-      if (!fs.existsSync(full)) {
+      if (art.includes("${")) {
+        artifactsSkippedUnresolved.push(art);
+        continue;
+      }
+      if (!artifactExists(art)) {
         artifactsMissing.push(art);
       }
     }
@@ -57,10 +103,11 @@ RESULT=$(WORKSPACE="$WORKSPACE" JOURNAL="$JOURNAL" node -e '
 
   process.stdout.write(JSON.stringify({
     artifacts_missing: artifactsMissing,
+    artifacts_skipped_unresolved: artifactsSkippedUnresolved,
     complete: missing.length === 0 && artifactsMissing.length === 0,
     steps_completed: completed.length,
     steps_logged: steps.length,
-    steps_missing: missing.map(s => s.step_id),
+    steps_missing: missing.map(s => ({ step_id: s.step_id, status: s.status })),
     steps_skipped: skipped.map(s => s.step_id),
   }));
 ' 2>/dev/null || true)
@@ -94,11 +141,18 @@ fi
 echo "INCOMPLETE FLOW:" >&2
 printf '%s' "$RESULT" | node -e '
   const r = JSON.parse(require("fs").readFileSync(0, "utf8"));
-  if (r.steps_missing.length) {
-    console.error("  Steps not completed: " + r.steps_missing.join(", "));
+  if (r.steps_missing && r.steps_missing.length) {
+    const rendered = r.steps_missing
+      .map(s => s.step_id + " (" + s.status + ")")
+      .join(", ");
+    console.error("  Steps not completed: " + rendered);
   }
-  if (r.artifacts_missing.length) {
+  if (r.artifacts_missing && r.artifacts_missing.length) {
     console.error("  Artifacts missing:   " + r.artifacts_missing.join(", "));
+  }
+  if (r.artifacts_skipped_unresolved && r.artifacts_skipped_unresolved.length) {
+    console.error("  Unresolved ${var} artifact patterns (verify substitution): "
+      + r.artifacts_skipped_unresolved.join(", "));
   }
 '
 exit 2
