@@ -22,8 +22,8 @@ done_criteria:
     description: "canon-learner extended with a principle-refinement analysis dimension. Learner reads lifecycle_workspace_snapshots + drift-store violations and produces structured patch proposals to principle files."
     testable: "canon-learner.md body specifies the new dimension. Running the learner against real data produces ≥ 1 structured proposal in .canon/proposed-learnings/{timestamp}/ targeting a specific principle file with a patch."
   - id: "dc-08"
-    description: "Gate B evidence: ≥ 1 principle-refinement proposal produced by the learner against real lifecycle data, accepted by a human reviewer, and applied as an actual edit to a principle file. End-to-end observation → pattern → proposal → refinement loop closed."
-    testable: "docs/v2.1b-gateB-evidence.md records the proposal, the review decision, the applied edit, and the resulting principle file diff. .canon/learning.jsonl records the accepted decision. The edited principle is in main."
+    description: "v2.1b loop-closure evidence: ≥ 1 principle-refinement proposal produced by the learner against real v2.1b-era lifecycle data, accepted by a human reviewer, and applied as an actual edit to a principle file. End-to-end observation → pattern → proposal → refinement loop closed. (Distinct from v2.md §15.2 Gate B, which is a process check runnable against pre-v2.1b drift-db.)"
+    testable: "docs/v2.1b-loop-closure-evidence.md records the proposal, the review decision, the applied edit, and the resulting principle file diff. .canon/learning.jsonl records the accepted decision. The edited principle is in main."
   - id: "dc-09"
     description: "Cross-artifact validation confirms the v2.1b minimum persistence substrate functions end-to-end: schema migration, snapshot on completion, tag capture, learner analysis, human curation, applied refinement."
     testable: "docs/v2.1b-validation-report.md records the full cycle for at least one flow from flow-start to applied refinement. No failures in any step."
@@ -35,7 +35,7 @@ done_criteria:
 
 **Vision:** Canon's learning loop (observation → pattern → proposal → refinement) closes end-to-end for **one refinement target** (principles) against **one persistence substrate** (a single new drift-db table + one MCP tool). Proves the loop works before v2.2 expands surface.
 
-**Done when:** dc-01 through dc-09 all pass. Gate B evidence (dc-08) is the ratification-gate criterion per `docs/agent-teams-migration-plan-v2.md` §15.2.
+**Done when:** dc-01 through dc-09 all pass. v2.1b loop-closure evidence (dc-08) is v2.1b's substrate-validation criterion. Separately, v2.md §15.2 Gate B (process check, runnable today against existing drift-db) is a Canon-wide ratification gate and is not this task tree's concern.
 
 **Constraints:**
 
