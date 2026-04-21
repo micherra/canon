@@ -82,13 +82,10 @@ tools:
 
 ### Tests to write
 
-- `agents/__tests__/canon-planner.test.ts` (or equivalent agent-definition lint path):
-  - Frontmatter parses; skills list matches the spec above
-  - `maxTurns: 40`, `model: opus`, `permissionMode: plan`, `memory: project` all present
-  - Body references both skill files by name
-  - No agent-body tool calls for Edit/Write/Bash (read-only by permissionMode)
-- Integration (runs in v2_1a-08 validation too):
-  - Spawn canon-planner against a representative build request; confirm `planning-brief.md` + `runbook.md` produced at expected paths; confirm runbook carries `confidence_signals[]` frontmatter; confirm no aggregate scalar in user-facing output
+No existing test infrastructure for agents/*.md. Validation is by:
+
+- Manual read: frontmatter matches spec (skills, maxTurns 40, model opus, permissionMode plan, memory project); body references both skill files by name; no Edit/Write/Bash calls in body (read-only by permissionMode)
+- Integration (part of v2_1a-08 validation): spawn canon-planner against a representative build request; confirm `planning-brief.md` + `runbook.md` produced at expected paths; runbook carries `confidence_signals[]` frontmatter; no aggregate scalar in user-facing output
 
 ### Verify
 

@@ -54,17 +54,10 @@ Extend the `canon-learner` agent so it can read lifecycle snapshots (v2_1b-01) +
 
 ### Tests to write
 
-- `skills/canon/references/__tests__/learner-principle-refinement.test.ts`:
-  - Skill file parses
-  - Documents the 4 illustrative pattern-detection queries (or equivalent named patterns)
-  - Specifies confidence bar + proposal format
-- `agents/__tests__/canon-learner.test.ts` (extend):
-  - Learner body references the new skill
-  - `skills:` frontmatter includes `learner-principle-refinement`
-  - Existing mining behavior preserved (regression check)
-- Integration (runs in v2_1b-07 Gate B evidence):
-  - Against a seeded dataset of ≥ 5 flows with populated v2.1b tags, running canon-learner produces ≥ 1 structured principle-refinement proposal in `.canon/proposed-learnings/{timestamp}/`
-  - Below-confidence-bar cases produce observations, not proposals
+No existing test infrastructure for skills/*.md or agents/*.md. Validation is by:
+
+- Manual read: skill file documents input sources, pattern-detection queries, confidence bar, proposal format; canon-learner body references the new skill; `skills:` frontmatter includes `learner-principle-refinement`; existing mining behavior text preserved
+- Integration (runs in v2_1b-07 loop-closure-evidence): against a seeded dataset of ≥ 5 flows with populated v2.1b tags, running canon-learner produces ≥ 1 structured principle-refinement proposal in `.canon/proposed-learnings/{timestamp}/`. Below-confidence-bar cases produce observations, not proposals.
 
 ### Verify
 

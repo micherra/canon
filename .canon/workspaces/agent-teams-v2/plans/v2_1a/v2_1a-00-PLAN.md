@@ -59,11 +59,15 @@ Total: 15 entries (13 functional + 2 mandatory tail).
 
 ### Tests to write
 
-- `skills/canon/references/__tests__/runbook-vocabulary.test.ts`:
-  - Parse the vocabulary file; assert exactly 15 entries
-  - Assert mandatory tail IDs (`context-sync`, `learn`) present with `canon-scribe` / `canon-learner` defaults
-  - Assert every step ID is unique and lowercase-kebab
-  - Assert `fix` entry requires `cause` field note in its purpose cell
+Canon has no existing test infrastructure for skills/ markdown files. Options:
+
+- **Preferred:** add minimal validation via the skills-manifest loader (if one exists) or via the integration test in v2_1a-02 / v2_1a-08 (which parses the vocabulary as part of synthesis validation — a failing vocabulary fails synthesis downstream).
+- **If a skill-lint harness is desirable:** file a follow-up task to add `scripts/lint-skills.ts` that parses every `skills/canon/references/*.md` skill file for required frontmatter. Out of scope for this task.
+
+Validation for v2_1a-00:
+
+- Manual read: exactly 15 step entries; mandatory tail present; step IDs unique + lowercase-kebab; `fix` entry notes `cause` requirement
+- Downstream integration (v2_1a-02): synthesis skill validates `skills:` references against this file at synthesis time — runs on every synthesized runbook
 
 ### Verify
 

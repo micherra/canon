@@ -61,17 +61,9 @@ findings:
 
 ### Tests to write
 
-- `templates/__tests__/review-checklist.test.ts`:
-  - Template requires `principle_id` per finding
-  - Finding without `principle_id` fails template parse
-- `agents/__tests__/canon-reviewer.test.ts` (extend):
-  - Reviewer body requires principle-ID-per-finding
-  - Body documents the "no principle → observation, not finding" rule
-- Indexer test (drift-store):
-  - Existing review write with no `principle_id` → rejected or warned (confirm current behavior; make strict if currently tolerant)
-- Integration (runs in v2_1b-08):
-  - Run a review against a test flow; inspect all findings; assert `principle_id` non-null for every finding
-  - Run a review where no principle clearly applies; reviewer emits an observation (not a finding) or escalates to `canon-writer`
+- **Indexer test** (drift-store has existing `__tests__/` under `mcp-server/src/platform/storage/drift/__tests__/`): extend or add tests for `principle_id` strictness — existing review write with no `principle_id` should reject or warn. Confirm current behavior; make strict if currently tolerant.
+- No existing test infrastructure for templates/*.md or agents/*.md. Manual read: review-checklist requires `principle_id` per finding; reviewer body requires principle-ID-per-finding and documents the "no principle → observation, not finding" rule.
+- Integration (runs in v2_1b-08): run a review against a test flow; inspect findings; assert all `principle_id` non-null. Run a review where no principle clearly applies; reviewer emits an observation (not a finding) or escalates to `canon-writer`.
 
 ### Verify
 

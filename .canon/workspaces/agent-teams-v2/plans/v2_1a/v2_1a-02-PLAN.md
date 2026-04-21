@@ -74,14 +74,10 @@ Write `skills/canon/references/runbook-synthesis.md` defining the mechanical syn
 
 ### Tests to write
 
-- `skills/canon/references/__tests__/runbook-synthesis.test.ts`:
-  - Skill file parses as markdown
-  - Step schema section declares all 9 first-class fields
-  - MUST / MAY / MUST NOT sections each present with ≥ 3 items
-  - Iterate-until-approved loop documented with iteration persistence rule
-  - Confidence section specifies per-signal user-facing + aggregate internal (aligned with §7.1)
-- `skills/canon/references/__tests__/runbook-synthesis-integration.test.ts`:
-  - End-to-end: spawn canon-planner against a representative fast-path-equivalent request; synthesize runbook; assert every MUST is satisfied; assert mandatory tail present
+No existing test infrastructure for skills/*.md markdown. Validation is by:
+
+- Manual read against the 7-contract-element checklist (step schema 9 fields, MUST / MAY / MUST NOT ≥ 3 items each, iteration loop doc, confidence per-signal-only wording)
+- Integration test (can live in existing `mcp-server/src/features/orchestration/__tests__/` following the repo's test-path convention): end-to-end spawn of canon-planner against a representative fast-path-equivalent request; synthesize runbook; assert every MUST is satisfied; assert mandatory tail present. Belongs to v2_1a-08 validation but can be developed incrementally during this task.
 
 ### Verify
 

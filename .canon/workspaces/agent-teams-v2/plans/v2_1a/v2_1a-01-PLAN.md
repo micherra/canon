@@ -57,11 +57,11 @@ Write `skills/canon/references/planner-brief.md` defining the strategic-analysis
 
 ### Tests to write
 
-- `skills/canon/references/__tests__/planner-brief.test.ts`:
-  - Skill file parses as markdown
-  - All 6 required brief sections documented
-  - Depth calibration rules cover the three complexity tiers
-  - Artifact contract specifies `${WORKSPACE}/plans/${slug}/planning-brief.md` path
+No existing test infrastructure for skills/*.md. Validation is by:
+
+- Manual read against the 5-contract-element checklist
+- Downstream integration: canon-planner (v2_1a-03) loads this skill; if the skill is malformed the planner spawn fails, which the v2_1a-08 validation will catch against all 5 request types
+- Optional: file follow-up task to add skill-lint harness — out of scope here
 
 ### Verify
 

@@ -57,15 +57,10 @@ The field is **optional** — empty array (or omitted entirely) is the common ca
 
 ### Tests to write
 
-- `templates/__tests__/implementation-log.test.ts` (extend):
-  - `justified_deviations` field present as an optional array in template
-  - Each entry must have `principle_id`, `reason_short`, `deviation_from`
-  - Template parse accepts empty / omitted field
-- `agents/__tests__/canon-engineer.test.ts` (extend):
-  - Engineer body references the `justified_deviations[]` rule
-  - Body forbids fabrication (explicit text to that effect)
-- Integration (runs in v2_1b-08):
-  - Run a flow where the plan calls for X but the engineer sees a simpler Canon-principle-aligned path Y; engineer produces implementation-log with a populated `justified_deviations[]` entry; indexer stores it
+No existing test infrastructure for templates/*.md or agents/*.md. Validation is by:
+
+- Manual read: template carries `justified_deviations[]` as optional array; each entry requires `principle_id` + `reason_short` + `deviation_from`; empty / omitted permitted; canon-engineer body cites the rule and forbids fabrication
+- Integration (runs in v2_1b-08): run a flow where the engineer legitimately deviates with Canon alignment; implementation-log carries a populated entry; indexer stores it
 
 ### Verify
 
