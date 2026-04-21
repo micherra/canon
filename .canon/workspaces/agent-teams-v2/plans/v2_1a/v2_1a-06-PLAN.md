@@ -1,7 +1,7 @@
 ---
 task_id: "v2_1a-06"
-wave: 3
-depends_on: ["v2_1a-01", "v2_1a-02", "v2_1a-03"]
+wave: 2
+depends_on: []
 decisions:
   - "dc-07"
 files:
@@ -41,7 +41,7 @@ Expand Canon's intent-routing surface so that every Canon intent that edits trac
 
 2. **Shared "content flow" pattern** — create `skills/canon/references/content-flow.md` that documents a lightweight synthesized-runbook pattern for non-`build` Canon intents. Steps vocabulary is the same as `build` (from v2_1a-00); what changes is which steps are typical (`research` → `content-edit` (mapped to `implement` with `skills: content-authoring`) → `review` → `context-sync` → `learn`). No code-step defaults (`design`, `test`, `security`) for content flows.
 
-3. **`canon-writer` agent body amendment** — agent now expects a workspace path in its spawn prompt, produces an `implementation-log.md` at `${WORKSPACE}/plans/${slug}/` documenting what principle(s) it edited, and runs under `acceptEdits` permission mode (currently `plan`-only).
+3. **`canon-writer` agent body amendment** — agent now expects a workspace path in its spawn prompt, produces an `implementation-log.md` at `${WORKSPACE}/plans/${slug}/` documenting what principle(s) it edited. **No `permissionMode` change required** — `canon-writer` already has `Write`, `Edit`, `Bash` in its `tools` list and no explicit `permissionMode` (defaults apply); it was already a write-capable agent. The amendment is purely behavioral: expect a workspace path, log the edit. Verify in `agents/canon-writer.md` before executing this task that current frontmatter matches this understanding; if it differs, amend this plan first rather than blindly applying.
 
 4. **`canon-learner` agent body amendment** — when the learner is spawned as part of applying an accepted proposal (rather than mining), it must receive a workspace path. Today's learner runs without one for proposal generation (writing to `.canon/proposed-learnings/`, which is gitignored); that continues for mining. For *application*, learner uses the same workspace-creating content flow as `canon-writer`.
 
@@ -62,12 +62,8 @@ Expand Canon's intent-routing surface so that every Canon intent that edits trac
 - `skills/canon/references/__tests__/content-flow.test.ts`:
   - content-flow.md parses as a skill file
   - Does not reintroduce step IDs outside the vocabulary from v2_1a-00
-- `agents/__tests__/canon-writer.test.ts`:
-  - Frontmatter carries `permissionMode: acceptEdits` (changed from `plan` for this expansion)
-  - Body references the workspace contract
-- `agents/__tests__/canon-learner.test.ts`:
-  - Body differentiates mining vs. application flows
-  - Application flow references a workspace path
+- No automated tests for agent-definition markdown (Canon has no `agents/__tests__/` test infrastructure today). Verification is by manual read + the integration test below.
+- Manual read of `agents/canon-writer.md` + `agents/canon-learner.md` post-amendment: bodies reference workspace contract; canon-learner differentiates mining vs. application flows.
 - Integration test (runs in v2_1a-08 validation):
   - Running `canon-writer` against a test principle produces a workspace at `.canon/workspaces/<slug>/` with `plans/${slug}/implementation-log.md`
   - Running `canon-learner` in application mode produces a workspace and an `implementation-log.md`

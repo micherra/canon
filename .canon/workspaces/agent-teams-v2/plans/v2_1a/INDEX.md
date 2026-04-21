@@ -12,7 +12,7 @@
 | v2_1a-03 | 3 | v2_1a-01, v2_1a-02 | `agents/canon-planner.md` | Rewrite canon-planner body to load both skills, emit brief+runbook, run iterate-until-approved |
 | v2_1a-04 | 3 | Wave 2 | `CLAUDE.md` | Amend with L1 per-message intent re-classification + pre-write gate guidance |
 | v2_1a-05 | 3 | Wave 2 | `hooks/canon-agent-teams/canon-workspace-check.sh`, `hooks/canon-agent-teams/hooks.json` | L4 PreToolUse hook with .gitignore-based allowlist (review HIGH-1) |
-| v2_1a-06 | 3 | Wave 2 | `CLAUDE.md`, `agents/canon-writer.md`, `agents/canon-learner.md` | Intent-routing expansion: principle / learn / docs intents create workspaces (review HIGH-1 prerequisite for L4) |
+| v2_1a-06 | 2 | — | `CLAUDE.md`, `agents/canon-writer.md`, `agents/canon-learner.md`, `skills/canon/references/content-flow.md` | Intent-routing expansion: principle / learn / docs intents create workspaces (review HIGH-1 prerequisite for L4). No deps — can run in parallel with v2_1a-01 and v2_1a-02. |
 | v2_1a-07 | 4 | Wave 3 | `docs/v2.1a-coldstart-spike.md` | Pre-ship cold-start friction spike: 3 trivial requests, measure iteration-0 latency (review MEDIUM-6) |
 | v2_1a-08 | 5 | Wave 4 | `docs/v2.1a-validation-report.md` | Cross-artifact validation against ≥ 5 distinct request types |
 
@@ -20,14 +20,13 @@
 
 **Wave 1** (1 task): Create canonical step vocabulary. No dependencies — foundation for all downstream skills.
 
-**Wave 2** (2 tasks, parallel): Planner-brief and runbook-synthesis skills, both strictly referencing the vocabulary.
+**Wave 2** (3 tasks, parallel): Planner-brief and runbook-synthesis skills (both depend on Wave 1 vocabulary); intent-routing expansion (no deps — moved from Wave 3 per fresh review; canon-writer/canon-learner routing doesn't require the synthesis skills).
 
-**Wave 3** (4 tasks, parallel after Wave 2):
+**Wave 3** (3 tasks, parallel after Wave 2):
 - v2_1a-03 rewrites the planner body
 - v2_1a-04 amends CLAUDE.md with L1
 - v2_1a-05 ships the L4 hook
-- v2_1a-06 expands intent routing so L4 doesn't block legitimate non-`build` Canon intents
-- L4 (v2_1a-05) MUST NOT land before intent-routing expansion (v2_1a-06) clears, otherwise L4 blocks canon-writer / canon-learner flows
+- L4 (v2_1a-05) MUST NOT land before intent-routing expansion (v2_1a-06) from Wave 2 clears, otherwise L4 blocks canon-writer / canon-learner flows
 
 **Wave 4** (1 task): Cold-start friction spike. Needs the full integrated system to run against.
 
