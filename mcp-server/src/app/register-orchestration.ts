@@ -8,6 +8,7 @@ import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
 import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
 import { injectWaveEvent } from "@features/orchestration/tools/inject-wave-event.ts";
 import { loadFlow } from "@features/orchestration/tools/load-flow.ts";
+import { logStep, verifyCompletion } from "@features/orchestration/tools/orchestration-journal.ts";
 import { postEvent } from "@features/orchestration/tools/post-event.ts";
 import { postMessage } from "@features/orchestration/tools/post-message.ts";
 import { reportResult } from "@features/orchestration/tools/report-result.ts";
@@ -527,6 +528,65 @@ function registerCategorizeTool(): void {
   );
 }
 
+function registerJournalTools(): void {
+  // Feature flag gate: only register when agent-teams mode is active.
+  // Keeps legacy CANON_AGENT_TEAMS_MODE=off path byte-identical.
+  if (process.env.CANON_AGENT_TEAMS_MODE !== "on") return;
+
+  server.registerTool(
+    "log_step",
+    {
+      description:
+        "Log a step in the orchestration journal. Records step execution for audit trail and completion verification. Accepts domain_skills_loaded and outcome fields for self-improving skills analysis (§4b P4).",
+      inputSchema: {
+        agent_type: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("Agent definition name, null for gate-only steps"),
+        artifacts_expected: z
+          .array(z.string())
+          .optional()
+          .describe("Expected artifact paths relative to workspace"),
+        domain_skills_loaded: z
+          .array(z.string())
+          .optional()
+          .describe("Domain skills named in spawn prompt for this step"),
+        mcp_tools_called: z
+          .array(z.string())
+          .optional()
+          .describe("MCP tools the lead called for this step"),
+        outcome: z
+          .object({
+            fix_iterations: z.number().optional(),
+            review_verdict: z.string().optional(),
+            test_pass_rate: z.number().optional(),
+          })
+          .optional()
+          .describe("Quality signals recorded on completion (§4b P4)"),
+        status: z
+          .enum(["planned", "started", "completed", "skipped"])
+          .describe("Step execution status"),
+        step_id: z.string().describe("Step ID from the runbook"),
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    wrapHandler(async (input) => logStep(input)),
+  );
+
+  server.registerTool(
+    "verify_completion",
+    {
+      description:
+        "Verify flow completion by checking the orchestration journal. Returns steps logged, steps missing (started but not completed), artifacts missing, and a flow_outcome block with aggregated quality signals (domain skills used, review verdict, fix iterations, total duration).",
+      inputSchema: {
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    wrapHandler(async (input) => verifyCompletion(input)),
+  );
+}
+
 export function registerOrchestrationTools(): void {
   registerFlowCoreTools();
   registerReportTools();
@@ -535,4 +595,5 @@ export function registerOrchestrationTools(): void {
   registerMessagingTools();
   registerDriveFlowTool();
   registerCategorizeTool();
+  registerJournalTools();
 }
