@@ -33,7 +33,24 @@ Create `hooks/canon-agent-teams/canon-workspace-check.sh` as a PreToolUse hook t
 | `Bash` | resolved target paths include any tracked file | no active workspace | **BLOCK** |
 | `Bash` | resolved target paths all gitignored OR no file targets | any | **ALLOW** |
 
-**"Current flow" detection:** check for `.canon/workspaces/<slug>/` where the workspace metadata lists the current branch (or HEAD's merge-base with a known workspace-active branch per existing Canon conventions). If lead is in plan mode or has not yet called `init_workspace`, no workspace exists; but per the bootstrap-contract assertion, L4 only fires on `Edit` / `Write` / tracked-Bash — not on the MCP tool calls used for `init_workspace` itself.
+**"Current flow" detection** — this is the most error-prone part of L4. A fresh-review pass found the original spec ambiguous for multi-branch / worktree cases. Spec:
+
+The hook must answer: "is there an active Canon workspace that *covers* the current working context?" Decision table:
+
+| Current context | Match rule | Rationale |
+|-----------------|------------|-----------|
+| Lead session on branch `B`; `.canon/workspaces/<slug>/` metadata lists `branch: B` | **Match** — allow | Primary case |
+| Lead session on branch `B`; no workspace lists `branch: B` | **No match** — block | The failure mode L4 protects against |
+| Subagent / teammate in a worktree on branch `B'` spawned from a lead flow on branch `B` | **Match via parent** — allow | Wave-parallel worktrees inherit the parent workspace; worktree metadata must record `parent_workspace_id` so L4 can resolve to the parent's workspace; if parent workspace is active, allow |
+| Subagent in a worktree on detached HEAD | **Match via parent** — allow | Same as above; detached HEAD means a spawned context, parent lookup required |
+| Lead session on branch `B`; multiple workspaces list `branch: B` | **Match** — allow (youngest wins) | Concurrent workspaces on the same branch are unusual but possible; accept any active one; if multiple, this hints at workspace-cleanup failure (file follow-up task, but don't block) |
+| Lead session on branch `B`; a workspace lists `branch: B` but was snapshotted + torn down | **No match** — block | Snapshot + teardown means the workspace is no longer active; new work requires a new workspace |
+
+**Parent-workspace lookup** — worktree metadata must include `parent_workspace_id: <slug>` or equivalent. If Canon's existing worktree convention does not record this, this task depends on amending that convention (file as sub-task if discovered during implementation).
+
+**"Active" definition:** a workspace is active if (a) its directory exists at `.canon/workspaces/<slug>/`, (b) it has NOT been snapshotted to `lifecycle_workspace_snapshots` (v2.1b — once that table exists), (c) it has NOT been marked complete/aborted/abandoned in its board state.
+
+**Implementation note:** the hook must resolve the current branch via `git symbolic-ref HEAD` (named branch) or `git rev-parse HEAD` (detached); it must resolve parent workspace via the worktree-metadata path. All lookups are read-only git + filesystem operations; no MCP call is needed from inside the hook (which keeps bootstrap clean — see below).
 
 **Bash argument resolution:**
 - Parse the Bash command string
@@ -76,7 +93,11 @@ Create `hooks/canon-agent-teams/canon-workspace-check.sh` as a PreToolUse hook t
 - `hooks/canon-agent-teams/__tests__/canon-workspace-check.test.sh` (or equivalent test harness):
   - Test case: Edit on tracked file, no workspace → blocks
   - Test case: Edit on gitignored file, no workspace → allows
-  - Test case: Edit on tracked file, workspace present → allows
+  - Test case: Edit on tracked file, workspace present for current branch → allows
+  - Test case: Edit in worktree on branch B', parent workspace active on branch B → allows (via parent lookup)
+  - Test case: Edit in worktree on detached HEAD, parent workspace active → allows (via parent lookup)
+  - Test case: Edit on branch B, workspace exists for B but was snapshotted + torn down → blocks
+  - Test case: Edit on branch B, multiple active workspaces match B → allows (youngest wins); filed follow-up about concurrent-workspace hygiene
   - Test case: Write on tracked file, no workspace → blocks
   - Test case: `bash -c 'sed -i ... README.md'` (tracked target), no workspace → blocks
   - Test case: `bash -c 'ls'` (no file targets), no workspace → allows
