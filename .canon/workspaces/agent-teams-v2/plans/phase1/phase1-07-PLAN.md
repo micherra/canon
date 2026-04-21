@@ -1,15 +1,13 @@
 ---
 task_id: "phase1-07"
-wave: 2
-depends_on:
-  - "phase1-00"
-  - "phase1-01"
-  - "phase1-02"
-  - "phase1-03"
-  - "phase1-04"
+wave: 1
+depends_on: []
 files:
   - hooks/canon-agent-teams/post-commit-trailers.sh
   - hooks/canon-agent-teams/completion-verify.sh
+  - hooks/canon-agent-teams/session-start-doc-check.sh
+  - hooks/canon-agent-teams/session-start-kg-check.sh
+  - hooks/canon-agent-teams/post-engineer-scribe.sh
   - hooks/canon-agent-teams/hooks.json
 principles:
   - agent-tdd-required
@@ -19,9 +17,30 @@ domains:
 
 ## Task: Write agent-teams hook scripts and hooks.json
 
+> **Scope note (2026-04-21).** This PLAN originally specified 2 hook
+> scripts. DESIGN.md dc-05, INDEX.md, and docs/agent-teams-migration-
+> plan-v2.md §10.1 (lines 1027–1031) all specify **5 hook scripts** as
+> Phase 1 Wave 1 scope, and Gate A measures against that 5-hook set.
+> This PLAN has been amended to the 5-hook scope to keep the plan tree
+> internally consistent; the original 2-hook draft was stale relative
+> to the higher-order DESIGN/INDEX/v2.md documents it should have
+> tracked. See PR #119 architect review Finding 1.
+
 ### Action
 
-Create two hook scripts and a hooks.json configuration for the agent-teams mode. These provide defense-in-depth enforcement (§2.8 layer 5 of migration plan).
+Create five hook scripts and a hooks.json configuration for the
+agent-teams mode. These provide defense-in-depth enforcement (§2.8
+layer 5 of the migration plan).
+
+The 5-hook set:
+
+| Script | Trigger | Purpose |
+|--------|---------|---------|
+| `post-commit-trailers.sh` | PostToolUse (Bash) | Warn when a git commit lands without a Canon-Workflow trailer. PostToolUse cannot block retroactively. |
+| `completion-verify.sh` | Called explicitly by the lead (NOT auto-registered) | Reads the orchestration journal; exits non-zero when steps are incomplete or artifacts missing. |
+| `session-start-doc-check.sh` | SessionStart | Advisory nudge when HEAD diverges from `.canon/last-scribe-commit`. |
+| `session-start-kg-check.sh` | SessionStart | Advisory nudge when `.canon/knowledge-graph.db` is missing or stale (>24h default). |
+| `post-engineer-scribe.sh` | SubagentStop | After `canon-engineer` completes, writes `pending-scribe.json` to workspace so the lead runs the scribe before flow completion. |
 
 #### 1. Create directory structure
 
@@ -85,149 +104,101 @@ Note: PostCommit hooks in Claude Code run AFTER the commit, so they cannot block
 
 #### 3. Write `completion-verify.sh`
 
-This hook calls `verify_completion` via the Canon MCP server's CLI interface (or reads the journal directly) to check whether the flow is complete.
+This script is called explicitly by the lead before declaring a flow done.
+It reads the orchestration journal and blocks with exit 2 when any step
+is not in a terminal state (planned + started are both missing) or when
+any expected artifact cannot be found on disk. Glob patterns in artifact
+paths are expanded; `${var}` template fragments are surfaced but do not
+block completion.
 
-```bash
-#!/usr/bin/env bash
-# completion-verify.sh ��� Completion verification hook
-# Reads the orchestration journal and verifies all steps are complete.
-# Called by the lead before declaring a flow done.
-# Exit 0: all steps complete, all artifacts present
-# Exit 2: incomplete — steps or artifacts missing
+Semantics must mirror `verify_completion` in
+`mcp-server/src/features/orchestration/tools/orchestration-journal.ts`
+so the hook and the MCP tool agree on every question they both answer.
 
-set -euo pipefail
+See the shipped `hooks/canon-agent-teams/completion-verify.sh` for the
+reference implementation.
 
-# Only enforce when agent-teams mode is active
-if [[ "${CANON_AGENT_TEAMS_MODE:-off}" != "on" ]]; then
-  exit 0
-fi
+#### 4. Write `session-start-doc-check.sh`
 
-# Get workspace from environment or argument
-WORKSPACE="${CANON_WORKSPACE:-${1:-}}"
+SessionStart advisory hook. Reads `.canon/last-scribe-commit`; emits an
+informational nudge on stdout when HEAD has advanced past the recorded
+SHA. Never blocks — exit 0 regardless. A missing file or empty SHA
+simply emits the "no checkpoint yet" nudge once.
 
-if [[ -z "$WORKSPACE" ]]; then
-  echo "ERROR: No workspace specified. Set CANON_WORKSPACE or pass as argument." >&2
-  exit 2
-fi
+#### 5. Write `session-start-kg-check.sh`
 
-JOURNAL="$WORKSPACE/journal.json"
+SessionStart advisory hook. Checks `.canon/knowledge-graph.db` exists and
+that its mtime is within `CANON_KG_STALE_SECONDS` (default 86400s).
+Emits a nudge when missing or stale so the lead knows `graph_query` /
+`get_file_context` results may be degraded. Never blocks.
 
-if [[ ! -f "$JOURNAL" ]]; then
-  echo "ERROR: No orchestration journal found at $JOURNAL" >&2
-  echo "The lead must call log_step for each runbook step." >&2
-  exit 2
-fi
+#### 6. Write `post-engineer-scribe.sh`
 
-# Parse journal using node (available in Canon environments)
-RESULT=$(node -e "
-  const j = JSON.parse(require('fs').readFileSync('$JOURNAL', 'utf8'));
-  const steps = j.steps || [];
-  const missing = steps.filter(s => s.status === 'started');
-  const completed = steps.filter(s => s.status === 'completed');
-  const skipped = steps.filter(s => s.status === 'skipped');
+SubagentStop hook. When the stopping subagent is `canon-engineer`,
+writes `${WORKSPACE}/pending-scribe.json` so the lead's completion
+checklist (phase1-09 CLAUDE.md) can check for it and run canon-scribe
+before declaring done. Workspace discovery: `CANON_WORKSPACE` env var,
+then the hook payload's `workspace` field. Never blocks.
 
-  // Check artifacts
-  const path = require('path');
-  const fs = require('fs');
-  const artifactsMissing = [];
-  for (const step of completed) {
-    for (const art of (step.artifacts_expected || [])) {
-      // Skip paths with unresolved variables
-      if (art.includes('\${')) continue;
-      const full = path.resolve('$WORKSPACE', art);
-      if (!fs.existsSync(full)) {
-        artifactsMissing.push(art);
-      }
-    }
-  }
+#### 7. Write `hooks/canon-agent-teams/hooks.json`
 
-  console.log(JSON.stringify({
-    steps_logged: steps.length,
-    steps_completed: completed.length,
-    steps_missing: missing.map(s => s.step_id),
-    steps_skipped: skipped.map(s => s.step_id),
-    artifacts_missing: artifactsMissing,
-    complete: missing.length === 0 && artifactsMissing.length === 0
-  }));
-" 2>/dev/null)
-
-if [[ -z "$RESULT" ]]; then
-  echo "ERROR: Failed to parse journal at $JOURNAL" >&2
-  exit 2
-fi
-
-COMPLETE=$(echo "$RESULT" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).complete.toString())")
-
-if [[ "$COMPLETE" == "true" ]]; then
-  STEPS_LOGGED=$(echo "$RESULT" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).steps_logged.toString())")
-  STEPS_COMPLETED=$(echo "$RESULT" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).steps_completed.toString())")
-  echo "Completion verified: $STEPS_COMPLETED/$STEPS_LOGGED steps complete."
-  exit 0
-fi
-
-# Incomplete — report details
-echo "INCOMPLETE FLOW:" >&2
-MISSING=$(echo "$RESULT" | node -e "
-  const r = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-  if (r.steps_missing.length) console.log('  Steps not completed: ' + r.steps_missing.join(', '));
-  if (r.artifacts_missing.length) console.log('  Artifacts missing: ' + r.artifacts_missing.join(', '));
-")
-echo "$MISSING" >&2
-exit 2
-```
-
-#### 4. Write `hooks/canon-agent-teams/hooks.json`
-
-```json
-{
-  "description": "Canon agent-teams hooks — commit trailer validation and completion verification. Active only when CANON_AGENT_TEAMS_MODE=on.",
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/post-commit-trailers.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Note: The `completion-verify.sh` hook is NOT registered in hooks.json as a PostToolUse hook — it is called explicitly by the lead (or by the CLAUDE.md completion checklist) before declaring a flow done. It is a verification script, not an automatic hook. If it were a PostToolUse hook, it would fire on every Bash command which is wrong. Instead, the lead's CLAUDE.md orchestration guidance instructs: "Before calling `update_board complete_flow`, run `bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/completion-verify.sh`".
+Register 4 of the 5 scripts: PostToolUse(Bash) → post-commit-trailers,
+SessionStart → session-start-doc-check + session-start-kg-check,
+SubagentStop → post-engineer-scribe. `completion-verify.sh` is NOT
+registered: registering it PostToolUse would fire on every Bash call,
+which is wrong. Instead, the lead's CLAUDE.md completion checklist
+(phase1-09) instructs: "Before calling `update_board complete_flow`,
+run `bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/completion-verify.sh`".
 
 ### Canon principles to apply
-- **agent-tdd-required**: Write tests for both hook scripts.
+- **agent-tdd-required**: Write tests for both hook scripts that have
+  non-trivial logic (`post-commit-trailers.sh` and `completion-verify.sh`).
+  The three advisory hooks (session-start-doc-check, session-start-kg-check,
+  post-engineer-scribe) are simple stderr nudges and need no test script
+  beyond feature-flag gating verification.
 
 ### Risk mitigations
-- **Feature flag isolation**: Both scripts check `CANON_AGENT_TEAMS_MODE` first and exit 0 if not active. This ensures they are no-ops when the flag is off.
-- **PostCommit hook limitation**: PostCommit hooks cannot block already-committed work. The trailer hook warns only. The completion-verify hook is the hard enforcement gate at flow end.
-- **Node availability**: `completion-verify.sh` requires `node` to parse JSON. This is safe in Canon environments (Node.js 24+ is required by the MCP server).
+- **Feature flag isolation**: All five scripts check `CANON_AGENT_TEAMS_MODE`
+  first and exit 0 if not active. No-op when flag is off.
+- **PostCommit hook limitation**: PostCommit hooks cannot block already-
+  committed work. The trailer hook warns only. The completion-verify
+  hook is the hard enforcement gate at flow end.
+- **Node availability**: `completion-verify.sh` requires `node` to parse
+  JSON. Safe in Canon environments (Node.js 24+ is required by the MCP
+  server).
 
 ### Tests to write
-- `hooks/canon-agent-teams/post-commit-trailers.test.sh`: Test that the hook exits 0 when mode is off, exits 0 when trailer is present, and warns when trailer is missing.
-- `hooks/canon-agent-teams/completion-verify.test.sh`: Test that the hook exits 0 when all steps complete, exits 2 when steps are missing, exits 2 when artifacts are missing, exits 2 when no journal exists, and exits 0 when mode is off.
+
+- `hooks/canon-agent-teams/post-commit-trailers.test.sh`: feature-flag
+  off, non-Bash input, non-commit Bash, commit with trailer (no warning),
+  commit without trailer (warns on stderr).
+- `hooks/canon-agent-teams/completion-verify.test.sh`: feature-flag off,
+  missing workspace, missing journal, complete flow, started-but-not-
+  completed blocks, planned blocks, missing artifacts, skipped steps do
+  not block, glob patterns match, glob with no match, `${var}` does
+  not block.
 
 ### Verify
-1. Both scripts are executable: `chmod +x hooks/canon-agent-teams/*.sh`
-2. `hooks/canon-agent-teams/hooks.json` parses as valid JSON
+1. All five scripts are executable: `chmod +x hooks/canon-agent-teams/*.sh`
+2. `hooks/canon-agent-teams/hooks.json` parses as valid JSON and
+   registers 4 scripts (not completion-verify).
 3. Test scripts pass:
    - `bash hooks/canon-agent-teams/post-commit-trailers.test.sh`
    - `bash hooks/canon-agent-teams/completion-verify.test.sh`
-4. Feature flag gating: both scripts exit 0 when `CANON_AGENT_TEAMS_MODE` is unset
-5. `npm run build` passes (no TypeScript changes)
-6. `npm test` passes (no test changes)
-7. The existing `hooks/hooks.json` is NOT modified
+4. Feature flag gating: all five scripts exit 0 when
+   `CANON_AGENT_TEAMS_MODE` is unset.
+5. `npm run build` passes (no TypeScript changes).
+6. `npm test` passes at baseline (no new regressions).
+7. The existing `hooks/hooks.json` is NOT modified.
 
 ### Done when
-- `hooks/canon-agent-teams/post-commit-trailers.sh` exists and validates Canon-Workflow trailer
-- `hooks/canon-agent-teams/completion-verify.sh` exists and verifies journal completion
-- `hooks/canon-agent-teams/hooks.json` exists with PostToolUse registration for the trailer hook
-- Both scripts gate on `CANON_AGENT_TEAMS_MODE=on`
-- Test scripts written and passing
-- Existing hooks untouched
-- Build and tests pass unchanged
+
+- All 5 hook scripts exist under `hooks/canon-agent-teams/`, are
+  executable, and gate on `CANON_AGENT_TEAMS_MODE=on`.
+- `hooks/canon-agent-teams/hooks.json` registers 4 scripts; completion-
+  verify is called explicitly by the lead.
+- Both test scripts written and passing.
+- Existing hooks untouched.
+- Build and tests pass unchanged (relative to the baseline failure set
+  captured in `.canon/workspaces/agent-teams-v2/baseline-failures.md`).
+
