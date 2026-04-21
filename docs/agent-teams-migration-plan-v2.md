@@ -3,7 +3,7 @@
 **Status:** REVISED — v2.1-aligned implementation plan
 **Owner:** Canon maintainers
 **Last updated:** 2026-04-19
-**Supersedes:** `docs/agent-teams-migration-plan.md` (v1, 2026-04-10)
+**Supersedes:** v1 (2026-04-10; abandoned before implementation, archived in git history)
 **Aligned with:** `docs/agent-teams-migration-plan-v2.1.md` (architectural source)
 **Architect review:** `docs/agent-teams-migration-plan-v2.1-review.md` (concerns + rewrite guidance)
 **Source material:** `docs/v2-plan-kickoff-prompt.md` on `canon/agent-teams-phase-2`; 28-gap integration audit (2026-04-11)
@@ -52,7 +52,7 @@ This is true about *scheduling* but wrong about *composition*. The v1 plan scope
 
 The v1 plan's Phase 2 code (`lead-mode.ts` on `canon/agent-teams-phase-2`) produced a `SpawnDescriptor` carrying only `role`, `task_type`, `task_id`, `spawn_prompt`, `artifact`, `artifact_path`, `hitl` (a string enum), and `required_artifacts`. It carried none of: `tools`, `disallowed_tools`, `permission_mode`, `worktree_path`, `continue_from`, wave policy, enrichment, principles, or commit provenance. An integration audit found **27 real gaps plus one already-known auto-approve gap** — 11 HIGH, 11 MEDIUM, 5 LOW severity. Phases 1 and 2 collectively provided roughly 10–15% of what `drive_flow` actually does at spawn time.
 
-**Phase 1 and Phase 2 are abandoned.** Their code lives on `canon/agent-teams-phase-2` and `claude/canon-agent-teams-migration-gICh6` as read-only reference. The only v1 artifact on main is `docs/agent-teams-migration-plan.md`.
+**Phase 1 and Phase 2 are abandoned.** Their code lives on `canon/agent-teams-phase-2` and `claude/canon-agent-teams-migration-gICh6` as read-only reference. v1's plan document was deleted from main once v2 superseded it; it remains available in git history for anyone needing the original text.
 
 ### What v2.1 adds on top of v2
 

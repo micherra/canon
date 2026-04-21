@@ -273,7 +273,7 @@ Each phase gets its own subsection with entry gate, scope, out-of-scope, exit cr
 The rewritten v2 header should carry:
 
 - **Status:** REVISED — implementation plan aligned with v2.1 architecture
-- **Supersedes:** v1 (`docs/agent-teams-migration-plan.md`)
+- **Supersedes:** v1 (2026-04-10; abandoned before implementation, archived in git history)
 - **Aligned with:** `docs/agent-teams-migration-plan-v2.1.md` (architectural source)
 - **Last updated:** 2026-04-19
 - Retain v2's audit-source reference (28-gap integration audit)
