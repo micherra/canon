@@ -1,0 +1,1 @@
+../../../rules/agent-plans-are-prompts.md

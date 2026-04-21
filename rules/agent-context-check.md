@@ -1,0 +1,21 @@
+---
+id: agent-context-check
+severity: rule
+tags: [agent-behavior, context, self-serve]
+scope:
+  agents: all
+---
+
+# Verify Context Before Starting Work
+
+Before starting work, check your spawn prompt for context:
+
+1. **Principles**: If your spawn prompt does not include a `## Principles` section, call `get_principles` with your target file path and task description.
+
+2. **File context**: If you need dependency or graph information not in your prompt, call `get_file_context` or `graph_query` directly.
+
+3. **Domain skills**: If your spawn prompt includes a `Relevant domain skills:` list, Read each named skill file from `skills/canon/references/` before starting work.
+
+4. **Template**: If your spawn prompt names a template (e.g., `Use template: implementation-log`), Read it from `templates/` before producing output.
+
+Do not block or report an error if context is missing — self-serve it via MCP tools and Read.
