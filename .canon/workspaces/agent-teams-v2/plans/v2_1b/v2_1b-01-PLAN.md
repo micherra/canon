@@ -45,7 +45,32 @@ snapshot_workspace({ workspace_id: string }) → { snapshot_id: number }
 3. Insert one row into `lifecycle_workspace_snapshots`
 4. Return `{ snapshot_id: <inserted row id> }`
 
-**Idempotency:** if a snapshot already exists for this `workspace_id`, **update** the existing row rather than inserting a new one (enforces one snapshot per workspace). Use the workspace's slug + `snapshotted_at` as the dedupe key, or add a `UNIQUE(workspace_id)` constraint if drift-db convention allows.
+**Idempotency:** enforced at the schema layer via `UNIQUE(workspace_id)` on `lifecycle_workspace_snapshots` (v2_1b-00 DDL). Tool implementation uses atomic upsert:
+
+```sql
+INSERT INTO lifecycle_workspace_snapshots (
+  workspace_id, slug, approved_runbook_id, outcome,
+  total_iterations_to_approve, total_steps_executed, total_steps_skipped,
+  total_hitl_events, total_deviations, flow_duration_ms,
+  commit_range_first, commit_range_last, snapshotted_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(workspace_id) DO UPDATE SET
+  slug = excluded.slug,
+  approved_runbook_id = excluded.approved_runbook_id,
+  outcome = excluded.outcome,
+  total_iterations_to_approve = excluded.total_iterations_to_approve,
+  total_steps_executed = excluded.total_steps_executed,
+  total_steps_skipped = excluded.total_steps_skipped,
+  total_hitl_events = excluded.total_hitl_events,
+  total_deviations = excluded.total_deviations,
+  flow_duration_ms = excluded.flow_duration_ms,
+  commit_range_first = excluded.commit_range_first,
+  commit_range_last = excluded.commit_range_last,
+  snapshotted_at = excluded.snapshotted_at
+RETURNING id;
+```
+
+Returns the row id regardless of whether insert or update happened. Safe under concurrent hook + janitor calls because the UNIQUE constraint + ON CONFLICT clause are atomic at the SQLite level.
 
 **Failure modes:**
 

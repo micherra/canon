@@ -26,10 +26,10 @@ Extend `.canon/drift-db.sqlite` schema with the `lifecycle_workspace_snapshots` 
 ```sql
 CREATE TABLE lifecycle_workspace_snapshots (
   id INTEGER PRIMARY KEY,
-  workspace_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL UNIQUE,       -- one snapshot per workspace; enforces v2_1b-01 idempotency
   slug TEXT NOT NULL,
-  approved_runbook_id INTEGER,          -- NULL in v2.1b (lifecycle_synthesized_runbooks not yet created)
-  outcome TEXT NOT NULL,                 -- 'complete' | 'aborted' | 'abandoned'
+  approved_runbook_id INTEGER,             -- NULL in v2.1b (lifecycle_synthesized_runbooks not yet created)
+  outcome TEXT NOT NULL,                    -- 'complete' | 'aborted' | 'abandoned'
   total_iterations_to_approve INTEGER,
   total_steps_executed INTEGER,
   total_steps_skipped INTEGER,
@@ -46,6 +46,8 @@ CREATE INDEX idx_lifecycle_workspace_snapshots_slug
 CREATE INDEX idx_lifecycle_workspace_snapshots_snapshotted_at
   ON lifecycle_workspace_snapshots(snapshotted_at);
 ```
+
+**Note on `UNIQUE(workspace_id)`:** v2.md §8.1 DDL did not include this constraint originally; it was added here per fresh-review ISSUE-5. The constraint is the single enforcement of the "one snapshot per workspace" rule v2_1b-01 depends on. Without it, v2_1b-01 would need application-level dedupe via SELECT-then-UPDATE/INSERT — less safe under concurrent hooks + janitor. With it, v2_1b-01 can use `INSERT ... ON CONFLICT(workspace_id) DO UPDATE SET ...` atomically. **Update v2.md §8.1 DDL to match** when that amendment commit lands.
 
 **Implementation:**
 

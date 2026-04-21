@@ -841,10 +841,10 @@ Rationale: drift analytics and lifecycle persistence share the same underlying c
 -- v2.1b migration: add lifecycle_workspace_snapshots
 CREATE TABLE lifecycle_workspace_snapshots (
   id INTEGER PRIMARY KEY,
-  workspace_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL UNIQUE,       -- one snapshot per workspace; enforces idempotency
   slug TEXT NOT NULL,
-  approved_runbook_id INTEGER,          -- NULL in v2.1b (lifecycle_synthesized_runbooks not yet created)
-  outcome TEXT NOT NULL,                 -- 'complete' | 'aborted' | 'abandoned'
+  approved_runbook_id INTEGER,             -- NULL in v2.1b (lifecycle_synthesized_runbooks not yet created)
+  outcome TEXT NOT NULL,                    -- 'complete' | 'aborted' | 'abandoned'
   total_iterations_to_approve INTEGER,
   total_steps_executed INTEGER,
   total_steps_skipped INTEGER,
