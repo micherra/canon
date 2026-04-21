@@ -303,3 +303,64 @@ v2.1 remains the architectural document; v2 becomes the ratifiable executable pl
 | Rewrite scope for v2 | Preserve 4 sections, replace 3, add 7, restructure phases |
 
 Proceed with v2 rewrite once the two HIGH-severity concerns have a documented resolution path in v2.1 or are accepted as ship-with residual risks with explicit owner + mitigation plan.
+
+---
+
+## 6. Resolution Log
+
+Each concern has a tracked status. Closure requires either (a) a landed resolution in the plan tree or v2.md amendments, or (b) explicit acceptance as residual risk with an owner and mitigation plan.
+
+### HIGH-severity
+
+| # | Concern | Status | Resolution |
+|---|---------|--------|------------|
+| HIGH-1 | L4 hook allowlist + intent-routing expansion | **Resolved in plan tree** | Plan tree implements the resolution: (a) allowlist = `.gitignore` with `git check-ignore` oracle per `v2_1a-05-PLAN.md`; (b) intent-routing expansion for `principle` / `learn` / `docs` per `v2_1a-06-PLAN.md` (moved to Wave 2, precedes L4 in Wave 3); (c) bootstrap contract asserted in `v2_1a-05`; (d) multi-branch / worktree-parent detection spec added post-fresh-review. **Residual:** actual execution quality must be validated in `v2_1a-08`; the plan is a proposal until Canon maintainer ratifies and the tasks execute. Owner: Canon maintainer. |
+| HIGH-2 | User-facing aggregate confidence scalar | **Accepted as design decision** | Applied in `docs/agent-teams-migration-plan-v2.md` §7.1: aggregate `confidence: 0.0-1.0` is internal-only; only `confidence_signals[]` is user-facing in v2.1a/b. Internal aggregate persists to lifecycle DB for v2.2 calibration corpus. Re-examined in v2.2 once calibration data exists (see §14 item 12). Owner: Canon maintainer; mitigation = review MEDIUM-6 cold-start spike. |
+
+### MEDIUM-severity
+
+| # | Concern | Status | Resolution |
+|---|---------|--------|------------|
+| MEDIUM-1 | v2.2 entry gate is volume-based, not quality-based | **Partially resolved** | v2.md §10.4 embeds the blockquote note pointing to the qualitative criterion. **Residual:** v2.2 entry gate final text must be amended before v2.2 begins; not blocking v2.1a/b. Owner: Canon maintainer at v2.2 entry. |
+| MEDIUM-2 | Synthesis skill as new SPoF | **Accepted with mitigation** | v2.md §13 risks row for planner inconsistency cites the synthesis regression suite mitigation. Adding regression-suite construction is implicit in `v2_1a-02` integration tests; if explicit regression-harness is wanted, file as follow-up task. Owner: Canon maintainer. |
+| MEDIUM-3 | Journal field-quality enforcement | **Accepted with mitigation** | v2.md §13 risks row updated to cite field-quality strengthening of `verify_completion`; structural capture disciplined via v2_1b-00 column set (`total_steps_executed`, `total_steps_skipped`, `total_hitl_events`, `total_deviations`). Owner: implementor of v2_1b-01 validates population. |
+| MEDIUM-4 | Vocabulary resume on major-version change | **Accepted with documentation gap noted** | v2.md §10.5 validation row for vocab-version-resume flags the open spec item. **Residual:** the full state-transition graph for regen-rejected cases needs specification before vocabulary major-version bumps are executed. Owner: whoever authors the first major vocab bump. |
+| MEDIUM-5 | Lifecycle DB / workspace truth boundary | **Resolved** | v2.md §14 item 13 explicitly scopes real-time write-through out of v2.1; v2.1b §8.2 documents the boundary; v2_1b-01 plan tool docstring notes the invariant. |
+| MEDIUM-6 | Cold-start iterate-until-approved friction | **Partially resolved** | Pre-ship spike task exists as `v2_1a-07`; Phase 2 cold-start vs. steady-state measurement specified in v2.md §10.5. **Residual:** the spike must run and pass before Wave 5 validation proceeds. Owner: v2.1a executor. |
+
+### LOW / nits
+
+| # | Concern | Status |
+|---|---------|--------|
+| LOW-1 | v2 source doc had duplicate section numbers | **Resolved** — v2 rewrite renumbered cleanly. |
+| LOW-2 | Phase naming density | **Accepted** — no simpler scheme identified; v2.md §10 intro lists all six phase labels. |
+| LOW-3 | Cross-target analysis budget unbounded | **Deferred to v2.2** — noted in v2.md §10.4 scope. |
+| LOW-4 | `memory_cited` tag reference consistency | **Accepted** — memory deferred per §3.3. |
+| LOW-5 | `novelty` signal computation in v2.1a/b | **Noted** — v2.1a/b falls back to planner memory-only; no `query_workspace_history` tool until v2.2. Documented implicitly in §7.2. |
+
+### Fresh-eyes review (post-ratification-draft)
+
+The fresh-eyes review identified 9 additional issues (ISSUE-1..9) against the plan tree itself. All are resolved in commits on this branch:
+
+| Issue | Resolution commit |
+|-------|-------------------|
+| ISSUE-1 Gate B name collision | 780b579 (v2_1b-07 renamed to loop-closure evidence) |
+| ISSUE-2 v2_1a-06 over-deps | 361e709 (moved to Wave 2 with no deps) |
+| ISSUE-3 L4 multi-branch detection | e334dd8 (6-row decision table) |
+| ISSUE-4 canon-writer permissionMode | 361e709 (permissionMode change removed) |
+| ISSUE-5 snapshot idempotency | 760e451 (UNIQUE + atomic upsert) |
+| ISSUE-6 test-path over-prescription | 16d1132 (stripped across 7 plans) |
+| ISSUE-7 Phase 3 kept-additions note | 5725d24 |
+| ISSUE-8 decisions/ directory | Accepted per phase1 precedent |
+| ISSUE-9 phase1-10 amendment + pre-flight | 5725d24 (new v2_1a-pre task) |
+
+### Sign-off criteria
+
+Before v2.1a Wave 1 begins, the Canon maintainer confirms:
+
+- [ ] Gate A passes (canon-planner + canon-engineer exist and validate in ≥ 3 runs)
+- [ ] HIGH-1 resolution approach accepted (v2_1a-05 + v2_1a-06 as designed)
+- [ ] HIGH-2 decision accepted (aggregate scalar dropped)
+- [ ] v2_1a-pre runs successfully and any remediation tasks complete
+- [ ] MEDIUM-6 spike target documented (e.g., 20s iteration-0 latency)
+- [ ] Resolution Log entries for MEDIUM-1 and MEDIUM-4 have scheduled owners (can be future tasks, not v2.1a scope)
