@@ -9,6 +9,7 @@
 - **agentkb** (`github.com/isaac-flath/agentkb`) — local-first, file-backed memory system for coding agents. Four stores (Wiki / Chats / Communications / Skills) with per-store retrieval.
 - **SpecStory** (`specstory.com`) — commercial chat-capture + spec-driven-development tool. Framing: "intent is the new source code."
 - **Karpathy's LLM Wiki gist** (`gist.github.com/karpathy/442a6bf555914893e9891c11519de94f`) — architectural pattern for an LLM-maintained personal wiki as an alternative to RAG. Memorable framing: *"Obsidian is the IDE; the LLM is the programmer; the wiki is the codebase."*
+- **forrestchang/andrej-karpathy-skills** (`github.com/forrestchang/andrej-karpathy-skills`) — four behavioral rules distilled from a Karpathy tweet on coding-agent failure modes, packaged as a Claude Code plugin / per-project `CLAUDE.md` snippet / Cursor `.mdc` rule. Distinct from the LLM Wiki gist above.
 
 Two sources reviewed and dropped from the shortlist: **pi-mono** (pi.dev) operates a layer below Canon (agent runtime, CLI, UI), and **codeflow's browser-shell ideas** are architecturally incompatible.
 
@@ -98,6 +99,21 @@ SpecStory's "chats as durable intent" collides cleanly with Canon roadmap **Item
 
 *Fit:* reshapes Item 28 rather than adding new scope. New artifact template + spec-synthesis role.
 
+### Behavioral-rule distillations
+
+**forrestchang/andrej-karpathy-skills — no novel items; full duplicate of existing principles.**
+
+The repo packages four rules from a Karpathy tweet on coding-agent failure modes: *Think Before Coding* (surface assumptions, don't hide confusion), *Simplicity First* (minimum code, nothing speculative), *Surgical Changes* (touch only what you must; don't reformat or refactor adjacent untouched code), and *Goal-Driven Execution* (turn vague requests into verifiable success criteria with a verify loop). Each maps to machinery Canon already ships:
+
+| Karpathy-skills rule | Canon equivalent |
+|---|---|
+| Think Before Coding | Flow state machine enforces research → architect → implement ordering; HITL breakpoints surface assumptions before writing code. No single principle file, but `strong-opinions/patterns-need-justification.md` covers the "don't add abstractions on a hunch" half. |
+| Simplicity First | `principles/strong-opinions/simplicity-first.md` — direct duplicate, same name. |
+| Surgical Changes | `principles/rules/refactoring-integrity.md` (no unintended modification of untouched code) plus `strong-opinions/leave-touched-files-better.md` (scoped cleanup discipline). |
+| Goal-Driven Execution | Flow contract — plans declare acceptance criteria; `canon-tester` and `canon-reviewer` verify against them; `drive_flow` status transitions enforce the verify loop. |
+
+Nothing survives as an adoption candidate. The repo is a useful *validation signal* that Canon's existing principles target real, widely-observed failure modes — but the ideas are already encoded, with severity levels and drift tracking the external repo lacks.
+
 ---
 
 ## Non-fits
@@ -124,11 +140,13 @@ Consolidated across all sources. These conflict with Canon's ethos and should no
 | Spec-Driven Development as the only entry point | SpecStory | Canon's flow library spans fast-path → epic on purpose. Forcing an upfront spec on every task regresses fast-path's reason for existing. Item 28 adds SDD as an *option*, not a default. |
 | pi-mono agent runtime, CLI, TUI, web, Slack, GPU deploy | pi-mono | Canon runs inside Claude Code as a dispatcher; these are a layer below (or orthogonal to) Canon's scope. |
 | Unified multi-provider LLM client | pi-mono | Provider abstraction is the host's responsibility, not the orchestrator's. |
+| Behavioral rules as a `CLAUDE.md` snippet / plugin / Cursor `.mdc` | forrestchang/andrej-karpathy-skills | Canon encodes behavioral guidance as prescriptive principles with severity levels, drift tracking, and compliance scoring. Free-form `CLAUDE.md` rules have no enforcement surface, no drift signal, and no reviewer citation — they are advisory text, not infrastructure. |
+| Shipping coding-agent guidance as a cross-tool plugin (Claude Code + Cursor) | forrestchang/andrej-karpathy-skills | Canon is a Claude Code skill by design; cross-IDE distribution is out of scope (same reasoning as the SpecStory cross-tool row). |
 
 ---
 
 ## Takeaway
 
-Twelve ideas across four sources fit Canon without touching the orchestrator-dispatcher contract. Six strengthen **code intelligence and diagnostics** (health score, pattern labels, duplicate detection, visualization overlays, one-shot report, security pre-filter). Four extend **compounding knowledge and artifact hygiene** (distillation loop, repo-level log, wiki-lint over Canon's own artifacts, compounding exploration). One adds **retrieval observability** (KG query log). One reshapes **flow inputs** (transcript-to-spec for roadmap Item 28).
+Twelve ideas across four sources fit Canon without touching the orchestrator-dispatcher contract. Six strengthen **code intelligence and diagnostics** (health score, pattern labels, duplicate detection, visualization overlays, one-shot report, security pre-filter). Four extend **compounding knowledge and artifact hygiene** (distillation loop, repo-level log, wiki-lint over Canon's own artifacts, compounding exploration). One adds **retrieval observability** (KG query log). One reshapes **flow inputs** (transcript-to-spec for roadmap Item 28). A fifth source — forrestchang/andrej-karpathy-skills — contributed zero adoption candidates; its four rules duplicate `simplicity-first`, `refactoring-integrity`, `leave-touched-files-better`, and flow-level structural enforcement that Canon already ships.
 
-The largest consistent non-fit theme is **sharing and cross-tool aggregation** — public session exports, cross-IDE chat sync, cross-machine state, shareable URLs. Canon is deliberately local-first and structured; raw-dialogue ideas either fail the threat model or conflict with "structured artifacts over raw transcripts." Likewise, anything that would replace Canon's prescriptive principle/KG layer with an evolving free-form wiki is out — Canon loses the compliance machinery that makes principles useful.
+The largest consistent non-fit theme is **sharing and cross-tool aggregation** — public session exports, cross-IDE chat sync, cross-machine state, shareable URLs. Canon is deliberately local-first and structured; raw-dialogue ideas either fail the threat model or conflict with "structured artifacts over raw transcripts." Likewise, anything that would replace Canon's prescriptive principle/KG layer with an evolving free-form wiki — or with free-form `CLAUDE.md` rules that lack severity, drift, and compliance scoring — is out. Canon loses the enforcement machinery that makes principles useful.
