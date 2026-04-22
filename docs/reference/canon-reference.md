@@ -8,7 +8,6 @@
 canon/
 ├── agents/               # Plugin agent definitions (YAML frontmatter + markdown instructions)
 ├── rules/                # Agent-behavior rules (loaded per agent at runtime)
-├── domain-primers/       # Built-in domain priming files (one per domain, raw markdown)
 ├── flows/                # Flow state machine definitions (YAML frontmatter + spawn instructions)
 │   └── fragments/        # Reusable state groups included by flows
 ├── hooks/                # Pre/post tool-use interceptor scripts
@@ -21,7 +20,11 @@ canon/
 ├── principles/           # Canonical engineering principles (markdown)
 ├── skills/canon/         # Canon skill definition (entry point for Claude Code)
 │   ├── commands/         # CLI command definitions (doctor, init, learn, pr-review, etc.)
-│   └── references/       # Skill reference fragments loaded on demand (includes canon-orchestrator.md)
+│   └── references/       # Reference fragments loaded on demand: orchestrator protocol,
+│                         #   agent rule symlinks, and the 12 domain primers
+│                         #   (backend-api, backend-data, frontend, testing, infrastructure,
+│                         #   deprecation, authentication-security, migration-strategy,
+│                         #   observability, error-handling, performance, devops-ci)
 ├── templates/            # Artifact templates agents must follow
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
     └── workspaces/       # Per-branch/task build state (board.json, session.json, progress.md, plans/, etc.)

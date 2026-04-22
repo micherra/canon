@@ -1,0 +1,1 @@
+../../../rules/agent-simplify-before-extending.md

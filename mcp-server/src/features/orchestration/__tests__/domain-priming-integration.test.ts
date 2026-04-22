@@ -4,15 +4,27 @@
  * Contract tests for the domain priming feature (domain-01, domain-02, domain-03).
  *
  * These tests verify:
- *   - All 6 built-in domain files exist at the correct paths with correct names
- *   - Domain files contain no YAML frontmatter (implementors load them as raw text)
- *   - Domain files follow the expected heading and checklist format
+ *   - All 6 built-in domain primers exist at the correct paths with correct names
+ *   - Domain primer files contain no YAML frontmatter (implementors load them as raw text)
+ *   - Domain primer files follow the canonical primer template
+ *     (Mental Models / Decision Frameworks / Failure Modes / Guardrails)
  *   - templates/task-plan.md exposes the `domains:` field to the architect
- *   - canon-architect.md lists all 6 built-in domain names and includes classification guidance
- *   - canon-implementor.md Step 2 instructs domain loading with correct fallback paths
+ *   - canon-architect.md lists all 6 built-in domain names and includes
+ *     classification guidance
+ *   - canon-implementor.md Step 2 instructs domain loading with correct
+ *     fallback paths
  *
  * These are structural/content contract tests — if any are broken by a rename,
- * restructure, or accidental edit, the domain priming pipeline will silently fail.
+ * restructure, or accidental edit, the domain priming pipeline will silently
+ * fail.
+ *
+ * Relocation note (2026-04-22): domain primers live at
+ * `skills/canon/references/<name>.md` — raw markdown, consumed by Canon
+ * subagents via Read per the agent-context-check protocol. They are NOT
+ * Claude Code skills (no `SKILL.md` wrapper, no YAML frontmatter): a
+ * subagent's `Read` tool loads the whole file, so frontmatter would just
+ * be noise. The 22 agent-rule symlinks in the same directory are the
+ * other content of `references/`.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -22,7 +34,7 @@ import { describe, expect, it } from "vitest";
 // Canon repo root — one level up from mcp-server
 const REPO_ROOT = resolve(process.cwd(), "..");
 
-const DOMAINS_DIR = join(REPO_ROOT, "domain-primers");
+const DOMAINS_DIR = join(REPO_ROOT, "skills", "canon", "references");
 const ARCHITECT_MD = join(REPO_ROOT, "agents", "canon-architect.md");
 const IMPLEMENTOR_MD = join(REPO_ROOT, "agents", "canon-implementor.md");
 const TASK_PLAN_TEMPLATE = join(REPO_ROOT, "templates", "task-plan.md");
@@ -42,27 +54,24 @@ const BUILT_IN_DOMAINS = [
 
 describe("domain files — existence", () => {
   for (const domain of BUILT_IN_DOMAINS) {
-    it(`domains/${domain}.md exists`, () => {
+    it(`skills/canon/references/${domain}.md exists`, () => {
       expect(existsSync(join(DOMAINS_DIR, `${domain}.md`))).toBe(true);
     });
   }
 
-  it("no unexpected extra files in domains/", () => {
-    // The six canonical domain files plus the authoring template are the only ones that should exist.
-    // If someone adds a file without updating the architect guidance, flag it.
-    const { readdirSync } = require("node:fs");
-    const files: string[] = readdirSync(DOMAINS_DIR).filter((f: string) => f.endsWith(".md"));
-    const knownNames = [...BUILT_IN_DOMAINS.map((d) => `${d}.md`), "TEMPLATE.md", "README.md"];
-    const unknown = files.filter((f: string) => !knownNames.includes(f));
-    expect(unknown).toEqual([]);
-  });
+  // NOTE: skills/canon/references/ intentionally holds more than the 6
+  // built-in domain primers — it also holds the 6 new agent-teams domain
+  // skills, 22 rule symlinks, and orchestrator reference fragments. We
+  // assert that the 6 required primers are present; we do NOT assert the
+  // directory is otherwise empty (it isn't, by design).
 });
 
 describe("domain files — no YAML frontmatter", () => {
   for (const domain of BUILT_IN_DOMAINS) {
-    it(`domains/${domain}.md does not start with YAML frontmatter delimiter`, () => {
+    it(`skills/canon/references/${domain}.md does not start with YAML frontmatter delimiter`, () => {
       const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
-      // A file with frontmatter starts with "---\n"
+      // A file with frontmatter starts with "---\n". Primers are loaded as
+      // raw markdown by Canon subagents; frontmatter would be noise.
       expect(content.startsWith("---")).toBe(false);
     });
   }
@@ -70,12 +79,12 @@ describe("domain files — no YAML frontmatter", () => {
 
 describe("domain files — heading format", () => {
   for (const domain of BUILT_IN_DOMAINS) {
-    it(`domains/${domain}.md starts with a top-level heading`, () => {
+    it(`skills/canon/references/${domain}.md starts with a top-level heading`, () => {
       const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
       expect(content.trimStart().startsWith("# ")).toBe(true);
     });
 
-    it(`domains/${domain}.md contains the required section headings`, () => {
+    it(`skills/canon/references/${domain}.md contains the required section headings`, () => {
       const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
       expect(content).toContain("## Mental Models");
       expect(content).toContain("## Decision Frameworks");
@@ -83,7 +92,7 @@ describe("domain files — heading format", () => {
       expect(content).toContain("## Guardrails");
     });
 
-    it(`domains/${domain}.md contains at least 4 bold terms`, () => {
+    it(`skills/canon/references/${domain}.md contains at least 4 bold terms`, () => {
       const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
       // Each entry is formatted as "**Bold Term** — description" or "**Bold Term**:" (em-dash style)
       const boldItems = (content.match(/\*\*[^*]+\*\*/g) ?? []).length;
@@ -94,7 +103,7 @@ describe("domain files — heading format", () => {
 
 describe("domain files — approximate token budget (≤ 1750 tokens ≈ 7000 chars)", () => {
   for (const domain of BUILT_IN_DOMAINS) {
-    it(`domains/${domain}.md is concise (under 7000 characters)`, () => {
+    it(`skills/canon/references/${domain}.md is concise (under 7000 characters)`, () => {
       const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
       expect(content.length).toBeLessThan(7000);
     });
@@ -174,9 +183,9 @@ describe("canon-implementor.md — Step 2 domain priming", () => {
     expect(content).toContain(".canon/domains/");
   });
 
-  it("Step 2 specifies built-in fallback path (CLAUDE_PLUGIN_ROOT/domain-primers/)", () => {
+  it("Step 2 specifies built-in fallback path (CLAUDE_PLUGIN_ROOT/skills/canon/references/)", () => {
     const content = readFile(IMPLEMENTOR_MD);
-    expect(content).toContain("${CLAUDE_PLUGIN_ROOT}/domain-primers/");
+    expect(content).toContain("${CLAUDE_PLUGIN_ROOT}/skills/canon/references/");
   });
 
   it("Step 2 instructs silent skip when domain file is missing (no NEEDS_CONTEXT)", () => {
@@ -214,26 +223,25 @@ describe("canon-implementor.md — Step 2 domain priming", () => {
 });
 
 // These verify that the three changes work together as a coherent pipeline:
-// Architect writes domains: in the plan → implementor reads domains: from plan → loads domain file
+// Architect writes domains: in the plan → implementor reads domains: from
+// plan → loads domain file from skills/canon/references/.
 
 describe("domain priming pipeline coherence", () => {
   it("all 6 domain names in architect guidance match actual domain file names", () => {
     const architectContent = readFile(ARCHITECT_MD);
-    const fileNames = BUILT_IN_DOMAINS.map((d) => `${d}.md`);
-    for (const fileName of fileNames) {
-      // The domain name without .md should appear in the architect guidance
-      const domain = fileName.replace(".md", "");
+    for (const domain of BUILT_IN_DOMAINS) {
       expect(architectContent).toContain(domain);
     }
   });
 
-  it("implementor fallback path matches actual domain-primers/ directory name", () => {
-    // The implementor references CLAUDE_PLUGIN_ROOT/domain-primers/{name}.md
-    // The actual directory is named "domain-primers" at repo root
-    expect(existsSync(DOMAINS_DIR)).toBe(true);
-    // And the implementor file must reference the plugin-level domain-primers/ directory
+  it("implementor fallback path matches actual skills/canon/references/ layout", () => {
+    // The implementor references CLAUDE_PLUGIN_ROOT/skills/canon/references/{name}.md.
+    // Every named primer must exist at that path.
     const implementorContent = readFile(IMPLEMENTOR_MD);
-    expect(implementorContent).toContain("/domain-primers/");
+    expect(implementorContent).toContain("/skills/canon/references/");
+    for (const domain of BUILT_IN_DOMAINS) {
+      expect(existsSync(join(DOMAINS_DIR, `${domain}.md`))).toBe(true);
+    }
   });
 
   it("task-plan template domains: field example uses a built-in domain name", () => {
