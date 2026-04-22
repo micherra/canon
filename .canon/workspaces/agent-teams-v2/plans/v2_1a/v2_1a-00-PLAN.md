@@ -21,7 +21,7 @@ Write `references/runbook-vocabulary.md` as the canonical list of step IDs Canon
 
 **Structure:**
 
-- Front-matter declaring this as a skill file, discoverable under the Canon skills registry
+- Markdown title and version declaration (Canon reference convention — no YAML frontmatter needed; other `references/*.md` files use plain markdown headers)
 - Versioning policy (semver: minor = additive; major = removal after deprecation cycle)
 - Table of the 15 canonical step IDs per v2.1 §5.1:
 
@@ -55,31 +55,30 @@ Total: 15 entries (13 functional + 2 mandatory tail).
 
 ### Risk mitigations
 
-- Vocabulary drift (§13 risk, LOW/LOW): include an explicit version field in the file's frontmatter; require versioned-migration review for any change
+- Vocabulary drift (§13 risk, LOW/LOW): include an explicit version declaration in the file header; require versioned-migration review for any change
 
 ### Tests to write
 
-Canon has no existing test infrastructure for skills/ markdown files. Options:
+Canon has no existing test infrastructure for `references/` markdown files. Options:
 
-- **Preferred:** add minimal validation via the skills-manifest loader (if one exists) or via the integration test in v2_1a-02 / v2_1a-08 (which parses the vocabulary as part of synthesis validation — a failing vocabulary fails synthesis downstream).
-- **If a skill-lint harness is desirable:** file a follow-up task to add `scripts/lint-skills.ts` that parses every `references/*.md` skill file for required frontmatter. Out of scope for this task.
+- **Preferred:** add minimal validation via the integration test in v2_1a-02 / v2_1a-08 (which parses the vocabulary as part of synthesis validation — a failing vocabulary fails synthesis downstream).
+- **If a reference-lint harness is desirable:** file a follow-up task to add a lint script that parses every `references/*.md` file for required structure. Out of scope for this task.
 
 Validation for v2_1a-00:
 
 - Manual read: exactly 15 step entries; mandatory tail present; step IDs unique + lowercase-kebab; `fix` entry notes `cause` requirement
-- Downstream integration (v2_1a-02): synthesis skill validates `skills:` references against this file at synthesis time — runs on every synthesized runbook
+- Downstream integration (v2_1a-02): synthesis skill validates step ID references against this file at synthesis time — runs on every synthesized runbook
 
 ### Verify
 
 1. `references/runbook-vocabulary.md` exists and parses as markdown
-2. Vocabulary test passes: `npm test -- runbook-vocabulary`
-3. Grep confirms no other file redefines the same step-ID list — this is the single source of truth
-4. Skills registry (if manifest-driven) loads the file without errors
+2. Grep confirms no other file redefines the same step-ID list — this is the single source of truth
+3. `npm run build` and `npm test` pass (no regressions — this is a data file, not code)
 
 ### Done when
 
 - File exists at the specified path with all 15 entries matching the table above
 - Versioning discipline section present
 - Resume behavior section present
-- All tests pass
-- File is registered in the skills manifest so `agent-context-check` can load it on demand
+- `npm run build` and `npm test` pass
+- File is discoverable under `references/` so `resolve_agent_skills` can preload it when agents declare it in their `references:` frontmatter (v2_1a-03 wires the planner to reference it)
