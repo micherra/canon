@@ -1,1 +1,0 @@
-../../../rules/agent-missing-artifact.md

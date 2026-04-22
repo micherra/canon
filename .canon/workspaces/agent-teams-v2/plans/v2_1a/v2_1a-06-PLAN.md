@@ -8,7 +8,7 @@ files:
   - CLAUDE.md
   - agents/writer.md
   - agents/learner.md
-  - skills/canon/references/content-flow.md
+  - references/content-flow.md
 principles:
   - agent-design-before-code
   - agent-surface-assumptions
@@ -39,7 +39,7 @@ Expand Canon's intent-routing surface so that every Canon intent that edits trac
    | `learn` | Route to `learner`; spawn with workspace context so applied refinements have a record |
    | `docs` | Route to a **content flow** (shared with `principle` / docs-only variants): planner-style brief, synthesized runbook focused on doc edits |
 
-2. **Shared "content flow" pattern** — create `skills/canon/references/content-flow.md` that documents a lightweight synthesized-runbook pattern for non-`build` Canon intents. Steps vocabulary is the same as `build` (from v2_1a-00); what changes is which steps are typical (`research` → `content-edit` (mapped to `implement` with `skills: content-authoring`) → `review` → `context-sync` → `learn`). No code-step defaults (`design`, `test`, `security`) for content flows.
+2. **Shared "content flow" pattern** — create `references/content-flow.md` that documents a lightweight synthesized-runbook pattern for non-`build` Canon intents. Steps vocabulary is the same as `build` (from v2_1a-00); what changes is which steps are typical (`research` → `content-edit` (mapped to `implement` with `skills: content-authoring`) → `review` → `context-sync` → `learn`). No code-step defaults (`design`, `test`, `security`) for content flows.
 
 3. **`writer` agent body amendment** — agent now expects a workspace path in its spawn prompt, produces an `implementation-log.md` at `${WORKSPACE}/plans/${slug}/` documenting what principle(s) it edited. **No `permissionMode` change required** — `writer` already has `Write`, `Edit`, `Bash` in its `tools` list and no explicit `permissionMode` (defaults apply); it was already a write-capable agent. The amendment is purely behavioral: expect a workspace path, log the edit. Verify in `agents/writer.md` before executing this task that current frontmatter matches this understanding; if it differs, amend this plan first rather than blindly applying.
 
@@ -59,7 +59,7 @@ Expand Canon's intent-routing surface so that every Canon intent that edits trac
 
 ### Tests to write
 
-- `skills/canon/references/__tests__/content-flow.test.ts`:
+- `references/__tests__/content-flow.test.ts`:
   - content-flow.md parses as a skill file
   - Does not reintroduce step IDs outside the vocabulary from v2_1a-00
 - No automated tests for agent-definition markdown (Canon has no `agents/__tests__/` test infrastructure today). Verification is by manual read + the integration test below.
@@ -72,7 +72,7 @@ Expand Canon's intent-routing surface so that every Canon intent that edits trac
 ### Verify
 
 1. CLAUDE.md dispatch table extended with `principle`, `learn`, `docs` routing
-2. `skills/canon/references/content-flow.md` exists and is registered
+2. `references/content-flow.md` exists and is registered
 3. `writer` and `learner` frontmatter / body updated
 4. `init_workspace` accepts `intent_class` argument
 5. Integration test: writer run produces workspace at expected path with expected artifacts

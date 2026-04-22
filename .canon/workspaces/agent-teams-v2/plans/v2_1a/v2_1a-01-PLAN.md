@@ -5,7 +5,7 @@ depends_on: ["v2_1a-00"]
 decisions:
   - "dc-02"
 files:
-  - skills/canon/references/planner-brief.md
+  - references/planner-brief.md
 principles:
   - agent-surface-assumptions
   - agent-evidence-over-intuition
@@ -17,7 +17,7 @@ domains:
 
 ### Action
 
-Write `skills/canon/references/planner-brief.md` defining the strategic-analysis contract `planner` follows to produce `plans/${slug}/planning-brief.md` per build request.
+Write `references/planner-brief.md` defining the strategic-analysis contract `planner` follows to produce `plans/${slug}/planning-brief.md` per build request.
 
 **The skill must specify:**
 
@@ -65,7 +65,7 @@ No existing test infrastructure for skills/*.md. Validation is by:
 
 ### Verify
 
-1. Skill file exists at `skills/canon/references/planner-brief.md`
+1. Skill file exists at `references/planner-brief.md`
 2. Skill tests pass: `npm test -- planner-brief`
 3. Skill is referenced by `planner` agent frontmatter (v2_1a-03 will add this)
 4. Manually spawn planner against a test request; planner produces a brief matching the required sections

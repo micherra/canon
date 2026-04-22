@@ -75,7 +75,7 @@ When the user asks to explain a specific principle (e.g., "explain thin-handlers
 
 ## Handling: Status
 
-Present a health dashboard by reading Canon's state directly. Follow the dashboard format in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/guide-dashboards.md` — it covers active build status, project health metrics, and actionable suggestions.
+Present a health dashboard by reading Canon's state directly. Follow the dashboard format in `${CLAUDE_PLUGIN_ROOT}/references/guide-dashboards.md` — it covers active build status, project health metrics, and actionable suggestions.
 
 ## Handling: Checkpoint
 
@@ -113,7 +113,7 @@ Use semantic reasoning to classify the user's response — do not look for magic
 
 ## Status Protocol
 
-See `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/status-protocol.md` for the full protocol.
+See `${CLAUDE_PLUGIN_ROOT}/references/status-protocol.md` for the full protocol.
 
 Checkpoint-specific statuses:
 

@@ -64,4 +64,4 @@ For substantive behavioral changes, consider writing an eval case in `skills/can
 
 Create a new file named `canon-{role}.md`. Add frontmatter with the agent's name, a concise description, the appropriate model tier, and the tools it needs. Write clear behavioral instructions in the body. Then register the agent's spawn point in the relevant flow definition (`flows/`) so the orchestrator knows when to use it.
 
-Keep agent instructions specific to the role. Cross-cutting behavior (template usage, workspace logging, evidence standards) is handled by the rules in `rules/` and reference fragments in `skills/canon/references/` — agents load those separately, so you don't need to repeat that content here.
+Keep agent instructions specific to the role. Cross-cutting behavior (template usage, workspace logging, evidence standards) is handled by the rules in `rules/` and reference fragments in `references/` — agents load those separately, so you don't need to repeat that content here.

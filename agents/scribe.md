@@ -130,7 +130,7 @@ Write a sync report to `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`. The orchest
 
 ### Step 8: Log activity
 
-Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 ## Status Protocol
 

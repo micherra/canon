@@ -7,13 +7,13 @@
 | Task | Wave | Depends on | Key files | Description |
 |------|------|------------|-----------|-------------|
 | v2_1a-pre | 0 | — | `docs/v2.1a-preflight.md` | Pre-flight environment verification (Gate A state, phase1-10 amendment status, agent frontmatter, test conventions, migration-runner convention, worktree metadata). Files remediation tasks for any gaps before Wave 1 begins. |
-| v2_1a-00 | 1 | v2_1a-pre | `skills/canon/references/runbook-vocabulary.md` | Create canonical 15-ID step vocabulary with versioned-change discipline |
-| v2_1a-01 | 2 | v2_1a-00 | `skills/canon/references/planner-brief.md` | Create strategic-brief skill defining planning-brief.md contract |
-| v2_1a-02 | 2 | v2_1a-00 | `skills/canon/references/runbook-synthesis.md` | Create synthesis skill with MUST/MAY/MUST NOT contract, step schema, iterate-until-approved loop |
+| v2_1a-00 | 1 | v2_1a-pre | `references/runbook-vocabulary.md` | Create canonical 15-ID step vocabulary with versioned-change discipline |
+| v2_1a-01 | 2 | v2_1a-00 | `references/planner-brief.md` | Create strategic-brief skill defining planning-brief.md contract |
+| v2_1a-02 | 2 | v2_1a-00 | `references/runbook-synthesis.md` | Create synthesis skill with MUST/MAY/MUST NOT contract, step schema, iterate-until-approved loop |
 | v2_1a-03 | 3 | v2_1a-01, v2_1a-02 | `agents/planner.md` | Rewrite planner body to load both skills, emit brief+runbook, run iterate-until-approved |
 | v2_1a-04 | 3 | Wave 2 | `CLAUDE.md` | Amend with L1 per-message intent re-classification + pre-write gate guidance |
 | v2_1a-05 | 3 | Wave 2 | `hooks/canon-agent-teams/canon-workspace-check.sh`, `hooks/canon-agent-teams/hooks.json` | L4 PreToolUse hook with .gitignore-based allowlist (review HIGH-1) |
-| v2_1a-06 | 2 | — | `CLAUDE.md`, `agents/writer.md`, `agents/learner.md`, `skills/canon/references/content-flow.md` | Intent-routing expansion: principle / learn / docs intents create workspaces (review HIGH-1 prerequisite for L4). No deps — can run in parallel with v2_1a-01 and v2_1a-02. |
+| v2_1a-06 | 2 | — | `CLAUDE.md`, `agents/writer.md`, `agents/learner.md`, `references/content-flow.md` | Intent-routing expansion: principle / learn / docs intents create workspaces (review HIGH-1 prerequisite for L4). No deps — can run in parallel with v2_1a-01 and v2_1a-02. |
 | v2_1a-07 | 4 | Wave 3 | `docs/v2.1a-coldstart-spike.md` | Pre-ship cold-start friction spike: 3 trivial requests, measure iteration-0 latency (review MEDIUM-6) |
 | v2_1a-08 | 5 | Wave 4 | `docs/v2.1a-validation-report.md` | Cross-artifact validation against ≥ 5 distinct request types |
 

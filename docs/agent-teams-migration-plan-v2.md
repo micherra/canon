@@ -115,8 +115,8 @@ User request
 | **MCP tools** | `get_principles`, `list_principles`, `get_compliance`, `get_drift_report`, `get_file_context`, `graph_query`, `semantic_search`, `codebase_graph`, `record_agent_metrics`, `post_event`, `show_pr_impact`, `review_code`, `store_pr_review`, `store_summaries` | These ARE Canon. Principles, drift, KG, artifacts, metrics — Claude uses them as a native toolkit. |
 | **Agent definitions** | 11 types in `agents/*.md` (v2 Phase 1: delete implementor + fixer + guide + chat, add engineer + planner) | Valid as both subagent types and agent team teammate types. Definitions support `skills` (preload rules + domain primers), `maxTurns` (effort budget), `permissionMode`, `memory`. Six agents get `memory: project`: planner (feature history), engineer (fix patterns), researcher (codebase topology), architect (design history), scribe (doc landscape), learner (pattern mining). Reviewer excluded per `agent-cold-review` rule. Guide and chat removed — lead handles these natively. Each agent includes `agent-context-check` skill for self-serve context verification. |
 | **Orchestration journal** | `log_step`, `verify_completion` MCP tools | The lead's checklist. Records steps executed, artifacts expected, domain skills loaded, per-step outcome. Completion hook verifies. Not a state machine — no scheduling, no forced ordering. |
-| **Domain skills** | 12 skill files in `skills/canon/references/` (6 existing + 6 new) | Domain expertise loaded on-demand by the lead or agent based on task scope. |
-| **Step vocabulary + synthesis skills** (new in v2.1a) | `skills/canon/references/runbook-vocabulary.md`, `skills/canon/references/runbook-synthesis.md`, `skills/canon/references/planner-brief.md` | The canonical set of step IDs Canon knows + the rules the planner follows to compose a runbook from them. Replaces v2's 5 hardcoded runbook files. |
+| **Domain skills** | 12 skill files in `references/` (6 existing + 6 new) | Domain expertise loaded on-demand by the lead or agent based on task scope. |
+| **Step vocabulary + synthesis skills** (new in v2.1a) | `references/runbook-vocabulary.md`, `references/runbook-synthesis.md`, `references/planner-brief.md` | The canonical set of step IDs Canon knows + the rules the planner follows to compose a runbook from them. Replaces v2's 5 hardcoded runbook files. |
 | **Hooks** | `TaskCompleted`, `TeammateIdle`, `PostCommit`, `SessionStart`, `SubagentStop`, `completion-verify.sh`, `canon-workspace-check.sh` (new in v2.1a — L4) | Artifact enforcement, trailer enforcement, doc staleness detection, scribe queuing, completion verification, Canon-bypass detection. |
 | **Workspace storage** | `.canon/workspaces/<id>/` | Artifact storage, progress tracking. Ephemeral — snapshotted to lifecycle DB at completion, then torn down. |
 | **Lifecycle DB** (new in v2.1b) | `.canon/drift-db.sqlite` extended with `lifecycle_workspace_snapshots` table | Durable per-flow record surviving workspace cleanup. Substrate for the learning system. |
@@ -232,7 +232,7 @@ In the new model, agents have MCP access and preloaded skills. This creates a **
 2. **Agent self-serves** (fallback path): if the lead's prompt is missing principles or file context, the agent calls the MCP tools itself. Every agent with Canon MCP tools in its `tools` allowlist can independently call `get_principles(file_path, task_description)` to load matched principles.
 3. **Skills guarantee baseline** (hard floor): critical rules and references are preloaded via `skills` frontmatter — they're in agent context regardless of what the lead or agent does. An engineer always has `agent-tdd-required`, a reviewer always has `agent-cold-review`.
 
-A preloaded skill `agent-context-check` (registered as `rules/agent-context-check.md` → `skills/canon/references/agent-context-check.md`) is injected into every agent via the `skills` frontmatter. It instructs:
+A preloaded skill `agent-context-check` (registered as `rules/agent-context-check.md` → `references/agent-context-check.md`) is injected into every agent via the `skills` frontmatter. It instructs:
 
 > Before starting work, verify you have Canon principles for your target files. If your spawn prompt does not include a `## Principles` section, call `get_principles` with your target file path and task description. Similarly, if you need file context or dependency information, call `get_file_context` or `graph_query` directly.
 
@@ -416,8 +416,8 @@ The surface of Canon artifacts the learning system can refine across the v2.1 + 
 |--------|-------|----------|-------------------|
 | **Principles** | v2.1b | `principles/*.md` | Scope narrowing, severity promotion/demotion, wording clarifications, new principles from recurring patterns. First refinement target — the only one v2.1b ships. Today's learner already produces principle proposals; v2.1b expands the data feeding them. |
 | **Conventions** | v2.2 | `.canon/CONVENTIONS.md` | Established patterns observed across N flows; graduation to principles when warranted. |
-| **Runbook synthesis skill** | v2.2 | `skills/canon/references/runbook-synthesis.md` | Default step selection, skill-selection patterns, contract pairings, request-shape recognition. Required for synthesis to learn. |
-| **Planning brief skill** | v2.2 | `skills/canon/references/planner-brief.md` | Strategic analysis patterns, open-question framing, value-assessment accuracy. Lower-risk write scope (skill file, not agent prompts). |
+| **Runbook synthesis skill** | v2.2 | `references/runbook-synthesis.md` | Default step selection, skill-selection patterns, contract pairings, request-shape recognition. Required for synthesis to learn. |
+| **Planning brief skill** | v2.2 | `references/planner-brief.md` | Strategic analysis patterns, open-question framing, value-assessment accuracy. Lower-risk write scope (skill file, not agent prompts). |
 | **Templates** | v2.2 | `templates/*.md` | Section utility (drop dead sections), placeholder clarity, structured-tag additions. Lowest blast radius. |
 
 v2.1b ships principle refinement only. The other four become available in v2.2 once v2.1b's loop demonstrably closes (≥ 1 accepted principle-refinement proposal per §15 Gate B / §10.3 v2.1b exit).
@@ -426,10 +426,10 @@ v2.1b ships principle refinement only. The other four become available in v2.2 o
 
 | Target | Original location | Why deferred |
 |--------|------------------|--------------|
-| Domain skills | `skills/canon/references/*.md` | Per-skill writes need clearer change-acceptance criteria; defer until in-scope skill-target work has established the pattern. |
+| Domain skills | `references/*.md` | Per-skill writes need clearer change-acceptance criteria; defer until in-scope skill-target work has established the pattern. |
 | Agent definitions | `agents/*.md` | New write scope (today's learner only writes to `.canon/proposed-learnings/`). Letting the learner edit agent prompts needs its own trust/audit design pass. |
 | Agent rules | `rules/*.md` | Same trust scope as agent definitions. |
-| Vocabulary | `skills/canon/references/runbook-vocabulary.md` | Meta-circular — the learner proposing changes to the canonical step list it depends on for synthesis is a self-modifying loop needing explicit stability design. |
+| Vocabulary | `references/runbook-vocabulary.md` | Meta-circular — the learner proposing changes to the canonical step list it depends on for synthesis is a self-modifying loop needing explicit stability design. |
 
 Agent memory is also deferred (audit/groom → v2.2; seeding → v2.3+). Memory-related writes are a new write scope with serious failure modes (groom-away-critical-knowledge, incorrect consolidation, stale-seed calcification) — deferred until the base learner proves trustworthy on lower-risk targets first.
 
@@ -559,7 +559,7 @@ v2.1 replaces v2's 5 hardcoded runbook files (fast-path, feature, epic, migrate,
 
 ### 5.1 Vocabulary
 
-The canonical set of step IDs Canon knows. Adding a new ID is a versioned change (like adding a principle — deliberate, reviewed). The vocabulary lives at `skills/canon/references/runbook-vocabulary.md` and is loaded as a skill by any agent that needs to understand runbook structure.
+The canonical set of step IDs Canon knows. Adding a new ID is a versioned change (like adding a principle — deliberate, reviewed). The vocabulary lives at `references/runbook-vocabulary.md` and is loaded as a skill by any agent that needs to understand runbook structure.
 
 | Step ID | Default agent | Dispatch | Default HITL | Purpose |
 |---------|---------------|----------|--------------|---------|
@@ -593,9 +593,9 @@ Total: **15 entries** (13 functional + 2 mandatory tail).
 
 ### 5.2 Step schema — first-class fields
 
-Every step in a synthesized runbook carries structural fields defined by the synthesis skill (`skills/canon/references/runbook-synthesis.md`, v2.1a), plus three domain-oriented axes:
+Every step in a synthesized runbook carries structural fields defined by the synthesis skill (`references/runbook-synthesis.md`, v2.1a), plus three domain-oriented axes:
 
-**`skills:` — what domain expertise to load.** General-purpose: any step can declare domain primers to load from `skills/canon/references/`. Agents read named skills on their first turn via `agent-context-check`.
+**`skills:` — what domain expertise to load.** General-purpose: any step can declare domain primers to load from `references/`. Agents read named skills on their first turn via `agent-context-check`.
 
 ```yaml
 - id: implement
@@ -609,7 +609,7 @@ Every step in a synthesized runbook carries structural fields defined by the syn
   hitl: none
 ```
 
-Validation: **strict**. The planner validates every `skills:` name against the file list in `skills/canon/references/` at synthesis time. Unresolvable names are a synthesis error.
+Validation: **strict**. The planner validates every `skills:` name against the file list in `references/` at synthesis time. Unresolvable names are a synthesis error.
 
 **`cause:` — analytic lineage + skill hint (fix-specific).** Used on `fix` (and potentially future re-work steps). Carries two signals:
 
@@ -627,10 +627,10 @@ Rules the planner (via `runbook-synthesis.md` skill) MUST follow when emitting a
 1. **Include mandatory tail.** Every build runbook ends with `context-sync` followed by `learn`.
 2. **Use canonical step IDs only.** Any step ID not in `runbook-vocabulary.md` is a synthesis error.
 3. **Preserve default agent / dispatch / HITL** unless overriding with explicit justification in the brief body.
-4. **Validate `skills:` names strictly** against `skills/canon/references/` at synthesis time.
+4. **Validate `skills:` names strictly** against `references/` at synthesis time.
 5. **Use `${slug}` / `${task_id}` / `${timestamp}` placeholders** per the runbook format spec.
 6. **Include a one-paragraph Overview** explaining why this step sequence was chosen.
-7. **Emit body H3 prose per step** with intent, skip-when elaboration, and coordination notes. Rules live in the synthesis skill itself (`skills/canon/references/runbook-synthesis.md`).
+7. **Emit body H3 prose per step** with intent, skip-when elaboration, and coordination notes. Rules live in the synthesis skill itself (`references/runbook-synthesis.md`).
 8. **Apply contract pairings** from synthesis rules:
    - Behavior-preserving `implement` → mandatory-following `verify` with "no behavior changes" criterion
    - `migrate` → paired rollback artifact
@@ -761,7 +761,7 @@ confidence_signals:
 |--------|---------|--------------|
 | `novelty` | Has Canon built something like this before? | Planner's `memory: project` in v2.1a; `query_workspace_history({ similar_to: brief_summary })` in v2.2 |
 | `scope_clarity` | Does the request have concrete acceptance criteria? | Planner analysis of brief; fewer open questions ⇒ higher |
-| `domain_coverage` | Are relevant domain primers available? | Ratio of affected file-layers with ≥ 1 matching primer in `skills/canon/references/` |
+| `domain_coverage` | Are relevant domain primers available? | Ratio of affected file-layers with ≥ 1 matching primer in `references/` |
 | `dependency_drift` | How much has changed in target files since related work? | `get_drift_report` + recent commit density |
 | `question_count` | Open questions remaining in the brief? | Inverse of count, clamped |
 
@@ -1055,10 +1055,10 @@ The migration runs in five sequential steps plus a deletion phase:
 
 **Scope:**
 
-- §5 Vocabulary — 15 canonical step IDs in `skills/canon/references/runbook-vocabulary.md`
+- §5 Vocabulary — 15 canonical step IDs in `references/runbook-vocabulary.md`
 - §5 Step schema — `skills:`, `cause:` first-class fields
 - §5.3 Synthesis contract — MUST / MAY / MUST NOT rules; iterate-until-approved loop
-- `skills/canon/references/planner-brief.md` + `skills/canon/references/runbook-synthesis.md` — two skills the planner loads
+- `references/planner-brief.md` + `references/runbook-synthesis.md` — two skills the planner loads
 - `planner` agent body updated: loads both skills, emits `planning-brief.md` + `runbook.md`, runs the iterate-until-approved loop
 - **CLAUDE.md intent-classification amendment (L1)** — per-message re-classification discipline + pre-write gate (§6.4, §6.5)
 - **New PreToolUse hook `canon-workspace-check.sh` (L4)** — blocks code-modification tools when no active Canon workspace exists for the current flow. Registered in `hooks/canon-agent-teams/hooks.json`
@@ -1076,7 +1076,7 @@ The migration runs in five sequential steps plus a deletion phase:
 
 **Exit criteria:**
 
-- `planner` synthesizes runbooks per the rules in `skills/canon/references/runbook-synthesis.md` and passes iterate-until-approved
+- `planner` synthesizes runbooks per the rules in `references/runbook-synthesis.md` and passes iterate-until-approved
 - At least 5 distinct request types processed end-to-end (bug fix, small feature, refactor, migration, test-gap equivalent)
 - L1 + L4 shipped; observed in action against intent-misclassification scenarios
 - Runbooks execute per the contract; same artifact quality as pre-synthesis static flows
@@ -1308,7 +1308,7 @@ The migration runs in five sequential steps plus a deletion phase:
 
 Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. The remaining code is Canon's value: MCP tools, agent definitions, hooks, principles, shared libraries, and workspace management.
 
-**v2.1 / v2.1b additions are kept, not deleted.** Phase 3 removes only the pre-v2.1 coordination layer listed above. Specifically, the following v2.1a / v2.1b additions remain on main post-Phase-3: `skills/canon/references/runbook-vocabulary.md`, `runbook-synthesis.md`, `planner-brief.md`, `content-flow.md`, `learner-principle-refinement.md`; `hooks/canon-agent-teams/canon-workspace-check.sh`; the `lifecycle_workspace_snapshots` table + migration; `snapshot_workspace` MCP tool; template additions (`fix-summary.md` tags, `implementation-log.md` `justified_deviations[]`); review-checklist `principle_id` discipline; planner + engineer + writer + learner amendments.
+**v2.1 / v2.1b additions are kept, not deleted.** Phase 3 removes only the pre-v2.1 coordination layer listed above. Specifically, the following v2.1a / v2.1b additions remain on main post-Phase-3: `references/runbook-vocabulary.md`, `runbook-synthesis.md`, `planner-brief.md`, `content-flow.md`, `learner-principle-refinement.md`; `hooks/canon-agent-teams/canon-workspace-check.sh`; the `lifecycle_workspace_snapshots` table + migration; `snapshot_workspace` MCP tool; template additions (`fix-summary.md` tags, `implementation-log.md` `justified_deviations[]`); review-checklist `principle_id` discipline; planner + engineer + writer + learner amendments.
 
 ---
 

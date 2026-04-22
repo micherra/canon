@@ -1,1 +1,0 @@
-../../../rules/agent-template-required.md

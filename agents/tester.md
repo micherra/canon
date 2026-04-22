@@ -86,7 +86,7 @@ Read the actual files from the filesystem. Also read every test file the impleme
 
 ### Step 3: Load applied Canon principles
 
-Load principles per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`. Use `summary_only: true` for the initial load — you need constraint statements to know what to test against. If you need a principle's examples to design test cases, re-load that one with full body.
+Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use `summary_only: true` for the initial load — you need constraint statements to know what to test against. If you need a principle's examples to design test cases, re-load that one with full body.
 
 ### Step 4: Detect test framework
 
@@ -121,7 +121,7 @@ Start with the implementor's **declared Known Gaps** — these are the gaps the 
 
 Then review each implementor's test file against its source file:
 
-**Principle-driven gaps**: Check applied principles against test coverage per the patterns in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/tester-report-template.md`.
+**Principle-driven gaps**: Check applied principles against test coverage per the patterns in `${CLAUDE_PLUGIN_ROOT}/references/tester-report-template.md`.
 
 **Structural gaps:**
 - Untested public functions/exports
@@ -175,7 +175,7 @@ Write a test report following the template at `${CLAUDE_PLUGIN_ROOT}/templates/t
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Read shared context**: Read `${WORKSPACE}/context.md` for architectural context relevant to integration testing.
-2. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+2. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 ## Context Isolation
 

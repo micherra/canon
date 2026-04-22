@@ -72,17 +72,17 @@ Read `package.json`, `requirements.txt`, `go.mod`, or equivalent to detect the p
 
 ### Step 2: Load security principles
 
-Load principles per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`. Use `list_principles` for the full index, then filter for principles tagged "security". Load full body for matched security principles — you need the examples to identify patterns.
+Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use `list_principles` for the full index, then filter for principles tagged "security". Load full body for matched security principles — you need the examples to identify patterns.
 
 ### Step 3: Scan for vulnerabilities
 
-Check each file against the vulnerability categories in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/security-checklist.md`. Categories cover: input handling, auth/authz, data handling, dependencies, and infrastructure.
+Check each file against the vulnerability categories in `${CLAUDE_PLUGIN_ROOT}/references/security-checklist.md`. Categories cover: input handling, auth/authz, data handling, dependencies, and infrastructure.
 
 **False positive verification**: Before reporting a finding, verify it's exploitable. For SQL injection: confirm the string reaches a query executor, not just a log line. For hardcoded secrets: confirm the value is a real credential, not a test fixture or placeholder. If uncertain, report as `info` severity with a verification note.
 
 ### Step 3.5: Dependency health audit
 
-Run the dependency health checks per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/security-checklist.md` (outdated deps, license compliance, unused deps, new dep justification).
+Run the dependency health checks per `${CLAUDE_PLUGIN_ROOT}/references/security-checklist.md` (outdated deps, license compliance, unused deps, new dep justification).
 
 ### Step 4: Assess severity
 
@@ -130,7 +130,7 @@ The orchestrator reads this status to determine the transition: `CLEAN` and `FIN
 
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
-1. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+1. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 ## Context Isolation
 

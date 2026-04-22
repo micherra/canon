@@ -291,7 +291,7 @@ It's marked as legacy (prefer `skills/` for new work), but is still auto-discove
 
 **Changed from original plan**: Commands stay in `commands/` at root instead of moving
 to `skills/canon/commands/`. The skill's `SKILL.md` dispatches to them; references in
-`skills/canon/references/` provide supporting docs.
+`references/` provide supporting docs.
 
 ### 4. `AGENTS.md` -> removed
 

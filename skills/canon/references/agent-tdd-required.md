@@ -1,1 +1,0 @@
-../../../rules/agent-tdd-required.md

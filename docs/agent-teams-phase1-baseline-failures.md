@@ -39,7 +39,7 @@ failing under sandbox constraints, model-download tests failing when
 the HuggingFace CDN is blocked, and a couple of preflight assertions
 that depend on a writable git HEAD. None of them exercise
 `orchestration-journal.ts`, `hooks/canon-agent-teams/`, or
-`skills/canon/references/` — the three surfaces introduced by Phase 1
+`references/` — the three surfaces introduced by Phase 1
 Wave 1.
 
 ## Failure catalogue

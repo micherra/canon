@@ -14,7 +14,7 @@ Before starting work, check your spawn prompt for context:
 
 2. **File context**: If you need dependency or graph information not in your prompt, call `get_file_context` or `graph_query` directly.
 
-3. **Domain skills**: If your spawn prompt includes a `Relevant domain skills:` list, Read each named skill file from `skills/canon/references/` before starting work.
+3. **Domain skills**: If your spawn prompt includes a `Relevant domain skills:` list, Read each named skill file from `references/` before starting work.
 
 4. **Template**: If your spawn prompt names a template (e.g., `Use template: implementation-log`), Read it from `templates/` before producing output.
 

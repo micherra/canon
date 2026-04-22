@@ -9,7 +9,7 @@ done_criteria:
     testable: "npm run build && npm test pass. Tool list with flag on shows log_step and verify_completion. With flag off, tools absent. log_step accepts domain_skills_loaded and outcome fields."
   - id: "dc-03"
     description: "11 agent definitions with maxTurns, permissionMode (plan or acceptEdits only), memory (6 agents: project), and skills frontmatter. Engineer consolidation and planner addition complete. Guide and chat removed. All skill references resolve."
-    testable: "ls agents/canon-*.md returns 11 files. implementor, fixer, guide, chat absent. engineer and planner present. Every skill name resolves under skills/canon/references/."
+    testable: "ls agents/canon-*.md returns 11 files. implementor, fixer, guide, chat absent. engineer and planner present. Every skill name resolves under references/."
   - id: "dc-04"
     description: "CLAUDE.md contains Agent Teams Orchestration section with 14 subsections, gated by CANON_AGENT_TEAMS_MODE=on. Includes inline dispatch for 4 removed flows, resume protocol, domain skill + template naming pattern, pre-build gate."
     testable: "Read CLAUDE.md. Confirm 14 subsections. Confirm inline dispatch table. Confirm resume protocol. Confirm flag boundary."
@@ -17,7 +17,7 @@ done_criteria:
     description: "5 hook scripts exist and are registered: PostCommit trailers, completion verify, SessionStart doc-check, SessionStart KG-check, SubagentStop scribe-queue."
     testable: "All 5 .sh files in hooks/canon-agent-teams/ exist, are executable, hooks.json registers them."
   - id: "dc-06"
-    description: "All rules and domain skills registered under skills/canon/references/. 21 rule symlinks + agent-context-check rule + 6 migrated primers + 6 new domain skills."
+    description: "All rules and domain skills registered under references/. 21 rule symlinks + agent-context-check rule + 6 migrated primers + 6 new domain skills."
     testable: "Symlinks resolve. 12 domain skill files present. agent-context-check exists."
   - id: "dc-07"
     description: "npm run build and npm test pass. Legacy path byte-identical when CANON_AGENT_TEAMS_MODE=off."
@@ -83,7 +83,7 @@ This replaces ~614 lines of legacy permission infrastructure (`tool-profiles.ts`
 
 **Always preloaded** (via `skills:` frontmatter): behavioral rules + universal references. ~1.5-2.5k tokens per agent. Guarantees consistent behavior. `agent-context-check` preloaded into ALL agents — instructs self-serve context verification + domain skill loading.
 
-**On-demand domain skills** (lead names in spawn prompt, agent reads): 12 domain skills under `skills/canon/references/`:
+**On-demand domain skills** (lead names in spawn prompt, agent reads): 12 domain skills under `references/`:
 - 6 migrated from `domain-primers/`: backend-api, backend-data, frontend, testing, infrastructure, deprecation
 - 6 new: authentication-security, migration-strategy, observability, error-handling, performance, devops-ci
 

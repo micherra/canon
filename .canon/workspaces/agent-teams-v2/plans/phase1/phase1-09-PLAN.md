@@ -75,7 +75,7 @@ When resuming a session or the user says "continue" / "resume":
 
 **Domain Skill + Template Naming**:
 Before spawning an agent, name relevant domain skills and the output template in the spawn prompt:
-- Domain skills: `"Relevant domain skills: authentication-security, backend-api. Load from skills/canon/references/."`
+- Domain skills: `"Relevant domain skills: authentication-security, backend-api. Load from references/."`
 - Template: `"Use template: implementation-log. Read from templates/implementation-log.md."`
 - Do NOT read and inject file content yourself — the agent reads the named files on its first turn (per `agent-context-check`).
 - This keeps the lead's context clean and puts the Read cost in the agent's fresh context.

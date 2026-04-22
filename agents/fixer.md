@@ -71,7 +71,7 @@ If you receive multiple violations, group them only if they are in the same file
 
 ### Step 2: Load Canon principles
 
-Load principles per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`.
+Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`.
 
 - **test-fix**: Use `get_principles` with the file paths of files you'll modify. Use `summary_only: true`.
 - **violation-fix**: Use `get_principles` with the violation's file path. Use full body (not `summary_only`) — you need the examples to understand the target pattern.
@@ -176,7 +176,7 @@ For single-fix tasks, one final atomic `fix(...)` commit is fine.
 - **BLOCKED** — Cannot fix (needs architectural change or missing context)
 - **NEEDS_CONTEXT** — Report is ambiguous, needs clarification
 
-**violation-fix statuses** (see `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/status-protocol.md`):
+**violation-fix statuses** (see `${CLAUDE_PLUGIN_ROOT}/references/status-protocol.md`):
 - **FIXED** — Violation resolved, committed. Include: principle-id, file-path, commit hash, brief description
 - **PARTIAL_FIX** — Partially resolved. Include: what was fixed, what remains, commit hash
 - **CANNOT_FIX** — Cannot resolve automatically. Include: reason (requires architectural change, needs user decision, would break API contract, falls under documented exception), suggestion for human action
@@ -214,4 +214,4 @@ When fixing issues in a wave task, you may be working in a Canon-managed worktre
 
 ## Workspace Logging
 
-Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.

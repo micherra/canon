@@ -1,1 +1,0 @@
-../../../rules/agent-conflict-detection.md

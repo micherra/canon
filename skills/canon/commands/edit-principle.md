@@ -9,7 +9,7 @@ Thin router for Canon principle/agent-rule editing.
 
 Authority model:
 - `agents/writer.md` owns editing behavior and decision logic
-- `skills/canon/references/principle-format.md` is the source of truth for file structure
+- `references/principle-format.md` is the source of truth for file structure
 - This command should not duplicate authoring or validation policy
 
 ## Instructions

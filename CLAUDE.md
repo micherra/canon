@@ -62,7 +62,7 @@ Do not narrate individual tool calls. One line between state transitions is corr
 
 ## Driving the State Machine
 
-Full protocol: `skills/canon/references/canon-orchestrator.md`. Key loop:
+Full protocol: `references/canon-orchestrator.md`. Key loop:
 
 1. `resolved_flow = load_flow(flow_name)` → get flow definition **object**
 2. `init_workspace(...)` → create or resume workspace; check `preflight_issues` before proceeding
@@ -145,9 +145,11 @@ canon/
 │   ├── strong-opinions/
 │   └── conventions/
 ├── rules/                # Agent-behavior rules loaded per agent at runtime
+├── primers/              # Domain primers — domain reasoning context loaded by agents
+├── references/           # Orchestrator + agent protocol fragments (canon-orchestrator.md, etc.)
 ├── skills/canon/         # Claude Code skill definition — entry point for Canon activation
 │   ├── commands/         # Slash command definitions (/canon:init, /canon:check, etc.)
-│   └── references/       # Reference fragments (canon-orchestrator.md, etc.)
+│   └── evals/            # Eval suite for intent classification
 ├── templates/            # Artifact templates agents must follow
 └── .canon/               # Runtime data (workspaces, principles, config, JSONL drift store, SQLite DBs)
     └── workspaces/       # Per-branch/task build state

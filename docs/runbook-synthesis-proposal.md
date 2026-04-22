@@ -53,7 +53,7 @@ Explicit decisions made in the PR #115 review thread, in order:
 | 4 | Amend `docs/agent-teams-migration-plan-v2.md` as v2.1, not a separate ADR | Keep the plan authoritative; avoid ADR-vs-plan split-brain |
 | 5 | Mark `phase1-01..04` plans abandoned; delete any runbook files they would have produced | None exist yet — only the template + README on this PR |
 | 6 | Two-skill split: `planner-brief.md` (strategic) + `runbook-synthesis.md` (mechanical) | Different mental modes; cleaner to reason about and evolve |
-| 7 | Strict validation of `skills:` names against `skills/canon/references/` at synthesis time | Typo safety; catches skill drift early |
+| 7 | Strict validation of `skills:` names against `references/` at synthesis time | Typo safety; catches skill drift early |
 | 8 | Confidence score is a **surfaced signal during iteration**, not a gating mechanism | Planner proposes, user approves; confidence informs the user, doesn't decide for them |
 | 9 | `mode` field deferred, handled in synthesis rules until evidence warrants promotion | Only 2–3 real variants today; promote when inline rules proliferate |
 | 10 | **Iterate-until-approved planner loop** replaces autonomous-execution thresholds | User is always the gate; eliminates confidence-threshold gating, recipes-as-separate-concept, escape hatches |
@@ -108,8 +108,8 @@ The surface of Canon artifacts the learning system can refine across the v2.1 + 
 |--------|-------|----------|-------------------|
 | **Principles** | v2.1b | `principles/*.md` | Scope narrowing, severity promotion/demotion, wording clarifications, new principles from recurring patterns. The first refinement target — the only one v2.1b ships. Today's learner already produces principle proposals; v2.1b expands the data feeding them. |
 | **Conventions** | v2.2 | `.canon/CONVENTIONS.md` | Established patterns observed across N flows; graduation to principles when warranted. Today's learner already produces convention proposals; v2.2 expands the corpus. |
-| **Runbook synthesis skill** | v2.2 | `skills/canon/references/runbook-synthesis.md` | Default step selection, skill-selection patterns, contract pairings, request-shape recognition. Required for synthesis to learn (per §3.1's argument that synthesis is load-bearing for plan-quality learning). |
-| **Planning brief skill** | v2.2 | `skills/canon/references/planner-brief.md` | Strategic analysis patterns, open-question framing, value-assessment accuracy. Lower-risk write scope (skill file, not agent prompts). |
+| **Runbook synthesis skill** | v2.2 | `references/runbook-synthesis.md` | Default step selection, skill-selection patterns, contract pairings, request-shape recognition. Required for synthesis to learn (per §3.1's argument that synthesis is load-bearing for plan-quality learning). |
+| **Planning brief skill** | v2.2 | `references/planner-brief.md` | Strategic analysis patterns, open-question framing, value-assessment accuracy. Lower-risk write scope (skill file, not agent prompts). |
 | **Templates** | v2.2 | `templates/*.md` | Section utility (drop dead sections), placeholder clarity, structured-tag additions. Lowest blast radius among in-scope targets. |
 
 **Phase markers:** v2.1b ships principle refinement only (per §17.2). The other four become available in v2.2 once v2.1b's loop demonstrably closes (≥ 3 accepted principle-refinement proposals per §17.2 exit criteria). Each in-scope target needs explicit per-target spec for evidence threshold, cadence, and output format before its v2.2 slot starts.
@@ -118,10 +118,10 @@ The surface of Canon artifacts the learning system can refine across the v2.1 + 
 
 | Target | Original location | Why deferred |
 |--------|------------------|--------------|
-| **Domain skills** | `skills/canon/references/*.md` | Per-skill writes need clearer change-acceptance criteria; defer until in-scope skill-target work (synthesis + planner brief) has established the pattern. |
+| **Domain skills** | `references/*.md` | Per-skill writes need clearer change-acceptance criteria; defer until in-scope skill-target work (synthesis + planner brief) has established the pattern. |
 | **Agent definitions** | `agents/*.md` | New write scope (today's learner only writes to `.canon/proposed-learnings/`). Letting the learner edit agent prompts is a trust expansion that needs its own design pass. |
 | **Agent rules** | `rules/*.md` | Same trust scope as agent definitions; both need a coordinated write-permission design before either lands. |
-| **Vocabulary** | `skills/canon/references/runbook-vocabulary.md` | Meta-circular — the learner proposing changes to the canonical step list it depends on for synthesis is a self-modifying loop with subtle stability implications. Needs explicit stability design (vocab versioning per §8.2 is a prerequisite, not a complete answer). |
+| **Vocabulary** | `references/runbook-vocabulary.md` | Meta-circular — the learner proposing changes to the canonical step list it depends on for synthesis is a self-modifying loop with subtle stability implications. Needs explicit stability design (vocab versioning per §8.2 is a prerequisite, not a complete answer). |
 
 Agent memory was originally a row here too; cut to v2.2+ (audit/groom) and v2.3+ (seeding) via architect change #2 — see §7 status note + Appendix B.
 
@@ -352,7 +352,7 @@ Digest format, review cadence, and acceptance workflow are all **hypothetical**;
 
 ## 8. Vocabulary
 
-The canonical set of step IDs Canon knows. Adding a new ID is a versioned change (like adding a principle — deliberate, reviewed). The vocabulary is stored at `skills/canon/references/runbook-vocabulary.md` and loaded as a skill by any agent that needs to understand runbook structure.
+The canonical set of step IDs Canon knows. Adding a new ID is a versioned change (like adding a principle — deliberate, reviewed). The vocabulary is stored at `references/runbook-vocabulary.md` and loaded as a skill by any agent that needs to understand runbook structure.
 
 | Step ID | Default agent | Dispatch | Default HITL | Purpose |
 |---------|---------------|----------|--------------|---------|
@@ -412,7 +412,7 @@ Every step in a synthesized runbook carries structural fields (from `templates/r
 
 ### 9.1 `skills:` — what domain expertise to load
 
-General-purpose: any step can declare domain primers to load from `skills/canon/references/`. Agents read named skills on their first turn via `agent-context-check`.
+General-purpose: any step can declare domain primers to load from `references/`. Agents read named skills on their first turn via `agent-context-check`.
 
 ```yaml
 - id: implement
@@ -426,7 +426,7 @@ General-purpose: any step can declare domain primers to load from `skills/canon/
   hitl: none
 ```
 
-**Validation:** strict. The planner validates every `skills:` name against the file list in `skills/canon/references/` at synthesis time. Unresolvable names are a synthesis error.
+**Validation:** strict. The planner validates every `skills:` name against the file list in `references/` at synthesis time. Unresolvable names are a synthesis error.
 
 **Why declarative, not inline prose:** planner decides skill selection at synthesis; journal's `domain_skills_loaded` field captures the list verbatim; multiple skills per step compose cleanly; no step-specific `domain` / `scope` field proliferation.
 
@@ -465,7 +465,7 @@ Rules the planner (via `runbook-synthesis.md` skill) MUST follow when emitting a
 1. **Include mandatory tail.** Every build runbook ends with `context-sync` followed by `learn`. Not optional, not reorderable.
 2. **Use canonical step IDs only.** Any step ID not in `runbook-vocabulary.md` is a synthesis error.
 3. **Preserve default agent / dispatch / HITL** unless overriding with explicit justification in the brief body.
-4. **Validate `skills:` names strictly** against `skills/canon/references/` at synthesis time.
+4. **Validate `skills:` names strictly** against `references/` at synthesis time.
 5. **Use `${slug}` / `${task_id}` / `${timestamp}` placeholders** per the runbook format spec.
 6. **Include a one-paragraph Overview** explaining why this step sequence was chosen.
 7. **Emit body H3 prose per step** with intent, skip-when elaboration, and coordination notes (per `skills/canon/runbooks/README.md`).
@@ -821,7 +821,7 @@ confidence_signals:
 |--------|---------|--------------|
 | `novelty` | Has Canon built something like this before? | Planner's `memory: project` + `query_workspace_history({ similar_to: brief_summary })` |
 | `scope_clarity` | Does the request have concrete acceptance criteria? | Planner analysis of brief; fewer open questions ⇒ higher |
-| `domain_coverage` | Are relevant domain primers available? | Ratio of affected file-layers with ≥1 matching primer in `skills/canon/references/` |
+| `domain_coverage` | Are relevant domain primers available? | Ratio of affected file-layers with ≥1 matching primer in `references/` |
 | `dependency_drift` | How much has changed in target files since related work? | `get_drift_report` + recent commit density |
 | `question_count` | Open questions remaining in the brief? | Inverse of count, clamped |
 
@@ -948,7 +948,7 @@ The split per §17 means **v2.1a alone is a workable shipping milestone** if v2.
 |------|--------|------|
 | phase1-00 (runbook format) | DONE on PR #115 | Output format for synthesis; lives at `templates/runbook-template.md` + `skills/canon/runbooks/README.md`. |
 | phase1-01..04 (5 static runbook files) | **ABANDONED** for v2.1 | Replaced by vocabulary-based synthesis (v2.1a). The static-file work doesn't ship. |
-| phase1-05 (skills registration) | **Stays — required v2 Phase 1 deliverable** | Domain skills + agent rules registered under `skills/canon/references/`. v2.1's synthesis and observation tagging both depend on this. |
+| phase1-05 (skills registration) | **Stays — required v2 Phase 1 deliverable** | Domain skills + agent rules registered under `references/`. v2.1's synthesis and observation tagging both depend on this. |
 | phase1-06 (orchestration journal) | **Stays — required v2 Phase 1 deliverable** | Journal's `domain_skills_loaded`, outcome fields, and HITL events feed the v2.1b lifecycle substrate. |
 | phase1-07 (hooks) | **Stays — required v2 Phase 1 deliverable** | `completion-verify.sh` will be extended in v2.1b to call `snapshot_workspace`. |
 | **phase1-08 (agent definitions)** | **Stays — REQUIRED v2 Phase 1 deliverable; this is Gate A** | Creates `planner` and `engineer` agent definitions. **v2.1 cannot start without this.** Currently `implementor` and `fixer` exist; phase1-08 merges them into `engineer` and adds the new `planner`. |
@@ -1082,8 +1082,8 @@ Responding to architect change #1 (§16). The current proposal bundles three ind
 - §8 Vocabulary — 15 canonical step IDs (unchanged; architect change #6 was the §4 refinement-target matrix reduction, not a vocabulary cut)
 - §9 Step schema — `skills:`, `cause:` first-class fields
 - §10 Synthesis contract — MUST / MAY / MUST NOT rules; iterate-until-approved loop
-- `skills/canon/references/runbook-vocabulary.md` — new vocabulary file
-- `skills/canon/references/planner-brief.md` + `skills/canon/references/runbook-synthesis.md` — two skills the planner loads
+- `references/runbook-vocabulary.md` — new vocabulary file
+- `references/planner-brief.md` + `references/runbook-synthesis.md` — two skills the planner loads
 - `planner` agent body updated: loads both skills, emits `planning-brief.md` + `runbook.md`, runs the iterate-until-approved loop
 - `templates/runbook-template.md` — already landed on PR #115; becomes the output format for synthesis
 - **CLAUDE.md intent-classification amendment (L1)** — re-classification discipline: intent is per-message, not per-session. Every user message re-classifies; chat/question sessions that pivot to a build request route the pivot message through planner. Pre-write gate: before Edit/Write/Bash for code changes, verify active Canon workspace exists; if not, stop and route.

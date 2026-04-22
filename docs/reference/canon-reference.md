@@ -18,13 +18,22 @@ canon/
 │       ├── drift/          # JSONL-backed drift tracking (reviews)
 │       └── graph/          # Dependency graph scanner and priority scoring
 ├── principles/           # Canonical engineering principles (markdown)
-├── skills/canon/         # Canon skill definition (entry point for Claude Code)
-│   ├── commands/         # CLI command definitions (doctor, init, learn, pr-review, etc.)
-│   └── references/       # Reference fragments loaded on demand: orchestrator protocol,
-│                         #   agent rule symlinks, and the 12 domain primers
-│                         #   (backend-api, backend-data, frontend, testing, infrastructure,
+├── primers/              # Domain primers (12 files) — reasoning context agents Read
+│                         #   when their plan's `domains:` field matches (backend-api,
+│                         #   backend-data, frontend, testing, infrastructure,
 │                         #   deprecation, authentication-security, migration-strategy,
 │                         #   observability, error-handling, performance, devops-ci)
+├── references/           # Orchestrator + agent protocol fragments (11 files):
+│                         #   canon-orchestrator.md, principle-format.md,
+│                         #   principle-loading.md, context-isolation.md,
+│                         #   workspace-logging.md, status-protocol.md,
+│                         #   guide-dashboards.md, learner-dimensions.md,
+│                         #   tester-report-template.md, security-checklist.md,
+│                         #   writer-worked-example.md
+├── skills/canon/         # Canon skill definition (Claude Code skill entry point)
+│   ├── SKILL.md          # Skill frontmatter + orchestrator activation
+│   ├── commands/         # Slash commands (/canon:init, /canon:check, /canon:doctor, …)
+│   └── evals/            # Eval suite for intent classification
 ├── templates/            # Artifact templates agents must follow
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
     └── workspaces/       # Per-branch/task build state (board.json, session.json, progress.md, plans/, etc.)

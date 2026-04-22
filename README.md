@@ -421,9 +421,11 @@ canon/
 │       └── ui/           # Svelte frontend — MCP App dashboards
 ├── principles/           # Built-in principles (56 total: 5 rules, 34 strong-opinions, 17 conventions)
 ├── rules/                # Agent-behavior rules (loaded per agent at runtime)
+├── primers/              # Domain primers (backend-api, frontend, testing, …) — agent reasoning context
+├── references/           # Orchestrator + protocol fragments (canon-orchestrator.md, principle-format.md, …)
 ├── skills/canon/         # Claude Code skill definition — entry point for Canon activation
 │   ├── commands/         # Slash command definitions
-│   └── references/       # Reference fragments (canon-orchestrator.md, etc.)
+│   └── evals/            # Eval suite
 ├── templates/            # Artifact templates agents must follow
 └── .canon/               # Runtime data (workspaces, principles, config, SQLite DBs)
     └── workspaces/       # Per-branch/task build state

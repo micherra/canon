@@ -22,7 +22,7 @@ LAST_SCRIBE_FILE="${CANON_PROJECT_DIR:-.}/.canon/last-scribe-commit"
 if [[ ! -f "$LAST_SCRIBE_FILE" ]]; then
   cat <<'EOF'
 CANON NOTE: No scribe checkpoint recorded yet (.canon/last-scribe-commit missing).
-Agent-facing docs (CLAUDE.md files, skills/canon/references/) may not reflect
+Agent-facing docs (CLAUDE.md files, references/) may not reflect
 recent source changes. Consider running the scribe at the end of the next
 completed flow.
 EOF

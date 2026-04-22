@@ -5,7 +5,7 @@ depends_on: ["v2_1a-pre"]
 decisions:
   - "dc-01"
 files:
-  - skills/canon/references/runbook-vocabulary.md
+  - references/runbook-vocabulary.md
 principles:
   - agent-design-before-code
   - agent-surface-assumptions
@@ -17,7 +17,7 @@ domains:
 
 ### Action
 
-Write `skills/canon/references/runbook-vocabulary.md` as the canonical list of step IDs Canon knows. This is the data layer that `planner-brief.md` and `runbook-synthesis.md` (v2_1a-01, v2_1a-02) reference strictly.
+Write `references/runbook-vocabulary.md` as the canonical list of step IDs Canon knows. This is the data layer that `planner-brief.md` and `runbook-synthesis.md` (v2_1a-01, v2_1a-02) reference strictly.
 
 **Structure:**
 
@@ -62,7 +62,7 @@ Total: 15 entries (13 functional + 2 mandatory tail).
 Canon has no existing test infrastructure for skills/ markdown files. Options:
 
 - **Preferred:** add minimal validation via the skills-manifest loader (if one exists) or via the integration test in v2_1a-02 / v2_1a-08 (which parses the vocabulary as part of synthesis validation — a failing vocabulary fails synthesis downstream).
-- **If a skill-lint harness is desirable:** file a follow-up task to add `scripts/lint-skills.ts` that parses every `skills/canon/references/*.md` skill file for required frontmatter. Out of scope for this task.
+- **If a skill-lint harness is desirable:** file a follow-up task to add `scripts/lint-skills.ts` that parses every `references/*.md` skill file for required frontmatter. Out of scope for this task.
 
 Validation for v2_1a-00:
 
@@ -71,7 +71,7 @@ Validation for v2_1a-00:
 
 ### Verify
 
-1. `skills/canon/references/runbook-vocabulary.md` exists and parses as markdown
+1. `references/runbook-vocabulary.md` exists and parses as markdown
 2. Vocabulary test passes: `npm test -- runbook-vocabulary`
 3. Grep confirms no other file redefines the same step-ID list — this is the single source of truth
 4. Skills registry (if manifest-driven) loads the file without errors
