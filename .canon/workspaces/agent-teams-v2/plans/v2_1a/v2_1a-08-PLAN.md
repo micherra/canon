@@ -34,7 +34,7 @@ Run end-to-end validation of v2.1a against ≥ 5 distinct request types. Documen
 3. **Approved runbook executes**: lead logs each step via `log_step`; artifacts land at declared paths; per-step `outcome` recorded
 4. **L1 observed**: a deliberate chat-then-pivot scenario routes the build request through planner
 5. **L4 observed**: an attempt to edit a tracked file without an active workspace is blocked with an actionable message; edit of a gitignored file succeeds; edit of a tracked file with an active workspace succeeds
-6. **Intent routing (v2_1a-06) works**: `canon-writer` spawn against a principle edit creates a workspace; L4 does not block
+6. **Intent routing (v2_1a-06) works**: `writer` spawn against a principle edit creates a workspace; L4 does not block
 7. **Artifact quality parity**: compare outputs to baseline v2-era static-runbook outputs for equivalent flows — no regression in review verdict, test coverage, or implementation summary structure
 
 **Report structure:**
@@ -43,7 +43,7 @@ Run end-to-end validation of v2.1a against ≥ 5 distinct request types. Documen
 - Per-request-type section with: request text, synthesized runbook (brief summary), execution log, artifacts produced, validation checks passed, deviations noted
 - L1 observation section
 - L4 observation section (include a false-positive test matrix per v2_1a-05 integration tests)
-- Intent-routing observation section (canon-writer + canon-learner runs)
+- Intent-routing observation section (writer + learner runs)
 - Quality-parity comparison table (v2.1a output vs. v2 baseline for equivalent flow types)
 - Regression summary (flag off → behavior unchanged)
 - Open issues / follow-ups (if any)

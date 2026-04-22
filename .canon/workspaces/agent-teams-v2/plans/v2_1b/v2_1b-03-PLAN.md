@@ -6,7 +6,7 @@ decisions:
   - "dc-04"
 files:
   - templates/fix-summary.md
-  - agents/canon-engineer.md
+  - agents/engineer.md
 principles:
   - agent-template-required
   - agent-evidence-over-intuition
@@ -18,7 +18,7 @@ domains:
 
 ### Action
 
-Add `cause` and `root_cause_tag` as required structured frontmatter fields on the fix-summary template. Amend `canon-engineer` to populate them on every fix-mode run.
+Add `cause` and `root_cause_tag` as required structured frontmatter fields on the fix-summary template. Amend `engineer` to populate them on every fix-mode run.
 
 **Template amendment** — if `templates/fix-summary.md` does not yet exist, create it following the `implementation-log.md` template pattern. Required frontmatter:
 
@@ -40,7 +40,7 @@ principle_ids_addressed: []
 - **`root_cause_tag`** — a short phrase (≤ 40 chars, lowercase-kebab) categorizing the *root cause* of the issue being fixed. Open-coded initially; the learner can later mine common root_cause_tag values and propose a stable taxonomy. Examples: `missing-null-check`, `off-by-one`, `wrong-import-path`, `forgot-await`, `stale-snapshot`.
 - **`upstream_step_id`** — the step ID (e.g., `review-wave1-a`) that flagged the issue. Enables the learner to correlate fixes with which upstream step caught them.
 
-**canon-engineer amendment:**
+**engineer amendment:**
 
 - Agent body's fix-mode section references the fix-summary template
 - Engineer populates `cause` from its spawn-prompt metadata (synthesis carries this through)
@@ -50,7 +50,7 @@ principle_ids_addressed: []
 
 ### Canon principles to apply
 
-- **agent-template-required** — the template is authoritative; canon-engineer MUST read it and follow its structure
+- **agent-template-required** — the template is authoritative; engineer MUST read it and follow its structure
 - **agent-evidence-over-intuition** — `root_cause_tag` is what the engineer actually found, not a guess
 
 ### Risk mitigations
@@ -62,14 +62,14 @@ principle_ids_addressed: []
 
 No existing test infrastructure for templates/*.md or agents/*.md. Validation is by:
 
-- Manual read: template carries `cause` + `root_cause_tag` + `upstream_step_id` as required fields in frontmatter block; canon-engineer body cites the fix-summary template
+- Manual read: template carries `cause` + `root_cause_tag` + `upstream_step_id` as required fields in frontmatter block; engineer body cites the fix-summary template
 - Indexer-side check (existing drift-store code): if the indexer parses fix-summary frontmatter, it should reject or warn on missing required tags — confirm existing behavior or file a small follow-up task
 - Integration (runs in v2_1b-08): run a flow with a deliberate review failure → fix step → fix-summary artifact exists with `cause: review` and a non-empty `root_cause_tag`
 
 ### Verify
 
 1. `templates/fix-summary.md` exists with the required frontmatter shape
-2. `canon-engineer` body references the template
+2. `engineer` body references the template
 3. Template + engineer tests pass
 4. A real fix-mode run produces a summary with both tags populated
 

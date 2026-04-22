@@ -225,7 +225,7 @@ describe("disk-load: epic flow consultation fragments from disk", () => {
     expect(consultations).toBeDefined();
     expect(consultations!["pattern-check"]).toBeDefined();
     // Verify agent and role are correctly resolved from fragment YAML
-    expect(consultations!["pattern-check"].agent).toBe("canon-architect");
+    expect(consultations!["pattern-check"].agent).toBe("architect");
     expect(consultations!["pattern-check"].role).toBe("pattern-check");
   });
 
@@ -234,7 +234,7 @@ describe("disk-load: epic flow consultation fragments from disk", () => {
 
     const consultations = flow.consultations;
     expect(consultations!["early-scan"]).toBeDefined();
-    expect(consultations!["early-scan"].agent).toBe("canon-security");
+    expect(consultations!["early-scan"].agent).toBe("security");
     expect(consultations!["early-scan"].role).toBe("early-scan");
   });
 
@@ -263,7 +263,7 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
       },
       states: {
         checkpoint: {
-          agent: "canon-guide",
+          agent: "guide",
           skip_when: "auto_approved",
           transitions: {
             approved: "done",
@@ -394,7 +394,7 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
     return {
       consultations: {
         "pattern-check": {
-          agent: "canon:canon-architect",
+          agent: "canon:architect",
           fragment: "pattern-check",
           min_waves: 2,
           role: "pattern-check",
@@ -411,7 +411,7 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           consultations: {
             between: ["pattern-check"],
           },
@@ -524,7 +524,7 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
     // Consultation SHOULD be included (wave_total=2 >= min_waves=2)
     const patternCheck = result.consultation_prompts?.find((e) => e.name === "pattern-check");
     expect(patternCheck).toBeDefined();
-    expect(patternCheck?.agent).toBe("canon:canon-architect");
+    expect(patternCheck?.agent).toBe("canon:architect");
   });
 
   it("both features degrade gracefully: git diff fails AND wave_total undefined (fail-open)", async () => {

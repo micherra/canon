@@ -200,7 +200,7 @@ describe("updateWaveEvent (store)", () => {
     });
 
     const resolution = {
-      agents_spawned: ["canon-architect"],
+      agents_spawned: ["architect"],
       artifacts: ["plans/task-04.md"],
       summary: "Task planned and slotted",
     };
@@ -266,10 +266,10 @@ describe("updateWaveEvent (store)", () => {
 // resolveEventAgents (pure function — unchanged)
 
 describe("resolveEventAgents", () => {
-  it("add_task returns canon-architect", () => {
+  it("add_task returns architect", () => {
     const result = resolveEventAgents("add_task");
-    expect(result.agents).toEqual(["canon-architect"]);
-    expect(result.descriptions["canon-architect"]).toBeDefined();
+    expect(result.agents).toEqual(["architect"]);
+    expect(result.descriptions.architect).toBeDefined();
   });
 
   it("skip_task returns no agents", () => {
@@ -278,10 +278,10 @@ describe("resolveEventAgents", () => {
     expect(result.descriptions).toEqual({});
   });
 
-  it("reprioritize returns canon-architect", () => {
+  it("reprioritize returns architect", () => {
     const result = resolveEventAgents("reprioritize");
-    expect(result.agents).toEqual(["canon-architect"]);
-    expect(result.descriptions["canon-architect"]).toBeDefined();
+    expect(result.agents).toEqual(["architect"]);
+    expect(result.descriptions.architect).toBeDefined();
   });
 
   it("inject_context returns no agents", () => {

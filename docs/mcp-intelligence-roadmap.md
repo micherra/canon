@@ -265,7 +265,7 @@ The shipper uses these when posting PR comments. Requires full SHA (not abbrevia
   → Lead spawns 3-4 reviewer teammates in parallel
   → Aggregated findings with confidence scores (threshold 80)
   → Developer reads terminal output, asks Claude to fix
-  → canon-engineer fixes in terminal
+  → engineer fixes in terminal
   → /canon:review again
     → outdated violations flagged, new analysis on changed lines
   → Clean → /canon:review --comment posts to PR with GitHub line links

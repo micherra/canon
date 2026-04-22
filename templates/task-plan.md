@@ -1,8 +1,8 @@
 ---
 template: task-plan
 description: Atomic task plan for implementor agents
-used-by: [canon-architect]
-read-by: [canon-implementor]
+used-by: [architect]
+read-by: [implementor]
 output-path: ${WORKSPACE}/plans/${slug}/${task-id}-PLAN.md
 ---
 

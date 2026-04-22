@@ -13,7 +13,7 @@ import type { ConsultationPromptEntry } from "../enter-and-prepare-state.ts";
 
 // Minimal valid SpawnPromptEntry (without tool scoping fields)
 const baseEntry = (): SpawnPromptEntry => ({
-  agent: "canon:canon-implementor",
+  agent: "canon:implementor",
   prompt: "Do the thing",
   template_paths: [],
 });
@@ -83,13 +83,13 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
     // Entries that haven't passed through injectCoordination (no tools/disallowed_tools set)
     // still get permission_mode: "auto" from the Option C safety net when isolation is "worktree".
     const entry: SpawnPromptEntry = {
-      agent: "canon:canon-researcher",
+      agent: "canon:researcher",
       prompt: "Research the codebase",
       role: "researcher",
       template_paths: [],
     };
     const [req] = buildSpawnRequests([entry]);
-    expect(req.agent_type).toBe("canon:canon-researcher");
+    expect(req.agent_type).toBe("canon:researcher");
     expect(req.role).toBe("researcher");
     expect(Object.hasOwn(req, "tools")).toBe(false);
     expect(Object.hasOwn(req, "disallowed_tools")).toBe(false);
@@ -103,10 +103,10 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
     // outcome. This ensures non-wave agents (researcher, architect, tester, etc.) always run in
     // auto mode since the orchestrator always spawns them with isolation: "worktree" (CLAUDE.md).
     const entries: SpawnPromptEntry[] = [
-      { agent: "canon:canon-researcher", prompt: "Research", template_paths: [] },
-      { agent: "canon:canon-architect", prompt: "Design", template_paths: [] },
-      { agent: "canon:canon-tester", prompt: "Test", template_paths: [] },
-      { agent: "canon:canon-reviewer", prompt: "Review", template_paths: [] },
+      { agent: "canon:researcher", prompt: "Research", template_paths: [] },
+      { agent: "canon:architect", prompt: "Design", template_paths: [] },
+      { agent: "canon:tester", prompt: "Test", template_paths: [] },
+      { agent: "canon:reviewer", prompt: "Review", template_paths: [] },
     ];
     const requests = buildSpawnRequests(entries);
     for (const req of requests) {
@@ -117,7 +117,7 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
 
   test("consultation spawns get tool scope from their agent profile", () => {
     const consultation: ConsultationPromptEntry = {
-      agent: "canon:canon-researcher",
+      agent: "canon:researcher",
       name: "research-consult",
       prompt: "Consult on the research",
       role: "consultation",

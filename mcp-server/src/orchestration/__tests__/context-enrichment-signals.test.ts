@@ -79,7 +79,7 @@ function makeFlow(tier = "medium"): ResolvedFlow {
     params: {},
     states: {
       implement: {
-        spawn: { agent: "canon-implementor", prompt: "implement" },
+        spawn: { agent: "implementor", prompt: "implement" },
         transitions: { done: "terminal" },
         type: "single",
       },

@@ -112,7 +112,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         prompt: "Do task",
         role: "main",
         template_paths: [],
@@ -291,7 +291,7 @@ describe("driveFlow — result without agent_session_id", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -308,12 +308,12 @@ describe("driveFlow — result without agent_session_id", () => {
       spawn_instructions: { implement: "implement", research: "research" },
       states: {
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
         research: {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           transitions: { done: "implement" },
           type: "single",
         },
@@ -335,7 +335,7 @@ describe("driveFlow — result without agent_session_id", () => {
     if (!result.ok) return;
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
-    expect(result.requests[0].agent_type).toBe("canon:canon-implementor");
+    expect(result.requests[0].agent_type).toBe("canon:implementor");
   });
 });
 

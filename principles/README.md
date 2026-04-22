@@ -33,7 +33,7 @@ The body follows a consistent structure: a one-paragraph statement of the constr
 
 ## How Principles Are Used
 
-The Canon MCP server loads principles through its `get_principles` and `review_code` tools. When the reviewer or security agent analyzes code, the server filters the principle set by the code's layer, file patterns, and tags to surface the most relevant constraints. The `canon-learner` agent proposes new or updated principles when it spots recurring patterns. The `canon-writer` agent creates the actual principle files following Canon's format.
+The Canon MCP server loads principles through its `get_principles` and `review_code` tools. When the reviewer or security agent analyzes code, the server filters the principle set by the code's layer, file patterns, and tags to surface the most relevant constraints. The `learner` agent proposes new or updated principles when it spots recurring patterns. The `writer` agent creates the actual principle files following Canon's format.
 
 Principles are also referenced in compliance declarations that implementors include in their task summaries, creating an audit trail of which principles were applied to which work.
 

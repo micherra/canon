@@ -373,7 +373,7 @@ describe("resolution data persisted to events file after apply", () => {
 // 5. Agent routing end-to-end: event type → correct agents in resolve result
 
 describe("agent routing: resolveEventAgents contract via resolveWaveEvent", () => {
-  it("add_task event resolves to canon-architect via full inject+resolve path", async () => {
+  it("add_task event resolves to architect via full inject+resolve path", async () => {
     const injected = await injectWaveEvent({
       payload: { description: "Agent routing test" },
       type: "add_task",
@@ -386,10 +386,10 @@ describe("agent routing: resolveEventAgents contract via resolveWaveEvent", () =
       workspace,
     });
 
-    expect(result.agents).toEqual(["canon-architect"]);
-    expect(result.descriptions["canon-architect"]).toBeDefined();
-    expect(typeof result.descriptions["canon-architect"]).toBe("string");
-    expect(result.descriptions["canon-architect"].length).toBeGreaterThan(0);
+    expect(result.agents).toEqual(["architect"]);
+    expect(result.descriptions.architect).toBeDefined();
+    expect(typeof result.descriptions.architect).toBe("string");
+    expect(result.descriptions.architect.length).toBeGreaterThan(0);
   });
 
   it("guidance event resolves to empty agents via full inject+resolve path", async () => {

@@ -2,7 +2,7 @@
 fragment: early-scan
 type: consultation
 description: Security quick-scan of wave changes before next wave builds on them
-agent: canon-security
+agent: security
 role: early-scan
 section: Early warnings
 timeout: 5m

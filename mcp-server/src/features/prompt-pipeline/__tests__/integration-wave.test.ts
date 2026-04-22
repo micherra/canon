@@ -126,7 +126,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement the task." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -181,7 +181,7 @@ describe("integration — cache prefix prepended to all prompts", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -222,7 +222,7 @@ describe("integration — wave briefing injection", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -252,7 +252,7 @@ describe("integration — wave briefing injection", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -301,7 +301,7 @@ describe("integration — stage ordering preserved end-to-end", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "## INSTRUCTION_MARKER ##\n\n${item}" },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -347,7 +347,7 @@ describe("integration — debate state produces debate prompts", () => {
 
     const flow = makeFlow({
       debate: {
-        composition: ["canon-implementor"],
+        composition: ["implementor"],
         max_rounds: 3,
         teams: 2,
       },
@@ -379,7 +379,7 @@ describe("integration — cluster fanout for single state", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           large_diff_threshold: 5,
           type: "single",
         } as never,

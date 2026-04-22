@@ -39,7 +39,7 @@ describe("buildLayerInferrer", () => {
 
     it("matches ** glob at multiple depths", () => {
       const infer = buildLayerInferrer({ agents: ["agents/**"] });
-      expect(infer("agents/canon-implementor.md")).toBe("agents");
+      expect(infer("agents/implementor.md")).toBe("agents");
       expect(infer("agents/sub/dir/thing.md")).toBe("agents");
     });
 
@@ -104,7 +104,7 @@ describe("buildLayerInferrer", () => {
       );
       expect(infer("mcp-server/src/ui/PrReview.svelte")).toBe("dashboard-ui");
       expect(infer("src/api/handler.ts")).toBe("api");
-      expect(infer("agents/canon-implementor.md")).toBe("agents");
+      expect(infer("agents/implementor.md")).toBe("agents");
       expect(infer("unmatched/file.ts")).toBe("unknown");
     });
   });

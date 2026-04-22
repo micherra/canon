@@ -85,9 +85,8 @@ export function shouldApprovalGate(
   // Tier-based defaults (approval_gate is undefined — apply defaults)
   const tier = flow.tier;
   if (tier === "medium" || tier === "large") {
-    // Default gate on design states (agent is canon-architect, with or without prefix)
-    const isArchitect =
-      stateDef.agent === "canon-architect" || stateDef.agent === "canon:canon-architect";
+    // Default gate on design states (agent is architect, with or without prefix)
+    const isArchitect = stateDef.agent === "architect" || stateDef.agent === "canon:architect";
     if (!isArchitect) return false;
     // Only apply default gate when the state's transitions include approval-related keys.
     // This prevents gating flows like migrate.md where design only has done/has_questions.

@@ -1,5 +1,5 @@
 ---
-name: canon-implementor
+name: implementor
 description: >-
   Executes a single Canon task plan in fresh context. Receives a plan
   file and relevant principles. Writes code, verifies, and commits.
@@ -94,7 +94,7 @@ A meaningful unit is: one function + its tests, one file modification + verifica
 
 ```
 Canon-Workflow: {workflow-slug}
-Canon-Agent: canon-implementor
+Canon-Agent: implementor
 Canon-State: {state-id}
 Canon-Task: {task-id}
 ```
@@ -105,7 +105,7 @@ Place trailers after the commit body, before `Co-Authored-By`. Example:
 wip(task-01): add file claim tracking
 
 Canon-Workflow: add-provenance-system
-Canon-Agent: canon-implementor
+Canon-Agent: implementor
 Canon-State: implement
 Canon-Task: provenance-02
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
@@ -173,7 +173,7 @@ Verification: passed ({verification details})
 
 ```
 Canon-Workflow: {workflow-slug}
-Canon-Agent: canon-implementor
+Canon-Agent: implementor
 Canon-State: {state-id}
 Canon-Task: {task-id}
 ```
@@ -187,7 +187,7 @@ Canon principles applied: errors-are-values, information-hiding
 Verification: passed (14 tests, build clean)
 
 Canon-Workflow: add-provenance-system
-Canon-Agent: canon-implementor
+Canon-Agent: implementor
 Canon-State: implement
 Canon-Task: provenance-02
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

@@ -47,7 +47,7 @@ This is true about *scheduling* but wrong about *composition*. The v1 plan scope
 - **Post-state effects** — `orchestration/engine/effects.ts` runs `persist_review` and `check_postconditions` after state completion.
 - **Session continuation** — `applySessionContinuation` (ADR-009a) injects `continue_from` for context continuity on resume.
 - **Flow event channel** — `drainFlowEvents` reads mid-flow agent events (insert, skip, escalate) and returns override actions.
-- **Learn gate** — `services/learn-gate.ts` evaluates whether `canon-learner` auto-triggers at flow completion.
+- **Learn gate** — `services/learn-gate.ts` evaluates whether `learner` auto-triggers at flow completion.
 - **Flow analytics** — `update_board complete_flow` aggregates metrics into `FlowRunEntry` via DriftStore.
 
 The v1 plan's Phase 2 code (`lead-mode.ts` on `canon/agent-teams-phase-2`) produced a `SpawnDescriptor` carrying only `role`, `task_type`, `task_id`, `spawn_prompt`, `artifact`, `artifact_path`, `hitl` (a string enum), and `required_artifacts`. It carried none of: `tools`, `disallowed_tools`, `permission_mode`, `worktree_path`, `continue_from`, wave policy, enrichment, principles, or commit provenance. An integration audit found **27 real gaps plus one already-known auto-approve gap** — 11 HIGH, 11 MEDIUM, 5 LOW severity. Phases 1 and 2 collectively provided roughly 10–15% of what `drive_flow` actually does at spawn time.
@@ -58,7 +58,7 @@ The v1 plan's Phase 2 code (`lead-mode.ts` on `canon/agent-teams-phase-2`) produ
 
 v2 (2026-04-12 draft) specified the architecture — Canon-as-Claude's-toolkit, 27-integration disposition table, three-phase rollout with feature-flag gating. v2.1 (2026-04-19, the architectural source this plan aligns to) preserves every v2 decision and adds two cross-cutting capabilities:
 
-1. **Synthesis replaces static runbooks.** v2 specified 5 hand-authored runbook files (fast-path, feature, epic, migrate, test-gap). v2.1 replaces those files with a canonical 15-ID step vocabulary, a `runbook-synthesis.md` skill that defines the composition contract, and a `planner-brief.md` skill that produces the strategic brief. `canon-planner` iterates with the user until approval; only the approved runbook executes. Static runbooks couldn't learn; synthesized runbooks close the plan-quality arm of the learning loop.
+1. **Synthesis replaces static runbooks.** v2 specified 5 hand-authored runbook files (fast-path, feature, epic, migrate, test-gap). v2.1 replaces those files with a canonical 15-ID step vocabulary, a `runbook-synthesis.md` skill that defines the composition contract, and a `planner-brief.md` skill that produces the strategic brief. `planner` iterates with the user until approval; only the approved runbook executes. Static runbooks couldn't learn; synthesized runbooks close the plan-quality arm of the learning loop.
 
 2. **Unified learning loop across Canon's artifact stack.** v2 preserved principles, drift, and commit provenance as MCP tools but didn't articulate how Canon improves from every interaction. v2.1 makes this explicit: observation → pattern → proposal → refinement is one mechanism applied across five in-scope refinement targets (principles, conventions, synthesis skill, planning brief skill, templates). Four additional targets are deferred to v2.2+ and one (KG priors) is cut entirely. The learner's role expands from principle-only to the full five-target matrix.
 
@@ -77,7 +77,7 @@ v2 Phase 1 (Gate A)
           → Phase 3 (deletion, unchanged from v2)
 ```
 
-v2 Phase 1 remains a hard precondition: `canon-planner` and `canon-engineer` agent definitions must exist and be validated in ≥ 3 runs under `CANON_AGENT_TEAMS_MODE=on` before any v2.1 work begins. See §10 for the full phase boundaries.
+v2 Phase 1 remains a hard precondition: `planner` and `engineer` agent definitions must exist and be validated in ≥ 3 runs under `CANON_AGENT_TEAMS_MODE=on` before any v2.1 work begins. See §10 for the full phase boundaries.
 
 ---
 
@@ -97,7 +97,7 @@ What the state machine does NOT provide is Canon's actual value: principle-groun
 User request
   → Claude (lead) reads CLAUDE.md + agent defs
   → Classifies intent per-message (L1 re-classification discipline)
-  → Build intent: spawns canon-planner
+  → Build intent: spawns planner
       → Planner emits planning-brief.md + runbook.md
       → Iterates with user until approval
   → Claude calls Canon MCP tools to compose context for each step
@@ -135,7 +135,7 @@ User request
 | Session continuation | `applySessionContinuation` | Claude includes context summaries in spawn prompts naturally. |
 | Consultation executor | `consultation-executor.ts` | Claude can spawn an advisory subagent directly — no special mechanism needed. |
 
-### 2.3 Pre-build gate — canon-planner (v2.1 iterate-until-approved)
+### 2.3 Pre-build gate — planner (v2.1 iterate-until-approved)
 
 Claude defaults to action — "add dark mode" → starts building. Canon needs to be smarter. Before committing to any build flow, the lead evaluates whether the request is ready to build:
 
@@ -144,9 +144,9 @@ Claude defaults to action — "add dark mode" → starts building. Canon needs t
 - Have alternatives been considered?
 - Is the value proportional to the effort?
 
-v2's pre-build gate made this a conditional call to `canon-planner` (spawn only if the request was vague). v2.1 changes this to an unconditional rule: **every build request routes through `canon-planner`**, not just vague ones. The planner produces two artifacts per build and iterates with the user until approval.
+v2's pre-build gate made this a conditional call to `planner` (spawn only if the request was vague). v2.1 changes this to an unconditional rule: **every build request routes through `planner`**, not just vague ones. The planner produces two artifacts per build and iterates with the user until approval.
 
-**canon-planner v2.1 responsibilities:**
+**planner v2.1 responsibilities:**
 
 1. **Clarifies requirements** — "What problem are you solving? Who benefits?"
 2. **Challenges assumptions** — "You're assuming users need X. What if Y is the actual need?"
@@ -175,8 +175,8 @@ This is not the chat agent (brainstorms, removed in v2) or the researcher (disco
 A concrete example of a medium build — "add dark mode to the settings page":
 
 1. **User says** "add dark mode to the settings page" to the Canon lead session.
-2. **Claude classifies intent** (per-message, per L1 re-classification discipline; see §6.4). This is a build request → routes to `canon-planner`.
-3. **Claude spawns `canon-planner`.** Planner loads `planner-brief` and `runbook-synthesis` skills. Reads user request; calls `get_principles` with target-file scope; calls `get_file_context` for KG summaries. Produces `planning-brief.md` + initial `runbook.md` + confidence signals.
+2. **Claude classifies intent** (per-message, per L1 re-classification discipline; see §6.4). This is a build request → routes to `planner`.
+3. **Claude spawns `planner`.** Planner loads `planner-brief` and `runbook-synthesis` skills. Reads user request; calls `get_principles` with target-file scope; calls `get_file_context` for KG summaries. Produces `planning-brief.md` + initial `runbook.md` + confidence signals.
 4. **Claude presents** the brief + proposed runbook to the user, including the per-signal confidence breakdown. User reviews.
 5. **User iterates.** Possible paths: clarification ("what about the mobile view?"), redirect ("skip the design step — it's a CSS change"), modification ("use theme variable X, not Y"). Each iteration re-spawns the planner with full workspace context; new runbook row persisted to the lifecycle DB.
 6. **User approves** the final runbook. Lead records the approval internally; the approved runbook row is the one executed against.
@@ -251,7 +251,7 @@ This is **more resilient** than the legacy pipeline:
 5. **Self-healing context.** Agents self-serve missing context via MCP tools. Skills preload critical rules. Three independent context channels vs. one pipeline.
 6. **Agent definitions work as-is.** All 11 agent defs are valid subagent and teammate types. The `tools` allowlist is honored in both paths.
 7. **Canon's whole stack improves from every interaction** (v2.1 addition). The learning system is one mechanism — observation → pattern → proposal → refinement — applied across every Canon artifact type. Principles, conventions, synthesis skill, planning brief skill, and templates are the five in-scope v2.1 refinement targets; the mechanism is uniform; the learner curates weekly (see §3).
-8. **Runbooks as data, not files** (v2.1 addition). v2's 5 static runbook files are replaced by 1 vocabulary file + 2 skills; runbooks are synthesized per plan by `canon-planner`. Plan quality becomes learnable where static runbooks couldn't learn (see §5).
+8. **Runbooks as data, not files** (v2.1 addition). v2's 5 static runbook files are replaced by 1 vocabulary file + 2 skills; runbooks are synthesized per plan by `planner`. Plan quality becomes learnable where static runbooks couldn't learn (see §5).
 
 ### 2.9 Orchestration journal (the lead's checklist; v2.1 extensions)
 
@@ -402,7 +402,7 @@ Static runbooks serve principle refinement fine — the corpus still captures re
 
 ### 3.2 Why the learner is the engine
 
-The `canon-learner` agent is the orchestrator of this mechanism. Today it mostly produces principle and convention suggestions. Under v2.1, its role expands modestly: it analyzes the v2.1 scope's five refinement targets (§3.3) and emits proposals. Full expansion to all possible targets is v2.2+ (§3.5).
+The `learner` agent is the orchestrator of this mechanism. Today it mostly produces principle and convention suggestions. Under v2.1, its role expands modestly: it analyzes the v2.1 scope's five refinement targets (§3.3) and emits proposals. Full expansion to all possible targets is v2.2+ (§3.5).
 
 One agent, multiple query types, multiple output targets. Same learner, richer analyses.
 
@@ -563,21 +563,21 @@ The canonical set of step IDs Canon knows. Adding a new ID is a versioned change
 
 | Step ID | Default agent | Dispatch | Default HITL | Purpose |
 |---------|---------------|----------|--------------|---------|
-| `research` | canon-researcher | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift). |
-| `design` | canon-architect | subagent | approval | Plan index + design decisions. |
-| `spike` | canon-engineer | subagent | none | Time-boxed exploratory prototype; produces findings, not shipped code. |
-| `implement` | canon-engineer | subagent or team | none | Build code with TDD/BDD. `team` when wave-parallel. |
-| `migrate` | canon-engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact). |
-| `verify` | canon-engineer | subagent | on_failure | Run existing tests / gates post-change. |
-| `test` | canon-tester | subagent | none | Net-new integration tests; coverage-gap fills. |
-| `benchmark` | canon-tester | subagent | on_failure | Performance verification against baseline. |
-| `security` | canon-security | subagent | none | Security assessment. |
-| `review` | canon-reviewer | subagent | checkpoint | Principle compliance. |
-| `fix` | canon-engineer | subagent | on_failure | Fix mode. Required: `cause: test-failure \| security \| review \| verify`. |
+| `research` | researcher | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift). |
+| `design` | architect | subagent | approval | Plan index + design decisions. |
+| `spike` | engineer | subagent | none | Time-boxed exploratory prototype; produces findings, not shipped code. |
+| `implement` | engineer | subagent or team | none | Build code with TDD/BDD. `team` when wave-parallel. |
+| `migrate` | engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact). |
+| `verify` | engineer | subagent | on_failure | Run existing tests / gates post-change. |
+| `test` | tester | subagent | none | Net-new integration tests; coverage-gap fills. |
+| `benchmark` | tester | subagent | on_failure | Performance verification against baseline. |
+| `security` | security | subagent | none | Security assessment. |
+| `review` | reviewer | subagent | checkpoint | Principle compliance. |
+| `fix` | engineer | subagent | on_failure | Fix mode. Required: `cause: test-failure \| security \| review \| verify`. |
 | `pre-launch-check` | null | n/a | on_failure | Gate-only — lead runs discovered checks via Bash. |
-| `ship` | canon-shipper | subagent | on_failure | PR description synthesis. |
-| `context-sync` | canon-scribe | subagent | none | Doc sync — **mandatory tail**. |
-| `learn` | canon-learner | subagent | none | Pattern analysis — **mandatory tail**. |
+| `ship` | shipper | subagent | on_failure | PR description synthesis. |
+| `context-sync` | scribe | subagent | none | Doc sync — **mandatory tail**. |
+| `learn` | learner | subagent | none | Pattern analysis — **mandatory tail**. |
 
 Total: **15 entries** (13 functional + 2 mandatory tail).
 
@@ -599,7 +599,7 @@ Every step in a synthesized runbook carries structural fields defined by the syn
 
 ```yaml
 - id: implement
-  agent: canon-engineer
+  agent: engineer
   dispatch: team
   skills:
     - backend-api
@@ -715,7 +715,7 @@ Defense in depth: L1 is the soft path (Claude usually does the right thing); L4 
 
 > **Review note (HIGH-1).** L4's predicate must be principled before shipping. Resolution framing per the architect review: **the allowlist is `.gitignore`**. Any change to a tracked file belongs in a Canon flow (branch + PR); anything gitignored is out-of-scope for L4 by construction. `git check-ignore` is the oracle. "Bash-that-modifies-code" becomes the concrete predicate "Bash invocations whose resolved target paths include any tracked file."
 >
-> This framing resolves the blast-radius concern but exposes an architectural requirement v2.1 does not yet address: **not all Canon intents currently create workspaces.** CLAUDE.md routes `build` / `explore` / `test` / `review` / `security` through `load_flow` + `init_workspace`, but `principle` (canon-writer), `learn` (canon-learner), and any future `docs` intent edit tracked files without creating workspaces. Under the tracked-files-in-Canon-flow framing, each of those intents needs a workspace-creating path (a dedicated lightweight flow or a shared "content" flow pattern). L4 cannot ship before this intent-routing expansion is specified; otherwise L4 blocks legitimate canon-writer and canon-learner runs.
+> This framing resolves the blast-radius concern but exposes an architectural requirement v2.1 does not yet address: **not all Canon intents currently create workspaces.** CLAUDE.md routes `build` / `explore` / `test` / `review` / `security` through `load_flow` + `init_workspace`, but `principle` (writer), `learn` (learner), and any future `docs` intent edit tracked files without creating workspaces. Under the tracked-files-in-Canon-flow framing, each of those intents needs a workspace-creating path (a dedicated lightweight flow or a shared "content" flow pattern). L4 cannot ship before this intent-routing expansion is specified; otherwise L4 blocks legitimate writer and learner runs.
 >
 > See `docs/agent-teams-migration-plan-v2.1-review.md` §4.1 HIGH-1 for the full resolution path (four pre-ship items).
 
@@ -999,12 +999,12 @@ Every one of the 28 gaps from the integration audit must map to a concrete repla
 
 ## 10. Phase Boundaries
 
-> **⚠️ HARD PRECONDITION (Gate A): v2 Phase 1 exit criteria must be met before any v2.1 work begins.** `canon-planner` and `canon-engineer` agent definitions must exist (currently they don't — only `canon-implementor` and `canon-fixer` exist), must register with the Canon MCP server, and must be validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`. This is not a soft guideline. Without these agents, v2.1 has nothing to build on. See §15 Gate A.
+> **⚠️ HARD PRECONDITION (Gate A): v2 Phase 1 exit criteria must be met before any v2.1 work begins.** `planner` and `engineer` agent definitions must exist (currently they don't — only `implementor` and `fixer` exist), must register with the Canon MCP server, and must be validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`. This is not a soft guideline. Without these agents, v2.1 has nothing to build on. See §15 Gate A.
 
 The migration runs in five sequential steps plus a deletion phase:
 
 - **v2 Phase 1** (§10.1) — orchestration guidance: journal, hooks, agent def updates, skills registration. Additive-only. Completes before any v2.1 work starts.
-- **v2.1a** (§10.2) — vocabulary + synthesis skills + canon-planner rewrite + L1 (CLAUDE.md re-classification) + L4 (canon-workspace-check hook). Ships synthesis over static runbooks.
+- **v2.1a** (§10.2) — vocabulary + synthesis skills + planner rewrite + L1 (CLAUDE.md re-classification) + L4 (canon-workspace-check hook). Ships synthesis over static runbooks.
 - **v2.1b** (§10.3) — minimum viable lifecycle persistence: one table + one MCP tool + three structured tags + one learner analysis dimension. Proves the learning loop closes end-to-end.
 - **v2.2** (§10.4) — surface expansion contingent on v2.1b evidence.
 - **Phase 2** (§10.5) — validation, extended from v2 with synthesis-specific and learning-specific deliverables.
@@ -1022,20 +1022,20 @@ The migration runs in five sequential steps plus a deletion phase:
 |------------|------|---------|
 | Orchestration CLAUDE.md (initial version) | `CLAUDE.md` (update) | Orchestration discipline: how the lead composes context via MCP tools, when to use subagents vs agent teams, HITL patterns, post-step effects, completion checklist. v2.1a will amend this further — see §10.2. |
 | Runbook format | Defined by the synthesis skill (v2.1a deliverable, not v2 Phase 1) | No separate template or standing format doc. Single source of truth is the synthesis skill. v2's `phase1-00` (which produced `templates/runbook-template.md` + `skills/canon/runbooks/README.md`) is ABANDONED in v2.1 — those artifacts were deleted to avoid drift with the synthesis skill that v2.1a writes. |
-| Agent def updates | `agents/*.md` | Add `maxTurns`, `permissionMode`, `skills` frontmatter. **Create `canon-engineer` and `canon-planner` via `phase1-08`.** Remove `canon-implementor`, `canon-fixer`, `canon-guide`, `canon-chat`. |
+| Agent def updates | `agents/*.md` | Add `maxTurns`, `permissionMode`, `skills` frontmatter. **Create `engineer` and `planner` via `phase1-08`.** Remove `implementor`, `fixer`, `guide`, `chat`. |
 | Orchestration journal tool | `mcp-server/src/features/orchestration/tools/orchestration-journal.ts` | `log_step` and `verify_completion` MCP tools. See §2.9 for the v2.1-extended signature. |
 | Commit trailer hook | `hooks/canon-agent-teams/post-commit-trailers.sh` | PostCommit hook validating Canon-Workflow trailer presence. |
 | Completion verification hook | `hooks/canon-agent-teams/completion-verify.sh` | Calls `verify_completion` journal tool. Blocks "done" if steps or artifacts missing. (v2.1b extends to call `snapshot_workspace` after verify clears.) |
 | SessionStart doc-check hook | `hooks/canon-agent-teams/session-start-doc-check.sh` | Compares HEAD against `.canon/last-scribe-commit`. Nudges lead if documentation may be stale. |
 | SessionStart KG-check hook | `hooks/canon-agent-teams/session-start-kg-check.sh` | Checks `knowledge-graph.db` freshness. |
-| SubagentStop scribe-queue hook | `hooks/canon-agent-teams/post-engineer-scribe.sh` | After `canon-engineer` completes, writes `pending-scribe.json` to workspace. Lead runs scribe before completing flow. |
+| SubagentStop scribe-queue hook | `hooks/canon-agent-teams/post-engineer-scribe.sh` | After `engineer` completes, writes `pending-scribe.json` to workspace. Lead runs scribe before completing flow. |
 | Feature flag | Environment variable `CANON_AGENT_TEAMS_MODE` | `off` (default): legacy `drive_flow` path unchanged. `on`: Claude orchestrates natively. |
 
 **Important clarification:** v2's `phase1-01..04` (the 5 static runbook authoring tasks) are abandoned, but **`phase1-05` through `phase1-10` remain required v2 Phase 1 deliverables**. `phase1-08` in particular is the agent-creation work that v2.1 depends on (Gate A). v2.1 builds *on top of* v2 Phase 1; it does not replace it.
 
 **Exit criteria (Gate A):**
 
-- `canon-planner` and `canon-engineer` agent definitions exist and register with the Canon MCP server
+- `planner` and `engineer` agent definitions exist and register with the Canon MCP server
 - Both validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
 - CLAUDE.md has orchestration section matching §2 (MCP tool composition, dispatch framework, HITL patterns, completion checklist); v2.1a will amend further per §10.2
 - All 5 hook scripts exist, are executable, and register in `hooks/canon-agent-teams/hooks.json`
@@ -1059,7 +1059,7 @@ The migration runs in five sequential steps plus a deletion phase:
 - §5 Step schema — `skills:`, `cause:` first-class fields
 - §5.3 Synthesis contract — MUST / MAY / MUST NOT rules; iterate-until-approved loop
 - `skills/canon/references/planner-brief.md` + `skills/canon/references/runbook-synthesis.md` — two skills the planner loads
-- `canon-planner` agent body updated: loads both skills, emits `planning-brief.md` + `runbook.md`, runs the iterate-until-approved loop
+- `planner` agent body updated: loads both skills, emits `planning-brief.md` + `runbook.md`, runs the iterate-until-approved loop
 - **CLAUDE.md intent-classification amendment (L1)** — per-message re-classification discipline + pre-write gate (§6.4, §6.5)
 - **New PreToolUse hook `canon-workspace-check.sh` (L4)** — blocks code-modification tools when no active Canon workspace exists for the current flow. Registered in `hooks/canon-agent-teams/hooks.json`
 
@@ -1076,7 +1076,7 @@ The migration runs in five sequential steps plus a deletion phase:
 
 **Exit criteria:**
 
-- `canon-planner` synthesizes runbooks per the rules in `skills/canon/references/runbook-synthesis.md` and passes iterate-until-approved
+- `planner` synthesizes runbooks per the rules in `skills/canon/references/runbook-synthesis.md` and passes iterate-until-approved
 - At least 5 distinct request types processed end-to-end (bug fix, small feature, refactor, migration, test-gap equivalent)
 - L1 + L4 shipped; observed in action against intent-misclassification scenarios
 - Runbooks execute per the contract; same artifact quality as pre-synthesis static flows
@@ -1094,7 +1094,7 @@ The migration runs in five sequential steps plus a deletion phase:
   - Review findings: ensure `principle_id` is consistently populated (already in drift-db schema since v1)
   - Fix summary: add `cause`, `root_cause_tag` (genuinely new; prose-to-frontmatter)
   - Implementation summary: add `justified_deviations[]` (genuinely new)
-- Extend existing `canon-learner` with one new analysis dimension: principle-refinement from per-flow review data (§3.1 illustrative query → pattern → proposal)
+- Extend existing `learner` with one new analysis dimension: principle-refinement from per-flow review data (§3.1 illustrative query → pattern → proposal)
 
 **Explicitly out of scope for v2.1b:**
 
@@ -1308,7 +1308,7 @@ The migration runs in five sequential steps plus a deletion phase:
 
 Expected reduction: approximately 40–45% of `mcp-server/src/` by line count. The remaining code is Canon's value: MCP tools, agent definitions, hooks, principles, shared libraries, and workspace management.
 
-**v2.1 / v2.1b additions are kept, not deleted.** Phase 3 removes only the pre-v2.1 coordination layer listed above. Specifically, the following v2.1a / v2.1b additions remain on main post-Phase-3: `skills/canon/references/runbook-vocabulary.md`, `runbook-synthesis.md`, `planner-brief.md`, `content-flow.md`, `learner-principle-refinement.md`; `hooks/canon-agent-teams/canon-workspace-check.sh`; the `lifecycle_workspace_snapshots` table + migration; `snapshot_workspace` MCP tool; template additions (`fix-summary.md` tags, `implementation-log.md` `justified_deviations[]`); review-checklist `principle_id` discipline; canon-planner + canon-engineer + canon-writer + canon-learner amendments.
+**v2.1 / v2.1b additions are kept, not deleted.** Phase 3 removes only the pre-v2.1 coordination layer listed above. Specifically, the following v2.1a / v2.1b additions remain on main post-Phase-3: `skills/canon/references/runbook-vocabulary.md`, `runbook-synthesis.md`, `planner-brief.md`, `content-flow.md`, `learner-principle-refinement.md`; `hooks/canon-agent-teams/canon-workspace-check.sh`; the `lifecycle_workspace_snapshots` table + migration; `snapshot_workspace` MCP tool; template additions (`fix-summary.md` tags, `implementation-log.md` `justified_deviations[]`); review-checklist `principle_id` discipline; planner + engineer + writer + learner amendments.
 
 ---
 
@@ -1342,7 +1342,7 @@ This section summarizes how each phase proves it is complete and documents the r
 
 ### 12.1 How each phase proves it is complete
 
-**v2 Phase 1 (Gate A, §15.1):** agent roster has `canon-planner` and `canon-engineer`; both validated in ≥ 3 runs under `CANON_AGENT_TEAMS_MODE=on`; all 5 hooks registered; skill preloading validated for ≥ 3 agent types; `npm run build` and `npm test` pass.
+**v2 Phase 1 (Gate A, §15.1):** agent roster has `planner` and `engineer`; both validated in ≥ 3 runs under `CANON_AGENT_TEAMS_MODE=on`; all 5 hooks registered; skill preloading validated for ≥ 3 agent types; `npm run build` and `npm test` pass.
 
 **v2.1a (§10.2 exit):** planner synthesizes working runbooks per the synthesis contract; L1 + L4 observed to prevent intent misclassification; 5 distinct request types processed end-to-end; cold-start friction spike passes (review MEDIUM-6).
 
@@ -1356,7 +1356,7 @@ This section summarizes how each phase proves it is complete and documents the r
 
 ### 12.2 Rollback path
 
-**v2.1a:** revert the CLAUDE.md amendments + remove `canon-workspace-check.sh` (L4) + revert the `canon-planner` agent-body changes. v2 Phase 1 behavior restored.
+**v2.1a:** revert the CLAUDE.md amendments + remove `canon-workspace-check.sh` (L4) + revert the `planner` agent-body changes. v2 Phase 1 behavior restored.
 
 **v2.1b:** drop `lifecycle_workspace_snapshots` table + revert `snapshot_workspace` MCP tool + remove the three structured tags + revert the learner's principle-refinement dimension. v2.1a stays.
 
@@ -1403,7 +1403,7 @@ The following are explicitly NOT part of this migration:
 
 1. **Rewriting Canon's MCP tools beyond the parallel workstream** (from v2). The 38 MCP tools stay functionally unchanged. v2.1 adds `snapshot_workspace` (v2.1b) and potentially `query_workspace_history` (v2.2) but does not rewrite existing tools.
 
-2. **Modifying agent definitions beyond what v2 Phase 1 and v2.1a do** (amended from v2). v2 Phase 1 updates frontmatter (`tools`, `permissionMode`, `maxTurns`, `skills`, `memory`) and creates `canon-planner` + `canon-engineer` (phase1-08). v2.1a rewrites the `canon-planner` body to load brief + synthesis skills. No other agent body changes.
+2. **Modifying agent definitions beyond what v2 Phase 1 and v2.1a do** (amended from v2). v2 Phase 1 updates frontmatter (`tools`, `permissionMode`, `maxTurns`, `skills`, `memory`) and creates `planner` + `engineer` (phase1-08). v2.1a rewrites the `planner` body to load brief + synthesis skills. No other agent body changes.
 
 3. **Modifying principles, rules, or conventions** (from v2). Canon's 54 principles are untouched by the v2.1 migration itself (though v2.1's learning system produces refinements over time — that's the intended mechanism, not a scope violation).
 
@@ -1441,11 +1441,11 @@ Three gates control ratification of this plan. **Gate A is the substantive block
 
 v2 Phase 1 exit criteria met:
 
-- `canon-planner` agent definition exists and registers with the Canon MCP server
-- `canon-engineer` agent definition exists and registers
+- `planner` agent definition exists and registers with the Canon MCP server
+- `engineer` agent definition exists and registers
 - Both validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
 
-**Current state:** Gate A is NOT met. The Canon repository currently has `canon-implementor` and `canon-fixer` — not `canon-planner` or `canon-engineer`. Those agents are created via `phase1-08` (v2 Phase 1 task). Until that task completes and the agents are validated, v2.1a cannot start.
+**Current state:** Gate A is NOT met. The Canon repository currently has `implementor` and `fixer` — not `planner` or `engineer`. Those agents are created via `phase1-08` (v2 Phase 1 task). Until that task completes and the agents are validated, v2.1a cannot start.
 
 Without Gate A, this plan has no planner agent to hang synthesis off. Gate B cannot be followed by action even if it clears.
 
@@ -1491,7 +1491,7 @@ When Gate A, Gate B, and Gate C all pass:
 
 ### 15.5 Expected timeline
 
-- **Gate A** — completion of v2 Phase 1 tasks, particularly `phase1-08` (create `canon-planner` and `canon-engineer`) and `phase1-10` (validation). Depends on v2 Phase 1 execution schedule.
+- **Gate A** — completion of v2 Phase 1 tasks, particularly `phase1-08` (create `planner` and `engineer`) and `phase1-10` (validation). Depends on v2 Phase 1 execution schedule.
 - **Gate B** — ~30 minutes of SQL scripting against existing drift-db once Gate A is clear. Independent of Gate A, but meaningless to clear before Gate A (no action available if Gate B clears first).
 - **Gate C** — done.
 

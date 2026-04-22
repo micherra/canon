@@ -1,8 +1,8 @@
 ---
 template: chat-brief
 description: Structured brief from chat discussion for build handoff
-used-by: [canon-chat]
-read-by: [canon-orchestrator, canon-researcher, canon-architect]
+used-by: [chat]
+read-by: [canon-orchestrator, researcher, architect]
 output-path: .canon/briefs/${topic-slug}.md
 ---
 
@@ -13,7 +13,7 @@ output-path: .canon/briefs/${topic-slug}.md
 topic: "{concise topic description}"
 created: "{ISO-8601}"
 status: ready
-participants: [user, canon-chat]
+participants: [user, chat]
 ---
 
 ## Context

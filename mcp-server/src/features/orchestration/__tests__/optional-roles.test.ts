@@ -72,7 +72,7 @@ function makeFlowWithOptionalRoles(): ResolvedFlow {
     states: {
       hitl: { type: "terminal" },
       review: {
-        agents: ["canon:canon-reviewer"],
+        agents: ["canon:reviewer"],
         roles: ["required-reviewer", { name: "optional-reviewer", optional: true }],
         transitions: {
           blocked: "hitl",

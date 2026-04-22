@@ -134,12 +134,12 @@ function makeFullFlow(): ResolvedFlow {
         },
       },
       research: {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         transitions: { done: "implement" },
         type: "single",
       },
       review: {
-        agent: "canon:canon-reviewer",
+        agent: "canon:reviewer",
         transitions: { done: "terminal" },
         type: "single",
       },
@@ -162,7 +162,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         prompt: "Do research task",
         role: "main",
         template_paths: [],
@@ -234,7 +234,7 @@ describe("result.status defaults to 'done' when omitted (HITL resume defense)", 
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-01",
             prompt: "Implement",
             role: "implementor",
@@ -295,7 +295,7 @@ describe("e2e: wave with gate failure", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-01",
             prompt: "Implement task-01",
             role: "implementor",
@@ -381,7 +381,7 @@ describe("e2e: wave with gate failure", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-01",
             prompt: "Implement task-01",
             role: "implementor",
@@ -398,9 +398,7 @@ describe("e2e: wave with gate failure", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("review") as never);
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [
-          { agent: "canon:canon-reviewer", prompt: "Review", role: "main", template_paths: [] },
-        ],
+        prompts: [{ agent: "canon:reviewer", prompt: "Review", role: "main", template_paths: [] }],
         state_type: "single",
       }),
     );
@@ -418,7 +416,7 @@ describe("e2e: wave with gate failure", () => {
     if (turn2.ok) {
       expect(turn2.action).toBe("spawn");
       if (turn2.action === "spawn") {
-        expect(turn2.requests[0].agent_type).toBe("canon:canon-reviewer");
+        expect(turn2.requests[0].agent_type).toBe("canon:reviewer");
       }
     }
   });
@@ -439,9 +437,7 @@ describe("e2e: partial migration correctness (drive_flow from intermediate state
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [
-          { agent: "canon:canon-reviewer", prompt: "Review", role: "main", template_paths: [] },
-        ],
+        prompts: [{ agent: "canon:reviewer", prompt: "Review", role: "main", template_paths: [] }],
         state_type: "single",
       }),
     );
@@ -453,7 +449,7 @@ describe("e2e: partial migration correctness (drive_flow from intermediate state
     if (result.ok) {
       expect(result.action).toBe("spawn");
       if (result.action === "spawn") {
-        expect(result.requests[0].agent_type).toBe("canon:canon-reviewer");
+        expect(result.requests[0].agent_type).toBe("canon:reviewer");
       }
     }
   });

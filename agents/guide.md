@@ -1,5 +1,5 @@
 ---
-name: canon-guide
+name: guide
 description: >-
   Read-only project guide. Answers questions about the codebase, browses
   and explains Canon principles, and presents project health dashboards.

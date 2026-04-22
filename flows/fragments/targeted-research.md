@@ -2,7 +2,7 @@
 fragment: targeted-research
 type: consultation
 description: Targeted research on open questions identified by pattern-check
-agent: canon-researcher
+agent: researcher
 role: targeted-research
 section: Targeted research findings
 timeout: 5m

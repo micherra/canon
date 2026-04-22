@@ -30,7 +30,7 @@ describe("initBoard with approval gate fields — wave state", () => {
       name: "test-flow",
       spawn_instructions: {},
       states: {
-        implement: { agent: "canon:canon-implementor", type: "wave" },
+        implement: { agent: "canon:implementor", type: "wave" },
         terminal: { type: "terminal" },
         ...stateOverrides,
       },
@@ -83,7 +83,7 @@ describe("initBoard with approval gate fields — wave state", () => {
       name: "test-flow",
       spawn_instructions: {},
       states: {
-        implement: { agent: "canon:canon-implementor", type: "wave" as const },
+        implement: { agent: "canon:implementor", type: "wave" as const },
         // Terminal with approval_gate — semantically nonsensical but the terminal guard
         // in initBoard prevents creating an iteration entry (fix #5).
         terminal: { approval_gate: true, type: "terminal" as const },
@@ -156,7 +156,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon-architect",
+        agent: "architect",
         prompt: "Design the feature",
         role: "main",
         template_paths: [],
@@ -215,7 +215,7 @@ function makeApprovalFlow(): ResolvedFlow {
     },
     states: {
       design: {
-        agent: "canon-architect",
+        agent: "architect",
         approval_gate: true,
         transitions: {
           approved: "implement",
@@ -226,7 +226,7 @@ function makeApprovalFlow(): ResolvedFlow {
         type: "single",
       },
       implement: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         transitions: { done: "terminal" },
         type: "single",
       },
@@ -353,7 +353,7 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -373,7 +373,7 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
       spawn_instructions: { implement: "Implement" },
       states: {
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "terminal" },
           type: "single",
           // No approval_gate — implementor on medium tier doesn't trigger tier default either
@@ -418,7 +418,7 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
       spawn_instructions: { design: "Design" },
       states: {
         design: {
-          agent: "canon-architect",
+          agent: "architect",
           approval_gate: true,
           transitions: { approved: "terminal", done: "terminal" },
           type: "single",

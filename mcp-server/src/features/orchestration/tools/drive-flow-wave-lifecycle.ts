@@ -158,7 +158,7 @@ export async function handleMergeConflict(input: {
     ok: true as const,
     requests: [
       {
-        agent_type: stateDef?.agent ?? "canon:canon-implementor",
+        agent_type: stateDef?.agent ?? "canon:implementor",
         isolation: worktreePath ? "none" : "worktree",
         prompt: `${spawnInstruction}\n\nNote: This is a retry for task '${conflictTask}' after a merge conflict. Conflict detail:\n${conflictDetail}`,
         task_id: conflictTask,

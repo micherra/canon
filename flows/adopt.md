@@ -5,7 +5,7 @@ description: Scan codebase for principle coverage, report violations, optionally
 states:
   scan:
     type: single
-    agent: canon-researcher
+    agent: researcher
     role: adoption-scan
     transitions:
       done: fix
@@ -14,7 +14,7 @@ states:
 
   fix:
     type: parallel-per
-    agent: canon-fixer
+    agent: fixer
     role: violation-fix
     iterate_on: violation_groups
     max_iterations: 2
@@ -27,7 +27,7 @@ states:
 
   rescan:
     type: single
-    agent: canon-researcher
+    agent: researcher
     role: adoption-scan
     transitions:
       done: done

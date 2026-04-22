@@ -5,7 +5,7 @@ description: Research and report on a codebase question — no implementation
 states:
   research:
     type: parallel
-    agents: [canon-researcher]
+    agents: [researcher]
     roles: [codebase, {name: dependencies, optional: true}]
     template: research-finding
     transitions:
@@ -14,7 +14,7 @@ states:
 
   synthesize:
     type: single
-    agent: canon-architect
+    agent: architect
     role: analysis
     inject_context:
       - from: research

@@ -23,7 +23,7 @@ Four integration points implemented:
 
 3. **`inject-coordination.ts`** — Added step 3.5 injecting a `## Commit Provenance` section into every spawn prompt entry. Uses `formatCommitTrailers` with `workflow` (from session slug), `agent` (from entry), `state_id`, and optional `task_id` (from structured wave item). Non-blocking: returns empty string on session read failure.
 
-4. **`agents/canon-implementor.md`** — Added Canon commit trailer instructions to both Step 5 (incremental commits) and Step 9 (final commit), with example commit messages showing the trailer format.
+4. **`agents/implementor.md`** — Added Canon commit trailer instructions to both Step 5 (incremental commits) and Step 9 (final commit), with example commit messages showing the trailer format.
 
 ### Files Modified
 
@@ -32,7 +32,7 @@ Four integration points implemented:
 | `mcp-server/src/features/orchestration/tools/init-workspace.ts` | Modified — added claim overlap check in preflight; exported `runPreflightChecksForTest` |
 | `mcp-server/src/features/orchestration/tools/update-board.ts` | Modified — `handleInlineAction` made async; `set_metadata` registers claims + reports overlaps; `handleCompleteFlow` releases claims |
 | `mcp-server/src/features/prompt-pipeline/services/inject-coordination.ts` | Modified — added `buildProvenanceSection` + step 3.5 commit provenance injection per prompt entry |
-| `agents/canon-implementor.md` | Modified — added commit trailer instructions in Steps 5 and 9 |
+| `agents/implementor.md` | Modified — added commit trailer instructions in Steps 5 and 9 |
 | `mcp-server/src/features/orchestration/__tests__/init-workspace-claims.test.ts` | Created — 6 tests |
 | `mcp-server/src/features/orchestration/__tests__/update-board-claims.test.ts` | Created — 6 tests |
 
@@ -87,4 +87,4 @@ Total: 12 new tests, all passing.
 1. New tests: `npx vitest run src/features/orchestration/__tests__/init-workspace-claims.test.ts src/features/orchestration/__tests__/update-board-claims.test.ts` → 12/12 passed
 2. Full suite: `npx vitest run` → 4696/4697 passed; 1 pre-existing failure (`domain-priming-integration.test.ts` — README.md in domains/ dir, unrelated to this task)
 3. Build: `node node_modules/typescript/bin/tsc --noEmit` → clean (no TypeScript errors)
-4. Agent instructions: `agents/canon-implementor.md` has trailer instructions in Step 5 (line 93) and Step 9 (line 172)
+4. Agent instructions: `agents/implementor.md` has trailer instructions in Step 5 (line 93) and Step 9 (line 172)

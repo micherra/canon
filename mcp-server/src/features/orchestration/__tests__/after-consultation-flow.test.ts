@@ -130,7 +130,7 @@ function makeFlowWithAfterAndNextState(): ResolvedFlow {
   return {
     consultations: {
       "post-impl-check": {
-        agent: "canon:canon-security",
+        agent: "canon:security",
         fragment: "post-impl-check",
         role: "security-reviewer",
         section: "Post-Implementation Check",
@@ -147,14 +147,14 @@ function makeFlowWithAfterAndNextState(): ResolvedFlow {
     states: {
       done: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         consultations: {
           after: ["post-impl-check"],
         },
         type: "wave",
       },
       review: {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         consultations: {
           before: ["post-impl-check"],
         },
@@ -259,7 +259,7 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
 
     // All fields the orchestrator needs to spawn an agent
     expect(entry.name).toBe("post-impl-check");
-    expect(entry.agent).toBe("canon:canon-security");
+    expect(entry.agent).toBe("canon:security");
     expect(entry.role).toBe("security-reviewer");
     expect(entry.prompt).toContain("cross-task-feature");
     expect(entry.section).toBe("Post-Implementation Check");
@@ -279,7 +279,7 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
     const flow: ResolvedFlow = {
       consultations: {
         "final-audit": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           fragment: "final-audit",
           role: "security",
           section: "Final Audit",
@@ -294,7 +294,7 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
       },
       states: {
         review: {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           consultations: { after: ["final-audit"] },
           type: "single",
         },
@@ -313,7 +313,7 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
 
     // Required fields from ConsultationPromptEntry interface
     expect(entry).toHaveProperty("name", "final-audit");
-    expect(entry).toHaveProperty("agent", "canon:canon-security");
+    expect(entry).toHaveProperty("agent", "canon:security");
     expect(entry).toHaveProperty("role", "security");
     expect(entry).toHaveProperty("prompt");
     expect(typeof entry.prompt).toBe("string");
@@ -345,7 +345,7 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
       },
       states: {
         review: {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           consultations: { after: ["check-a", "check-b", "check-c"] },
           type: "single",
         },
@@ -420,19 +420,19 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
     const flow: ResolvedFlow = {
       consultations: {
         "mid-check": {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           fragment: "mid-check",
           role: "researcher",
           section: "Mid-Check",
         },
         "post-check": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           fragment: "post-check",
           role: "security",
           section: "Post-Check",
         },
         "pre-check": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           fragment: "pre-check",
           role: "security",
           section: "Pre-Check",
@@ -447,7 +447,7 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           // Declare an empty between array — this makes stateDef.consultations truthy
           // so the collection block runs and collects prior wave summaries.
           consultations: {

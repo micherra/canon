@@ -31,14 +31,14 @@ export type LearnGateResult = {
 };
 
 /**
- * Allowed write path prefix for canon-learner output (Advisory 1 / ADR-016).
- * Must match the write_scope declared in the canon-learner tool profile.
+ * Allowed write path prefix for learner output (Advisory 1 / ADR-016).
+ * Must match the write_scope declared in the learner tool profile.
  */
 const LEARNER_WRITE_PREFIX = ".canon/proposed-learnings/";
 
 /**
  * Post-hoc validation: verify that all files in the proposed-learnings directory
- * are within the allowed write scope for canon-learner.
+ * are within the allowed write scope for learner.
  *
  * This is a defense-in-depth check — the agent prompt constrains write paths,
  * and this function validates the output after the learner completes.

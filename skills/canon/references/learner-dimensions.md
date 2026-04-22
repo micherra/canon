@@ -1,6 +1,6 @@
 # Learner Dimension Specifications
 
-Reference material for `canon-learner`. Contains dimension specs, report template, and learning log schema.
+Reference material for `learner`. Contains dimension specs, report template, and learning log schema.
 
 ---
 

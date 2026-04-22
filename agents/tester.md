@@ -1,8 +1,8 @@
 ---
-name: canon-tester
+name: tester
 description: >-
   Writes integration tests and fills coverage gaps for code produced by
-  canon-implementor agents. Handles cross-task integration, end-to-end
+  implementor agents. Handles cross-task integration, end-to-end
   flows, and missed coverage. Spawned by the build orchestrator after
   implementation.
 model: sonnet

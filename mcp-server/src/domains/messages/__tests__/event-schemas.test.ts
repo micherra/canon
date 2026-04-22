@@ -47,7 +47,7 @@ describe("EventPayloadSchemas", () => {
 
   it("agent_spawned schema validates correct payload", () => {
     const result = EventPayloadSchemas.agent_spawned.safeParse({
-      agent: "canon-implementor",
+      agent: "implementor",
       model: "claude-sonnet-4-6",
       stateId: "build",
       timestamp: "2026-04-01T00:00:00Z",
@@ -345,7 +345,7 @@ describe("validateEventPayload", () => {
 
   it("returns { valid: true } for a correct tool_scope_audit payload", () => {
     const result = validateEventPayload("tool_scope_audit", {
-      agent: "canon-researcher",
+      agent: "researcher",
       event: "adr014_replace_override_grants_disallowed",
       granted_disallowed: ["Edit", "Write"],
       stateId: "research",
@@ -356,7 +356,7 @@ describe("validateEventPayload", () => {
 
   it("returns { valid: true } for tool_scope_audit with optional correlation_id", () => {
     const result = validateEventPayload("tool_scope_audit", {
-      agent: "canon-researcher",
+      agent: "researcher",
       correlation_id: "corr-xyz",
       event: "adr014_replace_override_grants_disallowed",
       granted_disallowed: ["Edit"],
@@ -368,7 +368,7 @@ describe("validateEventPayload", () => {
 
   it("returns { valid: false } for tool_scope_audit missing required fields", () => {
     const result = validateEventPayload("tool_scope_audit", {
-      agent: "canon-researcher",
+      agent: "researcher",
       // missing event, granted_disallowed, stateId, timestamp
     });
     expect(result.valid).toBe(false);

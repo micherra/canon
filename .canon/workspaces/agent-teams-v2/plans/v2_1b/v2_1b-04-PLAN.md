@@ -6,7 +6,7 @@ decisions:
   - "dc-05"
 files:
   - templates/implementation-log.md
-  - agents/canon-engineer.md
+  - agents/engineer.md
 principles:
   - agent-template-required
   - agent-surface-assumptions
@@ -18,7 +18,7 @@ domains:
 
 ### Action
 
-Add `justified_deviations[]` as a structured frontmatter field on the implementation-log template. Amend `canon-engineer` to populate it when deviating from the task plan or runbook guidance with Canon-aligned justification.
+Add `justified_deviations[]` as a structured frontmatter field on the implementation-log template. Amend `engineer` to populate it when deviating from the task plan or runbook guidance with Canon-aligned justification.
 
 **Template amendment** — extend `templates/implementation-log.md` frontmatter to include:
 
@@ -37,7 +37,7 @@ The field is **optional** — empty array (or omitted entirely) is the common ca
 - `reason_short` — tight summary of why the deviation is justified (≤ 140 chars so it fits in tables and digests)
 - `deviation_from` — what the plan / runbook / convention said to do, so the deviation is auditable
 
-**canon-engineer amendment:**
+**engineer amendment:**
 
 - Agent body includes a Canon-Compliance section (if not already present) that notes any deviations made during the task
 - When deviating, engineer adds a `justified_deviations[]` entry
@@ -59,13 +59,13 @@ The field is **optional** — empty array (or omitted entirely) is the common ca
 
 No existing test infrastructure for templates/*.md or agents/*.md. Validation is by:
 
-- Manual read: template carries `justified_deviations[]` as optional array; each entry requires `principle_id` + `reason_short` + `deviation_from`; empty / omitted permitted; canon-engineer body cites the rule and forbids fabrication
+- Manual read: template carries `justified_deviations[]` as optional array; each entry requires `principle_id` + `reason_short` + `deviation_from`; empty / omitted permitted; engineer body cites the rule and forbids fabrication
 - Integration (runs in v2_1b-08): run a flow where the engineer legitimately deviates with Canon alignment; implementation-log carries a populated entry; indexer stores it
 
 ### Verify
 
 1. Template file carries the field per spec
-2. canon-engineer body cites the rule
+2. engineer body cites the rule
 3. Tests pass
 4. Integration test demonstrates a populated deviation entry
 

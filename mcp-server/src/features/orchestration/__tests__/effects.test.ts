@@ -9,7 +9,7 @@ import { executeEffects } from "../engine/effects.ts";
 
 const SAMPLE_REVIEW = `---
 verdict: "WARNING"
-agent: canon-reviewer
+agent: reviewer
 timestamp: "2026-03-23T10:00:00Z"
 files-reviewed: 3
 principles-checked: 5

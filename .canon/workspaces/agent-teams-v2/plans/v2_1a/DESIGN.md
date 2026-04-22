@@ -10,8 +10,8 @@ done_criteria:
     description: "runbook-synthesis.md skill defines the MUST / MAY / MUST NOT synthesis contract including step schema, iterate-until-approved loop, and contract pairings."
     testable: "skills/canon/references/runbook-synthesis.md exists. MUST/MAY/MUST NOT sections present. References vocabulary strictly. Registered in skills manifest."
   - id: "dc-04"
-    description: "canon-planner agent body rewritten to load planner-brief + runbook-synthesis skills, emit planning-brief.md + runbook.md, and run the iterate-until-approved loop. maxTurns: 40, model: opus, permissionMode: plan, memory: project."
-    testable: "agents/canon-planner.md frontmatter matches spec. Body references both skills. Produces both artifacts when spawned against a test request."
+    description: "planner agent body rewritten to load planner-brief + runbook-synthesis skills, emit planning-brief.md + runbook.md, and run the iterate-until-approved loop. maxTurns: 40, model: opus, permissionMode: plan, memory: project."
+    testable: "agents/planner.md frontmatter matches spec. Body references both skills. Produces both artifacts when spawned against a test request."
   - id: "dc-05"
     description: "CLAUDE.md carries the L1 per-message intent re-classification amendment + pre-write gate guidance, gated by CANON_AGENT_TEAMS_MODE=on."
     testable: "CLAUDE.md contains explicit re-classification instruction + pre-write Canon-routing check. Text matches v2.1 §6.4 and §6.5 wording."
@@ -19,8 +19,8 @@ done_criteria:
     description: "canon-workspace-check.sh (L4) PreToolUse hook blocks Edit / Write / Bash-on-tracked-files when no active Canon workspace matches the current flow. Allowlist = .gitignore via git check-ignore oracle."
     testable: "Hook script exists, is executable, registered in hooks/canon-agent-teams/hooks.json. Unit tests cover: (a) edit of tracked file without workspace → blocked; (b) edit of gitignored file → allowed; (c) Bash with gitignored target → allowed; (d) Bash with tracked target → blocked."
   - id: "dc-07"
-    description: "Intent-routing expansion: principle / learn / docs intents route through workspace-creating flows. Canon-writer, canon-learner, and any docs intent have workspace-creating paths that predate L4 firing. Review HIGH-1 prerequisite."
-    testable: "Running canon-writer produces a workspace at .canon/workspaces/<slug>/. Running canon-learner produces a workspace. Neither triggers L4 blocks. Integration test confirms."
+    description: "Intent-routing expansion: principle / learn / docs intents route through workspace-creating flows. Canon-writer, learner, and any docs intent have workspace-creating paths that predate L4 firing. Review HIGH-1 prerequisite."
+    testable: "Running writer produces a workspace at .canon/workspaces/<slug>/. Running learner produces a workspace. Neither triggers L4 blocks. Integration test confirms."
   - id: "dc-08"
     description: "Pre-ship cold-start friction spike passes. 3 representative trivial requests (typo fix, rename, one-line config change) measured for iteration-0 latency. Review MEDIUM-6 satisfied."
     testable: "docs/v2.1a-coldstart-spike.md records measurements. Iteration-0 latency within target specified in spike design. If out of target, v2.1a is paused pending mitigation."
@@ -33,13 +33,13 @@ done_criteria:
 
 ### North Star
 
-**Vision:** `canon-planner` synthesizes plan-specific runbooks per user request from a canonical step vocabulary, iterating with the user until approval. Static runbook files are replaced. No lifecycle persistence ships in v2.1a — that's v2.1b's concern.
+**Vision:** `planner` synthesizes plan-specific runbooks per user request from a canonical step vocabulary, iterating with the user until approval. Static runbook files are replaced. No lifecycle persistence ships in v2.1a — that's v2.1b's concern.
 
 **Done when:** dc-01 through dc-09 all pass. Architect review's HIGH-1 prerequisites (L4 allowlist + intent-routing expansion) are resolved before L4 ships.
 
 **Constraints:**
 
-- v2 Phase 1 exit criteria (Gate A in `docs/agent-teams-migration-plan-v2.md` §15.1) must be met first: `canon-planner` and `canon-engineer` exist and validate in ≥ 3 runs
+- v2 Phase 1 exit criteria (Gate A in `docs/agent-teams-migration-plan-v2.md` §15.1) must be met first: `planner` and `engineer` exist and validate in ≥ 3 runs
 - No lifecycle persistence (no new tables, no new MCP tools)
 - No learner role expansion
 - No commit trailer family additions

@@ -249,7 +249,7 @@ src/
 - Validates: `action === "reject"` requires `reason`; throws `"Event not found"` if `event_id` absent; throws `"Event {id} is already {status}"` if event is not pending
 - Calls `markEventApplied` (with optional `resolution`) or `markEventRejected` (with `reason`) then `resolveEventAgents(event.type)`
 - Emits `wave_event_resolved` on event bus after mutation; acquires board lock for full duration
-- `resolveEventAgents("guidance")` returns `{ agents: [], descriptions: {} }` — guidance events are mechanical orchestrator operations, no agent spawn needed (changed from `["canon-guide"]` 2026-03-26)
+- `resolveEventAgents("guidance")` returns `{ agents: [], descriptions: {} }` — guidance events are mechanical orchestrator operations, no agent spawn needed (changed from `["guide"]` 2026-03-26)
 
 **Event bus** (`src/orchestration/events.ts`):
 - `FlowEventType` union includes `"wave_event_resolved"` (added 2026-03-26, after `"wave_event_injected"`) and `"agent_activity"` (added 2026-04-07)

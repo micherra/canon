@@ -49,7 +49,7 @@ export const EMPTY_PROFILE: AgentToolProfile = {
 
 /** Registry of declared tool profiles for all Canon agent types. */
 export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
-  "canon-architect": {
+  architect: {
     allowed: [
       "Read",
       "Grep",
@@ -68,7 +68,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
-  "canon-chat": {
+  chat: {
     allowed: [
       "Read",
       "Grep",
@@ -80,7 +80,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
   },
-  "canon-fixer": {
+  fixer: {
     allowed: [
       "Read",
       "Grep",
@@ -95,7 +95,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: [],
   },
-  "canon-guide": {
+  guide: {
     allowed: [
       "Read",
       "Grep",
@@ -107,7 +107,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
   },
-  "canon-implementor": {
+  implementor: {
     allowed: [
       "Read",
       "Grep",
@@ -124,7 +124,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: [],
   },
-  "canon-learner": {
+  learner: {
     allowed: [
       "Read",
       "Grep",
@@ -144,7 +144,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     // Post-hoc validation enforced by validateLearnerOutput in learn-gate.ts.
     write_scope: [".canon/proposed-learnings/"],
   },
-  "canon-researcher": {
+  researcher: {
     allowed: [
       "Read",
       "Grep",
@@ -160,7 +160,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
-  "canon-reviewer": {
+  reviewer: {
     allowed: [
       "Read",
       "Grep",
@@ -176,11 +176,11 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
-  "canon-scribe": {
+  scribe: {
     allowed: ["Read", "Grep", "Glob", "Bash", "Edit"],
     disallowed: ["Write", "NotebookEdit"],
   },
-  "canon-security": {
+  security: {
     allowed: [
       "Read",
       "Grep",
@@ -194,11 +194,11 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
-  "canon-shipper": {
+  shipper: {
     allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "post_event"],
     disallowed: ["Write", "NotebookEdit"],
   },
-  "canon-tester": {
+  tester: {
     allowed: [
       "Read",
       "Grep",
@@ -212,7 +212,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: [],
   },
-  "canon-writer": {
+  writer: {
     allowed: ["Read", "Grep", "Glob", "Edit", "Write"],
     disallowed: ["Bash", "NotebookEdit"],
   },

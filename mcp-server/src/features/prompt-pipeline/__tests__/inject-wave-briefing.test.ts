@@ -76,7 +76,7 @@ function makeCtx(
         spawn_instructions: { implement: "Do the thing" },
         states: {
           done: { type: "terminal" },
-          implement: { agent: "canon-implementor", type: "wave" },
+          implement: { agent: "implementor", type: "wave" },
         },
       } as ResolvedFlow,
       state_id: "implement",
@@ -90,7 +90,7 @@ function makeCtx(
     mergedVariables: {},
     prompts: [],
     rawInstruction: "Do the thing",
-    state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+    state: { agent: "implementor", type: "wave" } as StateDefinition,
     warnings: [],
     ...rest,
   };
@@ -116,7 +116,7 @@ beforeEach(() => {
 describe("injectWaveBriefing — no-op conditions", () => {
   it("returns ctx unchanged when state type is 'single'", async () => {
     const ctx = makeCtx({
-      state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+      state: { agent: "implementor", type: "single" } as StateDefinition,
       wave: 1,
     });
     const result = await injectWaveBriefing(ctx);
@@ -127,7 +127,7 @@ describe("injectWaveBriefing — no-op conditions", () => {
 
   it("returns ctx unchanged when state type is 'parallel'", async () => {
     const ctx = makeCtx({
-      state: { agents: ["canon-implementor"], type: "parallel" } as StateDefinition,
+      state: { agents: ["implementor"], type: "parallel" } as StateDefinition,
       wave: 1,
     });
     const result = await injectWaveBriefing(ctx);
@@ -137,7 +137,7 @@ describe("injectWaveBriefing — no-op conditions", () => {
 
   it("returns ctx unchanged when wave is null/undefined", async () => {
     const ctx = makeCtx({
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      state: { agent: "implementor", type: "wave" } as StateDefinition,
       wave: undefined,
     });
     const result = await injectWaveBriefing(ctx);
@@ -210,7 +210,7 @@ describe("injectWaveBriefing — parallel-per state", () => {
   it("also appends wave briefing for parallel-per state type", async () => {
     const ctx = makeCtx({
       consultation_outputs: { key: { section: "Sec", summary: "text" } },
-      state: { agent: "canon-implementor", type: "parallel-per" } as StateDefinition,
+      state: { agent: "implementor", type: "parallel-per" } as StateDefinition,
       wave: 1,
     });
     vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing\n\nSec: text");

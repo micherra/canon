@@ -21,8 +21,8 @@ function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
     spawn_instructions: {},
     states: {
       done: { type: "terminal" },
-      review: { agent: "canon:canon-implementor", max_iterations: 3, type: "single" },
-      start: { agent: "canon:canon-implementor", type: "single" },
+      review: { agent: "canon:implementor", max_iterations: 3, type: "single" },
+      start: { agent: "canon:implementor", type: "single" },
     },
     ...overrides,
   };
@@ -461,11 +461,11 @@ describe("canEnterState", () => {
 describe("appendConcern", () => {
   it("appends a concern entry to board.concerns", () => {
     const board = makeBoard();
-    const result = appendConcern(board, "start", "canon-implementor", "something to watch");
+    const result = appendConcern(board, "start", "implementor", "something to watch");
 
     expect(result.concerns).toHaveLength(1);
     expect(result.concerns[0].state_id).toBe("start");
-    expect(result.concerns[0].agent).toBe("canon-implementor");
+    expect(result.concerns[0].agent).toBe("implementor");
     expect(result.concerns[0].message).toBe("something to watch");
     expect(result.concerns[0].timestamp).toBeTruthy();
   });

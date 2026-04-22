@@ -129,7 +129,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         item: "task-01",
         prompt: "Implement task-01",
         role: "implementor",
@@ -179,14 +179,14 @@ describe("driveFlow — wave entry", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-01",
             prompt: "Implement task-01",
             role: "implementor",
             template_paths: [],
           },
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-02",
             prompt: "Implement task-02",
             role: "implementor",
@@ -275,7 +275,7 @@ describe("driveFlow — wave entry", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-02",
             prompt: "Implement task-02",
             role: "implementor",
@@ -337,7 +337,7 @@ describe("driveFlow — wave entry", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-02",
             prompt: "Implement task-02",
             role: "implementor",
@@ -389,13 +389,13 @@ describe("driveFlow — wave entry", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-01",
             prompt: "Impl task-01",
             template_paths: [],
           },
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-02",
             prompt: "Impl task-02",
             template_paths: [],

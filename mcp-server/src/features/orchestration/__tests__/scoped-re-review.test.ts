@@ -91,7 +91,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     states: {
       done: { type: "terminal" },
-      review: { agent: "canon-reviewer", type: "single" },
+      review: { agent: "reviewer", type: "single" },
     },
     ...overrides,
   };

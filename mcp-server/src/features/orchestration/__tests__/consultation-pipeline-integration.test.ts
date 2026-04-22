@@ -109,7 +109,7 @@ function makeFlowWithBeforeConsultation(): ResolvedFlow {
   return {
     consultations: {
       "security-review": {
-        agent: "canon:canon-security",
+        agent: "canon:security",
         fragment: "security-review",
         role: "security-reviewer",
         section: "Security Review",
@@ -126,7 +126,7 @@ function makeFlowWithBeforeConsultation(): ResolvedFlow {
     states: {
       done: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         consultations: {
           before: ["security-review"],
         },
@@ -143,12 +143,12 @@ function makeFlowWithMultipleConsultations(): ResolvedFlow {
   return {
     consultations: {
       "perf-review": {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         fragment: "perf-review",
         role: "researcher",
       },
       "security-review": {
-        agent: "canon:canon-security",
+        agent: "canon:security",
         fragment: "security-review",
         role: "security-reviewer",
         section: "Security Review",
@@ -166,7 +166,7 @@ function makeFlowWithMultipleConsultations(): ResolvedFlow {
     states: {
       done: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         consultations: {
           before: ["security-review", "perf-review"],
         },
@@ -215,7 +215,7 @@ describe("resolveConsultationPrompt → enterAndPrepareState: output shape contr
 
     const entry = result.consultation_prompts![0];
     expect(entry.name).toBe("security-review");
-    expect(entry.agent).toBe("canon:canon-security");
+    expect(entry.agent).toBe("canon:security");
     expect(entry.role).toBe("security-reviewer");
     expect(entry.timeout).toBe("5m");
     expect(entry.section).toBe("Security Review");
@@ -251,7 +251,7 @@ describe("resolveConsultationPrompt — both timeout and section present", () =>
     const flow: ResolvedFlow = {
       consultations: {
         "full-check": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           fragment: "full-check",
           role: "security",
           section: "## Full Security Audit",
@@ -272,7 +272,7 @@ describe("resolveConsultationPrompt — both timeout and section present", () =>
     expect(result!.timeout).toBe("10m");
     expect(result!.section).toBe("## Full Security Audit");
     // Core fields still present
-    expect(result!.agent).toBe("canon:canon-security");
+    expect(result!.agent).toBe("canon:security");
     expect(result!.role).toBe("security");
     expect(result!.prompt).toBe("Run full check for my-feature.");
   });
@@ -310,7 +310,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
     const flow: ResolvedFlow = {
       consultations: {
         "security-review": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           fragment: "security-review",
           role: "security-reviewer",
         },
@@ -327,7 +327,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           consultations: {
             before: ["security-review", "missing-consult"],
           },
@@ -366,7 +366,7 @@ describe("getSpawnPrompt — wave=null with consultation_outputs does not inject
       name: "test-flow",
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     };

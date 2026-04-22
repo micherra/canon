@@ -81,12 +81,12 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     states: {
       implement: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         transitions: { done: "terminal" },
         type: "single",
       },
       research: {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         transitions: { done: "implement" },
         type: "single",
       },
@@ -111,7 +111,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         prompt: "Do research task",
         role: "main",
         template_paths: [],
@@ -174,7 +174,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Fix the issue",
             role: "main",
             template_paths: [],
@@ -215,7 +215,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Fix the issue",
             role: "main",
             template_paths: [],
@@ -245,7 +245,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -284,7 +284,7 @@ describe("driveFlow — parallel state", () => {
       entry: "review",
       states: {
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           roles: ["reviewer-a", "reviewer-b"],
           transitions: { done: "terminal" },
           type: "parallel",
@@ -303,13 +303,13 @@ describe("driveFlow — parallel state", () => {
       ok: true,
       prompts: [
         {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           prompt: "Review A",
           role: "reviewer-a",
           template_paths: [],
         },
         {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           prompt: "Review B",
           role: "reviewer-b",
           template_paths: [],
@@ -338,7 +338,7 @@ describe("driveFlow — parallel state", () => {
       entry: "review",
       states: {
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           roles: ["reviewer-a", "reviewer-b"],
           transitions: { done: "terminal" },
           type: "parallel",
@@ -452,12 +452,12 @@ describe("driveFlow — tool_scope_audit event persistence", () => {
       ...makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-researcher",
+            agent: "canon:researcher",
             prompt: "Do research",
             template_paths: [],
             tool_scope_warnings: [
               {
-                agent: "canon:canon-researcher",
+                agent: "canon:researcher",
                 event: "adr014_replace_override_grants_disallowed",
                 granted_disallowed: ["Edit"],
               },
@@ -474,7 +474,7 @@ describe("driveFlow — tool_scope_audit event persistence", () => {
     expect(events).toHaveLength(1);
     const payload = events[0].payload as Record<string, unknown>;
     expect(payload.event).toBe("adr014_replace_override_grants_disallowed");
-    expect(payload.agent).toBe("canon:canon-researcher");
+    expect(payload.agent).toBe("canon:researcher");
     expect(payload.granted_disallowed).toEqual(["Edit"]);
     expect(payload.stateId).toBe("research");
   });

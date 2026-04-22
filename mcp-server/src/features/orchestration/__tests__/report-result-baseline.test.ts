@@ -55,7 +55,7 @@ function makeMinimalFlow(): ResolvedFlow {
     spawn_instructions: { impl: "Do the thing" },
     states: {
       impl: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         transitions: {
           done: "terminal",
           hitl: "terminal",

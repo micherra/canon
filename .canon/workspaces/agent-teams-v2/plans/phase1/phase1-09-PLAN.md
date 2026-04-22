@@ -44,20 +44,20 @@ Reproduce the flow selection table from the existing CLAUDE.md, mapped to the ne
 | Large cross-cutting, 10+ files | Read `epic.md` runbook |
 | Migration, upgrade, "move to X" | Read `migrate.md` runbook |
 | Improve test coverage | Read `test-gap.md` runbook |
-| Review PR or branch | Spawn `canon-reviewer` (no runbook) |
-| Security audit | Spawn `canon-security`, then `canon-reviewer` (no runbook) |
-| Investigate / "how does X work" | Spawn `canon-researcher`(s), synthesize (no runbook) |
-| Scan for violations (via init) | Spawn `canon-engineer` to scan + fix (no runbook) |
-| Create/edit principle | Spawn `canon-writer` (no runbook) |
-| Analyze patterns / learn | Spawn `canon-learner` (no runbook) |
+| Review PR or branch | Spawn `reviewer` (no runbook) |
+| Security audit | Spawn `security`, then `reviewer` (no runbook) |
+| Investigate / "how does X work" | Spawn `researcher`(s), synthesize (no runbook) |
+| Scan for violations (via init) | Spawn `engineer` to scan + fix (no runbook) |
+| Create/edit principle | Spawn `writer` (no runbook) |
+| Analyze patterns / learn | Spawn `learner` (no runbook) |
 | Resume interrupted flow | See Resume Protocol below |
-| Vague / unclear request | Spawn `canon-planner` (pre-build gate) |
+| Vague / unclear request | Spawn `planner` (pre-build gate) |
 
 **Pre-Build Gate**:
 Before starting any build flow, evaluate the request:
 - Is the problem clearly defined? Are acceptance criteria explicit?
 - Have alternatives been considered? Is the value proportional to the effort?
-- If any answer is no, spawn `canon-planner` before proceeding to a build runbook.
+- If any answer is no, spawn `planner` before proceeding to a build runbook.
 - If the request is a clear bug fix or small change with obvious scope, skip to fast-path.
 
 **Setup**:

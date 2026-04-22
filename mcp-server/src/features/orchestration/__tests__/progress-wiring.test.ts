@@ -46,7 +46,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement ${task}. Progress so far:\n${progress}" },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };

@@ -1,5 +1,5 @@
 ---
-name: canon-learner
+name: learner
 description: >-
   Analyzes codebase patterns, review history, flow execution logs, and
   conventions to suggest improvements to Canon principles. Produces a

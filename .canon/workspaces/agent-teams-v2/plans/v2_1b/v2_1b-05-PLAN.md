@@ -6,7 +6,7 @@ decisions:
   - "dc-06"
 files:
   - templates/review-checklist.md
-  - agents/canon-reviewer.md
+  - agents/reviewer.md
 principles:
   - agent-template-required
   - agent-evidence-over-intuition
@@ -32,13 +32,13 @@ findings:
     suggested_fix: "{≤ 200 chars}"
 ```
 
-**canon-reviewer amendment:**
+**reviewer amendment:**
 
 - Reviewer's process section explicitly requires `principle_id` on every finding
 - If the reviewer cannot map a finding to a principle, the finding MUST NOT be emitted. Either:
   1. Dig deeper until a principle applies (most findings map to *some* principle)
   2. File a note in the `## Observations` section (not `## Findings`) describing what was seen without a principle backing
-  3. If the pattern recurs across reviews, the reviewer escalates to the `canon-writer` path (intent: `principle`) to propose a new principle
+  3. If the pattern recurs across reviews, the reviewer escalates to the `writer` path (intent: `principle`) to propose a new principle
 - Finding without `principle_id` → invalid review artifact → `verify_completion` rejects
 
 **Why this matters for v2.1b:** the learner's principle-refinement analysis (v2_1b-06) JOINs lifecycle snapshots against `drift_store.violations` where `principle_id` is the key. Sparse `principle_id` means the learner sees fewer patterns — Gate B evidence becomes harder to produce.
@@ -63,7 +63,7 @@ findings:
 
 - **Indexer test** (drift-store has existing `__tests__/` under `mcp-server/src/platform/storage/drift/__tests__/`): extend or add tests for `principle_id` strictness — existing review write with no `principle_id` should reject or warn. Confirm current behavior; make strict if currently tolerant.
 - No existing test infrastructure for templates/*.md or agents/*.md. Manual read: review-checklist requires `principle_id` per finding; reviewer body requires principle-ID-per-finding and documents the "no principle → observation, not finding" rule.
-- Integration (runs in v2_1b-08): run a review against a test flow; inspect findings; assert all `principle_id` non-null. Run a review where no principle clearly applies; reviewer emits an observation (not a finding) or escalates to `canon-writer`.
+- Integration (runs in v2_1b-08): run a review against a test flow; inspect findings; assert all `principle_id` non-null. Run a review where no principle clearly applies; reviewer emits an observation (not a finding) or escalates to `writer`.
 
 ### Verify
 

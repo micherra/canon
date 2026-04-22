@@ -62,7 +62,7 @@ function makeFlow(gates?: Record<string, string>): ResolvedFlow {
     name: "integration-flow",
     spawn_instructions: { implement: "Implement the feature." },
     states: {
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
       ship: { type: "terminal" },
     },
     ...(gates ? { gates } : {}),
@@ -73,13 +73,13 @@ function makeConsultationFlow(): ResolvedFlow {
   return {
     consultations: {
       "arch-review": {
-        agent: "canon:canon-architect",
+        agent: "canon:architect",
         fragment: "arch-review",
         role: "architect",
         section: "Architecture review",
       },
       "security-check": {
-        agent: "canon:canon-security",
+        agent: "canon:security",
         fragment: "security-check",
         role: "security",
         section: "Security findings",
@@ -93,7 +93,7 @@ function makeConsultationFlow(): ResolvedFlow {
       "arch-review": "Review architecture for ${task}.",
       "security-check": "Run security audit for ${task}.",
     },
-    states: { build: { agent: "canon-implementor", type: "single" } },
+    states: { build: { agent: "implementor", type: "single" } },
   };
 }
 
@@ -227,7 +227,7 @@ describe("integration: executeConsultations result → recordConsultationResult 
 
     expect(resolved).not.toBeNull();
     expect(resolved!.prompt).toBe("Run security audit for payment-service.");
-    expect(resolved!.agent).toBe("canon:canon-security");
+    expect(resolved!.agent).toBe("canon:security");
     expect(resolved!.role).toBe("security");
   });
 

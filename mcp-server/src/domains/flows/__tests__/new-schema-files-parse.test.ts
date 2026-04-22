@@ -155,7 +155,7 @@ describe("flow-definition-schemas.ts — FlowDefinitionSchema", () => {
       name: "feature",
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon:canon-implementor", type: "single" },
+        implement: { agent: "canon:implementor", type: "single" },
       },
     });
     expect(Object.keys(result.states ?? {})).toContain("implement");
@@ -204,14 +204,14 @@ describe("flow-definition-schemas.ts — BaseStateFields usability", () => {
   it("SingleStateSchema (which spreads BaseStateFields) parses the base fields correctly", () => {
     // Verifies that BaseStateFields spread into SingleStateSchema works as intended
     const result = SingleStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       max_iterations: 5,
       stuck_when: "same_violations",
       tool_overrides: { allow: ["Read"] },
       transitions: { done: "next-state" },
       type: "single",
     });
-    expect(result.agent).toBe("canon:canon-implementor");
+    expect(result.agent).toBe("canon:implementor");
     expect(result.max_iterations).toBe(5);
     expect(result.stuck_when).toBe("same_violations");
     expect(result.tool_overrides?.allow).toEqual(["Read"]);

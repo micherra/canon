@@ -17,7 +17,7 @@ domains:
 
 ### Action
 
-Write `skills/canon/references/planner-brief.md` defining the strategic-analysis contract `canon-planner` follows to produce `plans/${slug}/planning-brief.md` per build request.
+Write `skills/canon/references/planner-brief.md` defining the strategic-analysis contract `planner` follows to produce `plans/${slug}/planning-brief.md` per build request.
 
 **The skill must specify:**
 
@@ -60,15 +60,15 @@ Write `skills/canon/references/planner-brief.md` defining the strategic-analysis
 No existing test infrastructure for skills/*.md. Validation is by:
 
 - Manual read against the 5-contract-element checklist
-- Downstream integration: canon-planner (v2_1a-03) loads this skill; if the skill is malformed the planner spawn fails, which the v2_1a-08 validation will catch against all 5 request types
+- Downstream integration: planner (v2_1a-03) loads this skill; if the skill is malformed the planner spawn fails, which the v2_1a-08 validation will catch against all 5 request types
 - Optional: file follow-up task to add skill-lint harness — out of scope here
 
 ### Verify
 
 1. Skill file exists at `skills/canon/references/planner-brief.md`
 2. Skill tests pass: `npm test -- planner-brief`
-3. Skill is referenced by `canon-planner` agent frontmatter (v2_1a-03 will add this)
-4. Manually spawn canon-planner against a test request; planner produces a brief matching the required sections
+3. Skill is referenced by `planner` agent frontmatter (v2_1a-03 will add this)
+4. Manually spawn planner against a test request; planner produces a brief matching the required sections
 
 ### Done when
 

@@ -40,7 +40,7 @@ cat > "$WS/journal.json" <<'EOF'
   "version": 1,
   "workspace": "",
   "steps": [
-    { "step_id": "s1", "agent_type": "canon-architect", "artifacts_expected": ["plans/DESIGN.md"], "status": "completed", "started_at": "2026-04-21T10:00:00Z", "completed_at": "2026-04-21T10:05:00Z" }
+    { "step_id": "s1", "agent_type": "architect", "artifacts_expected": ["plans/DESIGN.md"], "status": "completed", "started_at": "2026-04-21T10:00:00Z", "completed_at": "2026-04-21T10:05:00Z" }
   ]
 }
 EOF

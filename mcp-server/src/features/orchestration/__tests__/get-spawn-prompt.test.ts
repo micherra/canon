@@ -73,7 +73,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement ${task}." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -86,7 +86,7 @@ function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     name: "test-wave-flow",
     spawn_instructions: { build: "Build ${item}." },
     states: {
-      build: { agent: "canon-implementor", type: "wave" },
+      build: { agent: "implementor", type: "wave" },
       done: { type: "terminal" },
     },
     ...overrides,
@@ -118,7 +118,7 @@ describe("getSpawnPrompt — board state from ExecutionStore", () => {
     const flow = makeFlow({
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
+        implement: { agent: "implementor", skip_when: "auto_approved", type: "single" },
       },
     });
 
@@ -375,7 +375,7 @@ describe("getSpawnPrompt — wave briefing injection", () => {
       spawn_instructions: { review: "Review ${item}." },
       states: {
         done: { type: "terminal" },
-        review: { agent: "canon-reviewer", type: "parallel-per" },
+        review: { agent: "reviewer", type: "parallel-per" },
       },
     };
 
@@ -433,7 +433,7 @@ describe("getSpawnPrompt — metrics footer injection", () => {
       spawn_instructions: { review: "Review the code." },
       states: {
         done: { type: "terminal" as const },
-        review: { agent: "canon-reviewer", type: "single" as const },
+        review: { agent: "reviewer", type: "single" as const },
       },
     };
 
@@ -514,7 +514,7 @@ describe("getSpawnPrompt — metrics footer injection", () => {
       spawn_instructions: { implement: "Implement ${task}." },
       states: {
         done: { type: "terminal" as const },
-        implement: { agent: "canon-implementor", type: "single" as const },
+        implement: { agent: "implementor", type: "single" as const },
       },
     };
 

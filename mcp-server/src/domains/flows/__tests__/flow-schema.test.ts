@@ -31,16 +31,16 @@ import {
 describe("SingleStateSchema", () => {
   it("accepts minimal valid single state", () => {
     const result = SingleStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "single",
     });
     expect(result.type).toBe("single");
-    expect(result.agent).toBe("canon:canon-implementor");
+    expect(result.agent).toBe("canon:implementor");
   });
 
   it("accepts single state with all optional fields", () => {
     const result = SingleStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       cluster_by: "directory",
       compete: "auto",
       gate: "npm test",
@@ -61,7 +61,7 @@ describe("SingleStateSchema", () => {
 
   it("coerces max_iterations string to number", () => {
     const result = SingleStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       max_iterations: "5",
       type: "single",
     });
@@ -71,7 +71,7 @@ describe("SingleStateSchema", () => {
   it("rejects wrong type literal", () => {
     expect(() =>
       SingleStateSchema.parse({
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         type: "wave",
       }),
     ).toThrow();
@@ -80,7 +80,7 @@ describe("SingleStateSchema", () => {
   it("rejects missing type field", () => {
     expect(() =>
       SingleStateSchema.parse({
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
       }),
     ).toThrow();
   });
@@ -145,17 +145,17 @@ describe("WavePolicySchema", () => {
 describe("WaveStateSchema", () => {
   it("accepts minimal valid wave state (without wave_policy)", () => {
     const result = WaveStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "wave",
     });
     expect(result.type).toBe("wave");
-    expect(result.agent).toBe("canon:canon-implementor");
+    expect(result.agent).toBe("canon:implementor");
     expect(result.wave_policy).toBeUndefined();
   });
 
   it("accepts wave state with full wave_policy", () => {
     const result = WaveStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "wave",
       wave_policy: {
         isolation: "branch",
@@ -170,7 +170,7 @@ describe("WaveStateSchema", () => {
 
   it("accepts wave state with empty wave_policy (defaults applied)", () => {
     const result = WaveStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "wave",
       wave_policy: {},
     });
@@ -182,7 +182,7 @@ describe("WaveStateSchema", () => {
   it("rejects wrong type literal", () => {
     expect(() =>
       WaveStateSchema.parse({
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         type: "single",
       }),
     ).toThrow();
@@ -190,8 +190,8 @@ describe("WaveStateSchema", () => {
 
   it("accepts wave state with transitions, gates, consultations, postconditions", () => {
     const result = WaveStateSchema.parse({
-      agent: "canon:canon-implementor",
-      consultations: { before: ["canon-guide"] },
+      agent: "canon:implementor",
+      consultations: { before: ["guide"] },
       gate: "npm test",
       postconditions: [{ target: "dist/index.js", type: "file_exists" }],
       transitions: { done: "review" },
@@ -207,7 +207,7 @@ describe("WaveStateSchema", () => {
 describe("ParallelStateSchema", () => {
   it("accepts minimal valid parallel state", () => {
     const result = ParallelStateSchema.parse({
-      agents: ["canon:canon-implementor", "canon:canon-tester"],
+      agents: ["canon:implementor", "canon:tester"],
       type: "parallel",
     });
     expect(result.type).toBe("parallel");
@@ -234,7 +234,7 @@ describe("ParallelStateSchema", () => {
   it("rejects wrong type literal", () => {
     expect(() =>
       ParallelStateSchema.parse({
-        agents: ["canon:canon-implementor"],
+        agents: ["canon:implementor"],
         type: "single",
       }),
     ).toThrow();
@@ -258,7 +258,7 @@ describe("ParallelStateSchema", () => {
 describe("ParallelPerStateSchema", () => {
   it("accepts minimal valid parallel-per state", () => {
     const result = ParallelPerStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       iterate_on: "${tasks}",
       type: "parallel-per",
     });
@@ -268,7 +268,7 @@ describe("ParallelPerStateSchema", () => {
 
   it("coerces max_iterations string to number", () => {
     const result = ParallelPerStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       iterate_on: "${tasks}",
       max_iterations: "4",
       type: "parallel-per",
@@ -279,7 +279,7 @@ describe("ParallelPerStateSchema", () => {
   it("rejects wrong type literal", () => {
     expect(() =>
       ParallelPerStateSchema.parse({
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         iterate_on: "${tasks}",
         type: "single",
       }),
@@ -290,7 +290,7 @@ describe("ParallelPerStateSchema", () => {
     // iterate_on is semantically required but kept optional in the schema for backward compat;
     // the flow validator (validateFlow) checks for missing iterate_on at load time.
     const result = ParallelPerStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "parallel-per",
     });
     expect(result.type).toBe("parallel-per");
@@ -345,19 +345,19 @@ describe("TerminalStateSchema", () => {
 describe("StateDefinitionSchema (discriminated union)", () => {
   it("routes 'single' type to SingleStateSchema", () => {
     const result = StateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "single",
     });
     expect(result.type).toBe("single");
     // TypeScript narrowing: after discriminant check, agent is accessible
     if (result.type === "single") {
-      expect(result.agent).toBe("canon:canon-implementor");
+      expect(result.agent).toBe("canon:implementor");
     }
   });
 
   it("routes 'wave' type to WaveStateSchema", () => {
     const result = StateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "wave",
     });
     expect(result.type).toBe("wave");
@@ -365,7 +365,7 @@ describe("StateDefinitionSchema (discriminated union)", () => {
 
   it("routes 'parallel' type to ParallelStateSchema", () => {
     const result = StateDefinitionSchema.parse({
-      agents: ["canon:canon-implementor"],
+      agents: ["canon:implementor"],
       type: "parallel",
     });
     expect(result.type).toBe("parallel");
@@ -373,7 +373,7 @@ describe("StateDefinitionSchema (discriminated union)", () => {
 
   it("routes 'parallel-per' type to ParallelPerStateSchema", () => {
     const result = StateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       iterate_on: "${tasks}",
       type: "parallel-per",
     });
@@ -390,7 +390,7 @@ describe("StateDefinitionSchema (discriminated union)", () => {
   it("rejects unknown type literal", () => {
     expect(() =>
       StateDefinitionSchema.parse({
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         type: "unknown-type",
       }),
     ).toThrow();
@@ -399,7 +399,7 @@ describe("StateDefinitionSchema (discriminated union)", () => {
   it("SingleStateSchema rejects 'wave' type literal (wrong-type rejection)", () => {
     expect(() =>
       SingleStateSchema.parse({
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         type: "wave",
       }),
     ).toThrow();
@@ -408,7 +408,7 @@ describe("StateDefinitionSchema (discriminated union)", () => {
   it("WaveStateSchema rejects 'single' type literal (wrong-type rejection)", () => {
     expect(() =>
       WaveStateSchema.parse({
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         type: "single",
       }),
     ).toThrow();

@@ -88,7 +88,7 @@ One agent, runs once per entry. The simplest and most common type.
 ```yaml
 design:
   type: single
-  agent: canon-architect
+  agent: architect
   transitions:
     done: implement
     blocked: hitl
@@ -101,7 +101,7 @@ Multiple agents run simultaneously. All must complete before transitioning. When
 ```yaml
 research:
   type: parallel
-  agents: [canon-researcher]
+  agents: [researcher]
   roles: [codebase, risk]
   transitions:
     done: design
@@ -116,7 +116,7 @@ Spawns parallel agents across git worktrees, with a gate check between waves. Ea
 ```yaml
 implement:
   type: wave
-  agent: canon-implementor
+  agent: implementor
   gate: test-suite
   consultations:
     before: [plan-review]
@@ -144,7 +144,7 @@ Fan-out over a dynamic list of items from a prior state's artifact. One agent is
 ```yaml
 fix-violations:
   type: parallel-per
-  agent: canon-fixer
+  agent: fixer
   role: violation-fix
   iterate_on: violation_groups
   max_iterations: 3
@@ -170,7 +170,7 @@ Looping states define an upper bound to prevent infinite retry:
 ```yaml
 review:
   type: single
-  agent: canon-reviewer
+  agent: reviewer
   max_iterations: 3
   stuck_when: same_violations
 ```
@@ -202,7 +202,7 @@ HITL is also the default target when an agent returns an unrecognized status key
 
 ### User Checkpoints
 
-The `user-checkpoint` fragment pauses the flow and presents a summary of completed work, then waits for the user's response. The `canon-guide` agent uses semantic reasoning to classify the response — it does not look for magic keywords.
+The `user-checkpoint` fragment pauses the flow and presents a summary of completed work, then waits for the user's response. The `guide` agent uses semantic reasoning to classify the response — it does not look for magic keywords.
 
 - **approved** — User is satisfied, proceed to the next state
 - **revise** — User wants changes; feedback is saved to `REVISION-NOTES.md` and routed back for rework
@@ -228,7 +228,7 @@ States can pull content from prior states' artifacts or ask the user a question 
 ```yaml
 design:
   type: single
-  agent: canon-architect
+  agent: architect
   inject_context:
     - from: research
       section: risk
@@ -256,7 +256,7 @@ States can declare `effects` — declarative hooks that persist drift data after
 ```yaml
 review:
   type: single
-  agent: canon-reviewer
+  agent: reviewer
   effects:
     - type: persist_review
       artifact: REVIEW.md

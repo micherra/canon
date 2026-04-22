@@ -40,7 +40,7 @@ The 5-hook set:
 | `completion-verify.sh` | Called explicitly by the lead (NOT auto-registered) | Reads the orchestration journal; exits non-zero when steps are incomplete or artifacts missing. |
 | `session-start-doc-check.sh` | SessionStart | Advisory nudge when HEAD diverges from `.canon/last-scribe-commit`. |
 | `session-start-kg-check.sh` | SessionStart | Advisory nudge when `.canon/knowledge-graph.db` is missing or stale (>24h default). |
-| `post-engineer-scribe.sh` | SubagentStop | After `canon-engineer` completes, writes `pending-scribe.json` to workspace so the lead runs the scribe before flow completion. |
+| `post-engineer-scribe.sh` | SubagentStop | After `engineer` completes, writes `pending-scribe.json` to workspace so the lead runs the scribe before flow completion. |
 
 #### 1. Create directory structure
 
@@ -134,9 +134,9 @@ Emits a nudge when missing or stale so the lead knows `graph_query` /
 
 #### 6. Write `post-engineer-scribe.sh`
 
-SubagentStop hook. When the stopping subagent is `canon-engineer`,
+SubagentStop hook. When the stopping subagent is `engineer`,
 writes `${WORKSPACE}/pending-scribe.json` so the lead's completion
-checklist (phase1-09 CLAUDE.md) can check for it and run canon-scribe
+checklist (phase1-09 CLAUDE.md) can check for it and run scribe
 before declaring done. Workspace discovery: `CANON_WORKSPACE` env var,
 then the hook payload's `workspace` field. Never blocks.
 

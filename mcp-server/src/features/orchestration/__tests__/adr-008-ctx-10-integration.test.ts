@@ -315,8 +315,7 @@ describe("ctx-09 backward compatibility — existing inject_context not disturbe
 
     // explore has no implement state with file_context
     const implementorStates = Object.entries(flow.states).filter(
-      ([, state]) =>
-        state.type !== "terminal" && "agent" in state && state.agent === "canon-implementor",
+      ([, state]) => state.type !== "terminal" && "agent" in state && state.agent === "implementor",
     );
     // explore has no implementor states — or if it does, they don't have file_context
     for (const [, state] of implementorStates) {

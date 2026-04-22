@@ -1,8 +1,8 @@
 ---
 template: implementation-log
 description: Structured format for implementor task summaries
-used-by: [canon-implementor, canon-fixer]
-read-by: [canon-tester, canon-reviewer, canon-scribe, canon-shipper]
+used-by: [implementor, fixer]
+read-by: [tester, reviewer, scribe, shipper]
 output-path: ${WORKSPACE}/plans/${slug}/SUMMARY.md
 ---
 
@@ -14,7 +14,7 @@ Use this template when producing the task summary after implementation. This rep
 ---
 task-id: "{slug}-{NN}"
 status: "{DONE|DONE_WITH_CONCERNS|BLOCKED|NEEDS_CONTEXT}"
-agent: canon-implementor
+agent: implementor
 timestamp: "{ISO-8601}"
 commit: "{hash}"
 ---

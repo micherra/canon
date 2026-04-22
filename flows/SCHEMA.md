@@ -41,7 +41,7 @@ Each key under `states:` is a state ID. State IDs must be lowercase, alphanumeri
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | enum | yes | `single`, `parallel`, `wave`, `parallel-per`, `terminal` |
-| `agent` | string | yes* | Agent name (e.g., `canon-researcher`). *Not required for `terminal`. |
+| `agent` | string | yes* | Agent name (e.g., `researcher`). *Not required for `terminal`. |
 | `agents` | list | no | For `parallel` type — list of agent names |
 | `roles` | list | no | For `parallel` type — role labels passed to each agent |
 | `role` | string | no | For `single` type — role label passed to the agent |
@@ -64,7 +64,7 @@ Each key under `states:` is a state ID. State IDs must be lowercase, alphanumeri
 ```yaml
 design:
   type: single
-  agent: canon-architect
+  agent: architect
   transitions:
     done: implement
 ```
@@ -73,7 +73,7 @@ design:
 ```yaml
 research:
   type: parallel
-  agents: [canon-researcher]
+  agents: [researcher]
   roles: [codebase, risk]
   transitions:
     done: design
@@ -86,7 +86,7 @@ When `agents` has one entry and `roles` has multiple, the agent is spawned once 
 ```yaml
 implement:
   type: wave
-  agent: canon-implementor
+  agent: implementor
   gate: test-suite
   consultations:
     before: [plan-review]
@@ -133,7 +133,7 @@ All consultations within a timing group spawn concurrently. Consultation failure
 ```yaml
 fix-violations:
   type: parallel-per
-  agent: canon-fixer
+  agent: fixer
   iterate_on: violation_groups
   transitions:
     done: review
@@ -197,21 +197,21 @@ Each state type has a default timeout. If an agent does not return within the ti
 
 | Agent Role | Default Timeout | Rationale |
 |-----------|----------------|-----------|
-| `canon-researcher` | 5 minutes | Scoped to one dimension; should complete quickly |
-| `canon-architect` | 15 minutes | Produces design + plans; needs time for graph analysis |
-| `canon-implementor` | 20 minutes | Writes code + tests; largest working scope |
-| `canon-tester` | 10 minutes | Writes integration tests; runs test suite |
-| `canon-reviewer` | 10 minutes | Reads diff + principles; no code writing |
-| `canon-fixer` | 10 minutes | Fixes one violation group or test failure |
-| `canon-security` | 10 minutes | Scans files + runs dependency audit |
-| `canon-scribe` | 5 minutes | Classification + surgical edits |
-| `canon-shipper` | 5 minutes | Read-only artifact synthesis; optional PR creation |
+| `researcher` | 5 minutes | Scoped to one dimension; should complete quickly |
+| `architect` | 15 minutes | Produces design + plans; needs time for graph analysis |
+| `implementor` | 20 minutes | Writes code + tests; largest working scope |
+| `tester` | 10 minutes | Writes integration tests; runs test suite |
+| `reviewer` | 10 minutes | Reads diff + principles; no code writing |
+| `fixer` | 10 minutes | Fixes one violation group or test failure |
+| `security` | 10 minutes | Scans files + runs dependency audit |
+| `scribe` | 5 minutes | Classification + surgical edits |
+| `shipper` | 5 minutes | Read-only artifact synthesis; optional PR creation |
 
 Flows can override the default timeout per state:
 ```yaml
 implement:
   type: wave
-  agent: canon-implementor
+  agent: implementor
   timeout: 30m  # Override default 20m for large tasks
 ```
 
@@ -342,7 +342,7 @@ States can pull context from prior states or from the user mid-flow:
 ```yaml
 design:
   type: single
-  agent: canon-architect
+  agent: architect
   inject_context:
     - from: research
       section: risk
@@ -617,7 +617,7 @@ Consultation fragments are a lightweight fragment type for advisory agents that 
 fragment: pattern-check
 type: consultation
 description: Architect reviews wave output for pattern drift
-agent: canon-architect
+agent: architect
 role: pattern-check
 section: Pattern review
 timeout: 5m
@@ -731,10 +731,10 @@ The orchestrator resolves fragments during flow template loading (Phase 1, Step 
 
 | Fragment | Agent | Section/Artifact | Description |
 |----------|-------|-----------------|-------------|
-| `plan-review` | canon-architect | section: Plan clarifications | Reviews upcoming wave plans for conflicts and pre-answers likely questions |
-| `pattern-check` | canon-architect | section: Pattern review | Reviews wave output for pattern drift and convention consistency |
-| `early-scan` | canon-security | section: Early warnings | Quick security scan of wave changes before next wave |
-| `impl-handoff` | canon-architect | artifact: IMPL-OVERVIEW.md | Produces implementation overview for downstream agents |
+| `plan-review` | architect | section: Plan clarifications | Reviews upcoming wave plans for conflicts and pre-answers likely questions |
+| `pattern-check` | architect | section: Pattern review | Reviews wave output for pattern drift and convention consistency |
+| `early-scan` | security | section: Early warnings | Quick security scan of wave changes before next wave |
+| `impl-handoff` | architect | artifact: IMPL-OVERVIEW.md | Produces implementation overview for downstream agents |
 
 ### Competitive States
 
@@ -743,7 +743,7 @@ Any state can be made competitive by adding a `compete` field. When present, the
 ```yaml
 design:
   type: single
-  agent: canon-architect
+  agent: architect
   compete:
     count: 3
     strategy: synthesize
@@ -780,7 +780,7 @@ Flows can define a `debate` configuration at the top level for multi-round struc
 ```yaml
 debate:
   teams: 3
-  composition: [canon-researcher, canon-architect]
+  composition: [researcher, architect]
   min_rounds: 2
   max_rounds: 5
   convergence_check_after: 3

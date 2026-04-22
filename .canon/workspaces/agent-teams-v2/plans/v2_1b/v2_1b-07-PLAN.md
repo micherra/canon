@@ -33,7 +33,7 @@ Produce the **v2.1b loop-closure evidence**: ≥ 1 principle-refinement proposal
    - Each flow has: a lifecycle snapshot row (v2_1b-01); review findings with `principle_id` populated (v2_1b-05); any fix summaries with `cause` + `root_cause_tag` (v2_1b-03); any implementation summaries with `justified_deviations[]` (v2_1b-04)
 
 2. **Run the learner** against the accumulated data:
-   - Invoke `canon-learner` in analysis mode (the new principle-refinement dimension from v2_1b-06)
+   - Invoke `learner` in analysis mode (the new principle-refinement dimension from v2_1b-06)
    - Output: `.canon/proposed-learnings/{timestamp}/` containing one or more principle-refinement proposals
 
 3. **Human curation (weekly review per §3.4):**

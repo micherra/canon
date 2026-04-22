@@ -58,7 +58,7 @@ function makeCtx(
           spawn_instructions: { implement: "Do the thing" },
           states: {
             done: { type: "terminal" },
-            implement: { agent: "canon-implementor", type: "single" },
+            implement: { agent: "implementor", type: "single" },
           },
         } as ResolvedFlow),
       state_id: state_id ?? "implement",
@@ -69,7 +69,7 @@ function makeCtx(
     mergedVariables: { CANON_PLUGIN_ROOT: "" },
     prompts: [],
     rawInstruction: "Do the thing",
-    state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+    state: { agent: "implementor", type: "single" } as StateDefinition,
     warnings: [],
     ...rest,
   };
@@ -92,7 +92,7 @@ describe("fanout — parallel-per state", () => {
   it("produces one prompt per item (no isolation field set)", async () => {
     const ctx = makeCtx({
       items: ["item-1", "item-2"],
-      state: { agent: "canon-implementor", type: "parallel-per" } as StateDefinition,
+      state: { agent: "implementor", type: "parallel-per" } as StateDefinition,
     });
 
     const result = await fanout(ctx);
@@ -107,7 +107,7 @@ describe("fanout — parallel-per state", () => {
       basePrompt: "Review cluster ${item.cluster_key}",
       items: ["original-item"],
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         large_diff_threshold: 5,
         type: "parallel-per",
       } as StateDefinition,
@@ -124,7 +124,7 @@ describe("fanout — parallel-per state", () => {
   it("produces zero prompts for parallel-per when items is empty array", async () => {
     const ctx = makeCtx({
       items: [],
-      state: { agent: "canon-implementor", type: "parallel-per" } as StateDefinition,
+      state: { agent: "implementor", type: "parallel-per" } as StateDefinition,
     });
 
     const result = await fanout(ctx);
@@ -138,7 +138,7 @@ describe("fanout — debate handling", () => {
   it("produces fanned_out prompts for active (not completed) debate", async () => {
     const flow: ResolvedFlow = {
       debate: {
-        composition: ["canon-architect"],
+        composition: ["architect"],
         continue_to_build: true,
         convergence_check_after: 2,
         hitl_checkpoint: false,
@@ -152,14 +152,14 @@ describe("fanout — debate handling", () => {
       spawn_instructions: { implement: "Debate this" },
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-architect", type: "single" },
+        implement: { agent: "architect", type: "single" },
       },
     } as unknown as ResolvedFlow;
 
     const ctx = makeCtx({
       basePrompt: "Debate this",
       flow,
-      state: { agent: "canon-architect", type: "single" } as StateDefinition,
+      state: { agent: "architect", type: "single" } as StateDefinition,
       state_id: "implement",
     });
 
@@ -181,7 +181,7 @@ describe("fanout — debate handling", () => {
   it("returns fanned_out: true when debate produces multiple prompts", async () => {
     const flow: ResolvedFlow = {
       debate: {
-        composition: ["canon-architect"],
+        composition: ["architect"],
         continue_to_build: true,
         convergence_check_after: 2,
         hitl_checkpoint: false,
@@ -195,7 +195,7 @@ describe("fanout — debate handling", () => {
       spawn_instructions: { implement: "Debate this" },
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-architect", type: "single" },
+        implement: { agent: "architect", type: "single" },
       },
     } as unknown as ResolvedFlow;
 
@@ -219,7 +219,7 @@ describe("fanout — debate handling", () => {
   it("appends debate summary to basePrompt when debate is completed", async () => {
     const flow: ResolvedFlow = {
       debate: {
-        composition: ["canon-architect"],
+        composition: ["architect"],
         continue_to_build: true,
         convergence_check_after: 2,
         hitl_checkpoint: false,
@@ -233,7 +233,7 @@ describe("fanout — debate handling", () => {
       spawn_instructions: { implement: "Debate this" },
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-architect", type: "single" },
+        implement: { agent: "architect", type: "single" },
       },
     } as unknown as ResolvedFlow;
 
@@ -261,7 +261,7 @@ describe("fanout — debate handling", () => {
   it("adds warning when debate completed", async () => {
     const flow: ResolvedFlow = {
       debate: {
-        composition: ["canon-architect"],
+        composition: ["architect"],
         continue_to_build: true,
         convergence_check_after: 2,
         hitl_checkpoint: false,
@@ -275,7 +275,7 @@ describe("fanout — debate handling", () => {
       spawn_instructions: { implement: "Debate this" },
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-architect", type: "single" },
+        implement: { agent: "architect", type: "single" },
       },
     } as unknown as ResolvedFlow;
 
@@ -304,7 +304,7 @@ describe("fanout — timeout parsing", () => {
   it("sets timeout_ms from valid timeout string", async () => {
     const ctx = makeCtx({
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         timeout: "10m",
         type: "single",
       } as StateDefinition,
@@ -318,7 +318,7 @@ describe("fanout — timeout parsing", () => {
   it("adds warning for invalid timeout format", async () => {
     const ctx = makeCtx({
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         timeout: "invalid",
         type: "single",
       } as StateDefinition,
@@ -333,7 +333,7 @@ describe("fanout — timeout parsing", () => {
   it("handles complex timeout like 1h30m", async () => {
     const ctx = makeCtx({
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         timeout: "1h30m",
         type: "single",
       } as StateDefinition,
@@ -347,7 +347,7 @@ describe("fanout — timeout parsing", () => {
   it("handles seconds timeout", async () => {
     const ctx = makeCtx({
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         timeout: "90s",
         type: "single",
       } as StateDefinition,
@@ -365,7 +365,7 @@ describe("fanout — clusterDiff null vs empty array distinction", () => {
   it("null clusterDiff result does not trigger cluster fanout", async () => {
     const ctx = makeCtx({
       state: {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         large_diff_threshold: 5,
         type: "single",
       } as StateDefinition,
@@ -379,7 +379,7 @@ describe("fanout — clusterDiff null vs empty array distinction", () => {
   it("empty array clusterDiff result does not trigger cluster fanout (null-vs-empty guard)", async () => {
     const ctx = makeCtx({
       state: {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         large_diff_threshold: 5,
         type: "single",
       } as StateDefinition,
@@ -395,7 +395,7 @@ describe("fanout — clusterDiff null vs empty array distinction", () => {
   it("non-empty clusters produce multiple prompts", async () => {
     const ctx = makeCtx({
       state: {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         large_diff_threshold: 5,
         type: "single",
       } as StateDefinition,

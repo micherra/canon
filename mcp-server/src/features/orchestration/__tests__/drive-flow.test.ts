@@ -81,12 +81,12 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     states: {
       implement: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         transitions: { done: "terminal" },
         type: "single",
       },
       research: {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         transitions: { done: "implement" },
         type: "single",
       },
@@ -111,7 +111,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         prompt: "Do research task",
         role: "main",
         template_paths: [],
@@ -181,7 +181,7 @@ describe("driveFlow — first call (no result)", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-researcher",
+            agent: "canon:researcher",
             prompt: "Research the codebase",
             role: "main",
             template_paths: [],
@@ -198,7 +198,7 @@ describe("driveFlow — first call (no result)", () => {
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
     expect(result.requests).toHaveLength(1);
-    expect(result.requests[0].agent_type).toBe("canon:canon-researcher");
+    expect(result.requests[0].agent_type).toBe("canon:researcher");
     expect(result.requests[0].prompt).toBe("Research the codebase");
     expect(result.requests[0].role).toBe("main");
   });
@@ -227,7 +227,7 @@ describe("driveFlow — first call (no result)", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -260,7 +260,7 @@ describe("driveFlow — call with result", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -287,7 +287,7 @@ describe("driveFlow — call with result", () => {
     if (!result.ok) return;
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
-    expect(result.requests[0].agent_type).toBe("canon:canon-implementor");
+    expect(result.requests[0].agent_type).toBe("canon:implementor");
   });
 
   it("returns done when next_state is terminal", async () => {
@@ -403,18 +403,18 @@ describe("driveFlow — skip-state auto-advancement", () => {
     const flow = makeFlow({
       states: {
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
         research: {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           skip_when: "no_contract_changes",
           transitions: { done: "security", skipped: "implement" },
           type: "single",
         },
         security: {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           skip_when: "no_contract_changes",
           transitions: { done: "implement" },
           type: "single",
@@ -442,7 +442,7 @@ describe("driveFlow — skip-state auto-advancement", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -459,7 +459,7 @@ describe("driveFlow — skip-state auto-advancement", () => {
     // Should return implement spawn, not research spawn
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
-    expect(result.requests[0].agent_type).toBe("canon:canon-implementor");
+    expect(result.requests[0].agent_type).toBe("canon:implementor");
     // reportResult should have been called once (for the skip)
     expect(reportResult).toHaveBeenCalledTimes(1);
     expect(reportResult).toHaveBeenCalledWith(

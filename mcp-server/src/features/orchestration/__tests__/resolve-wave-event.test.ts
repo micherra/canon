@@ -94,8 +94,8 @@ describe("apply action", () => {
       workspace,
     });
 
-    expect(result.agents).toEqual(["canon-architect"]);
-    expect(result.descriptions["canon-architect"]).toBeDefined();
+    expect(result.agents).toEqual(["architect"]);
+    expect(result.descriptions.architect).toBeDefined();
   });
 
   it("resolution is optional for apply", async () => {
@@ -195,7 +195,7 @@ describe("reject action", () => {
       workspace,
     });
 
-    expect(result.agents).toEqual(["canon-architect"]);
+    expect(result.agents).toEqual(["architect"]);
   });
 
   it("pending_count decrements after rejecting an event", async () => {

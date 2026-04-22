@@ -22,17 +22,17 @@ Templates exist so downstream agents can reliably parse upstream output. When an
 
 | Agent | Template | Path |
 |-------|----------|------|
-| canon-researcher | research-finding | `${CLAUDE_PLUGIN_ROOT}/templates/research-finding.md` |
-| canon-architect | design-decision | `${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md` |
-| canon-architect | session-context | `${CLAUDE_PLUGIN_ROOT}/templates/session-context.md` |
-| canon-implementor | implementation-log | `${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md` |
-| canon-tester | test-report | `${CLAUDE_PLUGIN_ROOT}/templates/test-report.md` |
-| canon-reviewer | review-checklist | `${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md` |
-| canon-security | security-assessment | `${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md` |
-| canon-scribe | context-sync-report | `${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md` |
+| researcher | research-finding | `${CLAUDE_PLUGIN_ROOT}/templates/research-finding.md` |
+| architect | design-decision | `${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md` |
+| architect | session-context | `${CLAUDE_PLUGIN_ROOT}/templates/session-context.md` |
+| implementor | implementation-log | `${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md` |
+| tester | test-report | `${CLAUDE_PLUGIN_ROOT}/templates/test-report.md` |
+| reviewer | review-checklist | `${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md` |
+| security | security-assessment | `${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md` |
+| scribe | context-sync-report | `${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md` |
 
 The orchestrator is responsible for passing these paths. Agents are responsible for using them.
 
 ## Exceptions
 
-**canon-fixer (violation-fix mode)**: The fixer in violation-fix mode produces a structured status report (FIXED/PARTIAL_FIX/CANNOT_FIX with commit hash, change description, and behavior preservation confirmation) rather than a full artifact document. Its output is consumed only by the orchestrator for transition decisions, not parsed by downstream agents. The fixer in violation-fix mode is exempt from template requirements — no template is defined for it in the flow states, and it should NOT report NEEDS_CONTEXT for a missing template.
+**fixer (violation-fix mode)**: The fixer in violation-fix mode produces a structured status report (FIXED/PARTIAL_FIX/CANNOT_FIX with commit hash, change description, and behavior preservation confirmation) rather than a full artifact document. Its output is consumed only by the orchestrator for transition decisions, not parsed by downstream agents. The fixer in violation-fix mode is exempt from template requirements — no template is defined for it in the flow states, and it should NOT report NEEDS_CONTEXT for a missing template.

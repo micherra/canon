@@ -8,7 +8,7 @@
  * - trustLevelToPermissionMode: never returns "deny_unknown"
  * - buildScopeMetrics: aggregation of hub/degree/cycle flags
  * - buildScopeMetrics: null entries treated as low-risk
- * - canon-scribe: Edit counts as write capability
+ * - scribe: Edit counts as write capability
  */
 
 import { describe, expect, it } from "vitest";
@@ -24,7 +24,7 @@ import {
 
 function makeLowRiskInput() {
   return {
-    agent: "canon-implementor",
+    agent: "implementor",
     agentCanWrite: true,
     kgFreshnessMs: 60_000, // 1 minute — fresh
     scopeMetrics: {
@@ -153,11 +153,11 @@ describe("computeTrustLevel — BLOCKED", () => {
   it("includes agent name in BLOCKED reason", () => {
     const result = computeTrustLevel({
       ...makeLowRiskInput(),
-      agent: "canon-researcher",
+      agent: "researcher",
       agentCanWrite: false,
     });
     expect(result.level).toBe("BLOCKED");
-    expect(result.reason).toContain("canon-researcher");
+    expect(result.reason).toContain("researcher");
   });
 
   it("BLOCKED check is gated after KG checks — stale KG returns LOW not BLOCKED", () => {
@@ -268,18 +268,18 @@ describe("buildScopeMetrics", () => {
 });
 
 // ---------------------------------------------------------------------------
-// canon-scribe: Edit counts as write capability (not blocked)
+// scribe: Edit counts as write capability (not blocked)
 // ---------------------------------------------------------------------------
 
-describe("canon-scribe: Edit capability counts as write", () => {
+describe("scribe: Edit capability counts as write", () => {
   it("when agentCanWrite is true (caller resolved Edit as write capability), trust computation proceeds past BLOCKED gate", () => {
-    // canon-scribe has Edit in its profile but NOT Write.
+    // scribe has Edit in its profile but NOT Write.
     // The caller (inject-coordination.ts) is responsible for resolving
     // agentCanWrite based on whether Edit or Write appears in the agent's profile.
     // Here we verify that agentCanWrite: true with a low-risk scope yields HIGH,
     // confirming that the trust function correctly uses the caller-provided flag.
     const result = computeTrustLevel({
-      agent: "canon-scribe",
+      agent: "scribe",
       agentCanWrite: true, // Edit counts as write capability per plan spec
       kgFreshnessMs: 60_000,
       scopeMetrics: {

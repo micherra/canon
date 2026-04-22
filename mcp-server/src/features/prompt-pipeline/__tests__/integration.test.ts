@@ -131,7 +131,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement the task." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -167,7 +167,7 @@ describe("integration — single state produces correct prompt structure", () =>
 
     expect(result.prompts).toHaveLength(1);
     expect(result.state_type).toBe("single");
-    expect(result.prompts[0].agent).toBe("canon-implementor");
+    expect(result.prompts[0].agent).toBe("implementor");
     expect(result.skip_reason).toBeUndefined();
   });
 
@@ -221,7 +221,7 @@ describe("integration — wave state produces N prompts with items substituted",
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -246,7 +246,7 @@ describe("integration — wave state produces N prompts with items substituted",
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -267,7 +267,7 @@ describe("integration — wave state produces N prompts with items substituted",
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -378,7 +378,7 @@ describe("integration — inject_context content is escaped (not expanded as var
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [{ from: "state", name: "context_data" }] as unknown as never[],
           type: "single",
         },
@@ -426,7 +426,7 @@ describe("integration — inject_context content is escaped (not expanded as var
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [{ from: "state", name: "context_data" }] as unknown as never[],
           type: "single",
         },
@@ -464,7 +464,7 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -492,7 +492,7 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -518,7 +518,7 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });

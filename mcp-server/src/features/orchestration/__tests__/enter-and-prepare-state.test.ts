@@ -113,7 +113,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement ${task}." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -198,7 +198,7 @@ describe("enterAndPrepareState", () => {
         states: {
           done: { type: "terminal" },
           implement: {
-            agent: "canon-implementor",
+            agent: "implementor",
             skip_when: "no_contract_changes",
             type: "single",
           },
@@ -232,7 +232,7 @@ describe("enterAndPrepareState", () => {
         states: {
           done: { type: "terminal" },
           implement: {
-            agent: "canon-implementor",
+            agent: "implementor",
             skip_when: "no_contract_changes",
             type: "single",
           },
@@ -274,7 +274,7 @@ describe("enterAndPrepareState", () => {
       expect(result.can_enter).toBe(true);
       expect(result.state_type).toBe("single");
       expect(result.prompts).toHaveLength(1);
-      expect(result.prompts[0].agent).toBe("canon-implementor");
+      expect(result.prompts[0].agent).toBe("implementor");
       expect(result.prompts[0].prompt).toContain("build the widget");
     });
 
@@ -331,7 +331,7 @@ describe("enterAndPrepareState", () => {
       const flow = makeFlow({
         states: {
           done: { type: "terminal" },
-          implement: { agent: "canon-implementor", max_iterations: 5, type: "single" },
+          implement: { agent: "implementor", max_iterations: 5, type: "single" },
         },
       });
 
@@ -409,7 +409,7 @@ describe("enterAndPrepareState", () => {
         spawn_instructions: { review: "Review the code for ${task}." },
         states: {
           done: { type: "terminal" },
-          review: { agents: ["canon-reviewer", "canon-security"], type: "parallel" },
+          review: { agents: ["reviewer", "security"], type: "parallel" },
         },
       };
 
@@ -423,8 +423,8 @@ describe("enterAndPrepareState", () => {
 
       expect(result.state_type).toBe("parallel");
       expect(result.prompts).toHaveLength(2);
-      expect(result.prompts[0].agent).toBe("canon-reviewer");
-      expect(result.prompts[1].agent).toBe("canon-security");
+      expect(result.prompts[0].agent).toBe("reviewer");
+      expect(result.prompts[1].agent).toBe("security");
     });
   });
 

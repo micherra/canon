@@ -22,11 +22,11 @@ vi.mock("@domains/messages/messages.ts", () => ({
 
 vi.mock("../model/tool-profiles.ts", () => ({
   AGENT_TOOL_PROFILES: {
-    "canon-implementor": {
+    implementor: {
       allowed: ["Read", "Edit", "Write"],
       disallowed: [],
     },
-    "canon-researcher": {
+    researcher: {
       allowed: ["Read", "Grep", "Glob"],
       disallowed: ["Edit", "Write"],
     },
@@ -96,7 +96,7 @@ import { injectCoordination } from "../services/inject-coordination.ts";
 
 function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry {
   return {
-    agent: "canon-implementor",
+    agent: "implementor",
     prompt: "Do the work",
     template_paths: [],
     ...overrides,
@@ -127,7 +127,7 @@ function makeCtx(
           spawn_instructions: { implement: "Do the thing" },
           states: {
             done: { type: "terminal" },
-            implement: { agent: "canon-implementor", type: "single" },
+            implement: { agent: "implementor", type: "single" },
           },
         } as ResolvedFlow),
       state_id: state_id ?? "implement",
@@ -140,7 +140,7 @@ function makeCtx(
     mergedVariables: {},
     prompts: [makeEntry()],
     rawInstruction: "Do the thing",
-    state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+    state: { agent: "implementor", type: "single" } as StateDefinition,
     warnings: [],
     ...rest,
   };
@@ -158,7 +158,7 @@ describe("injectCoordination — role substitution", () => {
     const ctx = makeCtx({
       prompts: [makeEntry({ prompt: "Implement the ${role} layer" })],
       role: "frontend",
-      state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+      state: { agent: "implementor", type: "single" } as StateDefinition,
     });
 
     const result = await injectCoordination(ctx);
@@ -174,7 +174,7 @@ describe("injectCoordination — role substitution", () => {
         makeEntry({ prompt: "Review cluster 2 as ${role}" }),
       ],
       role: "tech-lead",
-      state: { agent: "canon-reviewer", type: "single" } as StateDefinition,
+      state: { agent: "reviewer", type: "single" } as StateDefinition,
     });
 
     const result = await injectCoordination(ctx);
@@ -189,7 +189,7 @@ describe("injectCoordination — role substitution", () => {
     const ctx = makeCtx({
       prompts: [makeEntry({ prompt: "Implement the ${role} layer" })],
       role: "frontend",
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      state: { agent: "implementor", type: "wave" } as StateDefinition,
     });
 
     const result = await injectCoordination(ctx);
@@ -203,7 +203,7 @@ describe("injectCoordination — role substitution", () => {
     const ctx = makeCtx({
       prompts: [makeEntry({ prompt: "Implement the ${role} layer" })],
       role: undefined,
-      state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+      state: { agent: "implementor", type: "single" } as StateDefinition,
     });
 
     const result = await injectCoordination(ctx);

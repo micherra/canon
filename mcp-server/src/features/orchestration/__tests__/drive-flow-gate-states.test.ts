@@ -165,7 +165,7 @@ describe("gate-only state: all gates pass", () => {
           type: "single",
         },
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -193,7 +193,7 @@ describe("gate-only state: all gates pass", () => {
         makeEnterResult({
           prompts: [
             {
-              agent: "canon:canon-reviewer",
+              agent: "canon:reviewer",
               prompt: "Review code",
               role: "main",
               template_paths: [],
@@ -212,7 +212,7 @@ describe("gate-only state: all gates pass", () => {
       expect(result.action).toBe("spawn");
       if (result.action === "spawn") {
         expect(result.requests).toHaveLength(1);
-        expect(result.requests[0].agent_type).toBe("canon:canon-reviewer");
+        expect(result.requests[0].agent_type).toBe("canon:reviewer");
       }
     }
     // reportResult should have been called with gate_results and status_keyword "done"
@@ -246,7 +246,7 @@ describe("gate-only state: gate fails", () => {
           type: "single",
         },
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -312,7 +312,7 @@ describe("gate-only state: no gates resolved", () => {
           type: "single",
         },
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -371,7 +371,7 @@ describe("gate-only state: discovered gates from prior states", () => {
           type: "single",
         },
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -398,7 +398,7 @@ describe("gate-only state: discovered gates from prior states", () => {
         makeEnterResult({
           prompts: [
             {
-              agent: "canon:canon-reviewer",
+              agent: "canon:reviewer",
               prompt: "Review code",
               role: "main",
               template_paths: [],
@@ -442,7 +442,7 @@ describe("normal single state with agent and gates", () => {
       },
       states: {
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           gates: ["npm test"],
           transitions: { done: "terminal" },
           type: "single",
@@ -458,7 +458,7 @@ describe("normal single state with agent and gates", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -475,7 +475,7 @@ describe("normal single state with agent and gates", () => {
       // Should spawn the implementor, not run gates
       expect(result.action).toBe("spawn");
       if (result.action === "spawn") {
-        expect(result.requests[0].agent_type).toBe("canon:canon-implementor");
+        expect(result.requests[0].agent_type).toBe("canon:implementor");
       }
     }
     // runGates should NOT have been called for agent states
@@ -499,7 +499,7 @@ describe("normal single state without gates", () => {
       },
       states: {
         research: {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -513,7 +513,7 @@ describe("normal single state without gates", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-researcher", prompt: "Research", role: "main", template_paths: [] },
+          { agent: "canon:researcher", prompt: "Research", role: "main", template_paths: [] },
         ],
         state_type: "single",
       }),
@@ -525,7 +525,7 @@ describe("normal single state without gates", () => {
     if (result.ok) {
       expect(result.action).toBe("spawn");
       if (result.action === "spawn") {
-        expect(result.requests[0].agent_type).toBe("canon:canon-researcher");
+        expect(result.requests[0].agent_type).toBe("canon:researcher");
       }
     }
     expect(vi.mocked(runGates)).not.toHaveBeenCalled();

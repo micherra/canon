@@ -88,13 +88,13 @@ describe("syncBoardToStore", () => {
     const board = makeBoard({
       concerns: [
         {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           message: "test concern 1",
           state_id: "research",
           timestamp: "2026-01-01T00:00:00.000Z",
         },
         {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           message: "test concern 2",
           state_id: "implement",
           timestamp: "2026-01-01T00:00:00.000Z",
@@ -106,13 +106,13 @@ describe("syncBoardToStore", () => {
     const exec = store.getExecution();
     expect(exec?.concerns).toEqual([
       {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         message: "test concern 1",
         state_id: "research",
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         message: "test concern 2",
         state_id: "implement",
         timestamp: "2026-01-01T00:00:00.000Z",

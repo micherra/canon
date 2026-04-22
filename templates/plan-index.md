@@ -1,8 +1,8 @@
 ---
 template: plan-index
 description: Index of all task plans for a build
-used-by: [canon-architect]
-read-by: [canon-orchestrator, canon-implementor]
+used-by: [architect]
+read-by: [canon-orchestrator, implementor]
 output-path: ${WORKSPACE}/plans/${slug}/INDEX.md
 ---
 

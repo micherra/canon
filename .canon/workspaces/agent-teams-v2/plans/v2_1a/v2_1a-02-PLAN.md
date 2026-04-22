@@ -17,7 +17,7 @@ domains:
 
 ### Action
 
-Write `skills/canon/references/runbook-synthesis.md` defining the mechanical synthesis contract `canon-planner` follows to compose a plan-specific runbook from the canonical step vocabulary (v2_1a-00).
+Write `skills/canon/references/runbook-synthesis.md` defining the mechanical synthesis contract `planner` follows to compose a plan-specific runbook from the canonical step vocabulary (v2_1a-00).
 
 **The skill must specify:**
 
@@ -77,7 +77,7 @@ Write `skills/canon/references/runbook-synthesis.md` defining the mechanical syn
 No existing test infrastructure for skills/*.md markdown. Validation is by:
 
 - Manual read against the 7-contract-element checklist (step schema 9 fields, MUST / MAY / MUST NOT ≥ 3 items each, iteration loop doc, confidence per-signal-only wording)
-- Integration test (can live in existing `mcp-server/src/features/orchestration/__tests__/` following the repo's test-path convention): end-to-end spawn of canon-planner against a representative fast-path-equivalent request; synthesize runbook; assert every MUST is satisfied; assert mandatory tail present. Belongs to v2_1a-08 validation but can be developed incrementally during this task.
+- Integration test (can live in existing `mcp-server/src/features/orchestration/__tests__/` following the repo's test-path convention): end-to-end spawn of planner against a representative fast-path-equivalent request; synthesize runbook; assert every MUST is satisfied; assert mandatory tail present. Belongs to v2_1a-08 validation but can be developed incrementally during this task.
 
 ### Verify
 
@@ -93,4 +93,4 @@ No existing test infrastructure for skills/*.md markdown. Validation is by:
 - Tests pass
 - File is registered in the skills manifest
 - No duplication with `planner-brief.md` (synthesis is mechanical; brief is strategic)
-- canon-planner agent frontmatter (v2_1a-03) references this skill
+- planner agent frontmatter (v2_1a-03) references this skill

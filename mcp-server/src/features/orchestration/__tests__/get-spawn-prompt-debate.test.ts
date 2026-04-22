@@ -28,7 +28,7 @@ function makeTmpDir(): string {
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     debate: {
-      composition: ["canon-researcher", "canon-architect"],
+      composition: ["researcher", "architect"],
       continue_to_build: true,
       convergence_check_after: 3,
       hitl_checkpoint: true,
@@ -45,7 +45,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     states: {
       build: { type: "terminal" },
       research: {
-        agent: "canon-researcher",
+        agent: "researcher",
         transitions: { done: "build" },
         type: "single",
       },
@@ -87,13 +87,13 @@ describe("getSpawnPrompt — debate expansion", () => {
     await writeMessage(
       workspace,
       "debate-round-1",
-      "round-1-team-a-canon-researcher",
+      "round-1-team-a-researcher",
       "Use event sourcing.",
     );
     await writeMessage(
       workspace,
       "debate-round-1",
-      "round-1-team-b-canon-architect",
+      "round-1-team-b-architect",
       "Prefer CRUD plus audit.",
     );
 

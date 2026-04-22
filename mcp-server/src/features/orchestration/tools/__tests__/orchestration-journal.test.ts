@@ -51,7 +51,7 @@ describe("logStep", () => {
 
   test("updates existing step status from planned → started → completed", async () => {
     await logStep({
-      agent_type: "canon-engineer",
+      agent_type: "engineer",
       status: "planned",
       step_id: "step-a",
       workspace,
@@ -62,7 +62,7 @@ describe("logStep", () => {
     const journal = await readJournalFile(workspace);
     expect(journal.steps).toHaveLength(1);
     expect(journal.steps[0]?.status).toBe("completed");
-    expect(journal.steps[0]?.agent_type).toBe("canon-engineer");
+    expect(journal.steps[0]?.agent_type).toBe("engineer");
   });
 
   test("adds started_at on started and completed_at on completed", async () => {

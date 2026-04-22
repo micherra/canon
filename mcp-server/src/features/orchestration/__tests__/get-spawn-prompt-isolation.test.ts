@@ -62,7 +62,7 @@ function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     states: {
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         type: "wave",
       },
     },
@@ -80,7 +80,7 @@ function makeSingleFlow(): ResolvedFlow {
     },
     states: {
       research: {
-        agent: "canon-researcher",
+        agent: "researcher",
         type: "single",
       },
     },
@@ -97,7 +97,7 @@ function makeParallelPerFlow(): ResolvedFlow {
     },
     states: {
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         type: "parallel-per",
       },
     },
@@ -119,7 +119,7 @@ describe("getSpawnPrompt — wave state entries", () => {
 
     expect(result.prompts).toHaveLength(3);
     for (const entry of result.prompts) {
-      expect(entry.agent).toBe("canon-implementor");
+      expect(entry.agent).toBe("implementor");
       expect(entry.prompt).toBeDefined();
     }
   });
@@ -184,7 +184,7 @@ describe("getSpawnPrompt — single state entries", () => {
     });
 
     expect(result.prompts).toHaveLength(1);
-    expect(result.prompts[0].agent).toBe("canon-researcher");
+    expect(result.prompts[0].agent).toBe("researcher");
   });
 
   it("single state entries do not have an isolation field", async () => {
@@ -217,7 +217,7 @@ describe("getSpawnPrompt — parallel-per state entries", () => {
 
     expect(result.prompts).toHaveLength(2);
     for (const entry of result.prompts) {
-      expect(entry.agent).toBe("canon-implementor");
+      expect(entry.agent).toBe("implementor");
     }
   });
 

@@ -6,14 +6,14 @@ entry: ship
 states:
   ship:
     type: single
-    agent: canon-shipper
+    agent: shipper
     transitions:
       done: learn
       blocked: hitl
 
   learn:
     type: single
-    agent: canon-learner
+    agent: learner
     skip_when: learn_gate_not_passed
     transitions:
       done: done

@@ -209,7 +209,7 @@ describe("debate", () => {
     let workspace: string;
 
     const config: DebateConfig = {
-      composition: ["canon-researcher"],
+      composition: ["researcher"],
       continue_to_build: true,
       convergence_check_after: 3,
       hitl_checkpoint: true,
@@ -235,18 +235,8 @@ describe("debate", () => {
     });
 
     it("increments next_round as rounds are populated", async () => {
-      await writeMessage(
-        workspace,
-        "debate-round-1",
-        "round-1-team-a-canon-researcher",
-        "Position A.",
-      );
-      await writeMessage(
-        workspace,
-        "debate-round-1",
-        "round-1-team-b-canon-researcher",
-        "Position B.",
-      );
+      await writeMessage(workspace, "debate-round-1", "round-1-team-a-researcher", "Position A.");
+      await writeMessage(workspace, "debate-round-1", "round-1-team-b-researcher", "Position B.");
 
       const progress = await inspectDebateProgress(workspace, config);
       expect(progress.last_completed_round).toBe(1);
@@ -270,7 +260,7 @@ describe("debate", () => {
       await writeMessage(
         workspace,
         "debate-round-1",
-        "round-1-team-a-canon-researcher",
+        "round-1-team-a-researcher",
         "We prefer event sourcing.",
       );
 
@@ -312,7 +302,7 @@ describe("debate", () => {
   describe("buildDebatePrompt", () => {
     it("includes the base prompt", () => {
       const result = buildDebatePrompt("Design the auth system.", {
-        agent: "canon-researcher",
+        agent: "researcher",
         maxRounds: 5,
         otherTeamLabels: ["Team B", "Team C"],
         roundNumber: 1,
@@ -324,7 +314,7 @@ describe("debate", () => {
 
     it("includes round framing for the given round", () => {
       const result = buildDebatePrompt("Design the auth system.", {
-        agent: "canon-researcher",
+        agent: "researcher",
         maxRounds: 5,
         otherTeamLabels: ["Team B"],
         roundNumber: 1,
@@ -337,7 +327,7 @@ describe("debate", () => {
 
     it("includes post_message coordination instructions with correct channel", () => {
       const result = buildDebatePrompt("Brief.", {
-        agent: "canon-architect",
+        agent: "architect",
         maxRounds: 5,
         otherTeamLabels: ["Team A"],
         roundNumber: 2,
@@ -351,7 +341,7 @@ describe("debate", () => {
     it("includes prior transcript when provided", () => {
       const transcript = "### Round 1\n\nTeam A: Use event sourcing.";
       const result = buildDebatePrompt("Brief.", {
-        agent: "canon-architect",
+        agent: "architect",
         maxRounds: 5,
         otherTeamLabels: ["Team A"],
         roundNumber: 2,
@@ -365,7 +355,7 @@ describe("debate", () => {
 
     it("omits transcript section when not provided", () => {
       const result = buildDebatePrompt("Brief.", {
-        agent: "canon-researcher",
+        agent: "researcher",
         maxRounds: 5,
         otherTeamLabels: ["Team B"],
         roundNumber: 1,

@@ -34,7 +34,7 @@ includes:
 states:
   analyze:
     type: single
-    agent: canon-researcher
+    agent: researcher
     role: refactor-scope
     template: research-finding
     transitions:
@@ -43,7 +43,7 @@ states:
 
   implement:
     type: wave
-    agent: canon-implementor
+    agent: implementor
     gate: test-suite
     template: implementation-log
     inject_context:

@@ -35,7 +35,7 @@ The shift:
 |---|----------------|------------------------------|
 | Standing artifacts | 5 runbook files, 4 inline-dispatch patterns in CLAUDE.md | 1 vocabulary + 2 skills (brief + synthesis) + lifecycle persistence |
 | Flow-matches-work | Flow labels approximate; `skip_when` handles variants | Runbook tailored per-request via planner-user iteration |
-| Intent classification | 9-row table in CLAUDE.md | Every build request → `canon-planner` → iterate-until-approved |
+| Intent classification | 9-row table in CLAUDE.md | Every build request → `planner` → iterate-until-approved |
 | Authoring burden | 5 files × N future changes = 5N edits | 1 vocabulary update per step addition; learner proposes skill refinements |
 | **Does Canon improve over time?** | Only via manual principle edits | **Yes — observation → pattern → proposal → refinement across the whole stack** |
 
@@ -49,7 +49,7 @@ Explicit decisions made in the PR #115 review thread, in order:
 |---|----------|-----------|
 | 1 | Brainstorm vocabulary broadly before capping | Avoid premature abstraction; see what Canon actually does |
 | 2 | `cause`-style parameterization is first-class, broader than just `fix` | Generalizes to `skills:` field on any step |
-| 3 | `canon-planner` does runbook synthesis via a dedicated skill, not baked into the agent body | Portable knowledge; synthesis can be loaded by other agents (learner, validators) |
+| 3 | `planner` does runbook synthesis via a dedicated skill, not baked into the agent body | Portable knowledge; synthesis can be loaded by other agents (learner, validators) |
 | 4 | Amend `docs/agent-teams-migration-plan-v2.md` as v2.1, not a separate ADR | Keep the plan authoritative; avoid ADR-vs-plan split-brain |
 | 5 | Mark `phase1-01..04` plans abandoned; delete any runbook files they would have produced | None exist yet — only the template + README on this PR |
 | 6 | Two-skill split: `planner-brief.md` (strategic) + `runbook-synthesis.md` (mechanical) | Different mental modes; cleaner to reason about and evolve |
@@ -85,7 +85,7 @@ Static runbooks serve principle refinement fine — the corpus still captures re
 
 ### 3.2 Why the learner is the engine
 
-The `canon-learner` agent is the orchestrator of this mechanism. Today it mostly produces principle and convention suggestions. Under v2.1, its role expands: it analyzes the full corpus, detects patterns, and emits proposals targeting *any* Canon artifact.
+The `learner` agent is the orchestrator of this mechanism. Today it mostly produces principle and convention suggestions. Under v2.1, its role expands: it analyzes the full corpus, detects patterns, and emits proposals targeting *any* Canon artifact.
 
 One agent, many query types, many output targets. Same learner, richer analyses.
 
@@ -286,7 +286,7 @@ Concrete *illustrative* examples of query → pattern → proposal flows the lea
 
 **Hypothetical result (fabricated):** 40% reversal rate vs. 8% when `options_considered ≥ 3`.
 
-**Proposal (conditional):** update `canon-architect.md` or create `agent-explore-alternatives` rule.
+**Proposal (conditional):** update `architect.md` or create `agent-explore-alternatives` rule.
 
 **Depends on:** `options_considered` on design-decision frontmatter; decision-reversal detection across flows.
 
@@ -356,21 +356,21 @@ The canonical set of step IDs Canon knows. Adding a new ID is a versioned change
 
 | Step ID | Default agent | Dispatch | Default HITL | Purpose |
 |---------|---------------|----------|--------------|---------|
-| `research` | canon-researcher | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift). Absorbs legacy `scan`. |
-| `design` | canon-architect | subagent | approval | Plan index + design decisions |
-| `spike` | canon-engineer | subagent | none | Time-boxed exploratory prototype; produces findings, not shipped code |
-| `implement` | canon-engineer | subagent or team | none | Build code with TDD/BDD. `team` when wave-parallel. Absorbs legacy `write-tests` via TDD. |
-| `migrate` | canon-engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact) |
-| `verify` | canon-engineer | subagent | on_failure | Run existing tests / gates post-change |
-| `test` | canon-tester | subagent | none | Net-new integration tests; coverage-gap fills |
-| `benchmark` | canon-tester | subagent | on_failure | Performance verification against baseline |
-| `security` | canon-security | subagent | none | Security assessment |
-| `review` | canon-reviewer | subagent | checkpoint | Principle compliance (absorbs legacy `audit` via scope) |
-| `fix` | canon-engineer | subagent | on_failure | Fix mode. Required: `cause: test-failure \| security \| review \| verify` |
+| `research` | researcher | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift). Absorbs legacy `scan`. |
+| `design` | architect | subagent | approval | Plan index + design decisions |
+| `spike` | engineer | subagent | none | Time-boxed exploratory prototype; produces findings, not shipped code |
+| `implement` | engineer | subagent or team | none | Build code with TDD/BDD. `team` when wave-parallel. Absorbs legacy `write-tests` via TDD. |
+| `migrate` | engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact) |
+| `verify` | engineer | subagent | on_failure | Run existing tests / gates post-change |
+| `test` | tester | subagent | none | Net-new integration tests; coverage-gap fills |
+| `benchmark` | tester | subagent | on_failure | Performance verification against baseline |
+| `security` | security | subagent | none | Security assessment |
+| `review` | reviewer | subagent | checkpoint | Principle compliance (absorbs legacy `audit` via scope) |
+| `fix` | engineer | subagent | on_failure | Fix mode. Required: `cause: test-failure \| security \| review \| verify` |
 | `pre-launch-check` | null | n/a | on_failure | Gate-only — lead runs discovered checks via Bash |
-| `ship` | canon-shipper | subagent | on_failure | PR description synthesis (absorbs legacy `release` unless distinct release flow emerges) |
-| `context-sync` | canon-scribe | subagent | none | Doc sync — **mandatory tail** |
-| `learn` | canon-learner | subagent | none | Pattern analysis — **mandatory tail** |
+| `ship` | shipper | subagent | on_failure | PR description synthesis (absorbs legacy `release` unless distinct release flow emerges) |
+| `context-sync` | scribe | subagent | none | Doc sync — **mandatory tail** |
+| `learn` | learner | subagent | none | Pattern analysis — **mandatory tail** |
 
 Total: **15 entries** (13 functional + 2 mandatory tail).
 
@@ -416,7 +416,7 @@ General-purpose: any step can declare domain primers to load from `skills/canon/
 
 ```yaml
 - id: implement
-  agent: canon-engineer
+  agent: engineer
   dispatch: team
   skills:
     - backend-api
@@ -439,7 +439,7 @@ Used on `fix` (and potentially future re-work steps). Carries two signals:
 
 ```yaml
 - id: fix
-  agent: canon-engineer
+  agent: engineer
   cause: security                 # analytic + hints at authentication-security skill
   skills:
     - authentication-security     # explicit additional primer
@@ -613,7 +613,7 @@ All under the `lifecycle_` prefix in `drift-db.sqlite`.
 | `id` | INTEGER PK | |
 | `workspace_id` | TEXT | Links to existing `FlowRunEntry.workspace_id` |
 | `slug` | TEXT | Workspace slug |
-| `synthesizer_agent` | TEXT | Usually `canon-planner` |
+| `synthesizer_agent` | TEXT | Usually `planner` |
 | `vocabulary_version` | TEXT | Version of `runbook-vocabulary.md` this was synthesized against |
 | `synthesis_skill_version` | TEXT | Version of `runbook-synthesis.md` used |
 | `stage` | TEXT | `proposed` / `approved` / `regenerated` — `regenerated` rows are emitted when a resume across vocab major versions triggers re-synthesis (per §8.2 + §15 resolved #3); they reference the original via `original_runbook_id` |
@@ -921,7 +921,7 @@ These specifications live in `runbook-synthesis.md` (the skill file), not in the
 
 ## 13. Phase rollout
 
-> **⚠️ HARD PRECONDITION (Gate A): v2 Phase 1 exit criteria must be met before any v2.1 work begins.** Specifically: `canon-planner` and `canon-engineer` agent definitions must exist (currently they don't — only `canon-implementor` and `canon-fixer` exist), must register with the Canon MCP server, and must be validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`. This is not a soft guideline. Without these agents, v2.1 has nothing to build on. See §16 Gate A and §17 entry gates for the full statement.
+> **⚠️ HARD PRECONDITION (Gate A): v2 Phase 1 exit criteria must be met before any v2.1 work begins.** Specifically: `planner` and `engineer` agent definitions must exist (currently they don't — only `implementor` and `fixer` exist), must register with the Canon MCP server, and must be validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`. This is not a soft guideline. Without these agents, v2.1 has nothing to build on. See §16 Gate A and §17 entry gates for the full statement.
 
 The release-level phasing for v2.1 lives in §17 (v2.1a / v2.1b / v2.2 carve-out — authoritative). This section maps that release phasing onto the v2 plan's Phase 1 / 2 / 3 structure and clarifies what's required from v2 Phase 1 as a precondition.
 
@@ -932,7 +932,7 @@ The release-level phasing for v2.1 lives in §17 (v2.1a / v2.1b / v2.2 carve-out
 | Phase | Content |
 |-------|---------|
 | v2 Phase 1 (already spec'd, additive-only) | Journal, hooks, agent def updates, skills registration. Unchanged from v2 plan. **Hard precondition for any v2.1 work — see §13 callout above.** |
-| **v2.1a** (per §17.1) | `canon-planner` synthesis rewrite (brief + synthesis skills, iterate-until-approved loop), `runbook-vocabulary.md`, `runbook-synthesis.md`, `planner-brief.md`. No persistence work, no enforcement hooks. |
+| **v2.1a** (per §17.1) | `planner` synthesis rewrite (brief + synthesis skills, iterate-until-approved loop), `runbook-vocabulary.md`, `runbook-synthesis.md`, `planner-brief.md`. No persistence work, no enforcement hooks. |
 | **v2.1b** (per §17.2) | Minimum lifecycle persistence: `lifecycle_workspace_snapshots` (one table) + `snapshot_workspace` MCP tool + three structured tags (`principle_id` on review findings, `cause`/`root_cause_tag` on fix summaries, `justified_deviations[]` on impl summaries) + one learner analysis dimension (principle refinement from §6.1). One coordinated schema migration + template + agent-prompt pass. |
 | **v2.2** (per §17.3) | Surface expansion: additional `lifecycle_*` tables, additional structured tags, embeddings, `query_workspace_history` MCP tool, additional learner analyses beyond v2.1b's principle refinement. Each expansion gated on v2.1b evidence. |
 | Phase 2 (validation) | Real-data validation runs across the v2.1a/b corpus. Observational — no autonomous thresholds, just calibration and correlation. Architect change #4's real end-to-end trace gate applies here. |
@@ -951,13 +951,13 @@ The split per §17 means **v2.1a alone is a workable shipping milestone** if v2.
 | phase1-05 (skills registration) | **Stays — required v2 Phase 1 deliverable** | Domain skills + agent rules registered under `skills/canon/references/`. v2.1's synthesis and observation tagging both depend on this. |
 | phase1-06 (orchestration journal) | **Stays — required v2 Phase 1 deliverable** | Journal's `domain_skills_loaded`, outcome fields, and HITL events feed the v2.1b lifecycle substrate. |
 | phase1-07 (hooks) | **Stays — required v2 Phase 1 deliverable** | `completion-verify.sh` will be extended in v2.1b to call `snapshot_workspace`. |
-| **phase1-08 (agent definitions)** | **Stays — REQUIRED v2 Phase 1 deliverable; this is Gate A** | Creates `canon-planner` and `canon-engineer` agent definitions. **v2.1 cannot start without this.** Currently `canon-implementor` and `canon-fixer` exist; phase1-08 merges them into `canon-engineer` and adds the new `canon-planner`. |
+| **phase1-08 (agent definitions)** | **Stays — REQUIRED v2 Phase 1 deliverable; this is Gate A** | Creates `planner` and `engineer` agent definitions. **v2.1 cannot start without this.** Currently `implementor` and `fixer` exist; phase1-08 merges them into `engineer` and adds the new `planner`. |
 | phase1-09 (CLAUDE.md orchestration section) | **Stays — required v2 Phase 1 deliverable** | Becomes simpler under v2.1 (no 9-flow intent table, just route to planner) but the section itself is still required. |
 | phase1-10 (validation) | **Refactored** | Validates vocabulary + synthesis behavior, not 5 static files. Runs against v2.1a deliverables. |
 
 **The key clarification:** marking phase1-01..04 abandoned does NOT mean abandoning all of v2 Phase 1. **phase1-05 through phase1-10 stay as v2 Phase 1 deliverables**, and **phase1-08 in particular is the agent-creation work that v2.1 absolutely depends on** (Gate A). v2.1 builds *on top of* v2 Phase 1; it doesn't replace it.
 
-v2.1a's new task work — `runbook-vocabulary.md` + `runbook-synthesis.md` + `planner-brief.md` + `canon-planner` synthesis-rewrite prompt — is *additional* to phase1-05..10, not a substitute.
+v2.1a's new task work — `runbook-vocabulary.md` + `runbook-synthesis.md` + `planner-brief.md` + `planner` synthesis-rewrite prompt — is *additional* to phase1-05..10, not a substitute.
 
 ## 14. Migration plan amendments — v2.1 delta against v2
 
@@ -966,8 +966,8 @@ Sections of `docs/agent-teams-migration-plan-v2.md` that need amendment for v2.1
 | Section | Change |
 |---------|--------|
 | §1 "What v1 got right" | Add: "Canon's learning loop is the durable quality-up mechanism; synthesis is what makes plan quality learnable alongside principles." |
-| §2.2 "What stays" (Runbooks row) | Replace "Lightweight playbooks describing recommended step sequences" with "Canonical step vocabulary + synthesis skill. Runbooks synthesized per plan by `canon-planner` via iterate-until-approved loop." |
-| §2.3 "Pre-build gate (canon-planner)" | Expand planner responsibilities: emits both `planning-brief.md` AND `runbook.md` per flow; iterates with user until approval. Two-skill split (`planner-brief.md` + `runbook-synthesis.md`); agent body shrinks to skill loading + output contract. |
+| §2.2 "What stays" (Runbooks row) | Replace "Lightweight playbooks describing recommended step sequences" with "Canonical step vocabulary + synthesis skill. Runbooks synthesized per plan by `planner` via iterate-until-approved loop." |
+| §2.3 "Pre-build gate (planner)" | Expand planner responsibilities: emits both `planning-brief.md` AND `runbook.md` per flow; iterates with user until approval. Two-skill split (`planner-brief.md` + `runbook-synthesis.md`); agent body shrinks to skill loading + output contract. |
 | §2.4 "How Claude orchestrates a Canon flow" | Update example: planner proposes runbook, iterates with user, user approves; lead executes approved runbook with lifecycle capture. |
 | §2.5 (duplicate #1 — Dispatch framework) | Unchanged — `dispatch: subagent | team` stays the same |
 | §2.5 (duplicate #2 — Self-serve context) | Expand: agents also emit structured tags (§5) for learning-system observations |
@@ -1032,16 +1032,16 @@ Tracked as the work list for converging toward v2.1. Each is a concrete modifica
 4. **Require one real end-to-end trace before ratification.** Hand-run the §6.1 principle-refinement analysis against Canon's *existing* data (`.canon/drift-db.sqlite`, `.canon/learning.jsonl`, git log) and produce one actually-acceptable refinement proposal. *Open — runtime work only; gate documented in §16 Gate B. Second-round schema inspection confirmed Gate B is runnable against today's drift-db — `violations.principle_id` has been indexed since v1. No v2.1b infrastructure prerequisite; gate is clearable independently of v2.1a/b delivery.*
 5. ✅ **Specify the user-approval affordance** (§10.4 and §14 row on §2.3). *Done — §10.5 resolves: conversational mechanism; lead interprets natural-language signals; ambiguity triggers clarification; lightweight proposals for trivial work (thin-gate-no-skip) replace autodispatched fast-path; NO confidence-based skip; all iterations persisted with execution only against stage:approved. §11.3 intro updated to explicitly state every iteration gets a row.*
 6. ✅ **Replace §4's 10-target refinement matrix** with a reduced matrix. *Done — §4 now has 5 in-scope targets (principles, conventions, synthesis skill, planning brief skill, templates) with phase markers, 4 deferred to v2.2+ (domain skills, agent defs, agent rules, vocabulary), and 1 cut entirely (knowledge graph priors). Per-target rationale in §4.1–§4.3.*
-7. ✅ **Add hard precondition to v2.1a/b:** v2 Phase 1 exit criteria met — `canon-planner` and `canon-engineer` agent definitions exist, register, and have been validated in ≥ 3 successful runs under the feature flag. No v2.1 work before that. *Done — prominent Gate A callout at top of §13, retired "Phase 1.5" terminology in §11.8 in favor of §17's v2.1a/b/v2.2 framing, §13.2 clarifies that phase1-05..10 stay as required v2 Phase 1 deliverables (especially phase1-08 which creates the agent definitions).*
+7. ✅ **Add hard precondition to v2.1a/b:** v2 Phase 1 exit criteria met — `planner` and `engineer` agent definitions exist, register, and have been validated in ≥ 3 successful runs under the feature flag. No v2.1 work before that. *Done — prominent Gate A callout at top of §13, retired "Phase 1.5" terminology in §11.8 in favor of §17's v2.1a/b/v2.2 framing, §13.2 clarifies that phase1-05..10 stay as required v2 Phase 1 deliverables (especially phase1-08 which creates the agent definitions).*
 8. ✅ **Commit to a storage decision with migration math.** *Done — adopted option (c) per user direction: v2.1b ships one table (`lifecycle_workspace_snapshots`) with concrete SQL migration DDL against `drift-schema.ts` (§11.1). Full §11.3 schema deferred to v2.2, which explicitly revisits the drift-db-vs-JSONL-first decision based on observed v2.1b data volume. §11.3 and §11.4 have per-element v2.1b/v2.2 phase markers so scope is unambiguous.*
 9. ✅ **Promote §15 open questions #3 (vocabulary versioning across resume), #7 (observation-schema evolution), #8 (HITL event categorization) to blocking decisions.** *Done — resolutions captured in §8.2 + §11.3 + §5.6; §15 reorganized into Open + Resolved subsections.*
 10. ✅ **Remove or unambiguously mark the illustrative numbers in §6 as fabricated.** *Done — top-of-section warning callout + per-analysis "Hypothetical result (fabricated)" markers.*
 
 ### Gates before ratification
 
-**Gate A is the substantive blocker.** Gate B was confirmed runnable against today's schema (see below); Gate C is editorial (items #2, #3, #6 are done). Gate A depends on v2 Phase 1 work not yet complete — the canon-planner and canon-engineer agent definitions don't exist yet (only canon-implementor and canon-fixer). Until v2 Phase 1 exits (phase1-08 ships the agents; phase1-09 lands CLAUDE.md orchestration; ≥ 3 validated runs under `CANON_AGENT_TEAMS_MODE=on`), v2.1 cannot start regardless of how polished this proposal gets. **The gates in priority order:**
+**Gate A is the substantive blocker.** Gate B was confirmed runnable against today's schema (see below); Gate C is editorial (items #2, #3, #6 are done). Gate A depends on v2 Phase 1 work not yet complete — the planner and engineer agent definitions don't exist yet (only implementor and fixer). Until v2 Phase 1 exits (phase1-08 ships the agents; phase1-09 lands CLAUDE.md orchestration; ≥ 3 validated runs under `CANON_AGENT_TEAMS_MODE=on`), v2.1 cannot start regardless of how polished this proposal gets. **The gates in priority order:**
 
-- **Gate A (existence) — THE BLOCKER:** v2 Phase 1 exit criteria met (canon-planner + canon-engineer defs exist, register, validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`). Without this, v2.1 has no planner agent to hang synthesis off and Gate B cannot be followed by action even if it clears.
+- **Gate A (existence) — THE BLOCKER:** v2 Phase 1 exit criteria met (planner + engineer defs exist, register, validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`). Without this, v2.1 has no planner agent to hang synthesis off and Gate B cannot be followed by action even if it clears.
 - **Gate B (evidence) — already clearable:** item #4 above — one real refinement proposal produced by running a §6-style analysis against today's data. Without this, §3's learning-loop claim is unvalidated. **Gate B is runnable today against the existing drift-db schema** — `violations.principle_id` has been indexed since v1 (see `mcp-server/src/platform/storage/drift/drift-schema.ts`). The §6.1 finding-count-per-principle query is trivial (`SELECT principle_id, COUNT(DISTINCT review_id) FROM violations GROUP BY principle_id`); fix-iteration cost requires review-over-review comparison via a 30-line SQL script. No v2.1b infrastructure needed to run the trace.
 - **Gate C (scope discipline) — done:** items #2, #3, #6 executed; split per §17 committed. Items done means this gate is effectively cleared; ratification blocker has always been A (and optionally B).
 
@@ -1054,7 +1054,7 @@ All 10 first-round architect changes are addressed in-document (9 as text change
 The remaining path to ratification:
 
 1. **Final editorial scrub pass** — any residuals surfaced by the third-round review fix (this batch closes them)
-2. **Gate A (the only real blocker)** — v2 Phase 1 completes: `canon-planner` and `canon-engineer` agent definitions land via `phase1-08`, register, and are validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
+2. **Gate A (the only real blocker)** — v2 Phase 1 completes: `planner` and `engineer` agent definitions land via `phase1-08`, register, and are validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
 3. **Gate B (runnable today)** — hand-run the §6.1 principle-refinement analysis against today's drift-db (confirmed schema-supported — `violations.principle_id` indexed since v1); produce one accepted refinement proposal
 4. **Promote this draft to `docs/agent-teams-migration-plan-v2.1.md`** with the §14 amendments applied against v2
 
@@ -1084,7 +1084,7 @@ Responding to architect change #1 (§16). The current proposal bundles three ind
 - §10 Synthesis contract — MUST / MAY / MUST NOT rules; iterate-until-approved loop
 - `skills/canon/references/runbook-vocabulary.md` — new vocabulary file
 - `skills/canon/references/planner-brief.md` + `skills/canon/references/runbook-synthesis.md` — two skills the planner loads
-- `canon-planner` agent body updated: loads both skills, emits `planning-brief.md` + `runbook.md`, runs the iterate-until-approved loop
+- `planner` agent body updated: loads both skills, emits `planning-brief.md` + `runbook.md`, runs the iterate-until-approved loop
 - `templates/runbook-template.md` — already landed on PR #115; becomes the output format for synthesis
 - **CLAUDE.md intent-classification amendment (L1)** — re-classification discipline: intent is per-message, not per-session. Every user message re-classifies; chat/question sessions that pivot to a build request route the pivot message through planner. Pre-write gate: before Edit/Write/Bash for code changes, verify active Canon workspace exists; if not, stop and route.
 - **New PreToolUse hook `canon-workspace-check.sh` (L4)** — hard-enforcement backstop for L1. Blocks code-modification tools when no active Canon workspace exists for the current flow. Registered in `hooks/canon-agent-teams/hooks.json`. Detection: checks `.canon/workspaces/<slug>/` matching current branch. Defense in depth: L1 is soft (Claude usually does the right thing); L4 is hard (if Claude fails to re-classify, the hook catches it before uncontrolled code modification).
@@ -1098,11 +1098,11 @@ Responding to architect change #1 (§16). The current proposal bundles three ind
 - No memory audit/groom/seed
 - No embeddings or semantic search
 
-**Entry gate:** v2 Phase 1 exit criteria met (architect change #7). `canon-planner` and `canon-engineer` agent definitions must exist and be validated in ≥ 3 successful runs under the feature flag before v2.1a starts.
+**Entry gate:** v2 Phase 1 exit criteria met (architect change #7). `planner` and `engineer` agent definitions must exist and be validated in ≥ 3 successful runs under the feature flag before v2.1a starts.
 
 **Exit criteria:**
 
-- `canon-planner` synthesizes runbooks that conform to the format spec and pass iterate-until-approved
+- `planner` synthesizes runbooks that conform to the format spec and pass iterate-until-approved
 - At least 5 distinct request types processed end-to-end (bug fix, small feature, refactor, migration, test-gap)
 - User-approval affordance defined at the runtime level (architect change #5)
 - Runbooks execute per the contract; same artifact quality as pre-synthesis static flows
@@ -1122,7 +1122,7 @@ Responding to architect change #1 (§16). The current proposal bundles three ind
   - **Review findings: `principle_id` already exists** in the drift-db `violations` table (indexed since v1 per `drift-schema.ts`). v2.1b work is *ensuring consistent reviewer population* — may require review-template amendments or reviewer-agent prompt updates to guarantee the field is always supplied. Not a schema change.
   - **Fix summary: add `cause`, `root_cause_tag`** — genuinely new. Fix summaries today live as workspace markdown with unstructured prose; v2.1b adds frontmatter tags + indexer capture.
   - **Implementation summary: add `justified_deviations[]`** — genuinely new. Same as above — prose today; structured frontmatter tag in v2.1b.
-- Extend existing `canon-learner` with one new analysis dimension: principle-refinement from per-flow review data (§6.1). No template, no design-decision, no memory analyses.
+- Extend existing `learner` with one new analysis dimension: principle-refinement from per-flow review data (§6.1). No template, no design-decision, no memory analyses.
 
 **Explicitly out of scope for v2.1b:**
 
@@ -1269,14 +1269,14 @@ All of this is detectable from the corpus once `memory_cited` tagging (originall
 
 The corpus is distilled expert context for the repo. When:
 
-- A new agent role is introduced (future `canon-security-auditor`)
+- A new agent role is introduced (future `security-auditor`)
 - Canon is installed in a new repo
 - An agent's memory is intentionally reset
 - An existing agent's role expands
 
 …seed memory from the corpus instead of starting cold.
 
-**Seed-candidate analysis:** for a fresh `canon-engineer` memory in this repo, pull from the existing corpus:
+**Seed-candidate analysis:** for a fresh `engineer` memory in this repo, pull from the existing corpus:
 
 - Codebase invariants (patterns with >90% consistency across 6+ months)
 - Design decisions with zero reversal rate

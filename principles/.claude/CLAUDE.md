@@ -33,7 +33,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 - Principles are loaded by the MCP server via `get_principles` and `review_code` tools
 - `matcher.ts` in mcp-server filters principles by layer, file pattern, tags, and severity
 - `parser.ts` in mcp-server extracts frontmatter metadata from principle files
-- The `canon-learner` agent proposes new principles; the `canon-reviewer` checks against them
+- The `learner` agent proposes new principles; the `reviewer` checks against them
 
 ## Conventions
 <!-- last-updated: 2026-03-22 -->

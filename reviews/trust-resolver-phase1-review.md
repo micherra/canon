@@ -1,6 +1,6 @@
 ---
 verdict: "WARNING"
-agent: canon-reviewer
+agent: reviewer
 timestamp: "2026-04-08T19:56:00Z"
 files-reviewed: 19
 principles-checked: 7

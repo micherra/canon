@@ -133,7 +133,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         item: "task-01",
         prompt: "Implement task-01",
         role: "implementor",
@@ -179,7 +179,7 @@ describe("driveFlow — after-consultation handling", () => {
     vi.mocked(resolveAfterConsultations).mockReturnValue({
       consultation_prompts: [
         {
-          agent: "canon:canon-learner",
+          agent: "canon:learner",
           name: "pattern-check",
           prompt: "Check patterns",
           role: "consultation",
@@ -225,7 +225,7 @@ describe("driveFlow — after-consultation handling", () => {
     // Should include the consultation agent
     const consultReq = result.requests.find((r) => r.role === "consultation");
     expect(consultReq).toBeDefined();
-    expect(consultReq?.agent_type).toBe("canon:canon-learner");
+    expect(consultReq?.agent_type).toBe("canon:learner");
   });
 });
 
@@ -264,7 +264,7 @@ describe("driveFlow — epic checkpoint", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-02",
             prompt: "Implement task-02",
             template_paths: [],

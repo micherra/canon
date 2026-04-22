@@ -108,7 +108,7 @@ function makeFlowWithMinWavesConsultation(minWaves: number = 2): ResolvedFlow {
   return {
     consultations: {
       "pattern-check": {
-        agent: "canon:canon-architect",
+        agent: "canon:architect",
         fragment: "pattern-check",
         min_waves: minWaves,
         role: "pattern-check",
@@ -125,7 +125,7 @@ function makeFlowWithMinWavesConsultation(minWaves: number = 2): ResolvedFlow {
     states: {
       done: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         consultations: {
           between: ["pattern-check"],
         },
@@ -143,7 +143,7 @@ function makeFlowWithUnconditionalConsultation(): ResolvedFlow {
   return {
     consultations: {
       "plan-review": {
-        agent: "canon:canon-architect",
+        agent: "canon:architect",
         fragment: "plan-review",
         role: "plan-reviewer",
       },
@@ -158,7 +158,7 @@ function makeFlowWithUnconditionalConsultation(): ResolvedFlow {
     states: {
       done: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         consultations: {
           between: ["plan-review"],
         },
@@ -177,7 +177,7 @@ function makeFlowWithMinWavesBeforeConsultation(): ResolvedFlow {
   return {
     consultations: {
       "early-scan": {
-        agent: "canon:canon-security",
+        agent: "canon:security",
         fragment: "early-scan",
         min_waves: 2,
         role: "early-scan",
@@ -194,7 +194,7 @@ function makeFlowWithMinWavesBeforeConsultation(): ResolvedFlow {
     states: {
       done: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         consultations: {
           before: ["early-scan"],
         },
@@ -217,7 +217,7 @@ afterEach(() => {
 describe("ConsultationFragmentSchema — min_waves field", () => {
   it("accepts a fragment with min_waves field", () => {
     const result = ConsultationFragmentSchema.safeParse({
-      agent: "canon:canon-architect",
+      agent: "canon:architect",
       fragment: "pattern-check",
       min_waves: 2,
       role: "pattern-check",
@@ -231,7 +231,7 @@ describe("ConsultationFragmentSchema — min_waves field", () => {
 
   it("accepts a fragment without min_waves (backward compat)", () => {
     const result = ConsultationFragmentSchema.safeParse({
-      agent: "canon:canon-architect",
+      agent: "canon:architect",
       fragment: "plan-review",
       role: "plan-reviewer",
     });
@@ -243,7 +243,7 @@ describe("ConsultationFragmentSchema — min_waves field", () => {
 
   it("rejects a fragment with non-numeric min_waves", () => {
     const result = ConsultationFragmentSchema.safeParse({
-      agent: "canon:canon-architect",
+      agent: "canon:architect",
       fragment: "test",
       min_waves: "two",
       role: "test",

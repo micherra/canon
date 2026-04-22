@@ -2,7 +2,7 @@
 fragment: plan-review
 type: consultation
 description: Architect reviews upcoming wave plans for conflicts, ambiguity, and pre-answers likely questions
-agent: canon-architect
+agent: architect
 role: plan-review
 section: Plan clarifications
 timeout: 5m

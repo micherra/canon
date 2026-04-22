@@ -29,7 +29,7 @@ import { injectSettingsIntoRequests } from "../tools/drive-flow.ts";
 
 function makeAutoRequest(overrides: Partial<SpawnRequest> = {}): SpawnRequest {
   return {
-    agent_type: "canon:canon-implementor",
+    agent_type: "canon:implementor",
     isolation: "none",
     permission_mode: "auto",
     prompt: "Implement the task",
@@ -88,7 +88,7 @@ describe("injectSettingsIntoRequests — conditional injection logic", () => {
     // If worktree_path is absent, there's nowhere to write settings — skip
     const requests: SpawnRequest[] = [
       {
-        agent_type: "canon:canon-implementor",
+        agent_type: "canon:implementor",
         isolation: "worktree",
         permission_mode: "auto",
         prompt: "Implement",
@@ -106,7 +106,7 @@ describe("injectSettingsIntoRequests — conditional injection logic", () => {
 
     const requests: SpawnRequest[] = [
       {
-        agent_type: "canon:canon-implementor",
+        agent_type: "canon:implementor",
         isolation: "none",
         permission_mode: "auto",
         prompt: "Implement",
@@ -237,7 +237,7 @@ describe("injectSettingsIntoRequests — settings file contents for known agent 
 
     const requests: SpawnRequest[] = [
       makeAutoRequest({
-        agent_type: "canon:canon-researcher",
+        agent_type: "canon:researcher",
         tools: researcherTools,
         worktree_path: dir,
       }),

@@ -1,6 +1,6 @@
 # Security Vulnerability Checklist
 
-Reference material for `canon-security`. Contains vulnerability categories and dependency audit procedures.
+Reference material for `security`. Contains vulnerability categories and dependency audit procedures.
 
 ---
 

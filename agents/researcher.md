@@ -1,5 +1,5 @@
 ---
-name: canon-researcher
+name: researcher
 description: >-
   Researches a specific dimension of a development task before planning.
   Spawned in parallel by the build orchestrator. Produces a compressed

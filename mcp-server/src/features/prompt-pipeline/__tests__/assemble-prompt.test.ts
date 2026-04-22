@@ -101,7 +101,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement the task." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -161,7 +161,7 @@ describe("assemblePrompt — missing rawInstruction", () => {
       spawn_instructions: {}, // no instruction for implement
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-implementor", type: "single" },
+        implement: { agent: "implementor", type: "single" },
       },
     });
     const input = makeInput({ flow });
@@ -182,7 +182,7 @@ describe("assemblePrompt — skip_when", () => {
     const flow = makeFlow({
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
+        implement: { agent: "implementor", skip_when: "auto_approved", type: "single" },
       },
     });
     const input = makeInput({ flow });
@@ -198,7 +198,7 @@ describe("assemblePrompt — skip_when", () => {
     const flow = makeFlow({
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
+        implement: { agent: "implementor", skip_when: "auto_approved", type: "single" },
       },
     });
     const input = makeInput({ flow });
@@ -217,7 +217,7 @@ describe("assemblePrompt — simple single state", () => {
     const result = await assemblePrompt(input);
 
     expect(result.prompts).toHaveLength(1);
-    expect(result.prompts[0].agent).toBe("canon-implementor");
+    expect(result.prompts[0].agent).toBe("implementor");
     expect(result.state_type).toBe("single");
     expect(result.skip_reason).toBeUndefined();
   });
@@ -244,7 +244,7 @@ describe("assemblePrompt — wave state with items", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -258,7 +258,7 @@ describe("assemblePrompt — wave state with items", () => {
 
     expect(result.prompts).toHaveLength(3);
     expect(result.state_type).toBe("wave");
-    expect(result.prompts[0].agent).toBe("canon-implementor");
+    expect(result.prompts[0].agent).toBe("implementor");
     expect(result.prompts[0].prompt).toContain("Build task-1");
     expect(result.prompts[1].prompt).toContain("Build task-2");
     expect(result.prompts[2].prompt).toContain("Build task-3");
@@ -268,7 +268,7 @@ describe("assemblePrompt — wave state with items", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -292,7 +292,7 @@ describe("assemblePrompt — _board optimization", () => {
     const flow = makeFlow({
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
+        implement: { agent: "implementor", skip_when: "auto_approved", type: "single" },
       },
     });
     const input = makeInput({ _board: board, flow });
@@ -312,7 +312,7 @@ describe("assemblePrompt — _board optimization", () => {
     const flow = makeFlow({
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
+        implement: { agent: "implementor", skip_when: "auto_approved", type: "single" },
       },
     });
     const input = makeInput({ flow }); // no _board
@@ -340,7 +340,7 @@ describe("assemblePrompt — consultation output escaping", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -373,7 +373,7 @@ describe("assemblePrompt — consultation output escaping", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -435,7 +435,7 @@ describe("assemblePrompt — Stage 3 inject_messages", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_messages: true,
           type: "single",
         } as ResolvedFlow["states"][string],
@@ -471,7 +471,7 @@ describe("assemblePrompt — absent consultation_outputs", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });

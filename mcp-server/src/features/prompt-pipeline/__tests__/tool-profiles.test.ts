@@ -6,19 +6,19 @@ import { describe, expect, it, vi } from "vitest";
 import { AGENT_TOOL_PROFILES, EMPTY_PROFILE, resolveToolProfile } from "../model/tool-profiles.ts";
 
 const ALL_AGENTS = [
-  "canon-researcher",
-  "canon-architect",
-  "canon-implementor",
-  "canon-tester",
-  "canon-reviewer",
-  "canon-fixer",
-  "canon-security",
-  "canon-scribe",
-  "canon-learner",
-  "canon-guide",
-  "canon-writer",
-  "canon-shipper",
-  "canon-chat",
+  "researcher",
+  "architect",
+  "implementor",
+  "tester",
+  "reviewer",
+  "fixer",
+  "security",
+  "scribe",
+  "learner",
+  "guide",
+  "writer",
+  "shipper",
+  "chat",
 ] as const;
 
 describe("AGENT_TOOL_PROFILES", () => {
@@ -42,71 +42,69 @@ describe("AGENT_TOOL_PROFILES", () => {
     expect(EMPTY_PROFILE.disallowed).toEqual(["Edit", "Write", "Bash", "NotebookEdit"]);
   });
 
-  it("canon-researcher profile includes codebase_graph MCP tool", () => {
-    expect(AGENT_TOOL_PROFILES["canon-researcher"].allowed).toContain("codebase_graph");
+  it("researcher profile includes codebase_graph MCP tool", () => {
+    expect(AGENT_TOOL_PROFILES.researcher.allowed).toContain("codebase_graph");
   });
 
-  it("canon-implementor profile includes post_message MCP tool", () => {
-    expect(AGENT_TOOL_PROFILES["canon-implementor"].allowed).toContain("post_message");
+  it("implementor profile includes post_message MCP tool", () => {
+    expect(AGENT_TOOL_PROFILES.implementor.allowed).toContain("post_message");
   });
 
-  it("canon-reviewer profile includes write_review MCP tool", () => {
-    expect(AGENT_TOOL_PROFILES["canon-reviewer"].allowed).toContain("write_review");
+  it("reviewer profile includes write_review MCP tool", () => {
+    expect(AGENT_TOOL_PROFILES.reviewer.allowed).toContain("write_review");
   });
 
-  it("canon-tester profile includes write_test_report MCP tool", () => {
-    expect(AGENT_TOOL_PROFILES["canon-tester"].allowed).toContain("write_test_report");
+  it("tester profile includes write_test_report MCP tool", () => {
+    expect(AGENT_TOOL_PROFILES.tester.allowed).toContain("write_test_report");
   });
 
-  it("canon-chat profile does not include Write or Bash (read-only agent)", () => {
-    expect(AGENT_TOOL_PROFILES["canon-chat"].disallowed).toContain("Write");
-    expect(AGENT_TOOL_PROFILES["canon-chat"].disallowed).toContain("Bash");
-    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).not.toContain("Write");
-    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).not.toContain("Bash");
+  it("chat profile does not include Write or Bash (read-only agent)", () => {
+    expect(AGENT_TOOL_PROFILES.chat.disallowed).toContain("Write");
+    expect(AGENT_TOOL_PROFILES.chat.disallowed).toContain("Bash");
+    expect(AGENT_TOOL_PROFILES.chat.allowed).not.toContain("Write");
+    expect(AGENT_TOOL_PROFILES.chat.allowed).not.toContain("Bash");
   });
 
-  it("canon-architect profile includes write_plan_index and update_board MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES["canon-architect"].allowed).toContain("write_plan_index");
-    expect(AGENT_TOOL_PROFILES["canon-architect"].allowed).toContain("update_board");
+  it("architect profile includes write_plan_index and update_board MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES.architect.allowed).toContain("write_plan_index");
+    expect(AGENT_TOOL_PROFILES.architect.allowed).toContain("update_board");
   });
 
-  it("canon-fixer profile includes graph_query, semantic_search, get_file_context MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES["canon-fixer"].allowed).toContain("graph_query");
-    expect(AGENT_TOOL_PROFILES["canon-fixer"].allowed).toContain("semantic_search");
-    expect(AGENT_TOOL_PROFILES["canon-fixer"].allowed).toContain("get_file_context");
+  it("fixer profile includes graph_query, semantic_search, get_file_context MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES.fixer.allowed).toContain("graph_query");
+    expect(AGENT_TOOL_PROFILES.fixer.allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES.fixer.allowed).toContain("get_file_context");
   });
 
-  it("canon-security profile includes semantic_search and codebase_graph MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES["canon-security"].allowed).toContain("semantic_search");
-    expect(AGENT_TOOL_PROFILES["canon-security"].allowed).toContain("codebase_graph");
+  it("security profile includes semantic_search and codebase_graph MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES.security.allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES.security.allowed).toContain("codebase_graph");
   });
 
-  it("canon-learner profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES["canon-learner"].allowed).toContain("graph_query");
-    expect(AGENT_TOOL_PROFILES["canon-learner"].allowed).toContain("semantic_search");
-    expect(AGENT_TOOL_PROFILES["canon-learner"].allowed).toContain("get_file_context");
-    expect(AGENT_TOOL_PROFILES["canon-learner"].allowed).toContain("codebase_graph");
+  it("learner profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES.learner.allowed).toContain("graph_query");
+    expect(AGENT_TOOL_PROFILES.learner.allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES.learner.allowed).toContain("get_file_context");
+    expect(AGENT_TOOL_PROFILES.learner.allowed).toContain("codebase_graph");
   });
 
-  it("canon-guide profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES["canon-guide"].allowed).toContain("graph_query");
-    expect(AGENT_TOOL_PROFILES["canon-guide"].allowed).toContain("semantic_search");
-    expect(AGENT_TOOL_PROFILES["canon-guide"].allowed).toContain("get_file_context");
-    expect(AGENT_TOOL_PROFILES["canon-guide"].allowed).toContain("codebase_graph");
+  it("guide profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES.guide.allowed).toContain("graph_query");
+    expect(AGENT_TOOL_PROFILES.guide.allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES.guide.allowed).toContain("get_file_context");
+    expect(AGENT_TOOL_PROFILES.guide.allowed).toContain("codebase_graph");
   });
 
-  it("canon-chat profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).toContain("graph_query");
-    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).toContain("semantic_search");
-    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).toContain("get_file_context");
-    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).toContain("codebase_graph");
+  it("chat profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES.chat.allowed).toContain("graph_query");
+    expect(AGENT_TOOL_PROFILES.chat.allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES.chat.allowed).toContain("get_file_context");
+    expect(AGENT_TOOL_PROFILES.chat.allowed).toContain("codebase_graph");
   });
 
-  it("canon-implementor profile includes write_implementation_summary and get_messages MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES["canon-implementor"].allowed).toContain(
-      "write_implementation_summary",
-    );
-    expect(AGENT_TOOL_PROFILES["canon-implementor"].allowed).toContain("get_messages");
+  it("implementor profile includes write_implementation_summary and get_messages MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES.implementor.allowed).toContain("write_implementation_summary");
+    expect(AGENT_TOOL_PROFILES.implementor.allowed).toContain("get_messages");
   });
 });
 
@@ -125,15 +123,15 @@ describe("resolveToolProfile", () => {
   });
 
   it("returns base profile tools for known agent without overrides", () => {
-    const result = resolveToolProfile("canon-researcher");
-    const base = AGENT_TOOL_PROFILES["canon-researcher"];
+    const result = resolveToolProfile("researcher");
+    const base = AGENT_TOOL_PROFILES.researcher;
     expect(result.tools).toEqual(base.allowed.filter((t) => !base.disallowed.includes(t)));
     expect(result.disallowed_tools).toEqual(base.disallowed);
   });
 
   it("with allow override adds tools to base allowed", () => {
-    const result = resolveToolProfile("canon-researcher", { overrides: { allow: ["ExtraToolA"] } });
-    const base = AGENT_TOOL_PROFILES["canon-researcher"];
+    const result = resolveToolProfile("researcher", { overrides: { allow: ["ExtraToolA"] } });
+    const base = AGENT_TOOL_PROFILES.researcher;
     expect(result.tools).toContain("ExtraToolA");
     for (const t of base.allowed) {
       if (!base.disallowed.includes(t)) {
@@ -144,13 +142,13 @@ describe("resolveToolProfile", () => {
 
   it("with deny override removes tools from allowed", () => {
     // researcher has Read in allowed — deny it
-    const result = resolveToolProfile("canon-researcher", { overrides: { deny: ["Read"] } });
+    const result = resolveToolProfile("researcher", { overrides: { deny: ["Read"] } });
     expect(result.tools).not.toContain("Read");
     expect(result.disallowed_tools).toContain("Read");
   });
 
   it("with replace override replaces entire allowed list", () => {
-    const result = resolveToolProfile("canon-researcher", {
+    const result = resolveToolProfile("researcher", {
       overrides: { replace: ["ToolX", "ToolY"] },
     });
     expect(result.tools).toEqual(["ToolX", "ToolY"]);
@@ -158,7 +156,7 @@ describe("resolveToolProfile", () => {
 
   it("disallowed wins: tool in both allowed and disallowed ends up only in disallowed", () => {
     // Use allow to add a tool, and deny to block the same tool
-    const result = resolveToolProfile("canon-researcher", {
+    const result = resolveToolProfile("researcher", {
       overrides: { allow: ["ConflictTool"], deny: ["ConflictTool"] },
     });
     expect(result.tools).not.toContain("ConflictTool");
@@ -166,25 +164,25 @@ describe("resolveToolProfile", () => {
   });
 
   it("permission mode defaults to auto when worktreePath is provided", () => {
-    const result = resolveToolProfile("canon-implementor", {
+    const result = resolveToolProfile("implementor", {
       worktreePath: "/some/path",
     });
     expect(result.permission_mode).toBe("auto");
   });
 
   it("permission mode defaults to prompt when no worktreePath provided", () => {
-    const result = resolveToolProfile("canon-implementor");
+    const result = resolveToolProfile("implementor");
     expect(result.permission_mode).toBe("prompt");
   });
 
   it("permission mode defaults to prompt when worktreePath is undefined", () => {
     // worktree_path absent means no sandboxed directory — fall back to prompt
-    const result = resolveToolProfile("canon-implementor", { worktreePath: undefined });
+    const result = resolveToolProfile("implementor", { worktreePath: undefined });
     expect(result.permission_mode).toBe("prompt");
   });
 
   it("permission_mode override from ToolOverrides takes precedence over worktreePath", () => {
-    const result = resolveToolProfile("canon-implementor", {
+    const result = resolveToolProfile("implementor", {
       overrides: { permission_mode: "deny_unknown" },
       worktreePath: "/some/path",
     });
@@ -192,33 +190,33 @@ describe("resolveToolProfile", () => {
   });
 
   it("replace override with deny strips matching tools", () => {
-    const result = resolveToolProfile("canon-implementor", {
+    const result = resolveToolProfile("implementor", {
       overrides: { deny: ["ToolB"], replace: ["ToolA", "ToolB", "ToolC"] },
     });
     expect(result.tools).toEqual(["ToolA", "ToolC"]);
     expect(result.disallowed_tools).toContain("ToolB");
   });
 
-  it("canon-implementor has Edit and Write in allowed", () => {
-    const result = resolveToolProfile("canon-implementor");
+  it("implementor has Edit and Write in allowed", () => {
+    const result = resolveToolProfile("implementor");
     expect(result.tools).toContain("Edit");
     expect(result.tools).toContain("Write");
   });
 
-  it("namespaced agent ID (canon:canon-researcher) resolves to same profile as unprefixed", () => {
-    const prefixed = resolveToolProfile("canon:canon-researcher");
-    const unprefixed = resolveToolProfile("canon-researcher");
+  it("namespaced agent ID (canon:researcher) resolves to same profile as unprefixed", () => {
+    const prefixed = resolveToolProfile("canon:researcher");
+    const unprefixed = resolveToolProfile("researcher");
     expect(prefixed).toEqual(unprefixed);
   });
 
   it("namespaced agent ID does not fall back to EMPTY_PROFILE", () => {
-    const result = resolveToolProfile("canon:canon-implementor");
+    const result = resolveToolProfile("canon:implementor");
     expect(result.tools).toContain("Edit");
     expect(result.tools).toContain("Write");
   });
 
-  it("canon-researcher has Edit and Write in disallowed", () => {
-    const result = resolveToolProfile("canon-researcher");
+  it("researcher has Edit and Write in disallowed", () => {
+    const result = resolveToolProfile("researcher");
     expect(result.disallowed_tools).toContain("Edit");
     expect(result.disallowed_tools).toContain("Write");
     expect(result.tools).not.toContain("Edit");
@@ -226,38 +224,38 @@ describe("resolveToolProfile", () => {
   });
 
   it("no warnings when replace does not grant disallowed tools", () => {
-    const result = resolveToolProfile("canon-researcher", {
+    const result = resolveToolProfile("researcher", {
       overrides: { replace: ["Read", "Grep"] },
     });
     expect(result.warnings).toBeUndefined();
   });
 
   it("no warnings when using allow override (not replace)", () => {
-    const result = resolveToolProfile("canon-researcher", { overrides: { allow: ["ExtraToolA"] } });
+    const result = resolveToolProfile("researcher", { overrides: { allow: ["ExtraToolA"] } });
     expect(result.warnings).toBeUndefined();
   });
 
   it("no warnings when no overrides at all", () => {
-    const result = resolveToolProfile("canon-researcher");
+    const result = resolveToolProfile("researcher");
     expect(result.warnings).toBeUndefined();
   });
 
   it("replace override that grants base-disallowed tools produces a structured warning", () => {
-    // canon-researcher has Edit in disallowed; replace with Edit should warn
-    const result = resolveToolProfile("canon-researcher", {
+    // researcher has Edit in disallowed; replace with Edit should warn
+    const result = resolveToolProfile("researcher", {
       overrides: { replace: ["Read", "Edit"] },
     });
     expect(result.warnings).toBeDefined();
     expect(result.warnings).toHaveLength(1);
     const warning = result.warnings![0];
     expect(warning.event).toBe("adr014_replace_override_grants_disallowed");
-    expect(warning.agent).toBe("canon-researcher");
+    expect(warning.agent).toBe("researcher");
     expect(warning.granted_disallowed).toContain("Edit");
   });
 
   it("warnings capture all granted-disallowed tools in a single entry", () => {
-    // canon-researcher has Edit and Write in disallowed; replace grants both
-    const result = resolveToolProfile("canon-researcher", {
+    // researcher has Edit and Write in disallowed; replace grants both
+    const result = resolveToolProfile("researcher", {
       overrides: { replace: ["Read", "Edit", "Write"] },
     });
     expect(result.warnings).toHaveLength(1);
@@ -267,7 +265,7 @@ describe("resolveToolProfile", () => {
 
   it("does not call console.warn — warnings are data, not side effects", () => {
     const spy = vi.spyOn(console, "warn");
-    resolveToolProfile("canon-researcher", { overrides: { replace: ["Read", "Edit"] } });
+    resolveToolProfile("researcher", { overrides: { replace: ["Read", "Edit"] } });
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
@@ -275,17 +273,17 @@ describe("resolveToolProfile", () => {
   // trustPermissionMode tests
 
   it("trustPermissionMode 'auto' is used when no override is set", () => {
-    const result = resolveToolProfile("canon-implementor", { trustPermissionMode: "auto" });
+    const result = resolveToolProfile("implementor", { trustPermissionMode: "auto" });
     expect(result.permission_mode).toBe("auto");
   });
 
   it("trustPermissionMode 'prompt' is used when no override is set", () => {
-    const result = resolveToolProfile("canon-implementor", { trustPermissionMode: "prompt" });
+    const result = resolveToolProfile("implementor", { trustPermissionMode: "prompt" });
     expect(result.permission_mode).toBe("prompt");
   });
 
   it("overrides.permission_mode takes precedence over trustPermissionMode", () => {
-    const result = resolveToolProfile("canon-implementor", {
+    const result = resolveToolProfile("implementor", {
       overrides: { permission_mode: "deny_unknown" },
       trustPermissionMode: "auto",
     });
@@ -295,7 +293,7 @@ describe("resolveToolProfile", () => {
   it("trustPermissionMode takes precedence over worktreePath fallback", () => {
     // Without worktreePath, the fallback would be "prompt".
     // trustPermissionMode="auto" should override that.
-    const result = resolveToolProfile("canon-implementor", {
+    const result = resolveToolProfile("implementor", {
       trustPermissionMode: "auto",
       worktreePath: undefined,
     });
@@ -304,7 +302,7 @@ describe("resolveToolProfile", () => {
 
   it("falls back to worktreePath check when trustPermissionMode is undefined", () => {
     // No trustPermissionMode, worktreePath present → worktreePath fallback applies → "auto"
-    const result = resolveToolProfile("canon-implementor", {
+    const result = resolveToolProfile("implementor", {
       trustPermissionMode: undefined,
       worktreePath: "/some/path",
     });
@@ -312,84 +310,84 @@ describe("resolveToolProfile", () => {
   });
 
   it("backward compat: calling with only agent (no options) behaves identically — prompt mode", () => {
-    const withNoOptions = resolveToolProfile("canon-implementor");
-    const withEmptyOptions = resolveToolProfile("canon-implementor", {});
+    const withNoOptions = resolveToolProfile("implementor");
+    const withEmptyOptions = resolveToolProfile("implementor", {});
     expect(withNoOptions.permission_mode).toBe("prompt");
     expect(withEmptyOptions.permission_mode).toBe("prompt");
     expect(withNoOptions.tools).toEqual(withEmptyOptions.tools);
     expect(withNoOptions.disallowed_tools).toEqual(withEmptyOptions.disallowed_tools);
   });
 
-  it("canon-shipper has Edit in allowed (for CHANGELOG.md writing)", () => {
-    const result = resolveToolProfile("canon-shipper");
+  it("shipper has Edit in allowed (for CHANGELOG.md writing)", () => {
+    const result = resolveToolProfile("shipper");
     expect(result.tools).toContain("Edit");
     expect(result.disallowed_tools).not.toContain("Edit");
   });
 
   // isReadOnly auto-approve tests
 
-  it("read-only agent (canon-researcher) with no worktreePath gets permission_mode 'auto'", () => {
-    // canon-researcher has Write and Edit in disallowed — it's read-only → auto
-    const result = resolveToolProfile("canon-researcher");
+  it("read-only agent (researcher) with no worktreePath gets permission_mode 'auto'", () => {
+    // researcher has Write and Edit in disallowed — it's read-only → auto
+    const result = resolveToolProfile("researcher");
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("read-only agent (canon-architect) with no worktreePath gets permission_mode 'auto'", () => {
-    // canon-architect has Write, Edit, NotebookEdit in disallowed — it's read-only → auto
-    const result = resolveToolProfile("canon-architect");
+  it("read-only agent (architect) with no worktreePath gets permission_mode 'auto'", () => {
+    // architect has Write, Edit, NotebookEdit in disallowed — it's read-only → auto
+    const result = resolveToolProfile("architect");
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("read-only agent (canon-reviewer) with no worktreePath gets permission_mode 'auto'", () => {
-    const result = resolveToolProfile("canon-reviewer");
+  it("read-only agent (reviewer) with no worktreePath gets permission_mode 'auto'", () => {
+    const result = resolveToolProfile("reviewer");
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("read-only agent (canon-guide) with no worktreePath gets permission_mode 'auto'", () => {
-    const result = resolveToolProfile("canon-guide");
+  it("read-only agent (guide) with no worktreePath gets permission_mode 'auto'", () => {
+    const result = resolveToolProfile("guide");
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("read-only agent (canon-chat) with no worktreePath gets permission_mode 'auto'", () => {
-    const result = resolveToolProfile("canon-chat");
+  it("read-only agent (chat) with no worktreePath gets permission_mode 'auto'", () => {
+    const result = resolveToolProfile("chat");
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("read-only agent (canon-security) with no worktreePath gets permission_mode 'auto'", () => {
-    const result = resolveToolProfile("canon-security");
+  it("read-only agent (security) with no worktreePath gets permission_mode 'auto'", () => {
+    const result = resolveToolProfile("security");
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("write agent (canon-implementor) with no worktreePath still gets permission_mode 'prompt'", () => {
-    // canon-implementor has Write and Edit in allowed — NOT read-only → prompt
-    const result = resolveToolProfile("canon-implementor");
+  it("write agent (implementor) with no worktreePath still gets permission_mode 'prompt'", () => {
+    // implementor has Write and Edit in allowed — NOT read-only → prompt
+    const result = resolveToolProfile("implementor");
     expect(result.permission_mode).toBe("prompt");
   });
 
-  it("write agent (canon-fixer) with no worktreePath still gets permission_mode 'prompt'", () => {
-    // canon-fixer has Write and Edit in allowed, nothing in disallowed — NOT read-only → prompt
-    const result = resolveToolProfile("canon-fixer");
+  it("write agent (fixer) with no worktreePath still gets permission_mode 'prompt'", () => {
+    // fixer has Write and Edit in allowed, nothing in disallowed — NOT read-only → prompt
+    const result = resolveToolProfile("fixer");
     expect(result.permission_mode).toBe("prompt");
   });
 
   it("read-only agent with replace override that grants Write does NOT get auto (base.disallowed unchanged)", () => {
     // Even if the flow override grants Write via replace, the base profile still has Write in disallowed.
     // isReadOnly uses base.disallowed as source of truth.
-    const result = resolveToolProfile("canon-researcher", {
+    const result = resolveToolProfile("researcher", {
       overrides: { replace: ["Read", "Write"] },
     });
     expect(result.permission_mode).toBe("auto");
   });
 
   it("trustPermissionMode takes precedence over isReadOnly fallback", () => {
-    // canon-researcher is read-only, but trustPermissionMode forces 'prompt'
-    const result = resolveToolProfile("canon-researcher", { trustPermissionMode: "prompt" });
+    // researcher is read-only, but trustPermissionMode forces 'prompt'
+    const result = resolveToolProfile("researcher", { trustPermissionMode: "prompt" });
     expect(result.permission_mode).toBe("prompt");
   });
 
   it("overrides.permission_mode takes precedence over isReadOnly fallback", () => {
-    // canon-researcher is read-only, but explicit override forces 'deny_unknown'
-    const result = resolveToolProfile("canon-researcher", {
+    // researcher is read-only, but explicit override forces 'deny_unknown'
+    const result = resolveToolProfile("researcher", {
       overrides: { permission_mode: "deny_unknown" },
     });
     expect(result.permission_mode).toBe("deny_unknown");

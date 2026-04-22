@@ -33,18 +33,18 @@ export function resolveEventAgents(
   switch (eventType) {
     case "add_task":
       return {
-        agents: ["canon-architect"],
+        agents: ["architect"],
         descriptions: {
-          "canon-architect": "Break down the new task into a plan and slot it into INDEX.md",
+          architect: "Break down the new task into a plan and slot it into INDEX.md",
         },
       };
     case "skip_task":
       return { agents: [], descriptions: {} };
     case "reprioritize":
       return {
-        agents: ["canon-architect"],
+        agents: ["architect"],
         descriptions: {
-          "canon-architect": "Validate dependency ordering after reprioritization",
+          architect: "Validate dependency ordering after reprioritization",
         },
       };
     case "inject_context":

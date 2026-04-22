@@ -20,13 +20,13 @@ Amend `CLAUDE.md` with two additions that constitute the L1 soft-enforcement lay
 
 **Addition 1 — Per-message intent re-classification discipline** (new subsection under the orchestration section):
 
-> **Re-classify every user message.** Intent is classified per message, not per session. Every user message re-classifies; chat / question sessions that pivot to a build request route the pivot message through `canon-planner` regardless of prior conversation flow. Chat / question history does not make subsequent builds "chat."
+> **Re-classify every user message.** Intent is classified per message, not per session. Every user message re-classifies; chat / question sessions that pivot to a build request route the pivot message through `planner` regardless of prior conversation flow. Chat / question history does not make subsequent builds "chat."
 >
-> If the current message is a build request, route to `canon-planner` regardless of prior conversation flow.
+> If the current message is a build request, route to `planner` regardless of prior conversation flow.
 
 **Addition 2 — Pre-write Canon-routing check** (new subsection immediately after L1):
 
-> **Before using `Edit`, `Write`, or `Bash` for code changes**, verify Canon routing: ask yourself *"Is this request currently routed through a Canon build flow (planner + approved runbook)?"* If no, stop. Present the build request to the user and route through `canon-planner`. Editing code outside a Canon flow is the failure mode this rule prevents.
+> **Before using `Edit`, `Write`, or `Bash` for code changes**, verify Canon routing: ask yourself *"Is this request currently routed through a Canon build flow (planner + approved runbook)?"* If no, stop. Present the build request to the user and route through `planner`. Editing code outside a Canon flow is the failure mode this rule prevents.
 >
 > This is the soft enforcement layer (L1). The hard backstop is the `canon-workspace-check.sh` PreToolUse hook (L4, v2_1a-05) that blocks `Edit` / `Write` / `Bash`-on-tracked-files when no active Canon workspace exists for the current flow.
 
@@ -50,16 +50,16 @@ No automated tests for CLAUDE.md text itself (it is prompt content, not code). I
 - **Smoke test** (manual, recorded in v2_1a-08 validation):
   1. Start a chat session (no build intent)
   2. Pivot to a build request mid-session
-  3. Confirm lead routes the pivot message to `canon-planner` rather than continuing chat
+  3. Confirm lead routes the pivot message to `planner` rather than continuing chat
 - **Smoke test** (pre-write gate):
   1. Start a session with no active Canon workspace
   2. Ask the lead to fix a typo in a tracked file
-  3. Confirm lead presents the build request and spawns `canon-planner` before attempting Edit/Write
+  3. Confirm lead presents the build request and spawns `planner` before attempting Edit/Write
 
 ### Verify
 
 1. `CLAUDE.md` diff shows exactly the two new subsections added under the flag-gated Orchestration section
-2. Both amendments cite `canon-planner` (not `canon-implementor` or other v2-era agents)
+2. Both amendments cite `planner` (not `implementor` or other v2-era agents)
 3. No amendments leak outside the `CANON_AGENT_TEAMS_MODE=on` boundary
 4. `npm run build` and `npm test` still pass (no code changes)
 

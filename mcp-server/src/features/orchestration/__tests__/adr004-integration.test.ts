@@ -252,7 +252,7 @@ describe("validateStateIdParams — edge cases", () => {
           },
           states: {
             "security-scan": {
-              agent: "canon:canon-security",
+              agent: "canon:security",
               transitions: { critical: "${on_critical}", done: "${after_done}" },
               type: "single",
             },

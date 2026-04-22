@@ -1,6 +1,6 @@
 # Guide Health Dashboard Reference
 
-Reference material for `canon-guide`. Contains the health dashboard reporting format.
+Reference material for `guide`. Contains the health dashboard reporting format.
 
 ---
 

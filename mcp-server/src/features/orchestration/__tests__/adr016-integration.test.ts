@@ -87,7 +87,7 @@ function makeFlow(): ResolvedFlow {
     spawn_instructions: { research: "Do research" },
     states: {
       research: {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         transitions: { done: "terminal" },
         type: "single",
       },
@@ -106,9 +106,7 @@ function makeEnterResult(
     iteration_count: 1,
     max_iterations: 3,
     ok: true,
-    prompts: [
-      { agent: "canon:canon-researcher", prompt: "Research", role: "main", template_paths: [] },
-    ],
+    prompts: [{ agent: "canon:researcher", prompt: "Research", role: "main", template_paths: [] }],
     state_type: "single",
     ...overrides,
   };

@@ -24,7 +24,7 @@ description: A project-specific flow
 states:
   research:
     type: single
-    agent: canon-researcher
+    agent: researcher
     transitions:
       done: done
 
@@ -82,7 +82,7 @@ const TARGETED_RESEARCH_FRAGMENT = `---
 fragment: targeted-research
 type: consultation
 description: Targeted research consultation
-agent: canon-researcher
+agent: researcher
 role: researcher
 section: Research Findings
 skip_when: no_open_questions
@@ -104,7 +104,7 @@ entry: research
 states:
   research:
     type: single
-    agent: canon-researcher
+    agent: researcher
     transitions:
       done: done
 
@@ -185,7 +185,7 @@ describe("loadAndResolveFlow — project-level resolution", () => {
     expect(flow.name).toBe("my-project-flow");
     expect(flow.entry).toBe("research");
     expect(flow.states.research).toBeDefined();
-    expect(flow.states.research.agent).toBe("canon-researcher");
+    expect(flow.states.research.agent).toBe("researcher");
   });
 
   it("project-level flow overrides plugin-level flow of the same name", async () => {
@@ -294,7 +294,7 @@ describe("resolveFragments — consultation skip_when propagation", () => {
     };
 
     const consultationFragment: FragmentDefinition = {
-      agent: "canon-researcher",
+      agent: "researcher",
       fragment: "my-consult",
       role: "researcher",
       section: "Research Findings",
@@ -310,7 +310,7 @@ describe("resolveFragments — consultation skip_when propagation", () => {
 
     const consultation = result.consultations["my-consult"];
     expect(consultation).toBeDefined();
-    expect(consultation.agent).toBe("canon-researcher");
+    expect(consultation.agent).toBe("researcher");
     // skip_when should be propagated via spread
     expect((consultation as Record<string, unknown>).skip_when).toBe("no_open_questions");
   });
@@ -330,7 +330,7 @@ describe("resolveFragments — consultation skip_when propagation", () => {
     };
 
     const consultationFragment: FragmentDefinition = {
-      agent: "canon-reviewer",
+      agent: "reviewer",
       fragment: "plain-consult",
       role: "reviewer",
       type: "consultation",

@@ -1,8 +1,8 @@
 ---
 template: design-decision
 description: Structured format for recording architectural and design decisions
-used-by: [canon-architect]
-read-by: [canon-implementor]
+used-by: [architect]
+read-by: [implementor]
 output-path: ${WORKSPACE}/decisions/${decision-id}.md
 ---
 
@@ -15,7 +15,7 @@ Use this template when the architect makes a non-obvious decision that downstrea
 decision-id: "{slug}-{NN}"
 title: "{brief title}"
 status: "accepted"
-agent: canon-architect
+agent: architect
 timestamp: "{ISO-8601}"
 ---
 

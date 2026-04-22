@@ -60,7 +60,7 @@ function makeCtx(
           spawn_instructions: { implement: "Do the thing" },
           states: {
             done: { type: "terminal" },
-            implement: { agent: "canon-implementor", type: "single" },
+            implement: { agent: "implementor", type: "single" },
           },
         } as ResolvedFlow),
       state_id: state_id ?? "implement",
@@ -71,7 +71,7 @@ function makeCtx(
     mergedVariables: { CANON_PLUGIN_ROOT: "" },
     prompts: [],
     rawInstruction: "Do the thing",
-    state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+    state: { agent: "implementor", type: "single" } as StateDefinition,
     warnings: [],
     ...rest,
   };
@@ -96,7 +96,7 @@ describe("fanout — single state", () => {
     const result = await fanout(ctx);
 
     expect(result.prompts).toHaveLength(1);
-    expect(result.prompts[0].agent).toBe("canon-implementor");
+    expect(result.prompts[0].agent).toBe("implementor");
     expect(result.prompts[0].prompt).toBe("Do the thing");
   });
 
@@ -119,11 +119,11 @@ describe("fanout — single state", () => {
         spawn_instructions: { implement: "Review ${item.cluster_key}" },
         states: {
           done: { type: "terminal" },
-          implement: { agent: "canon-reviewer", large_diff_threshold: 5, type: "single" },
+          implement: { agent: "reviewer", large_diff_threshold: 5, type: "single" },
         },
       } as ResolvedFlow,
       state: {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         large_diff_threshold: 5,
         type: "single",
       } as StateDefinition,
@@ -159,14 +159,14 @@ describe("fanout — single state", () => {
   it("expands competitor prompts when compete config is present", async () => {
     const ctx = makeCtx({
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         compete: { count: 2, strategy: "synthesize" },
         type: "single",
       } as StateDefinition,
     });
     vi.mocked(expandCompetitorPrompts).mockReturnValue([
-      { agent: "canon-implementor", index: 0, prompt: "Team A prompt", template_paths: [] },
-      { agent: "canon-implementor", index: 1, prompt: "Team B prompt", template_paths: [] },
+      { agent: "implementor", index: 0, prompt: "Team A prompt", template_paths: [] },
+      { agent: "implementor", index: 1, prompt: "Team B prompt", template_paths: [] },
     ]);
 
     const result = await fanout(ctx);
@@ -184,7 +184,7 @@ describe("fanout — compete on non-single states", () => {
   it("produces a warning when non-single state has compete config", async () => {
     const ctx = makeCtx({
       state: {
-        agents: ["canon-implementor"],
+        agents: ["implementor"],
         compete: { count: 2, strategy: "synthesize" },
         type: "parallel",
       } as unknown as StateDefinition,
@@ -198,7 +198,7 @@ describe("fanout — compete on non-single states", () => {
   it("still returns prompts despite warning for non-single with compete", async () => {
     const ctx = makeCtx({
       state: {
-        agents: ["canon-implementor", "canon-architect"],
+        agents: ["implementor", "architect"],
         compete: { count: 2, strategy: "synthesize" },
         type: "parallel",
       } as unknown as StateDefinition,
@@ -216,7 +216,7 @@ describe("fanout — parallel state", () => {
   it("produces one prompt per agent when multiple agents and no roles", async () => {
     const ctx = makeCtx({
       state: {
-        agents: ["canon-implementor", "canon-architect"],
+        agents: ["implementor", "architect"],
         type: "parallel",
       } as StateDefinition,
     });
@@ -224,14 +224,14 @@ describe("fanout — parallel state", () => {
     const result = await fanout(ctx);
 
     expect(result.prompts).toHaveLength(2);
-    expect(result.prompts[0].agent).toBe("canon-implementor");
-    expect(result.prompts[1].agent).toBe("canon-architect");
+    expect(result.prompts[0].agent).toBe("implementor");
+    expect(result.prompts[1].agent).toBe("architect");
   });
 
   it("produces one prompt per role when one agent and multiple roles", async () => {
     const ctx = makeCtx({
       state: {
-        agents: ["canon-implementor"],
+        agents: ["implementor"],
         roles: ["frontend", "backend", "infra"],
         type: "parallel",
       } as StateDefinition,
@@ -249,7 +249,7 @@ describe("fanout — parallel state", () => {
     const ctx = makeCtx({
       basePrompt: "Implement the ${role} layer",
       state: {
-        agents: ["canon-implementor"],
+        agents: ["implementor"],
         roles: ["frontend", "backend"],
         type: "parallel",
       } as StateDefinition,
@@ -264,7 +264,7 @@ describe("fanout — parallel state", () => {
   it("handles object role entries (with name field)", async () => {
     const ctx = makeCtx({
       state: {
-        agents: ["canon-implementor"],
+        agents: ["implementor"],
         roles: [{ name: "frontend", optional: true }, "backend"],
         type: "parallel",
       } as StateDefinition,
@@ -285,7 +285,7 @@ describe("fanout — wave state", () => {
     const ctx = makeCtx({
       basePrompt: "Implement ${item}",
       items: ["task-a", "task-b", "task-c"],
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      state: { agent: "implementor", type: "wave" } as StateDefinition,
     });
 
     const result = await fanout(ctx);
@@ -300,7 +300,7 @@ describe("fanout — wave state", () => {
   it("does not set isolation field on wave prompts (worktree_path is the sole signal)", async () => {
     const ctx = makeCtx({
       items: ["task-a"],
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      state: { agent: "implementor", type: "wave" } as StateDefinition,
     });
 
     const result = await fanout(ctx);
@@ -311,7 +311,7 @@ describe("fanout — wave state", () => {
   it("produces zero prompts when items is empty array", async () => {
     const ctx = makeCtx({
       items: [],
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      state: { agent: "implementor", type: "wave" } as StateDefinition,
     });
 
     const result = await fanout(ctx);
@@ -324,7 +324,7 @@ describe("fanout — wave state", () => {
   it("produces zero prompts when items is undefined (uses ?? [])", async () => {
     const ctx = makeCtx({
       items: undefined,
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      state: { agent: "implementor", type: "wave" } as StateDefinition,
     });
 
     const result = await fanout(ctx);
@@ -337,7 +337,7 @@ describe("fanout — wave state", () => {
     const ctx = makeCtx({
       basePrompt: "Implement ${item.name} in ${item.layer}",
       items: [{ layer: "domain", name: "OrderService" }],
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      state: { agent: "implementor", type: "wave" } as StateDefinition,
     });
 
     const result = await fanout(ctx);

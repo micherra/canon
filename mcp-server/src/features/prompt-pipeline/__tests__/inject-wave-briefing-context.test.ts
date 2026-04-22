@@ -78,7 +78,7 @@ function makeCtx(
         spawn_instructions: { implement: "Do the thing" },
         states: {
           done: { type: "terminal" },
-          implement: { agent: "canon-implementor", type: "wave" },
+          implement: { agent: "implementor", type: "wave" },
         },
       } as ResolvedFlow,
       state_id: "implement",
@@ -92,7 +92,7 @@ function makeCtx(
     mergedVariables: {},
     prompts: [],
     rawInstruction: "Do the thing",
-    state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+    state: { agent: "implementor", type: "wave" } as StateDefinition,
     warnings: [],
     ...rest,
   };
