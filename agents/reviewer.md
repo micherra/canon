@@ -16,6 +16,8 @@ rules:
 references:
   - principle-loading
   - status-protocol
+templates:
+  - review-checklist
 tools:
   - Read
   - Bash

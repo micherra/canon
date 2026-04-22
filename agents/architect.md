@@ -17,6 +17,11 @@ rules:
   - agent-context-check
 references:
   - status-protocol
+templates:
+  - design-document
+  - task-plan
+  - design-decision
+  - session-context
 tools:
   - Read
   - Bash

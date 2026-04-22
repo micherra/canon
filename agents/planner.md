@@ -14,9 +14,12 @@ memory: project
 rules:
   - agent-surface-assumptions
   - agent-evidence-over-intuition
+  - agent-template-required
   - agent-context-check
 references:
   - status-protocol
+templates:
+  - planning-brief
 tools:
   - Read
   - Glob

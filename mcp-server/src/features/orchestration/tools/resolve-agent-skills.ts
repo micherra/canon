@@ -6,23 +6,24 @@ import matter from "gray-matter";
 /**
  * resolve_agent_skills — Canon's custom skill-preload resolver.
  *
- * Reads three dedicated frontmatter fields from an agent definition:
+ * Reads four dedicated frontmatter fields from an agent definition:
  *
  *   rules:      [<name>, ...]   → loaded from `rules/<name>.md`
  *   references: [<name>, ...]   → loaded from `references/<name>.md`
  *   primers:    [<name>, ...]   → loaded from `primers/<name>.md`
+ *   templates:  [<name>, ...]   → loaded from `templates/<name>.md`
  *
  * Returns a structured list of resolved content plus a single
  * `preload_prompt` string ready to inject at the top of a spawn prompt.
  *
- * Why three fields rather than one `skills:` with prefixes? Claude Code's
+ * Why four fields rather than one `skills:` with prefixes? Claude Code's
  * native `skills:` mechanism expects SKILL.md-wrapped directories (see
  * https://code.claude.com/docs/en/sub-agents). Canon stores rules,
- * protocol fragments, and domain primers as flat .md files and resolves
- * them itself. Keeping Canon's declarations out of `skills:` means the
- * native preloader never sees them, produces no spurious "skill not
- * found" warnings, and remains available for real native skills if
- * anyone ever registers one.
+ * protocol fragments, domain primers, and output templates as flat .md
+ * files and resolves them itself. Keeping Canon's declarations out of
+ * `skills:` means the native preloader never sees them, produces no
+ * spurious "skill not found" warnings, and remains available for real
+ * native skills if anyone ever registers one.
  *
  * Missing files are collected in `unresolved` (formatted as "<kind>:<name>"
  * for clarity) and otherwise skipped silently, matching the
@@ -34,7 +35,7 @@ export type ResolveAgentSkillsInput = {
   agent_name: string;
 };
 
-export type ResolvedSkillKind = "rule" | "ref" | "primer";
+export type ResolvedSkillKind = "rule" | "ref" | "primer" | "template";
 
 export type ResolvedSkill = {
   id: string;
@@ -54,15 +55,17 @@ const KIND_TO_DIR: Record<ResolvedSkillKind, string> = {
   primer: "primers",
   ref: "references",
   rule: "rules",
+  template: "templates",
 };
 
 const KIND_TO_FIELD: Record<ResolvedSkillKind, string> = {
   primer: "primers",
   ref: "references",
   rule: "rules",
+  template: "templates",
 };
 
-const KIND_ORDER: ResolvedSkillKind[] = ["rule", "ref", "primer"];
+const KIND_ORDER: ResolvedSkillKind[] = ["rule", "ref", "primer", "template"];
 
 function stripCanonPrefix(name: string): string {
   return name.startsWith("canon:") ? name.slice("canon:".length) : name;
@@ -87,16 +90,20 @@ function tryReadSkill(
   }
 }
 
+const KIND_LABEL: Record<ResolvedSkillKind, string> = {
+  primer: "Domain primer",
+  ref: "Reference",
+  rule: "Rule",
+  template: "Template",
+};
+
 function formatPreloadPrompt(skills: ResolvedSkill[]): string {
   if (skills.length === 0) return "";
-  const sections = skills.map((s) => {
-    const label = s.kind === "rule" ? "Rule" : s.kind === "ref" ? "Reference" : "Domain primer";
-    return `### ${label}: ${s.id}\n\n${s.content.trim()}`;
-  });
+  const sections = skills.map((s) => `### ${KIND_LABEL[s.kind]}: ${s.id}\n\n${s.content.trim()}`);
   return [
     "## Preloaded Skills",
     "",
-    "The following rules, references, and primers have been preloaded from the agent's frontmatter. Apply them as governing context throughout this task; do not re-read them.",
+    "The following rules, references, primers, and templates have been preloaded from the agent's frontmatter. Apply rules and references as governing context. Produce outputs matching the shape of any declared template; do not re-read these files.",
     "",
     sections.join("\n\n---\n\n"),
   ].join("\n");

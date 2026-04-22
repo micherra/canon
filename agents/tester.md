@@ -16,9 +16,10 @@ rules:
   - agent-template-required
   - agent-context-check
 references:
-  - tester-report-template
   - principle-loading
   - status-protocol
+templates:
+  - test-report
 tools:
   - Read
   - Write

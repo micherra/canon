@@ -22,6 +22,8 @@ rules:
 references:
   - principle-loading
   - status-protocol
+templates:
+  - implementation-log
 tools:
   - Read
   - Write

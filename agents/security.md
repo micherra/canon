@@ -16,6 +16,8 @@ references:
   - security-checklist
   - principle-loading
   - status-protocol
+templates:
+  - security-assessment
 tools:
   - Read
   - Bash

@@ -140,14 +140,13 @@ When resuming a session or the user says "continue" / "resume":
 
 ### Skill Preloading + Domain Skill + Template Naming
 
-**Preloaded rules and references (from agent frontmatter):** Before the `Agent` tool call, invoke `resolve_agent_skills({ agent_name })`. The tool reads three dedicated frontmatter fields — `rules:`, `references:`, `primers:` — loads each listed file from `rules/<name>.md` / `references/<name>.md` / `primers/<name>.md`, and returns a `preload_prompt` string. Include that string verbatim at the top of the spawn prompt. Canon uses its own three-field preloader instead of Claude Code's native `skills:` mechanism because Canon stores rules / references / primers as flat `.md` files, not per-skill `SKILL.md` directories. The native `skills:` field remains available for real Claude Code native skills, which it preloads independently.
+**Preloaded rules, references, primers, and templates (from agent frontmatter):** Before the `Agent` tool call, invoke `resolve_agent_skills({ agent_name })`. The tool reads four dedicated frontmatter fields — `rules:`, `references:`, `primers:`, `templates:` — loads each listed file from `rules/<name>.md` / `references/<name>.md` / `primers/<name>.md` / `templates/<name>.md`, and returns a `preload_prompt` string. Include that string verbatim at the top of the spawn prompt. The agent receives its governing rules, protocol references, domain primers, and required output templates preloaded — no path-passing, no runtime Reads, no "did they remember to load X" failure mode. Canon uses its own four-field preloader instead of Claude Code's native `skills:` mechanism because Canon stores these as flat `.md` files, not per-skill `SKILL.md` directories. The native `skills:` field remains available for real Claude Code native skills, which it preloads independently.
 
-**On-demand domain primers (from task context):** Some tasks need extra domain context beyond the agent's default skills. Name those in the spawn prompt body — the agent Reads them per `agent-context-check`:
+**On-demand domain primers (from task context):** Some tasks need extra domain context beyond the agent's default preloads. Name those in the spawn prompt body — the agent Reads them per `agent-context-check`:
 
-- Domain primers: `"Relevant domain primers: authentication-security, backend-api. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
-- Template: `"Use template: implementation-log. Read from ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md."`
+- Domain primers not already in the agent's `primers:` list: `"Relevant domain primers: authentication-security, backend-api. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
 
-Rule of thumb: frontmatter skills are preloaded by the resolver (lead injects the content); task-specific domain primers and templates are named by the lead but Read by the agent.
+Rule of thumb: the four frontmatter fields (`rules`, `references`, `primers`, `templates`) are preloaded by the resolver — the lead injects the content, no Read call required. Task-specific domain primers the agent does not already declare are named by the lead but Read by the agent.
 
 ### MCP Tool Composition
 

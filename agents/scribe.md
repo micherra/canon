@@ -18,6 +18,9 @@ rules:
 references:
   - workspace-logging
   - status-protocol
+templates:
+  - claudemd-template
+  - context-sync-report
 tools:
   - Read
   - Edit

@@ -36,13 +36,14 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
   - **Why not all `plan` for read-only roles?** Claude Code's `plan` mode blocks ALL write tools including MCP `write_*` — per [permission-modes](https://code.claude.com/docs/en/permission-modes.md). So the subset that genuinely can't write anything (no MCP write tools) stays on `plan`; everyone else is `acceptEdits`. Each agent's `tools:` list is the real allowlist.
 - Each agent has a `maxTurns` budget appropriate to its role. A turn is one assistant message with tool calls; text-only responses don't consume a turn. Parallel tool calls in one message = 1 turn.
 - Agents receive fresh context per spawn (no carryover between invocations).
-- Agent output must follow templates from `templates/` (see `agent-template-required` rule). Agents producing templated artifacts preload that rule via `rules:`.
-- **Three dedicated preload fields** — rules, references, and primers each live in their own frontmatter list, where the field name *is* the namespace:
-  - `rules:` — list of bare names; each resolves to `rules/<name>.md` (agent-behavior rules).
-  - `references:` — list of bare names; each resolves to `references/<name>.md` (protocol fragments, checklists, templates).
-  - `primers:` — list of bare names; each resolves to `primers/<name>.md` (domain context).
+- Agent output must follow templates declared in `templates:` frontmatter (see `agent-template-required` rule). Templates preload like rules/references/primers; no runtime Read is required.
+- **Four dedicated preload fields** — each lives in its own frontmatter list where the field name *is* the namespace:
+  - `rules:` — bare names resolving to `rules/<name>.md` (imperative agent-behavior rules).
+  - `references:` — bare names resolving to `references/<name>.md` (protocol fragments, checklists).
+  - `primers:` — bare names resolving to `primers/<name>.md` (domain context).
+  - `templates:` — bare names resolving to `templates/<name>.md` (required output shapes).
 
-  The Canon MCP tool `resolve_agent_skills` reads these three fields and returns the concatenated content; the lead injects it into the spawn prompt before calling `Agent`. The native `skills:` field is reserved for real Claude Code native skills (per-directory `SKILL.md` wrappers) and is untouched by Canon's resolver.
+  The Canon MCP tool `resolve_agent_skills` reads all four fields and returns the concatenated content; the lead injects it into the spawn prompt before calling `Agent`. The native `skills:` field is reserved for real Claude Code native skills (per-directory `SKILL.md` wrappers) and is untouched by Canon's resolver.
 - Agents log activity per `workspace-logging.md` protocol.
 - `engineer` has direct access to `mcp__canon__get_messages` and `mcp__canon__write_implementation_summary` for collaboration during wave execution.
 - `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.

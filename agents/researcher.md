@@ -17,6 +17,8 @@ rules:
   - agent-context-check
 references:
   - status-protocol
+templates:
+  - research-finding
 tools:
   - Read
   - Bash

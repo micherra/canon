@@ -15,6 +15,8 @@ rules:
   - agent-context-check
 references:
   - status-protocol
+templates:
+  - pr-description
 tools:
   - Read
   - Edit

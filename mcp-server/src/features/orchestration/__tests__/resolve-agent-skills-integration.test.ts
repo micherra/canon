@@ -58,25 +58,29 @@ describe("resolve_agent_skills against shipped agents", () => {
   });
 
   for (const name of listAgents()) {
-    it(`${name}: every rules/references/primers entry resolves`, () => {
+    it(`${name}: every rules/references/primers/templates entry resolves`, () => {
       const result = resolveAgentSkills({ agent_name: name }, REPO_ROOT);
       assertOk<ResolveAgentSkillsResult>(result);
       const fm = agentFrontmatter(name);
       const declaredCount =
         coerceList(fm.rules).length +
         coerceList(fm.references).length +
-        coerceList(fm.primers).length;
+        coerceList(fm.primers).length +
+        coerceList(fm.templates).length;
       expect(result.unresolved).toEqual([]);
       expect(result.skills.length).toBe(declaredCount);
     });
 
-    it(`${name}: does not carry Canon rules/refs/primers in skills:`, () => {
+    it(`${name}: does not carry Canon rules/refs/primers/templates in skills:`, () => {
       const fm = agentFrontmatter(name);
       const native = coerceList(fm.skills);
       for (const id of native) {
         expect(
-          id.startsWith("rule:") || id.startsWith("ref:") || id.startsWith("primer:"),
-          `${name} has a prefixed Canon ID '${id}' still in skills:; move it to the matching rules:/references:/primers: field`,
+          id.startsWith("rule:") ||
+            id.startsWith("ref:") ||
+            id.startsWith("primer:") ||
+            id.startsWith("template:"),
+          `${name} has a prefixed Canon ID '${id}' still in skills:; move it to the matching rules:/references:/primers:/templates: field`,
         ).toBe(false);
       }
     });
