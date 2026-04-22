@@ -7,6 +7,15 @@ description: >-
   implementation.
 model: sonnet
 color: cyan
+maxTurns: 40
+permissionMode: acceptEdits
+skills:
+  - agent-test-the-contract
+  - agent-test-sad-paths
+  - tester-report-template
+  - principle-loading
+  - agent-context-check
+  - status-protocol
 tools:
   - Read
   - Write

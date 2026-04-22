@@ -7,6 +7,13 @@ description: >-
   command, or other agents.
 model: opus
 color: red
+maxTurns: 25
+permissionMode: plan
+skills:
+  - agent-cold-review
+  - principle-loading
+  - agent-context-check
+  - status-protocol
 tools:
   - Read
   - Bash

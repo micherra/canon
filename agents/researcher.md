@@ -6,6 +6,15 @@ description: >-
   findings document. Does NOT write code.
 model: sonnet
 color: yellow
+maxTurns: 20
+permissionMode: plan
+memory: project
+skills:
+  - agent-scoped-research
+  - agent-surface-assumptions
+  - agent-evidence-over-intuition
+  - agent-context-check
+  - status-protocol
 tools:
   - Read
   - Bash

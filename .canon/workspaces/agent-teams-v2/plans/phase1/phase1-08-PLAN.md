@@ -143,9 +143,9 @@ No new tests. Existing tests should pass since agent definitions are configurati
 1. `agents/engineer.md` exists with union tool list, correct skills (no domain primers), maxTurns 50, permissionMode acceptEdits, memory project
 2. `agents/implementor.md` and `agents/fixer.md` are deleted
 3. All 11 agent files have `maxTurns`, `permissionMode`, `memory` (where applicable), and `skills` in YAML frontmatter
-4. YAML frontmatter parses for all agents: `for f in agents/canon-*.md; do python3 -c "import yaml; yaml.safe_load(open('$f').read().split('---')[1])"; done`
+4. YAML frontmatter parses for all agents: `for f in agents/*.md; do [ "$(basename "$f")" = "README.md" ] && continue; python3 -c "import yaml; yaml.safe_load(open('$f').read().split('---')[1])"; done`
 5. No runtime `Read ${CLAUDE_PLUGIN_ROOT}/rules/` instructions remain in agent bodies
-6. `agents/.claude/CLAUDE.md` roster table updated to show 11 agents (engineer, planner present; implementor, fixer, guide, chat absent)
+6. `agents/.claude/CLAUDE.md` roster table updated to show 11 agents (engineer, planner present; implementor, fixer, guide, chat absent). Note: agent filenames are `agents/<role>.md` (no `canon-` prefix) per PR #120.
 7. `npm run build` passes
 8. `npm test` passes
 

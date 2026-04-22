@@ -7,6 +7,13 @@ description: >-
   the review/fix loop completes.
 model: sonnet
 color: green
+maxTurns: 20
+permissionMode: acceptEdits
+skills:
+  - agent-artifacts-only
+  - agent-template-required
+  - agent-context-check
+  - status-protocol
 tools:
   - Read
   - Edit

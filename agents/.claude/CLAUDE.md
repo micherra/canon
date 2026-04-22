@@ -3,24 +3,22 @@
 <!-- Managed by Canon. Manual edits are preserved. -->
 
 ## Purpose
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-22 -->
 Agent definitions for Canon's multi-agent build pipeline. Each markdown file defines a specialized Claude agent with its role, tools, permissions, and behavioral rules.
 
 ## Architecture
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-22 -->
 
-Each agent file uses YAML frontmatter (name, description, model, color, tools) followed by markdown instructions. Agents are spawned by the orchestrator during flow execution.
+Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, `maxTurns`, `permissionMode`, `memory`, `skills`, `tools`) followed by markdown instructions. Agents are spawned by the orchestrator during flow execution.
 
-**Agent roster:**
+**Agent roster (11):**
 
 | Agent | Role | Model |
 |-------|------|-------|
 | `architect` | Designs solutions; produces design decisions and task decomposition | opus |
-| `chat` | Project-aware conversational agent; discusses ideas, brainstorms, writes briefs for build handoff | sonnet |
-| `fixer` | Fixes failing tests and principle violations identified by reviewers | sonnet |
-| `guide` | Answers questions, browses principles, shows status dashboards (read-only) | sonnet |
-| `implementor` | Writes code per plan; writes unit tests | sonnet |
+| `engineer` | Executes code-writing work in implementation mode (per a plan) or fix mode (targeted bug or violation fixes) | sonnet |
 | `learner` | Analyzes patterns; suggests principle improvements | sonnet |
+| `planner` | Evaluates build requests pre-implementation; produces structured briefs that greenlight, redirect, or ask clarifying questions | opus |
 | `researcher` | Investigates single research dimensions | sonnet |
 | `reviewer` | Reviews code for principle compliance | opus |
 | `scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation | sonnet |
@@ -30,11 +28,13 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 | `writer` | Creates and edits Canon principles and agent-rules | sonnet |
 
 ## Conventions
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-22 -->
 
-- Each agent has defined read/write permissions enforced by the orchestrator
-- Agents receive fresh context per spawn (no carryover between invocations)
-- Agent output must follow templates from `templates/` (see `agent-template-required` rule)
-- Agents log activity per `workspace-logging.md` protocol
-- `implementor` has direct access to `mcp__canon__post_message` and `mcp__canon__get_messages` for collaboration during wave execution
-- `implementor` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes
+- Each agent has a declarative `permissionMode` (`plan` for read-only roles, `acceptEdits` for roles that write files) enforced by Claude Code.
+- Each agent has a `maxTurns` budget appropriate to its role.
+- Agents receive fresh context per spawn (no carryover between invocations).
+- Agent output must follow templates from `templates/` (see `agent-template-required` rule).
+- Agents log activity per `workspace-logging.md` protocol.
+- `engineer` has direct access to `mcp__canon__get_messages` and `mcp__canon__write_implementation_summary` for collaboration during wave execution.
+- `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.
+- Agents with `memory: project` (planner, engineer, researcher, architect, scribe, learner) persist agent memory across sessions; others do not.

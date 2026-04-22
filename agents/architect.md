@@ -6,6 +6,15 @@ description: >-
   principles. Spawned by the build orchestrator. Does NOT write code.
 model: opus
 color: green
+maxTurns: 30
+permissionMode: plan
+memory: project
+skills:
+  - agent-design-before-code
+  - agent-plans-are-prompts
+  - agent-surface-assumptions
+  - agent-context-check
+  - status-protocol
 tools:
   - Read
   - Bash

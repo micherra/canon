@@ -6,6 +6,14 @@ description: >-
   ranked by severity.
 model: opus
 color: red
+maxTurns: 25
+permissionMode: plan
+skills:
+  - agent-assume-hostile-input
+  - security-checklist
+  - principle-loading
+  - agent-context-check
+  - status-protocol
 tools:
   - Read
   - Bash

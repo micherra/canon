@@ -7,6 +7,15 @@ description: >-
   new principles.
 model: sonnet
 color: cyan
+maxTurns: 15
+permissionMode: acceptEdits
+memory: project
+skills:
+  - agent-context-sync
+  - agent-missing-artifact
+  - workspace-logging
+  - agent-context-check
+  - status-protocol
 tools:
   - Read
   - Edit
