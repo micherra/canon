@@ -6,8 +6,7 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -51,7 +50,12 @@ describe("logStep", () => {
   });
 
   test("updates existing step status from planned → started → completed", async () => {
-    await logStep({ agent_type: "canon-engineer", status: "planned", step_id: "step-a", workspace });
+    await logStep({
+      agent_type: "canon-engineer",
+      status: "planned",
+      step_id: "step-a",
+      workspace,
+    });
     await logStep({ status: "started", step_id: "step-a", workspace });
     await logStep({ status: "completed", step_id: "step-a", workspace });
 
@@ -232,8 +236,10 @@ describe("verifyCompletion", () => {
     expect(result.flow_outcome.review_verdict).toBe("approve");
     expect(result.flow_outcome.fix_iterations).toBe(3);
     expect(result.flow_outcome.total_steps).toBe(2);
-    expect(typeof result.flow_outcome.total_duration_ms === "number"
-      || result.flow_outcome.total_duration_ms === null).toBe(true);
+    expect(
+      typeof result.flow_outcome.total_duration_ms === "number" ||
+        result.flow_outcome.total_duration_ms === null,
+    ).toBe(true);
   });
 
   test("review_verdict reports the LAST verdict, not the first (review→fix→re-review)", async () => {
