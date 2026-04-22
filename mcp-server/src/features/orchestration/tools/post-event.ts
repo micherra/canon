@@ -6,7 +6,7 @@
  * cross-build analysis and pattern mining.
  */
 
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 

@@ -19,7 +19,8 @@
  * - Multiple events, second produces the winning effect
  */
 
-import type { ExecutionStore, MessageOutput } from "@domains/workspaces/execution-store.ts";
+import type { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { MessageOutput } from "@domains/workspaces/execution-store-types.ts";
 import { describe, expect, it, vi } from "vitest";
 import type { FlowDefinition } from "../flow-definition-schemas.ts";
 import { drainFlowEvents } from "../flow-event-channel.ts";

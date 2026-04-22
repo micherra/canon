@@ -12,11 +12,11 @@ import type { PromptContext } from "../model/types.ts";
 
 // Hoist vi.mock — must come before module imports
 
-vi.mock("@domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store-cache.ts", () => ({
   getExecutionStore: vi.fn(),
 }));
 
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { substituteVariablesStage } from "../services/substitute-variables.ts";
 
 function makeBoard(): Board {

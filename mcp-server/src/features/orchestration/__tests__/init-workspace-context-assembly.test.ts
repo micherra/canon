@@ -27,7 +27,7 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];

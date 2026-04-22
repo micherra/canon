@@ -12,7 +12,7 @@ import type { ResolvedFlow as FlowType } from "@domains/flows/flow-definition-sc
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import type { FlowEventMap } from "@domains/messages/events.ts";
 import { writeMessage } from "@domains/messages/messages.ts";
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { reportResult } from "../tools/report-result.ts";

@@ -22,7 +22,7 @@ const mockStore = {
   getProgress: vi.fn(),
 };
 
-vi.mock("@domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store-cache.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));
 
@@ -35,7 +35,7 @@ vi.mock("../services/wave-briefing.ts", () => ({
 
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assembleWaveBriefing } from "../services/wave-briefing.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 

@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PromptContext } from "../model/types.ts";
 import { resolveProgress } from "../services/resolve-progress.ts";

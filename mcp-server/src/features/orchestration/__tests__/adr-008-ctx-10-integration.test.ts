@@ -51,7 +51,7 @@ const {
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 
-vi.mock("@domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store-cache.ts", () => ({
   getExecutionStore: vi.fn(() => mockExecutionStore),
 }));
 
@@ -110,7 +110,7 @@ vi.mock("@graph/kg-store.ts", () => ({
 // ─── Imports (after mocks) ─────────────────────────────────────────────────────
 
 import { existsSync } from "node:fs";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 

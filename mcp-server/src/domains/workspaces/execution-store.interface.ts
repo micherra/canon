@@ -24,8 +24,7 @@ import type {
   MessageOutput,
   UpdateExecutionFields,
   UpdateWaveEventFields,
-} from "./execution-store.ts";
-
+} from "./execution-store-types.ts";
 export type IExecutionStore = {
   // Event log
   appendEvent(type: string, payload: Record<string, unknown>, correlationId?: string): void;

@@ -17,8 +17,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { initExecutionDb, SCHEMA_VERSION } from "../execution-schema.ts";
-import type { FlowLineageEntry } from "../execution-store.ts";
 import { ExecutionStore } from "../execution-store.ts";
+import type { FlowLineageEntry } from "../execution-store-lineage.ts";
 
 let tmpFiles: string[] = [];
 

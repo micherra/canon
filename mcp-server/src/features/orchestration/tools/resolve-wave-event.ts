@@ -1,5 +1,5 @@
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { resolveEventAgents } from "@domains/workspaces/wave-events.ts";
 
 export type ResolveWaveEventInput = {

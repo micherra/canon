@@ -15,11 +15,8 @@ import {
   initExecutionDb,
   SCHEMA_VERSION,
 } from "@domains/workspaces/execution-schema.ts";
-import {
-  clearStoreCache,
-  ExecutionStore,
-  getExecutionStore,
-} from "@domains/workspaces/execution-store.ts";
+import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

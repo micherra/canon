@@ -11,7 +11,7 @@
 
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type {
   PromptContext,
   PromptStage,

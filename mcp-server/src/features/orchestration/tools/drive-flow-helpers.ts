@@ -14,7 +14,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { type GateResult, runGates } from "@domains/flows/gate-runner.ts";
-import type { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { createWaveWorktrees } from "@domains/workspaces/wave-lifecycle.ts";
 import { parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
 import { evaluateLearnGate } from "@features/orchestration/services/learn-gate.ts";

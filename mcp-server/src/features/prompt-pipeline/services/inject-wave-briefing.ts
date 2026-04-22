@@ -25,7 +25,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import { getItemCountCap } from "@features/orchestration/services/context-budget.ts";
 import {

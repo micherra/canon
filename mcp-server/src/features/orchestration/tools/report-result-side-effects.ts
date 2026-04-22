@@ -12,7 +12,7 @@ import type {
   StuckWhen,
 } from "@domains/flows/flow-definition-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
-import type { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { executeEffects } from "../engine/effects.ts";
 import type {
   LogEntry,

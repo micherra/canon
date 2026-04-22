@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { updateBoard } from "../tools/update-board.ts";
 

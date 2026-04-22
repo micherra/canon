@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import {
   checkSlugCollision,
   initWorkspace as createWorkspace,

@@ -37,7 +37,7 @@ vi.mock("@features/orchestration/services/scope-resolver.ts", () => ({
   resolveTaskScope: vi.fn(),
 }));
 
-vi.mock("@domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store-cache.ts", () => ({
   getExecutionStore: vi.fn().mockReturnValue({
     getSession: vi.fn().mockReturnValue({ tier: "medium" }),
   }),

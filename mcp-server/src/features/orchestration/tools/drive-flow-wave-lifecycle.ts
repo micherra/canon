@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { WaveResult } from "@domains/flows/board-state-schemas.ts";
 import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { runGates } from "@domains/flows/gate-runner.ts";
-import type { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { WaveWorktreeResult } from "@domains/workspaces/wave-lifecycle.ts";
 import {
   cleanupWorktrees,

@@ -18,8 +18,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
-import type { InitExecutionParams } from "@domains/workspaces/execution-store.ts";
-import { ExecutionStore, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import type { InitExecutionParams } from "@domains/workspaces/execution-store-types.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

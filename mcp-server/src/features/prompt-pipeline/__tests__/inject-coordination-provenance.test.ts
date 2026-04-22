@@ -61,7 +61,7 @@ vi.mock("@graph/kg-query.ts", () => ({
 }));
 
 // getExecutionStore mock — controlled per test via mockReturnValue
-vi.mock("@domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store-cache.ts", () => ({
   getExecutionStore: vi.fn(),
 }));
 
@@ -85,7 +85,7 @@ vi.mock("@shared/constants.ts", () => ({
 }));
 
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 import { injectCoordination } from "../services/inject-coordination.ts";
 

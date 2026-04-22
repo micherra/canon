@@ -16,7 +16,7 @@ import type { Board, CannotFixItem, HistoryEntry } from "@domains/flows/board-st
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";

@@ -8,7 +8,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
 import type { Effect, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ReviewEntry } from "@shared/schema.ts";

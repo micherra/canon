@@ -15,7 +15,8 @@ import { join } from "node:path";
 import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { initExecutionDb } from "../execution-schema.ts";
-import { ExecutionStore, getExecutionStore } from "../execution-store.ts";
+import { ExecutionStore } from "../execution-store.ts";
+import { getExecutionStore } from "../execution-store-cache.ts";
 
 function makeDb() {
   return initExecutionDb(":memory:");

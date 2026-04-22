@@ -15,7 +15,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock analytics so appendFlowRun doesn't need drift.db during most tests

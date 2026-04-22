@@ -33,7 +33,7 @@ vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(),
 }));
 
-vi.mock("@domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store-cache.ts", () => ({
   getExecutionStore: vi.fn(),
 }));
 
@@ -47,7 +47,7 @@ vi.mock("node:fs", async (importOriginal) => {
 
 import { existsSync } from "node:fs";
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import {
   assembleWaveBriefing,
   readWaveGuidance,

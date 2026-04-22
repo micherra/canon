@@ -30,7 +30,7 @@ import { join } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ToolOverrides } from "@domains/flows/flow-definition-schemas.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { KgQuery } from "@graph/kg-query.ts";
 import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";

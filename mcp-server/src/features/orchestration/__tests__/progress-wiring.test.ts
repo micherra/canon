@@ -26,7 +26,7 @@ vi.mock("@domains/flows/flow-parser.ts", async (importOriginal) => {
 
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 

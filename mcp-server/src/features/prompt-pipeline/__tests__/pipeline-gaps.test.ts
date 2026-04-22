@@ -74,7 +74,7 @@ vi.mock("@domains/flows/skip-when.ts", () => ({
 // Imports (after mocks)
 
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { inspectDebateProgress } from "@features/orchestration/engine/debate.ts";
 import { clusterDiff } from "@features/orchestration/services/diff-cluster.ts";
 import type {

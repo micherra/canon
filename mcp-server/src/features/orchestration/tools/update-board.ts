@@ -1,7 +1,7 @@
 import { enterState, setBlocked } from "@domains/board/board.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
 import { generateId } from "@shared/lib/id.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";

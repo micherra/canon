@@ -18,7 +18,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
-import { clearStoreCache } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache } from "@domains/workspaces/execution-store-cache.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";

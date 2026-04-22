@@ -17,7 +17,7 @@ import {
   assertWorkspacePath,
   clearStoreCache,
   getExecutionStore,
-} from "@domains/workspaces/execution-store.ts";
+} from "@domains/workspaces/execution-store-cache.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import type { ReviewEntry } from "@shared/schema.ts";

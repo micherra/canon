@@ -36,6 +36,14 @@ import {
   upsertIteration,
 } from "./execution-store-iterations.ts";
 import {
+  getFlowLineage as _getFlowLineage,
+  getLatestFlowForBranch as _getLatestFlowForBranch,
+  recordFlowLineage as _recordFlowLineage,
+  type FlowLineageEntry,
+  type LineageStatements,
+  prepareLineageStatements,
+} from "./execution-store-lineage.ts";
+import {
   appendEvent,
   appendMessage,
   type EventStmts,
@@ -66,35 +74,6 @@ import {
   updateExecutionVersioned as _updateExecutionVersioned,
   type VersionedUpdateResult,
 } from "./execution-store-updater.ts";
-
-// Re-export factory and cache helpers so existing importers continue to work.
-// biome-ignore lint/performance/noBarrelFile: 131 downstream consumers depend on this barrel; migrating every importer is a separate refactor.
-export {
-  assertWorkspacePath,
-  clearStoreCache,
-  getExecutionStore,
-} from "./execution-store-cache.ts";
-export type { FlowLineageEntry } from "./execution-store-lineage.ts";
-// Re-export types so all existing importers continue to work unchanged
-export type {
-  EventOutput,
-  GetEventsOptions,
-  GetMessagesOptions,
-  GetWaveEventsOptions,
-  InitExecutionParams,
-  MessageOutput,
-  UpdateExecutionFields,
-  UpdateWaveEventFields,
-} from "./execution-store-types.ts";
-
-import {
-  getFlowLineage as _getFlowLineage,
-  getLatestFlowForBranch as _getLatestFlowForBranch,
-  recordFlowLineage as _recordFlowLineage,
-  type FlowLineageEntry,
-  type LineageStatements,
-  prepareLineageStatements,
-} from "./execution-store-lineage.ts";
 
 // ExecutionStore
 
