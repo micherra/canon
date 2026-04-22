@@ -34,12 +34,13 @@ color: green
 memory: project
 maxTurns: 40
 permissionMode: plan
-skills:
-  - planner-brief
-  - runbook-synthesis
+rules:
   - agent-surface-assumptions
   - agent-evidence-over-intuition
   - agent-context-check
+references:
+  - planner-brief
+  - runbook-synthesis
   - status-protocol
 tools:
   - Read
@@ -52,6 +53,8 @@ tools:
   - mcp__canon__semantic_search
 ---
 ```
+
+**PLAN amendment note** (2026-04-22, phase1-08.5): original v2_1a-03 PLAN declared a single `skills:` list. Phase 1 Wave 2 refactored agent preload declarations into three dedicated fields (`rules:`, `references:`, `primers:`) resolved by the `resolve_agent_skills` MCP tool — see `agents/.claude/CLAUDE.md` for the convention. `planner-brief` and `runbook-synthesis` live at `references/planner-brief.md` and `references/runbook-synthesis.md` (per v2_1a-01 and v2_1a-02), so they belong under `references:`. No change to semantics: both files still preload at spawn time.
 
 **Body (new, replaces any v2-era body):**
 
@@ -84,14 +87,14 @@ tools:
 
 No existing test infrastructure for agents/*.md. Validation is by:
 
-- Manual read: frontmatter matches spec (skills, maxTurns 40, model opus, permissionMode plan, memory project); body references both skill files by name; no Edit/Write/Bash calls in body (read-only by permissionMode)
+- Manual read: frontmatter matches spec (`rules` / `references` / `tools` fields populated, maxTurns 40, model opus, permissionMode plan, memory project); body references both skill files by name; no Edit/Write/Bash calls in body (read-only by permissionMode)
 - Integration (part of v2_1a-08 validation): spawn planner against a representative build request; confirm `planning-brief.md` + `runbook.md` produced at expected paths; runbook carries `confidence_signals[]` frontmatter; no aggregate scalar in user-facing output
 
 ### Verify
 
 1. `agents/planner.md` parses as agent definition
-2. Frontmatter matches spec
-3. Skills referenced (`planner-brief`, `runbook-synthesis`) resolve to files from v2_1a-01, v2_1a-02
+2. Frontmatter matches spec (three-field preload model: `rules:`, `references:`)
+3. `resolve_agent_skills` returns zero `unresolved` entries for the planner; `preload_prompt` contains planner-brief + runbook-synthesis (from v2_1a-01, v2_1a-02)
 4. Agent tests pass: `npm test -- planner`
 5. Manual spawn against 2-3 test requests produces expected artifacts
 
