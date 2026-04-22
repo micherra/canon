@@ -42,7 +42,7 @@ For each runbook, validate against `templates/runbook-template.md`:
 
 **3. Skill registration completeness (1 check)**:
 For each agent definition's `skills:` frontmatter list:
-- Verify the named skill exists as a file under `skills/canon/references/` (either directly or via symlink from `rules/`)
+- Verify the named skill exists as a file under `references/` (either directly or via symlink from `rules/`)
 - Report any unresolvable skill names
 
 **4. Agent definition consistency (11 checks)**:
@@ -84,7 +84,7 @@ For each of the 11 agent definitions:
 - KG-check hook correctly detects: missing DB, stale DB (computed_at_commit ≠ HEAD), fresh DB
 
 **9. Domain skills (1 check)**:
-- 12 domain skill files exist under `skills/canon/references/`: backend-api, backend-data, frontend, testing, infrastructure, deprecation, authentication-security, migration-strategy, observability, error-handling, performance, devops-ci
+- 12 domain skill files exist under `references/`: backend-api, backend-data, frontend, testing, infrastructure, deprecation, authentication-security, migration-strategy, observability, error-handling, performance, devops-ci
 - Domain skills are NOT in any agent's `skills:` frontmatter (they're on-demand, loaded by the lead)
 - `domain-primers/` originals migrated (files present in new location)
 - CLAUDE.md orchestration section documents which domain skills to load for each task type

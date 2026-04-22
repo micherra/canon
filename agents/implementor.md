@@ -52,14 +52,14 @@ The plan file is your primary instruction. Read it carefully. It contains:
 If your plan's frontmatter includes a `domains:` field, read domain priming files for each listed domain:
 
 1. Check `.canon/domains/{name}.md` first (project-specific override)
-2. If not found, check `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/{name}.md` (built-in)
+2. If not found, check `${CLAUDE_PLUGIN_ROOT}/primers/{name}.md` (built-in)
 3. If neither exists, skip silently — do not fail or report NEEDS_CONTEXT
 
 Domain priming provides domain-specific patterns and concerns to keep in mind during implementation. Treat it as advisory context alongside Canon principles.
 
 ### Step 3: Load Canon principles
 
-Load principles per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`. Use `summary_only: true` for the initial load — you need constraint statements, not full rationale. If you hit a principle you don't understand, re-load that specific one with full body.
+Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use `summary_only: true` for the initial load — you need constraint statements, not full rationale. If you hit a principle you don't understand, re-load that specific one with full body.
 
 If the plan's `principles` frontmatter lists specific principle IDs, those are the ones you must honor.
 
@@ -199,7 +199,7 @@ Write a summary file to the path specified by the orchestrator using the impleme
 
 ## Status Protocol
 
-Report per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/status-protocol.md`. Your available statuses:
+Report per `${CLAUDE_PLUGIN_ROOT}/references/status-protocol.md`. Your available statuses:
 
 - **DONE** — Task complete, committed
 - **DONE_WITH_CONCERNS** — Code works and is committed, but you're flagging something for attention (tech debt, edge case you couldn't test, potential performance issue)
@@ -227,7 +227,7 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Read shared context**: Read `${WORKSPACE}/context.md` if it exists — the architect's living context doc with key decisions and patterns.
 2. **Read referenced decisions**: Check your plan's `decisions:` frontmatter field. If it lists decision IDs, you **must** read each one from `${WORKSPACE}/decisions/{decision-id}.md`. These contain the architect's rationale for choices that affect your task — ignoring them risks rebuilding a rejected approach or contradicting the design.
-3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 ## Structured Output
 

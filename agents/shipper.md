@@ -123,11 +123,11 @@ If push/PR creation fails, save the PR description to `${WORKSPACE}/plans/${slug
 
 ### Step 6: Log activity
 
-Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 ## Status Protocol
 
-Report per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/status-protocol.md`. Your available statuses:
+Report per `${CLAUDE_PLUGIN_ROOT}/references/status-protocol.md`. Your available statuses:
 
 - **DONE** — PR description generated (and PR created if requested)
 - **DONE_WITH_CONCERNS** — Generated, but flagging issues (missing test report, review had concerns, security findings unresolved). **When the review verdict is WARNING or security status is FINDINGS, the PR description MUST prominently surface these** — use the `## Unresolved Concerns` section in the PR description template. Do not bury build-time concerns in artifact summaries.

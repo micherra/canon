@@ -1,1 +1,0 @@
-../../../rules/agent-test-sad-paths.md

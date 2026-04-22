@@ -93,7 +93,7 @@ Save findings to the specified output path (provided by the orchestrator). The o
 
 ## Workspace Logging
 
-Read and follow `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+Read and follow `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 ## Pre-existing Briefs
 
@@ -117,4 +117,4 @@ You do NOT receive other researchers' findings. Stay focused on your assigned di
 
 ## Loading Canon Principles
 
-Read and follow `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`. Use scoped loading with `summary_only: true` for your assigned files.
+Read and follow `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use scoped loading with `summary_only: true` for your assigned files.

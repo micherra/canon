@@ -9,9 +9,9 @@ depends_on:
   - "phase1-04"
 files:
   - rules/agent-context-check.md
-  - skills/canon/references/ (symlinks for 21 rules)
-  - skills/canon/references/ (6 migrated domain primers)
-  - skills/canon/references/ (6 new domain skills)
+  - references/ (symlinks for 21 rules)
+  - references/ (6 migrated domain primers)
+  - references/ (6 new domain skills)
 principles:
   - simplicity-first
   - information-hiding
@@ -26,17 +26,17 @@ Three deliverables:
 
 #### A. Register rules as skills
 
-Create symlinks from `rules/*.md` to `skills/canon/references/` so agent definitions can reference them via `skills:` frontmatter.
+Create symlinks from `rules/*.md` to `references/` so agent definitions can reference them via `skills:` frontmatter.
 
 ```bash
-cd skills/canon/references/
+cd references/
 for rule in ../../../rules/agent-*.md; do
   name=$(basename "$rule")
   ln -sf "$rule" "$name"
 done
 ```
 
-Verify: every `agent-*.md` rule file has a corresponding symlink in `skills/canon/references/`.
+Verify: every `agent-*.md` rule file has a corresponding symlink in `references/`.
 
 #### B. Create agent-context-check rule
 
@@ -59,31 +59,31 @@ Before starting work, check your spawn prompt for context:
 
 2. **File context**: If you need dependency or graph information not in your prompt, call `get_file_context` or `graph_query` directly.
 
-3. **Domain skills**: If your spawn prompt includes a `Relevant domain skills:` list, Read each named skill file from `skills/canon/references/` before starting work.
+3. **Domain skills**: If your spawn prompt includes a `Relevant domain skills:` list, Read each named skill file from `references/` before starting work.
 
 4. **Template**: If your spawn prompt names a template (e.g., `Use template: implementation-log`), Read it from `templates/` before producing output.
 
 Do not block or report an error if context is missing — self-serve it via MCP tools and Read.
 ```
 
-Symlink this into `skills/canon/references/` as well.
+Symlink this into `references/` as well.
 
 #### C. Migrate domain primers
 
-Move existing primers from `domain-primers/` to `skills/canon/references/`:
+Move existing primers from `domain-primers/` to `references/`:
 
 ```bash
-cp domain-primers/backend-api.md skills/canon/references/
-cp domain-primers/backend-data.md skills/canon/references/
-cp domain-primers/frontend.md skills/canon/references/
-cp domain-primers/testing.md skills/canon/references/
-cp domain-primers/infrastructure.md skills/canon/references/
-cp domain-primers/deprecation.md skills/canon/references/
+cp domain-primers/backend-api.md references/
+cp domain-primers/backend-data.md references/
+cp domain-primers/frontend.md references/
+cp domain-primers/testing.md references/
+cp domain-primers/infrastructure.md references/
+cp domain-primers/deprecation.md references/
 ```
 
 #### D. Create 6 new domain skills
 
-Write ~30-40 lines each in `skills/canon/references/`, following the existing primer format (Mental Models, Decision Frameworks, Failure Modes, Guardrails):
+Write ~30-40 lines each in `references/`, following the existing primer format (Mental Models, Decision Frameworks, Failure Modes, Guardrails):
 
 1. `authentication-security.md` — auth patterns, credential handling, session management, common auth vulnerabilities
 2. `migration-strategy.md` — zero-downtime patterns, feature flags, data backfill, rollback procedures
@@ -103,15 +103,15 @@ No code tests. Verify symlinks resolve and files parse.
 
 ### Verify
 
-1. All 21 `agent-*.md` rules have symlinks in `skills/canon/references/`
-2. `agent-context-check.md` exists in both `rules/` and `skills/canon/references/`
-3. 6 domain primers exist in `skills/canon/references/` (migrated from `domain-primers/`)
-4. 6 new domain skill files exist in `skills/canon/references/`
+1. All 21 `agent-*.md` rules have symlinks in `references/`
+2. `agent-context-check.md` exists in both `rules/` and `references/`
+3. 6 domain primers exist in `references/` (migrated from `domain-primers/`)
+4. 6 new domain skill files exist in `references/`
 5. All files parse as valid markdown
 6. `npm run build` and `npm test` pass unchanged
 
 ### Done when
 
-- 21 rule symlinks + 1 new rule + 6 migrated primers + 6 new domain skills = 34 files in `skills/canon/references/` (plus existing 11 references)
+- 21 rule symlinks + 1 new rule + 6 migrated primers + 6 new domain skills = 34 files in `references/` (plus existing 11 references)
 - agent-context-check covers principles, file context, domain skills, and templates
 - All symlinks resolve correctly

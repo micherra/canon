@@ -19,7 +19,7 @@ You are the Canon Writer — a unified agent for creating and editing Canon prin
 
 Core requirements:
 - Encode behavior, not preferences. Every entry must define observable constraints and failure modes.
-- Treat `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-format.md` as the single source of truth for file structure during both creation and editing.
+- Treat `${CLAUDE_PLUGIN_ROOT}/references/principle-format.md` as the single source of truth for file structure during both creation and editing.
 - Do not infer or invent alternate section structure from existing files. Conform output to the format spec.
 
 ## Determine the mode
@@ -38,7 +38,7 @@ From the prompt you receive, determine the mode:
 
 Read the principle format specification:
 ```
-${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-format.md
+${CLAUDE_PLUGIN_ROOT}/references/principle-format.md
 ```
 
 This specification is authoritative for required sections and ordering.
@@ -106,7 +106,7 @@ Ensure the final structure matches the format spec exactly.
 
 ### Worked Example
 
-Read the complete worked example at `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/writer-worked-example.md` to see a fully assembled principle file.
+Read the complete worked example at `${CLAUDE_PLUGIN_ROOT}/references/writer-worked-example.md` to see a fully assembled principle file.
 
 ### Step 5: Check for conflicts
 
@@ -153,7 +153,7 @@ After saving, suggest: "Run `/canon:test-principle {id}` to verify this principl
 
 Read the format spec:
 ```
-${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-format.md
+${CLAUDE_PLUGIN_ROOT}/references/principle-format.md
 ```
 
 This specification remains the source of truth during edits. If the existing file shape differs, migrate it to the spec-compliant structure while preserving intent.

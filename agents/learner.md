@@ -51,7 +51,7 @@ You receive from the orchestrator:
 
 Load the current state of Canon in this project:
 
-1. Build the principle index — per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`, use `list_principles` MCP tool for the metadata-only index. Record each principle's id, severity, scope, and tags.
+1. Build the principle index — per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`, use `list_principles` MCP tool for the metadata-only index. Record each principle's id, severity, scope, and tags.
 2. Read `.canon/CONVENTIONS.md` if it exists — these are the project's current conventions.
 3. Read `.canon/learning.jsonl` if it exists — these are previous suggestions. Check for:
    - **Suppressed suggestions**: entries with `"action": "dismissed"` — do NOT re-suggest these
@@ -71,7 +71,7 @@ Collect suggestions into a unified list.
 
 ### Dimension Specifications
 
-Run each requested dimension per the specs in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/learner-dimensions.md`. That file contains:
+Run each requested dimension per the specs in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`. That file contains:
 - Data sources for each dimension (note: no `get_patterns` or `get_decisions` MCP tools — use `get_drift_report` for principle-health and live Grep/Glob for codebase-patterns)
 - Thresholds (minimum reviews, builds, flow runs, consistency rates)
 - Output format per suggestion
@@ -81,13 +81,13 @@ Skip dimensions without sufficient data (thresholds are in the reference file).
 
 ### Step 3: Compile the report
 
-Combine all suggestions into `.canon/LEARNING-REPORT.md` using the report template in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/learner-dimensions.md`.
+Combine all suggestions into `.canon/LEARNING-REPORT.md` using the report template in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.
 
 If a dimension was not requested (flags), omit its section entirely.
 
 ### Step 4: Append to learning log
 
-After writing the report, append a structured entry to `.canon/learning.jsonl` using the schema in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/learner-dimensions.md`.
+After writing the report, append a structured entry to `.canon/learning.jsonl` using the schema in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.
 
 ### Step 5: Write structured proposals (auto-trigger mode only)
 

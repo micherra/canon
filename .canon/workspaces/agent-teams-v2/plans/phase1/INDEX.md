@@ -6,7 +6,7 @@
 
 | Task | Wave | Depends on | Key files | Description |
 |------|------|------------|-----------|-------------|
-| phase1-05 | 1 | — | `rules/*.md` → `skills/canon/references/`, `domain-primers/*.md` → `skills/canon/references/`, 6 new domain skills, `rules/agent-context-check.md` | Register rules as skills, migrate domain primers, create 6 new domain skills, create agent-context-check rule |
+| phase1-05 | 1 | — | `rules/*.md` → `references/`, `domain-primers/*.md` → `references/`, 6 new domain skills, `rules/agent-context-check.md` | Register rules as skills, migrate domain primers, create 6 new domain skills, create agent-context-check rule |
 | phase1-06 | 1 | — | `mcp-server/src/features/orchestration/tools/orchestration-journal.ts` | Orchestration journal tool (`log_step` + `verify_completion`; v2.1 extends with `domain_skills_loaded` + `outcome` fields — see v2.md §2.9) |
 | phase1-07 | 1 | — | `hooks/canon-agent-teams/*.sh`, `hooks/canon-agent-teams/hooks.json` | 5 hooks: PostCommit trailers, completion verify, SessionStart doc-check, SessionStart KG-check, SubagentStop scribe-queue. v2.1a adds a 6th hook (`canon-workspace-check.sh` / L4) via v2_1a-05. |
 | phase1-08 | 2 | Wave 1 | `agents/*.md` (delete 4, create 2, modify 9) | Delete implementor+fixer+guide+chat, add engineer+planner (11 agents). **GATE A for v2.1** — produces `planner` + `engineer` that v2.1a depends on. |
@@ -58,7 +58,7 @@ These legacy flows are NOT converted to runbooks. CLAUDE.md's dispatch section h
 - `hooks/canon-agent-teams/post-engineer-scribe.sh`
 - `agents/engineer.md`
 - `agents/planner.md`
-- 6 new domain skill files under `skills/canon/references/`
+- 6 new domain skill files under `references/`
 
 The static runbook files that earlier drafts specified (`templates/runbook-template.md`, `skills/canon/runbooks/README.md` + 5 runbooks) are NOT produced — superseded by v2.1a's vocabulary-based synthesis.
 
@@ -82,4 +82,4 @@ The static runbook files that earlier drafts specified (`templates/runbook-templ
 
 **Symlinks (~19):**
 
-- `rules/agent-*.md` → `skills/canon/references/agent-*.md` (skill registrations)
+- `rules/agent-*.md` → `references/agent-*.md` (skill registrations)

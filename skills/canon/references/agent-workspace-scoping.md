@@ -1,1 +1,0 @@
-../../../rules/agent-workspace-scoping.md

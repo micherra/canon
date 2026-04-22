@@ -1,14 +1,14 @@
 ---
 done_criteria:
   - id: "dc-01"
-    description: "Canonical step vocabulary lives at skills/canon/references/runbook-vocabulary.md with 15 step IDs (13 functional + 2 mandatory tail) and versioned-change discipline documented."
+    description: "Canonical step vocabulary lives at references/runbook-vocabulary.md with 15 step IDs (13 functional + 2 mandatory tail) and versioned-change discipline documented."
     testable: "File exists. Exactly 15 step rows. Each step has id, default agent, dispatch, default HITL, purpose. Mandatory tail (context-sync, learn) present."
   - id: "dc-02"
     description: "planner-brief.md skill defines the strategic-analysis contract the planner follows to produce plans/${slug}/planning-brief.md."
-    testable: "skills/canon/references/planner-brief.md exists. Defines required brief sections (problem statement, target users, acceptance criteria, alternatives, recommended approach, open questions). Registered in skills manifest."
+    testable: "references/planner-brief.md exists. Defines required brief sections (problem statement, target users, acceptance criteria, alternatives, recommended approach, open questions). Registered in skills manifest."
   - id: "dc-03"
     description: "runbook-synthesis.md skill defines the MUST / MAY / MUST NOT synthesis contract including step schema, iterate-until-approved loop, and contract pairings."
-    testable: "skills/canon/references/runbook-synthesis.md exists. MUST/MAY/MUST NOT sections present. References vocabulary strictly. Registered in skills manifest."
+    testable: "references/runbook-synthesis.md exists. MUST/MAY/MUST NOT sections present. References vocabulary strictly. Registered in skills manifest."
   - id: "dc-04"
     description: "planner agent body rewritten to load planner-brief + runbook-synthesis skills, emit planning-brief.md + runbook.md, and run the iterate-until-approved loop. maxTurns: 40, model: opus, permissionMode: plan, memory: project."
     testable: "agents/planner.md frontmatter matches spec. Body references both skills. Produces both artifacts when spawned against a test request."

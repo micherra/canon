@@ -1,1 +1,0 @@
-../../../rules/agent-artifacts-only.md

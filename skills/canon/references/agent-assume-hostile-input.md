@@ -1,1 +1,0 @@
-../../../rules/agent-assume-hostile-input.md

@@ -1,1 +1,0 @@
-../../../rules/agent-minimal-fix.md

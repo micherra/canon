@@ -1,1 +1,0 @@
-../../../rules/agent-test-the-contract.md

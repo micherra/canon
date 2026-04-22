@@ -6,7 +6,7 @@ decisions:
   - "dc-07"
 files:
   - agents/learner.md
-  - skills/canon/references/learner-principle-refinement.md
+  - references/learner-principle-refinement.md
 principles:
   - agent-design-before-code
   - agent-evidence-over-intuition
@@ -22,7 +22,7 @@ Extend the `learner` agent so it can read lifecycle snapshots (v2_1b-01) + drift
 
 **Approach:**
 
-1. **New skill file** `skills/canon/references/learner-principle-refinement.md` documenting the analysis pattern:
+1. **New skill file** `references/learner-principle-refinement.md` documenting the analysis pattern:
    - **Input sources:** `lifecycle_workspace_snapshots` (v2_1b-00); `drift_store.violations` (existing); fix-summary files with `cause` / `root_cause_tag` / `upstream_step_id` (v2_1b-03); implementation-summary files with `justified_deviations[]` (v2_1b-04); review-finding `principle_id` consistency (v2_1b-05)
    - **Pattern-detection queries** (illustrative, not exhaustive):
      - **Elevated fix cost:** principles whose violations consistently take > N fix iterations → narrow the principle or improve its examples

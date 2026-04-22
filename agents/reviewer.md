@@ -66,7 +66,7 @@ Determine the diff to review based on what you received:
 
 If principles were provided in your prompt context, use those directly — do NOT re-load them.
 
-Only if principles were NOT provided: load per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`. Use full body (not `summary_only`) — you need examples to identify violation patterns.
+Only if principles were NOT provided: load per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use full body (not `summary_only`) — you need examples to identify violation patterns.
 
 Cap at max 10 principles, prioritized: rules > strong-opinions > conventions.
 
@@ -248,7 +248,7 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Use template**: Read the review-checklist template and follow its structure exactly. If no template path is provided, report `NEEDS_CONTEXT`.
 2. **Save to reviews/**: Save a copy to `${WORKSPACE}/reviews/`.
-3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 **Cold review is preserved**: Do NOT read research, plan files, decisions, or context.md until Stages 1 and 2 are complete. After Stages 1 and 2, you may read implementor `*-SUMMARY.md` files for Stage 3, and plan files (DESIGN.md, INDEX.md) for Stage 4.
 

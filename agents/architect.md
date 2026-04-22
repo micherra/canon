@@ -53,7 +53,7 @@ You are the Canon Architect — you design technical approaches checked against 
 3. Read the full body of Canon principles tagged as relevant by researchers
 4. Read CLAUDE.md for project-level instructions
 
-Load principles per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`. Use full body (not `summary_only`) — you need examples and exceptions for design decisions.
+Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use full body (not `summary_only`) — you need examples and exceptions for design decisions.
 
 ### Step 2: Design approaches
 
@@ -199,7 +199,7 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 1. **Read research from workspace**: Research findings are at `${WORKSPACE}/research/`, not `.canon/plans/`.
 2. **Record decisions**: For each non-trivial design decision, save a decision doc to `${WORKSPACE}/decisions/` using the design-decision template at `${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md`. Read the template first and follow its structure exactly (see agent-template-required rule). Name files `{decision-id}.md`.
 3. **Initialize context.md**: Create `${WORKSPACE}/context.md` using the session-context template at `${CLAUDE_PLUGIN_ROOT}/templates/session-context.md`. Read the template first and follow its structure exactly (see agent-template-required rule).
-4. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+4. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 ## Context Isolation
 

@@ -1,1 +1,0 @@
-../../../rules/agent-context-check.md

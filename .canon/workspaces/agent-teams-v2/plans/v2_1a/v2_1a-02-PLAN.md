@@ -5,7 +5,7 @@ depends_on: ["v2_1a-00"]
 decisions:
   - "dc-03"
 files:
-  - skills/canon/references/runbook-synthesis.md
+  - references/runbook-synthesis.md
 principles:
   - agent-design-before-code
   - agent-template-required
@@ -17,7 +17,7 @@ domains:
 
 ### Action
 
-Write `skills/canon/references/runbook-synthesis.md` defining the mechanical synthesis contract `planner` follows to compose a plan-specific runbook from the canonical step vocabulary (v2_1a-00).
+Write `references/runbook-synthesis.md` defining the mechanical synthesis contract `planner` follows to compose a plan-specific runbook from the canonical step vocabulary (v2_1a-00).
 
 **The skill must specify:**
 
@@ -25,7 +25,7 @@ Write `skills/canon/references/runbook-synthesis.md` defining the mechanical syn
    - `id` (required, from vocabulary)
    - `agent` (required, usually vocab default; overrides explicit in brief body)
    - `dispatch` (required, `subagent` | `team` | `n/a`)
-   - `skills` (optional, strictly validated against `skills/canon/references/` at synthesis time)
+   - `skills` (optional, strictly validated against `references/` at synthesis time)
    - `cause` (required on `fix` steps: `test-failure | security | review | verify`; carries analytic lineage + skill hint)
    - `mcp_tools` (optional, list of MCP tool calls to compose context)
    - `artifacts` (required, relative paths under `${WORKSPACE}`)
@@ -36,7 +36,7 @@ Write `skills/canon/references/runbook-synthesis.md` defining the mechanical syn
    - Include mandatory tail (`context-sync` → `learn`) on every build runbook
    - Use canonical step IDs only; reject unknown IDs at synthesis time
    - Preserve default agent / dispatch / HITL unless overriding with justification in brief body
-   - Validate `skills:` names strictly against `skills/canon/references/`
+   - Validate `skills:` names strictly against `references/`
    - Use `${slug}` / `${task_id}` / `${timestamp}` placeholders per the runbook format spec
    - Include a one-paragraph Overview explaining why this step sequence was chosen
    - Emit body H3 prose per step with intent, skip-when elaboration, coordination notes
@@ -81,7 +81,7 @@ No existing test infrastructure for skills/*.md markdown. Validation is by:
 
 ### Verify
 
-1. Skill file exists at `skills/canon/references/runbook-synthesis.md`
+1. Skill file exists at `references/runbook-synthesis.md`
 2. Unit tests pass: `npm test -- runbook-synthesis`
 3. Integration test passes (v2_1a-08 validation reruns this)
 4. Synthesis skill references v2_1a-00 vocabulary explicitly (by relative path)
