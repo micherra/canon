@@ -8,11 +8,11 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
-import matter from "gray-matter";
+import type { ResolveAgentSkillsResult } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
-import type { ResolveAgentSkillsResult } from "@features/orchestration/tools/resolve-agent-skills.ts";
+import matter from "gray-matter";
+import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = resolve(process.cwd(), "..");
 const AGENTS_DIR = join(REPO_ROOT, "agents");

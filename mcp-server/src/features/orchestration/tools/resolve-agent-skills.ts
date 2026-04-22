@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import matter from "gray-matter";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import matter from "gray-matter";
 
 /**
  * resolve_agent_skills — Canon's custom skill-preload resolver.
@@ -46,9 +46,9 @@ export type ResolveAgentSkillsResult = {
 };
 
 const KIND_TO_DIR: Record<ResolvedSkill["kind"], string> = {
-  rule: "rules",
-  ref: "references",
   primer: "primers",
+  ref: "references",
+  rule: "rules",
 };
 
 const BACKWARD_COMPAT_ORDER: ResolvedSkill["kind"][] = ["rule", "ref", "primer"];
@@ -65,16 +65,13 @@ function tryReadSkill(
   const path = join(pluginDir, KIND_TO_DIR[kind], `${name}.md`);
   try {
     const content = readFileSync(path, "utf-8");
-    return { path, content };
+    return { content, path };
   } catch {
     return null;
   }
 }
 
-function resolveOne(
-  pluginDir: string,
-  id: string,
-): ResolvedSkill | { unresolved: string } {
+function resolveOne(pluginDir: string, id: string): ResolvedSkill | { unresolved: string } {
   const colonIdx = id.indexOf(":");
   if (colonIdx > 0) {
     const prefix = id.slice(0, colonIdx);
@@ -82,7 +79,7 @@ function resolveOne(
     if (prefix === "rule" || prefix === "ref" || prefix === "primer") {
       const hit = tryReadSkill(pluginDir, prefix, name);
       if (hit) {
-        return { id, kind: prefix, path: hit.path, content: hit.content };
+        return { content: hit.content, id, kind: prefix, path: hit.path };
       }
       return { unresolved: id };
     }
@@ -93,7 +90,7 @@ function resolveOne(
   for (const kind of BACKWARD_COMPAT_ORDER) {
     const hit = tryReadSkill(pluginDir, kind, id);
     if (hit) {
-      return { id, kind, path: hit.path, content: hit.content };
+      return { content: hit.content, id, kind, path: hit.path };
     }
   }
   return { unresolved: id };
@@ -142,9 +139,9 @@ export function resolveAgentSkills(
   if (!Array.isArray(rawSkills)) {
     return toolOk<ResolveAgentSkillsResult>({
       agent_name: agentName,
+      preload_prompt: "",
       skills: [],
       unresolved: [],
-      preload_prompt: "",
     });
   }
   const skills: ResolvedSkill[] = [];
@@ -160,8 +157,8 @@ export function resolveAgentSkills(
   }
   return toolOk<ResolveAgentSkillsResult>({
     agent_name: agentName,
+    preload_prompt: formatPreloadPrompt(skills),
     skills,
     unresolved,
-    preload_prompt: formatPreloadPrompt(skills),
   });
 }

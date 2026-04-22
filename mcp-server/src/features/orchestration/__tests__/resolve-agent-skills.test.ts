@@ -1,12 +1,12 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  resolveAgentSkills,
   type ResolveAgentSkillsResult,
+  resolveAgentSkills,
 } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 function seedPluginDir(): string {
   const pluginDir = mkdtempSync(join(tmpdir(), "canon-skills-resolver-"));
@@ -18,13 +18,15 @@ function seedPluginDir(): string {
 }
 
 function writeAgent(pluginDir: string, name: string, frontmatter: string, body = "body\n") {
-  writeFileSync(
-    join(pluginDir, "agents", `${name}.md`),
-    `---\n${frontmatter}\n---\n\n${body}`,
-  );
+  writeFileSync(join(pluginDir, "agents", `${name}.md`), `---\n${frontmatter}\n---\n\n${body}`);
 }
 
-function writeSkill(pluginDir: string, kind: "rules" | "references" | "primers", id: string, body: string) {
+function writeSkill(
+  pluginDir: string,
+  kind: "rules" | "references" | "primers",
+  id: string,
+  body: string,
+) {
   writeFileSync(join(pluginDir, kind, `${id}.md`), body);
 }
 
@@ -43,7 +45,7 @@ describe("resolveAgentSkills", () => {
   });
 
   afterEach(() => {
-    rmSync(pluginDir, { recursive: true, force: true });
+    rmSync(pluginDir, { force: true, recursive: true });
   });
 
   it("resolves rule:<name> to rules/<name>.md", () => {
@@ -100,11 +102,7 @@ describe("resolveAgentSkills", () => {
   it("prefers rules/ when a bare name exists in multiple locations", () => {
     writeSkill(pluginDir, "rules", "ambiguous", "rules version\n");
     writeSkill(pluginDir, "references", "ambiguous", "references version\n");
-    writeAgent(
-      pluginDir,
-      "engineer",
-      ["name: engineer", "skills:", "  - ambiguous"].join("\n"),
-    );
+    writeAgent(pluginDir, "engineer", ["name: engineer", "skills:", "  - ambiguous"].join("\n"));
     const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills[0].kind).toBe("rule");
     expect(out.skills[0].content).toContain("rules version");
@@ -158,12 +156,9 @@ describe("resolveAgentSkills", () => {
     writeAgent(
       pluginDir,
       "engineer",
-      [
-        "name: engineer",
-        "skills:",
-        "  - rule:agent-tdd-required",
-        "  - ref:status-protocol",
-      ].join("\n"),
+      ["name: engineer", "skills:", "  - rule:agent-tdd-required", "  - ref:status-protocol"].join(
+        "\n",
+      ),
     );
     const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.preload_prompt).toContain("## Preloaded Skills");
@@ -181,20 +176,12 @@ describe("resolveAgentSkills", () => {
     writeAgent(
       pluginDir,
       "engineer",
-      [
-        "name: engineer",
-        "skills:",
-        "  - rule:second",
-        "  - rule:third",
-        "  - rule:first",
-      ].join("\n"),
+      ["name: engineer", "skills:", "  - rule:second", "  - rule:third", "  - rule:first"].join(
+        "\n",
+      ),
     );
     const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
-    expect(out.skills.map((s) => s.id)).toEqual([
-      "rule:second",
-      "rule:third",
-      "rule:first",
-    ]);
+    expect(out.skills.map((s) => s.id)).toEqual(["rule:second", "rule:third", "rule:first"]);
   });
 
   it("returns INVALID_INPUT when agent file is missing", () => {
@@ -219,13 +206,9 @@ describe("resolveAgentSkills", () => {
     writeAgent(
       pluginDir,
       "engineer",
-      [
-        "name: engineer",
-        "skills:",
-        "  - rule:valid-rule",
-        "  - 42",
-        "  - {nested: object}",
-      ].join("\n"),
+      ["name: engineer", "skills:", "  - rule:valid-rule", "  - 42", "  - {nested: object}"].join(
+        "\n",
+      ),
     );
     const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills).toHaveLength(1);
