@@ -7,12 +7,13 @@ description: >-
 model: sonnet
 color: yellow
 maxTurns: 20
-permissionMode: plan
+permissionMode: acceptEdits
 memory: project
 skills:
   - agent-scoped-research
   - agent-surface-assumptions
   - agent-evidence-over-intuition
+  - agent-template-required
   - agent-context-check
   - status-protocol
 tools:

@@ -13,6 +13,7 @@ skills:
   - agent-evidence-over-intuition
   - learner-dimensions
   - principle-format
+  - agent-template-required
   - agent-context-check
   - status-protocol
 tools:

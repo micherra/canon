@@ -107,8 +107,10 @@ Add `maxTurns`, `permissionMode`, `memory`, and `skills` to every agent:
 | writer | 25 | acceptEdits | — | principle-format, writer-worked-example |
 
 **Permission model** — two values, declarative, enforced by Claude Code:
-- `plan`: read-only. Agent cannot write files. For: researcher, architect, reviewer, security, planner.
-- `acceptEdits`: auto-approves file edits and common filesystem commands (`mkdir`, `touch`, `rm`, `mv`, `cp`, `sed`) scoped to the working directory. All other Bash commands prompt. For: engineer, tester, scribe, shipper, learner, writer.
+- `plan`: read-only across **all** tools, including MCP `write_*` / `update_*` tools (per [permission-modes](https://code.claude.com/docs/en/permission-modes.md)). For agents that emit artifacts inline (orchestrator writes them): planner, security.
+- `acceptEdits`: auto-approves file edits and common filesystem commands (`mkdir`, `touch`, `rm`, `mv`, `cp`, `sed`) scoped to the working directory. All other Bash commands prompt. For agents that use MCP write tools or edit files: researcher, architect, reviewer, engineer, tester, scribe, shipper, learner, writer.
+
+**Amended 2026-04-22 (phase1-08.3)**: The original PLAN put researcher, architect, reviewer on `plan` mode, framing them as "read-only". This was wrong — `plan` mode blocks the MCP `write_*` tools those agents depend on (`write_research_synthesis`, `write_plan_index`, `write_design_brief`, `write_review`, `update_board`). Flipped those three to `acceptEdits`. Each agent's `tools:` list remains the real allowlist (no agent has `Write`/`Edit` unless it should).
 
 Note: `auto` mode exists but requires Team/Enterprise/API plans (NOT available on Pro or Max per Claude Code docs). The plan uses `acceptEdits` exclusively so Canon works on all plans. When the lead session runs in auto mode, subagent `permissionMode` frontmatter is ignored — the classifier handles everything.
 

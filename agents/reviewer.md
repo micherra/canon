@@ -8,10 +8,11 @@ description: >-
 model: opus
 color: red
 maxTurns: 25
-permissionMode: plan
+permissionMode: acceptEdits
 skills:
   - agent-cold-review
   - principle-loading
+  - agent-template-required
   - agent-context-check
   - status-protocol
 tools:

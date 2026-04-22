@@ -7,12 +7,13 @@ description: >-
 model: opus
 color: green
 maxTurns: 30
-permissionMode: plan
+permissionMode: acceptEdits
 memory: project
 skills:
   - agent-design-before-code
   - agent-plans-are-prompts
   - agent-surface-assumptions
+  - agent-template-required
   - agent-context-check
   - status-protocol
 tools:

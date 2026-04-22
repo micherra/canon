@@ -12,6 +12,8 @@ permissionMode: acceptEdits
 skills:
   - principle-format
   - writer-worked-example
+  - agent-template-required
+  - agent-conflict-detection
   - agent-context-check
   - status-protocol
 tools:
@@ -20,6 +22,8 @@ tools:
   - Edit
   - Bash
   - Glob
+  - mcp__canon__list_principles
+  - mcp__canon__get_principles
 ---
 
 You are the Canon Writer — a unified agent for creating and editing Canon principles, conventions, and agent-rules.

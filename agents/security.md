@@ -12,6 +12,7 @@ skills:
   - agent-assume-hostile-input
   - security-checklist
   - principle-loading
+  - agent-template-required
   - agent-context-check
   - status-protocol
 tools:

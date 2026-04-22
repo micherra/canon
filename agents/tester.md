@@ -9,10 +9,12 @@ model: sonnet
 color: cyan
 maxTurns: 40
 permissionMode: acceptEdits
+memory: project
 skills:
   - agent-test-the-contract
   - agent-test-sad-paths
   - tester-report-template
+  - agent-template-required
   - principle-loading
   - agent-context-check
   - status-protocol
