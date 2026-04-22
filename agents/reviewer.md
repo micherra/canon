@@ -10,11 +10,11 @@ color: red
 maxTurns: 25
 permissionMode: acceptEdits
 skills:
-  - agent-cold-review
-  - principle-loading
-  - agent-template-required
-  - agent-context-check
-  - status-protocol
+  - rule:agent-cold-review
+  - rule:agent-template-required
+  - rule:agent-context-check
+  - ref:principle-loading
+  - ref:status-protocol
 tools:
   - Read
   - Bash

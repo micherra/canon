@@ -10,12 +10,12 @@ maxTurns: 20
 permissionMode: acceptEdits
 memory: project
 skills:
-  - agent-scoped-research
-  - agent-surface-assumptions
-  - agent-evidence-over-intuition
-  - agent-template-required
-  - agent-context-check
-  - status-protocol
+  - rule:agent-scoped-research
+  - rule:agent-surface-assumptions
+  - rule:agent-evidence-over-intuition
+  - rule:agent-template-required
+  - rule:agent-context-check
+  - ref:status-protocol
 tools:
   - Read
   - Bash

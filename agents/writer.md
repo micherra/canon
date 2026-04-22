@@ -10,12 +10,12 @@ color: blue
 maxTurns: 25
 permissionMode: acceptEdits
 skills:
-  - principle-format
-  - writer-worked-example
-  - agent-template-required
-  - agent-conflict-detection
-  - agent-context-check
-  - status-protocol
+  - rule:agent-template-required
+  - rule:agent-conflict-detection
+  - rule:agent-context-check
+  - ref:principle-format
+  - ref:writer-worked-example
+  - ref:status-protocol
 tools:
   - Read
   - Write

@@ -10,10 +10,10 @@ color: green
 maxTurns: 20
 permissionMode: acceptEdits
 skills:
-  - agent-artifacts-only
-  - agent-template-required
-  - agent-context-check
-  - status-protocol
+  - rule:agent-artifacts-only
+  - rule:agent-template-required
+  - rule:agent-context-check
+  - ref:status-protocol
 tools:
   - Read
   - Edit

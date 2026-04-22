@@ -37,6 +37,7 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 - Each agent has a `maxTurns` budget appropriate to its role. A turn is one assistant message with tool calls; text-only responses don't consume a turn. Parallel tool calls in one message = 1 turn.
 - Agents receive fresh context per spawn (no carryover between invocations).
 - Agent output must follow templates from `templates/` (see `agent-template-required` rule). Agents producing templated artifacts preload that rule via `skills:`.
+- **`skills:` ID convention (prefix-namespaced)**: every entry is prefixed by its source directory — `rule:<name>` resolves to `rules/<name>.md`, `ref:<name>` resolves to `references/<name>.md`, `primer:<name>` resolves to `primers/<name>.md`. The Canon MCP tool `resolve_agent_skills` reads the agent's frontmatter and returns the concatenated content; the lead injects that into the spawn prompt before calling `Agent`. Bare (unprefixed) names are accepted for backward compat — the resolver searches rules/ then references/ then primers/.
 - Agents log activity per `workspace-logging.md` protocol.
 - `engineer` has direct access to `mcp__canon__get_messages` and `mcp__canon__write_implementation_summary` for collaboration during wave execution.
 - `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.

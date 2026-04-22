@@ -13,6 +13,7 @@ import { postEvent } from "@features/orchestration/tools/post-event.ts";
 import { postMessage } from "@features/orchestration/tools/post-message.ts";
 import { reportResult } from "@features/orchestration/tools/report-result.ts";
 import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
+import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { resolveWaveEvent } from "@features/orchestration/tools/resolve-wave-event.ts";
 import { simulateFlowTool } from "@features/orchestration/tools/simulate-flow.ts";
 import { updateBoard } from "@features/orchestration/tools/update-board.ts";
@@ -583,6 +584,28 @@ function registerJournalTools(): void {
   );
 }
 
+function registerAgentTeamsTools(): void {
+  // Feature flag gate: only register when agent-teams mode is active.
+  // Keeps legacy CANON_AGENT_TEAMS_MODE=off path byte-identical.
+  if (process.env.CANON_AGENT_TEAMS_MODE !== "on") return;
+
+  server.registerTool(
+    "resolve_agent_skills",
+    {
+      description:
+        "Resolve an agent's `skills:` frontmatter into preloaded content. Reads `agents/<name>.md`, parses skills (`rule:<x>`, `ref:<x>`, `primer:<x>`, or bare names), loads each matching file from `rules/`, `references/`, `primers/`, and returns both a structured list and a concatenated `preload_prompt` string ready to inject into a spawn prompt. Canon's custom preloader — substitutes for Claude Code's native `skills:` mechanism, which requires per-skill `SKILL.md` directories that Canon does not use. Missing skills are skipped silently (returned in `unresolved`).",
+      inputSchema: {
+        agent_name: z
+          .string()
+          .describe(
+            "Agent name (with or without `canon:` prefix). Matches `agents/<name>.md`.",
+          ),
+      },
+    },
+    wrapHandler(async (input) => resolveAgentSkills(input, pluginDir)),
+  );
+}
+
 export function registerOrchestrationTools(): void {
   registerFlowCoreTools();
   registerReportTools();
@@ -592,4 +615,5 @@ export function registerOrchestrationTools(): void {
   registerDriveFlowTool();
   registerCategorizeTool();
   registerJournalTools();
+  registerAgentTeamsTools();
 }

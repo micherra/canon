@@ -11,13 +11,13 @@ maxTurns: 40
 permissionMode: acceptEdits
 memory: project
 skills:
-  - agent-test-the-contract
-  - agent-test-sad-paths
-  - tester-report-template
-  - agent-template-required
-  - principle-loading
-  - agent-context-check
-  - status-protocol
+  - rule:agent-test-the-contract
+  - rule:agent-test-sad-paths
+  - rule:agent-template-required
+  - rule:agent-context-check
+  - ref:tester-report-template
+  - ref:principle-loading
+  - ref:status-protocol
 tools:
   - Read
   - Write

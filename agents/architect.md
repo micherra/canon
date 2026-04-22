@@ -10,12 +10,12 @@ maxTurns: 30
 permissionMode: acceptEdits
 memory: project
 skills:
-  - agent-design-before-code
-  - agent-plans-are-prompts
-  - agent-surface-assumptions
-  - agent-template-required
-  - agent-context-check
-  - status-protocol
+  - rule:agent-design-before-code
+  - rule:agent-plans-are-prompts
+  - rule:agent-surface-assumptions
+  - rule:agent-template-required
+  - rule:agent-context-check
+  - ref:status-protocol
 tools:
   - Read
   - Bash

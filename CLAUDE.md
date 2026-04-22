@@ -138,15 +138,16 @@ When resuming a session or the user says "continue" / "resume":
 4. Continue from the first step with `status: "started"` or the next unstarted step.
 5. If no journal exists, check for legacy workspace state and advise the user.
 
-### Domain Skill + Template Naming
+### Skill Preloading + Domain Skill + Template Naming
 
-Before spawning an agent, name relevant domain primers and the output template in the spawn prompt:
+**Preloaded rules and references (from agent frontmatter):** Before the `Agent` tool call, invoke `resolve_agent_skills({ agent_name })`. The tool reads the agent's `skills:` frontmatter (prefixed IDs like `rule:<name>` / `ref:<name>` / `primer:<name>`), loads each file from `rules/` / `references/` / `primers/`, and returns a `preload_prompt` string. Include that string verbatim at the top of the spawn prompt. This substitutes for Claude Code's native `skills:` preload because Canon stores skills as flat `.md` files, not per-skill `SKILL.md` directories.
+
+**On-demand domain primers (from task context):** Some tasks need extra domain context beyond the agent's default skills. Name those in the spawn prompt body — the agent Reads them per `agent-context-check`:
 
 - Domain primers: `"Relevant domain primers: authentication-security, backend-api. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
 - Template: `"Use template: implementation-log. Read from ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md."`
-- Do NOT read and inject file content yourself — the agent reads the named files on its first turn (per `agent-context-check`).
-- This keeps the lead's context clean and puts the Read cost in the agent's fresh context.
-- Same pattern for both: lead names, agent loads.
+
+Rule of thumb: frontmatter skills are preloaded by the resolver (lead injects the content); task-specific domain primers and templates are named by the lead but Read by the agent.
 
 ### MCP Tool Composition
 
@@ -154,6 +155,7 @@ Table of which Canon MCP tools to call before spawning each step type:
 
 | Step type | MCP tools to call |
 |-----------|------------------|
+| Any step before spawn | `resolve_agent_skills` (preloaded rules + references injected into the spawn prompt) |
 | Research | `get_principles`, `get_file_context`, `graph_query`, `semantic_search` |
 | Design | `get_principles`, `get_file_context`, `graph_query` |
 | Implement | `get_principles`, `get_file_context`, `get_drift_report` |

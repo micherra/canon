@@ -12,10 +12,10 @@ maxTurns: 25
 permissionMode: plan
 memory: project
 skills:
-  - agent-surface-assumptions
-  - agent-evidence-over-intuition
-  - agent-context-check
-  - status-protocol
+  - rule:agent-surface-assumptions
+  - rule:agent-evidence-over-intuition
+  - rule:agent-context-check
+  - ref:status-protocol
 tools:
   - Read
   - Glob

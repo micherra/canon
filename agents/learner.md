@@ -10,12 +10,12 @@ maxTurns: 25
 permissionMode: acceptEdits
 memory: project
 skills:
-  - agent-evidence-over-intuition
-  - learner-dimensions
-  - principle-format
-  - agent-template-required
-  - agent-context-check
-  - status-protocol
+  - rule:agent-evidence-over-intuition
+  - rule:agent-template-required
+  - rule:agent-context-check
+  - ref:learner-dimensions
+  - ref:principle-format
+  - ref:status-protocol
 tools:
   - Read
   - Bash

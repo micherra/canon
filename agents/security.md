@@ -9,12 +9,12 @@ color: red
 maxTurns: 25
 permissionMode: plan
 skills:
-  - agent-assume-hostile-input
-  - security-checklist
-  - principle-loading
-  - agent-template-required
-  - agent-context-check
-  - status-protocol
+  - rule:agent-assume-hostile-input
+  - rule:agent-template-required
+  - rule:agent-context-check
+  - ref:security-checklist
+  - ref:principle-loading
+  - ref:status-protocol
 tools:
   - Read
   - Bash

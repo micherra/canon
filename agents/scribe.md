@@ -11,12 +11,12 @@ maxTurns: 15
 permissionMode: acceptEdits
 memory: project
 skills:
-  - agent-context-sync
-  - agent-missing-artifact
-  - workspace-logging
-  - agent-template-required
-  - agent-context-check
-  - status-protocol
+  - rule:agent-context-sync
+  - rule:agent-missing-artifact
+  - rule:agent-template-required
+  - rule:agent-context-check
+  - ref:workspace-logging
+  - ref:status-protocol
 tools:
   - Read
   - Edit
