@@ -80,21 +80,35 @@ src/
 - `VIRTUAL_SINKS: Set<string>` — new export; `{ "hitl", "no_items" }`
 - `RUNTIME_VARIABLES: Set<string>` — new export; known runtime variable names exempt from ref checks
 
-**Execution store** (`src/orchestration/execution-store.ts`) — updated 2026-04-01 (ADR-004); updated 2026-04-01 (ADR-003a):
+**Execution store** (`src/domains/workspaces/execution-store.ts`) — updated 2026-04-01 (ADR-004); updated 2026-04-01 (ADR-003a); updated 2026-04-09 (concurrency: optimistic locking + retry):
+<!-- last-updated: 2026-04-09 (concurrency: SCHEMA_VERSION 11, withRetry, updateExecutionVersioned, getVersion) -->
 - `ExecutionStore.recordIterationResult(stateId, iteration, status, data)` — new method; records raw iteration result in `iteration_results` table; `INSERT OR REPLACE` on `(state_id, iteration)` unique key
 - `ExecutionStore.isStuck(stateId, stuckWhen: StuckWhen): boolean` — new method; SQL-based stuck detection; reads last two rows from `iteration_results`; returns `false` when fewer than 2 results exist; mirrors `stuck_when` logic for all 5 strategies
 - Pure `isStuck` functions in `transitions.ts` are deprecated; prefer `ExecutionStore.isStuck`
 - `ExecutionStore.updateStateMetrics(stateId, metrics: Record<string, number|string>): boolean` — added 2026-04-01 (ADR-003a); merges provided fields into existing `metrics` JSON via targeted SQL `UPDATE`; preserves orchestrator-written fields (`duration_ms`, `spawns`, `model`); returns `true` when row found and updated, `false` when state not found
+- `ExecutionStore.withRetry<T>(fn: () => T, maxAttempts?): T` — wraps any synchronous DB operation; transparently retries on `SQLITE_BUSY` errors using `Atomics.wait` backoff; default 3 attempts; does not retry other error codes — added 2026-04-09
+- `ExecutionStore.updateExecutionVersioned(fields, expectedVersion): { updated: true; newVersion: number } | { updated: false; currentVersion: number }` — optimistic-locking update; increments `version` column atomically; returns `{ updated: false }` discriminated union on version mismatch (never throws for conflicts) — added 2026-04-09
+- `ExecutionStore.getVersion(): number` — reads current `version` from execution row; returns `1` when no row exists — added 2026-04-09
+- `ExecutionStore.transaction()` — now wraps the callback in `withRetry` internally; callers see transparent SQLITE_BUSY retry — updated 2026-04-09
+- `updateExecution`, `upsertState`, `upsertIteration` — annotated `@internal`; tool handlers should call `updateExecutionVersioned` instead of `updateExecution` directly — updated 2026-04-09
 
 **KG schema** (`src/graph/kg-schema.ts`) — updated 2026-04-08 (git-intel Phase 1):
 - `SCHEMA_VERSION = "4"` — bumped from `"3"`; migration v4 adds `hotspot_scores` and `co_change_edges` tables to all DBs initialized via `initDatabase()`
 - `hotspot_scores` table — columns: `file_path TEXT PRIMARY KEY`, `churn_raw`, `churn_percentile`, `complexity_raw`, `complexity_pctile`, `score`, `is_hotspot INTEGER`, `computed_at_commit TEXT`
 - `co_change_edges` table — columns: `file_a TEXT`, `file_b TEXT`, `co_count INTEGER`, `jaccard REAL`, `computed_at_commit TEXT`; indexes on both `file_a` and `file_b`; pair keys normalized alphabetically (`file_a <= file_b`)
 
-**Execution schema** (`src/orchestration/execution-schema.ts`) — updated 2026-04-01 (ADR-004):
-- `SCHEMA_VERSION = '3'` — new export; current DB schema version
+**Execution schema** (`src/domains/workspaces/execution-schema.ts`) — updated 2026-04-01 (ADR-004); updated 2026-04-09 (migration v11):
+<!-- last-updated: 2026-04-09 (SCHEMA_VERSION bumped to "11"; migration v11 adds version column) -->
+- `SCHEMA_VERSION = '11'` — current DB schema version (was `'3'` per ADR-004; subsequent migrations bumped to `'11'`)
 - `runMigrations(db)` — new export; runs pending migrations against the given database; version-gated; each migration wrapped in a transaction for atomicity; safe to call repeatedly
 - Migration v3 adds `iteration_results` table: `(id, state_id, iteration, status, data TEXT DEFAULT '{}', timestamp)` with `UNIQUE(state_id, iteration)` constraint and index on `state_id`
+- Migration v11 adds `version INTEGER NOT NULL DEFAULT 1` column to `execution` table; guarded by `columnExists` — idempotent — added 2026-04-09
+
+**Board sync** (`src/domains/board/board-sync.ts`) — updated 2026-04-09 (concurrency: transaction wrapping + optimistic locking):
+<!-- last-updated: 2026-04-09 (syncBoardToStore now returns SyncResult; all writes wrapped in single transaction) -->
+- `SyncResult` — discriminated union: `{ ok: true; newVersion: number } | { ok: false; error: "version_conflict" }` — new export 2026-04-09
+- `syncBoardToStore(store, board, expectedVersion?)` — return type changed from `void` to `SyncResult`; now wraps all writes (execution row, state upserts, iteration upserts) in a single `store.transaction()` call; uses `updateExecutionVersioned` for optimistic locking; returns `{ ok: false, error: "version_conflict" }` on stale write — updated 2026-04-09
+- Callers of `syncBoardToStore` must check `result.ok` before proceeding; version conflicts do not throw
 
 **Fragment param syntax** (`flows/fragments/*.md`) — updated 2026-04-01 (ADR-004):
 - Typed param declarations replace null-marker `~` syntax in all 7 fragments with params; format: `param_name: { type: state_id|string|number|boolean, default?: value }`
@@ -354,7 +368,7 @@ src/
 - `injectSettingsIntoRequests(requests: SpawnRequest[]): Promise<void>` — iterates spawn requests sequentially; calls `injectWorktreeSettings(req.worktree_path, req.tools)` when `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools` are all present; sequential (not `Promise.all`) for error isolation — one failure does not abort others; never throws
 
 ## Invariants
-<!-- last-updated: 2026-04-09 (file claims lifecycle and non-blocking invariants added) -->
+<!-- last-updated: 2026-04-09 (concurrency invariants added: optimistic locking, SQLITE_BUSY retry, atomic board sync) -->
 
 - **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
@@ -381,6 +395,9 @@ src/
 - **auto-approve settings injection** (2026-04-08): `injectSettingsIntoRequests` is called in all three spawn paths (`startNextWave`, `enterWaveState`, `tryEnterSingleState`) before returning `{ action: "spawn" }`; injection is conditional on `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools`; `injectWorktreeSettings` failure returns `false` and never blocks spawn (fail-closed); agents that would have received auto-approve simply fall back to standard prompting
 - **file claims non-blocking** (2026-04-09): all claim operations in `init_workspace`, `update_board`, and `inject-coordination.ts` are wrapped in try/catch; claim failures never block workflow execution; overlap warnings are advisory strings in board metadata (`claim_warnings`), not errors
 - **file claims lifecycle** (2026-04-09): claims are registered by `update_board set_metadata` (when `affected_files` is provided), checked as informational warnings by `init_workspace` preflight, and released by `update_board complete_flow`; do not call `file-claims.ts` functions directly from feature code outside these three integration points
+- **optimistic locking on all board mutations** (2026-04-09): all `update_board` handlers read `version` once at entry via `store.getVersion()` and pass it to `store.updateExecutionVersioned()`; a stale version returns `BOARD_LOCKED` (recoverable: true); do not use `store.updateExecution()` in handler code — use `store.updateExecutionVersioned()` instead
+- **syncBoardToStore is atomic** (2026-04-09): all writes in `syncBoardToStore` are wrapped in a single `store.transaction()`; partial writes cannot land — a version conflict aborts the entire sync and returns `{ ok: false, error: "version_conflict" }`; callers must check `result.ok`
+- **SQLITE_BUSY is transparent to callers** (2026-04-09): `store.transaction()` internally retries via `withRetry`; callers do not need to handle `SQLITE_BUSY` themselves; `withRetry` does not retry other error codes
 
 ## Development
 <!-- last-updated: 2026-03-22 -->
