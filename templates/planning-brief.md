@@ -7,85 +7,130 @@ read-by: [canon-orchestrator, architect, engineer]
 
 # Planning Brief: {request-title}
 
+<!--
+DEPTH CALIBRATION — choose before writing:
+  Trivial  (1 runbook step)   -> one-sentence Problem Statement, one-line Recommended Approach, no Alternatives required, minimal Criteria.
+  Small    (3-4 step runbook) -> all 7 sections, at least one real Alternative + "Do nothing", explicit Criteria.
+  Complex  (multi-wave epic)  -> all 7 sections at full depth, multiple Alternatives, North-Star Criteria, risk-adjusted Value Assessment.
+-->
+
 <!-- Outcome: GREENLIGHT | REDIRECT | OPEN_QUESTIONS -->
 **Outcome**: {one of GREENLIGHT, REDIRECT, OPEN_QUESTIONS}
 
 **Effort estimate**: {small (hours) | medium (days) | large (weeks+)}
-**Value estimate**: {low | medium | high — with one-line justification}
+**Value estimate**: {low | medium | high — with one-line justification citing observable signal: issue count, error rate, affected user count}
 
 ## ASSUMPTIONS
 
-Explicit assumptions that shape this brief. Correct any that are wrong before proceeding.
+Explicit assumptions that shape this brief. List every assumption you resolved yourself while writing this brief. If an assumption is wrong, correct it here before proceeding — do not let it propagate silently into the architect's work.
 
-1. {assumption 1}
+If you have no assumptions, say so: "none — all requirements and constraints are specified in the request."
+
+1. {assumption 1 — state what you assumed and why}
 2. {assumption 2}
 3. {assumption 3}
 
 ## Problem Statement
 
-What problem is being solved? State it in one or two sentences from the user's perspective. Distinguish real (evidenced) from speculative (imagined).
+What problem is being solved? State the real outcome the user wants, not the solution they proposed. One to two sentences from the user's perspective. Distinguish observed (evidenced) from speculative (imagined).
 
-- **Evidence**: {logs, reports, usage data, user feedback that shows this problem is real — or "speculative" if none}
+- **Evidence**: {cite graph_query results, issue counts, error logs, usage data, or user reports that confirm this problem is real — or state "speculative: no evidence available" if none exists}
+
+<!--
+Trivial requests: one sentence is sufficient.
+Complex epics: state the North-Star problem — the outcome that must hold system-wide when the work is done.
+-->
 
 ## Target Users
 
-Who benefits from solving this problem?
+Who benefits from solving this problem? Who does not? Scope prevents over-building.
 
-- **Primary**: {user/role, frequency of benefit}
-- **Secondary**: {user/role, frequency} — or "none"
+- **Primary**: {user role or team name, frequency of benefit — e.g., "end-users performing daily searches"}
+- **Secondary**: {user role, frequency} — or "none"
+- **Out of scope**: {roles or systems explicitly excluded from this brief's scope}
 
 ## Acceptance Criteria
 
-Concrete, observable conditions that must hold when the work is done. If the request lacks these, propose them here.
+Concrete, observable conditions that must hold when the work is done. Each criterion must be independently verifiable by a reviewer unfamiliar with the request. If the request lacks explicit criteria, propose them here.
 
-- [ ] {criterion 1 — observable, testable}
+- [ ] {criterion 1 — observable and testable; state what to check and how to confirm pass/fail}
 - [ ] {criterion 2}
 - [ ] {criterion 3}
 
+<!--
+Trivial requests: one or two criteria maximum.
+Small features: explicit criteria covering happy path and key error cases.
+Complex epics: include a North-Star criterion (system-wide observable outcome) plus decomposed sub-criteria per wave or subsystem.
+If a criterion cannot be verified without user input, tag it in Open Questions instead.
+-->
+
 ## Alternatives Considered
 
-At least 2–3 alternatives, including "do nothing" where applicable. For each:
+At least 2-3 alternatives for non-trivial requests, including "Do nothing" as Alternative C. For each alternative: approach summary, effort bucket, and honest tradeoff against the Recommended Approach. Apply the Canon preference ordering: configuration over new code; extension over rewrite; scoped fix over broad refactor.
+
+<!--
+Trivial requests: Alternatives section is not required. Include only if a genuine alternative exists and is worth noting.
+Small features and complex epics: at least one real alternative plus "Do nothing" are required.
+-->
 
 ### Alternative A: {name}
-- **Approach**: {one-line summary}
-- **Effort**: {bucket}
-- **Tradeoff**: {what this gives up vs the proposed approach}
+- **Approach**: {one-line summary of what this alternative does}
+- **Effort**: {small | medium | large}
+- **Tradeoff**: {what this alternative gives up compared to the Recommended Approach — be specific and honest}
 
 ### Alternative B: {name}
-- **Approach**: {...}
-- **Effort**: {...}
-- **Tradeoff**: {...}
+- **Approach**: {one-line summary}
+- **Effort**: {bucket}
+- **Tradeoff**: {specific tradeoff}
 
 ### Alternative C: Do nothing
-- **Consequence**: {what happens if this isn't built}
+- **Consequence**: {what happens if this problem is not solved — state it in terms of user impact, not technical debt}
 
 ## Recommended Approach
 
-One recommended approach, grounded in the alternatives above.
+One recommended approach, grounded in the Alternatives analysis above. Phrase the approach in terms of runbook step IDs from `references/runbook-vocabulary.md` so the synthesis skill can consume it directly.
 
-- **Approach**: {description}
-- **Why this one**: {rationale — tie to Canon principles where relevant}
-- **Scope boundaries**: {what is explicitly in scope and what is out of scope — prevents drift during implementation}
+- **Approach**: {description of what will be built or changed}
+- **Why this one**: {rationale — cite Canon principle IDs where applicable, cite evidence, explain why this outperforms the alternatives}
+- **Scope boundaries**: {what is explicitly in scope; what is explicitly out of scope — prevents scope drift during implementation}
+- **Runbook steps**: {list the step IDs from runbook-vocabulary.md that this approach requires, in order — e.g., "research -> design -> implement (team, 2 tasks) -> test -> review -> context-sync -> learn"}
 
-If the outcome is REDIRECT, the recommended approach differs from the request. State the redirect rationale explicitly.
+<!--
+If the outcome is REDIRECT: the Recommended Approach differs from the original request. State the redirect rationale explicitly — show how the redirected scope still satisfies the user's underlying need.
+If the outcome is OPEN_QUESTIONS: provide a tentative recommended approach with the assumption that open questions resolve in the expected direction. Mark the assumption explicitly.
+-->
 
 ## Open Questions
 
-Questions that must be answered by the user before the architect can proceed. Leave empty when outcome is GREENLIGHT.
+Questions that must be answered before the architect can proceed. Each item is tagged with its decision-owner and states why the answer matters.
 
-1. {question 1 — and why the answer matters}
-2. {question 2}
+Leave empty (write "None — all requirements and constraints are specified") when the outcome is GREENLIGHT with no unresolved items.
+
+1. {question — why does the answer matter, what decision does it unblock} [user | planner | architect]
+2. {question} [owner]
+
+<!--
+Decision-owner guidance:
+  [user]      — only the requester can answer this (business rule, priority, access to data)
+  [planner]   — requires additional research the planner can do (graph_query, web search)
+  [architect] — a technical design choice; safe to greenlight and let architect resolve
+-->
 
 ## Value Assessment
 
-Is the cost proportional to the value? One paragraph weighing effort vs expected benefit.
+Is the cost proportional to the value? One paragraph weighing effort against expected benefit. Apply agent-evidence-over-intuition: cite observable signals rather than asserting value qualitatively.
 
-- **Cost**: {effort bucket + key risks}
-- **Value**: {expected benefit magnitude + frequency + affected user count}
-- **Proportion**: {is this cost justified — yes/no/conditional}
+- **Cost**: {effort bucket (small/medium/large) + key risks that could increase it — e.g., "medium; risk of scope expansion if legacy API surface is larger than estimated"}
+- **Value**: {expected benefit magnitude + frequency + affected user count or percentage — cite observable signals}
+- **Proportion**: {yes | no | conditional — if conditional, state the conditions under which the cost is justified}
+
+<!--
+Complex epics: include a risk-adjusted estimate. What happens if the work runs long or scope expands? Does the value still justify the cost?
+REDIRECT outcomes: the value assessment covers the redirected (narrower) scope.
+-->
 
 ## Handoff
 
-- **GREENLIGHT** → architect spawned next with this brief as context.
-- **REDIRECT** → lead presents this brief to the user; on approval, architect spawned with the redirected scope.
-- **OPEN_QUESTIONS** → lead presents Open Questions to the user; brief is revised after answers.
+- **GREENLIGHT** -> architect spawned next with this brief as context. The brief's Recommended Approach (specifically the Runbook steps field) is the primary input to the synthesis step.
+- **REDIRECT** -> lead presents this brief to the user; on approval, architect is spawned with the redirected scope. The original request is archived for reference.
+- **OPEN_QUESTIONS** -> lead presents the Open Questions to the user; brief is revised after answers received. Revised brief is saved as `planning-brief-iter-1.md` (subsequent revisions increment the counter); the base `planning-brief.md` is updated to the latest approved version.
