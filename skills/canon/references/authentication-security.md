@@ -1,9 +1,3 @@
----
-name: authentication-security
-description: Domain primer for auth systems and credential handling. Covers identity-vs-permission separation, session model selection, credential storage (argon2/KMS/blocklists), timing oracles, redirect/callback confusion, and rotation theater. Use when touching login flows, OAuth/OIDC, session tokens, password handling, RBAC/ABAC, or anything that decides "who is this caller and what can they do."
-user-invocable: false
----
-
 # Authentication & Security Domain
 
 ## Mental Models

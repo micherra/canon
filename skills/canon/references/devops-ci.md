@@ -1,9 +1,3 @@
----
-name: devops-ci
-description: Domain primer for CI/CD pipelines, deploy strategies, and build systems. Covers pipeline-as-program, env parity, fast-feedback discipline, deploy strategy selection (blue-green/rolling/canary), pet-snowflake runners, and green-ness-as-theater. Use when editing CI config, authoring deploy scripts, diagnosing flaky builds, or reviewing release automation.
-user-invocable: false
----
-
 # DevOps & CI/CD Domain
 
 ## Mental Models

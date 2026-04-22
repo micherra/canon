@@ -1,9 +1,3 @@
----
-name: observability
-description: Domain primer for logs/metrics/traces and alerting design. Covers the three-signals model, structured vs free-text, sampling strategy, cardinality explosion, alert-on-symptoms, and dashboard graveyard failure modes. Use when adding instrumentation, writing alert rules, designing dashboards, or diagnosing a "why is this opaque" incident.
-user-invocable: false
----
-
 # Observability Domain
 
 ## Mental Models

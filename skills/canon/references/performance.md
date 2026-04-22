@@ -1,9 +1,3 @@
----
-name: performance
-description: Domain primer for performance engineering. Covers "measure-don't-guess," latency as distribution (p99/p99.9), bottleneck migration, cache placement with invalidation, N+1 detection, and premature-async failure modes. Use when optimizing hot paths, responding to a latency regression, sizing a cache, or deciding whether to parallelize.
-user-invocable: false
----
-
 # Performance Domain
 
 ## Mental Models

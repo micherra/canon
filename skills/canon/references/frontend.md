@@ -1,9 +1,3 @@
----
-name: frontend
-description: Domain primer for UI component design and browser-side state. Covers state placement hierarchy, ARIA vs native semantics, event-handler cleanup, and AI-generated-aesthetic failure modes. Use when writing React/Vue/Svelte components, making state-management decisions, styling UI, or reviewing client-side code.
-user-invocable: false
----
-
 # Frontend Domain
 
 ## Mental Models

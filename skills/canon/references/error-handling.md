@@ -1,9 +1,3 @@
----
-name: error-handling
-description: Domain primer for error design as values, not emergencies. Covers error categorization (bug/misuse/environment), retry-vs-fail-fast, circuit breakers, propagation vs translation, and silent-swallow failure modes. Use when designing error types, exception hierarchies, retry loops, fallback logic, or reviewing error-handling code.
-user-invocable: false
----
-
 # Error Handling Domain
 
 ## Mental Models

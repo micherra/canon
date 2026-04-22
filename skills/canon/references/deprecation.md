@@ -1,9 +1,3 @@
----
-name: deprecation
-description: Domain primer for safe deprecation and backward-compatibility. Covers expand-migrate-contract, consumer visibility, cutover sequencing, and "removal is a contract." Use when removing APIs, changing behavior callers depend on, retiring a field/flag, or planning a breaking change.
-user-invocable: false
----
-
 # Deprecation Domain
 
 ## Mental Models

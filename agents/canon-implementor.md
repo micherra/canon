@@ -52,7 +52,7 @@ The plan file is your primary instruction. Read it carefully. It contains:
 If your plan's frontmatter includes a `domains:` field, read domain priming files for each listed domain:
 
 1. Check `.canon/domains/{name}.md` first (project-specific override)
-2. If not found, check `${CLAUDE_PLUGIN_ROOT}/skills/{name}/SKILL.md` (built-in)
+2. If not found, check `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/{name}.md` (built-in)
 3. If neither exists, skip silently — do not fail or report NEEDS_CONTEXT
 
 Domain priming provides domain-specific patterns and concerns to keep in mind during implementation. Treat it as advisory context alongside Canon principles.

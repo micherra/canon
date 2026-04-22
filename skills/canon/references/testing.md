@@ -1,9 +1,3 @@
----
-name: testing
-description: Domain primer for test design — pyramid as resource allocation, tests-as-specs vs tests-as-implementation, the Beyonce rule, shared-state pitfalls, mocking discipline. Use when writing unit/integration/e2e tests, reviewing test coverage, deciding what to mock, or debugging flaky tests.
-user-invocable: false
----
-
 # Testing Domain
 
 ## Mental Models

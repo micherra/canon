@@ -4,13 +4,10 @@
  * Contract tests for the domain priming feature (domain-01, domain-02, domain-03).
  *
  * These tests verify:
- *   - All 6 built-in domain skills exist at the correct paths with correct names
- *   - Domain skills follow the Claude Code skill layout — each is a
- *     self-contained `skills/<name>/` directory with a `SKILL.md` entry point
- *   - SKILL.md has YAML frontmatter with `name` and `description` fields
- *   - The body (after the frontmatter) follows the canonical primer template:
- *     `# <Title> Domain` heading, then Mental Models / Decision Frameworks /
- *     Failure Modes / Guardrails sections
+ *   - All 6 built-in domain primers exist at the correct paths with correct names
+ *   - Domain primer files contain no YAML frontmatter (implementors load them as raw text)
+ *   - Domain primer files follow the canonical primer template
+ *     (Mental Models / Decision Frameworks / Failure Modes / Guardrails)
  *   - templates/task-plan.md exposes the `domains:` field to the architect
  *   - canon-architect.md lists all 6 built-in domain names and includes
  *     classification guidance
@@ -21,12 +18,13 @@
  * restructure, or accidental edit, the domain priming pipeline will silently
  * fail.
  *
- * Relocation note (2026-04-22): domain primers moved out of the root-level
- * `domain-primers/` directory and into top-level Claude Code skills at
- * `skills/<name>/SKILL.md` per the Claude Code skill layout
- * (https://code.claude.com/docs/en/skills). Each primer is now a
- * self-contained skill with YAML frontmatter describing when it applies.
- * The body shape is preserved per `templates/domain-primer.md`.
+ * Relocation note (2026-04-22): domain primers live at
+ * `skills/canon/references/<name>.md` — raw markdown, consumed by Canon
+ * subagents via Read per the agent-context-check protocol. They are NOT
+ * Claude Code skills (no `SKILL.md` wrapper, no YAML frontmatter): a
+ * subagent's `Read` tool loads the whole file, so frontmatter would just
+ * be noise. The 22 agent-rule symlinks in the same directory are the
+ * other content of `references/`.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -36,30 +34,13 @@ import { describe, expect, it } from "vitest";
 // Canon repo root — one level up from mcp-server
 const REPO_ROOT = resolve(process.cwd(), "..");
 
-const SKILLS_DIR = join(REPO_ROOT, "skills");
+const DOMAINS_DIR = join(REPO_ROOT, "skills", "canon", "references");
 const ARCHITECT_MD = join(REPO_ROOT, "agents", "canon-architect.md");
 const IMPLEMENTOR_MD = join(REPO_ROOT, "agents", "canon-implementor.md");
 const TASK_PLAN_TEMPLATE = join(REPO_ROOT, "templates", "task-plan.md");
 
 function readFile(path: string): string {
   return readFileSync(path, "utf-8");
-}
-
-function skillPath(name: string): string {
-  return join(SKILLS_DIR, name, "SKILL.md");
-}
-
-/**
- * Split a SKILL.md into its frontmatter and body. Returns `null` when no
- * frontmatter is present.
- */
-function splitSkill(content: string): { frontmatter: string; body: string } | null {
-  if (!content.startsWith("---")) return null;
-  const closingIdx = content.indexOf("\n---", 3);
-  if (closingIdx === -1) return null;
-  const frontmatter = content.slice(3, closingIdx).trim();
-  const body = content.slice(closingIdx + 4).replace(/^\n/, "");
-  return { body, frontmatter };
 }
 
 const BUILT_IN_DOMAINS = [
@@ -71,74 +52,59 @@ const BUILT_IN_DOMAINS = [
   "deprecation",
 ] as const;
 
-describe("skill layout — existence", () => {
+describe("domain files — existence", () => {
   for (const domain of BUILT_IN_DOMAINS) {
-    it(`skills/${domain}/SKILL.md exists`, () => {
-      expect(existsSync(skillPath(domain))).toBe(true);
+    it(`skills/canon/references/${domain}.md exists`, () => {
+      expect(existsSync(join(DOMAINS_DIR, `${domain}.md`))).toBe(true);
+    });
+  }
+
+  // NOTE: skills/canon/references/ intentionally holds more than the 6
+  // built-in domain primers — it also holds the 6 new agent-teams domain
+  // skills, 22 rule symlinks, and orchestrator reference fragments. We
+  // assert that the 6 required primers are present; we do NOT assert the
+  // directory is otherwise empty (it isn't, by design).
+});
+
+describe("domain files — no YAML frontmatter", () => {
+  for (const domain of BUILT_IN_DOMAINS) {
+    it(`skills/canon/references/${domain}.md does not start with YAML frontmatter delimiter`, () => {
+      const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
+      // A file with frontmatter starts with "---\n". Primers are loaded as
+      // raw markdown by Canon subagents; frontmatter would be noise.
+      expect(content.startsWith("---")).toBe(false);
     });
   }
 });
 
-describe("SKILL.md frontmatter — Claude Code skill format", () => {
+describe("domain files — heading format", () => {
   for (const domain of BUILT_IN_DOMAINS) {
-    it(`skills/${domain}/SKILL.md has YAML frontmatter`, () => {
-      const content = readFile(skillPath(domain));
-      const parts = splitSkill(content);
-      expect(parts).not.toBeNull();
+    it(`skills/canon/references/${domain}.md starts with a top-level heading`, () => {
+      const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
+      expect(content.trimStart().startsWith("# ")).toBe(true);
     });
 
-    it(`skills/${domain}/SKILL.md frontmatter declares a name matching the directory`, () => {
-      const content = readFile(skillPath(domain));
-      const parts = splitSkill(content);
-      expect(parts).not.toBeNull();
-      // name must match the directory name so the /slash-command resolves
-      expect(parts?.frontmatter).toContain(`name: ${domain}`);
+    it(`skills/canon/references/${domain}.md contains the required section headings`, () => {
+      const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
+      expect(content).toContain("## Mental Models");
+      expect(content).toContain("## Decision Frameworks");
+      expect(content).toContain("## Failure Modes");
+      expect(content).toContain("## Guardrails");
     });
 
-    it(`skills/${domain}/SKILL.md frontmatter declares a description`, () => {
-      const content = readFile(skillPath(domain));
-      const parts = splitSkill(content);
-      expect(parts).not.toBeNull();
-      expect(parts?.frontmatter).toMatch(/^description:\s*\S/m);
-    });
-  }
-});
-
-describe("SKILL.md body — domain primer template", () => {
-  for (const domain of BUILT_IN_DOMAINS) {
-    it(`skills/${domain}/SKILL.md body starts with a top-level heading`, () => {
-      const content = readFile(skillPath(domain));
-      const parts = splitSkill(content);
-      expect(parts).not.toBeNull();
-      expect(parts?.body.trimStart().startsWith("# ")).toBe(true);
-    });
-
-    it(`skills/${domain}/SKILL.md body contains the required section headings`, () => {
-      const content = readFile(skillPath(domain));
-      const parts = splitSkill(content);
-      expect(parts).not.toBeNull();
-      const body = parts?.body ?? "";
-      expect(body).toContain("## Mental Models");
-      expect(body).toContain("## Decision Frameworks");
-      expect(body).toContain("## Failure Modes");
-      expect(body).toContain("## Guardrails");
-    });
-
-    it(`skills/${domain}/SKILL.md body contains at least 4 bold terms`, () => {
-      const content = readFile(skillPath(domain));
-      const parts = splitSkill(content);
-      const body = parts?.body ?? "";
+    it(`skills/canon/references/${domain}.md contains at least 4 bold terms`, () => {
+      const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
       // Each entry is formatted as "**Bold Term** — description" or "**Bold Term**:" (em-dash style)
-      const boldItems = (body.match(/\*\*[^*]+\*\*/g) ?? []).length;
+      const boldItems = (content.match(/\*\*[^*]+\*\*/g) ?? []).length;
       expect(boldItems).toBeGreaterThanOrEqual(4);
     });
   }
 });
 
-describe("SKILL.md — approximate token budget (≤ 1750 tokens ≈ 7000 chars)", () => {
+describe("domain files — approximate token budget (≤ 1750 tokens ≈ 7000 chars)", () => {
   for (const domain of BUILT_IN_DOMAINS) {
-    it(`skills/${domain}/SKILL.md is concise (under 7000 characters)`, () => {
-      const content = readFile(skillPath(domain));
+    it(`skills/canon/references/${domain}.md is concise (under 7000 characters)`, () => {
+      const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
       expect(content.length).toBeLessThan(7000);
     });
   }
@@ -217,10 +183,9 @@ describe("canon-implementor.md — Step 2 domain priming", () => {
     expect(content).toContain(".canon/domains/");
   });
 
-  it("Step 2 specifies built-in fallback path (CLAUDE_PLUGIN_ROOT/skills/{name}/SKILL.md)", () => {
+  it("Step 2 specifies built-in fallback path (CLAUDE_PLUGIN_ROOT/skills/canon/references/)", () => {
     const content = readFile(IMPLEMENTOR_MD);
-    expect(content).toContain("${CLAUDE_PLUGIN_ROOT}/skills/");
-    expect(content).toContain("SKILL.md");
+    expect(content).toContain("${CLAUDE_PLUGIN_ROOT}/skills/canon/references/");
   });
 
   it("Step 2 instructs silent skip when domain file is missing (no NEEDS_CONTEXT)", () => {
@@ -259,24 +224,23 @@ describe("canon-implementor.md — Step 2 domain priming", () => {
 
 // These verify that the three changes work together as a coherent pipeline:
 // Architect writes domains: in the plan → implementor reads domains: from
-// plan → loads domain skill via its SKILL.md.
+// plan → loads domain file from skills/canon/references/.
 
 describe("domain priming pipeline coherence", () => {
-  it("all 6 domain names in architect guidance match actual skill directory names", () => {
+  it("all 6 domain names in architect guidance match actual domain file names", () => {
     const architectContent = readFile(ARCHITECT_MD);
     for (const domain of BUILT_IN_DOMAINS) {
       expect(architectContent).toContain(domain);
     }
   });
 
-  it("implementor fallback path matches actual skills/<name>/SKILL.md layout", () => {
-    // The implementor references CLAUDE_PLUGIN_ROOT/skills/{name}/SKILL.md.
-    // Every named skill must exist at that path.
+  it("implementor fallback path matches actual skills/canon/references/ layout", () => {
+    // The implementor references CLAUDE_PLUGIN_ROOT/skills/canon/references/{name}.md.
+    // Every named primer must exist at that path.
     const implementorContent = readFile(IMPLEMENTOR_MD);
-    expect(implementorContent).toContain("/skills/");
-    expect(implementorContent).toContain("SKILL.md");
+    expect(implementorContent).toContain("/skills/canon/references/");
     for (const domain of BUILT_IN_DOMAINS) {
-      expect(existsSync(skillPath(domain))).toBe(true);
+      expect(existsSync(join(DOMAINS_DIR, `${domain}.md`))).toBe(true);
     }
   });
 

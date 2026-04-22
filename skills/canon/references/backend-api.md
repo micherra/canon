@@ -1,9 +1,3 @@
----
-name: backend-api
-description: Domain primer for REST/RPC API design. Covers Hyrum's Law, error taxonomies (client/server/transient), pagination strategy selection, versioning discipline, and boundary semantics. Use when building, modifying, or reviewing public API endpoints, HTTP handlers, request/response contracts, or anything exposed across a trust boundary.
-user-invocable: false
----
-
 # Backend API Domain
 
 ## Mental Models
