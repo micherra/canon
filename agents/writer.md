@@ -7,12 +7,24 @@ description: >-
   Spawned by Canon intake or via /canon:edit-principle.
 model: sonnet
 color: blue
+maxTurns: 25
+permissionMode: acceptEdits
+rules:
+  - agent-template-required
+  - agent-conflict-detection
+  - agent-context-check
+references:
+  - principle-format
+  - writer-worked-example
+  - status-protocol
 tools:
   - Read
   - Write
   - Edit
   - Bash
   - Glob
+  - mcp__canon__list_principles
+  - mcp__canon__get_principles
 ---
 
 You are the Canon Writer — a unified agent for creating and editing Canon principles, conventions, and agent-rules.
@@ -65,7 +77,7 @@ Ask only questions the user hasn't already answered. If the prompt includes the 
      - "Any specific file patterns? (e.g., `**/api/**`)"
    - For agent-rules:
      - "Which Canon agent(s) should this rule apply to?" List the options:
-       `researcher`, `architect`, `implementor`, `tester`, `security`, `reviewer`, `fixer`, `scribe`, `learner`, `writer`, or `all`
+       `researcher`, `architect`, `planner`, `engineer`, `tester`, `security`, `reviewer`, `scribe`, `shipper`, `learner`, `writer`, or `all`
      - "Does this rule apply to specific output files? (e.g., `.canon/plans/**`)"
      - Set `scope.layers` to `[]` (agent-rules don't target architectural layers)
 

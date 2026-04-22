@@ -3,24 +3,22 @@
 <!-- Managed by Canon. Manual edits are preserved. -->
 
 ## Purpose
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-22 -->
 Agent definitions for Canon's multi-agent build pipeline. Each markdown file defines a specialized Claude agent with its role, tools, permissions, and behavioral rules.
 
 ## Architecture
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-22 -->
 
-Each agent file uses YAML frontmatter (name, description, model, color, tools) followed by markdown instructions. Agents are spawned by the orchestrator during flow execution.
+Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, `maxTurns`, `permissionMode`, `memory`, `skills`, `tools`) followed by markdown instructions. Agents are spawned by the orchestrator during flow execution.
 
-**Agent roster:**
+**Agent roster (11):**
 
 | Agent | Role | Model |
 |-------|------|-------|
 | `architect` | Designs solutions; produces design decisions and task decomposition | opus |
-| `chat` | Project-aware conversational agent; discusses ideas, brainstorms, writes briefs for build handoff | sonnet |
-| `fixer` | Fixes failing tests and principle violations identified by reviewers | sonnet |
-| `guide` | Answers questions, browses principles, shows status dashboards (read-only) | sonnet |
-| `implementor` | Writes code per plan; writes unit tests | sonnet |
+| `engineer` | Executes code-writing work in implementation mode (per a plan) or fix mode (targeted bug or violation fixes) | sonnet |
 | `learner` | Analyzes patterns; suggests principle improvements | sonnet |
+| `planner` | Evaluates build requests pre-implementation; produces structured briefs that greenlight, redirect, or ask clarifying questions | opus |
 | `researcher` | Investigates single research dimensions | sonnet |
 | `reviewer` | Reviews code for principle compliance | opus |
 | `scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation | sonnet |
@@ -30,11 +28,23 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 | `writer` | Creates and edits Canon principles and agent-rules | sonnet |
 
 ## Conventions
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-22 -->
 
-- Each agent has defined read/write permissions enforced by the orchestrator
-- Agents receive fresh context per spawn (no carryover between invocations)
-- Agent output must follow templates from `templates/` (see `agent-template-required` rule)
-- Agents log activity per `workspace-logging.md` protocol
-- `implementor` has direct access to `mcp__canon__post_message` and `mcp__canon__get_messages` for collaboration during wave execution
-- `implementor` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes
+- Each agent has a declarative `permissionMode` enforced by Claude Code:
+  - **`plan`** — truly read-only. No `Write` / `Edit` / `Bash`-to-modify AND no MCP `write_*` / `update_*` tools. For agents that emit artifacts inline (the lead writes them): `planner`, `security`.
+  - **`acceptEdits`** — auto-approves file edits and common filesystem commands scoped to the working directory. For agents that produce artifacts via MCP write tools (`architect` → `write_plan_index` / `write_design_brief` / `update_board`; `researcher` → `write_research_synthesis`; `reviewer` → `write_review`; `tester` → `write_test_report`; `learner` → writes to `.canon/learning.jsonl` and `.canon/proposed-learnings/`; `shipper` → PR description; `writer` → principle files) or that edit source files (`engineer`, `scribe`).
+  - **Why not all `plan` for read-only roles?** Claude Code's `plan` mode blocks ALL write tools including MCP `write_*` — per [permission-modes](https://code.claude.com/docs/en/permission-modes.md). So the subset that genuinely can't write anything (no MCP write tools) stays on `plan`; everyone else is `acceptEdits`. Each agent's `tools:` list is the real allowlist.
+- Each agent has a `maxTurns` budget appropriate to its role. A turn is one assistant message with tool calls; text-only responses don't consume a turn. Parallel tool calls in one message = 1 turn.
+- Agents receive fresh context per spawn (no carryover between invocations).
+- Agent output must follow templates declared in `templates:` frontmatter (see `agent-template-required` rule). Templates preload like rules/references/primers; no runtime Read is required.
+- **Four dedicated preload fields** — each lives in its own frontmatter list where the field name *is* the namespace:
+  - `rules:` — bare names resolving to `rules/<name>.md` (imperative agent-behavior rules).
+  - `references:` — bare names resolving to `references/<name>.md` (protocol fragments, checklists).
+  - `primers:` — bare names resolving to `primers/<name>.md` (domain context).
+  - `templates:` — bare names resolving to `templates/<name>.md` (required output shapes).
+
+  The Canon MCP tool `resolve_agent_skills` reads all four fields and returns the concatenated content; the lead injects it into the spawn prompt before calling `Agent`. The native `skills:` field is reserved for real Claude Code native skills (per-directory `SKILL.md` wrappers) and is untouched by Canon's resolver.
+- Agents log activity per `workspace-logging.md` protocol.
+- `engineer` has direct access to `mcp__canon__get_messages` and `mcp__canon__write_implementation_summary` for collaboration during wave execution.
+- `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.
+- Agents with `memory: project` (planner, engineer, researcher, architect, scribe, learner, tester) persist agent memory across sessions; others do not.

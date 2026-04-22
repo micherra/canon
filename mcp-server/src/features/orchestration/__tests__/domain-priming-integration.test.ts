@@ -5,14 +5,14 @@
  *
  * These tests verify:
  *   - All 6 built-in domain primers exist at the correct paths with correct names
- *   - Domain primer files contain no YAML frontmatter (implementors load them as raw text)
+ *   - Domain primer files contain no YAML frontmatter (engineer loads them as raw text)
  *   - Domain primer files follow the canonical primer template
  *     (Mental Models / Decision Frameworks / Failure Modes / Guardrails)
  *   - templates/task-plan.md exposes the `domains:` field to the architect
  *   - architect.md lists all 6 built-in domain names and includes
  *     classification guidance
- *   - implementor.md Step 2 instructs domain loading with correct
- *     fallback paths
+ *   - engineer.md Step 2 instructs domain loading with correct
+ *     fallback paths (phase1-08: implementor → engineer merge)
  *
  * These are structural/content contract tests — if any are broken by a rename,
  * restructure, or accidental edit, the domain priming pipeline will silently
@@ -37,7 +37,7 @@ const REPO_ROOT = resolve(process.cwd(), "..");
 
 const DOMAINS_DIR = join(REPO_ROOT, "primers");
 const ARCHITECT_MD = join(REPO_ROOT, "agents", "architect.md");
-const IMPLEMENTOR_MD = join(REPO_ROOT, "agents", "implementor.md");
+const ENGINEER_MD = join(REPO_ROOT, "agents", "engineer.md");
 const TASK_PLAN_TEMPLATE = join(REPO_ROOT, "templates", "task-plan.md");
 
 function readFile(path: string): string {
@@ -160,45 +160,45 @@ describe("architect.md — domain classification guidance", () => {
     expect(domainIdx).toBeLessThan(riskIdx);
   });
 
-  it("references the domains: frontmatter field implementors read", () => {
+  it("references the domains: frontmatter field the engineer reads", () => {
     const content = readFile(ARCHITECT_MD);
     expect(content).toContain("domains:");
   });
 });
 
-describe("implementor.md — Step 2 domain priming", () => {
-  it("implementor file exists", () => {
-    expect(existsSync(IMPLEMENTOR_MD)).toBe(true);
+describe("engineer.md — Step 2 domain priming", () => {
+  it("engineer file exists", () => {
+    expect(existsSync(ENGINEER_MD)).toBe(true);
   });
 
   it("contains Step 2 labeled as domain priming", () => {
-    const content = readFile(IMPLEMENTOR_MD);
+    const content = readFile(ENGINEER_MD);
     expect(content).toContain("Step 2: Load domain priming");
   });
 
   it("Step 2 references the plan's domains: frontmatter field", () => {
-    const content = readFile(IMPLEMENTOR_MD);
+    const content = readFile(ENGINEER_MD);
     expect(content).toContain("domains:");
   });
 
   it("Step 2 specifies project-specific override path (.canon/domains/)", () => {
-    const content = readFile(IMPLEMENTOR_MD);
+    const content = readFile(ENGINEER_MD);
     expect(content).toContain(".canon/domains/");
   });
 
   it("Step 2 specifies built-in fallback path (CLAUDE_PLUGIN_ROOT/primers/)", () => {
-    const content = readFile(IMPLEMENTOR_MD);
+    const content = readFile(ENGINEER_MD);
     expect(content).toContain("${CLAUDE_PLUGIN_ROOT}/primers/");
   });
 
   it("Step 2 instructs silent skip when domain file is missing (no NEEDS_CONTEXT)", () => {
-    const content = readFile(IMPLEMENTOR_MD);
+    const content = readFile(ENGINEER_MD);
     // The step must say to skip silently — not fail or report NEEDS_CONTEXT
-    expect(content).toContain("skip silently");
+    expect(content.toLowerCase()).toContain("skip silently");
   });
 
   it("Step 2 appears before Step 3 (Load Canon principles)", () => {
-    const content = readFile(IMPLEMENTOR_MD);
+    const content = readFile(ENGINEER_MD);
     const step2Idx = content.indexOf("Step 2: Load domain priming");
     const step3Idx = content.indexOf("Step 3: Load Canon principles");
     expect(step2Idx).toBeGreaterThan(-1);
@@ -207,7 +207,7 @@ describe("implementor.md — Step 2 domain priming", () => {
   });
 
   it("Step 1 (Read your plan) still exists and is before Step 2", () => {
-    const content = readFile(IMPLEMENTOR_MD);
+    const content = readFile(ENGINEER_MD);
     const step1Idx = content.indexOf("Step 1: Read your plan");
     const step2Idx = content.indexOf("Step 2: Load domain priming");
     expect(step1Idx).toBeGreaterThan(-1);
@@ -215,9 +215,8 @@ describe("implementor.md — Step 2 domain priming", () => {
   });
 
   it("Context Isolation section lists domain priming files", () => {
-    const content = readFile(IMPLEMENTOR_MD);
+    const content = readFile(ENGINEER_MD);
     // The context isolation section should mention domain priming as received context.
-    // The file uses "Domain priming" (capital D) in the bullet list.
     const isolationIdx = content.indexOf("Context Isolation");
     expect(isolationIdx).toBeGreaterThan(-1);
     const afterIsolation = content.slice(isolationIdx).toLowerCase();
@@ -226,8 +225,8 @@ describe("implementor.md — Step 2 domain priming", () => {
 });
 
 // These verify that the three changes work together as a coherent pipeline:
-// Architect writes domains: in the plan → implementor reads domains: from
-// plan → loads domain file from references/.
+// Architect writes domains: in the plan → engineer reads domains: from
+// plan → loads domain file from primers/.
 
 describe("domain priming pipeline coherence", () => {
   it("all 6 domain names in architect guidance match actual domain file names", () => {
@@ -237,11 +236,11 @@ describe("domain priming pipeline coherence", () => {
     }
   });
 
-  it("implementor fallback path matches actual primers/ layout", () => {
-    // The implementor references CLAUDE_PLUGIN_ROOT/primers/{name}.md.
+  it("engineer fallback path matches actual primers/ layout", () => {
+    // The engineer references CLAUDE_PLUGIN_ROOT/primers/{name}.md.
     // Every named primer must exist at that path.
-    const implementorContent = readFile(IMPLEMENTOR_MD);
-    expect(implementorContent).toContain("/primers/");
+    const engineerContent = readFile(ENGINEER_MD);
+    expect(engineerContent).toContain("/primers/");
     for (const domain of BUILT_IN_DOMAINS) {
       expect(existsSync(join(DOMAINS_DIR, `${domain}.md`))).toBe(true);
     }

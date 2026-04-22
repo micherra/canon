@@ -18,6 +18,7 @@ import { simulateFlowTool } from "@features/orchestration/tools/simulate-flow.ts
 import { updateBoard } from "@features/orchestration/tools/update-board.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { z } from "zod";
+import { registerAgentTeamsTools } from "./register-agent-teams.ts";
 import { gatedWrapHandler, pluginDir, projectDir, server } from "./server-state.ts";
 
 const FailureEntrySchema = z.object({
@@ -592,4 +593,5 @@ export function registerOrchestrationTools(): void {
   registerDriveFlowTool();
   registerCategorizeTool();
   registerJournalTools();
+  registerAgentTeamsTools();
 }

@@ -18,7 +18,7 @@ domains:
 
 ### Action
 
-Rewrite `agents/planner.md` to load `planner-brief` and `runbook-synthesis` skills (from v2_1a-01, v2_1a-02), emit `planning-brief.md` + `runbook.md` per build request, and run the iterate-until-approved loop.
+Rewrite `agents/planner.md` to load the `canon:plan` and `canon:synthesize` native Claude Code skills (from v2_1a-01, v2_1a-02), emit `planning-brief.md` + `runbook.md` per build request using the templates at `templates/planning-brief.md` and `templates/runbook.md`, and run the iterate-until-approved loop.
 
 **Frontmatter (v2.1):**
 
@@ -35,11 +35,14 @@ memory: project
 maxTurns: 40
 permissionMode: plan
 skills:
-  - planner-brief
-  - runbook-synthesis
+  - canon:plan
+  - canon:synthesize
+rules:
   - agent-surface-assumptions
   - agent-evidence-over-intuition
   - agent-context-check
+  - agent-template-required
+references:
   - status-protocol
 tools:
   - Read
@@ -53,13 +56,19 @@ tools:
 ---
 ```
 
+**PLAN amendment note** (2026-04-22, phase1-08.5 + follow-up): the original v2_1a-03 PLAN declared a single `skills:` list mixing two distinct concerns — procedural skills (how to plan, how to synthesize) and Canon rules/references (agent-surface-assumptions, status-protocol, etc.). The corrected model separates them:
+
+- **`skills:`** — Claude Code native skills, preloaded by Claude Code itself. `canon:plan` and `canon:synthesize` are per-skill `SKILL.md`-wrapped directories under `skills/canon/skills/` that v2_1a-01 and v2_1a-02 ship; they encode the planning and synthesis contracts. The planner subagent receives both skills' content at spawn natively.
+- **`rules:` / `references:`** — Canon preload fields resolved by `resolve_agent_skills` (phase1-08.5). Rules are imperative agent-behavior; references are protocol fragments. `agent-template-required` is added because the body references two templates.
+- **Templates** — `templates/planning-brief.md` (phase1-08) and `templates/runbook.md` (new in v2_1a-02) are the output shapes, named in the body per `agent-template-required`.
+
 **Body (new, replaces any v2-era body):**
 
 - Core principle: `agent-design-before-code` — planner produces a brief + runbook before any code lands
 - Process section:
   1. Read the user request and any prior planning artifacts
-  2. Load the `planner-brief` skill to produce `${WORKSPACE}/plans/${slug}/planning-brief.md`
-  3. Load the `runbook-synthesis` skill to produce `${WORKSPACE}/plans/${slug}/runbook.md`
+  2. Produce `${WORKSPACE}/plans/${slug}/planning-brief.md` following the `canon:plan` skill and the `templates/planning-brief.md` template
+  3. Produce `${WORKSPACE}/plans/${slug}/runbook.md` following the `canon:synthesize` skill and the `templates/runbook.md` template
   4. Emit `confidence_signals[]` in the runbook frontmatter (per-signal only; no aggregate scalar user-facing per review HIGH-2)
   5. Present brief + runbook to the lead for user presentation
   6. On iteration request: re-spawn with full workspace context; write `runbook-iter-N.md` (v2.1a) or new `lifecycle_synthesized_runbooks` row (v2.1b+); re-score per-signal confidence
@@ -84,16 +93,18 @@ tools:
 
 No existing test infrastructure for agents/*.md. Validation is by:
 
-- Manual read: frontmatter matches spec (skills, maxTurns 40, model opus, permissionMode plan, memory project); body references both skill files by name; no Edit/Write/Bash calls in body (read-only by permissionMode)
+- Manual read: frontmatter matches spec (`rules` / `references` / `tools` fields populated, maxTurns 40, model opus, permissionMode plan, memory project); body references both skill files by name; no Edit/Write/Bash calls in body (read-only by permissionMode)
 - Integration (part of v2_1a-08 validation): spawn planner against a representative build request; confirm `planning-brief.md` + `runbook.md` produced at expected paths; runbook carries `confidence_signals[]` frontmatter; no aggregate scalar in user-facing output
 
 ### Verify
 
 1. `agents/planner.md` parses as agent definition
-2. Frontmatter matches spec
-3. Skills referenced (`planner-brief`, `runbook-synthesis`) resolve to files from v2_1a-01, v2_1a-02
-4. Agent tests pass: `npm test -- planner`
-5. Manual spawn against 2-3 test requests produces expected artifacts
+2. Frontmatter matches spec: `skills: [canon:plan, canon:synthesize]` (native), `rules:` and `references:` populated per spec, `tools:` list correct
+3. `canon:plan` and `canon:synthesize` resolve as native Claude Code skills — i.e., `skills/canon/skills/plan/SKILL.md` and `skills/canon/skills/synthesize/SKILL.md` exist and are discovered by Claude Code (shipped by v2_1a-01 and v2_1a-02)
+4. `resolve_agent_skills` returns zero `unresolved` entries for the planner's `rules:` and `references:`
+5. Body cites `templates/planning-brief.md` and `templates/runbook.md` as output shapes (agent-template-required)
+6. Agent tests pass: `npm test -- planner`
+7. Manual spawn against 2-3 test requests produces expected artifacts
 
 ### Done when
 
