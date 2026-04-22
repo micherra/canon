@@ -60,7 +60,9 @@ Minimize text output during the state machine loop. Conversations exceeding ~100
 
 Do not narrate individual tool calls. One line between state transitions is correct.
 
-## Driving the State Machine
+## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off)
+
+_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off._
 
 Full protocol: `references/canon-orchestrator.md`. Key loop:
 
@@ -86,6 +88,138 @@ Full protocol: `references/canon-orchestrator.md`. Key loop:
 | Security audit | `security-audit` |
 
 When in doubt between tiers, prefer the higher tier. Proceed immediately — don't ask for tier confirmation.
+
+## Agent Teams Orchestration (CANON_AGENT_TEAMS_MODE=on)
+
+If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — use the legacy "Driving the State Machine" section above.
+
+### Intent Classification + Runbook Selection
+
+| Signal | Action |
+|--------|--------|
+| Bug fix, small change, 1–3 files | Read `fast-path.md` runbook |
+| New feature, 4–10 files | Read `feature.md` runbook (variant: refactor if restructuring) |
+| Large cross-cutting, 10+ files | Read `epic.md` runbook |
+| Migration, upgrade, "move to X" | Read `migrate.md` runbook |
+| Improve test coverage | Read `test-gap.md` runbook |
+| Review PR or branch | Spawn `reviewer` (no runbook) |
+| Security audit | Spawn `security`, then `reviewer` (no runbook) |
+| Investigate / "how does X work" | Spawn `researcher`(s), synthesize (no runbook) |
+| Scan for violations (via init) | Spawn `engineer` to scan + fix (no runbook) |
+| Create/edit principle | Spawn `writer` (no runbook) |
+| Analyze patterns / learn | Spawn `learner` (no runbook) |
+| Resume interrupted flow | See Resume Protocol below |
+| Vague / unclear request | Spawn `planner` (pre-build gate) |
+
+Runbook files live at `${CLAUDE_PLUGIN_ROOT}/skills/canon/runbooks/<flow-name>.md`.
+
+### Pre-Build Gate
+
+Before starting any build flow, evaluate the request:
+
+- Is the problem clearly defined? Are acceptance criteria explicit?
+- Have alternatives been considered? Is the value proportional to the effort?
+- If any answer is no, spawn `planner` before proceeding to a build runbook.
+- If the request is a clear bug fix or small change with obvious scope, skip to fast-path.
+
+### Setup
+
+1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`.
+2. Read the runbook for the selected flow: `${CLAUDE_PLUGIN_ROOT}/skills/canon/runbooks/<flow-name>.md` (one of `fast-path.md`, `feature.md`, `epic.md`, `migrate.md`, `test-gap.md`).
+3. Call `log_step` for each planned step from the runbook (creates the checklist).
+
+### Resume Protocol
+
+When resuming a session or the user says "continue" / "resume":
+
+1. Read the journal file (`journal.json` in the workspace).
+2. Identify the last step with `status: "completed"`.
+3. Read the workspace artifacts produced by completed steps for context.
+4. Continue from the first step with `status: "started"` or the next unstarted step.
+5. If no journal exists, check for legacy workspace state and advise the user.
+
+### Domain Skill + Template Naming
+
+Before spawning an agent, name relevant domain primers and the output template in the spawn prompt:
+
+- Domain primers: `"Relevant domain primers: authentication-security, backend-api. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
+- Template: `"Use template: implementation-log. Read from ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md."`
+- Do NOT read and inject file content yourself — the agent reads the named files on its first turn (per `agent-context-check`).
+- This keeps the lead's context clean and puts the Read cost in the agent's fresh context.
+- Same pattern for both: lead names, agent loads.
+
+### MCP Tool Composition
+
+Table of which Canon MCP tools to call before spawning each step type:
+
+| Step type | MCP tools to call |
+|-----------|------------------|
+| Research | `get_principles`, `get_file_context`, `graph_query`, `semantic_search` |
+| Design | `get_principles`, `get_file_context`, `graph_query` |
+| Implement | `get_principles`, `get_file_context`, `get_drift_report` |
+| Review | `get_principles`, `get_drift_report` |
+| Test | `get_principles`, `get_file_context` |
+| Security | `get_principles`, `get_file_context` |
+
+Include results in the spawn prompt. Agents also have direct MCP access and will self-serve missing context (via `agent-context-check` skill).
+
+### Dispatch Framework
+
+| Pattern | Primitive |
+|---------|-----------|
+| Sequential step (research, design, review) | Subagent |
+| Parallel implementation (wave tasks) | Agent team |
+| Debate / competing hypotheses | Agent team |
+| Advisory consultation | Subagent |
+| Background housekeeping | Subagent (background) |
+
+### Journal Protocol
+
+- Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
+- After each spawn: `log_step({ workspace, step_id, ..., status: "completed", artifacts_actual: [...] })`
+- The journal is your checklist. The completion hook (`verify_completion`) verifies it.
+
+### Post-Subagent Artifact Check
+
+After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
+
+### HITL Patterns
+
+- **Architect approval**: Present the plan to the user. For agent teams, use native plan approval mode.
+- **Review verdict**: Present review results. If not clean, spawn engineer in fix mode.
+- **Gate failure**: Present the failure output and ask the user how to proceed.
+- **Merge conflict**: Present conflicting files and ask for resolution strategy.
+
+### Post-Step Effects
+
+- After reviewer completes: call `store_pr_review` or `write_review`.
+- After each step: call `record_agent_metrics` if the agent didn't call it itself.
+- Run contract-checker assertions via Bash when postconditions are declared.
+
+### Completion Checklist
+
+1. Call `verify_completion({ workspace })` — if steps or artifacts missing, resolve before proceeding.
+2. Call `update_board({ workspace, operation: "complete_flow" })`.
+3. Verify file claims released.
+4. Evaluate learn gate: run `.canon/learn.sh` if it exists.
+5. Record final flow metrics.
+
+### Commit Provenance
+
+All agent commits must include trailers:
+
+```
+Canon-Workflow: {slug}
+Canon-Agent: {agent-type}
+Canon-State: {step-id}
+Canon-Task: {task-id}  # wave tasks only
+```
+
+The PostCommit hook validates `Canon-Workflow` trailer presence.
+
+### Error Handling
+
+See the "Agent Spawn Error Handling" section below. The same retry logic (429 rate limits, auth failures, TTL ordering) applies to agent-teams orchestration. Retry up to 3 times with exponential backoff (4s, 8s, 16s). If all retries fail, inform the user and pause.
 
 ## Specialist Agents
 
