@@ -1,3 +1,9 @@
+---
+name: migration-strategy
+description: Domain primer for large and long-running migrations. Covers expand-migrate-contract, backfill sizing, rollback windows, dual-write reconciliation, schema change ordering, and feature-flag cliff risk. Use when planning data migrations, schema changes with >1 release cycle, cross-service moves, or anything where readers and writers disagree for a period.
+user-invocable: false
+---
+
 # Migration Strategy Domain
 
 ## Mental Models

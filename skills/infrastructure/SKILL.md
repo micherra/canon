@@ -1,3 +1,9 @@
+---
+name: infrastructure
+description: Domain primer for deployment, configuration, and environment management. Covers idempotency-vs-imperativeness, secret hygiene, environment parity, and the "one more environment variable" anti-pattern. Use when writing Dockerfiles, CI/CD config, deployment scripts, IaC (Terraform/Pulumi), or reviewing release pipelines.
+user-invocable: false
+---
+
 # Infrastructure Domain
 
 ## Mental Models

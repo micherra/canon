@@ -1,1 +1,0 @@
-../skills/canon/references/frontend.md

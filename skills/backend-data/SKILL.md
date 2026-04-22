@@ -1,3 +1,9 @@
+---
+name: backend-data
+description: Domain primer for database access and data modeling. Covers query design, transaction scope, N+1 avoidance, schema migration discipline, and the difference between "makes queries" and "owns data." Use when writing SQL, designing tables or indexes, touching ORM/query-builder code, or reviewing a data-access layer.
+user-invocable: false
+---
+
 # Backend Data Domain
 
 ## Mental Models

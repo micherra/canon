@@ -8,7 +8,6 @@
 canon/
 ├── agents/               # Plugin agent definitions (YAML frontmatter + markdown instructions)
 ├── rules/                # Agent-behavior rules (loaded per agent at runtime)
-├── domain-primers/       # Built-in domain priming files (one per domain, raw markdown)
 ├── flows/                # Flow state machine definitions (YAML frontmatter + spawn instructions)
 │   └── fragments/        # Reusable state groups included by flows
 ├── hooks/                # Pre/post tool-use interceptor scripts
@@ -19,9 +18,22 @@ canon/
 │       ├── drift/          # JSONL-backed drift tracking (reviews)
 │       └── graph/          # Dependency graph scanner and priority scoring
 ├── principles/           # Canonical engineering principles (markdown)
-├── skills/canon/         # Canon skill definition (entry point for Claude Code)
-│   ├── commands/         # CLI command definitions (doctor, init, learn, pr-review, etc.)
-│   └── references/       # Skill reference fragments loaded on demand (includes canon-orchestrator.md)
+├── skills/               # Claude Code skills — each a directory with SKILL.md entrypoint
+│   ├── canon/            # Canon orchestrator skill (commands, evals, reference fragments)
+│   │   ├── commands/     # CLI command definitions (doctor, init, learn, pr-review, etc.)
+│   │   └── references/   # Orchestrator-facing reference fragments (canon-orchestrator.md, agent-*.md rule symlinks, etc.)
+│   ├── backend-api/      # Domain primer skill — REST/RPC API design
+│   ├── backend-data/     # Domain primer skill — database access and data modeling
+│   ├── frontend/         # Domain primer skill — UI component design
+│   ├── testing/          # Domain primer skill — test strategy
+│   ├── infrastructure/   # Domain primer skill — deployment and env management
+│   ├── deprecation/      # Domain primer skill — safe deprecation
+│   ├── authentication-security/  # Domain primer skill — auth and credential handling
+│   ├── migration-strategy/       # Domain primer skill — long-running migrations
+│   ├── observability/    # Domain primer skill — logs/metrics/traces
+│   ├── error-handling/   # Domain primer skill — error design
+│   ├── performance/      # Domain primer skill — profiling and caching
+│   └── devops-ci/        # Domain primer skill — CI/CD and build systems
 ├── templates/            # Artifact templates agents must follow
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
     └── workspaces/       # Per-branch/task build state (board.json, session.json, progress.md, plans/, etc.)
