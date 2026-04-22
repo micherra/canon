@@ -140,7 +140,7 @@ When resuming a session or the user says "continue" / "resume":
 
 ### Skill Preloading + Domain Skill + Template Naming
 
-**Preloaded rules and references (from agent frontmatter):** Before the `Agent` tool call, invoke `resolve_agent_skills({ agent_name })`. The tool reads the agent's `skills:` frontmatter (prefixed IDs like `rule:<name>` / `ref:<name>` / `primer:<name>`), loads each file from `rules/` / `references/` / `primers/`, and returns a `preload_prompt` string. Include that string verbatim at the top of the spawn prompt. This substitutes for Claude Code's native `skills:` preload because Canon stores skills as flat `.md` files, not per-skill `SKILL.md` directories.
+**Preloaded rules and references (from agent frontmatter):** Before the `Agent` tool call, invoke `resolve_agent_skills({ agent_name })`. The tool reads three dedicated frontmatter fields — `rules:`, `references:`, `primers:` — loads each listed file from `rules/<name>.md` / `references/<name>.md` / `primers/<name>.md`, and returns a `preload_prompt` string. Include that string verbatim at the top of the spawn prompt. Canon uses its own three-field preloader instead of Claude Code's native `skills:` mechanism because Canon stores rules / references / primers as flat `.md` files, not per-skill `SKILL.md` directories. The native `skills:` field remains available for real Claude Code native skills, which it preloads independently.
 
 **On-demand domain primers (from task context):** Some tasks need extra domain context beyond the agent's default skills. Name those in the spawn prompt body — the agent Reads them per `agent-context-check`:
 

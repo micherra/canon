@@ -11,11 +11,12 @@ color: cyan
 maxTurns: 25
 permissionMode: plan
 memory: project
-skills:
-  - rule:agent-surface-assumptions
-  - rule:agent-evidence-over-intuition
-  - rule:agent-context-check
-  - ref:status-protocol
+rules:
+  - agent-surface-assumptions
+  - agent-evidence-over-intuition
+  - agent-context-check
+references:
+  - status-protocol
 tools:
   - Read
   - Glob

@@ -9,13 +9,14 @@ color: green
 maxTurns: 30
 permissionMode: acceptEdits
 memory: project
-skills:
-  - rule:agent-design-before-code
-  - rule:agent-plans-are-prompts
-  - rule:agent-surface-assumptions
-  - rule:agent-template-required
-  - rule:agent-context-check
-  - ref:status-protocol
+rules:
+  - agent-design-before-code
+  - agent-plans-are-prompts
+  - agent-surface-assumptions
+  - agent-template-required
+  - agent-context-check
+references:
+  - status-protocol
 tools:
   - Read
   - Bash

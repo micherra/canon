@@ -10,14 +10,15 @@ color: cyan
 maxTurns: 40
 permissionMode: acceptEdits
 memory: project
-skills:
-  - rule:agent-test-the-contract
-  - rule:agent-test-sad-paths
-  - rule:agent-template-required
-  - rule:agent-context-check
-  - ref:tester-report-template
-  - ref:principle-loading
-  - ref:status-protocol
+rules:
+  - agent-test-the-contract
+  - agent-test-sad-paths
+  - agent-template-required
+  - agent-context-check
+references:
+  - tester-report-template
+  - principle-loading
+  - status-protocol
 tools:
   - Read
   - Write

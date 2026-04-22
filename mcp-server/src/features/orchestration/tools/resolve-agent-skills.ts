@@ -6,34 +6,39 @@ import matter from "gray-matter";
 /**
  * resolve_agent_skills — Canon's custom skill-preload resolver.
  *
- * Reads an agent's `skills:` frontmatter list, resolves each ID to a file under
- * `rules/`, `references/`, or `primers/`, and returns the concatenated content
- * ready for injection into a spawn prompt.
+ * Reads three dedicated frontmatter fields from an agent definition:
  *
- * Why this exists: Claude Code's native `skills:` preload requires each skill
- * to be its own `SKILL.md`-wrapped directory (see
- * https://code.claude.com/docs/en/sub-agents). Canon stores rules, protocol
- * fragments, and domain primers as flat .md files at `rules/<name>.md`,
- * `references/<name>.md`, `primers/<name>.md`. Rather than restructure 40+
- * files into per-skill directories, Canon runs its own resolver and the lead
- * injects the result into each spawn prompt.
+ *   rules:      [<name>, ...]   → loaded from `rules/<name>.md`
+ *   references: [<name>, ...]   → loaded from `references/<name>.md`
+ *   primers:    [<name>, ...]   → loaded from `primers/<name>.md`
  *
- * ID syntax:
- *   - `rule:<name>`   → `${pluginDir}/rules/<name>.md`
- *   - `ref:<name>`    → `${pluginDir}/references/<name>.md`
- *   - `primer:<name>` → `${pluginDir}/primers/<name>.md`
- *   - `<name>` (no prefix) → searches rules/, references/, primers/ in that order (backward compat)
+ * Returns a structured list of resolved content plus a single
+ * `preload_prompt` string ready to inject at the top of a spawn prompt.
  *
- * Missing files are skipped silently (per agent-context-check convention).
+ * Why three fields rather than one `skills:` with prefixes? Claude Code's
+ * native `skills:` mechanism expects SKILL.md-wrapped directories (see
+ * https://code.claude.com/docs/en/sub-agents). Canon stores rules,
+ * protocol fragments, and domain primers as flat .md files and resolves
+ * them itself. Keeping Canon's declarations out of `skills:` means the
+ * native preloader never sees them, produces no spurious "skill not
+ * found" warnings, and remains available for real native skills if
+ * anyone ever registers one.
+ *
+ * Missing files are collected in `unresolved` (formatted as "<kind>:<name>"
+ * for clarity) and otherwise skipped silently, matching the
+ * agent-context-check convention that missing context is degraded, not
+ * blocked.
  */
 
 export type ResolveAgentSkillsInput = {
   agent_name: string;
 };
 
+export type ResolvedSkillKind = "rule" | "ref" | "primer";
+
 export type ResolvedSkill = {
   id: string;
-  kind: "rule" | "ref" | "primer";
+  kind: ResolvedSkillKind;
   path: string;
   content: string;
 };
@@ -45,21 +50,32 @@ export type ResolveAgentSkillsResult = {
   preload_prompt: string;
 };
 
-const KIND_TO_DIR: Record<ResolvedSkill["kind"], string> = {
+const KIND_TO_DIR: Record<ResolvedSkillKind, string> = {
   primer: "primers",
   ref: "references",
   rule: "rules",
 };
 
-const BACKWARD_COMPAT_ORDER: ResolvedSkill["kind"][] = ["rule", "ref", "primer"];
+const KIND_TO_FIELD: Record<ResolvedSkillKind, string> = {
+  primer: "primers",
+  ref: "references",
+  rule: "rules",
+};
+
+const KIND_ORDER: ResolvedSkillKind[] = ["rule", "ref", "primer"];
 
 function stripCanonPrefix(name: string): string {
   return name.startsWith("canon:") ? name.slice("canon:".length) : name;
 }
 
+function coerceStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
 function tryReadSkill(
   pluginDir: string,
-  kind: ResolvedSkill["kind"],
+  kind: ResolvedSkillKind,
   name: string,
 ): { path: string; content: string } | null {
   const path = join(pluginDir, KIND_TO_DIR[kind], `${name}.md`);
@@ -71,35 +87,8 @@ function tryReadSkill(
   }
 }
 
-function resolveOne(pluginDir: string, id: string): ResolvedSkill | { unresolved: string } {
-  const colonIdx = id.indexOf(":");
-  if (colonIdx > 0) {
-    const prefix = id.slice(0, colonIdx);
-    const name = id.slice(colonIdx + 1);
-    if (prefix === "rule" || prefix === "ref" || prefix === "primer") {
-      const hit = tryReadSkill(pluginDir, prefix, name);
-      if (hit) {
-        return { content: hit.content, id, kind: prefix, path: hit.path };
-      }
-      return { unresolved: id };
-    }
-    // Unknown prefix — skip (could be a future namespace)
-    return { unresolved: id };
-  }
-  // Bare name — try each kind in order
-  for (const kind of BACKWARD_COMPAT_ORDER) {
-    const hit = tryReadSkill(pluginDir, kind, id);
-    if (hit) {
-      return { content: hit.content, id, kind, path: hit.path };
-    }
-  }
-  return { unresolved: id };
-}
-
 function formatPreloadPrompt(skills: ResolvedSkill[]): string {
-  if (skills.length === 0) {
-    return "";
-  }
+  if (skills.length === 0) return "";
   const sections = skills.map((s) => {
     const label = s.kind === "rule" ? "Rule" : s.kind === "ref" ? "Reference" : "Domain primer";
     return `### ${label}: ${s.id}\n\n${s.content.trim()}`;
@@ -107,7 +96,7 @@ function formatPreloadPrompt(skills: ResolvedSkill[]): string {
   return [
     "## Preloaded Skills",
     "",
-    "The following rules, references, and primers have been preloaded from the agent's `skills:` frontmatter. Apply them as governing context throughout this task; do not re-read them.",
+    "The following rules, references, and primers have been preloaded from the agent's frontmatter. Apply them as governing context throughout this task; do not re-read them.",
     "",
     sections.join("\n\n---\n\n"),
   ].join("\n");
@@ -135,24 +124,17 @@ export function resolveAgentSkills(
     );
   }
   const parsed = matter(agentFile);
-  const rawSkills = parsed.data.skills;
-  if (!Array.isArray(rawSkills)) {
-    return toolOk<ResolveAgentSkillsResult>({
-      agent_name: agentName,
-      preload_prompt: "",
-      skills: [],
-      unresolved: [],
-    });
-  }
   const skills: ResolvedSkill[] = [];
   const unresolved: string[] = [];
-  for (const entry of rawSkills) {
-    if (typeof entry !== "string") continue;
-    const result = resolveOne(pluginDir, entry);
-    if ("unresolved" in result) {
-      unresolved.push(result.unresolved);
-    } else {
-      skills.push(result);
+  for (const kind of KIND_ORDER) {
+    const ids = coerceStringList(parsed.data[KIND_TO_FIELD[kind]]);
+    for (const id of ids) {
+      const hit = tryReadSkill(pluginDir, kind, id);
+      if (hit) {
+        skills.push({ content: hit.content, id, kind, path: hit.path });
+      } else {
+        unresolved.push(`${kind}:${id}`);
+      }
     }
   }
   return toolOk<ResolveAgentSkillsResult>({

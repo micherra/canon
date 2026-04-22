@@ -10,13 +10,14 @@ color: cyan
 maxTurns: 15
 permissionMode: acceptEdits
 memory: project
-skills:
-  - rule:agent-context-sync
-  - rule:agent-missing-artifact
-  - rule:agent-template-required
-  - rule:agent-context-check
-  - ref:workspace-logging
-  - ref:status-protocol
+rules:
+  - agent-context-sync
+  - agent-missing-artifact
+  - agent-template-required
+  - agent-context-check
+references:
+  - workspace-logging
+  - status-protocol
 tools:
   - Read
   - Edit

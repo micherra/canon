@@ -9,13 +9,14 @@ color: yellow
 maxTurns: 20
 permissionMode: acceptEdits
 memory: project
-skills:
-  - rule:agent-scoped-research
-  - rule:agent-surface-assumptions
-  - rule:agent-evidence-over-intuition
-  - rule:agent-template-required
-  - rule:agent-context-check
-  - ref:status-protocol
+rules:
+  - agent-scoped-research
+  - agent-surface-assumptions
+  - agent-evidence-over-intuition
+  - agent-template-required
+  - agent-context-check
+references:
+  - status-protocol
 tools:
   - Read
   - Bash

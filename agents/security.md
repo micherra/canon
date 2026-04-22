@@ -8,13 +8,14 @@ model: opus
 color: red
 maxTurns: 25
 permissionMode: plan
-skills:
-  - rule:agent-assume-hostile-input
-  - rule:agent-template-required
-  - rule:agent-context-check
-  - ref:security-checklist
-  - ref:principle-loading
-  - ref:status-protocol
+rules:
+  - agent-assume-hostile-input
+  - agent-template-required
+  - agent-context-check
+references:
+  - security-checklist
+  - principle-loading
+  - status-protocol
 tools:
   - Read
   - Bash

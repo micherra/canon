@@ -1,9 +1,10 @@
 /**
  * resolve-agent-skills-integration.test.ts
  *
- * Integration: every shipped agent in `agents/` must resolve its entire
- * `skills:` list against the real `rules/`, `references/`, `primers/`
- * directories. Any `unresolved` entry is a typo or a missing rule/ref file.
+ * Integration: every shipped agent in `agents/` must resolve every entry
+ * in its `rules:`, `references:`, and `primers:` frontmatter fields against
+ * the real `rules/`, `references/`, `primers/` directories. Any `unresolved`
+ * entry indicates a typo or a missing file and must be fixed.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -23,10 +24,15 @@ function listAgents(): string[] {
     .map((f) => f.replace(/\.md$/, ""));
 }
 
-function agentFrontmatterSkills(agentName: string): string[] {
+function agentFrontmatter(agentName: string): Record<string, unknown> {
   const raw = readFileSync(join(AGENTS_DIR, `${agentName}.md`), "utf-8");
-  const parsed = matter(raw);
-  return Array.isArray(parsed.data.skills) ? parsed.data.skills : [];
+  return matter(raw).data;
+}
+
+function coerceList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
 }
 
 describe("resolve_agent_skills against shipped agents", () => {
@@ -52,21 +58,26 @@ describe("resolve_agent_skills against shipped agents", () => {
   });
 
   for (const name of listAgents()) {
-    it(`${name}: every skills: entry resolves`, () => {
+    it(`${name}: every rules/references/primers entry resolves`, () => {
       const result = resolveAgentSkills({ agent_name: name }, REPO_ROOT);
       assertOk<ResolveAgentSkillsResult>(result);
-      const declared = agentFrontmatterSkills(name);
+      const fm = agentFrontmatter(name);
+      const declaredCount =
+        coerceList(fm.rules).length +
+        coerceList(fm.references).length +
+        coerceList(fm.primers).length;
       expect(result.unresolved).toEqual([]);
-      expect(result.skills.length).toBe(declared.length);
+      expect(result.skills.length).toBe(declaredCount);
     });
 
-    it(`${name}: skills use prefixed IDs (rule: / ref: / primer:)`, () => {
-      const declared = agentFrontmatterSkills(name);
-      for (const id of declared) {
+    it(`${name}: does not carry Canon rules/refs/primers in skills:`, () => {
+      const fm = agentFrontmatter(name);
+      const native = coerceList(fm.skills);
+      for (const id of native) {
         expect(
           id.startsWith("rule:") || id.startsWith("ref:") || id.startsWith("primer:"),
-          `${name} skill '${id}' is missing a rule:/ref:/primer: prefix`,
-        ).toBe(true);
+          `${name} has a prefixed Canon ID '${id}' still in skills:; move it to the matching rules:/references:/primers: field`,
+        ).toBe(false);
       }
     });
   }

@@ -9,11 +9,12 @@ model: sonnet
 color: green
 maxTurns: 20
 permissionMode: acceptEdits
-skills:
-  - rule:agent-artifacts-only
-  - rule:agent-template-required
-  - rule:agent-context-check
-  - ref:status-protocol
+rules:
+  - agent-artifacts-only
+  - agent-template-required
+  - agent-context-check
+references:
+  - status-protocol
 tools:
   - Read
   - Edit

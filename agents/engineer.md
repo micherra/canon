@@ -10,17 +10,18 @@ color: magenta
 maxTurns: 50
 permissionMode: acceptEdits
 memory: project
-skills:
-  - rule:agent-tdd-required
-  - rule:agent-minimal-fix
-  - rule:agent-fresh-context
-  - rule:agent-structured-triage
-  - rule:agent-simplify-before-extending
-  - rule:agent-template-required
-  - rule:agent-missing-artifact
-  - rule:agent-context-check
-  - ref:principle-loading
-  - ref:status-protocol
+rules:
+  - agent-tdd-required
+  - agent-minimal-fix
+  - agent-fresh-context
+  - agent-structured-triage
+  - agent-simplify-before-extending
+  - agent-template-required
+  - agent-missing-artifact
+  - agent-context-check
+references:
+  - principle-loading
+  - status-protocol
 tools:
   - Read
   - Write

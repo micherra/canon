@@ -9,13 +9,14 @@ color: blue
 maxTurns: 25
 permissionMode: acceptEdits
 memory: project
-skills:
-  - rule:agent-evidence-over-intuition
-  - rule:agent-template-required
-  - rule:agent-context-check
-  - ref:learner-dimensions
-  - ref:principle-format
-  - ref:status-protocol
+rules:
+  - agent-evidence-over-intuition
+  - agent-template-required
+  - agent-context-check
+references:
+  - learner-dimensions
+  - principle-format
+  - status-protocol
 tools:
   - Read
   - Bash

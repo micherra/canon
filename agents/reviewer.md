@@ -9,12 +9,13 @@ model: opus
 color: red
 maxTurns: 25
 permissionMode: acceptEdits
-skills:
-  - rule:agent-cold-review
-  - rule:agent-template-required
-  - rule:agent-context-check
-  - ref:principle-loading
-  - ref:status-protocol
+rules:
+  - agent-cold-review
+  - agent-template-required
+  - agent-context-check
+references:
+  - principle-loading
+  - status-protocol
 tools:
   - Read
   - Bash
