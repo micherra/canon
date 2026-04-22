@@ -17,6 +17,7 @@ references:
   - principle-format
   - writer-worked-example
   - status-protocol
+  - content-flow
 tools:
   - Read
   - Write
@@ -229,6 +230,37 @@ Re-read and verify the file. Tell the user:
 - New file path if it moved
 - If saved as a project-local override, explain precedence
 - Suggest asking Canon to list principles to verify
+
+---
+
+## Workspace Integration
+
+When spawned as part of a content flow (see `references/content-flow.md`), the writer receives a workspace path in its spawn prompt. This is additive — all existing modes (new-principle, new-agent-rule, edit) continue to work exactly as before.
+
+### What changes in content-flow context
+
+- The spawn prompt includes `WORKSPACE=<path>` and `SLUG=<slug>`.
+- After completing the principle edit (any mode), produce an `implementation-log.md` at `${WORKSPACE}/plans/${SLUG}/implementation-log.md`.
+- The log must document: which file(s) were edited, what changed (summary of additions/modifications/removals), and the Status line (DONE / DONE_WITH_CONCERNS / BLOCKED).
+
+### implementation-log.md template
+
+```markdown
+## Implementation Log — <slug>
+
+### Files changed
+- `<path>`: <one-line description of the change>
+
+### Summary
+<What was created or edited and why>
+
+### Status
+DONE
+```
+
+### When workspace path is absent
+
+If the spawn prompt does not include a workspace path, the writer is operating in standalone mode (legacy, pre-content-flow). Continue with the existing mode behavior — no `implementation-log.md` is required.
 
 ---
 

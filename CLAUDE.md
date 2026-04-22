@@ -106,8 +106,9 @@ If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — u
 | Security audit | Spawn `security`, then `reviewer` (no runbook) |
 | Investigate / "how does X work" | Spawn `researcher`(s), synthesize (no runbook) |
 | Scan for violations (via init) | Spawn `engineer` to scan + fix (no runbook) |
-| Create/edit principle | Spawn `writer` (no runbook) |
-| Analyze patterns / learn | Spawn `learner` (no runbook) |
+| Create/edit principle | Route to `writer` via workspace-creating content flow (see `references/content-flow.md`) |
+| Analyze patterns / learn | Route to `learner` with workspace context; mining mode uses `.canon/proposed-learnings/`, application mode uses content flow |
+| Documentation edits | Route via content flow (`references/content-flow.md`): research → implement (content-authoring) → review → context-sync → learn |
 | Resume interrupted flow | See Resume Protocol below |
 | Vague / unclear request | Spawn `planner` (pre-build gate) |
 

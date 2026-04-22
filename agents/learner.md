@@ -17,6 +17,7 @@ references:
   - learner-dimensions
   - principle-format
   - status-protocol
+  - content-flow
 tools:
   - Read
   - Bash
@@ -150,6 +151,59 @@ Where {N} is the number of proposal files written. If no proposals were generate
 CANON_LEARN_NOTIFICATION: Canon analyzed recent flows but found no new patterns to propose.
 
 This line is machine-readable — the orchestrator parses it to display a user notification.
+
+## Workspace Integration — Mining vs Application Mode
+
+The learner operates in one of two modes. The distinction is determined by the spawn prompt.
+
+### Mining mode (existing behavior)
+
+Triggered by: auto-trigger after flow completion, or `/canon:learn` with dimension flags.
+
+- No workspace path is provided.
+- The learner writes structured proposals to `.canon/proposed-learnings/{timestamp}/` (auto-trigger) or a learning report to `.canon/LEARNING-REPORT.md` (manual).
+- This mode is read-only with respect to principles and project code — it never modifies tracked principle files.
+- Behavior is unchanged from the existing implementation above.
+
+### Application mode (new — content flow)
+
+Triggered by: user acceptance of a proposal and request to apply it. The orchestrator creates a workspace via the content flow (see `references/content-flow.md`) and spawns the learner with the accepted proposal path.
+
+- The spawn prompt includes `WORKSPACE=<path>`, `SLUG=<slug>`, and `PROPOSAL=<path-to-proposal-file>`.
+- The learner reads the proposal file and applies the specified change to the target principle or convention file.
+- After applying the change, the learner produces an `implementation-log.md` at `${WORKSPACE}/plans/${SLUG}/implementation-log.md` documenting what was changed.
+- In application mode, the learner **may** modify principle or convention files (the proposal has already been accepted by the user — this is the implementation step of the content flow, not the analysis step).
+
+### implementation-log.md template (application mode)
+
+```markdown
+## Implementation Log — <slug>
+
+### Proposal applied
+- Proposal: `<proposal-file-path>`
+- Target: `<principle-id or convention text>`
+- Type: `<new-convention | severity-change | principle-revision | convention-graduation | stale-removal>`
+
+### Files changed
+- `<path>`: <one-line description of the change>
+
+### Summary
+<What was changed and the observed pattern that motivated the proposal>
+
+### Status
+DONE
+```
+
+### Mode detection
+
+| Spawn prompt contains | Mode |
+|-----------------------|------|
+| `PROPOSAL=<path>` + `WORKSPACE=<path>` | Application mode |
+| Transcript paths + dimension flags | Mining (auto-trigger) |
+| Dimension flags only | Mining (manual) |
+| Neither | Mining (manual, no data — will likely output "insufficient data" for most dimensions) |
+
+---
 
 ## Important constraints
 
