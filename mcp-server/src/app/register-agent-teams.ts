@@ -19,7 +19,7 @@ export function registerAgentTeamsTools(): void {
     "resolve_agent_skills",
     {
       description:
-        "Resolve an agent's `skills:` frontmatter into preloaded content. Reads `agents/<name>.md`, parses skills (`rule:<x>`, `ref:<x>`, `primer:<x>`, or bare names), loads each matching file from `rules/`, `references/`, `primers/`, and returns both a structured list and a concatenated `preload_prompt` string ready to inject into a spawn prompt. Canon's custom preloader — substitutes for Claude Code's native `skills:` mechanism, which requires per-skill `SKILL.md` directories that Canon does not use. Missing skills are skipped silently (returned in `unresolved`).",
+        "Resolve an agent's preload fields into injectable content. Reads `agents/<name>.md` and loads each bare-name entry from three dedicated frontmatter fields: `rules:` → `rules/<name>.md`, `references:` → `references/<name>.md`, `primers:` → `primers/<name>.md`. Returns a structured list plus a `preload_prompt` string ready to inject at the top of a spawn prompt. Canon's custom preloader — substitutes for Claude Code's native `skills:` mechanism, which expects per-skill `SKILL.md` directories. Missing files are skipped silently (returned in `unresolved` as `<kind>:<name>`). The native `skills:` field is untouched and remains available for real Claude Code native skills.",
       inputSchema: {
         agent_name: z
           .string()
