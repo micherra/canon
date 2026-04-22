@@ -552,10 +552,6 @@ function registerJournalTools(): void {
           .array(z.string())
           .optional()
           .describe("Domain skills named in spawn prompt for this step"),
-        mcp_tools_called: z
-          .array(z.string())
-          .optional()
-          .describe("MCP tools the lead called for this step"),
         outcome: z
           .object({
             fix_iterations: z.number().optional(),

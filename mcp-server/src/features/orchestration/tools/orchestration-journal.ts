@@ -3,8 +3,8 @@
  *
  * Two tools:
  *   - log_step: record a step's status (planned/started/completed/skipped)
- *     and associated metadata (agent, expected artifacts, MCP tools called,
- *     domain skills loaded, outcome signals).
+ *     and associated metadata (agent, expected artifacts, domain skills
+ *     loaded, outcome signals).
  *   - verify_completion: read the journal back and report which steps are
  *     incomplete, which expected artifacts are missing, and aggregate
  *     quality signals across the flow run.
@@ -27,9 +27,9 @@
  * See v2 migration plan §2.9 and phase1-06 PLAN for the contract.
  */
 
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, globSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { join } from "node:path";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -47,7 +47,6 @@ export type JournalStep = {
   artifacts_expected: string[];
   completed_at?: string;
   domain_skills_loaded?: string[];
-  mcp_tools_called?: string[];
   outcome?: JournalOutcome;
   started_at?: string;
   status: JournalStepStatus;
@@ -64,7 +63,6 @@ export type LogStepInput = {
   agent_type?: string | null;
   artifacts_expected?: string[];
   domain_skills_loaded?: string[];
-  mcp_tools_called?: string[];
   outcome?: JournalOutcome;
   status: JournalStepStatus;
   step_id: string;
@@ -183,7 +181,6 @@ function applyTimestamps(step: JournalStep, status: JournalStepStatus): void {
 }
 
 function applyMetadata(step: JournalStep, input: LogStepInput): void {
-  if (input.mcp_tools_called !== undefined) step.mcp_tools_called = input.mcp_tools_called;
   if (input.domain_skills_loaded !== undefined) {
     step.domain_skills_loaded = input.domain_skills_loaded;
   }
@@ -209,64 +206,14 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   return toolOk({ status: input.status, step_id: input.step_id });
 }
 
-const GLOB_CHARS = /[*?[]/;
-
-function hasGlobChars(s: string): boolean {
-  return GLOB_CHARS.test(s);
-}
-
-function splitGlobPath(full: string): { prefix: string; patternSegments: string[] } {
-  const segments = full.split(/[\\/]/);
-  let prefixIdx = 0;
-  while (prefixIdx < segments.length && !hasGlobChars(segments[prefixIdx] ?? "")) {
-    prefixIdx += 1;
-  }
-  const prefix = segments.slice(0, prefixIdx).join("/") || "/";
-  const patternSegments = segments.slice(prefixIdx);
-  return { patternSegments, prefix };
-}
-
 /**
  * Resolve an artifact path (possibly with a glob) against the workspace.
- * Returns true when the path exists or when at least one glob match exists.
- * Unresolved template variables (`${...}`) short-circuit to true — the
- * caller has no workspace variables at verify time, and treating them as
- * missing would produce false negatives.
+ * Plain paths and glob patterns are both handled by node:fs globSync —
+ * returns true when at least one file matches. `${var}` template fragments
+ * are handled upstream in scanArtifacts and never reach this function.
  */
 function artifactExists(workspace: string, artifact: string): boolean {
-  if (artifact.includes("${")) return true;
-
-  const full = isAbsolute(artifact) ? artifact : resolve(workspace, artifact);
-  if (!hasGlobChars(artifact)) return existsSync(full);
-
-  const { prefix, patternSegments } = splitGlobPath(full);
-  if (patternSegments.length === 0) return existsSync(prefix);
-  return globMatch(prefix, patternSegments);
-}
-
-function globMatch(base: string, segments: string[]): boolean {
-  if (!existsSync(base) || !statSync(base).isDirectory()) return false;
-  const [head, ...rest] = segments;
-  if (!head) return true;
-  const regex = globSegmentRegex(head);
-  const entries = readdirSync(base);
-  for (const entry of entries) {
-    if (!regex.test(entry)) continue;
-    const next = join(base, entry);
-    if (rest.length === 0) {
-      return true;
-    }
-    if (statSync(next).isDirectory() && globMatch(next, rest)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function globSegmentRegex(segment: string): RegExp {
-  const escaped = segment.replace(/[.+^${}()|\\]/g, "\\$&");
-  const pattern = escaped.replace(/\*/g, ".*").replace(/\?/g, ".");
-  return new RegExp(`^${pattern}$`);
+  return globSync(artifact, { cwd: workspace }).length > 0;
 }
 
 type ArtifactScan = {
