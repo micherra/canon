@@ -7,6 +7,7 @@
 | Task | Wave | Depends on | Key files | Description |
 |------|------|------------|-----------|-------------|
 | v2_1a-pre | 0 | — | `docs/v2.1a-preflight.md` | Pre-flight environment verification (Gate A state, phase1-10 amendment status, agent frontmatter, test conventions, migration-runner convention, worktree metadata). Files remediation tasks for any gaps before Wave 1 begins. |
+| v2_1a-pre-01 | 0 | v2_1a-pre | `phase1/phase1-10-PLAN.md` | Rewrite phase1-10-PLAN.md against v2.1 section 10.5 criteria. Remove static-runbook checks, add four-field preload + planner/engineer validation. Blocks phase1-10 execution but not v2_1a-00. |
 | v2_1a-00 | 1 | v2_1a-pre | `references/runbook-vocabulary.md` | Create canonical 15-ID step vocabulary with versioned-change discipline |
 | v2_1a-01 | 2 | v2_1a-00 | `references/planner-brief.md` | Create strategic-brief skill defining planning-brief.md contract |
 | v2_1a-02 | 2 | v2_1a-00 | `references/runbook-synthesis.md` | Create synthesis skill with MUST/MAY/MUST NOT contract, step schema, iterate-until-approved loop |
