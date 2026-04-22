@@ -9,7 +9,7 @@ params:
 states:
   context-sync:
     type: single
-    agent: canon-scribe
+    agent: scribe
     template: context-sync-report
     skip_when: no_contract_changes
     transitions:

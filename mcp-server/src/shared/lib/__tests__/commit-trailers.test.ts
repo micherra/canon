@@ -18,7 +18,7 @@ import { buildCommitMessage, formatCommitTrailers } from "../commit-trailers.ts"
 describe("formatCommitTrailers — all fields", () => {
   it("produces 4-line output when taskId is provided", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       taskId: "task-01",
       workflow: "my-slug",
@@ -29,7 +29,7 @@ describe("formatCommitTrailers — all fields", () => {
 
   it("includes Canon-Workflow line", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       taskId: "task-01",
       workflow: "my-slug",
@@ -39,17 +39,17 @@ describe("formatCommitTrailers — all fields", () => {
 
   it("includes Canon-Agent line", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       taskId: "task-01",
       workflow: "my-slug",
     });
-    expect(result).toContain("Canon-Agent: canon-implementor");
+    expect(result).toContain("Canon-Agent: implementor");
   });
 
   it("includes Canon-State line", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       taskId: "task-01",
       workflow: "my-slug",
@@ -59,7 +59,7 @@ describe("formatCommitTrailers — all fields", () => {
 
   it("includes Canon-Task line when taskId provided", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       taskId: "task-01",
       workflow: "my-slug",
@@ -69,13 +69,13 @@ describe("formatCommitTrailers — all fields", () => {
 
   it("returns correct 4-line block in order", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       taskId: "task-01",
       workflow: "my-slug",
     });
     expect(result).toBe(
-      "Canon-Workflow: my-slug\nCanon-Agent: canon-implementor\nCanon-State: implement\nCanon-Task: task-01",
+      "Canon-Workflow: my-slug\nCanon-Agent: implementor\nCanon-State: implement\nCanon-Task: task-01",
     );
   });
 });
@@ -83,7 +83,7 @@ describe("formatCommitTrailers — all fields", () => {
 describe("formatCommitTrailers — without taskId", () => {
   it("produces 3-line output when taskId is omitted", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -93,7 +93,7 @@ describe("formatCommitTrailers — without taskId", () => {
 
   it("does not include Canon-Task line", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -102,12 +102,12 @@ describe("formatCommitTrailers — without taskId", () => {
 
   it("returns correct 3-line block", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
     expect(result).toBe(
-      "Canon-Workflow: my-slug\nCanon-Agent: canon-implementor\nCanon-State: implement",
+      "Canon-Workflow: my-slug\nCanon-Agent: implementor\nCanon-State: implement",
     );
   });
 });
@@ -115,7 +115,7 @@ describe("formatCommitTrailers — without taskId", () => {
 describe("formatCommitTrailers — empty required fields", () => {
   it("returns empty string when workflow is empty", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "",
     });
@@ -133,7 +133,7 @@ describe("formatCommitTrailers — empty required fields", () => {
 
   it("returns empty string when state is empty", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "",
       workflow: "my-slug",
     });
@@ -144,7 +144,7 @@ describe("formatCommitTrailers — empty required fields", () => {
 describe("formatCommitTrailers — trailer line format", () => {
   it("all lines match Key: value format", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       taskId: "task-01",
       workflow: "my-slug",
@@ -157,7 +157,7 @@ describe("formatCommitTrailers — trailer line format", () => {
 
   it("has no trailing newline", () => {
     const result = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -170,7 +170,7 @@ describe("formatCommitTrailers — trailer line format", () => {
 describe("buildCommitMessage — with body", () => {
   it("includes subject as first line", () => {
     const result = buildCommitMessage("feat: add parser", "Body text here.", {
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -179,7 +179,7 @@ describe("buildCommitMessage — with body", () => {
 
   it("includes body after blank line", () => {
     const result = buildCommitMessage("feat: add parser", "Body text here.", {
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -188,18 +188,18 @@ describe("buildCommitMessage — with body", () => {
 
   it("includes trailers after body", () => {
     const result = buildCommitMessage("feat: add parser", "Body text here.", {
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
     expect(result).toContain("Canon-Workflow: my-slug");
-    expect(result).toContain("Canon-Agent: canon-implementor");
+    expect(result).toContain("Canon-Agent: implementor");
     expect(result).toContain("Canon-State: implement");
   });
 
   it("includes Co-Authored-By line after trailers", () => {
     const result = buildCommitMessage("feat: add parser", "Body text here.", {
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -208,12 +208,12 @@ describe("buildCommitMessage — with body", () => {
 
   it("assembles full structure: subject + blank + body + blank + trailers + Co-Authored-By", () => {
     const result = buildCommitMessage("feat: add parser", "Body text here.", {
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
     const trailers = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -226,7 +226,7 @@ describe("buildCommitMessage — with body", () => {
 describe("buildCommitMessage — with empty body", () => {
   it("omits body section when body is empty string", () => {
     const result = buildCommitMessage("feat: add parser", "", {
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -236,12 +236,12 @@ describe("buildCommitMessage — with empty body", () => {
 
   it("includes subject and trailers separated by blank line", () => {
     const result = buildCommitMessage("feat: add parser", "", {
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
     const trailers = formatCommitTrailers({
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -252,7 +252,7 @@ describe("buildCommitMessage — with empty body", () => {
 
   it("still includes Co-Authored-By when body is empty", () => {
     const result = buildCommitMessage("feat: add parser", "", {
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       workflow: "my-slug",
     });
@@ -263,7 +263,7 @@ describe("buildCommitMessage — with empty body", () => {
 describe("buildCommitMessage — with taskId in trailers", () => {
   it("includes Canon-Task when taskId is in trailer opts", () => {
     const result = buildCommitMessage("feat: add parser", "Body.", {
-      agent: "canon-implementor",
+      agent: "implementor",
       state: "implement",
       taskId: "task-01",
       workflow: "my-slug",

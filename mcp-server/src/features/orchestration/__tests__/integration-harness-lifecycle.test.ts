@@ -108,7 +108,7 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
         prior: { type: "terminal" },
         ship: { type: "terminal" },
         "type-check": {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           inject_context: [{ as: "PRIOR", from: "prior" }],
           skip_when: "no_contract_changes",
           transitions: { done: "ship" },
@@ -149,7 +149,7 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
       states: {
         prior: { type: "terminal" },
         review: {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           inject_context: [{ as: "CONTEXT", from: "prior" }],
           skip_when: "no_contract_changes",
           transitions: { done: "ship" },
@@ -190,7 +190,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
-          agent: "canon-implementor",
+          agent: "implementor",
           gate: "some-gate-condition",
           transitions: { done: "ship" },
           type: "single",
@@ -227,7 +227,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
-          agent: "canon-implementor",
+          agent: "implementor",
           gate: "some-gate-condition",
           transitions: { done: "ship" },
           type: "single",
@@ -263,7 +263,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
-          agent: "canon-implementor",
+          agent: "implementor",
           timeout: "30m",
           transitions: { done: "ship" },
           type: "single",
@@ -298,7 +298,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
-          agent: "canon-implementor",
+          agent: "implementor",
           gate: "some-gate",
           large_diff_threshold: 500,
           timeout: "15m",

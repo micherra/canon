@@ -2,7 +2,7 @@
 fragment: pattern-check
 type: consultation
 description: Architect reviews wave output for pattern drift and convention consistency
-agent: canon-architect
+agent: architect
 role: pattern-check
 section: Pattern review
 timeout: 5m

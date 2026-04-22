@@ -41,7 +41,7 @@ This is true about *scheduling* but wrong about *composition*. The v1 plan scope
 - **Post-state effects** — `orchestration/engine/effects.ts` runs `persist_review` and `check_postconditions` after state completion.
 - **Session continuation** — `applySessionContinuation` (ADR-009a) injects `continue_from` for context continuity on resume.
 - **Flow event channel** — `drainFlowEvents` reads mid-flow agent events (insert, skip, escalate) and returns override actions.
-- **Learn gate** — `services/learn-gate.ts` evaluates whether `canon-learner` auto-triggers at flow completion.
+- **Learn gate** — `services/learn-gate.ts` evaluates whether `learner` auto-triggers at flow completion.
 - **Flow analytics** — `update_board complete_flow` aggregates metrics into `FlowRunEntry` via DriftStore.
 
 The v1 plan's Phase 2 code (`lead-mode.ts` on `canon/agent-teams-phase-2`) produced a `SpawnDescriptor` carrying only `role`, `task_type`, `task_id`, `spawn_prompt`, `artifact`, `artifact_path`, `hitl` (a string enum), and `required_artifacts`. It carried none of: `tools`, `disallowed_tools`, `permission_mode`, `worktree_path`, `continue_from`, wave policy, enrichment, principles, or commit provenance. An integration audit found **27 real gaps plus one already-known auto-approve gap** — 11 HIGH, 11 MEDIUM, 5 LOW severity. Phases 1 and 2 collectively provided roughly 10–15% of what `drive_flow` actually does at spawn time.
@@ -103,15 +103,15 @@ A concrete example of `fast-path` (bug fix):
 1. **User says** "fix the broken search" to the Canon lead session.
 2. **Claude reads** `CLAUDE.md`, sees Canon orchestration instructions. Reads the `fast-path` runbook for the recommended step sequence.
 3. **Claude calls** `get_principles` with the target file scope → gets matched principles. Calls `get_file_context` → gets KG summaries. Calls `get_drift_report` → gets recent drift. Assembles this into a research prompt.
-4. **Claude spawns** a `canon-researcher` subagent with the enriched prompt. Waits for result. Gets a research synthesis artifact.
-5. **Claude spawns** a `canon-architect` subagent with the research synthesis as upstream context. Waits for result. Gets a plan index.
+4. **Claude spawns** a `researcher` subagent with the enriched prompt. Waits for result. Gets a research synthesis artifact.
+5. **Claude spawns** a `architect` subagent with the research synthesis as upstream context. Waits for result. Gets a plan index.
 6. **Claude presents** the plan to the user for approval (native HITL). User approves.
-7. **Claude spawns** a `canon-implementor` subagent with the plan and principles. Waits for result. Gets an implementation summary.
-8. **Claude spawns** a `canon-reviewer` subagent. Waits for result. Gets a review verdict.
+7. **Claude spawns** a `implementor` subagent with the plan and principles. Waits for result. Gets an implementation summary.
+8. **Claude spawns** a `reviewer` subagent. Waits for result. Gets a review verdict.
 9. **If verdict is not clean**, Claude loops back to step 7 with the review feedback. (Native judgment, not a state transition.)
 10. **Claude calls** `record_agent_metrics`, `store_summaries`, evaluates learn gate, releases file claims. Done.
 
-For an `epic` flow with wave tasks, step 7 becomes: Claude creates an agent team, spawns N `canon-implementor` teammates (one per task), they self-coordinate via shared task list and Mailbox, Claude merges worktrees after the wave completes.
+For an `epic` flow with wave tasks, step 7 becomes: Claude creates an agent team, spawns N `implementor` teammates (one per task), they self-coordinate via shared task list and Mailbox, Claude merges worktrees after the wave completes.
 
 ### 2.4 Subagent capabilities (per [Claude Code docs](https://code.claude.com/docs/en/sub-agents))
 
@@ -159,7 +159,7 @@ Mitigations:
 - **Runbooks** as suggested playbooks — Claude follows them but can adapt when the situation warrants.
 - **Hooks** as guardrails — `TaskCompleted` enforces artifacts exist, `TeammateIdle` catches premature stops. These are hard enforcement, not Claude judgment.
 - **MCP tool contracts** — `record_agent_metrics`, `store_summaries`, `get_compliance` provide structured feedback loops. Canon's observability surface tells you what actually happened regardless of the execution path.
-- **Agent definitions** constrain each agent's tool access and behavioral instructions. A `canon-researcher` gets Read/Glob/Grep, not Write/Edit. This is enforced by Claude Code, not by Claude's judgment.
+- **Agent definitions** constrain each agent's tool access and behavioral instructions. A `researcher` gets Read/Glob/Grep, not Write/Edit. This is enforced by Claude Code, not by Claude's judgment.
 
 The state machine provided *determinism*. But Canon's flows aren't deterministic today (convergence loops, skip conditions, adaptive waves). And Claude's judgment about "what comes next" is arguably better than a rigid state graph — it can adapt to what it finds without needing a pre-authored transition for every contingency.
 

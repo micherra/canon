@@ -11,7 +11,7 @@ params:
 states:
   checkpoint:
     type: single
-    agent: canon-guide
+    agent: guide
     role: checkpoint
     skip_when: auto_approved
     max_iterations: 3

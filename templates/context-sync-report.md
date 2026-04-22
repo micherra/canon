@@ -1,21 +1,21 @@
 ---
 template: context-sync-report
 description: >-
-  Standardized output for the canon-scribe agent. Records which files
+  Standardized output for the scribe agent. Records which files
   were classified, which documents were updated, and freshness stamps.
-used-by: [canon-scribe]
-read-by: [canon-shipper]
+used-by: [scribe]
+read-by: [shipper]
 output-path: ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md
 fields:
   status: "UPDATED | NO_UPDATES"
-  agent: canon-scribe
+  agent: scribe
   timestamp: ISO-8601
 ---
 
 ```markdown
 ---
 status: "{UPDATED|NO_UPDATES}"
-agent: canon-scribe
+agent: scribe
 timestamp: "{ISO-8601}"
 ---
 

@@ -11,10 +11,10 @@
 | v2_1b-00 | 1 | — | `mcp-server/src/platform/storage/drift/drift-schema.ts`, migration file | Add `lifecycle_workspace_snapshots` table per §8.1 DDL; migration versioned and reversible |
 | v2_1b-01 | 2 | v2_1b-00 | `mcp-server/src/features/diagnostics/tools/snapshot-workspace.ts`, registration | `snapshot_workspace({ workspace_id })` MCP tool; idempotent |
 | v2_1b-02 | 3 | v2_1b-01 | `hooks/canon-agent-teams/completion-verify.sh` | Extend hook to call `snapshot_workspace` after `verify_completion` clears; block if snapshot fails |
-| v2_1b-03 | 3 | — | `templates/fix-summary.md` (new or amended), `agents/canon-engineer.md` | Fix-summary tags: `cause`, `root_cause_tag`. Engineer populates on fix runs. |
-| v2_1b-04 | 3 | — | `templates/implementation-log.md`, `agents/canon-engineer.md` | Implementation-summary tag: `justified_deviations[]`. Engineer populates when deviating with Canon justification. |
-| v2_1b-05 | 3 | — | `templates/review-checklist.md`, `agents/canon-reviewer.md` | Review-finding `principle_id` consistency — enforce existing field population via template + reviewer prompt |
-| v2_1b-06 | 4 | v2_1b-01, v2_1b-03, v2_1b-04, v2_1b-05 | `agents/canon-learner.md` | Extend learner with principle-refinement analysis dimension; reads lifecycle snapshots + drift-store violations; produces structured patches to principle files |
+| v2_1b-03 | 3 | — | `templates/fix-summary.md` (new or amended), `agents/engineer.md` | Fix-summary tags: `cause`, `root_cause_tag`. Engineer populates on fix runs. |
+| v2_1b-04 | 3 | — | `templates/implementation-log.md`, `agents/engineer.md` | Implementation-summary tag: `justified_deviations[]`. Engineer populates when deviating with Canon justification. |
+| v2_1b-05 | 3 | — | `templates/review-checklist.md`, `agents/reviewer.md` | Review-finding `principle_id` consistency — enforce existing field population via template + reviewer prompt |
+| v2_1b-06 | 4 | v2_1b-01, v2_1b-03, v2_1b-04, v2_1b-05 | `agents/learner.md` | Extend learner with principle-refinement analysis dimension; reads lifecycle snapshots + drift-store violations; produces structured patches to principle files |
 | v2_1b-07 | 5 | v2_1b-06 | `docs/v2.1b-loop-closure-evidence.md`, `principles/*.md` (edit), `.canon/learning.jsonl` | Loop-closure evidence run: produce ≥ 1 accepted, applied principle-refinement proposal end-to-end against v2.1b-era substrate |
 | v2_1b-08 | 6 | v2_1b-07 | `docs/v2.1b-validation-report.md` | Cross-artifact validation of the full substrate |
 

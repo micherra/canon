@@ -189,7 +189,7 @@ describe("reportResult — debate flow", () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow({
       debate: {
-        composition: ["canon-researcher", "canon-architect"],
+        composition: ["researcher", "architect"],
         continue_to_build: true,
         convergence_check_after: 3,
         hitl_checkpoint: true,
@@ -200,13 +200,8 @@ describe("reportResult — debate flow", () => {
     });
     setupWorkspace(workspace, flow);
 
-    await writeMessage(
-      workspace,
-      "debate-round-1",
-      "round-1-team-a-canon-researcher",
-      "Use events.",
-    );
-    await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-architect", "Use CRUD.");
+    await writeMessage(workspace, "debate-round-1", "round-1-team-a-researcher", "Use events.");
+    await writeMessage(workspace, "debate-round-1", "round-1-team-b-architect", "Use CRUD.");
 
     const result = await reportResult({
       flow,
@@ -226,7 +221,7 @@ describe("reportResult — debate flow", () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow({
       debate: {
-        composition: ["canon-researcher", "canon-architect"],
+        composition: ["researcher", "architect"],
         continue_to_build: true,
         convergence_check_after: 2,
         hitl_checkpoint: true,
@@ -240,22 +235,17 @@ describe("reportResult — debate flow", () => {
     await writeMessage(
       workspace,
       "debate-round-1",
-      "round-1-team-a-canon-researcher",
+      "round-1-team-a-researcher",
       "We agree on event sourcing.",
     );
     await writeMessage(
       workspace,
       "debate-round-1",
-      "round-1-team-b-canon-architect",
+      "round-1-team-b-architect",
       "Consensus reached, aligned.",
     );
-    await writeMessage(workspace, "debate-round-2", "round-2-team-a-canon-researcher", "Agreed.");
-    await writeMessage(
-      workspace,
-      "debate-round-2",
-      "round-2-team-b-canon-architect",
-      "Same conclusion.",
-    );
+    await writeMessage(workspace, "debate-round-2", "round-2-team-a-researcher", "Agreed.");
+    await writeMessage(workspace, "debate-round-2", "round-2-team-b-architect", "Same conclusion.");
 
     const result = await reportResult({
       flow,

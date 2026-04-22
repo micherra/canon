@@ -15,7 +15,7 @@ params:
 states:
   security:
     type: single
-    agent: canon-security
+    agent: security
     template: security-assessment
     transitions:
       done: ${after_done}
@@ -24,7 +24,7 @@ states:
 
   fix-security:
     type: parallel-per
-    agent: canon-fixer
+    agent: fixer
     role: violation-fix
     iterate_on: security_findings
     max_iterations: ${fix_max_iterations}

@@ -9,7 +9,7 @@ params:
 states:
   implement:
     type: single
-    agent: canon-implementor
+    agent: implementor
     template: implementation-log
     transitions:
       done: verify
@@ -17,7 +17,7 @@ states:
 
   verify:
     type: single
-    agent: canon-tester
+    agent: tester
     role: verify
     template: test-report
     transitions:
@@ -27,7 +27,7 @@ states:
 
   fix-impl:
     type: single
-    agent: canon-fixer
+    agent: fixer
     role: test-fix
     template: implementation-log
     max_iterations: 1

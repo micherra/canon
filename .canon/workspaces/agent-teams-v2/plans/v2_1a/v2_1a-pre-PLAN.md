@@ -22,12 +22,12 @@ Before v2.1a Wave 1 tasks execute, run a short pre-flight verification and docum
 
 **Verification items:**
 
-1. **Gate A state** — confirm `canon-planner` and `canon-engineer` agent definitions exist in `agents/`. If either is absent, Gate A is not met and v2.1a must not begin. v2's `phase1-08` is the task that creates them; check its status. If phase1-08 has landed but the agents don't exist, flag that gap.
+1. **Gate A state** — confirm `planner` and `engineer` agent definitions exist in `agents/`. If either is absent, Gate A is not met and v2.1a must not begin. v2's `phase1-08` is the task that creates them; check its status. If phase1-08 has landed but the agents don't exist, flag that gap.
 
-2. **phase1-10 amendment status** — v2's `phase1-10` is the validation task that Gate A depends on. Under v2.1, phase1-10's scope has changed: it validates canon-planner + canon-engineer + skills preloading, NOT the 5 static runbooks (which are abandoned). Per `.canon/workspaces/agent-teams-v2/plans/phase1/INDEX.md`, phase1-10 is tagged REFACTORED per v2.1 §10.5, but the PLAN file itself may not yet reflect the amended scope. **If phase1-10-PLAN.md still references static-runbook validation, file a remediation task to rewrite it against v2.1 §10.5 criteria before phase1-10 executes.**
+2. **phase1-10 amendment status** — v2's `phase1-10` is the validation task that Gate A depends on. Under v2.1, phase1-10's scope has changed: it validates planner + engineer + skills preloading, NOT the 5 static runbooks (which are abandoned). Per `.canon/workspaces/agent-teams-v2/plans/phase1/INDEX.md`, phase1-10 is tagged REFACTORED per v2.1 §10.5, but the PLAN file itself may not yet reflect the amended scope. **If phase1-10-PLAN.md still references static-runbook validation, file a remediation task to rewrite it against v2.1 §10.5 criteria before phase1-10 executes.**
 
-3. **canon-writer / canon-learner current frontmatter** — v2_1a-06 amends both agents to expect workspace paths. Read current `agents/canon-writer.md` + `agents/canon-learner.md`:
-   - Confirm tools list (should already include `Write`, `Edit` for canon-writer to justify v2_1a-06's "no permissionMode change" claim)
+3. **writer / learner current frontmatter** — v2_1a-06 amends both agents to expect workspace paths. Read current `agents/writer.md` + `agents/learner.md`:
+   - Confirm tools list (should already include `Write`, `Edit` for writer to justify v2_1a-06's "no permissionMode change" claim)
    - Confirm no existing `permissionMode: plan` restriction that would need to be removed
    - Document current body structure so v2_1a-06 amendments are additive, not replacing
    - Note any existing uses that might be affected by the workspace-path expectation

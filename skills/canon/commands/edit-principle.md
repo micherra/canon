@@ -8,7 +8,7 @@ model: sonnet
 Thin router for Canon principle/agent-rule editing.
 
 Authority model:
-- `agents/canon-writer.md` owns editing behavior and decision logic
+- `agents/writer.md` owns editing behavior and decision logic
 - `skills/canon/references/principle-format.md` is the source of truth for file structure
 - This command should not duplicate authoring or validation policy
 
@@ -16,7 +16,7 @@ Authority model:
 
 ### Step 1: Spawn the writer
 
-Launch the canon-writer agent:
+Launch the writer agent:
 
 "Mode: edit. The user wants to edit a Canon principle or agent-rule: ${ARGUMENTS}"
 
@@ -24,7 +24,7 @@ If no arguments, ask the user which principle they want to edit. Suggest asking 
 
 ### Step 2: Delegate completely
 
-Do not restate editing rules here. Let canon-writer:
+Do not restate editing rules here. Let writer:
 - load the entry
 - resolve requested edits
 - normalize structure to the format spec

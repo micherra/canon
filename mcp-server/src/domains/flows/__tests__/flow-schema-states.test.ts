@@ -22,7 +22,7 @@ import {
 describe("FragmentStateDefinitionSchema", () => {
   it("accepts single fragment state with string max_iterations placeholder", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       max_iterations: "${max_iter}",
       type: "single",
     });
@@ -32,7 +32,7 @@ describe("FragmentStateDefinitionSchema", () => {
 
   it("accepts single fragment state with numeric max_iterations", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       max_iterations: 3,
       type: "single",
     });
@@ -41,7 +41,7 @@ describe("FragmentStateDefinitionSchema", () => {
 
   it("accepts wave fragment state", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "wave",
     });
     expect(result.type).toBe("wave");
@@ -49,7 +49,7 @@ describe("FragmentStateDefinitionSchema", () => {
 
   it("accepts parallel fragment state", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      agents: ["canon:canon-implementor"],
+      agents: ["canon:implementor"],
       type: "parallel",
     });
     expect(result.type).toBe("parallel");
@@ -57,7 +57,7 @@ describe("FragmentStateDefinitionSchema", () => {
 
   it("accepts parallel-per fragment state with string iterate_on", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       iterate_on: "${tasks}",
       type: "parallel-per",
     });
@@ -73,7 +73,7 @@ describe("FragmentStateDefinitionSchema", () => {
 
   it("accepts string large_diff_threshold placeholder", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       large_diff_threshold: "${threshold}",
       type: "single",
     });
@@ -83,7 +83,7 @@ describe("FragmentStateDefinitionSchema", () => {
   it("rejects unknown type literal", () => {
     expect(() =>
       FragmentStateDefinitionSchema.parse({
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         type: "bogus",
       }),
     ).toThrow();
@@ -135,7 +135,7 @@ describe("ToolOverridesSchema", () => {
 describe("tool_overrides on state schemas (ADR-014)", () => {
   it("SingleStateSchema accepts tool_overrides with allow array", () => {
     const result = SingleStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       tool_overrides: { allow: ["Read", "Write", "Bash"] },
       type: "single",
     });
@@ -144,7 +144,7 @@ describe("tool_overrides on state schemas (ADR-014)", () => {
 
   it("WaveStateSchema accepts tool_overrides with deny array", () => {
     const result = WaveStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       tool_overrides: { deny: ["Write"] },
       type: "wave",
     });
@@ -153,7 +153,7 @@ describe("tool_overrides on state schemas (ADR-014)", () => {
 
   it("ParallelStateSchema accepts tool_overrides with replace array", () => {
     const result = ParallelStateSchema.parse({
-      agents: ["canon:canon-implementor", "canon:canon-tester"],
+      agents: ["canon:implementor", "canon:tester"],
       tool_overrides: { replace: ["Bash", "Read"] },
       type: "parallel",
     });
@@ -162,7 +162,7 @@ describe("tool_overrides on state schemas (ADR-014)", () => {
 
   it("ParallelPerStateSchema accepts tool_overrides with permission_mode", () => {
     const result = ParallelPerStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       iterate_on: "${tasks}",
       tool_overrides: { permission_mode: "deny_unknown" },
       type: "parallel-per",
@@ -180,7 +180,7 @@ describe("tool_overrides on state schemas (ADR-014)", () => {
 
   it("SingleStateSchema parses without tool_overrides (backward compat)", () => {
     const result = SingleStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "single",
     });
     expect(result.tool_overrides).toBeUndefined();
@@ -188,7 +188,7 @@ describe("tool_overrides on state schemas (ADR-014)", () => {
 
   it("WaveStateSchema parses without tool_overrides (backward compat)", () => {
     const result = WaveStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       type: "wave",
     });
     expect(result.tool_overrides).toBeUndefined();
@@ -203,7 +203,7 @@ describe("tool_overrides on state schemas (ADR-014)", () => {
 
   it("ParallelPerStateSchema parses without tool_overrides (backward compat)", () => {
     const result = ParallelPerStateSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       iterate_on: "${tasks}",
       type: "parallel-per",
     });
@@ -219,7 +219,7 @@ describe("tool_overrides on state schemas (ADR-014)", () => {
 
   it("FragmentSingleStateSchema accepts tool_overrides", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       tool_overrides: { allow: ["Read"] },
       type: "single",
     });
@@ -228,7 +228,7 @@ describe("tool_overrides on state schemas (ADR-014)", () => {
 
   it("FragmentWaveStateSchema accepts tool_overrides", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       tool_overrides: { deny: ["Bash"] },
       type: "wave",
     });

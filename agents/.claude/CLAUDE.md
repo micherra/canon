@@ -15,19 +15,19 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 
 | Agent | Role | Model |
 |-------|------|-------|
-| `canon-architect` | Designs solutions; produces design decisions and task decomposition | opus |
-| `canon-chat` | Project-aware conversational agent; discusses ideas, brainstorms, writes briefs for build handoff | sonnet |
-| `canon-fixer` | Fixes failing tests and principle violations identified by reviewers | sonnet |
-| `canon-guide` | Answers questions, browses principles, shows status dashboards (read-only) | sonnet |
-| `canon-implementor` | Writes code per plan; writes unit tests | sonnet |
-| `canon-learner` | Analyzes patterns; suggests principle improvements | sonnet |
-| `canon-researcher` | Investigates single research dimensions | sonnet |
-| `canon-reviewer` | Reviews code for principle compliance | opus |
-| `canon-scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation | sonnet |
-| `canon-security` | Security assessments on implemented code | opus |
-| `canon-shipper` | Handles final shipping decisions | sonnet |
-| `canon-tester` | Writes integration tests; fills coverage gaps | sonnet |
-| `canon-writer` | Creates and edits Canon principles and agent-rules | sonnet |
+| `architect` | Designs solutions; produces design decisions and task decomposition | opus |
+| `chat` | Project-aware conversational agent; discusses ideas, brainstorms, writes briefs for build handoff | sonnet |
+| `fixer` | Fixes failing tests and principle violations identified by reviewers | sonnet |
+| `guide` | Answers questions, browses principles, shows status dashboards (read-only) | sonnet |
+| `implementor` | Writes code per plan; writes unit tests | sonnet |
+| `learner` | Analyzes patterns; suggests principle improvements | sonnet |
+| `researcher` | Investigates single research dimensions | sonnet |
+| `reviewer` | Reviews code for principle compliance | opus |
+| `scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation | sonnet |
+| `security` | Security assessments on implemented code | opus |
+| `shipper` | Handles final shipping decisions | sonnet |
+| `tester` | Writes integration tests; fills coverage gaps | sonnet |
+| `writer` | Creates and edits Canon principles and agent-rules | sonnet |
 
 ## Conventions
 <!-- last-updated: 2026-04-09 -->
@@ -36,5 +36,5 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 - Agents receive fresh context per spawn (no carryover between invocations)
 - Agent output must follow templates from `templates/` (see `agent-template-required` rule)
 - Agents log activity per `workspace-logging.md` protocol
-- `canon-implementor` has direct access to `mcp__canon__post_message` and `mcp__canon__get_messages` for collaboration during wave execution
-- `canon-implementor` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes
+- `implementor` has direct access to `mcp__canon__post_message` and `mcp__canon__get_messages` for collaboration during wave execution
+- `implementor` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes

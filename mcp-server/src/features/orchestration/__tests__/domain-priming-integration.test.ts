@@ -9,9 +9,9 @@
  *   - Domain primer files follow the canonical primer template
  *     (Mental Models / Decision Frameworks / Failure Modes / Guardrails)
  *   - templates/task-plan.md exposes the `domains:` field to the architect
- *   - canon-architect.md lists all 6 built-in domain names and includes
+ *   - architect.md lists all 6 built-in domain names and includes
  *     classification guidance
- *   - canon-implementor.md Step 2 instructs domain loading with correct
+ *   - implementor.md Step 2 instructs domain loading with correct
  *     fallback paths
  *
  * These are structural/content contract tests — if any are broken by a rename,
@@ -35,8 +35,8 @@ import { describe, expect, it } from "vitest";
 const REPO_ROOT = resolve(process.cwd(), "..");
 
 const DOMAINS_DIR = join(REPO_ROOT, "skills", "canon", "references");
-const ARCHITECT_MD = join(REPO_ROOT, "agents", "canon-architect.md");
-const IMPLEMENTOR_MD = join(REPO_ROOT, "agents", "canon-implementor.md");
+const ARCHITECT_MD = join(REPO_ROOT, "agents", "architect.md");
+const IMPLEMENTOR_MD = join(REPO_ROOT, "agents", "implementor.md");
 const TASK_PLAN_TEMPLATE = join(REPO_ROOT, "templates", "task-plan.md");
 
 function readFile(path: string): string {
@@ -130,7 +130,7 @@ describe("templates/task-plan.md — domains: field", () => {
   });
 });
 
-describe("canon-architect.md — domain classification guidance", () => {
+describe("architect.md — domain classification guidance", () => {
   it("architect file exists", () => {
     expect(existsSync(ARCHITECT_MD)).toBe(true);
   });
@@ -163,7 +163,7 @@ describe("canon-architect.md — domain classification guidance", () => {
   });
 });
 
-describe("canon-implementor.md — Step 2 domain priming", () => {
+describe("implementor.md — Step 2 domain priming", () => {
   it("implementor file exists", () => {
     expect(existsSync(IMPLEMENTOR_MD)).toBe(true);
   });

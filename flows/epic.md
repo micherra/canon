@@ -7,7 +7,7 @@ progress: ${WORKSPACE}/progress.md
 
 debate:
   teams: 3
-  composition: [canon-researcher, canon-architect]
+  composition: [researcher, architect]
   min_rounds: 2
   max_rounds: 5
   convergence_check_after: 3
@@ -56,7 +56,7 @@ includes:
 states:
   research:
     type: parallel
-    agents: [canon-researcher]
+    agents: [researcher]
     roles: [codebase, risk]
     template: research-finding
     transitions:
@@ -65,7 +65,7 @@ states:
 
   design:
     type: single
-    agent: canon-architect
+    agent: architect
     compete:
       count: 3
       strategy: synthesize
@@ -92,7 +92,7 @@ states:
 
   implement:
     type: wave
-    agent: canon-implementor
+    agent: implementor
     template: implementation-log
     gate: test-suite
     max_iterations: 10

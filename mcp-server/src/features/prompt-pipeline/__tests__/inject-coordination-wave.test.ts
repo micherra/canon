@@ -16,11 +16,11 @@ vi.mock("@domains/messages/messages.ts", () => ({
 
 vi.mock("../model/tool-profiles.ts", () => ({
   AGENT_TOOL_PROFILES: {
-    "canon-implementor": {
+    implementor: {
       allowed: ["Read", "Edit", "Write"],
       disallowed: [],
     },
-    "canon-researcher": {
+    researcher: {
       allowed: ["Read", "Grep", "Glob"],
       disallowed: ["Edit", "Write"],
     },
@@ -97,7 +97,7 @@ import { computeTrustLevel, trustLevelToPermissionMode } from "../services/trust
 
 function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry {
   return {
-    agent: "canon-implementor",
+    agent: "implementor",
     prompt: "Do the work",
     template_paths: [],
     ...overrides,
@@ -128,7 +128,7 @@ function makeCtx(
           spawn_instructions: { implement: "Do the thing" },
           states: {
             done: { type: "terminal" },
-            implement: { agent: "canon-implementor", type: "single" },
+            implement: { agent: "implementor", type: "single" },
           },
         } as ResolvedFlow),
       state_id: state_id ?? "implement",
@@ -141,7 +141,7 @@ function makeCtx(
     mergedVariables: {},
     prompts: [makeEntry()],
     rawInstruction: "Do the thing",
-    state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+    state: { agent: "implementor", type: "single" } as StateDefinition,
     warnings: [],
     ...rest,
   };
@@ -164,7 +164,7 @@ describe("injectCoordination — tool scope injection", () => {
 
   it("sets tools, disallowed_tools, and permission_mode on all prompt entries", async () => {
     const ctx = makeCtx({
-      prompts: [makeEntry(), makeEntry({ agent: "canon-researcher" })],
+      prompts: [makeEntry(), makeEntry({ agent: "researcher" })],
     });
 
     const result = await injectCoordination(ctx);
@@ -198,7 +198,7 @@ describe("injectCoordination — tool scope injection", () => {
     const ctx = makeCtx({
       prompts: [makeEntry()],
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         tool_overrides: { allow: ["ExtraTool"], deny: ["Bash"] },
         type: "single",
       } as StateDefinition,
@@ -207,7 +207,7 @@ describe("injectCoordination — tool scope injection", () => {
     await injectCoordination(ctx);
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
-      "canon-implementor",
+      "implementor",
       expect.objectContaining({ overrides: { allow: ["ExtraTool"], deny: ["Bash"] } }),
     );
   });
@@ -235,7 +235,7 @@ describe("injectCoordination — tool scope injection", () => {
   it("forwards tool_scope_warnings onto SpawnPromptEntry", async () => {
     const warnings = [
       {
-        agent: "canon-researcher",
+        agent: "researcher",
         event: "adr014_replace_override_grants_disallowed" as const,
         granted_disallowed: ["Edit"],
       },
@@ -248,7 +248,7 @@ describe("injectCoordination — tool scope injection", () => {
     });
 
     const ctx = makeCtx({
-      prompts: [makeEntry({ agent: "canon-researcher" })],
+      prompts: [makeEntry({ agent: "researcher" })],
     });
 
     const result = await injectCoordination(ctx);
@@ -340,13 +340,13 @@ describe("injectCoordination — trust integration", () => {
         states: { implement: { entries: 1, status: "in_progress" } },
         task: "test",
       },
-      prompts: [makeEntry({ agent: "canon-implementor" })],
+      prompts: [makeEntry({ agent: "implementor" })],
     });
 
     await injectCoordination(ctx);
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
-      "canon-implementor",
+      "implementor",
       expect.objectContaining({ trustPermissionMode: "auto" }),
     );
   });

@@ -1,5 +1,5 @@
 ---
-name: canon-shipper
+name: shipper
 description: >-
   Post-build delivery agent. Synthesizes build artifacts (summaries, test
   reports, review verdicts, design docs) into a PR description, changelog

@@ -168,7 +168,7 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
       "@domains/flows/flow-definition-schemas.ts"
     );
     const result = ConsultationFragmentSchema.parse({
-      agent: "canon-researcher",
+      agent: "researcher",
       fragment: "targeted-research",
       role: "targeted-research",
       skip_when: "no_open_questions",
@@ -181,7 +181,7 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
       "@domains/flows/flow-definition-schemas.ts"
     );
     const result = ConsultationFragmentSchema.parse({
-      agent: "canon-reviewer",
+      agent: "reviewer",
       fragment: "plan-review",
       role: "reviewer",
     });
@@ -209,7 +209,7 @@ describe("FragmentDefinitionSchema — skip_when field", () => {
   it("accepts a consultation fragment definition with skip_when", async () => {
     const { FragmentDefinitionSchema } = await import("@domains/flows/flow-definition-schemas.ts");
     const result = FragmentDefinitionSchema.parse({
-      agent: "canon-researcher",
+      agent: "researcher",
       fragment: "targeted-research",
       role: "targeted-research",
       section: "Research Findings",
@@ -222,7 +222,7 @@ describe("FragmentDefinitionSchema — skip_when field", () => {
   it("accepts a fragment definition without skip_when (backward compat)", async () => {
     const { FragmentDefinitionSchema } = await import("@domains/flows/flow-definition-schemas.ts");
     const result = FragmentDefinitionSchema.parse({
-      agent: "canon-reviewer",
+      agent: "reviewer",
       fragment: "plan-review",
       role: "reviewer",
       type: "consultation",

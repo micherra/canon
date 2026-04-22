@@ -10,17 +10,17 @@ done_criteria:
     description: "completion-verify.sh hook extended to call snapshot_workspace after verify_completion clears. Failure in either step blocks flow completion."
     testable: "Hook integration test: completing a flow triggers snapshot_workspace call; snapshot row exists post-verify. If snapshot fails, the flow is not marked complete."
   - id: "dc-04"
-    description: "Fix summary template carries `cause` and `root_cause_tag` structured tags. canon-engineer populates them in fix flows."
-    testable: "templates/fix-summary.md has the fields. A canon-engineer fix run produces a fix summary with both tags populated. Indexer parses and stores them."
+    description: "Fix summary template carries `cause` and `root_cause_tag` structured tags. engineer populates them in fix flows."
+    testable: "templates/fix-summary.md has the fields. A engineer fix run produces a fix summary with both tags populated. Indexer parses and stores them."
   - id: "dc-05"
-    description: "Implementation summary template carries `justified_deviations[]` structured tag. canon-engineer populates it when deviating from plans with Canon justification."
-    testable: "templates/implementation-log.md has the field. A canon-engineer run with a justified deviation produces the tag. Indexer parses and stores."
+    description: "Implementation summary template carries `justified_deviations[]` structured tag. engineer populates it when deviating from plans with Canon justification."
+    testable: "templates/implementation-log.md has the field. A engineer run with a justified deviation produces the tag. Indexer parses and stores."
   - id: "dc-06"
     description: "Review finding `principle_id` consistency — existing drift-db field is consistently populated by reviewer in all findings. Review template makes this explicit."
-    testable: "templates/review-checklist.md requires principle_id per finding. A canon-reviewer run against a test flow produces all findings with principle_id set. drift-store query returns no null principle_id rows for v2.1b-era reviews."
+    testable: "templates/review-checklist.md requires principle_id per finding. A reviewer run against a test flow produces all findings with principle_id set. drift-store query returns no null principle_id rows for v2.1b-era reviews."
   - id: "dc-07"
-    description: "canon-learner extended with a principle-refinement analysis dimension. Learner reads lifecycle_workspace_snapshots + drift-store violations and produces structured patch proposals to principle files."
-    testable: "canon-learner.md body specifies the new dimension. Running the learner against real data produces ≥ 1 structured proposal in .canon/proposed-learnings/{timestamp}/ targeting a specific principle file with a patch."
+    description: "learner extended with a principle-refinement analysis dimension. Learner reads lifecycle_workspace_snapshots + drift-store violations and produces structured patch proposals to principle files."
+    testable: "learner.md body specifies the new dimension. Running the learner against real data produces ≥ 1 structured proposal in .canon/proposed-learnings/{timestamp}/ targeting a specific principle file with a patch."
   - id: "dc-08"
     description: "v2.1b loop-closure evidence: ≥ 1 principle-refinement proposal produced by the learner against real v2.1b-era lifecycle data, accepted by a human reviewer, and applied as an actual edit to a principle file. End-to-end observation → pattern → proposal → refinement loop closed. (Distinct from v2.md §15.2 Gate B, which is a process check runnable against pre-v2.1b drift-db.)"
     testable: "docs/v2.1b-loop-closure-evidence.md records the proposal, the review decision, the applied edit, and the resulting principle file diff. .canon/learning.jsonl records the accepted decision. The edited principle is in main."
@@ -52,7 +52,7 @@ v2.1b decomposes into three layers that ship sequentially:
 
 1. **Persistence layer** (Waves 1–2) — drift-db schema migration, then the `snapshot_workspace` MCP tool that writes to it.
 2. **Capture layer** (Wave 3) — completion-verify hook extension plus the three structured tag additions. Each tag is a small template change + agent-side population rule; they can run in parallel.
-3. **Analysis layer** (Wave 4) — the canon-learner extension that reads captured data and proposes principle refinements.
+3. **Analysis layer** (Wave 4) — the learner extension that reads captured data and proposes principle refinements.
 4. **Evidence layer** (Wave 5) — Gate B evidence run: produce ≥ 1 accepted, applied refinement proposal. This is the ratification proof.
 5. **Validation layer** (Wave 6) — cross-artifact validation of the complete v2.1b substrate.
 

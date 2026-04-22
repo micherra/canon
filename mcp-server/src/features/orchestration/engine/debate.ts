@@ -13,7 +13,7 @@ import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 export type DebateConfig = {
   /** Number of competing teams (default 3) */
   teams: number;
-  /** Agent types composing each team (e.g. ["canon-researcher", "canon-architect"]) */
+  /** Agent types composing each team (e.g. ["researcher", "architect"]) */
   composition: string[];
   /** Minimum rounds before convergence check (default 2) */
   min_rounds: number;

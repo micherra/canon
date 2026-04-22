@@ -1,5 +1,5 @@
 ---
-name: canon-architect
+name: architect
 description: >-
   Designs technical approach for a development task. Takes research
   findings and produces a design document checked against Canon

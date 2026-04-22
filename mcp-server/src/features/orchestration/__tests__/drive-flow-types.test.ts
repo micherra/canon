@@ -149,7 +149,7 @@ describe("DriveFlowAction discriminated union types", () => {
       action: "spawn",
       requests: [
         {
-          agent_type: "canon:canon-implementor",
+          agent_type: "canon:implementor",
           isolation: "worktree",
           prompt: "Implement the feature",
           task_id: "task-01",
@@ -213,7 +213,7 @@ describe("DriveFlowAction discriminated union types", () => {
 
   test("SpawnRequest supports continue_from", () => {
     const request: SpawnRequest = {
-      agent_type: "canon:canon-fixer",
+      agent_type: "canon:fixer",
       continue_from: {
         agent_id: "agent-123",
         context_summary: "Previously fixed 3/5 test failures",

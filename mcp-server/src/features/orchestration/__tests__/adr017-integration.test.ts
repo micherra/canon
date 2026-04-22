@@ -132,7 +132,7 @@ function makeFlow(tier: "small" | "medium" | "large" | undefined): DriveFlowInpu
     name: "test-flow",
     spawn_instructions: {},
     states: {
-      design: { agent: "canon-architect", type: "single" },
+      design: { agent: "architect", type: "single" },
       terminal: { type: "terminal" },
     },
     tier,
@@ -156,7 +156,7 @@ describe("shouldApprovalGate — additional edge cases", () => {
   it("parallel state without approval_gate: true does NOT gate on architect-agent medium tier", () => {
     // Parallel states don't have a single agent field at top level — tier default doesn't apply
     const stateDef: StateDefinition = {
-      agents: ["canon-architect"],
+      agents: ["architect"],
       type: "parallel",
     } as StateDefinition;
     const flow = makeFlow("medium");
@@ -181,7 +181,7 @@ describe("shouldApprovalGate — additional edge cases", () => {
   });
 
   it("undefined tier (no tier set) with architect agent returns false", () => {
-    const stateDef: StateDefinition = { agent: "canon-architect", type: "single" };
+    const stateDef: StateDefinition = { agent: "architect", type: "single" };
     const flow = makeFlow(undefined);
     const board = makeBoard();
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);

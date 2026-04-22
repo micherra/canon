@@ -62,7 +62,7 @@ The scribe must never infer conventions from patterns. That's the learner's job 
 
 ---
 status: "NO_UPDATES"
-agent: canon-scribe
+agent: scribe
 timestamp: "2025-01-15T10:30:00Z"
 ---
 ## Context Sync

@@ -6,13 +6,13 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     consultations: {
       "perf-check": {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         fragment: "perf-check",
         role: "researcher",
         section: "## Performance",
       },
       "post-review-check": {
-        agent: "canon:canon-security",
+        agent: "canon:security",
         fragment: "post-review-check",
         role: "security",
         timeout: "5m",
@@ -27,7 +27,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     states: {
       review: {
-        agent: "canon:canon-reviewer",
+        agent: "canon:reviewer",
         consultations: {
           after: ["post-review-check"],
         },
@@ -53,7 +53,7 @@ describe("resolveAfterConsultations", () => {
     expect(result.warnings).toHaveLength(0);
     expect(result.consultation_prompts).toHaveLength(1);
     expect(result.consultation_prompts[0].name).toBe("post-review-check");
-    expect(result.consultation_prompts[0].agent).toBe("canon:canon-security");
+    expect(result.consultation_prompts[0].agent).toBe("canon:security");
     expect(result.consultation_prompts[0].role).toBe("security");
     expect(result.consultation_prompts[0].prompt).toBe("Run post-review check for my-feature.");
   });
@@ -62,7 +62,7 @@ describe("resolveAfterConsultations", () => {
     const flow = makeFlow({
       states: {
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           type: "single",
           // no consultations key at all
         },
@@ -84,7 +84,7 @@ describe("resolveAfterConsultations", () => {
     const flow = makeFlow({
       states: {
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           consultations: {
             before: ["post-review-check"],
             // no "after" key
@@ -133,7 +133,7 @@ describe("resolveAfterConsultations", () => {
     const flow = makeFlow({
       consultations: {
         "orphan-consult": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           fragment: "orphan-consult",
           role: "security",
         },

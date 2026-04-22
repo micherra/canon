@@ -54,12 +54,12 @@ For each of the 11 agent definitions:
 - No runtime `Read ${CLAUDE_PLUGIN_ROOT}/rules/` instructions remain in body
 
 **5. Agent roster changes (1 check)**:
-- `agents/canon-engineer.md` exists with union tool list from both former agents
-- `agents/canon-planner.md` exists with opus model and plan permissionMode
-- `agents/canon-implementor.md` does not exist
-- `agents/canon-fixer.md` does not exist
-- `agents/canon-guide.md` does not exist
-- `agents/canon-chat.md` does not exist
+- `agents/engineer.md` exists with union tool list from both former agents
+- `agents/planner.md` exists with opus model and plan permissionMode
+- `agents/implementor.md` does not exist
+- `agents/fixer.md` does not exist
+- `agents/guide.md` does not exist
+- `agents/chat.md` does not exist
 - `agents/.claude/CLAUDE.md` roster shows 11 agents
 - `templates/planning-brief.md` exists
 - Guide-dashboards content present in CLAUDE.md orchestration section

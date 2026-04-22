@@ -1,5 +1,5 @@
 ---
-name: canon-fixer
+name: fixer
 description: >-
   Unified fix agent for Canon. Operates in two modes: test-fix (fixes failing
   tests from tester reports) and violation-fix (refactors code to comply with

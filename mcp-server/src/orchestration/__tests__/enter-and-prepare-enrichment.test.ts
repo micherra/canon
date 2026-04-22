@@ -110,7 +110,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement ${task}. ${enrichment}" },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -225,7 +225,7 @@ describe("enterAndPrepareState — enrichment integration", () => {
 
       assertOk(result);
       expect(result.prompts).toHaveLength(1);
-      expect(result.prompts[0].agent).toBe("canon-implementor");
+      expect(result.prompts[0].agent).toBe("implementor");
     });
 
     it("does not include enrichment key in variables when enrichment is empty and flow prompt has no ${enrichment}", async () => {

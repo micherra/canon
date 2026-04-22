@@ -40,7 +40,7 @@ Convergence is detected heuristically: Canon reads the latest round's messages a
 # epic.md — debate config
 debate:
   teams: 3
-  composition: [canon-researcher, canon-architect]
+  composition: [researcher, architect]
   min_rounds: 2
   max_rounds: 5
   convergence_check_after: 3
@@ -174,19 +174,19 @@ You type: **"add dark mode to the dashboard"**
 
 **Classification.** Canon reads this as a build intent — medium scope, UI work. It picks the `feature` flow.
 
-**Research.** A `canon-researcher` agent scans the codebase: finds the theming system, identifies the files that would change (Tailwind config, component tokens, top-level layout), flags that the user preference isn't currently persisted. Saves structured findings to the workspace.
+**Research.** A `researcher` agent scans the codebase: finds the theming system, identifies the files that would change (Tailwind config, component tokens, top-level layout), flags that the user preference isn't currently persisted. Saves structured findings to the workspace.
 
-**Design.** A `canon-architect` agent reads the research, produces a design: CSS custom properties for tokens, `prefers-color-scheme` media query as default, localStorage for persistence, a theme context in React. It writes an `INDEX.md` with task plans for each implementor.
+**Design.** A `architect` agent reads the research, produces a design: CSS custom properties for tokens, `prefers-color-scheme` media query as default, localStorage for persistence, a theme context in React. It writes an `INDEX.md` with task plans for each implementor.
 
 **Checkpoint.** The guide agent summarizes the design in plain language and asks for your thoughts. You say "looks good but also support system preference". The feedback is saved; the architect revises. You approve.
 
-**Implement.** Two `canon-implementor` agents work in parallel worktrees — one on the theming system, one on the component updates. Before they start, a plan-review consultation fires: an architect reads both plans and injects a note that the token naming scheme needs to be consistent across both tasks. Implementors get that note in their prompts. After wave 1, an early security scan checks for any accidental secrets or injection issues.
+**Implement.** Two `implementor` agents work in parallel worktrees — one on the theming system, one on the component updates. Before they start, a plan-review consultation fires: an architect reads both plans and injects a note that the token naming scheme needs to be consistent across both tasks. Implementors get that note in their prompts. After wave 1, an early security scan checks for any accidental secrets or injection issues.
 
-**Test.** A `canon-tester` agent runs the test suite, analyzes coverage gaps, and writes missing tests for the theme context and toggle behavior.
+**Test.** A `tester` agent runs the test suite, analyzes coverage gaps, and writes missing tests for the theme context and toggle behavior.
 
-**Review.** A `canon-reviewer` agent runs a principle-based review. It loads principles scoped to the `ui` layer — `no-inline-styles`, `accessible-color-contrast`, `prefer-system-defaults` — checks compliance, and scores the change. Verdict: clean. One advisory note on color contrast that gets logged to drift history.
+**Review.** A `reviewer` agent runs a principle-based review. It loads principles scoped to the `ui` layer — `no-inline-styles`, `accessible-color-contrast`, `prefer-system-defaults` — checks compliance, and scores the change. Verdict: clean. One advisory note on color contrast that gets logged to drift history.
 
-**Ship.** `canon-shipper` merges the worktrees, runs a final gate check, creates the PR.
+**Ship.** `shipper` merges the worktrees, runs a final gate check, creates the PR.
 
 Total time from your message to ready-for-merge: Canon drove all of it. You made one decision.
 

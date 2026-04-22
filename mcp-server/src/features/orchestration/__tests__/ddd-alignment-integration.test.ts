@@ -169,7 +169,7 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
     };
 
     const stateDef = {
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       effects: undefined,
       type: "single" as const,
     };
@@ -210,7 +210,7 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
 
     try {
       const stateDef = {
-        agent: "canon:canon-reviewer",
+        agent: "canon:reviewer",
         effects: [{ type: "persist_review" }],
         type: "single" as const,
       };
@@ -245,7 +245,7 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
     };
 
     const stateDef = {
-      agent: "canon:canon-implementor",
+      agent: "canon:implementor",
       effects: [],
       type: "single" as const,
     };

@@ -65,7 +65,7 @@ describe("postEvent — happy path start event", () => {
 
     const result = await postEvent({
       action: "start",
-      agent: "canon-implementor",
+      agent: "implementor",
       detail: "Starting implementation of post_event tool",
       workspace,
     });
@@ -79,7 +79,7 @@ describe("postEvent — happy path start event", () => {
     const events = store.getEvents({ type: "agent_activity" });
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("agent_activity");
-    expect(events[0].payload.agent).toBe("canon-implementor");
+    expect(events[0].payload.agent).toBe("implementor");
     expect(events[0].payload.action).toBe("start");
     expect(events[0].payload.detail).toBe("Starting implementation of post_event tool");
     expect(typeof events[0].payload.timestamp).toBe("string");
@@ -93,7 +93,7 @@ describe("postEvent — happy path complete event with artifacts", () => {
 
     const result = await postEvent({
       action: "complete",
-      agent: "canon-implementor",
+      agent: "implementor",
       artifacts: [
         "mcp-server/src/features/orchestration/tools/post-event.ts",
         "mcp-server/src/features/orchestration/__tests__/post-event.test.ts",
@@ -122,7 +122,7 @@ describe("postEvent — happy path complete event with artifacts", () => {
 
     await postEvent({
       action: "complete",
-      agent: "canon-implementor",
+      agent: "implementor",
       artifacts: [],
       detail: "Completed with no artifacts",
       workspace,
@@ -141,7 +141,7 @@ describe("postEvent — WORKSPACE_NOT_FOUND", () => {
   it("returns WORKSPACE_NOT_FOUND for a non-existent workspace path", async () => {
     const result = await postEvent({
       action: "start",
-      agent: "canon-implementor",
+      agent: "implementor",
       detail: "Starting something",
       workspace: "/tmp/does-not-exist-post-event-test-xyz-12345",
     });
@@ -197,7 +197,7 @@ describe("postEvent — INVALID_INPUT for empty detail", () => {
 
     const result = await postEvent({
       action: "complete",
-      agent: "canon-implementor",
+      agent: "implementor",
       detail: "",
       workspace,
     });
@@ -217,7 +217,7 @@ describe("EventPayloadSchemas.agent_activity", () => {
     const schema = EventPayloadSchemas.agent_activity;
     const result = schema.safeParse({
       action: "start",
-      agent: "canon-implementor",
+      agent: "implementor",
       detail: "Starting task",
       timestamp: new Date().toISOString(),
     });
@@ -228,7 +228,7 @@ describe("EventPayloadSchemas.agent_activity", () => {
     const schema = EventPayloadSchemas.agent_activity;
     const result = schema.safeParse({
       action: "complete",
-      agent: "canon-researcher",
+      agent: "researcher",
       artifacts: ["plans/DESIGN.md"],
       correlation_id: "corr-123",
       detail: "Completed research",
@@ -241,7 +241,7 @@ describe("EventPayloadSchemas.agent_activity", () => {
     const schema = EventPayloadSchemas.agent_activity;
     const result = schema.safeParse({
       action: "in_progress",
-      agent: "canon-implementor",
+      agent: "implementor",
       detail: "Doing something",
       timestamp: new Date().toISOString(),
     });
@@ -262,7 +262,7 @@ describe("EventPayloadSchemas.agent_activity", () => {
     const schema = EventPayloadSchemas.agent_activity;
     const result = schema.safeParse({
       action: "start",
-      agent: "canon-implementor",
+      agent: "implementor",
       timestamp: new Date().toISOString(),
     });
     expect(result.success).toBe(false);

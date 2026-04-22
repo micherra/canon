@@ -21,7 +21,7 @@ const CO_AUTHORED_BY = "Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com
  *
  * Returns a string like:
  *   Canon-Workflow: my-slug
- *   Canon-Agent: canon-implementor
+ *   Canon-Agent: implementor
  *   Canon-State: implement
  *   Canon-Task: task-01
  *

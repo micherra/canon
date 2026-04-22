@@ -1,5 +1,5 @@
 ---
-name: canon-security
+name: security
 description: >-
   Reviews code for security vulnerabilities, unsafe patterns, and
   compliance issues. Produces a security assessment with findings

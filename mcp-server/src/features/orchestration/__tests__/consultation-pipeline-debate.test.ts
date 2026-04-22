@@ -109,7 +109,7 @@ function makeFlowWithBeforeConsultation(): ResolvedFlow {
   return {
     consultations: {
       "security-review": {
-        agent: "canon:canon-security",
+        agent: "canon:security",
         fragment: "security-review",
         role: "security-reviewer",
         section: "Security Review",
@@ -126,7 +126,7 @@ function makeFlowWithBeforeConsultation(): ResolvedFlow {
     states: {
       done: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         consultations: {
           before: ["security-review"],
         },

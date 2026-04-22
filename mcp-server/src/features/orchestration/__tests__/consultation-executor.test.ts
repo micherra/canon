@@ -10,12 +10,12 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
     consultations: {
       "perf-check": {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         fragment: "perf-check",
         role: "researcher",
       },
       "security-check": {
-        agent: "canon:canon-security",
+        agent: "canon:security",
         description: "Security review consultation",
         fragment: "security-check",
         role: "security",
@@ -74,7 +74,7 @@ describe("executeConsultations", () => {
     const flow = makeFlow({
       consultations: {
         "orphan-consult": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           fragment: "orphan-consult",
           role: "security",
         },
@@ -153,7 +153,7 @@ describe("resolveConsultationPrompt", () => {
     const flow = makeFlow({
       consultations: {
         "no-spawn": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           fragment: "no-spawn",
           role: "security",
         },
@@ -171,7 +171,7 @@ describe("resolveConsultationPrompt", () => {
     const result = resolveConsultationPrompt("security-check", flow, {});
 
     expect(result).not.toBeNull();
-    expect(result!.agent).toBe("canon:canon-security");
+    expect(result!.agent).toBe("canon:security");
   });
 
   it("includes correct role from consultation fragment", () => {
@@ -204,7 +204,7 @@ describe("resolveConsultationPrompt", () => {
     const flow = makeFlow({
       consultations: {
         "section-check": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           fragment: "section-check",
           role: "security",
           section: "## Security Review",

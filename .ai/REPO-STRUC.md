@@ -65,20 +65,20 @@ canon/                                    # plugin root (git root)
 │   └── settings.json                     # project-scoped settings
 │
 ├── agents/                               # specialist agent definitions (canon: prefix)
-│   ├── canon-architect.md
-│   ├── canon-chat.md
-│   ├── canon-fixer.md
+│   ├── architect.md
+│   ├── chat.md
+│   ├── fixer.md
 │   ├── canon-generalist.md
-│   ├── canon-guide.md
-│   ├── canon-implementor.md
-│   ├── canon-learner.md
-│   ├── canon-researcher.md
-│   ├── canon-reviewer.md
-│   ├── canon-scribe.md
-│   ├── canon-security.md
-│   ├── canon-shipper.md
-│   ├── canon-tester.md
-│   └── canon-writer.md
+│   ├── guide.md
+│   ├── implementor.md
+│   ├── learner.md
+│   ├── researcher.md
+│   ├── reviewer.md
+│   ├── scribe.md
+│   ├── security.md
+│   ├── shipper.md
+│   ├── tester.md
+│   └── writer.md
 │
 ├── commands/                             # legacy command location (auto-discovered)
 │   ├── check.md                          #   kept at root per plugin convention
@@ -256,20 +256,20 @@ exist in the plugin system.
 | `workspace-scoping` | All agents |
 | `missing-artifact` | All agents |
 | `convergence-discipline` | All agents |
-| `artifacts-only` | canon-shipper |
-| `assume-hostile-input` | canon-security |
-| `cold-review` | canon-reviewer |
-| `conflict-detection` | canon-writer |
-| `context-sync` | canon-scribe |
-| `design-before-code` | canon-architect |
-| `evidence-over-intuition` | canon-learner |
-| `fresh-context` | canon-implementor |
-| `minimal-fix` | canon-fixer |
-| `plans-are-prompts` | canon-architect |
-| `scoped-research` | canon-researcher |
-| `tdd-required` | canon-implementor |
-| `test-sad-paths` | canon-tester, canon-implementor |
-| `test-the-contract` | canon-tester |
+| `artifacts-only` | shipper |
+| `assume-hostile-input` | security |
+| `cold-review` | reviewer |
+| `conflict-detection` | writer |
+| `context-sync` | scribe |
+| `design-before-code` | architect |
+| `evidence-over-intuition` | learner |
+| `fresh-context` | implementor |
+| `minimal-fix` | fixer |
+| `plans-are-prompts` | architect |
+| `scoped-research` | researcher |
+| `tdd-required` | implementor |
+| `test-sad-paths` | tester, implementor |
+| `test-the-contract` | tester |
 
 **Alternative delivery mechanisms** (if duplication becomes untenable):
 - Hook-based injection: Use a `SubagentStart` hook to prepend universal rules into agent context
@@ -279,7 +279,7 @@ exist in the plugin system.
 ### 2. `agents/` stays at plugin root
 
 Plugin agents live in `agents/` at the plugin root. This gives them the `canon:` prefix
-for `subagent_type` (e.g., `canon:canon-implementor`).
+for `subagent_type` (e.g., `canon:implementor`).
 
 `canon-orchestrator.md` does NOT move to agents — it's not a spawnable subagent.
 Its content belongs in `.claude/CLAUDE.md` or root `CLAUDE.md`.
@@ -423,7 +423,7 @@ MCP server process (runtime, programmatic registration)
 
 When a user runs a Canon MCP tool (e.g., `drive_flow`), Claude Code routes the call to
 the MCP server process — not to any filesystem path. When Claude Code discovers a Canon
-agent (e.g., `canon:canon-implementor`), it reads `agents/canon-implementor.md` directly
+agent (e.g., `canon:implementor`), it reads `agents/implementor.md` directly
 from the filesystem — no MCP server involved.
 
 ## What Gets Removed

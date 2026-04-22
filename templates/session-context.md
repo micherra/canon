@@ -1,8 +1,8 @@
 ---
 template: session-context
 description: Living shared context document for the workspace
-used-by: [canon-architect]
-read-by: [canon-implementor]
+used-by: [architect]
+read-by: [implementor]
 output-path: ${WORKSPACE}/context.md
 ---
 

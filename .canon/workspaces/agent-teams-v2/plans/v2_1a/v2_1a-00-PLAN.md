@@ -27,21 +27,21 @@ Write `skills/canon/references/runbook-vocabulary.md` as the canonical list of s
 
 | Step ID | Default agent | Dispatch | Default HITL | Purpose |
 |---------|---------------|----------|--------------|---------|
-| `research` | canon-researcher | subagent | none | Investigation — any scope |
-| `design` | canon-architect | subagent | approval | Plan index + design decisions |
-| `spike` | canon-engineer | subagent | none | Time-boxed exploratory prototype |
-| `implement` | canon-engineer | subagent or team | none | Build code with TDD/BDD |
-| `migrate` | canon-engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact) |
-| `verify` | canon-engineer | subagent | on_failure | Run existing tests/gates post-change |
-| `test` | canon-tester | subagent | none | Net-new integration tests; coverage-gap fills |
-| `benchmark` | canon-tester | subagent | on_failure | Performance verification against baseline |
-| `security` | canon-security | subagent | none | Security assessment |
-| `review` | canon-reviewer | subagent | checkpoint | Principle compliance |
-| `fix` | canon-engineer | subagent | on_failure | Fix mode (requires `cause: test-failure\|security\|review\|verify`) |
+| `research` | researcher | subagent | none | Investigation — any scope |
+| `design` | architect | subagent | approval | Plan index + design decisions |
+| `spike` | engineer | subagent | none | Time-boxed exploratory prototype |
+| `implement` | engineer | subagent or team | none | Build code with TDD/BDD |
+| `migrate` | engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact) |
+| `verify` | engineer | subagent | on_failure | Run existing tests/gates post-change |
+| `test` | tester | subagent | none | Net-new integration tests; coverage-gap fills |
+| `benchmark` | tester | subagent | on_failure | Performance verification against baseline |
+| `security` | security | subagent | none | Security assessment |
+| `review` | reviewer | subagent | checkpoint | Principle compliance |
+| `fix` | engineer | subagent | on_failure | Fix mode (requires `cause: test-failure\|security\|review\|verify`) |
 | `pre-launch-check` | null | n/a | on_failure | Gate-only — lead runs discovered checks via Bash |
-| `ship` | canon-shipper | subagent | on_failure | PR description synthesis |
-| `context-sync` | canon-scribe | subagent | none | Doc sync — **mandatory tail** |
-| `learn` | canon-learner | subagent | none | Pattern analysis — **mandatory tail** |
+| `ship` | shipper | subagent | on_failure | PR description synthesis |
+| `context-sync` | scribe | subagent | none | Doc sync — **mandatory tail** |
+| `learn` | learner | subagent | none | Pattern analysis — **mandatory tail** |
 
 Total: 15 entries (13 functional + 2 mandatory tail).
 

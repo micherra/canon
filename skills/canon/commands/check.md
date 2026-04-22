@@ -37,7 +37,7 @@ If the MCP tool is unavailable, fall back to globbing `.canon/principles/**/*.md
 
 ## Step 4: Spawn Reviewer
 
-Spawn a `canon-reviewer` sub-agent with this scoped prompt:
+Spawn a `reviewer` sub-agent with this scoped prompt:
 
 "Lightweight compliance check — Stage 1 (principle compliance) ONLY.
 - Skip Stage 2 (code quality suggestions)

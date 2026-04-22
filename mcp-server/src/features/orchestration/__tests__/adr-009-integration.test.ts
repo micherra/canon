@@ -117,7 +117,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         prompt: "Do task",
         role: "main",
         template_paths: [],
@@ -183,29 +183,29 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
       },
       states: {
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
         research: {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           transitions: { done: "skip-a" },
           type: "single",
         },
         "skip-a": {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           skip_when: "no_contract_changes" as const,
           transitions: { done: "skip-b", skipped: "skip-b" },
           type: "single",
         },
         "skip-b": {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           skip_when: "no_contract_changes" as const,
           transitions: { done: "skip-c", skipped: "skip-c" },
           type: "single",
         },
         "skip-c": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           skip_when: "no_fix_requested" as const,
           transitions: { done: "implement", skipped: "implement" },
           type: "single",
@@ -252,7 +252,7 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -276,7 +276,7 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
     // Should land on implement after all 3 skips
-    expect(result.requests[0].agent_type).toBe("canon:canon-implementor");
+    expect(result.requests[0].agent_type).toBe("canon:implementor");
 
     // reportResult was called 4 times: research + skip-a + skip-b + skip-c
     expect(vi.mocked(reportResult)).toHaveBeenCalledTimes(4);
@@ -302,12 +302,12 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
       },
       states: {
         research: {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           transitions: { done: "skip-state" },
           type: "single",
         },
         "skip-state": {
-          agent: "canon:canon-security",
+          agent: "canon:security",
           skip_when: "auto_approved" as const,
           transitions: { done: "terminal", skipped: "terminal" },
           type: "single",
@@ -361,7 +361,7 @@ describe("driveFlow — workspace exists but no board execution", () => {
       spawn_instructions: { research: "research" },
       states: {
         research: {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -398,17 +398,17 @@ describe("driveFlow — buildDoneSummary state counting", () => {
       spawn_instructions: { implement: "implement", research: "research", review: "review" },
       states: {
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
         research: {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           transitions: { done: "terminal" },
           type: "single",
         },
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -489,7 +489,7 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
       ok: true,
       prompts: [
         {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           // item is an object (not a string)
           item: {
             description: "structured task",
@@ -510,7 +510,7 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
       spawn_instructions: { research: "research" },
       states: {
         research: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -542,7 +542,7 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
       ok: true,
       prompts: [
         {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           // item is an object without task_id
           item: { description: "no task_id here" } as unknown as string,
           prompt: "Implement task",
@@ -560,7 +560,7 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
       spawn_instructions: { research: "research" },
       states: {
         research: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "terminal" },
           type: "single",
         },

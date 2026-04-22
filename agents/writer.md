@@ -1,5 +1,5 @@
 ---
-name: canon-writer
+name: writer
 description: >-
   Creates and edits Canon principles, conventions, and agent-rules.
   Focuses on behavioral constraints and uses the principle template as source of truth.

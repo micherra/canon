@@ -14,7 +14,7 @@ includes:
 states:
   scan:
     type: single
-    agent: canon-researcher
+    agent: researcher
     role: coverage-scan
     template: research-finding
     transitions:
@@ -24,7 +24,7 @@ states:
 
   write-tests:
     type: single
-    agent: canon-tester
+    agent: tester
     template: test-report
     max_iterations: 2
     stuck_when: same_file_test
@@ -38,7 +38,7 @@ states:
 
   fix-impl:
     type: single
-    agent: canon-fixer
+    agent: fixer
     role: test-fix
     template: implementation-log
     transitions:

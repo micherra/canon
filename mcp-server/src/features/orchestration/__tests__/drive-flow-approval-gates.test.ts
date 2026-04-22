@@ -81,7 +81,7 @@ function makeApprovalFlow(tier: "small" | "medium" | "large" | undefined = "medi
     },
     states: {
       design: {
-        agent: "canon-architect",
+        agent: "architect",
         approval_gate: true,
         transitions: {
           approved: "implement",
@@ -91,7 +91,7 @@ function makeApprovalFlow(tier: "small" | "medium" | "large" | undefined = "medi
         type: "single",
       },
       implement: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         transitions: { done: "terminal" },
         type: "single",
       },
@@ -115,7 +115,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon-architect",
+        agent: "architect",
         prompt: "Design the feature",
         role: "main",
         template_paths: [],
@@ -246,7 +246,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -265,12 +265,12 @@ describe("driveFlow Branch A — approval gate intercept", () => {
       spawn_instructions: { design: "Design", implement: "Implement" },
       states: {
         design: {
-          agent: "canon:canon-researcher",
+          agent: "canon:researcher",
           transitions: { approved: "implement" },
           type: "single",
         },
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -295,7 +295,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
     expect(result.requests.length).toBeGreaterThan(0);
-    expect(result.requests[0]!.agent_type).toBe("canon:canon-implementor");
+    expect(result.requests[0]!.agent_type).toBe("canon:implementor");
   });
 
   it("does not fire approval gate on architect state on small tier", async () => {
@@ -306,7 +306,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -323,12 +323,12 @@ describe("driveFlow Branch A — approval gate intercept", () => {
       spawn_instructions: { design: "Design", implement: "Implement" },
       states: {
         design: {
-          agent: "canon-architect",
+          agent: "architect",
           transitions: { done: "implement" },
           type: "single",
         },
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -353,7 +353,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
     if (!result.ok) return;
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
-    expect(result.requests[0]?.agent_type).toBe("canon:canon-implementor");
+    expect(result.requests[0]?.agent_type).toBe("canon:implementor");
   });
 });
 
@@ -368,7 +368,7 @@ describe("driveFlow — approval decision statuses do NOT re-trigger the gate", 
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -401,7 +401,7 @@ describe("driveFlow — approval decision statuses do NOT re-trigger the gate", 
     expect(result.action).not.toBe("approval");
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
-    expect(result.requests[0]?.agent_type).toBe("canon:canon-implementor");
+    expect(result.requests[0]?.agent_type).toBe("canon:implementor");
   });
 
   it("'revise' status on an approval_gate: true state skips the gate", async () => {
@@ -487,7 +487,7 @@ describe("driveFlow — self-transition on single state (revise: design)", () =>
       spawn_instructions: { design: "Design something" },
       states: {
         design: {
-          agent: "canon-architect",
+          agent: "architect",
           // Explicit approval_gate: false so only the revise path is tested
           approval_gate: false,
           transitions: {

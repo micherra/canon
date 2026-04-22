@@ -41,7 +41,7 @@ describe("validateSpawnCoverage: gate-only state exemption", () => {
           type: "single",
         },
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -67,7 +67,7 @@ describe("validateSpawnCoverage: gate-only state exemption", () => {
           type: "single",
         },
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },
@@ -92,7 +92,7 @@ describe("validateSpawnCoverage: agent + gates states still need spawn instructi
       },
       states: {
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           gates: ["npm test"],
           transitions: { done: "terminal" },
           type: "single",
@@ -115,7 +115,7 @@ describe("validateSpawnCoverage: agent + gates states still need spawn instructi
       },
       states: {
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           gates: ["npm test"],
           transitions: { done: "terminal" },
           type: "single",
@@ -205,12 +205,12 @@ describe("validateSpawnCoverage: mixed flow", () => {
           type: "single",
         },
         implement: {
-          agent: "canon:canon-implementor",
+          agent: "canon:implementor",
           transitions: { done: "review" },
           type: "single",
         },
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           transitions: { done: "terminal" },
           type: "single",
         },

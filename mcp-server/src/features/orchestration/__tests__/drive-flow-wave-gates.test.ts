@@ -133,7 +133,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         item: "task-01",
         prompt: "Implement task-01",
         role: "implementor",
@@ -212,7 +212,7 @@ describe("driveFlow — gate failure after merge", () => {
     // Mock enterAndPrepareState for the "fix" state that is entered after gate_failed
     vi.mocked(enterAndPrepareState).mockResolvedValue(
       makeEnterResult({
-        prompts: [{ agent: "canon:canon-fixer", prompt: "Fix tests", template_paths: [] }],
+        prompts: [{ agent: "canon:fixer", prompt: "Fix tests", template_paths: [] }],
       }),
     );
 
@@ -277,7 +277,7 @@ describe("driveFlow — gate failure after merge", () => {
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
     vi.mocked(enterAndPrepareState).mockResolvedValue(
       makeEnterResult({
-        prompts: [{ agent: "canon:canon-implementor", prompt: "dummy", template_paths: [] }],
+        prompts: [{ agent: "canon:implementor", prompt: "dummy", template_paths: [] }],
       }),
     );
 
@@ -357,7 +357,7 @@ describe("driveFlow — wave-to-wave advancement", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-02",
             prompt: "Implement task-02",
             template_paths: [],
@@ -423,7 +423,7 @@ describe("driveFlow — wave-to-wave advancement", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-02",
             prompt: "Implement task-02",
             template_paths: [],

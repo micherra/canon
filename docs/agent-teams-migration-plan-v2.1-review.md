@@ -1,6 +1,6 @@
 # Architect Review — Agent-Teams Migration Plan v2.1
 
-**Reviewer:** canon-architect (prompted review)
+**Reviewer:** architect (prompted review)
 **Target:** `docs/agent-teams-migration-plan-v2.1.md` (1289 lines, DRAFT)
 **Baseline:** `docs/agent-teams-migration-plan-v2.md` (698 lines, 2026-04-12)
 **Date:** 2026-04-19
@@ -74,9 +74,9 @@ v2 Phase 1 (Gate A) → v2.1a → v2.1b (Gate B) → v2.2 → Phase 2 → Phase 
 
 ### 3.1 Gate A is the right blocker
 
-§15.1 / §10.1 identify Gate A (v2 Phase 1 completion) as the substantive prerequisite. Specifically: `canon-planner` and `canon-engineer` agent definitions must exist and be validated in ≥ 3 successful runs before v2.1a starts. Today neither agent exists (only `canon-implementor` and `canon-fixer`). The plan correctly refuses to start v2.1 work against phantom prerequisites.
+§15.1 / §10.1 identify Gate A (v2 Phase 1 completion) as the substantive prerequisite. Specifically: `planner` and `engineer` agent definitions must exist and be validated in ≥ 3 successful runs before v2.1a starts. Today neither agent exists (only `implementor` and `fixer`). The plan correctly refuses to start v2.1 work against phantom prerequisites.
 
-This matters because v2.1's synthesis architecture depends on `canon-planner` as a real agent with real tools, not a notional role. A Gate A that is "met once the agents exist" rather than "met by reading the v2 plan and declaring victory" is the right discipline.
+This matters because v2.1's synthesis architecture depends on `planner` as a real agent with real tools, not a notional role. A Gate A that is "met once the agents exist" rather than "met by reading the v2 plan and declaring victory" is the right discipline.
 
 ### 3.2 v2.1a / v2.1b split has the right shape
 
@@ -135,7 +135,7 @@ Under that framing:
 
 **Why this is still HIGH.** The framing resolves the blast-radius worry, but two architectural gaps remain that block shipping L4:
 
-- **R1 — Intent-routing expansion is unspecified.** CLAUDE.md today routes `build` / `explore` / `test` / `review` / `security` through `load_flow` + `init_workspace`. `principle` (canon-writer), `learn` (canon-learner), and any future `docs` intent are all real tracked-file-editing activities that under this framing need workspace-creating paths. v2.1 does not specify this expansion. Without it, L4 blocks legitimate canon-writer and canon-learner runs. This is not trivial: each intent needs its own workspace template (what artifacts, what hooks, what completion criteria) or a shared "lightweight-flow" pattern.
+- **R1 — Intent-routing expansion is unspecified.** CLAUDE.md today routes `build` / `explore` / `test` / `review` / `security` through `load_flow` + `init_workspace`. `principle` (writer), `learn` (learner), and any future `docs` intent are all real tracked-file-editing activities that under this framing need workspace-creating paths. v2.1 does not specify this expansion. Without it, L4 blocks legitimate writer and learner runs. This is not trivial: each intent needs its own workspace template (what artifacts, what hooks, what completion criteria) or a shared "lightweight-flow" pattern.
 - **R2 — Bootstrap window.** Between the user's first message and `init_workspace` completion, the lead must be able to call the MCP tools needed to set up the flow. In practice this is a non-issue (workspace creation is an MCP call, not Edit/Write), but the spec should assert it explicitly so the hook doesn't race the bootstrap.
 
 **Recommended action.** Before v2.1a ships L4:
@@ -143,7 +143,7 @@ Under that framing:
 1. **Make the allowlist = `.gitignore`** explicit in §6.5. Replace "Bash-that-modifies-code" with a concrete predicate: "Bash invocations whose resolved target paths include any tracked file." Cite `git check-ignore` as the oracle.
 2. **Expand intent routing.** Add a §6.6 (or extend §6.4) specifying that every Canon intent that edits tracked files must route through a workspace-creating flow. Enumerate the currently unrouted intents (`principle`, `learn`, `docs`) and assign each either a dedicated lightweight flow or a shared "content" flow pattern that calls `init_workspace`.
 3. **Assert the bootstrap contract.** In §6.5, state that L4 is evaluated after the lead has had the chance to call `init_workspace`. Specifically, L4 fires on the first Edit / Write / tracked-file-Bash call; the lead's MCP tool calls to create the workspace are not Edit / Write and are never blocked.
-4. **Phase 2 checklist.** Validate L4 against a small scenario list: (a) user edits tracked doc file on a non-build branch → routed to content flow; (b) canon-writer run → creates workspace, L4 passes; (c) `bash -c 'sed -i ...'` on tracked file without workspace → blocked; (d) `.canon/workspaces/` internal writes during active flow → allowed.
+4. **Phase 2 checklist.** Validate L4 against a small scenario list: (a) user edits tracked doc file on a non-build branch → routed to content flow; (b) writer run → creates workspace, L4 passes; (c) `bash -c 'sed -i ...'` on tracked file without workspace → blocked; (d) `.canon/workspaces/` internal writes during active flow → allowed.
 
 #### HIGH-2 — User-facing aggregate confidence scalar invites overconfidence-driven misuse
 
@@ -245,7 +245,7 @@ The v2 document (`docs/agent-teams-migration-plan-v2.md`, 698 lines) becomes the
 ### 5.2 Replace (rewrite with v2.1 content)
 
 - **v2 §2 Target Architecture** → rewrite per v2.1 §2. Replace the single "Canon-as-toolkit" diagram with the iterate-until-approved flow (v2.1 §2.2). Add §§2.3 (planner v2.1 responsibilities), 2.4 (orchestration example with iterate-until-approved), 2.9 (orchestration journal with v2.1 extensions), 2.10 (8-layer defense-in-depth including L4).
-- **v2 §4 Phase 1 Deliverables table** → remove the 5 static runbook file rows (`phase1-01..04`). Keep agent def updates (now creating `canon-planner` and `canon-engineer` via `phase1-08`), orchestration journal, commit trailer hook, completion verification hook, SessionStart hooks, SubagentStop hook, feature flag. Add explicit note that `phase1-05..10` remain required and Gate A depends on `phase1-08`.
+- **v2 §4 Phase 1 Deliverables table** → remove the 5 static runbook file rows (`phase1-01..04`). Keep agent def updates (now creating `planner` and `engineer` via `phase1-08`), orchestration journal, commit trailer hook, completion verification hook, SessionStart hooks, SubagentStop hook, feature flag. Add explicit note that `phase1-05..10` remain required and Gate A depends on `phase1-08`.
 - **v2 §6 Risks (10 rows)** → replace table with v2.1 §13's 15-row table. New v2.1 risks: planner runbook inconsistency, intent misclassification drift (L1+L4), vocab drift, observation tag compliance, LLM overconfidence, learner scope creep. Carry forward all v2 risks.
 
 ### 5.3 Add (net new sections in rewritten v2)
@@ -347,7 +347,7 @@ The fresh-eyes review identified 9 additional issues (ISSUE-1..9) against the pl
 | ISSUE-1 Gate B name collision | 780b579 (v2_1b-07 renamed to loop-closure evidence) |
 | ISSUE-2 v2_1a-06 over-deps | 361e709 (moved to Wave 2 with no deps) |
 | ISSUE-3 L4 multi-branch detection | e334dd8 (6-row decision table) |
-| ISSUE-4 canon-writer permissionMode | 361e709 (permissionMode change removed) |
+| ISSUE-4 writer permissionMode | 361e709 (permissionMode change removed) |
 | ISSUE-5 snapshot idempotency | 760e451 (UNIQUE + atomic upsert) |
 | ISSUE-6 test-path over-prescription | 16d1132 (stripped across 7 plans) |
 | ISSUE-7 Phase 3 kept-additions note | 5725d24 |
@@ -358,7 +358,7 @@ The fresh-eyes review identified 9 additional issues (ISSUE-1..9) against the pl
 
 Before v2.1a Wave 1 begins, the Canon maintainer confirms:
 
-- [ ] Gate A passes (canon-planner + canon-engineer exist and validate in ≥ 3 runs)
+- [ ] Gate A passes (planner + engineer exist and validate in ≥ 3 runs)
 - [ ] HIGH-1 resolution approach accepted (v2_1a-05 + v2_1a-06 as designed)
 - [ ] HIGH-2 decision accepted (aggregate scalar dropped)
 - [ ] v2_1a-pre runs successfully and any remediation tasks complete

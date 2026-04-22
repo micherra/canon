@@ -9,7 +9,7 @@ done_criteria:
     testable: "npm run build && npm test pass. Tool list with flag on shows log_step and verify_completion. With flag off, tools absent. log_step accepts domain_skills_loaded and outcome fields."
   - id: "dc-03"
     description: "11 agent definitions with maxTurns, permissionMode (plan or acceptEdits only), memory (6 agents: project), and skills frontmatter. Engineer consolidation and planner addition complete. Guide and chat removed. All skill references resolve."
-    testable: "ls agents/canon-*.md returns 11 files. canon-implementor, canon-fixer, canon-guide, canon-chat absent. canon-engineer and canon-planner present. Every skill name resolves under skills/canon/references/."
+    testable: "ls agents/canon-*.md returns 11 files. implementor, fixer, guide, chat absent. engineer and planner present. Every skill name resolves under skills/canon/references/."
   - id: "dc-04"
     description: "CLAUDE.md contains Agent Teams Orchestration section with 14 subsections, gated by CANON_AGENT_TEAMS_MODE=on. Includes inline dispatch for 4 removed flows, resume protocol, domain skill + template naming pattern, pre-build gate."
     testable: "Read CLAUDE.md. Confirm 14 subsections. Confirm inline dispatch table. Confirm resume protocol. Confirm flag boundary."
@@ -56,13 +56,13 @@ Registered behind feature flag. Completion verification hook calls `verify_compl
 #### 3. Agent roster changes (13 → 11)
 
 **Delete 4:**
-- `canon-implementor` + `canon-fixer` → merged into `canon-engineer` (same skill set, different prompting via dual-mode: implementation mode and fix mode)
-- `canon-guide` → lead handles via MCP tools directly
-- `canon-chat` → lead handles natively; planner covers structured evaluation
+- `implementor` + `fixer` → merged into `engineer` (same skill set, different prompting via dual-mode: implementation mode and fix mode)
+- `guide` → lead handles via MCP tools directly
+- `chat` → lead handles natively; planner covers structured evaluation
 
 **Create 2:**
-- `canon-engineer`: union tool list, `acceptEdits`, `memory: project`, preloaded with `agent-tdd-required` + `agent-minimal-fix` + 6 behavioral rules
-- `canon-planner`: NEW role — pre-build gate. Clarifies requirements, challenges assumptions, evaluates alternatives, assesses value. `model: opus`, `plan` mode, `memory: project`. Produces structured brief via `planning-brief.md` template.
+- `engineer`: union tool list, `acceptEdits`, `memory: project`, preloaded with `agent-tdd-required` + `agent-minimal-fix` + 6 behavioral rules
+- `planner`: NEW role — pre-build gate. Clarifies requirements, challenges assumptions, evaluates alternatives, assesses value. `model: opus`, `plan` mode, `memory: project`. Produces structured brief via `planning-brief.md` template.
 
 #### 4. Agent frontmatter updates (all 11)
 
@@ -103,7 +103,7 @@ Intent table covers: 5 runbook flows + 6 inline dispatches (review, security, ex
 - `completion-verify.sh` — called at flow end: journal verification, blocks if incomplete
 - `session-start-doc-check.sh` — SessionStart: compares HEAD vs `.canon/last-scribe-commit`
 - `session-start-kg-check.sh` — SessionStart: checks `knowledge-graph.db` exists and is fresh
-- `post-engineer-scribe.sh` — SubagentStop: queues scribe after canon-engineer completes
+- `post-engineer-scribe.sh` — SubagentStop: queues scribe after engineer completes
 
 ### Canon alignment
 

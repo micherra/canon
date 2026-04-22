@@ -19,11 +19,11 @@ When an agent expects an artifact from a previous state and the file does not ex
 
 | Agent | Artifact | Category | Behavior |
 |-------|----------|----------|----------|
-| **canon-tester** | `*-SUMMARY.md` | Required | Report BLOCKED — cannot determine what to test without knowing what was implemented |
-| **canon-reviewer** (Stage 3) | `*-SUMMARY.md` | Cross-check | Skip Stage 3 for that task, note in Cross-Check Notes: "Missing summary for {task_id} — cross-check skipped" |
-| **canon-scribe** | `*-SUMMARY.md` | Optional | Proceed with git diff only, note in CONTEXT-SYNC.md: "Summary missing for {task_id} — sync based on git diff" |
-| **canon-security** | `*-SUMMARY.md` | Optional | Scan code directly — security review is independent of summaries |
-| **canon-architect** | `research/*.md` | Optional | Proceed with own codebase analysis if research directory doesn't exist |
+| **tester** | `*-SUMMARY.md` | Required | Report BLOCKED — cannot determine what to test without knowing what was implemented |
+| **reviewer** (Stage 3) | `*-SUMMARY.md` | Cross-check | Skip Stage 3 for that task, note in Cross-Check Notes: "Missing summary for {task_id} — cross-check skipped" |
+| **scribe** | `*-SUMMARY.md` | Optional | Proceed with git diff only, note in CONTEXT-SYNC.md: "Summary missing for {task_id} — sync based on git diff" |
+| **security** | `*-SUMMARY.md` | Optional | Scan code directly — security review is independent of summaries |
+| **architect** | `research/*.md` | Optional | Proceed with own codebase analysis if research directory doesn't exist |
 
 ## Rationale
 

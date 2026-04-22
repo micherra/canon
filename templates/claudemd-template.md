@@ -1,11 +1,11 @@
 ---
 template: claudemd-template
 description: >-
-  Canonical structure for CLAUDE.md files managed by the canon-scribe.
+  Canonical structure for CLAUDE.md files managed by the scribe.
   Defines the sections the scribe maintains and the rules for editing them.
   Projects adopt this structure incrementally — the scribe adds sections
   as needed, never restructures the whole file at once.
-used-by: [canon-scribe]
+used-by: [scribe]
 output-path: CLAUDE.md (project root)
 ---
 

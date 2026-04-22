@@ -135,7 +135,7 @@ function makeFlowWithAfterAndNextState(): ResolvedFlow {
   return {
     consultations: {
       "post-impl-check": {
-        agent: "canon:canon-security",
+        agent: "canon:security",
         fragment: "post-impl-check",
         role: "security-reviewer",
         section: "Post-Implementation Check",
@@ -152,14 +152,14 @@ function makeFlowWithAfterAndNextState(): ResolvedFlow {
     states: {
       done: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         consultations: {
           after: ["post-impl-check"],
         },
         type: "wave",
       },
       review: {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         consultations: {
           before: ["post-impl-check"],
         },
@@ -173,7 +173,7 @@ function makeFlowWithAfterNoSection(): ResolvedFlow {
   return {
     consultations: {
       "quick-check": {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         fragment: "quick-check",
         role: "researcher",
         // No "section" — deliberate gap from after-02 Known Gaps
@@ -189,7 +189,7 @@ function makeFlowWithAfterNoSection(): ResolvedFlow {
     states: {
       done: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         consultations: {
           after: ["quick-check"],
         },
@@ -485,7 +485,7 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
 
     const entry = result.consultation_prompts[0];
     expect(entry.name).toBe("quick-check");
-    expect(entry.agent).toBe("canon:canon-researcher");
+    expect(entry.agent).toBe("canon:researcher");
     expect("section" in entry).toBe(false); // No section key in entry
   });
 });

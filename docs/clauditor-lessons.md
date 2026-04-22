@@ -153,15 +153,15 @@ Defer this item until ADR-011 (flow-level concerns) and ADR-012 (conditional sta
 
 **What it does**
 
-Extends `canon-learner` to mine `.canon/workspaces/*/log.jsonl` across builds, looking for repeated agent sequences (e.g., implement → fail → fix → re-test appears in 70% of builds). High-frequency sequences can surface as flow variant candidates or new principle suggestions, feeding back into Canon's design over time.
+Extends `learner` to mine `.canon/workspaces/*/log.jsonl` across builds, looking for repeated agent sequences (e.g., implement → fail → fix → re-test appears in 70% of builds). High-frequency sequences can surface as flow variant candidates or new principle suggestions, feeding back into Canon's design over time.
 
 **What Canon currently has**
 
-`canon-learner` currently performs pattern analysis on a single session or on principles, but does not aggregate across the full workspace history. Each build's `log.jsonl` is self-contained and there is no cross-build analysis step. Patterns that repeat across many builds are invisible to the pipeline.
+`learner` currently performs pattern analysis on a single session or on principles, but does not aggregate across the full workspace history. Each build's `log.jsonl` is self-contained and there is no cross-build analysis step. Patterns that repeat across many builds are invisible to the pipeline.
 
 **Proposed implementation approach**
 
-- Add a `mine_patterns` task to `canon-learner`'s skill definition, triggered either on demand or after a configurable number of builds.
+- Add a `mine_patterns` task to `learner`'s skill definition, triggered either on demand or after a configurable number of builds.
 - The learner reads all `log.jsonl` files under `.canon/workspaces/`, extracts agent-type sequences per build, and computes frequency distributions.
 - Sequences above a frequency threshold (e.g., appearing in >30% of builds) are written to `.canon/pattern-report.md` with occurrence counts and example build IDs.
 - The learner can optionally propose a new flow variant YAML or a principle draft, tagged for human review before adoption.
@@ -169,13 +169,13 @@ Extends `canon-learner` to mine `.canon/workspaces/*/log.jsonl` across builds, l
 
 **Architect's assessment**
 
-Defer until ADR-001 and ADR-016 are in place. The `canon-learner` extension is architecturally clean — it fits naturally in Cohort 4 alongside ADR-016's auto-triggered learning — but two blockers make building it now a poor investment.
+Defer until ADR-001 and ADR-016 are in place. The `learner` extension is architecturally clean — it fits naturally in Cohort 4 alongside ADR-016's auto-triggered learning — but two blockers make building it now a poor investment.
 
 First, most Canon projects do not yet have enough build history to make pattern mining meaningful. Mining a dozen `log.jsonl` files will surface noise, not signal. The feature pays off after sustained use, and that use has not accumulated yet.
 
 Second, once ADR-001 moves build events to SQLite, cross-build pattern analysis becomes a SQL aggregation query rather than JSONL file parsing. The SQL version will be simpler to write, more performant, and easier to evolve with new event types. Building the JSONL-parsing version now creates a throwaway implementation that adds migration work later.
 
-Wait for ADR-001. Then design `mine_patterns` as a SQLite query backed by the events table, with `canon-learner` as the consumer.
+Wait for ADR-001. Then design `mine_patterns` as a SQLite query backed by the events table, with `learner` as the consumer.
 
 **Open questions / notes**
 
@@ -253,7 +253,7 @@ The problem is real but the implementation is architecturally wrong for Canon's 
 
 **5. Workflow Pattern Mining — Build after ADR-001 + ADR-016**
 
-Clean architectural fit for `canon-learner`, but needs the SQLite event store (ADR-001) and sufficient build history before the signal is meaningful. Design the `mine_patterns` task as a SQL-backed query. Do not build the JSONL-parsing version.
+Clean architectural fit for `learner`, but needs the SQLite event store (ADR-001) and sufficient build history before the signal is meaningful. Design the `mine_patterns` task as a SQL-backed query. Do not build the JSONL-parsing version.
 
 **6. Hot-File History Injection — Revisit after evaluating `get_file_context` coverage**
 

@@ -2,7 +2,7 @@
 fragment: impl-handoff
 type: consultation
 description: Architect produces implementation overview for downstream test, security, and review agents
-agent: canon-architect
+agent: architect
 role: impl-handoff
 artifact: IMPL-OVERVIEW.md
 timeout: 5m

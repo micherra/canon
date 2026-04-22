@@ -5,7 +5,7 @@ description: Review current changes against Canon principles with optional layer
 states:
   review:
     type: single
-    agent: canon-reviewer
+    agent: reviewer
     template: review-checklist
     large_diff_threshold: 300
     cluster_by: layer

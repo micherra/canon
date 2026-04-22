@@ -123,12 +123,12 @@ function makeFullFlow(): ResolvedFlow {
         },
       },
       research: {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         transitions: { done: "implement" },
         type: "single",
       },
       review: {
-        agent: "canon:canon-reviewer",
+        agent: "canon:reviewer",
         transitions: { done: "terminal" },
         type: "single",
       },
@@ -152,12 +152,12 @@ function makeSkipFlow(): ResolvedFlow {
     },
     states: {
       research: {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         transitions: { done: "test-state" },
         type: "single",
       },
       review: {
-        agent: "canon:canon-reviewer",
+        agent: "canon:reviewer",
         transitions: { done: "terminal" },
         type: "single",
       },
@@ -165,7 +165,7 @@ function makeSkipFlow(): ResolvedFlow {
         type: "terminal",
       },
       "test-state": {
-        agent: "canon:canon-tester",
+        agent: "canon:tester",
         skip_when: "no_fix_requested" as const,
         transitions: { done: "review", skipped: "review" },
         type: "single",
@@ -186,7 +186,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         prompt: "Do research task",
         role: "main",
         template_paths: [],
@@ -266,7 +266,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-researcher", prompt: "Research", role: "main", template_paths: [] },
+          { agent: "canon:researcher", prompt: "Research", role: "main", template_paths: [] },
         ],
         state_type: "single",
       }),
@@ -278,7 +278,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       expect(turn1.action).toBe("spawn");
       if (turn1.action === "spawn") {
         expect(turn1.requests).toHaveLength(1);
-        expect(turn1.requests[0].agent_type).toBe("canon:canon-researcher");
+        expect(turn1.requests[0].agent_type).toBe("canon:researcher");
       }
     }
 
@@ -288,14 +288,14 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-01",
             prompt: "Implement task-01",
             role: "implementor",
             template_paths: [],
           },
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             item: "task-02",
             prompt: "Implement task-02",
             role: "implementor",
@@ -319,7 +319,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       expect(turn2.action).toBe("spawn");
       if (turn2.action === "spawn") {
         expect(turn2.requests).toHaveLength(2);
-        expect(turn2.requests.every((r) => r.agent_type === "canon:canon-implementor")).toBe(true);
+        expect(turn2.requests.every((r) => r.agent_type === "canon:implementor")).toBe(true);
       }
     }
 
@@ -345,9 +345,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("review") as never);
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [
-          { agent: "canon:canon-reviewer", prompt: "Review", role: "main", template_paths: [] },
-        ],
+        prompts: [{ agent: "canon:reviewer", prompt: "Review", role: "main", template_paths: [] }],
         state_type: "single",
       }),
     );
@@ -365,7 +363,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       expect(turn4.action).toBe("spawn");
       if (turn4.action === "spawn") {
         expect(turn4.requests).toHaveLength(1);
-        expect(turn4.requests[0].agent_type).toBe("canon:canon-reviewer");
+        expect(turn4.requests[0].agent_type).toBe("canon:reviewer");
       }
     }
 
@@ -410,7 +408,7 @@ describe("e2e: HITL flow (stuck detection → hitl breakpoint)", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-researcher", prompt: "Research", role: "main", template_paths: [] },
+          { agent: "canon:researcher", prompt: "Research", role: "main", template_paths: [] },
         ],
         state_type: "single",
       }),
@@ -475,7 +473,7 @@ describe("e2e: HITL flow (stuck detection → hitl breakpoint)", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-researcher",
+            agent: "canon:researcher",
             prompt: "Retry research",
             role: "main",
             template_paths: [],
@@ -538,7 +536,7 @@ describe("e2e: skip-state flow (research → skip(test-state) → review → don
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-researcher", prompt: "Research", role: "main", template_paths: [] },
+          { agent: "canon:researcher", prompt: "Research", role: "main", template_paths: [] },
         ],
         state_type: "single",
       }),
@@ -567,9 +565,7 @@ describe("e2e: skip-state flow (research → skip(test-state) → review → don
     // enterAndPrepareState for review
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [
-          { agent: "canon:canon-reviewer", prompt: "Review", role: "main", template_paths: [] },
-        ],
+        prompts: [{ agent: "canon:reviewer", prompt: "Review", role: "main", template_paths: [] }],
         state_type: "single",
       }),
     );
@@ -589,7 +585,7 @@ describe("e2e: skip-state flow (research → skip(test-state) → review → don
       expect(turn2.action).toBe("spawn");
       if (turn2.action === "spawn") {
         expect(turn2.requests).toHaveLength(1);
-        expect(turn2.requests[0].agent_type).toBe("canon:canon-reviewer");
+        expect(turn2.requests[0].agent_type).toBe("canon:reviewer");
       }
     }
 

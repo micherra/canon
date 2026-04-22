@@ -56,12 +56,12 @@ function makeFlow(
     spawn_instructions: {},
     states: {
       design: {
-        agent: "canon-architect",
+        agent: "architect",
         transitions: { approved: "implement", reject: "terminal", revise: "design" },
         type: "single",
       },
       implement: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         type: "single",
       },
       terminal: {
@@ -99,7 +99,7 @@ describe("shouldApprovalGate", () => {
 
   it("returns true for architect agent on medium tier with approval transitions (tier default)", () => {
     const stateDef: StateDefinition = {
-      agent: "canon-architect",
+      agent: "architect",
       transitions: { approved: "implement", revise: "design" },
       type: "single",
     };
@@ -110,7 +110,7 @@ describe("shouldApprovalGate", () => {
 
   it("returns true for architect agent on medium tier with reject transition (second check)", () => {
     const stateDef: StateDefinition = {
-      agent: "canon-architect",
+      agent: "architect",
       transitions: { reject: "hitl" },
       type: "single",
     };
@@ -122,7 +122,7 @@ describe("shouldApprovalGate", () => {
 
   it("returns true for architect agent on large tier with approval transitions (tier default)", () => {
     const stateDef: StateDefinition = {
-      agent: "canon-architect",
+      agent: "architect",
       transitions: { approved: "implement", reject: "hitl", revise: "design" },
       type: "single",
     };
@@ -133,7 +133,7 @@ describe("shouldApprovalGate", () => {
 
   it("returns true for architect agent on large tier with revise transition (second check)", () => {
     const stateDef: StateDefinition = {
-      agent: "canon-architect",
+      agent: "architect",
       transitions: { revise: "design" },
       type: "single",
     };
@@ -143,21 +143,21 @@ describe("shouldApprovalGate", () => {
   });
 
   it("returns false for non-architect agent on medium tier", () => {
-    const stateDef: StateDefinition = { agent: "canon:canon-implementor", type: "single" };
+    const stateDef: StateDefinition = { agent: "canon:implementor", type: "single" };
     const flow = makeFlow("medium");
     const board = makeBoard();
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("returns false for small tier (no tier defaults)", () => {
-    const stateDef: StateDefinition = { agent: "canon-architect", type: "single" };
+    const stateDef: StateDefinition = { agent: "architect", type: "single" };
     const flow = makeFlow("small");
     const board = makeBoard();
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("returns false for small tier with architect agent (no tier defaults)", () => {
-    const stateDef: StateDefinition = { agent: "canon-architect", type: "single" };
+    const stateDef: StateDefinition = { agent: "architect", type: "single" };
     const flow = makeFlow("small");
     const board = makeBoard();
     // small has no tier defaults
@@ -180,7 +180,7 @@ describe("shouldApprovalGate", () => {
   it("returns false for architect agent on medium tier when transitions lack approval keys", () => {
     // Simulates flows like migrate.md where design only has done/has_questions
     const stateDef: StateDefinition = {
-      agent: "canon-architect",
+      agent: "architect",
       transitions: { done: "implement", has_questions: "hitl" },
       type: "single",
     };
@@ -191,7 +191,7 @@ describe("shouldApprovalGate", () => {
 
   it("returns false for architect agent on large tier when transitions are empty", () => {
     const stateDef: StateDefinition = {
-      agent: "canon-architect",
+      agent: "architect",
       transitions: {},
       type: "single",
     };
@@ -202,7 +202,7 @@ describe("shouldApprovalGate", () => {
 
   it("returns true for architect agent on medium tier when transitions include 'approved'", () => {
     const stateDef: StateDefinition = {
-      agent: "canon-architect",
+      agent: "architect",
       transitions: { approved: "implement", revise: "design" },
       type: "single",
     };
@@ -278,7 +278,7 @@ describe("shouldApprovalGateWaveBoundary", () => {
   });
 
   it("returns false for non-wave state type on large tier (type guard)", () => {
-    const stateDef: StateDefinition = { agent: "canon-architect", type: "single" };
+    const stateDef: StateDefinition = { agent: "architect", type: "single" };
     const flow = makeFlow("large");
     const board = makeBoard();
     expect(shouldApprovalGateWaveBoundary(stateDef, flow, board)).toBe(false);
@@ -304,7 +304,7 @@ describe("initBoard with approval gate fields", () => {
       name: "test-flow",
       spawn_instructions: {},
       states: {
-        design: { agent: "canon:canon-architect", type: "single" },
+        design: { agent: "canon:architect", type: "single" },
         terminal: { type: "terminal" },
         ...stateOverrides,
       },
@@ -352,7 +352,7 @@ describe("initBoard with approval gate fields", () => {
 
   it("does NOT create IterationEntry for non-gated states without max_iterations", () => {
     const flow = makeMinimalFlow({
-      design: { agent: "canon:canon-architect", type: "single" },
+      design: { agent: "canon:architect", type: "single" },
     });
     const board = initBoard(flow, "task", "abc");
     expect(board.iterations.design).toBeUndefined();

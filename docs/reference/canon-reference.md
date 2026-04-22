@@ -118,7 +118,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 
 Query commits by workflow: `git log --grep='Canon-Workflow: my-slug'`
-Query commits by agent: `git log --grep='Canon-Agent: canon-implementor'`
+Query commits by agent: `git log --grep='Canon-Agent: implementor'`
 
 ### File Claims
 

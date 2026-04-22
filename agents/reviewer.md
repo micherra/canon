@@ -1,5 +1,5 @@
 ---
-name: canon-reviewer
+name: reviewer
 description: >-
   Reviews code changes against Canon engineering principles. Four-stage
   evaluation: principle compliance, code quality, compliance cross-check, and

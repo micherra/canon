@@ -11,7 +11,7 @@ import { z } from "zod";
 // SpawnRequest — one agent spawn instruction
 
 export type SpawnRequest = {
-  /** Agent type identifier (e.g., "canon:canon-implementor") */
+  /** Agent type identifier (e.g., "canon:implementor") */
   agent_type: string;
   /** Prompt to pass to the agent */
   prompt: string;

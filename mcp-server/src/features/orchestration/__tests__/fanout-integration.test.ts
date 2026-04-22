@@ -120,7 +120,7 @@ function makeReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
       done: { type: "terminal" },
       hitl: { type: "terminal" },
       review: {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         large_diff_threshold: 5,
         transitions: {
           blocking: "hitl",
@@ -262,7 +262,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         done: { type: "terminal" },
         hitl: { type: "terminal" },
         review: {
-          agent: "canon-implementor",
+          agent: "implementor",
           transitions: {
             blocked: "hitl",
             cannot_fix: "hitl",
@@ -382,7 +382,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
       states: {
         done: { type: "terminal" },
         review: {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           // no large_diff_threshold
           transitions: { clean: "done" },
           type: "single",

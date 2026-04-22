@@ -189,7 +189,7 @@ relative to DESIGN + v2.md.
 | `completion-verify.sh` | Called explicitly by the lead | Reads the orchestration journal; exits non-zero when steps are incomplete or artifacts missing. NOT auto-registered. |
 | `session-start-doc-check.sh` | SessionStart | Advisory nudge when HEAD diverges from `.canon/last-scribe-commit`. |
 | `session-start-kg-check.sh` | SessionStart | Advisory nudge when `.canon/knowledge-graph.db` is missing or stale. |
-| `post-engineer-scribe.sh` | SubagentStop | After `canon-engineer` completes, writes `pending-scribe.json` so the lead runs scribe before flow completion. |
+| `post-engineer-scribe.sh` | SubagentStop | After `engineer` completes, writes `pending-scribe.json` so the lead runs scribe before flow completion. |
 
 `completion-verify.sh` is intentionally NOT registered in `hooks.json`
 — registering it as PostToolUse would fire on every Bash call. It is

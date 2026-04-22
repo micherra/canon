@@ -52,7 +52,7 @@ Discovery criteria:
 
 When gaps are found, create stub CLAUDE.md files with basic module description derived from file names and exports.
 
-**Files:** `agents/canon-scribe.md` (add Step 0: Module Discovery before Step 1: Read the diff)
+**Files:** `agents/scribe.md` (add Step 0: Module Discovery before Step 1: Read the diff)
 
 #### 1c. Code-to-Docs Mapping (`doc-map.yaml`)
 
@@ -82,7 +82,7 @@ mappings:
 
 The scribe reads this mapping in Step 1 and uses it to determine which docs to check when the diff touches a mapped directory. Eliminates inference from first principles.
 
-**Files:** `.canon/doc-map.yaml` (new), `agents/canon-scribe.md` (reference doc-map in Step 1)
+**Files:** `.canon/doc-map.yaml` (new), `agents/scribe.md` (reference doc-map in Step 1)
 
 #### 1d. Pre-Classification Before Spawn
 
@@ -96,7 +96,7 @@ Move "is this contract-level?" out of the scribe's reasoning. The orchestrator (
 
 Pass pre-classified results to the scribe so it doesn't re-derive the same information. This addresses the model gap — mechanical detection handles obvious cases, leaving genuine judgment calls to the agent.
 
-**Files:** `flows/fragments/context-sync.yaml` (enhance skip_when), `agents/canon-scribe.md` (accept pre-classified file list)
+**Files:** `flows/fragments/context-sync.yaml` (enhance skip_when), `agents/scribe.md` (accept pre-classified file list)
 
 ### Phase 2: Intelligence Signals (after git intelligence layer)
 

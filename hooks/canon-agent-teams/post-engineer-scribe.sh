@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # post-engineer-scribe.sh — SubagentStop hook that queues a scribe run after
-# canon-engineer completes.
+# engineer completes.
 #
-# Writes ${WORKSPACE}/pending-scribe.json recording that canon-engineer made
+# Writes ${WORKSPACE}/pending-scribe.json recording that engineer made
 # source changes. The lead is instructed (via CLAUDE.md completion checklist)
-# to spawn canon-scribe before completing the flow when this file exists.
+# to spawn scribe before completing the flow when this file exists.
 #
 # Only active when CANON_AGENT_TEAMS_MODE=on.
 #
 # Input: JSON on stdin (Claude Code SubagentStop hook format). We inspect the
-#        subagent's type and, when canon-engineer is the one stopping, record
+#        subagent's type and, when engineer is the one stopping, record
 #        the queue entry. Other subagents are no-ops.
 # Exit 0: always — this hook is advisory/bookkeeping, never blocks.
 
@@ -25,9 +25,9 @@ if [[ -z "$INPUT" ]]; then
   exit 0
 fi
 
-# Look for canon-engineer in the subagent descriptor. Tolerant of field name
+# Look for engineer in the subagent descriptor. Tolerant of field name
 # variation across Claude Code versions: `subagent_type`, `agent`, `agent_type`.
-if ! echo "$INPUT" | grep -qE '"(subagent_type|agent|agent_type)"[[:space:]]*:[[:space:]]*"[^"]*canon-engineer'; then
+if ! echo "$INPUT" | grep -qE '"(subagent_type|agent|agent_type)"[[:space:]]*:[[:space:]]*"[^"]*engineer'; then
   exit 0
 fi
 
@@ -52,7 +52,7 @@ STAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 cat > "$WORKSPACE/pending-scribe.json" <<EOF
 {
   "queued_at": "$STAMP",
-  "reason": "canon-engineer completed; source changes may need doc sync",
+  "reason": "engineer completed; source changes may need doc sync",
   "queued_by": "post-engineer-scribe.sh"
 }
 EOF

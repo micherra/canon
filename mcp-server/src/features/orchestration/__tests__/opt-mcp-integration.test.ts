@@ -85,7 +85,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement ${task}." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -139,7 +139,7 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           skip_when: "no_contract_changes",
           type: "single",
         },
@@ -171,7 +171,7 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [{ as: "some_context", from: "board" }],
           type: "single",
         },
@@ -197,7 +197,7 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           large_diff_threshold: 5,
           type: "parallel-per",
         },
@@ -230,7 +230,7 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [{ as: "ctx", from: "board" }],
           large_diff_threshold: 5,
           skip_when: "no_contract_changes",
@@ -276,7 +276,7 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           skip_when: "no_contract_changes",
           type: "single",
         },
@@ -395,7 +395,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           skip_when: "no_contract_changes",
           type: "single",
         },
@@ -429,7 +429,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           skip_when: "no_contract_changes",
           type: "single",
         },
@@ -456,7 +456,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           skip_when: "no_contract_changes",
           type: "single",
         },

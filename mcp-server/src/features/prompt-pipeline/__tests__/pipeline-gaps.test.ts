@@ -126,7 +126,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement the task." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -164,7 +164,7 @@ function makeFanoutCtx(
     mergedVariables: { CANON_PLUGIN_ROOT: "" },
     prompts: [],
     rawInstruction: "Do the thing",
-    state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+    state: { agent: "implementor", type: "single" } as StateDefinition,
     warnings: [],
     ...rest,
   };
@@ -203,7 +203,7 @@ describe("get-spawn-prompt thin wrapper — delegation contract", () => {
     const result = await getSpawnPrompt(makeInput(workspace));
 
     const entry: SpawnPromptEntry = result.prompts[0];
-    expect(entry.agent).toBe("canon-implementor");
+    expect(entry.agent).toBe("implementor");
     expect(typeof entry.prompt).toBe("string");
     expect(Array.isArray(entry.template_paths)).toBe(true);
   });
@@ -223,7 +223,7 @@ describe("get-spawn-prompt thin wrapper — delegation contract", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -245,7 +245,7 @@ describe("escaping ownership transfer — pipeline escapes raw consultation summ
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -274,7 +274,7 @@ describe("escaping ownership transfer — pipeline escapes raw consultation summ
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -299,7 +299,7 @@ describe("escaping ownership transfer — pipeline escapes raw consultation summ
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -334,7 +334,7 @@ describe("fanout — fanned_out flag is set only for single-state multi-prompt e
     const ctx = makeFanoutCtx({
       basePrompt: "Review ${item.cluster_key}",
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         large_diff_threshold: 5,
         type: "single",
       } as StateDefinition,
@@ -358,7 +358,7 @@ describe("fanout — fanned_out flag is set only for single-state multi-prompt e
   it("wave state with multiple items does NOT set fanned_out (wave is not a single-state expansion)", async () => {
     const ctx = makeFanoutCtx({
       items: ["task-1", "task-2"],
-      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      state: { agent: "implementor", type: "wave" } as StateDefinition,
     });
 
     const result = await fanout(ctx);
@@ -375,7 +375,7 @@ describe("fanout — debate triggered only when state_id === flow.entry", () => 
   it("does NOT inspect debate progress when state_id is NOT the flow entry state", async () => {
     const flow: ResolvedFlow = {
       debate: {
-        composition: ["canon-architect"],
+        composition: ["architect"],
         continue_to_build: true,
         convergence_check_after: 2,
         hitl_checkpoint: false,
@@ -389,15 +389,15 @@ describe("fanout — debate triggered only when state_id === flow.entry", () => 
       spawn_instructions: { implement: "Implement", review: "Review" },
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-architect", type: "single" },
-        review: { agent: "canon-reviewer", type: "single" },
+        implement: { agent: "architect", type: "single" },
+        review: { agent: "reviewer", type: "single" },
       },
     } as unknown as ResolvedFlow;
 
     const ctx = makeFanoutCtx({
       basePrompt: "Review this",
       flow,
-      state: { agent: "canon-reviewer", type: "single" } as StateDefinition,
+      state: { agent: "reviewer", type: "single" } as StateDefinition,
       state_id: "review", // NOT the entry state
     });
 
@@ -420,7 +420,7 @@ describe("fanout — debate triggered only when state_id === flow.entry", () => 
   it("DOES inspect debate progress when state_id equals flow.entry", async () => {
     const flow: ResolvedFlow = {
       debate: {
-        composition: ["canon-architect"],
+        composition: ["architect"],
         continue_to_build: true,
         convergence_check_after: 2,
         hitl_checkpoint: false,
@@ -434,13 +434,13 @@ describe("fanout — debate triggered only when state_id === flow.entry", () => 
       spawn_instructions: { implement: "Implement this" },
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-architect", type: "single" },
+        implement: { agent: "architect", type: "single" },
       },
     } as unknown as ResolvedFlow;
 
     const ctx = makeFanoutCtx({
       flow,
-      state: { agent: "canon-architect", type: "single" } as StateDefinition,
+      state: { agent: "architect", type: "single" } as StateDefinition,
       state_id: "implement", // IS the entry state
     });
 
@@ -478,7 +478,7 @@ describe("fanout — parallel state edge cases", () => {
     // When agents.length > 1, the per-agent path is used regardless of roles
     const ctx = makeFanoutCtx({
       state: {
-        agents: ["canon-implementor", "canon-reviewer"],
+        agents: ["implementor", "reviewer"],
         roles: ["frontend", "backend"],
         type: "parallel",
       } as StateDefinition,
@@ -488,7 +488,7 @@ describe("fanout — parallel state edge cases", () => {
 
     // 2 agents → 2 prompts (per-agent, not per-role)
     expect(result.prompts).toHaveLength(2);
-    expect(result.prompts[0].agent).toBe("canon-implementor");
-    expect(result.prompts[1].agent).toBe("canon-reviewer");
+    expect(result.prompts[0].agent).toBe("implementor");
+    expect(result.prompts[1].agent).toBe("reviewer");
   });
 });

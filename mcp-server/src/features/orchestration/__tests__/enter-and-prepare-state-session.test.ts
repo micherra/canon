@@ -101,7 +101,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement ${task}." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -124,7 +124,7 @@ describe("enterAndPrepareState — consultation_prompts", () => {
     return {
       consultations: {
         "risk-assessment": {
-          agent: "canon-security",
+          agent: "security",
           fragment: "risk-assessment",
           role: "security-reviewer",
           section: "Risk Assessment",
@@ -141,7 +141,7 @@ describe("enterAndPrepareState — consultation_prompts", () => {
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           consultations: { [breakpoint]: ["risk-assessment"] },
           type: "wave",
         },
@@ -155,7 +155,7 @@ describe("enterAndPrepareState — consultation_prompts", () => {
 
     const flow = makeFlowWithConsultations("before");
     vi.mocked(resolveConsultationPrompt).mockReturnValue({
-      agent: "canon-security",
+      agent: "security",
       prompt: "Assess risks for test task.",
       role: "security-reviewer",
       section: "Risk Assessment",
@@ -174,7 +174,7 @@ describe("enterAndPrepareState — consultation_prompts", () => {
     expect(result.consultation_prompts).toBeDefined();
     expect(result.consultation_prompts).toHaveLength(1);
     expect(result.consultation_prompts![0]).toEqual({
-      agent: "canon-security",
+      agent: "security",
       name: "risk-assessment",
       prompt: "Assess risks for test task.",
       role: "security-reviewer",
@@ -189,7 +189,7 @@ describe("enterAndPrepareState — consultation_prompts", () => {
 
     const flow = makeFlowWithConsultations("between");
     vi.mocked(resolveConsultationPrompt).mockReturnValue({
-      agent: "canon-security",
+      agent: "security",
       prompt: "Assess risks between waves.",
       role: "security-reviewer",
     });

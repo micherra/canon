@@ -36,10 +36,10 @@ You are the Canon Orchestrator — the single entry point for all Canon interact
 | **review** | Pipeline with `review-only` flow |
 | **security** | Pipeline with `security-audit` flow |
 | **explore** | Pipeline with `explore` flow |
-| **question / status** | Spawn `canon-guide` |
-| **principle** | Spawn `canon-writer` |
-| **learn** | Spawn `canon-learner` |
-| **chat** | Spawn `canon-chat` |
+| **question / status** | Spawn `guide` |
+| **principle** | Spawn `writer` |
+| **learn** | Spawn `learner` |
+| **chat** | Spawn `chat` |
 | **resume** | Read `board.json` → resume drive loop |
 | **greeting** | Respond directly |
 
@@ -175,22 +175,22 @@ Wave boundary approvals (epic flows) use the same three options. Present wave pr
 
 | Tool | Used by |
 |------|---------|
-| `write_plan_index` | canon-architect |
-| `write_implementation_summary` | canon-implementor |
-| `write_review` | canon-reviewer |
-| `write_test_report` | canon-tester |
-| `get_principles` / `list_principles` | canon-architect, canon-implementor, canon-reviewer |
-| `graph_query` | canon-researcher, canon-architect, canon-implementor, canon-reviewer, canon-security, canon-fixer, canon-tester, canon-learner, canon-guide, canon-chat |
-| `codebase_graph` | canon-researcher, canon-architect, canon-reviewer, canon-security, canon-learner, canon-guide, canon-chat |
-| `get_file_context` | canon-researcher, canon-architect, canon-reviewer, canon-security, canon-fixer, canon-learner, canon-guide, canon-chat |
-| `semantic_search` | canon-researcher, canon-architect, canon-reviewer, canon-security, canon-fixer, canon-learner, canon-guide, canon-chat |
-| `store_summaries` / `store_pr_review` | canon-scribe, canon-reviewer |
-| `record_agent_metrics` | canon-implementor, canon-tester |
-| `get_transcript` | canon-reviewer, canon-fixer |
-| `post_message` / `get_messages` | canon-implementor and all wave agents |
-| `show_pr_impact` / `review_code` / `get_drift_report` | canon-reviewer, canon-security |
-| `inject_wave_event` | canon-architect (event resolution mode only) |
-| `update_board` | canon-architect (set_metadata for affected_files) |
+| `write_plan_index` | architect |
+| `write_implementation_summary` | implementor |
+| `write_review` | reviewer |
+| `write_test_report` | tester |
+| `get_principles` / `list_principles` | architect, implementor, reviewer |
+| `graph_query` | researcher, architect, implementor, reviewer, security, fixer, tester, learner, guide, chat |
+| `codebase_graph` | researcher, architect, reviewer, security, learner, guide, chat |
+| `get_file_context` | researcher, architect, reviewer, security, fixer, learner, guide, chat |
+| `semantic_search` | researcher, architect, reviewer, security, fixer, learner, guide, chat |
+| `store_summaries` / `store_pr_review` | scribe, reviewer |
+| `record_agent_metrics` | implementor, tester |
+| `get_transcript` | reviewer, fixer |
+| `post_message` / `get_messages` | implementor and all wave agents |
+| `show_pr_impact` / `review_code` / `get_drift_report` | reviewer, security |
+| `inject_wave_event` | architect (event resolution mode only) |
+| `update_board` | architect (set_metadata for affected_files) |
 
 ## Workspace Ownership
 

@@ -32,10 +32,10 @@ Everything else — implementation, research, review, testing — is agent work.
 | **test** | Load `test-gap` flow → drive state machine |
 | **review** | Load `review-only` flow → drive state machine |
 | **security** | Load `security-audit` flow → drive state machine |
-| **question** | Spawn `canon:canon-guide` |
-| **chat** | Spawn `canon:canon-chat` (discussion, design thinking, ideas) |
-| **principle** | Spawn `canon:canon-writer` |
-| **learn** | Spawn `canon:canon-learner` |
+| **question** | Spawn `canon:guide` |
+| **chat** | Spawn `canon:chat` (discussion, design thinking, ideas) |
+| **principle** | Spawn `canon:writer` |
+| **learn** | Spawn `canon:learner` |
 | **resume** | Read `board.json` → resume state machine |
 | **greeting** | Respond directly |
 
@@ -43,7 +43,7 @@ Everything else — implementation, research, review, testing — is agent work.
 
 - **Don't ask which flow to use.** Auto-detect and pick it.
 - **Don't ask for confirmation before starting** unless the request is genuinely ambiguous.
-- **Don't expose Canon jargon.** Say "I'll research this first, then plan and implement" — not "entering research state, spawning canon-researcher".
+- **Don't expose Canon jargon.** Say "I'll research this first, then plan and implement" — not "entering research state, spawning researcher".
 - **Do give progress updates** in plain language.
 
 ## Silent Dispatch
@@ -91,19 +91,19 @@ When in doubt between tiers, prefer the higher tier. Proceed immediately — don
 
 | Agent | subagent_type | When |
 |-------|---------------|------|
-| Researcher | `canon:canon-researcher` | Research states |
-| Architect | `canon:canon-architect` | Design states |
-| Implementor | `canon:canon-implementor` | Implementation states |
-| Tester | `canon:canon-tester` | Test states |
-| Reviewer | `canon:canon-reviewer` | Review states |
-| Security | `canon:canon-security` | Security states |
-| Fixer | `canon:canon-fixer` | Fix states |
-| Scribe | `canon:canon-scribe` | Context sync states |
-| Shipper | `canon:canon-shipper` | Ship states |
-| Chat | `canon:canon-chat` | Discussion, brainstorming, ideas |
-| Guide | `canon:canon-guide` | Questions, status |
-| Writer | `canon:canon-writer` | Principle authoring |
-| Learner | `canon:canon-learner` | Pattern analysis |
+| Researcher | `canon:researcher` | Research states |
+| Architect | `canon:architect` | Design states |
+| Implementor | `canon:implementor` | Implementation states |
+| Tester | `canon:tester` | Test states |
+| Reviewer | `canon:reviewer` | Review states |
+| Security | `canon:security` | Security states |
+| Fixer | `canon:fixer` | Fix states |
+| Scribe | `canon:scribe` | Context sync states |
+| Shipper | `canon:shipper` | Ship states |
+| Chat | `canon:chat` | Discussion, brainstorming, ideas |
+| Guide | `canon:guide` | Questions, status |
+| Writer | `canon:writer` | Principle authoring |
+| Learner | `canon:learner` | Pattern analysis |
 
 **Isolation requirement:** Every `Agent` spawn MUST include `isolation: "worktree"` — except when the SpawnRequest carries a `worktree_path`. Wave task SpawnRequests include `worktree_path` pointing to Canon's worktree; the orchestrator spawns those agents without Agent tool isolation so they work directly in Canon's worktree.
 

@@ -20,7 +20,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 Trailers are queryable via standard git tooling:
 ```bash
 git log --grep='Canon-Workflow: my-slug'
-git log --grep='Canon-Agent: canon-implementor'
+git log --grep='Canon-Agent: implementor'
 ```
 
 Key exports: `formatCommitTrailers`, `buildCommitMessage`, `TrailerOpts`

@@ -75,12 +75,12 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     states: {
       implement: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         transitions: { done: "terminal" },
         type: "single",
       },
       research: {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         transitions: { done: "implement" },
         type: "single",
       },
@@ -104,7 +104,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         prompt: "Do research task",
         role: "main",
         template_paths: [],
@@ -220,7 +220,7 @@ describe("driveFlow — consultation prompts", () => {
       makeEnterResult({
         consultation_prompts: [
           {
-            agent: "canon:canon-security",
+            agent: "canon:security",
             name: "security-check",
             prompt: "Check security",
             role: "consultation",
@@ -228,7 +228,7 @@ describe("driveFlow — consultation prompts", () => {
         ],
         prompts: [
           {
-            agent: "canon:canon-researcher",
+            agent: "canon:researcher",
             prompt: "Research task",
             role: "main",
             template_paths: [],
@@ -247,7 +247,7 @@ describe("driveFlow — consultation prompts", () => {
     expect(result.requests).toHaveLength(2);
     const consultationReq = result.requests.find((r) => r.role === "consultation");
     expect(consultationReq).toBeDefined();
-    expect(consultationReq?.agent_type).toBe("canon:canon-security");
+    expect(consultationReq?.agent_type).toBe("canon:security");
     expect(consultationReq?.prompt).toBe("Check security");
   });
 });

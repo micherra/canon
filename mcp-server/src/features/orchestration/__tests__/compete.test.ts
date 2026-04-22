@@ -23,7 +23,7 @@ vi.mock("../services/diff-cluster.ts", () => ({
 
 describe("compete", () => {
   const basePrompt: SpawnPromptEntry = {
-    agent: "canon-architect",
+    agent: "architect",
     prompt: "Design the authentication system for the app.",
     template_paths: ["/templates/design-document.md"],
   };
@@ -82,7 +82,7 @@ describe("compete", () => {
 
       for (const p of result) {
         expect(p.prompt).toContain("Design the authentication system");
-        expect(p.agent).toBe("canon-architect");
+        expect(p.agent).toBe("architect");
         expect(p.template_paths).toEqual(["/templates/design-document.md"]);
       }
     });
@@ -164,7 +164,7 @@ function makeCompeteFlow(
     },
     states: {
       design: {
-        agent: "canon-architect",
+        agent: "architect",
         compete: competeValue,
         transitions: { done: "ship" },
         type: "single",
@@ -214,7 +214,7 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
     });
 
     for (const p of result.prompts) {
-      expect(p.agent).toBe("canon-architect");
+      expect(p.agent).toBe("architect");
     }
   });
 
@@ -252,7 +252,7 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
       },
       states: {
         build: {
-          agent: "canon-implementor",
+          agent: "implementor",
           compete: "auto" as any, // non-single with compete
           transitions: { done: "done_state" },
           type: "wave",

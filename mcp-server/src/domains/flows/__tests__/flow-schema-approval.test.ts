@@ -164,7 +164,7 @@ describe("ApprovalBreakpoint interface", () => {
   it("accepts a structurally correct ApprovalBreakpoint value", () => {
     // This is a compile-time check — if the type is wrong, TS will error at build time.
     const breakpoint: ApprovalBreakpoint = {
-      agent_type: "canon:canon-implementor",
+      agent_type: "canon:implementor",
       artifacts: ["/workspace/plans/task-01-SUMMARY.md"],
       options: ["approved", "revise", "reject"],
       state_id: "implement",
@@ -182,7 +182,7 @@ describe("DriveFlowAction approval variant", () => {
     const action: DriveFlowAction = {
       action: "approval",
       breakpoint: {
-        agent_type: "canon:canon-architect",
+        agent_type: "canon:architect",
         artifacts: [],
         options: ["approved", "revise", "reject"],
         state_id: "design",

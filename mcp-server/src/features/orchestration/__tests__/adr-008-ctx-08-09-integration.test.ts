@@ -289,8 +289,7 @@ describe("ctx-09 integration — flow YAML inject_context declarations", () => {
     // fast-path has a single-agent execute or implement state
     // Find a state with the implementor agent
     const implementorState = Object.values(flow.states).find(
-      (state) =>
-        state.type !== "terminal" && "agent" in state && state.agent === "canon-implementor",
+      (state) => state.type !== "terminal" && "agent" in state && state.agent === "implementor",
     );
 
     expect(implementorState).toBeDefined();
@@ -414,7 +413,7 @@ describe("ctx-09 integration — pipeline stage 1 invokes file_context handler",
       prompts: [],
       rawInstruction: "",
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         inject_context: [{ as: "file_context", from: "file_context" }],
         transitions: {},
         type: "single",
@@ -466,7 +465,7 @@ describe("ctx-09 integration — pipeline stage 1 invokes file_context handler",
       prompts: [],
       rawInstruction: "",
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         // No inject_context
         transitions: {},
         type: "single",
@@ -511,7 +510,7 @@ describe("ctx-09 integration — pipeline stage 1 invokes file_context handler",
       prompts: [],
       rawInstruction: "",
       state: {
-        agent: "canon-implementor",
+        agent: "implementor",
         inject_context: [{ as: "file_context", from: "file_context" }],
         transitions: {},
         type: "single",

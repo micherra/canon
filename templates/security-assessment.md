@@ -1,14 +1,14 @@
 ---
 template: security-assessment
 description: >-
-  Standardized output for the canon-security agent. Records vulnerability
+  Standardized output for the security agent. Records vulnerability
   findings ranked by severity, passed checks, and blocking status.
-used-by: [canon-security]
-read-by: [canon-shipper]
+used-by: [security]
+read-by: [shipper]
 output-path: ${WORKSPACE}/plans/${slug}/SECURITY.md
 fields:
   status: "CLEAN | FINDINGS | CRITICAL"
-  agent: canon-security
+  agent: security
   timestamp: ISO-8601
   scope: "description of what was scanned"
   findings_count: "N (X critical, X high, X medium, X low)"
@@ -17,7 +17,7 @@ fields:
 ```markdown
 ---
 status: "{CLEAN|FINDINGS|CRITICAL}"
-agent: canon-security
+agent: security
 timestamp: "{ISO-8601}"
 scope: "{scope description}"
 findings_count: "{N} ({X} critical, {X} high, {X} medium, {X} low)"

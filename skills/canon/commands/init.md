@@ -61,9 +61,9 @@ This project has Canon initialized. **You ARE the orchestrator.** Drive the buil
 
 Classify every user message by intent:
 - **build/review/security** → Load flow with `load_flow`, init workspace with `init_workspace`, drive the state machine by calling `drive_flow` → process `SpawnRequest`/`HitlBreakpoint` → spawn specialist agent → `report_result`. Read `skills/canon/references/canon-orchestrator.md` for the full protocol.
-- **question/status** → Spawn `canon:canon-guide`
-- **principle authoring** → Spawn `canon:canon-writer`
-- **learn** → Spawn `canon:canon-learner`
+- **question/status** → Spawn `canon:guide`
+- **principle authoring** → Spawn `canon:writer`
+- **learn** → Spawn `canon:learner`
 - **git ops / read-only / chat** → Handle directly
 
 ## Canon Engineering Principles

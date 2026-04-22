@@ -26,7 +26,7 @@ vi.mock("@domains/messages/messages.ts", () => ({
 
 vi.mock("../model/tool-profiles.ts", () => ({
   AGENT_TOOL_PROFILES: {
-    "canon-implementor": {
+    implementor: {
       allowed: ["Read", "Edit", "Write"],
       disallowed: [],
     },
@@ -92,7 +92,7 @@ import { injectCoordination } from "../services/inject-coordination.ts";
 /** Build a minimal SpawnPromptEntry. */
 function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry {
   return {
-    agent: "canon-implementor",
+    agent: "implementor",
     prompt: "Do the work",
     template_paths: [],
     ...overrides,
@@ -123,7 +123,7 @@ function makeCtx(
           spawn_instructions: { implement: "Do the thing" },
           states: {
             done: { type: "terminal" },
-            implement: { agent: "canon-implementor", type: "single" },
+            implement: { agent: "implementor", type: "single" },
           },
         } as ResolvedFlow),
       state_id: state_id ?? "implement",
@@ -135,7 +135,7 @@ function makeCtx(
     mergedVariables: {},
     prompts: [makeEntry()],
     rawInstruction: "Do the thing",
-    state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+    state: { agent: "implementor", type: "single" } as StateDefinition,
     warnings: [],
     ...rest,
   };
@@ -196,12 +196,12 @@ describe("injectCoordination — commit provenance injection (step 3.5)", () => 
     vi.mocked(getExecutionStore).mockReturnValue(makeStoreWithSlug("my-slug"));
 
     const ctx = makeCtx({
-      prompts: [makeEntry({ agent: "canon-implementor" })],
+      prompts: [makeEntry({ agent: "implementor" })],
       state_id: "implement",
     });
     const result = await injectCoordination(ctx);
 
-    expect(result.prompts[0].prompt).toContain("Canon-Agent: canon-implementor");
+    expect(result.prompts[0].prompt).toContain("Canon-Agent: implementor");
   });
 
   it("provenance section contains Canon-State trailer with state_id", async () => {

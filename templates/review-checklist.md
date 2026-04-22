@@ -1,8 +1,8 @@
 ---
 template: review-checklist
 description: Structured format for review outputs
-used-by: [canon-reviewer]
-read-by: [canon-shipper]
+used-by: [reviewer]
+read-by: [shipper]
 output-path: ${WORKSPACE}/reviews/
 ---
 
@@ -13,7 +13,7 @@ Use this template when producing review reports for the workspace.
 ```markdown
 ---
 verdict: "{BLOCKING|WARNING|CLEAN}"
-agent: canon-reviewer
+agent: reviewer
 timestamp: "{ISO-8601}"
 files-reviewed: {N}
 principles-checked: {N}

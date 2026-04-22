@@ -67,7 +67,8 @@ import {
   type VersionedUpdateResult,
 } from "./execution-store-updater.ts";
 
-// Re-export factory and cache helpers so existing importers continue to work
+// Re-export factory and cache helpers so existing importers continue to work.
+// biome-ignore lint/performance/noBarrelFile: 131 downstream consumers depend on this barrel; migrating every importer is a separate refactor.
 export {
   assertWorkspacePath,
   clearStoreCache,

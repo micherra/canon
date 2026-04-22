@@ -201,7 +201,7 @@ function makeMinimalFlow() {
     },
     states: {
       impl: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         transitions: {
           done: "terminal",
         },

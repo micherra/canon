@@ -1,8 +1,8 @@
 ---
 template: design-document
 description: Structured format for design documents with North Star section
-used-by: [canon-architect]
-read-by: [canon-implementor, canon-reviewer]
+used-by: [architect]
+read-by: [implementor, reviewer]
 output-path: ${WORKSPACE}/plans/${slug}/DESIGN.md
 ---
 

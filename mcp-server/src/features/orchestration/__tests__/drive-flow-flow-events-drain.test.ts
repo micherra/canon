@@ -90,17 +90,17 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     states: {
       implement: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         transitions: { done: "review" },
         type: "single",
       },
       research: {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         transitions: { done: "implement" },
         type: "single",
       },
       review: {
-        agent: "canon:canon-reviewer",
+        agent: "canon:reviewer",
         transitions: { done: "terminal" },
         type: "single",
       },
@@ -125,7 +125,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         prompt: "Do implement task",
         role: "main",
         template_paths: [],
@@ -307,7 +307,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Do implement",
             role: "main",
             template_paths: [],
@@ -356,7 +356,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
       states: {
         ...makeFlow().states,
         review: {
-          agent: "canon:canon-reviewer",
+          agent: "canon:reviewer",
           transitions: { done: "terminal", needs_revision: "implement" },
           type: "single",
         },
@@ -382,7 +382,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Do implement",
             role: "main",
             template_paths: [],
@@ -428,7 +428,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-reviewer",
+            agent: "canon:reviewer",
             prompt: "Do review",
             role: "main",
             template_paths: [],
@@ -479,7 +479,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-reviewer",
+            agent: "canon:reviewer",
             prompt: "Do review",
             role: "main",
             template_paths: [],
@@ -517,7 +517,7 @@ describe("driveFlow — flow events: watermark reading", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],
@@ -550,7 +550,7 @@ describe("driveFlow — flow events: watermark reading", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Implement",
             role: "main",
             template_paths: [],

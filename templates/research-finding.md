@@ -1,8 +1,8 @@
 ---
 template: research-finding
 description: Structured format for researcher agent output
-used-by: [canon-researcher]
-read-by: [canon-architect]
+used-by: [researcher]
+read-by: [architect]
 output-path: orchestrator-provided
 ---
 
@@ -14,7 +14,7 @@ Use this template when producing research findings for the workspace.
 ---
 dimension: "{codebase|architecture|domain|risk}"
 task: "{task description}"
-agent: canon-researcher
+agent: researcher
 timestamp: "{ISO-8601}"
 ---
 

@@ -40,7 +40,7 @@ includes:
 states:
   research:
     type: parallel
-    agents: [canon-researcher]
+    agents: [researcher]
     roles: [migration-scope, rollback-plan]
     template: research-finding
     transitions:
@@ -49,7 +49,7 @@ states:
 
   design:
     type: single
-    agent: canon-architect
+    agent: architect
     compete:
       count: 2
       strategy: synthesize
@@ -65,7 +65,7 @@ states:
 
   implement:
     type: wave
-    agent: canon-implementor
+    agent: implementor
     gate: test-suite
     template: implementation-log
     inject_context:

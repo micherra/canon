@@ -2,7 +2,7 @@
 template: wave-briefing
 description: Inter-wave learning briefing injected into next wave's spawn prompts
 used-by: [canon-orchestrator]
-read-by: [canon-implementor]
+read-by: [implementor]
 max_tokens: 500
 ---
 

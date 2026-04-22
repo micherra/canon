@@ -70,7 +70,7 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
     },
     states: {
       fix: {
-        agent: "canon-fixer",
+        agent: "fixer",
         transitions: {
           cannot_fix: "hitl",
           done: "review",
@@ -79,7 +79,7 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
       },
       hitl: { type: "terminal" },
       implement: {
-        agent: "canon-implementor",
+        agent: "implementor",
         max_iterations: 3,
         transitions: {
           blocked: "hitl",
@@ -89,7 +89,7 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
         type: "single",
       },
       review: {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         max_iterations: 2,
         transitions: {
           cannot_fix: "hitl",
@@ -417,7 +417,7 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
       },
       states: {
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [{ as: "RESEARCH", from: "research" }],
           transitions: { done: "ship" },
           type: "single",
@@ -457,7 +457,7 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
       },
       states: {
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [{ as: "USER_INPUT", from: "user", prompt: "Please describe the scope" }],
           transitions: { done: "ship" },
           type: "single",
@@ -493,7 +493,7 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
       },
       states: {
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [{ as: "CONTEXT", from: "research" }],
           transitions: { done: "ship" },
           type: "single",

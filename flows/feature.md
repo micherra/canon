@@ -34,7 +34,7 @@ includes:
 states:
   design:
     type: single
-    agent: canon-architect
+    agent: architect
     compete: "auto"
     template: [design-decision, session-context]
     approval_gate: true
@@ -49,7 +49,7 @@ states:
 
   implement:
     type: wave
-    agent: canon-implementor
+    agent: implementor
     template: implementation-log
     effects:
       - type: check_postconditions

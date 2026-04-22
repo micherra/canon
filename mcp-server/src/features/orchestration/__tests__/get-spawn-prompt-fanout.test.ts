@@ -67,7 +67,7 @@ function makeSingleReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFl
     states: {
       done: { type: "terminal" },
       review: {
-        agent: "canon-reviewer",
+        agent: "reviewer",
         large_diff_threshold: 5,
         type: "single",
       },
@@ -186,7 +186,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
     });
 
     for (const entry of result.prompts) {
-      expect(entry.agent).toBe("canon-reviewer");
+      expect(entry.agent).toBe("reviewer");
     }
   });
 
@@ -198,7 +198,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       states: {
         done: { type: "terminal" },
         review: {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           large_diff_threshold: 5,
           template: "review-template",
           type: "single",
@@ -297,7 +297,7 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
       spawn_instructions: { review: "Review everything." },
       states: {
         done: { type: "terminal" },
-        review: { agent: "canon-reviewer", type: "single" },
+        review: { agent: "reviewer", type: "single" },
       },
     };
 
@@ -341,7 +341,7 @@ describe("getSpawnPrompt — compete expansion", () => {
       states: {
         done: { type: "terminal" },
         review: {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           compete: {
             count: 3,
             lenses: ["speed", "safety", "simplicity"],
@@ -375,7 +375,7 @@ describe("getSpawnPrompt — compete expansion", () => {
       states: {
         done: { type: "terminal" },
         review: {
-          agent: "canon-reviewer",
+          agent: "reviewer",
           compete: "auto",
           type: "single",
         },

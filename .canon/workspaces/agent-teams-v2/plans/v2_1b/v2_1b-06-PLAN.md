@@ -5,7 +5,7 @@ depends_on: ["v2_1b-01", "v2_1b-03", "v2_1b-04", "v2_1b-05"]
 decisions:
   - "dc-07"
 files:
-  - agents/canon-learner.md
+  - agents/learner.md
   - skills/canon/references/learner-principle-refinement.md
 principles:
   - agent-design-before-code
@@ -14,11 +14,11 @@ domains:
   - infrastructure
 ---
 
-## Task: Extend `canon-learner` with principle-refinement analysis dimension
+## Task: Extend `learner` with principle-refinement analysis dimension
 
 ### Action
 
-Extend the `canon-learner` agent so it can read lifecycle snapshots (v2_1b-01) + drift-store violations + v2.1b-era structured tags (v2_1b-03/04/05) and emit structured patch proposals to principle files. This is the ONE new learner analysis dimension v2.1b adds; other dimensions defer to v2.2.
+Extend the `learner` agent so it can read lifecycle snapshots (v2_1b-01) + drift-store violations + v2.1b-era structured tags (v2_1b-03/04/05) and emit structured patch proposals to principle files. This is the ONE new learner analysis dimension v2.1b adds; other dimensions defer to v2.2.
 
 **Approach:**
 
@@ -28,11 +28,11 @@ Extend the `canon-learner` agent so it can read lifecycle snapshots (v2_1b-01) +
      - **Elevated fix cost:** principles whose violations consistently take > N fix iterations → narrow the principle or improve its examples
      - **Repeat justified deviations:** principles repeatedly cited in `justified_deviations[]` → the principle's scope may be too broad; propose narrowing or exception list
      - **Clustering by root cause:** review findings for a principle that share `root_cause_tag` → propose adding the pattern to the principle's "common mistakes" section
-     - **Unclassified findings:** observation-without-principle rate climbing → may indicate a missing principle (escalate to `canon-writer` intent)
+     - **Unclassified findings:** observation-without-principle rate climbing → may indicate a missing principle (escalate to `writer` intent)
    - **Proposal output format:** structured patch to `principles/{category}/{name}.md` (unified-diff-friendly). Each proposal lives in `.canon/proposed-learnings/{timestamp}/principle-{name}-{proposal-id}.md` with the patch + a rationale citing evidence (row counts, specific flow IDs, principle IDs).
    - **Confidence bar:** the learner emits a proposal only when the supporting evidence meets a threshold (e.g., ≥ 3 distinct flows, ≥ 2 distinct affected files). Below threshold → observation noted, no proposal. This prevents proposal spam.
 
-2. **canon-learner agent body amendment:**
+2. **learner agent body amendment:**
    - New section: "Principle-refinement analysis (v2.1b)"
    - References the `learner-principle-refinement` skill
    - Adds the skill to `skills:` frontmatter
@@ -56,13 +56,13 @@ Extend the `canon-learner` agent so it can read lifecycle snapshots (v2_1b-01) +
 
 No existing test infrastructure for skills/*.md or agents/*.md. Validation is by:
 
-- Manual read: skill file documents input sources, pattern-detection queries, confidence bar, proposal format; canon-learner body references the new skill; `skills:` frontmatter includes `learner-principle-refinement`; existing mining behavior text preserved
-- Integration (runs in v2_1b-07 loop-closure-evidence): against a seeded dataset of ≥ 5 flows with populated v2.1b tags, running canon-learner produces ≥ 1 structured principle-refinement proposal in `.canon/proposed-learnings/{timestamp}/`. Below-confidence-bar cases produce observations, not proposals.
+- Manual read: skill file documents input sources, pattern-detection queries, confidence bar, proposal format; learner body references the new skill; `skills:` frontmatter includes `learner-principle-refinement`; existing mining behavior text preserved
+- Integration (runs in v2_1b-07 loop-closure-evidence): against a seeded dataset of ≥ 5 flows with populated v2.1b tags, running learner produces ≥ 1 structured principle-refinement proposal in `.canon/proposed-learnings/{timestamp}/`. Below-confidence-bar cases produce observations, not proposals.
 
 ### Verify
 
 1. Skill file exists and is registered
-2. canon-learner body + frontmatter updated
+2. learner body + frontmatter updated
 3. Unit tests pass
 4. Integration test with seeded data produces at least one credible proposal
 

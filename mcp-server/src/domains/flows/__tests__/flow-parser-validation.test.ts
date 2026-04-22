@@ -262,7 +262,7 @@ describe("loadAndResolveFlow", () => {
     expect(flow.states.review).toBeDefined();
     expect(flow.states.done).toBeDefined();
     expect(flow.states.review.type).toBe("single");
-    expect(flow.states.review.agent).toBe("canon-reviewer");
+    expect(flow.states.review.agent).toBe("reviewer");
     expect(flow.states.done.type).toBe("terminal");
 
     // Should have spawn instruction for review
@@ -270,13 +270,13 @@ describe("loadAndResolveFlow", () => {
     expect(flow.spawn_instructions.review).toContain("git diff");
   });
 
-  it("fast-path execute state has agent: canon-implementor", async () => {
+  it("fast-path execute state has agent: implementor", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "fast-path");
 
     expect(flow.name).toBe("fast-path");
     expect(flow.entry).toBe("execute");
     expect(flow.states.execute).toBeDefined();
-    expect(flow.states.execute.agent).toBe("canon-implementor");
+    expect(flow.states.execute.agent).toBe("implementor");
   });
 });
 

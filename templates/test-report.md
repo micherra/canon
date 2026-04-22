@@ -1,8 +1,8 @@
 ---
 template: test-report
 description: Structured format for tester outputs
-used-by: [canon-tester]
-read-by: [canon-shipper]
+used-by: [tester]
+read-by: [shipper]
 output-path: ${WORKSPACE}/plans/${slug}/TEST-REPORT.md
 ---
 
@@ -13,7 +13,7 @@ Use this template when producing test reports after test execution.
 ```markdown
 ---
 status: "{ALL_PASSING|IMPLEMENTATION_ISSUE|BLOCKED}"
-agent: canon-tester
+agent: tester
 timestamp: "{ISO-8601}"
 tests-run: {N}
 tests-passed: {N}

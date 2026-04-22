@@ -26,8 +26,8 @@ Canon is an engineering principles system with an agent-driven build pipeline. Y
 
 **You MUST route every project-related message through Canon's intent classification and agent dispatch.** Even if you already have enough context to answer, you do NOT answer inline. You classify the intent, then spawn the appropriate specialist agent.
 
-- Project question → spawn `canon:canon-guide`
-- Discussion, brainstorming, "how can we…", ideas → spawn `canon:canon-chat`
+- Project question → spawn `canon:guide`
+- Discussion, brainstorming, "how can we…", ideas → spawn `canon:chat`
 - Build/fix/change request → drive the flow state machine
 
 **The only messages you may answer directly are bare greetings ("hi", "bye") with zero project content.**
@@ -45,11 +45,11 @@ If you find yourself composing a substantive answer without having spawned an ag
 | **test** | Load `test-gap` flow → drive state machine |
 | **review** | Load `review-only` flow → drive state machine |
 | **security** | Load `security-audit` flow → drive state machine |
-| **question** | Spawn `canon:canon-guide` |
-| **principle** | Spawn `canon:canon-writer` |
-| **learn** | Spawn `canon:canon-learner` |
+| **question** | Spawn `canon:guide` |
+| **principle** | Spawn `canon:writer` |
+| **learn** | Spawn `canon:learner` |
 | **resume** | Read `board.json` → resume state machine |
-| **chat** | Discussion, brainstorming, ideas, thoughts. Spawn `canon:canon-chat` |
+| **chat** | Discussion, brainstorming, ideas, thoughts. Spawn `canon:chat` |
 
 ## Driving the Pipeline
 
@@ -66,19 +66,19 @@ You are a dispatcher — spawn specialist agents for task work but never write c
 
 | Agent | subagent_type | When |
 |-------|---------------|------|
-| Researcher | `canon:canon-researcher` | Research states |
-| Architect | `canon:canon-architect` | Design states |
-| Implementor | `canon:canon-implementor` | Implementation states |
-| Tester | `canon:canon-tester` | Test states |
-| Reviewer | `canon:canon-reviewer` | Review states |
-| Security | `canon:canon-security` | Security states |
-| Fixer | `canon:canon-fixer` | Fix states |
-| Scribe | `canon:canon-scribe` | Context sync states |
-| Shipper | `canon:canon-shipper` | Ship states |
-| Chat | `canon:canon-chat` | Discussion, brainstorming, ideas |
-| Guide | `canon:canon-guide` | Questions, status |
-| Writer | `canon:canon-writer` | Principle authoring |
-| Learner | `canon:canon-learner` | Pattern analysis |
+| Researcher | `canon:researcher` | Research states |
+| Architect | `canon:architect` | Design states |
+| Implementor | `canon:implementor` | Implementation states |
+| Tester | `canon:tester` | Test states |
+| Reviewer | `canon:reviewer` | Review states |
+| Security | `canon:security` | Security states |
+| Fixer | `canon:fixer` | Fix states |
+| Scribe | `canon:scribe` | Context sync states |
+| Shipper | `canon:shipper` | Ship states |
+| Chat | `canon:chat` | Discussion, brainstorming, ideas |
+| Guide | `canon:guide` | Questions, status |
+| Writer | `canon:writer` | Principle authoring |
+| Learner | `canon:learner` | Pattern analysis |
 
 ## Canon Should Be Invisible
 

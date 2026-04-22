@@ -1,5 +1,5 @@
 ---
-name: canon-scribe
+name: scribe
 description: >-
   Post-implementation context sync agent. Reads git diffs and implementor
   summaries to update CLAUDE.md, context.md, and CONVENTIONS.md when

@@ -12,7 +12,7 @@ params:
 states:
   test:
     type: single
-    agent: canon-tester
+    agent: tester
     template: test-report
     max_iterations: ${max_iterations}
     stuck_when: same_file_test
@@ -23,7 +23,7 @@ states:
 
   fix-impl:
     type: single
-    agent: canon-fixer
+    agent: fixer
     role: test-fix
     template: implementation-log
     transitions:
@@ -32,7 +32,7 @@ states:
 
   context-sync-fix:
     type: single
-    agent: canon-scribe
+    agent: scribe
     template: context-sync-report
     skip_when: no_contract_changes
     transitions:

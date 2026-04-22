@@ -2,7 +2,7 @@
  * LearningProposal Zod schema — proposal frontmatter validation
  *
  * Defines the canonical shape of a learning proposal as specified in
- * canon-learner.md Step 5. Used by server-side validators (e.g. learn-gate.ts)
+ * learner.md Step 5. Used by server-side validators (e.g. learn-gate.ts)
  * to detect malformed proposals before they reach the user.
  *
  * Security note: consumers must validate file paths with `isPathContained`

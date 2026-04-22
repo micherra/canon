@@ -60,7 +60,7 @@ Based on the user's choice:
 | new-convention | Append to `.canon/CONVENTIONS.md` |
 | severity-change | Edit the principle's YAML frontmatter severity field and move file to the appropriate subdirectory |
 | principle-revision | Read the principle file, apply the proposed change to the relevant section |
-| convention-graduation | Tell the user to run `ask Canon to create a new principle {topic}` — canon-writer handles interactive authoring |
+| convention-graduation | Tell the user to run `ask Canon to create a new principle {topic}` — writer handles interactive authoring |
 | stale-removal | Remove the convention line from `.canon/CONVENTIONS.md` |
 
 If an apply action fails (file not found, write error, etc.), report a clear error message and do not silently skip:

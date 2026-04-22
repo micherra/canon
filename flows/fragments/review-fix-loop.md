@@ -14,7 +14,7 @@ params:
 states:
   review:
     type: single
-    agent: canon-reviewer
+    agent: reviewer
     template: review-checklist
     effects:
       - type: persist_review
@@ -27,7 +27,7 @@ states:
 
   fix-violations:
     type: parallel-per
-    agent: canon-fixer
+    agent: fixer
     role: violation-fix
     iterate_on: violation_groups
     max_iterations: ${max_iterations}

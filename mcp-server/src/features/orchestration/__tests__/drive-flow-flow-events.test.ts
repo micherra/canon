@@ -104,17 +104,17 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     },
     states: {
       implement: {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         transitions: { done: "review" },
         type: "single",
       },
       research: {
-        agent: "canon:canon-researcher",
+        agent: "canon:researcher",
         transitions: { done: "implement" },
         type: "single",
       },
       review: {
-        agent: "canon:canon-reviewer",
+        agent: "canon:reviewer",
         transitions: { done: "terminal" },
         type: "single",
       },
@@ -140,7 +140,7 @@ function makeEnterResult(
     ok: true,
     prompts: [
       {
-        agent: "canon:canon-implementor",
+        agent: "canon:implementor",
         prompt: "Do implement task",
         role: "main",
         template_paths: [],
@@ -221,7 +221,7 @@ describe("driveFlow — flow events: effect none", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-implementor",
+            agent: "canon:implementor",
             prompt: "Do implement",
             role: "main",
             template_paths: [],
@@ -249,7 +249,7 @@ describe("driveFlow — flow events: effect none", () => {
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
     // Should have entered the normal next state (implement)
-    expect(result.requests[0].agent_type).toBe("canon:canon-implementor");
+    expect(result.requests[0].agent_type).toBe("canon:implementor");
   });
 
   it("does not call drainFlowEvents on first call (no result)", async () => {
@@ -259,7 +259,7 @@ describe("driveFlow — flow events: effect none", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-researcher", prompt: "Research", role: "main", template_paths: [] },
+          { agent: "canon:researcher", prompt: "Research", role: "main", template_paths: [] },
         ],
       }),
     );
@@ -287,7 +287,7 @@ describe("driveFlow — flow events: effect insert", () => {
       makeEnterResult({
         prompts: [
           {
-            agent: "canon:canon-reviewer",
+            agent: "canon:reviewer",
             prompt: "Do review",
             role: "main",
             template_paths: [],
@@ -315,7 +315,7 @@ describe("driveFlow — flow events: effect insert", () => {
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
     // Should have entered "review", not "implement"
-    expect(result.requests[0].agent_type).toBe("canon:canon-reviewer");
+    expect(result.requests[0].agent_type).toBe("canon:reviewer");
 
     // enterAndPrepareState should have been called with state_id "review", not "implement"
     const enterCall = vi.mocked(enterAndPrepareState).mock.calls[0][0];
@@ -334,7 +334,7 @@ describe("driveFlow — flow events: effect insert", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-reviewer", prompt: "Do review", role: "main", template_paths: [] },
+          { agent: "canon:reviewer", prompt: "Do review", role: "main", template_paths: [] },
         ],
       }),
     );
@@ -392,9 +392,7 @@ describe("driveFlow — flow events: effect skip", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [
-          { agent: "canon:canon-reviewer", prompt: "Review", role: "main", template_paths: [] },
-        ],
+        prompts: [{ agent: "canon:reviewer", prompt: "Review", role: "main", template_paths: [] }],
       }),
     );
 
@@ -412,7 +410,7 @@ describe("driveFlow — flow events: effect skip", () => {
     if (!result.ok) return;
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
-    expect(result.requests[0].agent_type).toBe("canon:canon-reviewer");
+    expect(result.requests[0].agent_type).toBe("canon:reviewer");
 
     const enterCall = vi.mocked(enterAndPrepareState).mock.calls[0][0];
     expect(enterCall.state_id).toBe("review");

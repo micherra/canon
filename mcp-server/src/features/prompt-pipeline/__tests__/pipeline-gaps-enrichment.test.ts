@@ -117,7 +117,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement the task." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "canon-implementor", type: "single" },
+      implement: { agent: "implementor", type: "single" },
     },
     ...overrides,
   };
@@ -162,7 +162,7 @@ describe("assemblePrompt — skip_reason result includes warnings accumulated be
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [{ from: "state", name: "some-artifact" }] as unknown as never[],
           type: "single",
         },
@@ -219,7 +219,7 @@ describe("multi-inject_context entries — both variables substituted into promp
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [
             { from: "state", name: "research_findings" },
             { from: "state", name: "design_spec" },
@@ -268,7 +268,7 @@ describe("multi-inject_context entries — both variables substituted into promp
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "canon-implementor",
+          agent: "implementor",
           inject_context: [{ from: "state", name: "research_findings" }] as unknown as never[],
           type: "single",
         },
@@ -345,7 +345,7 @@ describe("cache prefix lifecycle — store to prompt end-to-end", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -401,7 +401,7 @@ describe("pipeline error paths — pre-pipeline early returns", () => {
       spawn_instructions: {}, // deliberate: no instruction for "implement"
       states: {
         done: { type: "terminal" },
-        implement: { agent: "canon-implementor", type: "single" },
+        implement: { agent: "implementor", type: "single" },
       },
     });
 
@@ -429,13 +429,13 @@ describe("pipeline error paths — pre-pipeline early returns", () => {
 // and appears in the final SpawnPromptResult.
 
 describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
-  it("canon-researcher state produces entries with tools and disallowed_tools from registry", async () => {
+  it("researcher state produces entries with tools and disallowed_tools from registry", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
       spawn_instructions: { research: "Research the codebase." },
       states: {
         done: { type: "terminal" },
-        research: { agent: "canon-researcher", type: "single" },
+        research: { agent: "researcher", type: "single" },
       },
     });
 
@@ -443,7 +443,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
 
     expect(result.prompts).toHaveLength(1);
     const entry = result.prompts[0];
-    // canon-researcher is allowed to read and search, but not write
+    // researcher is allowed to read and search, but not write
     expect(entry.tools).toContain("Read");
     expect(entry.tools).toContain("Grep");
     expect(entry.tools).toContain("WebFetch");
@@ -458,7 +458,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
       states: {
         done: { type: "terminal" },
         research: {
-          agent: "canon-researcher",
+          agent: "researcher",
           tool_overrides: { allow: ["Edit"] },
           type: "single",
         },
@@ -469,7 +469,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
 
     expect(result.prompts).toHaveLength(1);
     const entry = result.prompts[0];
-    // canon-researcher base has "Edit" in disallowed, but allow override is applied first,
+    // researcher base has "Edit" in disallowed, but allow override is applied first,
     // and disallowed wins — so Edit should still be excluded because disallowed wins
     // (This tests that the pipeline passes overrides to the resolver correctly)
     expect(entry.tools).toBeDefined();
@@ -506,7 +506,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "canon-implementor", type: "wave" },
+        build: { agent: "implementor", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -538,7 +538,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     expect(entry.permission_mode).toBeDefined();
   });
 
-  it("canon-implementor single state has permission_mode: prompt without worktree_path (set post-pipeline)", async () => {
+  it("implementor single state has permission_mode: prompt without worktree_path (set post-pipeline)", async () => {
     const workspace = seedWorkspace();
 
     const result = await assemblePrompt(makeInput(workspace));
@@ -548,7 +548,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     // No worktree_path set by pipeline, no KG DB → prompt mode
     // (worktree_path is set by orchestrator post-pipeline for non-wave, Agent tool creates worktree)
     expect(entry.permission_mode).toBe("prompt");
-    // canon-implementor can write
+    // implementor can write
     expect(entry.tools).toContain("Edit");
     expect(entry.tools).toContain("Write");
   });
@@ -562,7 +562,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     // Existing invariants still hold
     expect(result.prompts).toHaveLength(1);
     expect(result.state_type).toBe("single");
-    expect(result.prompts[0].agent).toBe("canon-implementor");
+    expect(result.prompts[0].agent).toBe("implementor");
     expect(result.skip_reason).toBeUndefined();
     // Plus new tool scope fields
     expect(result.prompts[0].tools).toBeDefined();

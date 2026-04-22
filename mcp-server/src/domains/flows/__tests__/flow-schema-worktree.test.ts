@@ -111,7 +111,7 @@ describe("WaveResultSchema — worktree_entries", () => {
   it("parses WaveResult with all existing fields and no worktree_entries", () => {
     const result = WaveResultSchema.parse({
       consultations: {
-        before: { "canon-guide": { status: "done", summary: "OK" } },
+        before: { guide: { status: "done", summary: "OK" } },
       },
       gate: "npm test",
       gate_output: "All tests passed",

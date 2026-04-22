@@ -11,7 +11,7 @@ includes:
 states:
   review:
     type: single
-    agent: canon-reviewer
+    agent: reviewer
     template: review-checklist
     transitions:
       clean: done

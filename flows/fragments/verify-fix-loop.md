@@ -18,7 +18,7 @@ params:
 states:
   verify:
     type: single
-    agent: canon-tester
+    agent: tester
     role: ${role}
     template: test-report
     max_iterations: ${max_iterations}
@@ -35,7 +35,7 @@ states:
 
   fix-impl:
     type: single
-    agent: canon-fixer
+    agent: fixer
     role: test-fix
     template: implementation-log
     transitions:

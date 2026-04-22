@@ -5,7 +5,7 @@ depends_on: ["v2_1a-01", "v2_1a-02"]
 decisions:
   - "dc-04"
 files:
-  - agents/canon-planner.md
+  - agents/planner.md
 principles:
   - agent-design-before-code
   - agent-surface-assumptions
@@ -14,17 +14,17 @@ domains:
   - infrastructure
 ---
 
-## Task: Rewrite canon-planner agent body for v2.1 iterate-until-approved
+## Task: Rewrite planner agent body for v2.1 iterate-until-approved
 
 ### Action
 
-Rewrite `agents/canon-planner.md` to load `planner-brief` and `runbook-synthesis` skills (from v2_1a-01, v2_1a-02), emit `planning-brief.md` + `runbook.md` per build request, and run the iterate-until-approved loop.
+Rewrite `agents/planner.md` to load `planner-brief` and `runbook-synthesis` skills (from v2_1a-01, v2_1a-02), emit `planning-brief.md` + `runbook.md` per build request, and run the iterate-until-approved loop.
 
 **Frontmatter (v2.1):**
 
 ```yaml
 ---
-name: canon-planner
+name: planner
 description: >-
   Produces planning briefs and synthesizes plan-specific runbooks from the
   canonical step vocabulary. Iterates with the user until approval. Does NOT
@@ -85,14 +85,14 @@ tools:
 No existing test infrastructure for agents/*.md. Validation is by:
 
 - Manual read: frontmatter matches spec (skills, maxTurns 40, model opus, permissionMode plan, memory project); body references both skill files by name; no Edit/Write/Bash calls in body (read-only by permissionMode)
-- Integration (part of v2_1a-08 validation): spawn canon-planner against a representative build request; confirm `planning-brief.md` + `runbook.md` produced at expected paths; runbook carries `confidence_signals[]` frontmatter; no aggregate scalar in user-facing output
+- Integration (part of v2_1a-08 validation): spawn planner against a representative build request; confirm `planning-brief.md` + `runbook.md` produced at expected paths; runbook carries `confidence_signals[]` frontmatter; no aggregate scalar in user-facing output
 
 ### Verify
 
-1. `agents/canon-planner.md` parses as agent definition
+1. `agents/planner.md` parses as agent definition
 2. Frontmatter matches spec
 3. Skills referenced (`planner-brief`, `runbook-synthesis`) resolve to files from v2_1a-01, v2_1a-02
-4. Agent tests pass: `npm test -- canon-planner`
+4. Agent tests pass: `npm test -- planner`
 5. Manual spawn against 2-3 test requests produces expected artifacts
 
 ### Done when

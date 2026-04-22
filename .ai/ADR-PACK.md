@@ -192,7 +192,7 @@ Instead of callers constructing shaped history entries, the execution store reco
 ```yaml
 implement:
   type: wave
-  agent: canon-implementor
+  agent: implementor
   wave_policy:
     isolation: worktree        # worktree | branch | none
     merge_strategy: sequential  # sequential | rebase | squash
@@ -440,7 +440,7 @@ Implement a `drive_flow` MCP tool that executes the state machine loop mechanica
 
 ```typescript
 interface SpawnRequest {
-  agent_type: string;   // e.g. "canon-implementor"
+  agent_type: string;   // e.g. "implementor"
   prompt: string;       // fully-resolved spawn prompt
   isolation: string;    // worktree | branch | none
   role?: string;        // for parallel/wave states
@@ -801,7 +801,7 @@ Per-state overrides are supported — a flow can grant additional tools to a spe
 ```yaml
 security-research:
   type: single
-  agent: canon-researcher
+  agent: researcher
   tool_overrides:
     allow: [Bash]             # researcher needs Bash for this state
 ```
@@ -930,7 +930,7 @@ Claude Code records every agent's full conversation to a separate JSONL file via
 
 ### Decision
 
-Record each specialist agent's full conversation to a structured transcript file in the workspace. Store the transcript path in the execution state (SQLite per ADR-001). The `canon-learner` (ADR-016) reads transcripts to analyze agent patterns.
+Record each specialist agent's full conversation to a structured transcript file in the workspace. Store the transcript path in the execution state (SQLite per ADR-001). The `learner` (ADR-016) reads transcripts to analyze agent patterns.
 
 **Transcript storage:**
 
@@ -955,7 +955,7 @@ interface TranscriptEntry {
 **Recording responsibility:** The caller (Claude Code) records transcripts as agent messages stream back — identical to Claude Code's `runAgent()` which yields messages and records to sidechain. The transcript path is passed to `report_result` and stored in `execution_states.transcript_path`.
 
 **Access patterns:**
-- `canon-learner` reads transcripts to analyze agent decision patterns
+- `learner` reads transcripts to analyze agent decision patterns
 - `diagnose` command (ADR-003) includes transcript excerpts for failed states
 - A new `get_transcript` MCP tool returns formatted transcript for a given state execution
 - Workspace cleanup (`/canon:clean`) removes transcripts alongside other workspace artifacts
@@ -988,7 +988,7 @@ ADR-001 (transcript_path stored in execution_states table), ADR-003 (diagnostics
 
 ### Context
 
-`canon-learner` is manually invoked via `/canon:learn`. It analyzes codebase patterns and drift data to suggest principle and convention improvements. But learning only happens when the user remembers to ask — which is rarely, since the value of learning is long-term and invisible.
+`learner` is manually invoked via `/canon:learn`. It analyzes codebase patterns and drift data to suggest principle and convention improvements. But learning only happens when the user remembers to ask — which is rarely, since the value of learning is long-term and invisible.
 
 Claude Code's Auto-Dream pattern demonstrates automatic between-session consolidation with carefully designed gating:
 - **Time gate:** minimum hours since last consolidation (default 24h)
@@ -1002,7 +1002,7 @@ Claude Code's Auto-Dream pattern demonstrates automatic between-session consolid
 
 ### Decision
 
-Auto-trigger `canon-learner` after flow completion when gating conditions are met. The learner runs as a background job (ADR-007) with restricted permissions (ADR-014). Output goes to a staging area for user review — the learner never modifies principles directly.
+Auto-trigger `learner` after flow completion when gating conditions are met. The learner runs as a background job (ADR-007) with restricted permissions (ADR-014). Output goes to a staging area for user review — the learner never modifies principles directly.
 
 **Gating logic (cheapest checks first):**
 
@@ -1062,7 +1062,7 @@ ADR-001 (flow_runs table for gate counting, events table for execution data), AD
 - Implement learner output format: observation + proposed change + evidence + confidence
 - Add `/canon:review-learnings` command to review and accept/reject proposals
 - Add notification mechanism for pending proposals
-- Update `canon-learner` agent to accept transcript paths as input and produce structured proposals
+- Update `learner` agent to accept transcript paths as input and produce structured proposals
 
 ---
 
@@ -1089,7 +1089,7 @@ Add an optional `approval_gate` field to flow state definitions. When a state ha
 ```yaml
 design:
   type: single
-  agent: canon-architect
+  agent: architect
   approval_gate: true
   transitions:
     done: implement
@@ -1586,7 +1586,7 @@ Each task is independently skippable — if a task fails, log the error and cont
 
 5. **Trim transcripts.** Configurable retention: `transcript_retention_days` (default: 30). Transcripts older than retention and belonging to completed flows get compressed (gzip) or deleted. Transcript summary (assistant messages only) preserved in `execution_states.transcript_summary` before deletion.
 
-6. **Evaluate learn gate.** Identical to ADR-016 gate logic, but pulled out of the `complete_flow` path. If gate passes, spawn `canon-learner` as a background agent. The janitor doesn't wait for the learner to finish.
+6. **Evaluate learn gate.** Identical to ADR-016 gate logic, but pulled out of the `complete_flow` path. If gate passes, spawn `learner` as a background agent. The janitor doesn't wait for the learner to finish.
 
 7. **Refresh KG.** Query `KgQuery.getKgFreshnessMs()`. If stale beyond threshold (default: 24h), queue a `codebase_graph` background job (ADR-007).
 
