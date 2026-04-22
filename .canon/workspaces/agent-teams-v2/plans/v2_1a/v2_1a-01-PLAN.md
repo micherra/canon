@@ -5,7 +5,8 @@ depends_on: ["v2_1a-00"]
 decisions:
   - "dc-02"
 files:
-  - references/planner-brief.md
+  - skills/canon/skills/plan/SKILL.md
+  - templates/planning-brief.md
 principles:
   - agent-surface-assumptions
   - agent-evidence-over-intuition
@@ -13,11 +14,17 @@ domains:
   - infrastructure
 ---
 
-## Task: Create planner-brief.md skill
+## Task: Create the `canon:plan` native skill + planning-brief template
 
 ### Action
 
-Write `references/planner-brief.md` defining the strategic-analysis contract `planner` follows to produce `plans/${slug}/planning-brief.md` per build request.
+Ship two artifacts that together define how the planner produces a strategic brief:
+
+1. **Native Claude Code skill** — `skills/canon/skills/plan/SKILL.md` (plus any supporting files inside that directory) defining the strategic-analysis contract. Because it's a real SKILL.md-wrapped directory, Claude Code loads it natively when any subagent (v2.1a: planner; potentially others later) lists `canon:plan` in its `skills:` frontmatter.
+
+2. **Output template** — `templates/planning-brief.md`. Partial skeleton already shipped in phase1-08; this task fleshes it out per the 7-section contract below. Referenced from the planner body per `agent-template-required`.
+
+**PLAN amendment note** (2026-04-22, phase1-08.5 + follow-up): the original v2_1a-01 PLAN specified `references/planner-brief.md` as the single output. That conflated two concerns — the procedural skill (how to plan) and the output shape (the brief template). Separated per clarified intent: the skill is a native Claude Code skill under `skills/canon/skills/plan/`; the output shape is a template under `templates/`.
 
 **The skill must specify:**
 
@@ -44,7 +51,7 @@ Write `references/planner-brief.md` defining the strategic-analysis contract `pl
    - Step-by-step execution plan (that's the synthesis skill's domain)
    - Code-level design decisions (that's the architect's domain during `design` step)
 
-5. **Artifact contract** — where the brief is written (`${WORKSPACE}/plans/${slug}/planning-brief.md`), how it is referenced from the synthesized runbook, how iterations update it (new file per iteration? overwrite with append-log? per §6.6 use new `lifecycle_synthesized_runbooks` row per iteration, but for v2.1a without lifecycle DB, use numbered files: `planning-brief-iter-N.md`).
+5. **Artifact contract** — where the brief is written (`${WORKSPACE}/plans/${slug}/planning-brief.md`), how it is referenced from the synthesized runbook, how iterations update it (new file per iteration? overwrite with append-log? per §6.6 use new `lifecycle_synthesized_runbooks` row per iteration, but for v2.1a without lifecycle DB, use numbered files: `planning-brief-iter-N.md`). The on-disk output follows `templates/planning-brief.md` (this task's second deliverable).
 
 ### Canon principles to apply
 
@@ -65,14 +72,17 @@ No existing test infrastructure for skills/*.md. Validation is by:
 
 ### Verify
 
-1. Skill file exists at `references/planner-brief.md`
-2. Skill tests pass: `npm test -- planner-brief`
-3. Skill is referenced by `planner` agent frontmatter (v2_1a-03 will add this)
-4. Manually spawn planner against a test request; planner produces a brief matching the required sections
+1. Native skill exists at `skills/canon/skills/plan/SKILL.md` (with the five contract elements captured in the SKILL.md body or structured sub-files)
+2. Claude Code discovers the skill — any subagent listing `canon:plan` in its native `skills:` frontmatter receives the skill content at spawn
+3. Template exists at `templates/planning-brief.md` with all seven sections from the brief-output contract
+4. Skill tests pass: `npm test -- plan-skill` (or equivalent)
+5. `v2_1a-03` planner rewrite lists `canon:plan` in native `skills:` (not in Canon's three-field `rules:`/`references:`/`primers:`)
+6. Manually spawn planner against a test request; planner produces a brief matching `templates/planning-brief.md` and the skill's contract
 
 ### Done when
 
-- File exists and specifies all 5 contract elements (sections, depth rules, push-back, non-responsibilities, artifact contract)
+- Native skill exists as a proper `SKILL.md`-wrapped directory under `skills/canon/skills/plan/`
+- Template exists at `templates/planning-brief.md` with all seven required sections
+- All five contract elements (sections, depth rules, push-back, non-responsibilities, artifact contract) captured in the skill
 - Tests pass
-- File is registered in the skills manifest
-- No duplication with `runbook-synthesis.md` (planner-brief is strategic; synthesis is mechanical)
+- No duplication with `canon:synthesize` (plan is strategic; synthesize is mechanical)

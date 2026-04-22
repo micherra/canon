@@ -5,7 +5,8 @@ depends_on: ["v2_1a-00"]
 decisions:
   - "dc-03"
 files:
-  - references/runbook-synthesis.md
+  - skills/canon/skills/synthesize/SKILL.md
+  - templates/runbook.md
 principles:
   - agent-design-before-code
   - agent-template-required
@@ -13,11 +14,17 @@ domains:
   - infrastructure
 ---
 
-## Task: Create runbook-synthesis.md skill
+## Task: Create the `canon:synthesize` native skill + runbook template
 
 ### Action
 
-Write `references/runbook-synthesis.md` defining the mechanical synthesis contract `planner` follows to compose a plan-specific runbook from the canonical step vocabulary (v2_1a-00).
+Ship two artifacts that together define how the planner composes a runbook from the canonical step vocabulary (v2_1a-00):
+
+1. **Native Claude Code skill** — `skills/canon/skills/synthesize/SKILL.md` (plus supporting files inside that directory) defining the mechanical synthesis contract. Listed in the planner's native `skills:` frontmatter as `canon:synthesize` (v2_1a-03); Claude Code loads the skill content at subagent spawn.
+
+2. **Output template** — `templates/runbook.md`. Defines the runbook file's structural shape (YAML frontmatter with `confidence_signals[]`, step schema, body prose). Referenced from the planner body per `agent-template-required`.
+
+**PLAN amendment note** (2026-04-22, phase1-08.5 + follow-up): the original v2_1a-02 PLAN specified `references/runbook-synthesis.md` as the single output. Separated per clarified intent: the synthesis skill is a native Claude Code skill under `skills/canon/skills/synthesize/`; the output shape is a template under `templates/`. The skill encodes the MUST/MAY/MUST NOT contract and validates runbook-step `skills:` names; the template encodes the file shape.
 
 **The skill must specify:**
 
@@ -81,16 +88,20 @@ No existing test infrastructure for skills/*.md markdown. Validation is by:
 
 ### Verify
 
-1. Skill file exists at `references/runbook-synthesis.md`
-2. Unit tests pass: `npm test -- runbook-synthesis`
-3. Integration test passes (v2_1a-08 validation reruns this)
-4. Synthesis skill references v2_1a-00 vocabulary explicitly (by relative path)
-5. Confidence handling matches `docs/agent-teams-migration-plan-v2.md` §7.1 HIGH-2 decision: per-signal user-facing, aggregate internal
+1. Native skill exists at `skills/canon/skills/synthesize/SKILL.md` with the seven contract elements
+2. Claude Code discovers the skill — any subagent listing `canon:synthesize` in its native `skills:` frontmatter receives the skill content at spawn
+3. Template exists at `templates/runbook.md` with the runbook file shape (frontmatter including `confidence_signals[]`, step schema, body prose sections)
+4. Skill tests pass: `npm test -- synthesize-skill` (or equivalent)
+5. Integration test passes (v2_1a-08 validation reruns this)
+6. Synthesis skill references v2_1a-00 vocabulary explicitly (by relative path to `references/runbook-vocabulary.md`)
+7. Confidence handling matches `docs/agent-teams-migration-plan-v2.md` §7.1 HIGH-2 decision: per-signal user-facing, aggregate internal
+8. `v2_1a-03` planner rewrite lists `canon:synthesize` in native `skills:` (not in Canon's three-field `rules:`/`references:`/`primers:`)
 
 ### Done when
 
-- File exists with all 7 contract elements
+- Native skill exists as a proper `SKILL.md`-wrapped directory under `skills/canon/skills/synthesize/`
+- Template exists at `templates/runbook.md` with the full runbook shape
+- All seven contract elements captured in the skill
 - Tests pass
-- File is registered in the skills manifest
-- No duplication with `planner-brief.md` (synthesis is mechanical; brief is strategic)
-- planner agent frontmatter (v2_1a-03) references this skill
+- No duplication with `canon:plan` (synthesize is mechanical; plan is strategic)
+- planner agent frontmatter (v2_1a-03) lists `canon:synthesize` in native `skills:`
