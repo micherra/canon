@@ -40,7 +40,8 @@ vi.mock("@domains/flows/flow-event-channel.ts", () => ({
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
-import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache } from "@domains/workspaces/execution-store-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";

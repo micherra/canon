@@ -6,8 +6,7 @@
  */
 
 import type { Board } from "@domains/flows/board-state-schemas.ts";
-import type { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-
+import type { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 /**
  * Result type for syncBoardToStore.
  *

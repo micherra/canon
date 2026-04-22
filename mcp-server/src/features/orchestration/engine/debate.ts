@@ -8,8 +8,7 @@
  */
 
 import { type Message, readChannelAsContext, readMessages } from "@domains/messages/messages.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 export type DebateConfig = {
   /** Number of competing teams (default 3) */
   teams: number;

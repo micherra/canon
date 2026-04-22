@@ -71,7 +71,7 @@ vi.mock("../engine/convergence.ts", () => ({
 
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import type { FileCluster } from "../services/diff-cluster.ts";
 import { clusterDiff } from "../services/diff-cluster.ts";

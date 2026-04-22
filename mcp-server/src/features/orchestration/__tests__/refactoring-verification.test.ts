@@ -15,7 +15,7 @@ import { join } from "node:path";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reportResult } from "../tools/report-result.ts";

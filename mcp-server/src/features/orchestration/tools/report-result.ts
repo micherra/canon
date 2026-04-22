@@ -17,7 +17,7 @@ import {
   type TestResults,
   type ViolationSeverities,
 } from "@domains/flows/flow-definition-schemas.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";
 import { inspectDebateProgress } from "../engine/debate.ts";

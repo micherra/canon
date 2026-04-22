@@ -2,7 +2,7 @@
 
 import { join } from "node:path";
 import type { WaveResult } from "@domains/flows/board-state-schemas.ts";
-import type { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { getProjectDir } from "@domains/workspaces/wave-lifecycle.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";

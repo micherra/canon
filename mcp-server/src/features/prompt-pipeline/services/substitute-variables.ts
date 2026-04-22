@@ -10,7 +10,7 @@
  */
 
 import { substituteVariables } from "@domains/messages/variables.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { PromptContext } from "../model/types.ts";
 
 /**

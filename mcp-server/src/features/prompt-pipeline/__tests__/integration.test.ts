@@ -81,7 +81,7 @@ vi.mock("@domains/flows/skip-when.ts", () => ({
 // Imports (after mocks)
 
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { resolveContextInjections } from "@features/orchestration/services/inject-context.ts";
 import { assembleWaveBriefing } from "@features/orchestration/services/wave-briefing.ts";
 import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";

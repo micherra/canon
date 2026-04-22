@@ -35,7 +35,7 @@ vi.mock("../engine/effects.ts", () => ({
 
 import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { reportResult } from "../tools/report-result.ts";
 

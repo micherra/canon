@@ -64,7 +64,7 @@ vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: vi.fn(),
 }));
 
-vi.mock("@domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store-cache.ts", () => ({
   getExecutionStore: vi.fn().mockReturnValue({
     getBoard: vi.fn().mockReturnValue(null),
   }),

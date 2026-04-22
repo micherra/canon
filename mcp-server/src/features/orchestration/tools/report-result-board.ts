@@ -21,7 +21,7 @@ import type {
   ViolationSeverities,
 } from "@domains/flows/flow-definition-schemas.ts";
 import { STATUS_ALIASES, STATUS_KEYWORDS } from "@domains/flows/flow-definition-schemas.ts";
-import type { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { inspectDebateProgress } from "../engine/debate.ts";
 import {
   aggregateParallelPerResults,

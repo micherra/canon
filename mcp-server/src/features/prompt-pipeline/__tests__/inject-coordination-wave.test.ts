@@ -58,7 +58,7 @@ vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: vi.fn(),
 }));
 
-vi.mock("@domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store-cache.ts", () => ({
   getExecutionStore: vi.fn().mockReturnValue({
     getBoard: vi.fn().mockReturnValue(null),
   }),
@@ -85,7 +85,7 @@ vi.mock("@shared/constants.ts", () => ({
 
 import { existsSync } from "node:fs";
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { KgQuery } from "@graph/kg-query.ts";
 import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";

@@ -27,7 +27,8 @@ vi.mock("@domains/workspaces/wave-lifecycle.ts", () => ({
 
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
-import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache } from "@domains/workspaces/execution-store-cache.ts";
 import { createWaveWorktrees } from "@domains/workspaces/wave-lifecycle.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { beforeEach } from "vitest";

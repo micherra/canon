@@ -13,7 +13,8 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ExecutionStore, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports

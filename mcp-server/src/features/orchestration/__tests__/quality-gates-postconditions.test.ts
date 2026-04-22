@@ -29,7 +29,7 @@ vi.mock("../engine/effects.ts", () => ({
 
 // Imports after mocks
 
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { appendFlowRun, computeAnalytics } from "@platform/storage/drift/analytics.ts";
 import { CANON_DIR } from "@shared/constants.ts";
 import { reportResult } from "../tools/report-result.ts";

@@ -13,7 +13,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
-import { type ExecutionStore, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports

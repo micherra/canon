@@ -35,7 +35,7 @@ vi.mock("../engine/effects.ts", () => ({
 }));
 
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { isToolError } from "@shared/lib/tool-result.ts";
 import { reportResult } from "../tools/report-result.ts";
 

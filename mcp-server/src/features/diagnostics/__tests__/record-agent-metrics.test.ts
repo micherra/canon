@@ -13,7 +13,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { recordAgentMetrics } from "../tools/record-agent-metrics.ts";
@@ -232,7 +232,7 @@ describe("MCP metrics schema widening", () => {
     // The actual behavior test is in the broadened schema acceptance.
     const { reportResult } = await import("@features/orchestration/tools/report-result.ts");
     const { getExecutionStore: getStore, clearStoreCache: clearCache } = await import(
-      "@domains/workspaces/execution-store.ts"
+      "@domains/workspaces/execution-store-cache.ts"
     );
 
     const ws = makeTmpWorkspace();
