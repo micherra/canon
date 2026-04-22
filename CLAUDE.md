@@ -32,8 +32,8 @@ Everything else — implementation, research, review, testing — is agent work.
 | **test** | Load `test-gap` flow → drive state machine |
 | **review** | Load `review-only` flow → drive state machine |
 | **security** | Load `security-audit` flow → drive state machine |
-| **question** | Spawn `canon:guide` |
-| **chat** | Spawn `canon:chat` (discussion, design thinking, ideas) |
+| **question** | Respond directly — the lead has full Canon MCP access (`get_principles`, `list_principles`, `get_compliance`, `get_drift_report`) |
+| **chat** | Respond directly — Claude handles conversation natively; use `canon:planner` for structured "should we build this?" evaluation |
 | **principle** | Spawn `canon:writer` |
 | **learn** | Spawn `canon:learner` |
 | **resume** | Read `board.json` → resume state machine |
@@ -225,17 +225,15 @@ See the "Agent Spawn Error Handling" section below. The same retry logic (429 ra
 
 | Agent | subagent_type | When |
 |-------|---------------|------|
+| Planner | `canon:planner` | Pre-build gate — evaluates build requests |
 | Researcher | `canon:researcher` | Research states |
 | Architect | `canon:architect` | Design states |
-| Implementor | `canon:implementor` | Implementation states |
+| Engineer | `canon:engineer` | Implementation and fix states (dual-mode) |
 | Tester | `canon:tester` | Test states |
 | Reviewer | `canon:reviewer` | Review states |
 | Security | `canon:security` | Security states |
-| Fixer | `canon:fixer` | Fix states |
 | Scribe | `canon:scribe` | Context sync states |
 | Shipper | `canon:shipper` | Ship states |
-| Chat | `canon:chat` | Discussion, brainstorming, ideas |
-| Guide | `canon:guide` | Questions, status |
 | Writer | `canon:writer` | Principle authoring |
 | Learner | `canon:learner` | Pattern analysis |
 

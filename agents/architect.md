@@ -101,7 +101,7 @@ Save to the path specified by the orchestrator (typically `.canon/plans/{task-sl
 
 ### Step 6: Extract task conventions
 
-After producing the design document, extract task-specific conventions into `.canon/plans/{slug}/CONVENTIONS.md`. These are the concrete patterns and decisions that implementors need — without requiring access to the full design document.
+After producing the design document, extract task-specific conventions into `.canon/plans/{slug}/CONVENTIONS.md`. These are the concrete patterns and decisions that engineers need — without requiring access to the full design document.
 
 ```markdown
 ## Task Conventions
@@ -116,19 +116,19 @@ Rules for task conventions:
 - **Max 15 items** — only decisions specific to THIS task
 - **Pattern, not rationale** — show the convention, not why
 - **Concrete** — include type signatures, naming patterns, import paths
-- **~200 tokens max** — implementors read this in fresh context
+- **~200 tokens max** — engineers read this in fresh context
 - **Do NOT duplicate** what's already in the project-level `.canon/CONVENTIONS.md`
 
 Read `.canon/CONVENTIONS.md` first (if it exists) to avoid repeating project-level conventions. Only include conventions that are new or specific to this task.
 
 ### Step 7: Break into atomic task plans
 
-**Plans Are Prompts, Not Documents** (agent-plans-are-prompts). Each plan is self-contained and directly executable — the implementor receives the plan file as its primary instruction.
+**Plans Are Prompts, Not Documents** (agent-plans-are-prompts). Each plan is self-contained and directly executable — the engineer receives the plan file as its primary instruction.
 
 Break the design into atomic tasks. Each task should:
 - Complete in ~50% of a fresh context window
 - Touch a small, well-defined set of files
-- Include tests the implementor writes alongside the code
+- Include tests the engineer writes alongside the code
 - Have concrete verification steps
 - Be independently committable
 
@@ -148,13 +148,13 @@ Assign wave numbers based on dependencies:
 
 For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md` using the task-plan template at `${CLAUDE_PLUGIN_ROOT}/templates/task-plan.md`.
 
-**Domain classification**: For each task plan, add a `domains:` field listing the relevant domains. Built-in domains: `frontend`, `backend-api`, `backend-data`, `infrastructure`, `testing`, `deprecation`. Use project-specific domain names if `.canon/domains/{name}.md` exists. The implementor reads domain priming files based on this field. Omit `domains:` if no domain-specific guidance applies.
+**Domain classification**: For each task plan, add a `domains:` field listing the relevant domains. Built-in domains: `frontend`, `backend-api`, `backend-data`, `infrastructure`, `testing`, `deprecation`. Use project-specific domain names if `.canon/domains/{name}.md` exists. The engineer reads domain priming files based on this field. Omit `domains:` if no domain-specific guidance applies.
 
 **Risk flow rule**: Every finding from the risk researcher MUST map to at least one task plan's `### Risk mitigations` section. If a risk finding doesn't naturally belong to any task, create a dedicated task for it or add it to the most relevant task. After producing all plans, verify: every risk finding has a home. If any risk finding is unaccounted for, flag it in the design doc's "Open questions" section.
 
-**Decision linking rule**: Every plan's `decisions:` frontmatter field MUST list the IDs of design decisions that are relevant to that task. The implementor reads decisions referenced in its plan from `${WORKSPACE}/decisions/`. If a decision affects multiple plans, list it in all of them. After producing all plans, verify: every decision doc is referenced by at least one plan. Unreferenced decisions are wasted context — either link them or remove them.
+**Decision linking rule**: Every plan's `decisions:` frontmatter field MUST list the IDs of design decisions that are relevant to that task. The engineer reads decisions referenced in its plan from `${WORKSPACE}/decisions/`. If a decision affects multiple plans, list it in all of them. After producing all plans, verify: every decision doc is referenced by at least one plan. Unreferenced decisions are wasted context — either link them or remove them.
 
-**Write affected files to board metadata**: After producing all task plans, collect every file path listed across all task `files:` frontmatter fields. Call `update_board` with `action: "set_metadata"` and `metadata: { affected_files: "<JSON array of file paths>" }`. Example: `update_board({ workspace: "${WORKSPACE}", action: "set_metadata", metadata: { affected_files: '["src/foo.ts","src/bar.ts"]' } })`. This enables downstream `file_context` injection to pre-load file summaries for implementors. The value must be a JSON-stringified array of strings.
+**Write affected files to board metadata**: After producing all task plans, collect every file path listed across all task `files:` frontmatter fields. Call `update_board` with `action: "set_metadata"` and `metadata: { affected_files: "<JSON array of file paths>" }`. Example: `update_board({ workspace: "${WORKSPACE}", action: "set_metadata", metadata: { affected_files: '["src/foo.ts","src/bar.ts"]' } })`. This enables downstream `file_context` injection to pre-load file summaries for engineers. The value must be a JSON-stringified array of strings.
 
 ### Step 8: Produce plan index
 
