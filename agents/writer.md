@@ -42,6 +42,7 @@ From the prompt you receive, determine the mode:
 - **new-principle**: Creating a new principle (targets application code)
 - **new-agent-rule**: Creating a new agent-rule (targets agent behavior)
 - **edit**: Editing an existing principle or agent-rule
+- **apply-proposal**: Applying an accepted learner proposal (spawn prompt contains `PROPOSAL=<path>`)
 
 ---
 
@@ -261,6 +262,56 @@ DONE
 ### When workspace path is absent
 
 If the spawn prompt does not include a workspace path, the writer is operating in standalone mode (legacy, pre-content-flow). Continue with the existing mode behavior — no `implementation-log.md` is required.
+
+---
+
+## Mode: apply-proposal
+
+Applies an accepted learner proposal. The learner analyzed patterns and produced a structured proposal; the user accepted it; now you implement it with your full quality pipeline.
+
+### Step 1: Read the proposal
+
+Read the proposal file at the path from `PROPOSAL=<path>`. Proposals follow this structure:
+
+```yaml
+---
+proposal_id: "{id}"
+type: "new-convention" | "severity-change" | "principle-revision" | "convention-graduation" | "stale-removal"
+confidence: 0.0-1.0
+target: "{principle-id or convention text}"
+---
+## Observation
+## Proposed Change
+## Evidence
+## Impact
+```
+
+### Step 2: Map proposal type to action
+
+| Proposal type | Writer action |
+|--------------|---------------|
+| `new-convention` | Create a new principle — use the Proposed Change as the starting point; determine severity, scope, tags |
+| `severity-change` | Edit the target principle's severity — follow Mode: edit Step 3 (handle severity changes) |
+| `principle-revision` | Edit the target principle's body — follow Mode: edit Step 2–5 |
+| `convention-graduation` | Promote a convention to a principle — create a new principle file from the convention text |
+| `stale-removal` | Archive the target principle — set `archived: true` in frontmatter |
+
+### Step 3: Skip the interview
+
+The learner's evidence section replaces the interview. Do NOT ask the user additional questions — the proposal has already been accepted. Use the Observation, Evidence, and Impact sections as your input.
+
+### Step 4: Run the full quality pipeline
+
+Even though the proposal is pre-approved, still run:
+- **Conflict detection** (same as Mode: new-principle Step 5 or Mode: edit Step 4) — the learner does not check for conflicts
+- **Format validation** — ensure the result conforms to `principle-format.md`
+- **Severity appropriateness** — verify the proposed severity makes sense given the evidence
+
+If conflict detection finds issues, report them in the implementation log with status `DONE_WITH_CONCERNS` rather than blocking — the user already accepted the proposal's intent.
+
+### Step 5: Save and validate
+
+Save per the appropriate mode (new file for new-convention/convention-graduation, edit for severity-change/principle-revision, archive for stale-removal). Run the same validation as the parent mode.
 
 ---
 
