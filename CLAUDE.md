@@ -93,31 +93,29 @@ When in doubt between tiers, prefer the higher tier. Proceed immediately — don
 
 If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — use the legacy "Driving the State Machine" section above.
 
-### Intent Classification + Runbook Selection
+### Intent Classification
 
-All build intents route through the planner (`canon:planner`) before runbook execution. The planner evaluates the request, produces a planning brief, and selects the runbook. The table below shows the signal-to-runbook mapping the planner uses:
+All build intents route through the planner (`canon:planner`) before execution. The planner evaluates the request, produces a planning brief and a synthetic runbook, and presents the runbook for approval. The table below shows the signal-to-tier mapping the planner uses:
 
-| Signal | Action |
-|--------|--------|
-| Bug fix, small change, 1–3 files | Read `fast-path.md` runbook |
-| New feature, 4–10 files | Read `feature.md` runbook (variant: refactor if restructuring) |
-| Large cross-cutting, 10+ files | Read `epic.md` runbook |
-| Migration, upgrade, "move to X" | Read `migrate.md` runbook |
-| Improve test coverage | Read `test-gap.md` runbook |
+| Signal | Tier |
+|--------|------|
+| Bug fix, small change, 1–3 files | fast-path |
+| New feature, 4–10 files | feature (variant: refactor if restructuring) |
+| Large cross-cutting, 10+ files | epic |
+| Migration, upgrade, "move to X" | migrate |
+| Improve test coverage | test-gap |
 | Review PR or branch | Spawn `reviewer` (no runbook) |
 | Security audit | Spawn `security`, then `reviewer` (no runbook) |
 | Investigate / "how does X work" | Spawn `researcher`(s), synthesize (no runbook) |
 | Scan for violations (via init) | Spawn `engineer` to scan + fix (no runbook) |
 | Create/edit principle | Route to `writer` via workspace-creating content flow (see `references/content-flow.md`) |
 | Analyze patterns / learn | Route to `learner` for mining (proposals to `.canon/proposed-learnings/`); when applying accepted proposals, route to `writer` via `content-flow/learn-apply` |
-| Documentation edits | Not yet active — `content-flow/docs` variant is future work (see `references/content-flow.md`). Until implemented, route as a `build` intent with `fast-path` or `feature` flow. |
+| Documentation edits | Not yet active — `content-flow/docs` variant is future work (see `references/content-flow.md`). Until implemented, route as a `build` intent with fast-path or feature tier. |
 | Resume interrupted flow | See Resume Protocol below |
-
-Runbook files live at `${CLAUDE_PLUGIN_ROOT}/skills/canon/runbooks/<flow-name>.md`.
 
 ### Pre-Build Gate
 
-Every build request routes through the planner (`canon:planner`) before execution begins. The planner evaluates the request — clarifies requirements, challenges assumptions, assesses value — and produces a planning brief. For trivial requests (clear bug fix, small change with obvious scope), the planner produces a shallow brief (one-sentence problem statement, one-line approach) and selects the fast-path runbook. The planner's depth calibration handles this automatically — there is no "skip the planner" shortcut.
+Every build request routes through the planner (`canon:planner`) before execution begins. The planner evaluates the request — clarifies requirements, challenges assumptions, assesses value — and produces a planning brief and synthetic runbook. For trivial requests (clear bug fix, small change with obvious scope), the planner produces a shallow brief (one-sentence problem statement, one-line approach) and a minimal runbook. The planner's depth calibration handles this automatically — there is no "skip the planner" shortcut.
 
 ### Per-Message Re-Classification (L1)
 
@@ -133,11 +131,11 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 ### Setup
 
-After the planner produces an approved brief and selects the runbook:
-
-1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`.
-2. Read the runbook for the selected flow: `${CLAUDE_PLUGIN_ROOT}/skills/canon/runbooks/<flow-name>.md` (one of `fast-path.md`, `feature.md`, `epic.md`, `migrate.md`, `test-gap.md`).
-3. Call `log_step` for each planned step from the runbook (creates the checklist).
+1. Spawn `canon:planner` with the build request. The planner produces a planning brief and a synthetic runbook (using `canon:plan` + `canon:synthesize` skills internally).
+2. Present the synthetic runbook to the user for approval. Iterate if the user requests changes (the planner handles re-synthesis).
+3. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` where `flow_name` and `tier` come from the approved runbook's frontmatter.
+4. Call `log_step` for each step in the approved runbook (creates the checklist).
+5. Execute steps in order, spawning the agent specified by each step.
 
 ### Resume Protocol
 
