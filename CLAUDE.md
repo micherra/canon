@@ -95,6 +95,8 @@ If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — u
 
 ### Intent Classification + Runbook Selection
 
+All build intents route through the planner (`canon:planner`) before runbook execution. The planner evaluates the request, produces a planning brief, and selects the runbook. The table below shows the signal-to-runbook mapping the planner uses:
+
 | Signal | Action |
 |--------|--------|
 | Bug fix, small change, 1–3 files | Read `fast-path.md` runbook |
@@ -110,18 +112,12 @@ If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — u
 | Analyze patterns / learn | Route to `learner` for mining (proposals to `.canon/proposed-learnings/`); when applying accepted proposals, route to `writer` via `content-flow/learn-apply` |
 | Documentation edits | Not yet active — `content-flow/docs` variant is future work (see `references/content-flow.md`). Until implemented, route as a `build` intent with `fast-path` or `feature` flow. |
 | Resume interrupted flow | See Resume Protocol below |
-| Vague / unclear request | Spawn `planner` (pre-build gate) |
 
 Runbook files live at `${CLAUDE_PLUGIN_ROOT}/skills/canon/runbooks/<flow-name>.md`.
 
 ### Pre-Build Gate
 
-Before starting any build flow, evaluate the request:
-
-- Is the problem clearly defined? Are acceptance criteria explicit?
-- Have alternatives been considered? Is the value proportional to the effort?
-- If any answer is no, spawn `planner` before proceeding to a build runbook.
-- If the request is a clear bug fix or small change with obvious scope, skip to fast-path.
+Every build request routes through the planner (`canon:planner`) before execution begins. The planner evaluates the request — clarifies requirements, challenges assumptions, assesses value — and produces a planning brief. For trivial requests (clear bug fix, small change with obvious scope), the planner produces a shallow brief (one-sentence problem statement, one-line approach) and selects the fast-path runbook. The planner's depth calibration handles this automatically — there is no "skip the planner" shortcut.
 
 ### Per-Message Re-Classification (L1)
 
@@ -136,6 +132,8 @@ If the current message is a build request, route to `planner` regardless of prio
 This is the soft enforcement layer (L1). The hard backstop is the `canon-workspace-check.sh` PreToolUse hook (L4, v2_1a-05) that blocks `Edit` / `Write` / `Bash`-on-tracked-files when no active Canon workspace exists for the current flow. L4 fires only on `Edit` / `Write` / tracked-Bash calls — MCP tool calls used by the lead to call `init_workspace` are not `Edit` / `Write` / `Bash` and are never blocked.
 
 ### Setup
+
+After the planner produces an approved brief and selects the runbook:
 
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`.
 2. Read the runbook for the selected flow: `${CLAUDE_PLUGIN_ROOT}/skills/canon/runbooks/<flow-name>.md` (one of `fast-path.md`, `feature.md`, `epic.md`, `migrate.md`, `test-gap.md`).
