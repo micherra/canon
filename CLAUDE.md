@@ -251,7 +251,9 @@ See the "Agent Spawn Error Handling" section below. The same retry logic (429 ra
 | Writer | `canon:writer` | Principle authoring |
 | Learner | `canon:learner` | Pattern analysis |
 
-**Isolation requirement:** Every `Agent` spawn MUST include `isolation: "worktree"` — except when the SpawnRequest carries a `worktree_path`. Wave task SpawnRequests include `worktree_path` pointing to Canon's worktree; the orchestrator spawns those agents without Agent tool isolation so they work directly in Canon's worktree.
+**Isolation requirement:** Every `Agent` spawn MUST include `isolation: "worktree"` — except:
+- When the SpawnRequest carries a `worktree_path`. Wave task SpawnRequests include `worktree_path` pointing to Canon's worktree; the orchestrator spawns those agents without Agent tool isolation so they work directly in Canon's worktree.
+- When the agent's `permissionMode` is `plan`. Plan-mode agents are truly read-only (no `Edit`, `Write`, or file-modifying `Bash`). Worktree isolation provides no functional value and adds 5–8s of overhead per spawn. Currently applies to: planner, security. This exemption does NOT extend to `acceptEdits` agents, which can modify files and require worktree isolation.
 
 ## Agent Spawn Error Handling
 
