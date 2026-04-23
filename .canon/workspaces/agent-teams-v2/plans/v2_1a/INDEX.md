@@ -15,7 +15,7 @@
 | v2_1a-04 | 3 | Wave 2 | `CLAUDE.md` | Amend with L1 per-message intent re-classification + pre-write gate guidance |
 | v2_1a-05 | 3 | Wave 2 | `hooks/canon-agent-teams/canon-workspace-check.sh`, `hooks/canon-agent-teams/hooks.json` | L4 PreToolUse hook with .gitignore-based allowlist (review HIGH-1) |
 | v2_1a-06 | 2 | — | `CLAUDE.md`, `agents/writer.md`, `agents/learner.md`, `references/content-flow.md` | Intent-routing expansion: principle / learn / docs intents create workspaces (review HIGH-1 prerequisite for L4). No deps — can run in parallel with v2_1a-01 and v2_1a-02. |
-| v2_1a-07 | 4 | Wave 3 | `docs/v2.1a-coldstart-spike.md` | Pre-ship cold-start friction spike: 3 trivial requests, measure iteration-0 latency (review MEDIUM-6) |
+| v2_1a-07 | 4 | Wave 3 | `docs/v2.1a-coldstart-spike.md` | Pre-ship cold-start friction spike: 3 trivial requests, measure iteration-0 latency (review MEDIUM-6). **Completed** — CONDITIONAL PASS under revised targets (30s REDIRECT / 60s GREENLIGHT); see spike report §11 |
 | v2_1a-07-fix | 4.5 | Wave 4 | `agents/planner.md`, `CLAUDE.md` | Cold-start latency mitigation: skip worktree for plan-mode agents, add cold-start KG awareness. Required before v2_1a-08 proceeds (spike FAIL resolution). |
 | v2_1a-08 | 5 | v2_1a-07-fix | `docs/v2.1a-validation-report.md` | Cross-artifact validation against ≥ 5 distinct request types |
 
@@ -33,9 +33,9 @@
 - v2_1a-05 ships the L4 hook
 - L4 (v2_1a-05) MUST NOT land before intent-routing expansion (v2_1a-06) from Wave 2 clears, otherwise L4 blocks writer / learner flows
 
-**Wave 4** (1 task): Cold-start friction spike. Needs the full integrated system to run against.
+**Wave 4** (1 task): Cold-start friction spike. **Completed** — FAIL on original 20s target (0/9). Escalated to Wave 4.5 mitigation.
 
-**Wave 4.5** (1 task): Cold-start latency mitigation. Resolves spike FAIL — skip worktree isolation for plan-mode agents, add cold-start KG awareness to planner. Re-run spike measurements after mitigations. Architect review required.
+**Wave 4.5** (1 task): Cold-start latency mitigation. **Completed** — 4 fixes applied, re-run FAIL on 20s target (1/9), revised to 30s/60s → CONDITIONAL PASS (7/9). Target revision committed in Wave 5 prep. Planner efficiency filed as v2_1b-09.
 
 **Wave 5** (1 task): Cross-artifact validation. Requires spike (including mitigation re-run) to pass.
 
@@ -54,3 +54,7 @@ v2.1a builds on top of v2 Phase 1. Gate A (`planner` + `engineer` exist and vali
 ### Relationship to v2.1b
 
 v2.1b (lifecycle persistence substrate) begins only after v2.1a ships and produces ≥ 20 synthesized runbooks in real use. See `.canon/workspaces/agent-teams-v2/plans/v2_1b/INDEX.md`.
+
+### Filed v2.1b follow-up
+
+**v2_1b-09 — Planner efficiency.** Filed from Wave 5 target revision. Reduces the planner's cold-start latency floor below the revised targets (30s/60s). Expected surfaces: preload trimming, selective caching, scope-conditional evidence thresholds. See `.canon/workspaces/agent-teams-v2/plans/v2_1b/v2_1b-09-PLAN.md`.

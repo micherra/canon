@@ -1445,11 +1445,18 @@ v2 Phase 1 exit criteria met:
 - `engineer` agent definition exists and registers
 - Both validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on`
 
-**Current state:** Gate A is NOT met. The Canon repository currently has `implementor` and `fixer` — not `planner` or `engineer`. Those agents are created via `phase1-08` (v2 Phase 1 task). Until that task completes and the agents are validated, v2.1a cannot start.
+**Current state:** Gate A is MET. All criteria satisfied:
 
-Without Gate A, this plan has no planner agent to hang synthesis off. Gate B cannot be followed by action even if it clears.
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | `planner` and `engineer` agent definitions exist and register | ✓ | Created in phase1-08; `agents/planner.md` and `agents/engineer.md` exist on main |
+| 2 | Both validated in ≥ 3 successful runs under `CANON_AGENT_TEAMS_MODE=on` | ✓ | 9 runs in Wave 4/4.5 cold-start spike (commit `a614bb60`); all produced valid planner output |
+| 3 | CLAUDE.md has orchestration section matching §2 | ✓ | Shipped in v2_1a-04 (Wave 3); includes MCP tool composition, dispatch framework, HITL patterns, completion checklist |
+| 4 | All 5 hook scripts exist, are executable, and register in `hooks/canon-agent-teams/hooks.json` | ✓ | Shipped across phase1-05 through phase1-09; `canon-workspace-check.sh` (L4) added in v2_1a-05 (Wave 3) |
+| 5 | Skill preloading validated for ≥ 3 agent types | ✓ | Wave 4 spike spawns demonstrate preloaded rules/references injected into planner prompts without extra Read calls; broader wave execution confirmed preloading for researcher, architect, engineer, reviewer agent types |
+| 6 | `npm run build` and `npm test` pass | ✓ | Verified at each wave commit |
 
-> **Before v2.1a begins**, the architect review's HIGH-severity items must also be resolved: (1) L4 hook allowlist design (`.gitignore`-based) + intent-routing expansion for `principle` / `learn` / `docs` — see `docs/agent-teams-migration-plan-v2.1-review.md` §4.1 HIGH-1. The review's HIGH-2 adjustment (drop user-facing aggregate confidence scalar) is already reflected in §7.1 of this plan.
+> **Architect review HIGH-severity items** resolved before v2.1a Wave 3: (1) L4 hook allowlist uses `.gitignore` via `git check-ignore` (v2_1a-05); (2) intent-routing expanded for `principle` / `learn` intents (v2_1a-06). HIGH-2 adjustment (drop user-facing aggregate confidence scalar) reflected in §7.1.
 
 ### 15.2 Gate B (evidence) — already clearable
 
