@@ -151,6 +151,16 @@ When resuming a session or the user says "continue" / "resume":
 4. Continue from the first step with `status: "started"` or the next unstarted step.
 5. If no journal exists, check for legacy workspace state and advise the user.
 
+### Multi-Wave Migration Mode
+
+When coordinating a multi-wave migration (epic-scale work spanning multiple execution sessions), load the wave-steward skill before processing wave reports:
+
+1. Read `${CLAUDE_PLUGIN_ROOT}/skills/canon/skills/wave-steward/SKILL.md`.
+2. Have the user fill in `templates/migration-state.md` with the current migration state.
+3. Follow the wave-steward operating loop for each wave report received.
+
+This mode activates explicitly — the user enters it by providing a wave report and migration state. It does not activate automatically for single-session builds.
+
 ### Skill Preloading + Domain Skill + Template Naming
 
 **Preloaded rules, references, primers, and templates (from agent frontmatter):** Before the `Agent` tool call, invoke `resolve_agent_skills({ agent_name })`. The tool reads four dedicated frontmatter fields — `rules:`, `references:`, `primers:`, `templates:` — loads each listed file from `rules/<name>.md` / `references/<name>.md` / `primers/<name>.md` / `templates/<name>.md`, and returns a `preload_prompt` string. Include that string verbatim at the top of the spawn prompt. The agent receives its governing rules, protocol references, domain primers, and required output templates preloaded — no path-passing, no runtime Reads, no "did they remember to load X" failure mode. Canon uses its own four-field preloader instead of Claude Code's native `skills:` mechanism because Canon stores these as flat `.md` files, not per-skill `SKILL.md` directories. The native `skills:` field remains available for real Claude Code native skills, which it preloads independently.
