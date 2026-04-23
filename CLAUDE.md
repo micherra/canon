@@ -95,7 +95,7 @@ If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — u
 
 ### Intent Classification
 
-All build intents route through the planner (`canon:planner`) before execution. The planner evaluates the request, produces a planning brief and a synthetic runbook, and presents the runbook for approval. The table below shows the signal-to-tier mapping the planner uses:
+All build intents route through the planner (`canon:planner`) before execution. The planner evaluates the request and produces a runbook for approval. The table below shows the signal-to-tier mapping the planner uses:
 
 | Signal | Tier |
 |--------|------|
@@ -115,7 +115,7 @@ All build intents route through the planner (`canon:planner`) before execution. 
 
 ### Pre-Build Gate
 
-Every build request routes through the planner (`canon:planner`) before execution begins. The planner evaluates the request — clarifies requirements, challenges assumptions, assesses value — and produces a planning brief and synthetic runbook. For trivial requests (clear bug fix, small change with obvious scope), the planner produces a shallow brief (one-sentence problem statement, one-line approach) and a minimal runbook. The planner's depth calibration handles this automatically — there is no "skip the planner" shortcut.
+Every build request routes through the planner (`canon:planner`) before execution begins. The planner evaluates the request — clarifies requirements, challenges assumptions, assesses value — and produces a runbook. For trivial requests (clear bug fix, small change with obvious scope), the planner produces a minimal runbook. The planner's depth calibration handles this automatically — there is no "skip the planner" shortcut.
 
 ### Per-Message Re-Classification (L1)
 
@@ -131,8 +131,8 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 ### Setup
 
-1. Spawn `canon:planner` with the build request. The planner produces a planning brief and a synthetic runbook (using `canon:plan` + `canon:synthesize` skills internally).
-2. Present the synthetic runbook to the user for approval. Iterate if the user requests changes (the planner handles re-synthesis).
+1. Spawn `canon:planner` with the build request. The planner produces a runbook.
+2. Present the runbook to the user for approval. Iterate if the user requests changes.
 3. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` where `flow_name` and `tier` come from the approved runbook's frontmatter.
 4. Call `log_step` for each step in the approved runbook (creates the checklist).
 5. Execute steps in order, spawning the agent specified by each step.
