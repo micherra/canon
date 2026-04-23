@@ -24,11 +24,13 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `test-report.md` | tester | Test coverage and results |
 | `context-sync-report.md` | scribe | Cross-iteration context sync |
 | `wave-briefing.md` | orchestrator | Wave execution briefing |
+| `wave-report.md` | orchestrator | Structured wave execution report for inter-wave handoff |
 | `design-document.md` | architect | Technical design with Canon alignment |
 | `task-plan.md` | architect | Atomic task plan for implementors |
 | `plan-index.md` | architect | Index of all task plans for a build |
 | `pr-description.md` | shipper | PR description from build artifacts |
 | `chat-brief.md` | chat | Structured brief for build handoff |
+| `migration-state.md` | orchestrator | Migration state handoff for multi-wave coordination |
 
 ## Conventions
 <!-- last-updated: 2026-03-22 -->

@@ -53,12 +53,12 @@ Source: [`mcp-server/src/features/orchestration/engine/debate.ts`](./mcp-server/
 
 For large changes, Canon doesn't plan everything upfront and execute blindly. The architect plans wave by wave: implement wave 1, see the results, plan wave 2 with what was actually learned. Between waves, Canon runs automatic consultations:
 
-- **Plan review** — an architect reads the upcoming wave's plans for conflicts, ambiguity, and pre-answerable questions before implementors start
+- **Plan review** — an architect reads the upcoming wave's plans for conflicts, ambiguity, and pre-answerable questions before engineers start
 - **Pattern check** — flags architectural drift from the design intent
 - **Early security scan** — flags secrets, injection risks, and insecure defaults in wave changes before the next wave builds on them
 - **Targeted research** — digs into open questions surfaced by pattern check
 
-These consultations run as background agents and inject their findings directly into the next wave's implementor prompts. Implementors get the right context without asking for it. Source: [`flows/epic.md`](./flows/epic.md), [`flows/fragments/`](./flows/fragments/)
+These consultations run as background agents and inject their findings directly into the next wave's engineer prompts. Engineers get the right context without asking for it. Source: [`flows/epic.md`](./flows/epic.md), [`flows/fragments/`](./flows/fragments/)
 
 ### Knowledge graph with affinity injection
 
@@ -78,7 +78,7 @@ The graph also tracks hotspot scores (churn × complexity) and co-change pairs (
 
 Canon ships 56 built-in engineering principles across three severity tiers. Every agent loads the principles relevant to its task — matched by architectural layer and file path pattern. Reviewers check compliance. Drift reports show you which principles the codebase is drifting away from, with trend data, most-violated principle lists, and hotspot directories.
 
-Principles aren't static documentation. `/canon:learn` analyzes accumulated review data to suggest severity adjustments (a convention with consistent violations might warrant promoting to a strong-opinion), flag stale principles the codebase no longer follows, and surface candidates for new principles based on recurring review findings. Source: [`mcp-server/src/features/principles/`](./mcp-server/src/features/principles/), [`mcp-server/src/features/diagnostics/tools/get-drift-report.ts`](./mcp-server/src/features/diagnostics/tools/get-drift-report.ts)
+Principles aren't static documentation. `/canon:review-learnings` reviews accumulated review data to suggest severity adjustments (a convention with consistent violations might warrant promoting to a strong-opinion), flag stale principles the codebase no longer follows, and surface candidates for new principles based on recurring review findings. Source: [`mcp-server/src/features/principles/`](./mcp-server/src/features/principles/), [`mcp-server/src/features/diagnostics/tools/get-drift-report.ts`](./mcp-server/src/features/diagnostics/tools/get-drift-report.ts)
 
 ### PR review with impact analysis
 
@@ -149,6 +149,19 @@ Each agent runs in its own git worktree — a lightweight separate working direc
 
 Workspaces persist. If a build is interrupted — connection dropped, session ended, context limit hit — `board.json` has the full state. Picking up where you left off is "resume" intent; Canon reads the board and re-enters the state machine at the interrupted step.
 
+### Agent Teams Mode
+
+Canon v2.1 introduced a second orchestration mode: **Agent Teams** (enabled by setting `CANON_AGENT_TEAMS_MODE=on`). In this mode, the orchestrator follows runbooks instead of flow state machines, and every user message is re-classified independently — sessions aren't sticky.
+
+Key capabilities in Agent Teams mode:
+
+- **Pre-build gate** — a planner agent evaluates requests before any code is written, challenging assumptions, assessing alternatives, and confirming that the value is proportional to the effort. Clear bug fixes skip straight to fast-path.
+- **Per-message re-classification** — intent is re-classified on every message, not once per session. A design discussion that pivots to a build request is routed through the planner regardless of prior context.
+- **Pre-write gate (L1 + L4)** — prevents code changes outside a Canon flow. L1 is a soft enforcement check; L4 is the `canon-workspace-check.sh` hook that blocks `Edit`/`Write`/`Bash` when no active Canon workspace exists.
+- **Skill preloading** — before each agent spawn, `resolve_agent_skills` reads the agent's declared rules, references, primers, and templates, then injects the resolved content directly into the spawn prompt. Agents receive governing context without runtime reads.
+- **Journal-based tracking** — each step is logged with `log_step` before and after spawn. `verify_completion` checks that all expected artifacts exist before the flow closes.
+- **Resume protocol** — reads `journal.json` to identify the last completed step, then continues from the first unfinished step.
+
 ### Hooks
 
 Canon installs tool-use interceptors that run automatically. These are guardrails that enforce policy without requiring agent compliance:
@@ -163,6 +176,8 @@ Canon installs tool-use interceptors that run automatically. These are guardrail
 | `principle-inject.sh` | Before Write/Edit | Inject relevant principle summaries into prompts |
 | `learn-nudge.sh` | After Bash | Suggest principle creation or updates |
 | `compaction-check.sh` | After Bash | Detect workspace file growth |
+| `plan-mode-guard.sh` | Before Bash | Enforce plan-mode agent restrictions |
+| `post-merge-cleanup.sh` | After Bash | Clean up worktrees after merge operations |
 
 Source: [`hooks/hooks.json`](./hooks/hooks.json)
 
@@ -176,11 +191,11 @@ You type: **"add dark mode to the dashboard"**
 
 **Research.** A `researcher` agent scans the codebase: finds the theming system, identifies the files that would change (Tailwind config, component tokens, top-level layout), flags that the user preference isn't currently persisted. Saves structured findings to the workspace.
 
-**Design.** A `architect` agent reads the research, produces a design: CSS custom properties for tokens, `prefers-color-scheme` media query as default, localStorage for persistence, a theme context in React. It writes an `INDEX.md` with task plans for each implementor.
+**Design.** A `architect` agent reads the research, produces a design: CSS custom properties for tokens, `prefers-color-scheme` media query as default, localStorage for persistence, a theme context in React. It writes an `INDEX.md` with task plans for each engineer.
 
-**Checkpoint.** The guide agent summarizes the design in plain language and asks for your thoughts. You say "looks good but also support system preference". The feedback is saved; the architect revises. You approve.
+**Checkpoint.** Canon summarizes the design in plain language and asks for your thoughts. You say "looks good but also support system preference". The feedback is saved; the architect revises. You approve.
 
-**Implement.** Two `implementor` agents work in parallel worktrees — one on the theming system, one on the component updates. Before they start, a plan-review consultation fires: an architect reads both plans and injects a note that the token naming scheme needs to be consistent across both tasks. Implementors get that note in their prompts. After wave 1, an early security scan checks for any accidental secrets or injection issues.
+**Implement.** Two `engineer` agents work in parallel worktrees — one on the theming system, one on the component updates. Before they start, a plan-review consultation fires: an architect reads both plans and injects a note that the token naming scheme needs to be consistent across both tasks. Engineers get that note in their prompts. After wave 1, an early security scan checks for any accidental secrets or injection issues.
 
 **Test.** A `tester` agent runs the test suite, analyzes coverage gaps, and writes missing tests for the theme context and toggle behavior.
 
@@ -198,17 +213,15 @@ Each state in a flow spawns a specialist agent. Agents receive structured contex
 
 | Agent | Role |
 |-------|------|
+| Planner | Pre-build gate — evaluates requests, challenges assumptions, assesses value |
 | Researcher | Codebase analysis, risk assessment, investigation |
 | Architect | Design decisions, task plans, technical direction |
-| Implementor | Code changes, tests, self-review |
+| Engineer | Code changes — implementation and targeted fixes (dual-mode) |
 | Tester | Test coverage analysis, test writing, verification |
 | Reviewer | Principle-based code review, compliance scoring |
 | Security | Vulnerability assessment, threat modeling |
-| Fixer | Targeted fixes for failing tests or review violations |
 | Scribe | Context sync — updates CLAUDE.md and documentation |
 | Shipper | Merge, PR creation, deployment prep |
-| Chat | Design discussions, brainstorming, ideas |
-| Guide | Questions, status checks, HITL checkpoints |
 | Writer | Principle authoring and editing |
 | Learner | Review data analysis, principle improvement suggestions |
 
@@ -255,7 +268,7 @@ Principles are matched by architectural layer and file path pattern. When you to
 | `/canon:pr-review` | Review a PR or branch against principles |
 | `/canon:edit-principle` | Edit a principle — severity, scope, tags, or body |
 | `/canon:test-principle` | Verify a principle fires by generating a violation |
-| `/canon:learn` | Analyze review data and suggest principle improvements |
+| `/canon:review-learnings` | Review proposed learnings and apply accepted ones as principle/convention updates |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts; optionally archive to project history |
 
@@ -267,7 +280,7 @@ Canon's tooling is provided by a TypeScript MCP server (`mcp-server/`) that Clau
 
 | Area | Tools |
 |------|-------|
-| **Orchestration** | `load_flow`, `init_workspace`, `drive_flow`, `update_board`, `report_result`, `post_message`, `get_messages`, `inject_wave_event`, `get_transcript`, `seed_workspace`, `simulate_flow`, `resolve_wave_event`, `resolve_after_consultations` |
+| **Orchestration** | `load_flow`, `init_workspace`, `drive_flow`, `update_board`, `report_result`, `post_message`, `get_messages`, `inject_wave_event`, `get_transcript`, `simulate_flow`, `resolve_wave_event`, `resolve_after_consultations`, `resolve_agent_skills`, `log_step`, `verify_completion` |
 | **Principles** | `get_principles`, `list_principles`, `get_compliance`, `review_code` |
 | **Knowledge graph** | `codebase_graph`, `graph_query`, `semantic_search`, `store_summaries` |
 | **PR review** | `show_pr_impact`, `review_code`, `store_pr_review` |
@@ -303,11 +316,11 @@ Source: [`mcp-server/src/ui/`](./mcp-server/src/ui/)
 | Competing agents | Multiple agents race with different optimization lenses; synthesizer merges the best ideas | [`engine/compete.ts`](./mcp-server/src/features/orchestration/engine/compete.ts) |
 | Debate protocol | Multi-team structured deliberation with heuristic convergence detection and HITL checkpoint | [`engine/debate.ts`](./mcp-server/src/features/orchestration/engine/debate.ts) |
 | Adaptive waves | Architect re-plans after each implementation wave; consultations fire between waves | [`flows/epic.md`](./flows/epic.md) |
-| Wave consultations | Plan review, pattern check, early security scan, targeted research inject into implementor prompts | [`flows/fragments/`](./flows/fragments/) |
+| Wave consultations | Plan review, pattern check, early security scan, targeted research inject into engineer prompts | [`flows/fragments/`](./flows/fragments/) |
 | Knowledge graph | SQLite-backed codebase graph with affinity injection, semantic search, cycle detection, hub identification | [`features/knowledge-graph/`](./mcp-server/src/features/knowledge-graph/) |
 | Git intelligence | Hotspot scoring (churn × complexity) and co-change pair detection from git history | [`features/knowledge-graph/git-intel/`](./mcp-server/src/features/knowledge-graph/git-intel/) |
 | Principle enforcement | Principles loaded per task, enforced by reviewer, drift-tracked across sessions | [`features/principles/`](./mcp-server/src/features/principles/) |
-| Drift detection | Compliance rate trends, most-violated principles, hotspot directories, `/canon:learn` suggestions | [`features/diagnostics/`](./mcp-server/src/features/diagnostics/) |
+| Drift detection | Compliance rate trends, most-violated principles, hotspot directories, `/canon:review-learnings` suggestions | [`features/diagnostics/`](./mcp-server/src/features/diagnostics/) |
 | PR impact analysis | Change story clustering, blast radius, co-change warnings, progressive review dashboard | [`features/pr-review/`](./mcp-server/src/features/pr-review/) |
 | HITL breakpoints | Flows pause for user approval; semantic classification routes to approved/revise/reject | [`flows/fragments/user-checkpoint.md`](./flows/fragments/user-checkpoint.md) |
 | Worktree isolation | Each agent in its own git worktree; safe parallelism, clean main worktree | [`hooks/`](./hooks/) |
@@ -322,6 +335,9 @@ Source: [`mcp-server/src/ui/`](./mcp-server/src/ui/)
 | Postcondition contracts | States declare file-exists / pattern-match / bash-check assertions verified after completion | [`engine/contract-checker.ts`](./mcp-server/src/features/orchestration/services/contract-checker.ts) |
 | File claim tracking | Workflows register file ownership; overlapping claims produce advisory warnings | [`shared/lib/file-claims.ts`](./mcp-server/src/shared/lib/file-claims.ts) |
 | Agent provenance | Commit messages include structured trailers: `Canon-Workflow`, `Canon-Agent`, `Canon-State`, `Canon-Task` | [`shared/lib/commit-trailers.ts`](./mcp-server/src/shared/lib/commit-trailers.ts) |
+| Agent Teams mode | Runbook-based orchestration with planner gate, skill preloading, journal tracking | [CLAUDE.md agent-teams section](./CLAUDE.md) |
+| Pre-build gate | Planner evaluates requests before builds start — challenges assumptions, assesses alternatives | [`agents/planner.md`](./agents/planner.md) |
+| Skill preloading | Agent rules, references, primers, and templates resolved and injected before spawn | `resolve_agent_skills` tool |
 
 ---
 

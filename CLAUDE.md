@@ -93,35 +93,22 @@ When in doubt between tiers, prefer the higher tier. Proceed immediately — don
 
 If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — use the legacy "Driving the State Machine" section above.
 
-### Intent Classification + Runbook Selection
+### Intent Classification
 
 | Signal | Action |
 |--------|--------|
-| Bug fix, small change, 1–3 files | Read `fast-path.md` runbook |
-| New feature, 4–10 files | Read `feature.md` runbook (variant: refactor if restructuring) |
-| Large cross-cutting, 10+ files | Read `epic.md` runbook |
-| Migration, upgrade, "move to X" | Read `migrate.md` runbook |
-| Improve test coverage | Read `test-gap.md` runbook |
-| Review PR or branch | Spawn `reviewer` (no runbook) |
-| Security audit | Spawn `security`, then `reviewer` (no runbook) |
-| Investigate / "how does X work" | Spawn `researcher`(s), synthesize (no runbook) |
-| Scan for violations (via init) | Spawn `engineer` to scan + fix (no runbook) |
-| Create/edit principle | Route to `writer` via workspace-creating content flow (see `references/content-flow.md`) |
-| Analyze patterns / learn | Route to `learner` for mining (proposals to `.canon/proposed-learnings/`); when applying accepted proposals, route to `writer` via `content-flow/learn-apply` |
-| Documentation edits | Not yet active — `content-flow/docs` variant is future work (see `references/content-flow.md`). Until implemented, route as a `build` intent with `fast-path` or `feature` flow. |
+| Build, fix, change, improve (any scope) | Spawn `planner` |
+| Review PR or branch | Spawn `reviewer` |
+| Security audit | Spawn `security`, then `reviewer` |
+| Investigate / "how does X work" | Spawn `researcher`(s), synthesize findings |
+| Scan for violations (via init) | Spawn `engineer` to scan + fix |
+| Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
+| Analyze patterns / learn | Route to `learner` for mining |
 | Resume interrupted flow | See Resume Protocol below |
-| Vague / unclear request | Spawn `planner` (pre-build gate) |
-
-Runbook files live at `${CLAUDE_PLUGIN_ROOT}/skills/canon/runbooks/<flow-name>.md`.
 
 ### Pre-Build Gate
 
-Before starting any build flow, evaluate the request:
-
-- Is the problem clearly defined? Are acceptance criteria explicit?
-- Have alternatives been considered? Is the value proportional to the effort?
-- If any answer is no, spawn `planner` before proceeding to a build runbook.
-- If the request is a clear bug fix or small change with obvious scope, skip to fast-path.
+Every build request routes through the planner (`canon:planner`) before execution begins. The planner evaluates the request — clarifies requirements, challenges assumptions, assesses value — and produces a runbook. For trivial requests (clear bug fix, small change with obvious scope), the planner produces a minimal runbook. The planner's depth calibration handles this automatically — there is no "skip the planner" shortcut.
 
 ### Per-Message Re-Classification (L1)
 
@@ -137,9 +124,11 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 ### Setup
 
-1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`.
-2. Read the runbook for the selected flow: `${CLAUDE_PLUGIN_ROOT}/skills/canon/runbooks/<flow-name>.md` (one of `fast-path.md`, `feature.md`, `epic.md`, `migrate.md`, `test-gap.md`).
-3. Call `log_step` for each planned step from the runbook (creates the checklist).
+1. Spawn `canon:planner` with the build request. The planner produces a runbook.
+2. Present the runbook to the user for approval. Iterate if the user requests changes.
+3. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` where `flow_name` and `tier` come from the approved runbook's frontmatter.
+4. Call `log_step` for each step in the approved runbook (creates the checklist).
+5. Execute steps in order, spawning the agent specified by each step.
 
 ### Resume Protocol
 
@@ -150,6 +139,16 @@ When resuming a session or the user says "continue" / "resume":
 3. Read the workspace artifacts produced by completed steps for context.
 4. Continue from the first step with `status: "started"` or the next unstarted step.
 5. If no journal exists, check for legacy workspace state and advise the user.
+
+### Multi-Wave Migration Mode
+
+When coordinating a multi-wave migration (epic-scale work spanning multiple execution sessions), load the wave-steward skill before processing wave reports:
+
+1. Read `${CLAUDE_PLUGIN_ROOT}/skills/canon/skills/wave-steward/SKILL.md`.
+2. Have the user fill in `${CLAUDE_PLUGIN_ROOT}/templates/migration-state.md` with the current migration state.
+3. Follow the wave-steward operating loop for each wave report received.
+
+This mode activates explicitly — the user enters it by providing a wave report and migration state. It does not activate automatically for single-session builds.
 
 ### Skill Preloading + Domain Skill + Template Naming
 
