@@ -16,7 +16,8 @@
 | v2_1a-05 | 3 | Wave 2 | `hooks/canon-agent-teams/canon-workspace-check.sh`, `hooks/canon-agent-teams/hooks.json` | L4 PreToolUse hook with .gitignore-based allowlist (review HIGH-1) |
 | v2_1a-06 | 2 | — | `CLAUDE.md`, `agents/writer.md`, `agents/learner.md`, `references/content-flow.md` | Intent-routing expansion: principle / learn / docs intents create workspaces (review HIGH-1 prerequisite for L4). No deps — can run in parallel with v2_1a-01 and v2_1a-02. |
 | v2_1a-07 | 4 | Wave 3 | `docs/v2.1a-coldstart-spike.md` | Pre-ship cold-start friction spike: 3 trivial requests, measure iteration-0 latency (review MEDIUM-6) |
-| v2_1a-08 | 5 | Wave 4 | `docs/v2.1a-validation-report.md` | Cross-artifact validation against ≥ 5 distinct request types |
+| v2_1a-07-fix | 4.5 | Wave 4 | `agents/planner.md`, `CLAUDE.md` | Cold-start latency mitigation: skip worktree for plan-mode agents, add cold-start KG awareness. Required before v2_1a-08 proceeds (spike FAIL resolution). |
+| v2_1a-08 | 5 | v2_1a-07-fix | `docs/v2.1a-validation-report.md` | Cross-artifact validation against ≥ 5 distinct request types |
 
 ### Wave Summary
 
@@ -34,7 +35,9 @@
 
 **Wave 4** (1 task): Cold-start friction spike. Needs the full integrated system to run against.
 
-**Wave 5** (1 task): Cross-artifact validation. Requires spike to pass.
+**Wave 4.5** (1 task): Cold-start latency mitigation. Resolves spike FAIL — skip worktree isolation for plan-mode agents, add cold-start KG awareness to planner. Re-run spike measurements after mitigations. Architect review required.
+
+**Wave 5** (1 task): Cross-artifact validation. Requires spike (including mitigation re-run) to pass.
 
 ### Deferred cleanup
 

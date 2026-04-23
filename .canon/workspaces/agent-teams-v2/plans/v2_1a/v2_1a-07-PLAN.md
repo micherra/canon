@@ -26,8 +26,8 @@ Run a pre-ship spike to measure cold-start iteration-0 latency for trivial reque
 
 1. **Three representative trivial requests:**
    - Request 1: "Fix the typo in `docs/reference/canon-reference.md` where 'relevent' should be 'relevant'"
-   - Request 2: "Rename the variable `foo_bar` to `fooBar` in `src/shared/util/foo.ts` and update its one caller"
-   - Request 3: "Update the default value of `CANON_DEFAULT_TIMEOUT_MS` in `.canon/config.json` from 30000 to 60000"
+   - Request 2: "Rename the constant `EMBEDDING_BATCH_SIZE` to `EMBEDDING_CHUNK_SIZE` in `mcp-server/src/shared/constants.ts` and update its callers" *(amended: original referenced non-existent `src/shared/util/foo.ts`)*
+   - Request 3: "Update the default value of `max_principles_per_review` in `.canon/config.json` from 10 to 15" *(amended: original referenced non-existent `CANON_DEFAULT_TIMEOUT_MS` key)*
 2. **Measurement:**
    - Start a fresh session with `CANON_AGENT_TEAMS_MODE=on`, empty planner memory, no corpus
    - Submit the request
