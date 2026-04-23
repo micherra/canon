@@ -1,6 +1,18 @@
 {
-  "description": "Canon agent-teams hooks — commit trailer validation, doc/KG staleness nudges, and scribe queuing. All scripts no-op unless CANON_AGENT_TEAMS_MODE=on. The completion-verify.sh script is NOT registered here; the lead invokes it explicitly from the CLAUDE.md completion checklist before declaring a flow done.",
+  "description": "Canon agent-teams hooks — commit trailer validation, doc/KG staleness nudges, scribe queuing, and workspace-check enforcement. All scripts no-op unless CANON_AGENT_TEAMS_MODE=on. The completion-verify.sh script is NOT registered here; the lead invokes it explicitly from the CLAUDE.md completion checklist before declaring a flow done.",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/canon-workspace-check.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Bash",
