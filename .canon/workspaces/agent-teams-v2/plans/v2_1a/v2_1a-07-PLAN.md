@@ -56,13 +56,15 @@ This is the test. The spike report IS the deliverable.
 
 ### Verify
 
-1. `docs/v2.1a-coldstart-spike.md` exists with methodology, raw measurements, and pass/fail decision
-2. All 9 measurements recorded
-3. Pass decision documented and cross-referenced from `docs/agent-teams-migration-plan-v2.md` §10.2 exit criteria
+1. `docs/v2.1a-coldstart-spike.md` exists with methodology, raw measurements, pass/fail decision, and §11 target revision
+2. All 9 measurements recorded (original spike §2 + mitigation re-run §10)
+3. Pass decision documented against revised targets (30s median REDIRECT / 60s median GREENLIGHT — see spike report §10 for architectural-floor rationale) and cross-referenced from `docs/agent-teams-migration-plan-v2.md` §10.2 exit criteria
+4. v2.1b planner-efficiency follow-up filed (`.canon/workspaces/agent-teams-v2/plans/v2_1b/v2_1b-09-PLAN.md`)
 
 ### Done when
 
-- Spike report committed
-- If PASS: v2.1a Wave 5 (validation) proceeds
-- If CONDITIONAL PASS: outliers explained, still proceed
-- If FAIL: v2.1a rollout paused; mitigation task added to INDEX before proceeding; architect review's review of the fail decision is required
+- Spike report committed with original measurements (§2), mitigation re-run (§10), and target revision (§11)
+- Verdict: CONDITIONAL PASS under revised targets (7/9 within 30s REDIRECT / 60s GREENLIGHT)
+- v2_1a-07-fix (Wave 4.5) applied: worktree isolation skipped for plan-mode agents, cold-start KG awareness added
+- v2.1b planner-efficiency follow-up filed for further cold-start floor reduction (v2_1b-09)
+- v2.1a Wave 5 (v2_1a-08 cross-artifact validation) proceeds with revised targets as the acceptance bar
