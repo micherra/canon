@@ -21,12 +21,12 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
 PACKAGE_JSON="$REPO_ROOT/mcp-server/package.json"
-INDEX_TS="$REPO_ROOT/mcp-server/src/index.ts"
+SERVER_STATE_TS="$REPO_ROOT/mcp-server/src/app/server-state.ts"
 
 echo "Bumping version to $VERSION in:"
 echo "  $PLUGIN_JSON"
 echo "  $PACKAGE_JSON"
-echo "  $INDEX_TS"
+echo "  $SERVER_STATE_TS"
 
 # Update .claude-plugin/plugin.json
 jq --arg v "$VERSION" '.version = $v' "$PLUGIN_JSON" > "$PLUGIN_JSON.tmp" && mv "$PLUGIN_JSON.tmp" "$PLUGIN_JSON"
@@ -34,12 +34,12 @@ jq --arg v "$VERSION" '.version = $v' "$PLUGIN_JSON" > "$PLUGIN_JSON.tmp" && mv 
 # Update mcp-server/package.json
 jq --arg v "$VERSION" '.version = $v' "$PACKAGE_JSON" > "$PACKAGE_JSON.tmp" && mv "$PACKAGE_JSON.tmp" "$PACKAGE_JSON"
 
-# Update the hardcoded version string in index.ts
+# Update the hardcoded version string in server-state.ts
 # Matches:   version: "X.Y.Z",
-sed -i '' "s/version: \"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\"/version: \"$VERSION\"/" "$INDEX_TS"
+sed -i '' "s/version: \"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\"/version: \"$VERSION\"/" "$SERVER_STATE_TS"
 
 echo "Staging files..."
-git -C "$REPO_ROOT" add "$PLUGIN_JSON" "$PACKAGE_JSON" "$INDEX_TS"
+git -C "$REPO_ROOT" add "$PLUGIN_JSON" "$PACKAGE_JSON" "$SERVER_STATE_TS"
 
 echo "Committing..."
 git -C "$REPO_ROOT" commit -m "release: v$VERSION"
