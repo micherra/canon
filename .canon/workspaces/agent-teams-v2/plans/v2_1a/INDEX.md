@@ -36,6 +36,10 @@
 
 **Wave 5** (1 task): Cross-artifact validation. Requires spike to pass.
 
+### Deferred cleanup
+
+- **Flatten `hooks/canon-agent-teams/` → `hooks/`.** Once `CANON_AGENT_TEAMS_MODE` flag is removed and agent-teams becomes the only mode, the `canon-agent-teams` subdirectory is a vestigial namespace. Merge its hooks and `hooks.json` into the top-level `hooks/` directory in the wave that removes the flag gate.
+
 ### Exit criteria
 
 v2.1a is complete when all 9 tasks pass their "Done when" criteria and the design document's dc-01 through dc-09 are satisfied. See `docs/agent-teams-migration-plan-v2.md` §10.2 exit criteria for the top-level gate.
