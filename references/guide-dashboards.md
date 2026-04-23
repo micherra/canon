@@ -33,5 +33,5 @@ Gather and present project-wide health data:
 
 Based on the data:
 - If 0 reviews: "Run some code reviews to start building drift data."
-- If 10+ reviews since last learn: "Enough data for learning — try `/canon:learn`."
-- If 0 conventions: "No project conventions yet. Edit `.canon/CONVENTIONS.md` or run `/canon:learn --patterns`."
+- If 10+ reviews since last learn: "Enough data for learning — Canon will auto-analyze after the next few flows."
+- If 0 conventions: "No project conventions yet. Edit `.canon/CONVENTIONS.md` or ask Canon to analyze codebase patterns."

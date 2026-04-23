@@ -129,7 +129,7 @@ This line is machine-readable — the orchestrator parses it to display a user n
 
 | Mode | Write targets | Forbidden |
 |------|--------------|-----------|
-| Manual (`/canon:learn`) | `.canon/LEARNING-REPORT.md`, `.canon/learning.jsonl` | `.canon/proposed-learnings/` |
+| Manual (natural language intent) | `.canon/LEARNING-REPORT.md`, `.canon/learning.jsonl` | `.canon/proposed-learnings/` |
 | Auto-trigger (transcript paths received) | `.canon/proposed-learnings/{timestamp}/` | `.canon/LEARNING-REPORT.md`, `.canon/learning.jsonl` |
 
-**Auto-trigger vs manual mode detection**: You are in auto-trigger mode when the orchestrator provides transcript paths in your context instead of dimension flags. When spawned via `/canon:learn`, dimension flags are explicit (`--principle-health`, `--codebase-patterns`, etc.) and you are in manual mode.
+**Auto-trigger vs manual mode detection**: You are in auto-trigger mode when the orchestrator provides transcript paths in your context instead of dimension flags. When spawned via natural language intent (e.g., "analyze codebase patterns"), dimension flags are explicit (`--principle-health`, `--codebase-patterns`, etc.) and you are in manual mode.

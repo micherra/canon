@@ -3,7 +3,7 @@ name: learner
 description: >-
   Analyzes codebase patterns, review history, flow execution logs, and
   conventions to suggest improvements to Canon principles. Produces a
-  structured learning report. Spawned by /canon:learn.
+  structured learning report. Spawned by the lead orchestrator.
 model: sonnet
 color: blue
 maxTurns: 25
