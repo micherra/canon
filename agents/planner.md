@@ -7,7 +7,7 @@ description: >-
 model: opus
 color: green
 memory: project
-maxTurns: 40
+maxTurns: 80
 permissionMode: plan
 skills:
   - canon:plan
