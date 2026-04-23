@@ -123,6 +123,18 @@ Before starting any build flow, evaluate the request:
 - If any answer is no, spawn `planner` before proceeding to a build runbook.
 - If the request is a clear bug fix or small change with obvious scope, skip to fast-path.
 
+### Per-Message Re-Classification (L1)
+
+**Re-classify every user message.** Intent is classified per message, not per session. Every user message re-classifies; chat / question sessions that pivot to a build request route the pivot message through `planner` regardless of prior conversation flow. Chat / question history does not make subsequent builds "chat."
+
+If the current message is a build request, route to `planner` regardless of prior conversation flow.
+
+### Pre-Write Gate (L1)
+
+**Before using `Edit`, `Write`, or `Bash` for code changes**, verify Canon routing: ask yourself *"Is this request currently routed through a Canon build flow (planner + approved runbook)?"* If no, stop. Present the build request to the user and route through `planner`. Editing code outside a Canon flow is the failure mode this rule prevents.
+
+This is the soft enforcement layer (L1). The hard backstop is the `canon-workspace-check.sh` PreToolUse hook (L4, v2_1a-05) that blocks `Edit` / `Write` / `Bash`-on-tracked-files when no active Canon workspace exists for the current flow. L4 fires only on `Edit` / `Write` / tracked-Bash calls — MCP tool calls used by the lead to call `init_workspace` are not `Edit` / `Write` / `Bash` and are never blocked.
+
 ### Setup
 
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`.
