@@ -17,6 +17,8 @@
 | v2_1b-06 | 4 | v2_1b-01, v2_1b-03, v2_1b-04, v2_1b-05 | `agents/learner.md` | Extend learner with principle-refinement analysis dimension; reads lifecycle snapshots + drift-store violations; produces structured patches to principle files |
 | v2_1b-07 | 5 | v2_1b-06 | `docs/v2.1b-loop-closure-evidence.md`, `principles/*.md` (edit), `.canon/learning.jsonl` | Loop-closure evidence run: produce ≥ 1 accepted, applied principle-refinement proposal end-to-end against v2.1b-era substrate |
 | v2_1b-08 | 6 | v2_1b-07 | `docs/v2.1b-validation-report.md` | Cross-artifact validation of the full substrate |
+| v2_1b-09 | ~ | — | TBD | Planner efficiency — reduce cold-start latency floor (defense-in-depth, downgraded from required) |
+| v2_1b-10 | ~ | — | TBD | Mandatory tail enforcement under compact output (NF-6) |
 
 ### Wave Summary
 
