@@ -156,7 +156,7 @@ When resuming a session or the user says "continue" / "resume":
 When coordinating a multi-wave migration (epic-scale work spanning multiple execution sessions), load the wave-steward skill before processing wave reports:
 
 1. Read `${CLAUDE_PLUGIN_ROOT}/skills/canon/skills/wave-steward/SKILL.md`.
-2. Have the user fill in `templates/migration-state.md` with the current migration state.
+2. Have the user fill in `${CLAUDE_PLUGIN_ROOT}/templates/migration-state.md` with the current migration state.
 3. Follow the wave-steward operating loop for each wave report received.
 
 This mode activates explicitly — the user enters it by providing a wave report and migration state. It does not activate automatically for single-session builds.
