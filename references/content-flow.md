@@ -17,7 +17,7 @@ The content flow is the workspace-creating mechanism for three non-build intents
 | Intent | Variant | Spawning agent |
 |--------|---------|----------------|
 | `principle` | `content-flow/principle` | `writer` |
-| `learn` (application mode) | `content-flow/learn-apply` | `learner` |
+| `learn` (application mode) | `content-flow/learn-apply` | `writer` (receives accepted proposal from learner) |
 | `docs` | `content-flow/docs` | (future; engineer in content-authoring mode) |
 
 > **Note on `init_workspace`:** As of this writing, `init_workspace` defaults to a build-intent workspace layout. Full `intent_class` support (`build` | `principle` | `learn` | `docs`) needs to be added in a follow-up task (MCP server files are out of scope here). The behavioral contract defined in this document is the authoritative spec; the MCP tool will catch up. Until then, orchestrators calling `init_workspace` for a content flow should use a slug that signals the variant (e.g., `principle-<slug>`, `learn-apply-<slug>`).
@@ -39,7 +39,7 @@ All step IDs come from `references/runbook-vocabulary.md` (Version 1.0). No new 
 | Step | Default agent | HITL | Notes |
 |------|---------------|------|-------|
 | `research` | researcher | none | Investigate existing principles, prior learnings, coverage gaps. May be skipped for trivial edits (one-line corrections). |
-| `implement` | writer or learner | none | Content-authoring mode. The agent edits the target file(s) and produces an `implementation-log.md`. No code is written. |
+| `implement` | writer | none | Content-authoring mode. The writer edits the target file(s) and produces an `implementation-log.md`. No code is written. The writer handles all principle edits — including those originating from learner proposals — to ensure conflict detection and format validation run consistently. |
 | `review` | reviewer | checkpoint | Principle compliance and factual correctness of the edited content. |
 | `context-sync` | scribe | none | Mandatory tail — update CLAUDE.md, context.md, CONVENTIONS.md if contract-level changes occurred. |
 | `learn` | learner | none | Mandatory tail — pattern analysis from the completed flow. |
@@ -90,13 +90,13 @@ Triggered by: user request to create or edit a principle, convention, or agent-r
 - The writer receives the workspace path in its spawn prompt and produces `implementation-log.md` upon completion.
 - All existing writer modes (new-principle, new-agent-rule, edit) continue to work within this flow.
 
-### `content-flow/learn-apply` — learner in application mode
+### `content-flow/learn-apply` — writer applying accepted learner proposal
 
 Triggered by: user acceptance of a proposal from `.canon/proposed-learnings/` and request to apply it.
 
-- Mining mode (auto-trigger after flows) is unchanged — the learner writes to `.canon/proposed-learnings/` without a workspace.
-- Application mode is new: when the user accepts a proposal and asks Canon to apply it, the orchestrator creates a workspace and spawns the learner with the accepted proposal path.
-- The learner edits the target principle or convention file and produces `implementation-log.md`.
+- The learner's role ends at proposal generation (mining mode). It writes structured proposals to `.canon/proposed-learnings/` — it never edits principle or convention files.
+- When the user accepts a proposal, the orchestrator creates a workspace and spawns the `writer` with the accepted proposal as context. The writer applies the change using its full pipeline: conflict detection, format validation, severity checks, and implementation logging.
+- The writer receives the proposal file path in its spawn prompt and produces `implementation-log.md`.
 
 ### `content-flow/docs` (future)
 

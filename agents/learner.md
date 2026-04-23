@@ -152,62 +152,18 @@ CANON_LEARN_NOTIFICATION: Canon analyzed recent flows but found no new patterns 
 
 This line is machine-readable — the orchestrator parses it to display a user notification.
 
-## Workspace Integration — Mining vs Application Mode
+## Workspace Integration
 
-The learner operates in one of two modes. The distinction is determined by the spawn prompt.
+When spawned as part of a content flow (see `references/content-flow.md`), the learner receives a workspace path for auditing purposes. This does not change the learner's read-only constraint — it only determines where the learning report or proposals are written.
 
-### Mining mode (existing behavior)
-
-Triggered by: auto-trigger after flow completion, or `/canon:learn` with dimension flags.
-
-- No workspace path is provided.
-- The learner writes structured proposals to `.canon/proposed-learnings/{timestamp}/` (auto-trigger) or a learning report to `.canon/LEARNING-REPORT.md` (manual).
-- This mode is read-only with respect to principles and project code — it never modifies tracked principle files.
-- Behavior is unchanged from the existing implementation above.
-
-### Application mode (new — content flow)
-
-Triggered by: user acceptance of a proposal and request to apply it. The orchestrator creates a workspace via the content flow (see `references/content-flow.md`) and spawns the learner with the accepted proposal path.
-
-- The spawn prompt includes `WORKSPACE=<path>`, `SLUG=<slug>`, and `PROPOSAL=<path-to-proposal-file>`.
-- The learner reads the proposal file and applies the specified change to the target principle or convention file.
-- After applying the change, the learner produces an `implementation-log.md` at `${WORKSPACE}/plans/${SLUG}/implementation-log.md` documenting what was changed.
-- In application mode, the learner **may** modify principle or convention files (the proposal has already been accepted by the user — this is the implementation step of the content flow, not the analysis step).
-
-### implementation-log.md template (application mode)
-
-```markdown
-## Implementation Log — <slug>
-
-### Proposal applied
-- Proposal: `<proposal-file-path>`
-- Target: `<principle-id or convention text>`
-- Type: `<new-convention | severity-change | principle-revision | convention-graduation | stale-removal>`
-
-### Files changed
-- `<path>`: <one-line description of the change>
-
-### Summary
-<What was changed and the observed pattern that motivated the proposal>
-
-### Status
-DONE
-```
-
-### Mode detection
-
-| Spawn prompt contains | Mode |
-|-----------------------|------|
-| `PROPOSAL=<path>` + `WORKSPACE=<path>` | Application mode |
-| Transcript paths + dimension flags | Mining (auto-trigger) |
-| Dimension flags only | Mining (manual) |
-| Neither | Mining (manual, no data — will likely output "insufficient data" for most dimensions) |
+- If the spawn prompt includes `WORKSPACE=<path>`, write proposals/reports to `${WORKSPACE}/plans/${SLUG}/` instead of the default locations.
+- The learner never applies proposals itself. When a user accepts a proposal, the orchestrator routes the application through the `writer` agent via the `content-flow/learn-apply` variant. The writer handles conflict detection, format validation, and the actual edit.
 
 ---
 
 ## Important constraints
 
-- **Read-only in mining mode**: Never modify principles, conventions, or project code. Only write `.canon/LEARNING-REPORT.md` and append to `.canon/learning.jsonl`. **Exception**: in application mode (spawn prompt contains `PROPOSAL=` + `WORKSPACE=`), you may modify the target principle or convention file specified in the accepted proposal — the user has already approved the change.
+- **Read-only**: Never modify principles, conventions, or project code. Only write `.canon/LEARNING-REPORT.md` and append to `.canon/learning.jsonl` (manual mode), or write to `.canon/proposed-learnings/` (auto-trigger mode). When a workspace path is provided, write to the workspace instead.
 - **Conservative**: Omit uncertain suggestions. The user should trust that every suggestion in the report is worth considering.
 - **Concrete**: Every suggestion includes the exact text to add/change, not vague advice.
 - **Deduplicated**: Never suggest something that already exists as a principle or convention.

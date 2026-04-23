@@ -107,7 +107,7 @@ If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — u
 | Investigate / "how does X work" | Spawn `researcher`(s), synthesize (no runbook) |
 | Scan for violations (via init) | Spawn `engineer` to scan + fix (no runbook) |
 | Create/edit principle | Route to `writer` via workspace-creating content flow (see `references/content-flow.md`) |
-| Analyze patterns / learn | Route to `learner` with workspace context; mining mode uses `.canon/proposed-learnings/`, application mode uses content flow |
+| Analyze patterns / learn | Route to `learner` for mining (proposals to `.canon/proposed-learnings/`); when applying accepted proposals, route to `writer` via `content-flow/learn-apply` |
 | Documentation edits | Not yet active — `content-flow/docs` variant is future work (see `references/content-flow.md`). Until implemented, route as a `build` intent with `fast-path` or `feature` flow. |
 | Resume interrupted flow | See Resume Protocol below |
 | Vague / unclear request | Spawn `planner` (pre-build gate) |
