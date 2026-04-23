@@ -44,7 +44,7 @@ export const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || dirname(mcpServ
 
 export const server = new McpServer({
   name: "canon",
-  version: "0.1.0",
+  version: "2.1.0",
 });
 
 // Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
