@@ -29,6 +29,7 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `plan-index.md` | architect | Index of all task plans for a build |
 | `pr-description.md` | shipper | PR description from build artifacts |
 | `chat-brief.md` | chat | Structured brief for build handoff |
+| `migration-state.md` | orchestrator | Migration state handoff for multi-wave coordination |
 
 ## Conventions
 <!-- last-updated: 2026-03-22 -->
