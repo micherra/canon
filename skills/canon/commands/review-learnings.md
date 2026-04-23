@@ -53,22 +53,13 @@ If the principle is tagged as security-related, refuse the demotion entirely:
 
 ### Step 3: Apply accepted proposals
 
-Based on the user's choice:
+Spawn the **writer agent** in `apply-proposal` mode for each accepted proposal. The writer handles conflict detection, format validation, and the actual edit — this command does not modify principle files directly.
 
-| Proposal type | Apply action |
-|--------------|-------------|
-| new-convention | Append to `.canon/CONVENTIONS.md` |
-| severity-change | Edit the principle's YAML frontmatter severity field and move file to the appropriate subdirectory |
-| principle-revision | Read the principle file, apply the proposed change to the relevant section |
-| convention-graduation | Tell the user to run `ask Canon to create a new principle {topic}` — writer handles interactive authoring |
-| stale-removal | Remove the convention line from `.canon/CONVENTIONS.md` |
-
-If an apply action fails (file not found, write error, etc.), report a clear error message and do not silently skip:
-"Failed to apply proposal {proposal_id}: {reason}. Leaving proposal in place."
-
-After applying:
-1. Move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` (create subdirectory if needed)
-2. Append an entry to `.canon/learning.jsonl`:
+For each accepted proposal:
+1. Spawn the writer agent with: `"Mode: apply-proposal. PROPOSAL=${proposal_file_path}"`. If a workspace is active, include `WORKSPACE=<path>` and `SLUG=<slug>`.
+2. The writer reads the proposal, maps the type to the appropriate action (create, edit severity, revise, graduate, archive), runs its quality pipeline, and saves.
+3. After the writer completes, move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` (create subdirectory if needed).
+4. Append an entry to `.canon/learning.jsonl`:
    ```json
    {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"..."}
    ```
@@ -97,6 +88,7 @@ If any proposals were accepted, suggest the user run `/canon:check` to verify th
 ### Constraints
 
 - Only modifies files the user explicitly approves
+- All principle/convention edits go through the writer agent — this command never edits principle files directly
 - Proposal files are moved (not deleted) to preserve audit trail
 - `learning.jsonl` is append-only
 - Never demote security-tagged rules; show extra confirmation for any rule demotion
