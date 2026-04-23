@@ -17,6 +17,7 @@ references:
   - status-protocol
 templates:
   - pr-description
+  - wave-report
 tools:
   - Read
   - Edit

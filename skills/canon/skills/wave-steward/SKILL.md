@@ -31,14 +31,16 @@ Two things, in order:
      wave specs and dependencies
 
 2. **Wave report** — what the most recent execution session
-   produced. Expect at least:
-   - Commit SHAs
-   - Per-task exit-criteria checklist
-   - Verdict (PASS / CONDITIONAL / FAIL / etc.)
-   - Test delta vs baseline
+   produced. The shipper agent produces this using
+   `templates/wave-report.md`. Expect the template's structure:
+   - Wave identity (name, task IDs, branch)
+   - Commits (SHAs with subjects)
+   - Per-task exit-criteria checklist (pass/fail per criterion)
+   - Verdict (PASS / CONDITIONAL / FAIL, with conditions if CONDITIONAL)
+   - Test delta vs baseline (before/after counts, regressions, new tests)
    - PLAN amendments made
    - New findings (with severity)
-   - New remediations filed
+   - New remediations filed (with task IDs and edges)
    - Blockers
    - PR link
 
