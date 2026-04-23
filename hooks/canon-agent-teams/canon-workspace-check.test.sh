@@ -284,6 +284,40 @@ pass "13: Edit in worktree with active CANON_PARENT_WORKSPACE → allowed"
 git -C "$T13_MAIN" worktree remove --force "$T13_WT" 2>/dev/null || true
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 15. Bash with redirect, no space after > (e.g. >src/app.ts) → BLOCKED
+# ─────────────────────────────────────────────────────────────────────────────
+T15="$MASTER_SANDBOX/t15"
+_setup_repo "$T15"
+
+exit_code=0
+(
+  cd "$T15"
+  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Bash \
+    bash "$HOOK" <<< '{"command": "echo hi >src/app.ts"}' \
+    >/dev/null 2>&1
+) || exit_code=$?
+
+[[ "$exit_code" -eq 2 ]] || fail "15: expected exit 2, got $exit_code"
+pass "15: Bash with >file (no space) to tracked file → blocked"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 16. Bash with tee writing to multiple files, one tracked → BLOCKED
+# ─────────────────────────────────────────────────────────────────────────────
+T16="$MASTER_SANDBOX/t16"
+_setup_repo "$T16"
+
+exit_code=0
+(
+  cd "$T16"
+  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Bash \
+    bash "$HOOK" <<< '{"command": "echo hi | tee .canon/log.txt src/app.ts"}' \
+    >/dev/null 2>&1
+) || exit_code=$?
+
+[[ "$exit_code" -eq 2 ]] || fail "16: expected exit 2, got $exit_code"
+pass "16: Bash with tee to gitignored + tracked files → blocked"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 14. Block message content check — BLOCKED with expected message
 # ─────────────────────────────────────────────────────────────────────────────
 T14="$MASTER_SANDBOX/t14"

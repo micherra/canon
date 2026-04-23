@@ -58,13 +58,18 @@ case "${TOOL_NAME:-}" in
     fi
 
     # Parse Bash command for file write targets.
-    # Redirect targets: > file, >> file
+    # Redirect targets: > file, >> file (with or without space after operator)
     while IFS= read -r match; do
       [[ -n "$match" ]] && TARGETS+=("$match")
-    done < <(echo "$cmd" | grep -oE '(>>?|tee)[[:space:]]+[^[:space:];|&>]+' \
-      | sed -E 's/^(>>?|tee)[[:space:]]+//' || true)
+    done < <(echo "$cmd" | grep -oE '>>?[[:space:]]*[^[:space:];|&>]+' \
+      | sed -E 's/^>>?[[:space:]]*//' || true)
 
-    # tee with multiple args (tee a b c) — already handled above via grep
+    # tee with multiple args: tee [-ai] file1 file2 ...
+    while IFS= read -r match; do
+      [[ -n "$match" ]] && TARGETS+=("$match")
+    done < <(echo "$cmd" | grep -oE 'tee[[:space:]]+(-[ai][[:space:]]+)*[^;|&]+' \
+      | sed -E 's/^tee[[:space:]]+(-[ai][[:space:]]+)*//' \
+      | tr ' ' '\n' | grep -v '^$' || true)
 
     # sed -i: sed -i '' 's/.../.../' file  OR  sed -i 's/.../.../' file
     while IFS= read -r match; do
