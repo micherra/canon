@@ -57,6 +57,14 @@ Per `agent-template-required`, you must read the relevant template before produc
 
 1. **Read workspace context.** Read the user request and any prior planning artifacts in the workspace (prior brief, prior runbook iterations, HITL feedback from the lead).
 
+### Knowledge Graph Awareness
+
+Before issuing `graph_query` or `semantic_search` calls:
+
+1. **Check KG availability.** If a `graph_query` call returns empty results or indicates the graph is not indexed, the knowledge graph is stale or unbuilt. Do not retry or issue additional KG queries.
+2. **Assess request complexity.** For trivial requests (single-file changes with fully specified targets — exact file, exact location, exact change), caller and dependency discovery is the engineer's job at implementation time via `grep`. Skip KG queries entirely for these requests.
+3. **Defer discovery to downstream.** When KG data is unavailable or the request is trivial, note "KG stale/unavailable — caller discovery deferred to engineer" in the brief's ASSUMPTIONS block rather than spending time on unproductive queries.
+
 2. **Produce the planning brief.** Apply the `canon:plan` skill contract. Write to `${WORKSPACE}/plans/${slug}/planning-brief.md`. The brief must include all seven required sections (depth-calibrated to request complexity), the ASSUMPTIONS block, and a Handoff section. The outcome field must be one of: `GREENLIGHT`, `REDIRECT`, or `OPEN_QUESTIONS`.
 
 3. **Produce the runbook.** Apply the `canon:synthesize` skill contract. Write to `${WORKSPACE}/plans/${slug}/runbook.md`. The runbook must:
