@@ -207,7 +207,7 @@ DONE
 
 ## Important constraints
 
-- **Read-only** (almost): Never modify principles, conventions, or project code. Only write `.canon/LEARNING-REPORT.md` and append to `.canon/learning.jsonl`.
+- **Read-only in mining mode**: Never modify principles, conventions, or project code. Only write `.canon/LEARNING-REPORT.md` and append to `.canon/learning.jsonl`. **Exception**: in application mode (spawn prompt contains `PROPOSAL=` + `WORKSPACE=`), you may modify the target principle or convention file specified in the accepted proposal — the user has already approved the change.
 - **Conservative**: Omit uncertain suggestions. The user should trust that every suggestion in the report is worth considering.
 - **Concrete**: Every suggestion includes the exact text to add/change, not vague advice.
 - **Deduplicated**: Never suggest something that already exists as a principle or convention.
