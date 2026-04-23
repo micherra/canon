@@ -32,7 +32,7 @@ description: >-
 model: opus
 color: green
 memory: project
-maxTurns: 40
+maxTurns: 80
 permissionMode: plan
 skills:
   - canon:plan
@@ -55,6 +55,8 @@ tools:
   - mcp__canon__semantic_search
 ---
 ```
+
+**PLAN amendment note** (2026-04-23, pre-ship NF-1): `maxTurns` bumped from 40 to 80. v2_1a-08 validation found S4 (migration, 39 tool calls) and S5 (test-gap, 32 tool calls) exhausted the 40-turn budget investigating the codebase without producing output. The 2× bump tests the capacity hypothesis — if 80 turns suffices, the exhaustion was a budget shortfall; if not, architectural budget-awareness (v2_1b-09) is required. See NF-1 in `docs/v2.1a-validation-report.md` §12.
 
 **PLAN amendment note** (2026-04-22, phase1-08.5 + follow-up): the original v2_1a-03 PLAN declared a single `skills:` list mixing two distinct concerns — procedural skills (how to plan, how to synthesize) and Canon rules/references (agent-surface-assumptions, status-protocol, etc.). The corrected model separates them:
 
