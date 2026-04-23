@@ -95,22 +95,15 @@ If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — u
 
 ### Intent Classification
 
-All build intents route through the planner (`canon:planner`) before execution. The planner evaluates the request and produces a runbook for approval. The table below shows the signal-to-tier mapping the planner uses:
-
-| Signal | Tier |
-|--------|------|
-| Bug fix, small change, 1–3 files | fast-path |
-| New feature, 4–10 files | feature (variant: refactor if restructuring) |
-| Large cross-cutting, 10+ files | epic |
-| Migration, upgrade, "move to X" | migrate |
-| Improve test coverage | test-gap |
-| Review PR or branch | Spawn `reviewer` (no runbook) |
-| Security audit | Spawn `security`, then `reviewer` (no runbook) |
-| Investigate / "how does X work" | Spawn `researcher`(s), synthesize (no runbook) |
-| Scan for violations (via init) | Spawn `engineer` to scan + fix (no runbook) |
-| Create/edit principle | Route to `writer` via workspace-creating content flow (see `references/content-flow.md`) |
-| Analyze patterns / learn | Route to `learner` for mining (proposals to `.canon/proposed-learnings/`); when applying accepted proposals, route to `writer` via `content-flow/learn-apply` |
-| Documentation edits | Not yet active — `content-flow/docs` variant is future work (see `references/content-flow.md`). Until implemented, route as a `build` intent with fast-path or feature tier. |
+| Signal | Action |
+|--------|--------|
+| Build, fix, change, improve (any scope) | Spawn `planner` |
+| Review PR or branch | Spawn `reviewer` |
+| Security audit | Spawn `security`, then `reviewer` |
+| Investigate / "how does X work" | Spawn `researcher`(s), synthesize findings |
+| Scan for violations (via init) | Spawn `engineer` to scan + fix |
+| Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
+| Analyze patterns / learn | Route to `learner` for mining |
 | Resume interrupted flow | See Resume Protocol below |
 
 ### Pre-Build Gate
