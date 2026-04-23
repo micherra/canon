@@ -1,7 +1,7 @@
 ---
 template: wave-report
 description: Structured wave execution report produced at the end of each wave. Consumed by the wave-steward skill for inter-wave analysis and next-wave prompt drafting.
-used-by: [shipper]
+used-by: [orchestrator]
 read-by: [wave-steward, orchestrator]
 output-path: ${WORKSPACE}/WAVE-REPORT.md
 ---
