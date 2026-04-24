@@ -88,7 +88,7 @@ describe("init_workspace — runbook and brief persistence (NF-7)", () => {
     const briefContent = "# Brief\n\ngoal: ship it\n";
 
     const result = await initWorkspaceFlow(
-      { ...baseInput, runbook_content: runbookContent, brief_content: briefContent },
+      { ...baseInput, brief_content: briefContent, runbook_content: runbookContent },
       projectDir,
       "/fake/plugin",
     );
