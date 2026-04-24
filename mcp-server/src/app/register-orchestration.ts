@@ -91,6 +91,12 @@ function registerFlowCoreTools(): void {
         skip_flags: z.array(z.string()).optional(),
         task: z.string(),
         tier: z.enum(["small", "medium", "large"]),
+        runbook_content: z.string().optional().describe(
+          "Raw runbook markdown to persist to ${WORKSPACE}/plans/${slug}/runbook.md at creation time"
+        ),
+        brief_content: z.string().optional().describe(
+          "Raw planning brief markdown to persist to ${WORKSPACE}/plans/${slug}/planning-brief.md at creation time"
+        ),
       },
     },
     gatedWrapHandler(async (input) => initWorkspaceFlow(input, projectDir, pluginDir)),
