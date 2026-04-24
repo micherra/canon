@@ -41,7 +41,7 @@ Every synthesized step carries these first-class fields (per v2.1 §5.2):
 - `skills` — if present, every name must correspond to a file at `references/<name>.md` or `skills/canon/skills/<name>/SKILL.md`. Unknown skill names are synthesis errors.
 - `cause` — required on every `fix` step. One of: `test-failure`, `security`, `review`, `verify`. Indicates which upstream step triggered this fix. Do not emit a `fix` step without a `cause`.
 - `mcp_tools` — list of MCP tool names (e.g., `mcp__canon__get_principles`) the lead should call before spawning this step's agent. Used to compose context.
-- `artifacts` — at least one path per step. Paths are relative to `${WORKSPACE}`. Use `${slug}` and `${task_id}` placeholders where appropriate.
+- `artifacts` — at least one entry per step. Entries are either file paths relative to `${WORKSPACE}` or `outcome:` sentinels. An `outcome:` sentinel takes the form `outcome:{description}` (e.g., `outcome:all existing tests pass`) and signals a pass/fail outcome rather than a file artifact — use it when a step produces no file output but has a verifiable result. Paths and outcome sentinels may coexist in the same `artifacts` list. Use `${slug}` and `${task_id}` placeholders in file paths where appropriate.
 - `hitl` — must match the vocabulary's Default HITL column unless the brief body overrides with justification. HITL posture is a policy floor, not a confidence dial.
 - `skip_when` — human-readable string explaining when this step may be skipped (e.g., "no database schema changes in scope"). Leave `~` (null) when the step is always executed.
 

@@ -68,6 +68,17 @@ The planner MUST NOT skip these steps regardless of flow size, user preference, 
 
 ## Step-Specific Constraints
 
+### Artifacts: `outcome:` sentinel
+
+Steps that produce no file output but have a verifiable pass/fail result may use an `outcome:` sentinel in their `artifacts` list instead of a file path:
+
+```yaml
+artifacts:
+  - "outcome:{human-readable description of what must be true}"
+```
+
+The `outcome:` prefix signals a pass/fail outcome rather than a file artifact. The description is human-readable and appears in HITL output when the step fails. Paths and outcome sentinels may coexist in the same `artifacts` list.
+
 ### `fix`
 
 The `fix` step requires a `cause` field indicating which upstream step triggered the fix:
@@ -87,9 +98,25 @@ When dispatched as `team`, the planner decomposes the implementation into wave-p
 
 Migration steps pair with a rollback artifact. The synthesis contract requires that any runbook containing a `migrate` step also documents the rollback strategy.
 
+### `verify`
+
+Runs existing tests and type checks after an implementation step to detect regressions. When all checks pass, no file artifact is produced — use the `outcome:` sentinel:
+
+```yaml
+artifacts:
+  - "outcome:all tests and type checks pass"
+```
+
+File artifacts (e.g., a test-results log) may be added alongside the sentinel when available.
+
 ### `pre-launch-check`
 
-Gate-only step with no agent. The lead runs discovered gate commands (from prior steps' `discovered_gates`) via Bash. All gates must pass for the step to succeed; any failure triggers HITL (`on_failure`).
+Gate-only step with no agent. The lead runs discovered gate commands (from prior steps' `discovered_gates`) via Bash. All gates must pass for the step to succeed; any failure triggers HITL (`on_failure`). Because this step produces no file output, use the `outcome:` sentinel:
+
+```yaml
+artifacts:
+  - "outcome:all discovered gates pass"
+```
 
 ---
 
