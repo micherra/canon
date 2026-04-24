@@ -8,8 +8,9 @@
  * Stale locks (mtime + staleAfterMs < now) are reclaimed atomically.
  */
 
-import { readFile, stat, unlink, utimes, writeFile } from "node:fs/promises";
+import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { CANON_FILES } from "@shared/constants.ts";
 
 export type JanitorLockResult =
   | { acquired: true; previousMtime: number | null }
@@ -108,12 +109,12 @@ export const acquireJanitorLock = async (
 };
 
 /**
- * Update lock mtime to now after a successful janitor run.
+ * Record a successful janitor run timestamp to a separate lastrun file.
+ * The lock file is transient (deleted on release); the timestamp must persist.
  */
 export const commitJanitorLock = async (canonDir: string): Promise<void> => {
-  const path = lockPath(canonDir);
-  const now = new Date();
-  await utimes(path, now, now);
+  const lastrunPath = join(canonDir, CANON_FILES.JANITOR_LASTRUN);
+  await writeFile(lastrunPath, String(Date.now()));
 };
 
 /**
@@ -129,14 +130,15 @@ export const releaseJanitorLock = async (canonDir: string): Promise<void> => {
 };
 
 /**
- * Read lock mtime (= last successful janitor timestamp).
- * Returns null if no lock file exists.
+ * Read last successful janitor run timestamp from the lastrun file.
+ * Returns null if no lastrun file exists.
  */
 export const getLastJanitorTimestamp = async (canonDir: string): Promise<number | null> => {
-  const path = lockPath(canonDir);
+  const lastrunPath = join(canonDir, CANON_FILES.JANITOR_LASTRUN);
   try {
-    const st = await stat(path);
-    return st.mtime.getTime();
+    const content = await readFile(lastrunPath, "utf-8");
+    const ts = parseInt(content.trim(), 10);
+    return Number.isNaN(ts) ? null : ts;
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;

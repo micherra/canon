@@ -41,6 +41,7 @@ export const CANON_DIR = ".canon";
 export const CANON_FILES = {
   CONFIG: "config.json",
   DRIFT_DB: "drift.db",
+  JANITOR_LASTRUN: "janitor.lastrun",
   JANITOR_LOCK: "janitor.lock",
   KNOWLEDGE_DB: "knowledge-graph.db",
   ORCHESTRATION_DB: "orchestration.db",

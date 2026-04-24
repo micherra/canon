@@ -23,6 +23,18 @@ export async function invokeJanitor(input: {
   project_dir?: string;
 }): Promise<ToolResult<{ janitor: JanitorResult }>> {
   const projectDir = input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd();
-  const result = await runJanitor(projectDir);
-  return toolOk({ janitor: result });
+  try {
+    const result = await runJanitor(projectDir);
+    return toolOk({ janitor: result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return toolOk({
+      janitor: {
+        gate_passed: false,
+        needs_prune: false,
+        reason: `unexpected: ${message}`,
+        tasks: {},
+      },
+    });
+  }
 }

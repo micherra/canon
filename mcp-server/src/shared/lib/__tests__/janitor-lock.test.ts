@@ -5,7 +5,7 @@
  * Tests cover: acquire, commit, release, getLastJanitorTimestamp.
  */
 
-import { mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -173,22 +173,18 @@ describe("acquireJanitorLock", () => {
 // commitJanitorLock
 
 describe("commitJanitorLock", () => {
-  test("sets mtime to approximately now after commit", async () => {
+  test("writes timestamp to janitor.lastrun file", async () => {
     await acquireJanitorLock(canonDir, STALE_AFTER_MS);
-
-    // Sleep briefly to ensure time moves forward enough to be measurable
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const before = Date.now();
     await commitJanitorLock(canonDir);
     const after = Date.now();
 
-    const st = await stat(join(canonDir, "janitor.lock"));
-    const mtime = st.mtime.getTime();
+    const content = await readFile(join(canonDir, "janitor.lastrun"), "utf-8");
+    const ts = parseInt(content.trim(), 10);
 
-    // mtime should be >= before and close to after (within 2 seconds for OS precision)
-    expect(mtime).toBeGreaterThanOrEqual(before - 2000);
-    expect(mtime).toBeLessThanOrEqual(after + 2000);
+    expect(ts).toBeGreaterThanOrEqual(before);
+    expect(ts).toBeLessThanOrEqual(after);
   });
 });
 
@@ -211,25 +207,33 @@ describe("releaseJanitorLock", () => {
 // getLastJanitorTimestamp
 
 describe("getLastJanitorTimestamp", () => {
-  test("returns null when no lock file exists", async () => {
+  test("returns null when no lastrun file exists", async () => {
     const result = await getLastJanitorTimestamp(canonDir);
     expect(result).toBeNull();
   });
 
-  test("returns mtime of lock file when it exists", async () => {
-    const lockPath = join(canonDir, "janitor.lock");
-    await writeFile(lockPath, String(process.pid));
+  test("returns timestamp from lastrun file", async () => {
+    const knownTs = Date.now() - 5_000;
+    await writeFile(join(canonDir, "janitor.lastrun"), String(knownTs));
 
-    // Set a known mtime
-    const knownTime = new Date(Date.now() - 5_000);
-    await utimes(lockPath, new Date(), knownTime);
+    const result = await getLastJanitorTimestamp(canonDir);
+    expect(result).toBe(knownTs);
+  });
+
+  test("returns null for corrupt lastrun content", async () => {
+    await writeFile(join(canonDir, "janitor.lastrun"), "not-a-number");
+
+    const result = await getLastJanitorTimestamp(canonDir);
+    expect(result).toBeNull();
+  });
+
+  test("persists across lock release", async () => {
+    await acquireJanitorLock(canonDir, STALE_AFTER_MS);
+    await commitJanitorLock(canonDir);
+    await releaseJanitorLock(canonDir);
 
     const result = await getLastJanitorTimestamp(canonDir);
     expect(result).not.toBeNull();
     expect(typeof result).toBe("number");
-
-    // Should match the mtime we set (within 2 seconds for OS precision)
-    const diff = Math.abs(result! - knownTime.getTime());
-    expect(diff).toBeLessThan(2000);
   });
 });
