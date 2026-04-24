@@ -15,6 +15,7 @@ rules:
   - agent-missing-artifact
   - agent-template-required
   - agent-context-check
+  - agent-document-decisions
 references:
   - workspace-logging
   - status-protocol

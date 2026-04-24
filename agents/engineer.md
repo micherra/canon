@@ -19,6 +19,7 @@ rules:
   - agent-template-required
   - agent-missing-artifact
   - agent-context-check
+  - agent-document-public-apis
 references:
   - principle-loading
   - status-protocol
