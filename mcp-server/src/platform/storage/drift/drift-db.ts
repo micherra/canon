@@ -14,7 +14,13 @@ import { join, resolve } from "node:path";
 import { CANON_DIR } from "@shared/constants.ts";
 import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
-import type { DecisionEntry, FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
+import type {
+  ArchiveManifestEntry,
+  ArchiveManifestFilter,
+  DecisionEntry,
+  FlowAnalytics,
+  FlowRunEntry,
+} from "./drift-analytics-types.ts";
 import {
   computeComplianceTrend,
   computeFlowAnalytics,
@@ -86,6 +92,22 @@ type DecisionRow = {
   timestamp: string;
 };
 
+type ArchiveRow = {
+  id: number;
+  archive_id: string;
+  branch: string;
+  sanitized_branch: string;
+  slug: string;
+  flow: string;
+  tier: string;
+  task: string;
+  archived_at: string;
+  archive_path: string;
+  artifact_types: string; // JSON array
+  has_run_summary: number; // INTEGER: 0 or 1
+  source_run_id: string | null;
+};
+
 /** Deserialize a ReviewRow + ViolationRow[] into a ReviewEntry. */
 function rowToReviewEntry(row: ReviewRow, violations: ViolationRow[]): ReviewEntry {
   const entry: ReviewEntry = {
@@ -131,6 +153,34 @@ function rowToDecisionEntry(row: DecisionRow): DecisionEntry {
   return entry;
 }
 
+/**
+ * Deserialize an ArchiveRow into an ArchiveManifestEntry.
+ * Handles JSON parsing of artifact_types and INTEGER→boolean for has_run_summary.
+ * validate-at-trust-boundaries: artifact_types crosses a serialization boundary.
+ */
+function rowToArchiveManifestEntry(row: ArchiveRow): ArchiveManifestEntry {
+  let artifact_types: string[];
+  try {
+    artifact_types = JSON.parse(row.artifact_types) as string[];
+  } catch {
+    artifact_types = [];
+  }
+  return {
+    archive_id: row.archive_id,
+    archive_path: row.archive_path,
+    archived_at: row.archived_at,
+    artifact_types,
+    branch: row.branch,
+    flow: row.flow,
+    has_run_summary: row.has_run_summary !== 0,
+    sanitized_branch: row.sanitized_branch,
+    slug: row.slug,
+    source_run_id: row.source_run_id,
+    task: row.task,
+    tier: row.tier,
+  };
+}
+
 // DriftDb
 
 export class DriftDb {
@@ -158,6 +208,12 @@ export class DriftDb {
   private readonly stmtInsertDecision: Database.Statement;
   private readonly stmtGetDecisionsByRun: Database.Statement;
   private readonly stmtGetRecentDecisions: Database.Statement;
+
+  // ---- Archive manifest statements ----
+  private readonly stmtInsertArchive: Database.Statement;
+  private readonly stmtGetArchiveById: Database.Statement;
+  private readonly stmtGetAllArchives: Database.Statement;
+  private readonly stmtCountArchives: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -256,6 +312,27 @@ export class DriftDb {
     this.stmtGetRecentDecisions = db.prepare(
       `SELECT * FROM decisions ORDER BY timestamp DESC LIMIT ?`,
     );
+
+    // Archive manifests
+    this.stmtInsertArchive = db.prepare(`
+      INSERT INTO build_archives (
+        archive_id, branch, sanitized_branch, slug, flow, tier, task,
+        archived_at, archive_path, artifact_types, has_run_summary, source_run_id
+      ) VALUES (
+        @archive_id, @branch, @sanitized_branch, @slug, @flow, @tier, @task,
+        @archived_at, @archive_path, @artifact_types, @has_run_summary, @source_run_id
+      )
+    `);
+
+    this.stmtGetArchiveById = db.prepare(
+      `SELECT * FROM build_archives WHERE archive_id = ?`,
+    );
+
+    this.stmtGetAllArchives = db.prepare(
+      `SELECT * FROM build_archives ORDER BY archived_at DESC`,
+    );
+
+    this.stmtCountArchives = db.prepare(`SELECT COUNT(*) as count FROM build_archives`);
   }
 
   // Reviews
@@ -531,6 +608,77 @@ export class DriftDb {
   getAllFlowRuns(): FlowRunEntry[] {
     const rows = this.stmtGetAllFlowRuns.all() as FlowRunRow[];
     return rows.map(rowToFlowRunEntry);
+  }
+
+  // Archive manifests
+
+  /**
+   * INSERT an ArchiveManifestEntry into the build_archives table.
+   * Throws on duplicate archive_id (UNIQUE constraint violation).
+   */
+  appendArchiveManifest(entry: ArchiveManifestEntry): void {
+    this.stmtInsertArchive.run({
+      archive_id: entry.archive_id,
+      archive_path: entry.archive_path,
+      archived_at: entry.archived_at,
+      artifact_types: JSON.stringify(entry.artifact_types),
+      branch: entry.branch,
+      flow: entry.flow,
+      has_run_summary: entry.has_run_summary ? 1 : 0,
+      sanitized_branch: entry.sanitized_branch,
+      slug: entry.slug,
+      source_run_id: entry.source_run_id ?? null,
+      task: entry.task,
+      tier: entry.tier,
+    });
+  }
+
+  /**
+   * Fetch archive manifests with optional filters: branch, flow, limit.
+   * Results are ordered by archived_at DESC.
+   * Returns empty array when no archives exist (define-errors-out-of-existence).
+   */
+  getArchiveManifests(filter?: ArchiveManifestFilter): ArchiveManifestEntry[] {
+    const { branch, flow, limit } = filter ?? {};
+
+    // Build the query dynamically based on provided filters
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (branch !== undefined) {
+      conditions.push("branch = ?");
+      params.push(branch);
+    }
+    if (flow !== undefined) {
+      conditions.push("flow = ?");
+      params.push(flow);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limitClause = limit !== undefined ? `LIMIT ${Math.max(0, limit)}` : "";
+    const sql = `SELECT * FROM build_archives ${where} ORDER BY archived_at DESC ${limitClause}`.trim();
+
+    const rows = this.db.prepare(sql).all(...params) as ArchiveRow[];
+    return rows.map(rowToArchiveManifestEntry);
+  }
+
+  /**
+   * Fetch a single archive by archive_id.
+   * Returns null when not found (define-errors-out-of-existence).
+   */
+  getArchiveById(archiveId: string): ArchiveManifestEntry | null {
+    const row = this.stmtGetArchiveById.get(archiveId) as ArchiveRow | undefined;
+    if (!row) return null;
+    return rowToArchiveManifestEntry(row);
+  }
+
+  /**
+   * Count total archives in the build_archives table.
+   * Returns 0 when empty (define-errors-out-of-existence).
+   */
+  countArchives(): number {
+    const row = this.stmtCountArchives.get() as { count: number } | undefined;
+    return row?.count ?? 0;
   }
 
   // Lifecycle

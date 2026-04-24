@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "2";
+export const DRIFT_SCHEMA_VERSION = "3";
 
 // DDL statements — v1 base tables
 //
@@ -166,6 +166,34 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
     },
     version: "2",
+  },
+  {
+    version: "3",
+    up: (db) => {
+      db.exec(`CREATE TABLE IF NOT EXISTS build_archives (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        archive_id        TEXT NOT NULL UNIQUE,
+        branch            TEXT NOT NULL,
+        sanitized_branch  TEXT NOT NULL,
+        slug              TEXT NOT NULL,
+        flow              TEXT NOT NULL DEFAULT '',
+        tier              TEXT NOT NULL DEFAULT '',
+        task              TEXT NOT NULL DEFAULT '',
+        archived_at       TEXT NOT NULL,
+        archive_path      TEXT NOT NULL,
+        artifact_types    TEXT NOT NULL DEFAULT '[]',
+        has_run_summary   INTEGER NOT NULL DEFAULT 0,
+        source_run_id     TEXT
+      )`);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_build_archives_branch ON build_archives(sanitized_branch)`,
+      );
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_build_archives_archived_at ON build_archives(archived_at)`,
+      );
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_build_archives_flow ON build_archives(flow)`);
+      db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
+    },
   },
 ];
 

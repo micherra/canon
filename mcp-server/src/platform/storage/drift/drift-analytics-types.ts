@@ -1,7 +1,32 @@
 /**
- * Shared type definitions for flow run analytics.
+ * Shared type definitions for flow run analytics and archive manifests.
  * Imported by both analytics.ts and drift-db.ts to avoid circular dependencies.
+ * ArchiveManifestEntry lives here (shared kernel) so DriftDb can use it without
+ * importing from the history feature bounded context.
  */
+
+/** Metadata for a single archived workspace. */
+export type ArchiveManifestEntry = {
+  archive_id: string;
+  branch: string;
+  sanitized_branch: string;
+  slug: string;
+  flow: string;
+  tier: string;
+  task: string;
+  archived_at: string;
+  archive_path: string;
+  artifact_types: string[];
+  has_run_summary: boolean;
+  source_run_id: string | null;
+};
+
+/** Filter options for querying archive manifests. */
+export type ArchiveManifestFilter = {
+  branch?: string;
+  flow?: string;
+  limit?: number;
+};
 
 export type FlowRunEntry = {
   run_id: string;

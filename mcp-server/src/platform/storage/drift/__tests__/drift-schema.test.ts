@@ -114,16 +114,16 @@ describe("columnExists", () => {
 // Fresh DB — schema version 2
 
 describe("initDriftDb — fresh database", () => {
-  test("DRIFT_SCHEMA_VERSION is '2'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("2");
+  test("DRIFT_SCHEMA_VERSION is '3'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("3");
   });
 
-  test("meta table has schema_version = '2' after init", () => {
+  test("meta table has schema_version = '3' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("2");
+    expect(row.value).toBe("3");
     db.close();
   });
 
@@ -205,13 +205,13 @@ describe("runDriftMigrations — v1 to v2 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v1 DB to v2: updates schema_version to '2'", () => {
+  test("migrates a v1 DB to current version: updates schema_version to '3'", () => {
     const db = createV1Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("2");
+    expect(row.value).toBe("3");
     db.close();
   });
 
