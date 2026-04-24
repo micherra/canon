@@ -668,7 +668,7 @@ Multiple predicates can be combined: `files_changed < 5 AND NOT layers_touched i
 
 Positive: flows adapt to runtime conditions without requiring user presence, `skip_when` becomes a proper expression language rather than a closed enum, agents can signal complexity escalation through a controlled mechanism, flows become more precise (fewer unnecessary states run).
 
-Negative: expression evaluator adds parsing and security surface (predicates must not be injectable), agent-requested events need careful whitelist enforcement (`request_state` with an un-whitelisted target is a silent no-op, not an error, to avoid agent confusion), testing conditional flows requires simulation (ADR-013).
+Negative: expression evaluator adds parsing and security surface (predicates must not be injectable), agent-requested events need careful whitelist enforcement (`request_state` with an un-whitelisted target is a silent no-op, not an error, to avoid agent confusion).
 
 ### Dependencies
 
@@ -686,72 +686,9 @@ ADR-004 (flow schema validation for `allowed_insertions` whitelist and `skip_whe
 
 ---
 
-## ADR-013: Flow Simulation and Reachability Analysis
+## ~~ADR-013: Flow Simulation and Reachability Analysis~~ [CANCELLED]
 
-### Context
-
-`validateFlow` checks structural validity (entry exists, transition targets exist, `parallel-per` has `iterate_on`) but cannot simulate execution. Dead-end paths — where certain failure conditions lead to states with no path to a terminal — are discovered only at runtime. `buildStateGraph` exists in `flow-parser.ts` but is unused in validation; it builds adjacency lists from transitions but does not analyze reachability through all possible status conditions. The stuck detection query (ADR-004) tells you a flow is stuck after the fact, not that a flow design will inevitably get stuck under specific conditions.
-
-### Decision
-
-Two capabilities:
-
-**1. Reachability analysis at load time:** For every state, verify that every possible transition condition eventually leads to a terminal state or `hitl` (an acceptable deliberate escape hatch). The analysis follows all transition edges using BFS from every non-terminal state and reports:
-- Dead-end states: states reachable from entry with no path to terminal or `hitl`
-- Unreachable states: states with no path from the entry state
-- Stuck loops: cycles where no edge exits to a terminal or `hitl`
-
-Integrated into `validateFlow` as warnings (not errors, because `hitl` is a valid escape from any state and some flows intentionally use it as a terminal equivalent). Reachability warnings surface during `load_flow` and are included in the `load_flow` response's `warnings` array.
-
-**2. Flow simulation (`simulate_flow` tool):** Walks the state machine with mocked agent results. The caller provides a scenario: a sequence of `(state_id, status_keyword)` pairs. The simulator walks transitions and reports the full execution path.
-
-```typescript
-interface SimulateFlowInput {
-  flow: string;                    // flow name
-  scenario: Array<{
-    state_id: string;
-    status: string;                // e.g. "done", "blocked", "cannot_fix"
-  }>;
-  max_steps?: number;              // default 50, prevents infinite loop in simulation
-}
-
-interface SimulateFlowOutput {
-  ok: boolean;
-  path: Array<{
-    state_id: string;
-    status_input: string;
-    next_state: string;
-    transition_matched: string;
-  }>;
-  terminal_state?: string;         // final state reached
-  stuck_at?: string;               // state where stuck detection triggered
-  dead_end_at?: string;            // state with no matching transition
-  iterations_consumed: Record<string, number>;
-  warnings: string[];
-}
-```
-
-No agents are spawned, no workspace is created. The simulator operates purely on the resolved flow definition.
-
-### Consequences
-
-Positive: catches dead-end flow designs before runtime execution, flow authors can verify complex iteration/transition logic in seconds, reachability warnings surface during CI validation of flow YAML files, simulation enables automated flow regression testing when flow logic changes.
-
-Negative: reachability analysis is conservative (warns on paths that are practically unreachable if `skip_when` would prevent them — ADR-012 predicates are not evaluated by the analyzer), simulation does not capture wave-level complexity (only state-level transitions), adding simulation as a CI step requires all flow files to be valid under the stricter load-time validation.
-
-### Dependencies
-
-ADR-004 (builds on `validateFlow` infrastructure; `buildStateGraph` becomes the analysis backbone; `GateResult` and transition schemas provide the edge types for analysis).
-
-### Implementation
-
-- Implement reachability analysis: BFS/DFS from every state through all transition edges to terminal states; use `buildStateGraph` as the starting point
-- Report: dead-end states (reachable but no terminal path), unreachable states (no path from entry), stuck loops (cycles with no terminal exit)
-- Integrate analysis into `validateFlow`; add results to `warnings` array in `LoadFlowResult`
-- Implement `simulate_flow` tool: accepts flow name + scenario, walks transitions deterministically
-- Simulator evaluates `stuck_when` conditions using the iteration tracking from ADR-001 execution store schema (simulated in-memory)
-- Returns: `SimulateFlowOutput` with full execution trace
-- Add `canon flow validate` CLI command that runs `load_flow` (with reachability) on all YAML files in the flows directory and exits non-zero on warnings
+**Cancelled 2026-04-23.** The flow YAML state machine is being replaced by native Claude Code agent teams (v2.1 Tier 0). Simulating and analyzing reachability of flow state transitions targets infrastructure that will be deleted in Phase 2/3. No replacement needed — the coordination logic moves to the lead's native orchestration, which doesn't have a static graph to analyze.
 
 ---
 
@@ -1916,13 +1853,13 @@ ADR-003a (agent metrics — provides token counts), ADR-009 (`drive_flow` — ev
 
 Canon records rich data about what agents do — ADR-015 transcripts capture full conversations, ADR-003a metrics track performance, ADR-010 structured outputs provide typed results. But there is no systematic way to evaluate whether agents are getting better or worse after changes.
 
-When you change an agent's instructions, refine the prompt pipeline (ADR-006), or adjust context assembly policy (ADR-008), you have no baseline to compare against. ADR-013's `simulate_flow` tests flow *structure* (transitions, reachability), but not flow *quality* (do agents produce good output given specific inputs?). Improvements to agents are vibes-driven — you make a change, run a flow, eyeball the result.
+When you change an agent's instructions, refine the prompt pipeline (ADR-006), or adjust context assembly policy (ADR-008), you have no baseline to compare against. Improvements to agents are vibes-driven — you make a change, run a flow, eyeball the result.
 
 The ADR-010 structured output tools make evaluation tractable in a way free-form markdown never could. Each tool (`write_review`, `write_plan_index`, `write_test_report`, `write_implementation_summary`) has a typed schema. Schema-level diffing is deterministic.
 
 ### Decision
 
-Build an agent evaluation framework on top of ADR-013 (simulation) and ADR-015 (transcripts). Record "golden" input/output pairs from successful flows as evaluation fixtures. A `canon flow eval` command replays inputs through current agent definitions and compares structured outputs against the golden baseline.
+Build an agent evaluation framework on top of ADR-015 (transcripts) and ADR-010 (structured outputs). Record "golden" input/output pairs from successful flows as evaluation fixtures. A `canon flow eval` command replays inputs through current agent definitions and compares structured outputs against the golden baseline.
 
 **Golden fixture capture:**
 
@@ -1993,7 +1930,7 @@ Negative: LLM non-determinism means exact field matches aren't always possible (
 
 ### Dependencies
 
-ADR-010 (structured output schemas — the diffable surface), ADR-013 (simulation infrastructure — execution framework), ADR-015 (transcripts — input fixture source). Soft: ADR-003a (metrics for comparison), ADR-006 (prompt pipeline — must be deterministic given same inputs).
+ADR-010 (structured output schemas — the diffable surface), ADR-015 (transcripts — input fixture source). Soft: ADR-003a (metrics for comparison), ADR-006 (prompt pipeline — must be deterministic given same inputs).
 
 ### Implementation
 
@@ -2008,92 +1945,9 @@ ADR-010 (structured output schemas — the diffable surface), ADR-013 (simulatio
 
 ---
 
-## ADR-024: Fragment Testing
+## ~~ADR-024: Fragment Testing~~ [CANCELLED]
 
-### Context
-
-Fragments are Canon's primary composition unit — 13 fragments power all medium+ flows. ADR-004 validates them structurally at load time, and ADR-013 simulates full-flow transitions. But there is no way to test a fragment in isolation.
-
-When you modify `test-fix-loop` (used by `feature`, `refactor`, `migrate`, `epic`), you must mentally trace its behavior across four consuming flows. ADR-011's composite fragments and typed ports make fragments more powerful but also more compositional — a bug in `try-fix-retry` propagates to every consumer.
-
-Full-flow simulation (ADR-013) is the integration test layer. Fragment tests are the missing unit test layer for flow composition.
-
-### Decision
-
-Add a `fragment_test` block to fragment definition frontmatter that declares minimal test harnesses. Each harness is a stub flow containing only the fragment's states plus synthetic entry/exit states. `simulate_flow` (ADR-013) runs these harnesses.
-
-**Fragment test definition:**
-
-```yaml
-# In test-fix-loop.md frontmatter
-fragment_test:
-  - name: "passes on first try"
-    scenario:
-      - { state_id: test, status: done }
-    expect_terminal: exit_success
-
-  - name: "fix loop converges after one iteration"
-    scenario:
-      - { state_id: test, status: has_failures }
-      - { state_id: fix, status: done }
-      - { state_id: test, status: done }
-    expect_terminal: exit_success
-
-  - name: "fix loop exhausts retries"
-    scenario:
-      - { state_id: test, status: has_failures }
-      - { state_id: fix, status: done }
-      - { state_id: test, status: has_failures }
-      - { state_id: fix, status: done }
-      - { state_id: test, status: has_failures }
-    expect_terminal: exit_failure
-```
-
-**Harness generation:**
-
-For each test case, the framework generates a minimal flow:
-1. Synthetic `entry` state that transitions to the fragment's first state
-2. The fragment's states (with ports resolved to synthetic endpoints)
-3. Synthetic `exit_success` and `exit_failure` terminal states
-
-Typed ports (ADR-011) are resolved to the synthetic terminals. This means fragments with ports are testable without their consumer flows.
-
-**Execution via `simulate_flow` (ADR-013):**
-
-Fragment tests reuse the existing simulation infrastructure. The `scenario` array provides the sequence of `(state_id, status)` pairs that the simulator feeds as mock agent results. The simulator walks the state machine and verifies it reaches `expect_terminal`.
-
-**Integration with `canon flow validate`:**
-
-`canon flow validate` (ADR-013) already validates full flows. Add a `--fragments` flag (or run by default) that also executes all fragment tests. Fragment tests run first — if a fragment test fails, full-flow simulation is likely to fail too, so fragment failures are reported with higher priority.
-
-**Test coverage reporting:**
-
-For each fragment, report:
-- Number of test cases
-- States exercised vs total states in fragment
-- Transition paths exercised vs total transition paths
-- Consuming flows (from `simulate_flow` full-flow results)
-
-### Consequences
-
-Positive: fragments become independently verifiable; catch composition bugs before they propagate to multiple flows; reuses existing `simulate_flow` infrastructure (no new simulation engine); test cases serve as executable documentation of fragment behavior; fast execution (no LLM calls, pure state machine simulation).
-
-Negative: test maintenance burden — fragment changes require updating test scenarios (mitigated by keeping scenarios minimal and focused on key paths); harness generation adds complexity to the simulation framework; some fragment behaviors depend on context from the consuming flow (mitigated by typed ports which make the interface explicit).
-
-### Dependencies
-
-ADR-004 (flow validation — fragment schema), ADR-013 (`simulate_flow` — execution engine), ADR-011 (typed ports — clean fragment interfaces for harness generation).
-
-### Implementation
-
-- Add `fragment_test` schema to fragment frontmatter validation (ADR-004)
-- Implement harness generation: synthetic entry/exit states + port resolution
-- Implement scenario replay: feed mock `(state_id, status)` pairs to simulator
-- Implement terminal assertion: verify simulator reaches `expect_terminal`
-- Add `--fragments` flag to `canon flow validate`
-- Add fragment test coverage reporting
-- Write fragment tests for all 13 existing fragments
-- Document fragment test authoring in flow authoring guide
+**Cancelled 2026-04-23.** Fragments are being deleted with the flow YAML state machine (v2.1 Tier 0). There is nothing to test. The roadmap explicitly notes: "If fragments go away with the state machine, the thing being tested no longer exists."
 
 ---
 
@@ -2107,7 +1961,7 @@ There is no way to proactively test Canon against known tasks with known-correct
 
 A/B comparison is also currently impossible in a principled way. If you change `fast-path` to add a review gate, you can't measure whether outcomes improved. Current metrics track process (gate pass rates, iteration counts) but not outcomes (was the generated code actually correct?).
 
-This creates a gap: Canon has strong process observability (ADR-003, ADR-003a, ADR-015) and structural correctness guarantees (ADR-004, ADR-013), but no end-to-end outcome measurement against known-correct targets.
+This creates a gap: Canon has strong process observability (ADR-003, ADR-003a, ADR-015) and structural correctness guarantees (ADR-004), but no end-to-end outcome measurement against known-correct targets.
 
 ### Decision
 
@@ -2318,7 +2172,7 @@ Negative: scenario authoring is labor-intensive — each scenario requires a see
 
 ### Dependencies
 
-ADR-023 (complementary — golden fixtures for post-hoc regression, scenarios for proactive outcome measurement). ADR-001 (SQLite store for eval results — soft dependency, JSON files acceptable initially). ADR-015 (transcripts for debugging failed evals — soft dependency, aids root cause analysis when a scenario fails). ADR-004 (flow validation ensures scenarios target valid flows). ADR-014 (worktree isolation for seed repo clones during eval runs).
+ADR-023 (complementary — golden fixtures for post-hoc regression, scenarios for proactive outcome measurement). ADR-001 (SQLite store for eval results — soft dependency, JSON files acceptable initially). ADR-015 (transcripts for debugging failed evals — soft dependency, aids root cause analysis when a scenario fails). ADR-014 (worktree isolation for seed repo clones during eval runs).
 
 ### Implementation
 
@@ -2356,7 +2210,7 @@ ADR-023 (complementary — golden fixtures for post-hoc regression, scenarios fo
 | 13 | 010 Output Contracts | [x] | Parallel with 007; needs typed errors (002), validated flow schema (004) |
 | 14 | 017 Approval Gates | [x] | Extends drive_flow (009) with approval breakpoints; needs validated flow schema (004) |
 | 15 | 011 Flow Composition | [x] | Needs load-time validation (004); parallel with 010, 017 |
-| 16 | 013 Flow Simulation | [ ] | Builds on validateFlow (004); parallel with 010, 011, 017 |
+| ~~16~~ | ~~013 Flow Simulation~~ | [CANCELLED] | ~~Builds on validateFlow (004)~~ — flow YAML state machine replaced by agent teams (v2.1) |
 | 17 | 016 Auto-Learn | [~] | After 007 (background jobs) + 015 (transcripts) + 014 (learner tool restrictions) |
 | 18 | 012 Conditional States | [x] | After 009 (server driver evaluates conditions); needs validated flow schema (004) |
 | 19 | 019 Execution History | [~] | After 001 (SQLite), 010 (structured output for decision extraction), 015 (transcripts), 016 (learner provenance) |
@@ -2365,18 +2219,18 @@ ADR-023 (complementary — golden fixtures for post-hoc regression, scenarios fo
 | 22 | 021 Agent Memory | [ ] | After 005 (KG database), 006 (prompt pipeline), 008 (file affinity), 010 (structured output); soft dep on 020 (janitor for TTL expiry) |
 | 23 | 022 Cost Budgets | [ ] | After 003a (agent metrics), 009 (drive_flow), 004 (flow validation for budget schema) |
 | 24 | 023 Agent Evaluation | [ ] | After 010 (structured output), 013 (simulation), 015 (transcripts) |
-| 25 | 024 Fragment Testing | [ ] | After 004 (fragment schema), 013 (simulate_flow), 011 (typed ports) |
+| ~~25~~ | ~~024 Fragment Testing~~ | [CANCELLED] | ~~After 004, 013, 011~~ — fragments deleted with flow YAML state machine (v2.1) |
 | 26 | 025 Eval Scenario Library | [ ] | After 023 (evaluation baseline), 004 (flow validation for scenario targets), 014 (worktree isolation for seed repo runs); soft dep on 001 (SQLite for results), 015 (transcripts for debugging) |
 
 **First cohort (foundation):** ADRs 001, 002, 003, 004, 005, 015 — can progress in parallel once 001 schema is defined. ADR 015 (transcripts) slots in early because it's low-effort and unblocks the learning pipeline.
 
 **Second cohort (execution + pipeline):** ADRs 009, 009b, 006, 014, 008, 018 — server-side loop moves up as the centerpiece that unblocks tool scoping (014), approval gates (017), and conditional states (012). 009b lands immediately after 009 to consolidate the tool surface before other ADRs build on it. Prompt pipeline and context assembly follow, with tool scoping now correctly placed after its 009 dependency.
 
-**Third cohort (contracts + composition + quality):** ADRs 007, 010, 011, 013, 017, 022, 024 — background jobs, output contracts, flow composition, simulation, approval gates, cost budgets, and fragment testing. Cost budgets extend drive_flow with budget evaluation. Fragment testing extends simulate_flow with unit-level coverage. These develop in parallel.
+**Third cohort (contracts + composition + quality):** ADRs 007, 010, 011, 017, 022 — background jobs, output contracts, flow composition, approval gates, and cost budgets. Cost budgets extend drive_flow with budget evaluation. ~~ADR-013 (Flow Simulation) and ADR-024 (Fragment Testing) cancelled — flow YAML state machine replaced by agent teams (v2.1).~~
 
 **Fourth cohort (automation + history + maintenance):** ADRs 016 (auto-learn), 012 (conditional states), 019 (execution history), 020 (background janitor) — these depend on the full stack being stable. Auto-learn needs transcripts (015), background jobs (007), and tool restrictions (014). Conditional states need the server-side driver (009). Execution history needs structured output (010), transcripts (015), and learner provenance (016). The janitor consolidates inline housekeeping from 016 and 019 into an asynchronous background process, keeping `complete_flow` fast.
 
-**Fifth cohort (intelligence):** ADRs 021 (agent memory), 023 (agent evaluation), 025 (eval scenario library) — these require the full pipeline to be stable and instrumented. Agent memory needs the KG, prompt pipeline, structured output, and context assembly layers. Agent evaluation needs structured output, simulation, and transcripts. Eval scenarios extend the evaluation layer from post-hoc golden fixtures to proactive outcome measurement and A/B comparison. All three represent the shift from "agents that work" to "agents that learn and improve."
+**Fifth cohort (intelligence):** ADRs 021 (agent memory), 023 (agent evaluation), 025 (eval scenario library) — these require the full pipeline to be stable and instrumented. Agent memory needs the KG, prompt pipeline, structured output, and context assembly layers. Agent evaluation needs structured output and transcripts. Eval scenarios extend the evaluation layer from post-hoc golden fixtures to proactive outcome measurement and A/B comparison. All three represent the shift from "agents that work" to "agents that learn and improve."
 
 ## Decision Summary
 
@@ -2393,7 +2247,7 @@ ADR-023 (complementary — golden fixtures for post-hoc regression, scenarios fo
 - Structured write tools for all agent output boundaries (`write_test_report`, `write_review`, `write_implementation_summary`); regex parsing eliminated; artifact validation in `report_result`
 - Flow composition: `extends` for flow inheritance, composite fragments, typed ports replacing implicit string-param coupling
 - `skip_when` expression language + agent-requested flow events via `flow-events` channel with `allowed_insertions` whitelist
-- Reachability analysis in `validateFlow`; `simulate_flow` tool for deterministic flow dry-runs
+- ~~Reachability analysis in `validateFlow`; `simulate_flow` tool for deterministic flow dry-runs~~ [CANCELLED — flow YAML replaced by agent teams]
 - Per-agent tool scoping profiles: structural enforcement of role boundaries (researchers can't edit, reviewers can't write), with per-state overrides; permission bypass for orchestrated agents in worktrees eliminates prompt wall while worktree containment + tool scoping maintain safety
 - Agent transcript recording: full conversation JSONL per specialist agent for debugging, resume, and learning
 - Auto-triggered learning: gated background consolidation (time + flow count thresholds) that proposes principle/convention updates from transcript analysis
@@ -2405,5 +2259,5 @@ ADR-023 (complementary — golden fixtures for post-hoc regression, scenarios fo
 - Orchestrator tool surface consolidation: deprecate manual orchestration tools (`enter_and_prepare_state`, `get_spawn_prompt`, `check_convergence`), internalize into `drive_flow`, shrink orchestrator instructions to three concerns (intent classification, drive_flow loop, HITL handling)
 - Flow-level cost budgets: optional `budget` block in flow definitions with per-flow and per-state token limits, evaluated by `drive_flow` at state boundaries, warning injection at threshold, HITL breakpoint at limit
 - Deterministic agent evaluation: golden fixture capture from successful flows, schema-level diffing of structured outputs, regression detection for agent instruction and pipeline changes
-- Fragment testing: `fragment_test` blocks in fragment frontmatter with scenario-based harnesses, executed via `simulate_flow`, unit test layer for flow composition complementing full-flow integration simulation
+- ~~Fragment testing: `fragment_test` blocks in fragment frontmatter with scenario-based harnesses~~ [CANCELLED — fragments deleted with flow YAML]
 - Eval Scenario Library: purpose-built seed repos with oracle tests as ground truth; three-tier grader stack (structural/deterministic, behavioral/light-LLM, semantic/judge-model); A/B comparison protocol with median scoring across N runs for statistically grounded configuration evaluation; proactive outcome measurement complementing ADR-023's post-hoc regression fixtures
