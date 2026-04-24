@@ -57,3 +57,12 @@ Rules: 1/1 passed | Opinions: 2/3 passed | Conventions: 1/1 passed
 ## Exceptions
 
 When the reviewer is run as a standalone review on the user's own code (not via the build workflow), it may receive a context description from the user. This is acceptable — the user is providing context, not the orchestrator leaking session history.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|----------------|----------------|
+| "The design doc explains why the code is structured this way." | The reviewer's job is to evaluate what was delivered, not confirm that the implementation matches intent. A cold reviewer sees only the code — if the code can't be understood or justified on its own terms, that is a finding. | Review the code on its own terms. If the rationale is not visible in the code, flag it as a documentation or clarity issue. |
+| "The implementor probably had a reason for this violation — I shouldn't flag it." | The reviewer exists precisely to catch what the implementor missed or rationalized away. Deferring to imagined intent defeats the purpose of a separate review stage. | Flag the violation. The implementor can respond in the follow-up. The reviewer's job is to surface issues, not pre-resolve them. |
+| "I need to understand the full context before I can review this properly." | Cold review is not a bug — it is the design. A reviewer who demands context becomes a confirmer. The constraint forces the reviewer to ask whether the code is self-evident, which is itself a quality signal. | Proceed with the diff and matched principles. If something is genuinely ambiguous, note the ambiguity as a finding rather than seeking to resolve it through context. |
+| "This is just a refactor, the tests pass — there's nothing to check for compliance." | Refactors restructure code, which changes how principles apply. A passing test suite confirms behavior but says nothing about principle compliance. The scopes are independent. | Run both review stages regardless of the change type. Apply principle compliance checks to the refactored structure, not only to new logic. |
