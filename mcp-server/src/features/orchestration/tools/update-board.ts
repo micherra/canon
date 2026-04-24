@@ -249,6 +249,14 @@ async function handleCompleteFlow(opts: HandleCompleteFlowOptions): Promise<Boar
   }
 
   await appendFlowAnalytics(updatedBoard, now, projectDir, sessionTier);
+
+  try {
+    const { runJanitor } = await import("../services/janitor.ts");
+    await runJanitor(projectDir);
+  } catch {
+    // Janitor failure is non-blocking
+  }
+
   return updatedBoard;
 }
 

@@ -3,6 +3,7 @@ import type { FailureEntry } from "@features/diagnostics/tools/categorize-failur
 import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";
 import { recordAgentMetrics } from "@features/diagnostics/tools/record-agent-metrics.ts";
 import { driveFlow } from "@features/orchestration/tools/drive-flow.ts";
+import { invokeJanitor } from "@features/orchestration/tools/invoke-janitor.ts";
 import { getMessages } from "@features/orchestration/tools/get-messages.ts";
 import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
 import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
@@ -586,6 +587,25 @@ function registerJournalTools(): void {
   );
 }
 
+function registerJanitorTool(): void {
+  server.registerTool(
+    "invoke_janitor",
+    {
+      description:
+        "Run the Canon background janitor. Checkpoints SQLite WAL files and detects stale worktrees. Non-blocking — all outcomes are reported in the result, never thrown.",
+      inputSchema: {
+        project_dir: z
+          .string()
+          .optional()
+          .describe(
+            "Project root directory (defaults to CANON_PROJECT_DIR env or cwd)",
+          ),
+      },
+    },
+    gatedWrapHandler(async (input) => invokeJanitor(input)),
+  );
+}
+
 export function registerOrchestrationTools(): void {
   registerFlowCoreTools();
   registerInitWorkspaceTool();
@@ -596,5 +616,6 @@ export function registerOrchestrationTools(): void {
   registerDriveFlowTool();
   registerCategorizeTool();
   registerJournalTools();
+  registerJanitorTool();
   registerAgentTeamsTools();
 }
