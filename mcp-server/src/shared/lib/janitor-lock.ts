@@ -1,8 +1,9 @@
 /**
  * Janitor lock — .canon/janitor.lock management
  *
- * The lock file body is the current process PID.
- * The lock file mtime tracks the last successful janitor run timestamp.
+ * The lock file body is the current process PID. Lock file mtime is used
+ * only for crash-recovery staleness detection. The last successful run
+ * timestamp is persisted separately in janitor.lastrun.
  *
  * Acquire uses exclusive create (O_EXCL) to prevent TOCTOU races.
  * Stale locks (mtime + staleAfterMs < now) are reclaimed atomically.
