@@ -3,10 +3,11 @@
  *
  * Uses real temp directories for I/O correctness (SQLite, worktree detection).
  * Mocks loadJanitorConfig, acquireJanitorLock, commitJanitorLock, releaseJanitorLock,
- * and getLastJanitorTimestamp via vitest module mocking.
+ * getLastJanitorTimestamp, and gitExec via vitest module mocking.
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -29,6 +30,14 @@ vi.mock("@shared/lib/janitor-lock.ts", () => ({
   releaseJanitorLock: vi.fn(),
 }));
 
+vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@platform/adapters/git-adapter.ts")>();
+  return {
+    ...original,
+    gitExec: vi.fn(),
+  };
+});
+
 // Import after mocks are set up
 import { loadJanitorConfig } from "@shared/lib/config.ts";
 import {
@@ -37,6 +46,7 @@ import {
   getLastJanitorTimestamp,
   releaseJanitorLock,
 } from "@shared/lib/janitor-lock.ts";
+import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { runJanitor } from "../janitor.ts";
 
 const mockLoadJanitorConfig = loadJanitorConfig as ReturnType<typeof vi.fn>;
@@ -44,15 +54,77 @@ const mockAcquireJanitorLock = acquireJanitorLock as ReturnType<typeof vi.fn>;
 const mockCommitJanitorLock = commitJanitorLock as ReturnType<typeof vi.fn>;
 const mockReleaseJanitorLock = releaseJanitorLock as ReturnType<typeof vi.fn>;
 const mockGetLastJanitorTimestamp = getLastJanitorTimestamp as ReturnType<typeof vi.fn>;
+const mockGitExec = gitExec as ReturnType<typeof vi.fn>;
+
+/** Build a ProcessResult-like value for git worktree list output. */
+function makeGitWorktreeListResult(lines: string[]): {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+  duration_ms: number;
+} {
+  return {
+    ok: true,
+    stdout: lines.join("\n") + "\n",
+    stderr: "",
+    exitCode: 0,
+    timedOut: false,
+    duration_ms: 10,
+  };
+}
+
+/** Build a ProcessResult-like value for git branch --merged output. */
+function makeGitBranchMergedResult(branches: string[]): {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+  duration_ms: number;
+} {
+  return {
+    ok: true,
+    stdout: branches.map((b) => `  ${b}`).join("\n") + "\n",
+    stderr: "",
+    exitCode: 0,
+    timedOut: false,
+    duration_ms: 10,
+  };
+}
+
+/** Build a failing ProcessResult (git command failed). */
+function makeGitFailResult(): {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+  duration_ms: number;
+} {
+  return {
+    ok: false,
+    stdout: "",
+    stderr: "fatal: not a git repository",
+    exitCode: 128,
+    timedOut: false,
+    duration_ms: 5,
+  };
+}
 
 let tmpDir: string;
 let canonDir: string;
-let worktreesDir: string;
+let claudeDir: string;
+let agentWorktreesDir: string;
+let canonWorkspacesDir: string;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "janitor-test-"));
   canonDir = join(tmpDir, ".canon");
-  worktreesDir = join(canonDir, "worktrees");
+  claudeDir = join(tmpDir, ".claude");
+  agentWorktreesDir = join(claudeDir, "worktrees");
+  canonWorkspacesDir = join(canonDir, "workspaces");
   await mkdir(canonDir, { recursive: true });
 
   // Default: janitor enabled, no recent run, lock acquired
@@ -61,6 +133,17 @@ beforeEach(async () => {
   mockAcquireJanitorLock.mockResolvedValue({ acquired: true, previousMtime: null });
   mockCommitJanitorLock.mockResolvedValue(undefined);
   mockReleaseJanitorLock.mockResolvedValue(undefined);
+
+  // Default git mocks: empty worktree list and no merged branches
+  mockGitExec.mockImplementation((args: string[]) => {
+    if (args[0] === "worktree" && args[1] === "list") {
+      return makeGitWorktreeListResult([]);
+    }
+    if (args[0] === "branch" && args[1] === "--merged") {
+      return makeGitBranchMergedResult([]);
+    }
+    return makeGitFailResult();
+  });
 });
 
 afterEach(async () => {
@@ -158,28 +241,325 @@ describe("wal_checkpoint task", () => {
   });
 });
 
-// --- Prune detection ---
+// --- prune_worktrees task ---
 
-describe("prune detection", () => {
-  test("sets needs_prune: true when worktrees directory is non-empty", async () => {
-    await mkdir(worktreesDir, { recursive: true });
-    await mkdir(join(worktreesDir, "some-worktree"));
+describe("prune_worktrees task", () => {
+  test("skips when .claude/worktrees directory does not exist", async () => {
+    // agentWorktreesDir does not exist
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([]);
+      }
+      return makeGitBranchMergedResult([]);
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.gate_passed).toBe(true);
+    expect(result.tasks.prune_worktrees).toBeDefined();
+    expect(result.tasks.prune_worktrees.status).toBe("skipped");
+  });
+
+  test("skips when .claude/worktrees directory is empty", async () => {
+    await mkdir(agentWorktreesDir, { recursive: true });
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([]);
+      }
+      return makeGitBranchMergedResult([]);
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_worktrees).toBeDefined();
+    expect(result.tasks.prune_worktrees.status).toBe("skipped");
+  });
+
+  test("removes directories not in git worktree list", async () => {
+    await mkdir(agentWorktreesDir, { recursive: true });
+    const staleDir = join(agentWorktreesDir, "agent-stale-123");
+    await mkdir(staleDir);
+
+    // git worktree list returns nothing for this dir
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      return makeGitBranchMergedResult([]);
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_worktrees.status).toBe("success");
+    expect(result.tasks.prune_worktrees.detail).toContain("1");
+    expect(existsSync(staleDir)).toBe(false);
+  });
+
+  test("keeps directories that ARE in git worktree list", async () => {
+    await mkdir(agentWorktreesDir, { recursive: true });
+    const activeDir = join(agentWorktreesDir, "agent-active-456");
+    await mkdir(activeDir);
+
+    // git worktree list includes this dir
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([
+          `${tmpDir} abc123 [main]`,
+          `${activeDir} def456 [canon/some-task]`,
+        ]);
+      }
+      return makeGitBranchMergedResult([]);
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_worktrees.status).toBe("skipped");
+    expect(existsSync(activeDir)).toBe(true);
+  });
+
+  test("prunes stale but keeps active in a mixed set", async () => {
+    await mkdir(agentWorktreesDir, { recursive: true });
+    const activeDir = join(agentWorktreesDir, "agent-active-456");
+    const staleDir = join(agentWorktreesDir, "agent-stale-123");
+    await mkdir(activeDir);
+    await mkdir(staleDir);
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([
+          `${tmpDir} abc123 [main]`,
+          `${activeDir} def456 [canon/some-task]`,
+        ]);
+      }
+      return makeGitBranchMergedResult([]);
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_worktrees.status).toBe("success");
+    expect(result.tasks.prune_worktrees.detail).toContain("1");
+    expect(existsSync(activeDir)).toBe(true);
+    expect(existsSync(staleDir)).toBe(false);
+  });
+
+  test("reports error status when git worktree list fails", async () => {
+    await mkdir(agentWorktreesDir, { recursive: true });
+    await mkdir(join(agentWorktreesDir, "agent-some-id"));
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitFailResult();
+      }
+      return makeGitBranchMergedResult([]);
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_worktrees.status).toBe("error");
+    expect(result.tasks.prune_worktrees.detail).toBeDefined();
+  });
+
+  test("continues past individual removal errors (fail per-item)", async () => {
+    // This test verifies the fail-per-item contract by ensuring one error doesn't
+    // prevent other items from being processed. We create two stale dirs.
+    await mkdir(agentWorktreesDir, { recursive: true });
+    const staleDir1 = join(agentWorktreesDir, "agent-stale-1");
+    const staleDir2 = join(agentWorktreesDir, "agent-stale-2");
+    await mkdir(staleDir1);
+    await mkdir(staleDir2);
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        // Neither stale dir is in the list
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      return makeGitBranchMergedResult([]);
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    // Both should be pruned
+    expect(result.tasks.prune_worktrees.status).toBe("success");
+    expect(existsSync(staleDir1)).toBe(false);
+    expect(existsSync(staleDir2)).toBe(false);
+  });
+});
+
+// --- prune_workspaces task ---
+
+describe("prune_workspaces task", () => {
+  test("skips when .canon/workspaces directory does not exist", async () => {
+    // canonWorkspacesDir does not exist
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces).toBeDefined();
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
+  });
+
+  test("skips when .canon/workspaces directory is empty", async () => {
+    await mkdir(canonWorkspacesDir, { recursive: true });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
+  });
+
+  test("removes workspace dirs for merged branches", async () => {
+    // Branch "feat/my-feature" sanitizes to "feat--my-feature"
+    const mergedBranch = "feat/my-feature";
+    const sanitized = "feat--my-feature";
+    const workspaceDir = join(canonWorkspacesDir, sanitized);
+    await mkdir(workspaceDir, { recursive: true });
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        return makeGitBranchMergedResult([mergedBranch, "main"]);
+      }
+      return makeGitFailResult();
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    expect(result.tasks.prune_workspaces.detail).toContain("1");
+    expect(existsSync(workspaceDir)).toBe(false);
+  });
+
+  test("keeps workspace dirs for unmerged branches", async () => {
+    const unmergedSanitized = "feat--active-branch";
+    const workspaceDir = join(canonWorkspacesDir, unmergedSanitized);
+    await mkdir(workspaceDir, { recursive: true });
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        // Only main is merged
+        return makeGitBranchMergedResult(["main"]);
+      }
+      return makeGitFailResult();
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    // No merged branches match unmergedSanitized → skipped (0 pruned)
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
+    expect(existsSync(workspaceDir)).toBe(true);
+  });
+
+  test("never prunes the main workspace directory", async () => {
+    const mainDir = join(canonWorkspacesDir, "main");
+    await mkdir(mainDir, { recursive: true });
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        return makeGitBranchMergedResult(["main"]);
+      }
+      return makeGitFailResult();
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    // main is excluded from pruning
+    expect(existsSync(mainDir)).toBe(true);
+  });
+
+  test("reports error status when git branch --merged fails", async () => {
+    await mkdir(canonWorkspacesDir, { recursive: true });
+    await mkdir(join(canonWorkspacesDir, "feat--some-branch"));
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        return makeGitFailResult();
+      }
+      return makeGitFailResult();
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("error");
+    expect(result.tasks.prune_workspaces.detail).toBeDefined();
+  });
+
+  test("prunes multiple matched, keeps unmatched", async () => {
+    const mergedA = "feat--merged-a";
+    const mergedB = "fix--merged-b";
+    const activeC = "feat--active-c";
+    await mkdir(join(canonWorkspacesDir, mergedA), { recursive: true });
+    await mkdir(join(canonWorkspacesDir, mergedB), { recursive: true });
+    await mkdir(join(canonWorkspacesDir, activeC), { recursive: true });
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        // feat/merged-a and fix/merged-b are merged; feat/active-c is not
+        return makeGitBranchMergedResult(["feat/merged-a", "fix/merged-b", "main"]);
+      }
+      return makeGitFailResult();
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    expect(result.tasks.prune_workspaces.detail).toContain("2");
+    expect(existsSync(join(canonWorkspacesDir, mergedA))).toBe(false);
+    expect(existsSync(join(canonWorkspacesDir, mergedB))).toBe(false);
+    expect(existsSync(join(canonWorkspacesDir, activeC))).toBe(true);
+  });
+});
+
+// --- needs_prune semantics ---
+
+describe("needs_prune semantics", () => {
+  test("needs_prune: true when prune_worktrees removed entries", async () => {
+    await mkdir(agentWorktreesDir, { recursive: true });
+    await mkdir(join(agentWorktreesDir, "agent-stale-id"));
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      return makeGitBranchMergedResult(["main"]);
+    });
 
     const result = await runJanitor(tmpDir);
 
     expect(result.needs_prune).toBe(true);
   });
 
-  test("sets needs_prune: false when worktrees directory is empty", async () => {
-    await mkdir(worktreesDir, { recursive: true });
+  test("needs_prune: true when prune_workspaces removed entries", async () => {
+    await mkdir(join(canonWorkspacesDir, "feat--merged"), { recursive: true });
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        return makeGitBranchMergedResult(["feat/merged", "main"]);
+      }
+      return makeGitFailResult();
+    });
 
     const result = await runJanitor(tmpDir);
 
-    expect(result.needs_prune).toBe(false);
+    expect(result.needs_prune).toBe(true);
   });
 
-  test("sets needs_prune: false when worktrees directory is missing", async () => {
-    // worktreesDir does not exist
+  test("needs_prune: false when nothing was pruned", async () => {
+    // No agent worktrees, no workspace dirs to prune
 
     const result = await runJanitor(tmpDir);
 

@@ -3,18 +3,19 @@
  *
  * Runs gate checks (cheapest-first), then executes tasks:
  *   - wal_checkpoint: flush WAL files for root-level Canon SQLite databases
- *
- * After tasks complete, detects whether worktree pruning is needed.
+ *   - prune_worktrees: remove orphaned agent isolation worktrees from .claude/worktrees/
+ *   - prune_workspaces: remove workspace dirs for merged branches from .canon/workspaces/
  *
  * Canon principles:
  *   - fail-closed-by-default: gate fails → don't run; lock not acquired → don't run
  *   - no-silent-failures: every task records its outcome with status and detail
- *   - define-errors-out-of-existence: no WAL file = skip; no DB = skip; missing dir = false
- *   - subprocess-isolation: SQLite via better-sqlite3 in-process; no shell commands
+ *   - define-errors-out-of-existence: no WAL file = skip; no DB = skip; missing dir = skip
+ *   - subprocess-isolation: git commands via gitExec (spawnSync, shell never true)
  */
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { loadJanitorConfig } from "@shared/lib/config.ts";
 import {
@@ -36,6 +37,7 @@ export type JanitorResult = {
   gate_passed: boolean;
   reason?: string;
   tasks: Record<string, JanitorTaskResult>;
+  /** True when either prune task actually removed entries during this run. */
   needs_prune: boolean;
 };
 
@@ -105,19 +107,195 @@ function runWalCheckpointTask(canonDir: string): JanitorTaskResult {
 }
 
 /**
- * Detect whether the .canon/worktrees directory has any entries.
- * Returns false if the directory does not exist or is empty.
+ * Parse git worktree list output into a Set of absolute worktree paths.
+ *
+ * `git worktree list` outputs lines like:
+ *   /path/to/worktree  <hash>  [branch]
+ *   /path/to/worktree  <hash>  (detached HEAD)
+ *
+ * We extract only the first field (the path) from each line.
  */
-function detectNeedsPrune(canonDir: string): boolean {
-  const worktreesDir = join(canonDir, "worktrees");
-  try {
-    const entries = readdirSync(worktreesDir);
-    return entries.length > 0;
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
-    // On unexpected errors, assume no prune needed (fail-closed)
-    return false;
+function parseWorktreePaths(stdout: string): Set<string> {
+  const paths = new Set<string>();
+  for (const line of stdout.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    // First whitespace-delimited token is the path
+    const spaceIdx = trimmed.search(/\s/);
+    const worktreePath = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
+    if (worktreePath) paths.add(worktreePath);
   }
+  return paths;
+}
+
+/**
+ * Parse `git branch --merged` output into a Set of branch names (trimmed, no leading spaces).
+ */
+function parseMergedBranches(stdout: string): Set<string> {
+  const branches = new Set<string>();
+  for (const line of stdout.split("\n")) {
+    // Strip the leading "* " (current branch marker) or "  "
+    const trimmed = line.replace(/^\*?\s+/, "").trim();
+    if (trimmed) branches.add(trimmed);
+  }
+  return branches;
+}
+
+/**
+ * Sanitize a branch name the same way workspace directories are named.
+ * Mirrors sanitizeBranch() from @domains/workspaces/workspace.ts.
+ *
+ * Replaces `/` with `--`, spaces with `-`, strips non-alphanumeric/hyphen chars,
+ * lowercases, and truncates to 80 characters.
+ */
+function sanitizeBranchForComparison(branch: string): string {
+  return branch
+    .replace(/\//g, "--")
+    .replace(/\s/g, "-")
+    .replace(/[^a-zA-Z0-9-]/g, "")
+    .toLowerCase()
+    .slice(0, 80);
+}
+
+/**
+ * List directory entries under a given path.
+ * Returns null when the directory does not exist or cannot be read.
+ * Treats ENOENT as expected (returns null); re-throws unexpected errors.
+ */
+function listDir(dirPath: string): string[] | null {
+  try {
+    return readdirSync(dirPath);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+/**
+ * Prune orphaned agent isolation worktrees from {projectDir}/.claude/worktrees/.
+ *
+ * A worktree directory is considered orphaned when it does NOT appear in the
+ * output of `git worktree list`. Only directories directly under
+ * .claude/worktrees/ are examined — no subdirectory recursion.
+ *
+ * Path safety: only paths strictly under agentWorktreesDir are removed.
+ *
+ * @returns JanitorTaskResult with pruned count in detail on success
+ */
+function pruneWorktreesTask(projectDir: string): JanitorTaskResult {
+  const agentWorktreesDir = join(projectDir, ".claude", "worktrees");
+
+  const entries = listDir(agentWorktreesDir);
+  if (entries === null || entries.length === 0) {
+    return { detail: "no agent worktrees directory or empty", status: "skipped" };
+  }
+
+  // Get valid worktree paths from git
+  const listResult = gitExec(["worktree", "list"], projectDir);
+  if (!listResult.ok) {
+    return {
+      detail: `git worktree list failed: ${listResult.stderr.trim()}`,
+      status: "error",
+    };
+  }
+
+  const validPaths = parseWorktreePaths(listResult.stdout);
+
+  let pruned = 0;
+  const errors: string[] = [];
+
+  for (const entry of entries) {
+    const entryPath = join(agentWorktreesDir, entry);
+    if (validPaths.has(entryPath)) continue;
+
+    try {
+      rmSync(entryPath, { force: true, recursive: true });
+      pruned++;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`${entry}: ${message}`);
+    }
+  }
+
+  if (errors.length > 0 && pruned === 0) {
+    return { detail: errors.join("; "), status: "error" };
+  }
+  if (pruned === 0) {
+    return { detail: "no orphaned agent worktrees found", status: "skipped" };
+  }
+  const detail =
+    errors.length > 0
+      ? `pruned ${pruned} worktree(s); errors: ${errors.join("; ")}`
+      : `pruned ${pruned} worktree(s)`;
+  return { detail, status: "success" };
+}
+
+/**
+ * Prune workspace directories for merged branches from {projectDir}/.canon/workspaces/.
+ *
+ * A workspace directory is a candidate for pruning when its name matches the
+ * sanitized form of a merged branch name. The "main" workspace is always kept.
+ *
+ * Path safety: only paths strictly under canonWorkspacesDir are removed.
+ *
+ * @returns JanitorTaskResult with pruned count in detail on success
+ */
+function pruneWorkspacesTask(projectDir: string, canonDir: string): JanitorTaskResult {
+  const canonWorkspacesDir = join(canonDir, "workspaces");
+
+  const entries = listDir(canonWorkspacesDir);
+  if (entries === null || entries.length === 0) {
+    return { detail: "no workspaces directory or empty", status: "skipped" };
+  }
+
+  // Get merged branches from git
+  const branchResult = gitExec(["branch", "--merged", "main"], projectDir);
+  if (!branchResult.ok) {
+    return {
+      detail: `git branch --merged failed: ${branchResult.stderr.trim()}`,
+      status: "error",
+    };
+  }
+
+  const mergedBranches = parseMergedBranches(branchResult.stdout);
+
+  // Build a set of sanitized merged branch names (excluding "main" — never prune it)
+  const sanitizedMerged = new Set<string>();
+  for (const branch of mergedBranches) {
+    const s = sanitizeBranchForComparison(branch);
+    if (s !== "main") sanitizedMerged.add(s);
+  }
+
+  let pruned = 0;
+  const errors: string[] = [];
+
+  for (const entry of entries) {
+    // Never prune the main workspace
+    if (entry === "main") continue;
+
+    if (!sanitizedMerged.has(entry)) continue;
+
+    const entryPath = join(canonWorkspacesDir, entry);
+    try {
+      rmSync(entryPath, { force: true, recursive: true });
+      pruned++;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`${entry}: ${message}`);
+    }
+  }
+
+  if (errors.length > 0 && pruned === 0) {
+    return { detail: errors.join("; "), status: "error" };
+  }
+  if (pruned === 0) {
+    return { detail: "no merged-branch workspace directories found", status: "skipped" };
+  }
+  const detail =
+    errors.length > 0
+      ? `pruned ${pruned} workspace(s); errors: ${errors.join("; ")}`
+      : `pruned ${pruned} workspace(s)`;
+  return { detail, status: "success" };
 }
 
 /**
@@ -128,10 +306,10 @@ function detectNeedsPrune(canonDir: string): boolean {
  *   2. Time gate (min_hours_between_runs)
  *   3. Lock acquisition
  *
- * When gate passes, runs WAL checkpoint task and detects prune need.
+ * When gate passes, runs WAL checkpoint, worktree prune, and workspace prune tasks.
  * Always releases lock on exit, even on unexpected error.
  *
- * @param projectDir - Project root directory (contains .canon/)
+ * @param projectDir - Project root directory (contains .canon/ and .claude/)
  */
 export async function runJanitor(projectDir: string): Promise<JanitorResult> {
   const canonDir = join(projectDir, CANON_DIR);
@@ -172,14 +350,16 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
 
   // Gate passed — run tasks
   const tasks: Record<string, JanitorTaskResult> = {};
-  let needsPrune = false;
 
   try {
     // Task: WAL checkpoint
     tasks.wal_checkpoint = runWalCheckpointTask(canonDir);
 
-    // Prune detection
-    needsPrune = detectNeedsPrune(canonDir);
+    // Task: prune orphaned agent isolation worktrees
+    tasks.prune_worktrees = pruneWorktreesTask(projectDir);
+
+    // Task: prune workspace dirs for merged branches
+    tasks.prune_workspaces = pruneWorkspacesTask(projectDir, canonDir);
 
     // Commit lock (update mtime = last successful run timestamp)
     await commitJanitorLock(canonDir);
@@ -190,6 +370,11 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
   } finally {
     await releaseJanitorLock(canonDir);
   }
+
+  // needs_prune is true when either prune task actually removed entries
+  const needsPrune =
+    tasks.prune_worktrees?.status === "success" ||
+    tasks.prune_workspaces?.status === "success";
 
   return {
     gate_passed: true,
