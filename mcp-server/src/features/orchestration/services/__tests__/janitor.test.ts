@@ -1,13 +1,5 @@
-/**
- * Janitor service tests
- *
- * Uses real temp directories for I/O correctness (SQLite, worktree detection).
- * Mocks loadJanitorConfig, acquireJanitorLock, commitJanitorLock, releaseJanitorLock,
- * getLastJanitorTimestamp, and gitExec via vitest module mocking.
- */
-
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -38,6 +30,7 @@ vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
   };
 });
 
+import { gitExec } from "@platform/adapters/git-adapter.ts";
 // Import after mocks are set up
 import { loadJanitorConfig } from "@shared/lib/config.ts";
 import {
@@ -46,7 +39,6 @@ import {
   getLastJanitorTimestamp,
   releaseJanitorLock,
 } from "@shared/lib/janitor-lock.ts";
-import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { runJanitor } from "../janitor.ts";
 
 const mockLoadJanitorConfig = loadJanitorConfig as ReturnType<typeof vi.fn>;
@@ -66,12 +58,12 @@ function makeGitWorktreeListResult(lines: string[]): {
   duration_ms: number;
 } {
   return {
-    ok: true,
-    stdout: lines.join("\n") + "\n",
-    stderr: "",
-    exitCode: 0,
-    timedOut: false,
     duration_ms: 10,
+    exitCode: 0,
+    ok: true,
+    stderr: "",
+    stdout: `${lines.join("\n")}\n`,
+    timedOut: false,
   };
 }
 
@@ -85,12 +77,12 @@ function makeGitBranchMergedResult(branches: string[]): {
   duration_ms: number;
 } {
   return {
-    ok: true,
-    stdout: branches.map((b) => `  ${b}`).join("\n") + "\n",
-    stderr: "",
-    exitCode: 0,
-    timedOut: false,
     duration_ms: 10,
+    exitCode: 0,
+    ok: true,
+    stderr: "",
+    stdout: `${branches.map((b) => `  ${b}`).join("\n")}\n`,
+    timedOut: false,
   };
 }
 
@@ -104,12 +96,12 @@ function makeGitFailResult(): {
   duration_ms: number;
 } {
   return {
-    ok: false,
-    stdout: "",
-    stderr: "fatal: not a git repository",
-    exitCode: 128,
-    timedOut: false,
     duration_ms: 5,
+    exitCode: 128,
+    ok: false,
+    stderr: "fatal: not a git repository",
+    stdout: "",
+    timedOut: false,
   };
 }
 
@@ -466,7 +458,7 @@ describe("prune_workspaces task", () => {
       return makeGitFailResult();
     });
 
-    const result = await runJanitor(tmpDir);
+    const _result = await runJanitor(tmpDir);
 
     // main is excluded from pruning
     expect(existsSync(mainDir)).toBe(true);
