@@ -161,8 +161,10 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
   }
 
   // Gate 3: Lock acquisition
-  const staleAfterMs = config.min_hours_between_runs * 60 * 60 * 1000;
-  const lockResult = await acquireJanitorLock(canonDir, staleAfterMs);
+  // Lock staleness is a crash-recovery timeout, not a scheduling interval.
+  // 5 minutes is generous for a janitor run that takes seconds.
+  const LOCK_STALE_MS = 5 * 60 * 1000;
+  const lockResult = await acquireJanitorLock(canonDir, LOCK_STALE_MS);
   if (!lockResult.acquired) {
     return {
       gate_passed: false,
