@@ -25,6 +25,9 @@
       "WebSearch"
     ]
   },
+  "env": {
+    "CANON_AGENT_TEAMS_MODE": "on"
+  },
   "enabledPlugins": {
     "canon@canon-marketplace": true
   }
