@@ -48,15 +48,16 @@ const mockReleaseJanitorLock = releaseJanitorLock as ReturnType<typeof vi.fn>;
 const mockGetLastJanitorTimestamp = getLastJanitorTimestamp as ReturnType<typeof vi.fn>;
 const mockGitExec = gitExec as ReturnType<typeof vi.fn>;
 
-/** Build a ProcessResult-like value for git worktree list output. */
-function makeGitWorktreeListResult(lines: string[]): {
+type GitResult = {
   ok: boolean;
   stdout: string;
   stderr: string;
   exitCode: number;
   timedOut: boolean;
   duration_ms: number;
-} {
+};
+
+function makeGitWorktreeListResult(lines: string[]): GitResult {
   return {
     duration_ms: 10,
     exitCode: 0,
@@ -67,15 +68,7 @@ function makeGitWorktreeListResult(lines: string[]): {
   };
 }
 
-/** Build a ProcessResult-like value for git branch --merged output. */
-function makeGitBranchMergedResult(branches: string[]): {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  timedOut: boolean;
-  duration_ms: number;
-} {
+function makeGitBranchMergedResult(branches: string[]): GitResult {
   return {
     duration_ms: 10,
     exitCode: 0,
@@ -86,15 +79,7 @@ function makeGitBranchMergedResult(branches: string[]): {
   };
 }
 
-/** Build a failing ProcessResult (git command failed). */
-function makeGitFailResult(): {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  timedOut: boolean;
-  duration_ms: number;
-} {
+function makeGitFailResult(): GitResult {
   return {
     duration_ms: 5,
     exitCode: 128,
@@ -119,14 +104,11 @@ beforeEach(async () => {
   canonWorkspacesDir = join(canonDir, "workspaces");
   await mkdir(canonDir, { recursive: true });
 
-  // Default: janitor enabled, no recent run, lock acquired
   mockLoadJanitorConfig.mockResolvedValue({ enabled: true, min_hours_between_runs: 1 });
   mockGetLastJanitorTimestamp.mockResolvedValue(null);
   mockAcquireJanitorLock.mockResolvedValue({ acquired: true, previousMtime: null });
   mockCommitJanitorLock.mockResolvedValue(undefined);
   mockReleaseJanitorLock.mockResolvedValue(undefined);
-
-  // Default git mocks: empty worktree list and no merged branches
   mockGitExec.mockImplementation((args: string[]) => {
     if (args[0] === "worktree" && args[1] === "list") {
       return makeGitWorktreeListResult([]);
@@ -187,17 +169,12 @@ describe("gate checks", () => {
 
 describe("wal_checkpoint task", () => {
   test("checkpoints WAL files that exist", async () => {
-    // Create a real SQLite DB in WAL mode
     const dbPath = join(canonDir, "knowledge-graph.db");
     const db = new Database(dbPath);
     db.pragma("journal_mode=WAL");
     db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
     db.close();
-
-    // Verify WAL file was created
-    const walPath = `${dbPath}-wal`;
-    // Force WAL file to exist by writing something
-    await writeFile(walPath, "");
+    await writeFile(`${dbPath}-wal`, "");
 
     const result = await runJanitor(tmpDir);
 
@@ -207,22 +184,16 @@ describe("wal_checkpoint task", () => {
   });
 
   test("skips WAL checkpoint for databases without WAL files", async () => {
-    // knowledge-graph.db does not exist → no checkpoint
     const result = await runJanitor(tmpDir);
-
     expect(result.gate_passed).toBe(true);
     expect(result.tasks.wal_checkpoint).toBeDefined();
     expect(result.tasks.wal_checkpoint.status).toBe("success");
-    // No error since skipping is expected behavior
   });
 
   test("reports error for corrupt/inaccessible database files", async () => {
-    // Create a DB file that exists but has a WAL file too
     const dbPath = join(canonDir, "knowledge-graph.db");
-    const walPath = `${dbPath}-wal`;
-    // Write corrupt content to the DB
     await writeFile(dbPath, "this is not a valid sqlite database");
-    await writeFile(walPath, "");
+    await writeFile(`${dbPath}-wal`, "");
 
     const result = await runJanitor(tmpDir);
 
@@ -418,6 +389,29 @@ describe("prune_workspaces task", () => {
 
     expect(result.tasks.prune_workspaces.status).toBe("success");
     expect(result.tasks.prune_workspaces.detail).toContain("1");
+    expect(existsSync(workspaceDir)).toBe(false);
+  });
+
+  test("handles + worktree marker in git branch output", async () => {
+    const workspaceDir = join(canonWorkspacesDir, "feat--worktree-branch");
+    await mkdir(workspaceDir, { recursive: true });
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        return {
+          ...makeGitBranchMergedResult(["main"]),
+          stdout: "+ feat/worktree-branch\n  main\n",
+        };
+      }
+      return makeGitFailResult();
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("success");
     expect(existsSync(workspaceDir)).toBe(false);
   });
 

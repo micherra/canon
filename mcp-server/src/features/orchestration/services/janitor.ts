@@ -134,8 +134,8 @@ function parseWorktreePaths(stdout: string): Set<string> {
 function parseMergedBranches(stdout: string): Set<string> {
   const branches = new Set<string>();
   for (const line of stdout.split("\n")) {
-    // Strip the leading "* " (current branch marker) or "  "
-    const trimmed = line.replace(/^\*?\s+/, "").trim();
+    // Strip leading markers: "* " (current), "+ " (worktree), or "  " (plain)
+    const trimmed = line.replace(/^[*+]?\s+/, "").trim();
     if (trimmed) branches.add(trimmed);
   }
   return branches;
