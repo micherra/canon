@@ -5,7 +5,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
@@ -33,6 +33,8 @@ type InitWorkspaceInput = {
   skip_flags?: string[];
   preflight?: boolean;
   seed_from?: string;
+  runbook_content?: string;
+  brief_content?: string;
 };
 
 type InitWorkspaceResult = {
@@ -537,6 +539,12 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
 
   const flow = await loadAndResolveFlow(pluginDir, input.flow_name);
   await mkdir(join(workspace, "plans", slug), { recursive: true });
+  if (input.runbook_content) {
+    await writeFile(join(workspace, "plans", slug, "runbook.md"), input.runbook_content);
+  }
+  if (input.brief_content) {
+    await writeFile(join(workspace, "plans", slug, "planning-brief.md"), input.brief_content);
+  }
   const board = initBoard(flow, input.task, input.base_commit);
   const now = new Date().toISOString();
   const session: Session = {

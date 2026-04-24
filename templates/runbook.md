@@ -3,7 +3,7 @@ template: runbook
 description: Synthesized runbook produced by the planner agent (canon:synthesize skill). Defines the ordered step sequence that the orchestrator executes.
 used-by: [planner]
 read-by: [canon-orchestrator, engineer, reviewer, scribe, learner]
-output-path: ${WORKSPACE}/runbook.md
+output-path: ${WORKSPACE}/plans/${slug}/runbook.md
 ---
 
 # Template: Runbook

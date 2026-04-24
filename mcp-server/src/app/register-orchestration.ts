@@ -48,7 +48,7 @@ function registerFlowCoreTools(): void {
     "simulate_flow",
     {
       description:
-        "Simulate a Canon flow execution with mocked agent results. Walks the state machine deterministically using a provided scenario of (state_id, status) pairs. Returns the full execution path, terminal/stuck/dead-end detection, and iteration tracking. No agents spawned, no workspace needed.",
+        "Simulate a Canon flow execution with mocked agent results. Returns execution path, terminal/stuck/dead-end detection, and iteration tracking.",
       inputSchema: {
         flow: z.string().describe("Name of the flow file (without .md extension)"),
         max_steps: z
@@ -71,7 +71,9 @@ function registerFlowCoreTools(): void {
     },
     gatedWrapHandler(async (input) => simulateFlowTool(input, pluginDir, projectDir)),
   );
+}
 
+function registerInitWorkspaceTool(): void {
   server.registerTool(
     "init_workspace",
     {
@@ -80,6 +82,12 @@ function registerFlowCoreTools(): void {
       inputSchema: {
         base_commit: z.string(),
         branch: z.string(),
+        brief_content: z
+          .string()
+          .optional()
+          .describe(
+            "Raw planning brief markdown to persist to ${WORKSPACE}/plans/${slug}/planning-brief.md at creation time",
+          ),
         flow_name: z.string(),
         original_input: z.string().optional(),
         preflight: z
@@ -87,6 +95,12 @@ function registerFlowCoreTools(): void {
           .optional()
           .describe(
             "Run pre-flight checks (git status, lock, stale sessions) before creating workspace",
+          ),
+        runbook_content: z
+          .string()
+          .optional()
+          .describe(
+            "Raw runbook markdown to persist to ${WORKSPACE}/plans/${slug}/runbook.md at creation time",
           ),
         skip_flags: z.array(z.string()).optional(),
         task: z.string(),
@@ -221,7 +235,7 @@ function registerReportTools(): void {
     "report_result",
     {
       description:
-        "Report an agent's result. Normalizes status, evaluates transitions, updates board state, checks stuck detection. Returns next state and whether HITL is required.",
+        "Report an agent's result. Evaluates transitions, updates board state, checks stuck detection. Returns next state and HITL status.",
       inputSchema: reportResultInputSchema,
     },
     gatedWrapHandler(async (input) => reportResult({ ...input, project_dir: projectDir })),
@@ -231,7 +245,7 @@ function registerReportTools(): void {
     "record_agent_metrics",
     {
       description:
-        "Record agent performance metrics (tool_calls, orientation_calls, turns) directly to the execution store. Agents call this at the end of their work, before returning status. Merges with existing metrics — does not overwrite orchestrator-tracked fields.",
+        "Record agent performance metrics (tool_calls, orientation_calls, turns) to the execution store. Merges with existing metrics without overwriting orchestrator-tracked fields.",
       inputSchema: {
         orientation_calls: z
           .number()
@@ -252,8 +266,7 @@ function registerReportTools(): void {
   server.registerTool(
     "get_transcript",
     {
-      description:
-        "Retrieve the transcript of a specialist agent's conversation for a given state execution. Supports full mode (all entries) and summary mode (assistant messages only, ~20% of full).",
+      description: "Retrieve a specialist agent's conversation transcript for a state execution.",
       inputSchema: {
         mode: z
           .enum(["full", "summary"])
@@ -273,8 +286,7 @@ function registerUpdateBoardTool(): void {
   server.registerTool(
     "update_board",
     {
-      description:
-        "Perform board state mutations. Supports entering, skipping, blocking, unblocking states, completing flow, and setting wave progress.",
+      description: "Perform board state mutations (enter, skip, block, complete, etc).",
       inputSchema: {
         action: z.enum([
           "enter_state",
@@ -314,8 +326,7 @@ function registerWaveEventTools(): void {
   server.registerTool(
     "inject_wave_event",
     {
-      description:
-        "Inject a user event into a running wave execution. Events are applied at wave boundaries (between waves). Use to add tasks, skip tasks, inject context, provide guidance, or pause execution.",
+      description: "Inject a user event into a running wave execution.",
       inputSchema: {
         payload: z.object({
           context: z.string().optional().describe("Additional context"),
@@ -344,7 +355,7 @@ function registerWaveEventTools(): void {
     "resolve_wave_event",
     {
       description:
-        "Resolve a pending wave event by applying or rejecting it. Returns agent routing from resolveEventAgents so the orchestrator knows which agents to spawn. Use after processing events from get_messages.",
+        "Resolve a pending wave event by applying or rejecting it. Returns agent routing for orchestrator spawn dispatch.",
       inputSchema: {
         action: z.enum(["apply", "reject"]).describe("Whether to apply or reject the event"),
         event_id: z.string().describe("ID of the pending event to resolve"),
@@ -365,8 +376,7 @@ function registerWaveEventTools(): void {
   server.registerTool(
     "resolve_after_consultations",
     {
-      description:
-        "Resolve 'after' consultation prompts for a state. Call after the last wave completes and before report_result. Returns consultation prompt entries for the orchestrator to spawn.",
+      description: "Resolve after-consultation prompts for a state.",
       inputSchema: {
         flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
         state_id: z.string(),
@@ -382,8 +392,7 @@ function registerMessagingTools(): void {
   server.registerTool(
     "post_message",
     {
-      description:
-        "Post a message to a workspace channel for inter-agent communication. Messages are markdown files that agents read at spawn time.",
+      description: "Post a message to a workspace channel for inter-agent communication.",
       inputSchema: {
         channel: z
           .string()
@@ -399,8 +408,7 @@ function registerMessagingTools(): void {
   server.registerTool(
     "post_event",
     {
-      description:
-        "Log a structured agent activity event (start or complete) to the workspace event store. Agents call this instead of writing to log.jsonl. Events are stored in SQLite for cross-build analysis.",
+      description: "Log a structured agent activity event to the workspace.",
       inputSchema: {
         action: z
           .enum(["start", "complete"])
@@ -420,8 +428,7 @@ function registerMessagingTools(): void {
   server.registerTool(
     "get_messages",
     {
-      description:
-        "Read messages from a workspace channel. Returns messages ordered by sequence number. Optionally includes pending wave events.",
+      description: "Read messages from a workspace channel, ordered by sequence number.",
       inputSchema: {
         channel: z.string().describe("Channel name to read from"),
         include_events: z.boolean().optional().describe("Also return pending wave events"),
@@ -441,7 +448,7 @@ function registerDriveFlowTool(): void {
     "drive_flow",
     {
       description:
-        "Drive the Canon state machine loop server-side. Turn-by-turn protocol: first call (no result) enters the current state and returns SpawnRequest[]; subsequent calls (with result) report the agent's result, advance the loop, and return the next action. Returns spawn, hitl, or done.",
+        "Drive the Canon state machine. First call (no result) enters current state and returns SpawnRequest[]; subsequent calls (with result) report agent result and return next action (spawn, hitl, or done).",
       inputSchema: {
         flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
         result: z
@@ -474,7 +481,7 @@ function registerDriveFlowTool(): void {
               .optional()
               .default("done")
               .describe(
-                "Agent status keyword (e.g. DONE, DONE_WITH_CONCERNS, BLOCKED). Defaults to 'done' when absent — omit when resuming after HITL with no other status to report.",
+                "Agent status keyword (e.g. DONE, DONE_WITH_CONCERNS, BLOCKED). Defaults to 'done'.",
               ),
             task_id: z
               .string()
@@ -530,15 +537,13 @@ function registerCategorizeTool(): void {
 }
 
 function registerJournalTools(): void {
-  // Feature flag gate: only register when agent-teams mode is active.
-  // Keeps legacy CANON_AGENT_TEAMS_MODE=off path byte-identical.
   if (process.env.CANON_AGENT_TEAMS_MODE !== "on") return;
 
   server.registerTool(
     "log_step",
     {
       description:
-        "Log a step in the orchestration journal. Records step execution for audit trail and completion verification. Accepts domain_skills_loaded and outcome fields for self-improving skills analysis (§4b P4).",
+        "Log a step in the orchestration journal. Records step execution for audit trail and completion verification.",
       inputSchema: {
         agent_type: z
           .string()
@@ -549,10 +554,7 @@ function registerJournalTools(): void {
           .array(z.string())
           .optional()
           .describe("Expected artifact paths relative to workspace"),
-        domain_skills_loaded: z
-          .array(z.string())
-          .optional()
-          .describe("Domain skills named in spawn prompt for this step"),
+        domain_skills_loaded: z.array(z.string()).optional(),
         outcome: z
           .object({
             fix_iterations: z.number().optional(),
@@ -560,7 +562,7 @@ function registerJournalTools(): void {
             test_pass_rate: z.number().optional(),
           })
           .optional()
-          .describe("Quality signals recorded on completion (§4b P4)"),
+          .describe("Quality signals recorded on completion"),
         status: z
           .enum(["planned", "started", "completed", "skipped"])
           .describe("Step execution status"),
@@ -575,7 +577,7 @@ function registerJournalTools(): void {
     "verify_completion",
     {
       description:
-        "Verify flow completion by checking the orchestration journal. Returns steps logged, steps missing (started but not completed), artifacts missing, and a flow_outcome block with aggregated quality signals (domain skills used, review verdict, fix iterations, total duration).",
+        "Verify flow completion by checking the orchestration journal. Returns steps logged, missing steps, missing artifacts, and aggregated quality signals.",
       inputSchema: {
         workspace: z.string().describe("Workspace directory path"),
       },
@@ -586,6 +588,7 @@ function registerJournalTools(): void {
 
 export function registerOrchestrationTools(): void {
   registerFlowCoreTools();
+  registerInitWorkspaceTool();
   registerReportTools();
   registerUpdateBoardTool();
   registerWaveEventTools();

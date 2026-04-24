@@ -126,7 +126,7 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 1. Spawn `canon:planner` with the build request. The planner produces a runbook.
 2. Present the runbook to the user for approval. Iterate if the user requests changes.
-3. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` where `flow_name` and `tier` come from the approved runbook's frontmatter.
+3. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` and `tier` come from the approved runbook's frontmatter, and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`.
 4. Call `log_step` for each step in the approved runbook (creates the checklist).
 5. Execute steps in order, spawning the agent specified by each step.
 
