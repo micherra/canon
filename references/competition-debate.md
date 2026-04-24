@@ -61,7 +61,9 @@ elements. However, the result must be internally coherent, not a Frankenstein of
 incompatible ideas. If two inputs have genuinely incompatible approaches to the same
 problem, choose one and explain the tradeoff.
 
-For each major decision in your output, note which input(s) inspired it.
+For each major decision in your output:
+- Note which input(s) inspired it
+- Explain why you chose that approach over alternatives
 ```
 
 #### Select
@@ -73,21 +75,21 @@ Pick the single best solution. Evaluate each alternative, explain the choice, no
 The synthesizer receives:
 
 1. The original brief (problem statement, constraints, goals).
-2. All N competitor outputs, each formatted with its team label and lens:
+2. All N competitor outputs, each formatted with its team number and lens:
 
 ```
-## Team A — optimizing for: {lens}
+### Team 1 (lens: {lens})
 
-{Team A output}
+{Team 1 output}
 
 ---
 
-## Team B — optimizing for: {lens}
+### Team 2 (lens: {lens})
 
-{Team B output}
+{Team 2 output}
 ```
 
-If no lens was used, omit the "optimizing for" line and just label by team.
+Teams are numbered 1–N in synthesis (matching the source's `out.index + 1`). The A–E labels are used only during the spawn phase (see "Team Labeling" above). If no lens was used, the label is simply `Team {N}` with no parenthetical.
 
 ### Dispatch Summary
 
