@@ -1,12 +1,8 @@
 /**
  * invoke_janitor tool handler — thin wrapper over runJanitor service.
  *
- * Always returns toolOk — janitor never produces a toolError.
  * Gate failures and task errors are reported inside the JanitorResult.
- *
- * Canon principles:
- *   - toolresult-contract: returns ToolResult<{ janitor: JanitorResult }>, never throws
- *   - no-silent-failures: all outcomes reported in JanitorResult.tasks
+ * Unexpected throws propagate to wrapHandler, which returns UNEXPECTED CanonToolError.
  */
 
 import type { ToolResult } from "@shared/lib/tool-result.ts";
@@ -23,18 +19,6 @@ export async function invokeJanitor(input: {
   project_dir?: string;
 }): Promise<ToolResult<{ janitor: JanitorResult }>> {
   const projectDir = input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd();
-  try {
-    const result = await runJanitor(projectDir);
-    return toolOk({ janitor: result });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return toolOk({
-      janitor: {
-        gate_passed: false,
-        needs_prune: false,
-        reason: `unexpected: ${message}`,
-        tasks: {},
-      },
-    });
-  }
+  const result = await runJanitor(projectDir);
+  return toolOk({ janitor: result });
 }
