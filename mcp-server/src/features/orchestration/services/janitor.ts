@@ -13,17 +13,17 @@
  *   - subprocess-isolation: SQLite via better-sqlite3 in-process; no shell commands
  */
 
-import Database from "better-sqlite3";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { loadJanitorConfig } from "@shared/lib/config.ts";
 import {
   acquireJanitorLock,
   commitJanitorLock,
   getLastJanitorTimestamp,
   releaseJanitorLock,
 } from "@shared/lib/janitor-lock.ts";
-import { loadJanitorConfig } from "@shared/lib/config.ts";
+import Database from "better-sqlite3";
 
 /** Outcome of a single janitor task. */
 export type JanitorTaskResult = {
@@ -56,12 +56,12 @@ const ROOT_DB_KEYS = [
  * @returns JanitorTaskResult for this database checkpoint attempt
  */
 function checkpointDb(dbPath: string): JanitorTaskResult {
-  const walPath = dbPath + "-wal";
+  const walPath = `${dbPath}-wal`;
   if (!existsSync(walPath)) {
-    return { status: "skipped", detail: `no WAL file at ${walPath}` };
+    return { detail: `no WAL file at ${walPath}`, status: "skipped" };
   }
   if (!existsSync(dbPath)) {
-    return { status: "skipped", detail: `database not found at ${dbPath}` };
+    return { detail: `database not found at ${dbPath}`, status: "skipped" };
   }
 
   let db: InstanceType<typeof Database> | null = null;
@@ -71,7 +71,7 @@ function checkpointDb(dbPath: string): JanitorTaskResult {
     return { status: "success" };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return { status: "error", detail: message };
+    return { detail: message, status: "error" };
   } finally {
     try {
       db?.close();
@@ -88,7 +88,6 @@ function checkpointDb(dbPath: string): JanitorTaskResult {
 function runWalCheckpointTask(canonDir: string): JanitorTaskResult {
   let hasError = false;
   let errorDetail: string | undefined;
-  let allSkipped = true;
 
   for (const dbKey of ROOT_DB_KEYS) {
     const dbPath = join(canonDir, dbKey);
@@ -97,13 +96,10 @@ function runWalCheckpointTask(canonDir: string): JanitorTaskResult {
       hasError = true;
       errorDetail = result.detail;
     }
-    if (result.status !== "skipped") {
-      allSkipped = false;
-    }
   }
 
   if (hasError) {
-    return { status: "error", detail: errorDetail };
+    return { detail: errorDetail, status: "error" };
   }
   return { status: "success" };
 }
@@ -143,7 +139,7 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
   // Gate 1: Config enabled check
   const config = await loadJanitorConfig(projectDir);
   if (!config.enabled) {
-    return { gate_passed: false, reason: "janitor disabled", tasks: {}, needs_prune: false };
+    return { gate_passed: false, needs_prune: false, reason: "janitor disabled", tasks: {} };
   }
 
   // Gate 2: Time gate
@@ -153,9 +149,9 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
     if (hoursSinceLast < config.min_hours_between_runs) {
       return {
         gate_passed: false,
+        needs_prune: false,
         reason: `time gate: ${hoursSinceLast.toFixed(1)}h < ${config.min_hours_between_runs}h`,
         tasks: {},
-        needs_prune: false,
       };
     }
   }
@@ -168,9 +164,9 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
   if (!lockResult.acquired) {
     return {
       gate_passed: false,
+      needs_prune: false,
       reason: `lock: ${lockResult.reason}`,
       tasks: {},
-      needs_prune: false,
     };
   }
 
@@ -180,7 +176,7 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
 
   try {
     // Task: WAL checkpoint
-    tasks["wal_checkpoint"] = runWalCheckpointTask(canonDir);
+    tasks.wal_checkpoint = runWalCheckpointTask(canonDir);
 
     // Prune detection
     needsPrune = detectNeedsPrune(canonDir);
@@ -189,7 +185,7 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
     await commitJanitorLock(canonDir);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    tasks["unexpected_error"] = { status: "error", detail: message };
+    tasks.unexpected_error = { detail: message, status: "error" };
     // Fall through to lock release
   } finally {
     await releaseJanitorLock(canonDir);
@@ -197,7 +193,7 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
 
   return {
     gate_passed: true,
-    tasks,
     needs_prune: needsPrune,
+    tasks,
   };
 }

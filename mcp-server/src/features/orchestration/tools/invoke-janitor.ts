@@ -19,9 +19,9 @@ import { type JanitorResult, runJanitor } from "../services/janitor.ts";
  * @param input.project_dir - Project root (falls back to CANON_PROJECT_DIR env, then cwd)
  * @returns ToolResult wrapping the JanitorResult (always ok: true)
  */
-export async function invokeJanitor(
-  input: { project_dir?: string },
-): Promise<ToolResult<{ janitor: JanitorResult }>> {
+export async function invokeJanitor(input: {
+  project_dir?: string;
+}): Promise<ToolResult<{ janitor: JanitorResult }>> {
   const projectDir = input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd();
   const result = await runJanitor(projectDir);
   return toolOk({ janitor: result });

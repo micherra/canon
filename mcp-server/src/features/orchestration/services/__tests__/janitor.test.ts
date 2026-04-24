@@ -6,10 +6,10 @@
  * and getLastJanitorTimestamp via vitest module mocking.
  */
 
-import Database from "better-sqlite3";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // --- module mocks ---
@@ -120,15 +120,15 @@ describe("wal_checkpoint task", () => {
     db.close();
 
     // Verify WAL file was created
-    const walPath = dbPath + "-wal";
+    const walPath = `${dbPath}-wal`;
     // Force WAL file to exist by writing something
     await writeFile(walPath, "");
 
     const result = await runJanitor(tmpDir);
 
     expect(result.gate_passed).toBe(true);
-    expect(result.tasks["wal_checkpoint"]).toBeDefined();
-    expect(result.tasks["wal_checkpoint"].status).toBe("success");
+    expect(result.tasks.wal_checkpoint).toBeDefined();
+    expect(result.tasks.wal_checkpoint.status).toBe("success");
   });
 
   test("skips WAL checkpoint for databases without WAL files", async () => {
@@ -136,15 +136,15 @@ describe("wal_checkpoint task", () => {
     const result = await runJanitor(tmpDir);
 
     expect(result.gate_passed).toBe(true);
-    expect(result.tasks["wal_checkpoint"]).toBeDefined();
-    expect(result.tasks["wal_checkpoint"].status).toBe("success");
+    expect(result.tasks.wal_checkpoint).toBeDefined();
+    expect(result.tasks.wal_checkpoint.status).toBe("success");
     // No error since skipping is expected behavior
   });
 
   test("reports error for corrupt/inaccessible database files", async () => {
     // Create a DB file that exists but has a WAL file too
     const dbPath = join(canonDir, "knowledge-graph.db");
-    const walPath = dbPath + "-wal";
+    const walPath = `${dbPath}-wal`;
     // Write corrupt content to the DB
     await writeFile(dbPath, "this is not a valid sqlite database");
     await writeFile(walPath, "");
@@ -152,9 +152,9 @@ describe("wal_checkpoint task", () => {
     const result = await runJanitor(tmpDir);
 
     expect(result.gate_passed).toBe(true);
-    expect(result.tasks["wal_checkpoint"]).toBeDefined();
-    expect(result.tasks["wal_checkpoint"].status).toBe("error");
-    expect(result.tasks["wal_checkpoint"].detail).toBeDefined();
+    expect(result.tasks.wal_checkpoint).toBeDefined();
+    expect(result.tasks.wal_checkpoint.status).toBe("error");
+    expect(result.tasks.wal_checkpoint.detail).toBeDefined();
   });
 });
 
@@ -201,7 +201,7 @@ describe("lock lifecycle", () => {
   test("releases lock even on unexpected error", async () => {
     // Force an error in the WAL checkpoint by making readdirSync throw
     const dbPath = join(canonDir, "knowledge-graph.db");
-    const walPath = dbPath + "-wal";
+    const walPath = `${dbPath}-wal`;
     await writeFile(dbPath, "corrupt");
     await writeFile(walPath, "");
 
@@ -222,7 +222,7 @@ describe("lock lifecycle", () => {
     // Should still release lock
     expect(mockReleaseJanitorLock).toHaveBeenCalledTimes(1);
     // Returns error result
-    expect(result.tasks["unexpected_error"]).toBeDefined();
-    expect(result.tasks["unexpected_error"].status).toBe("error");
+    expect(result.tasks.unexpected_error).toBeDefined();
+    expect(result.tasks.unexpected_error.status).toBe("error");
   });
 });
