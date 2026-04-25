@@ -277,6 +277,40 @@ describe("computeFixCyclePatterns", () => {
 // ---- computePerformanceTrends ----
 
 describe("computePerformanceTrends", () => {
+  test("deduplicates runs when summary and FlowRunEntry share the same (flow, started)", () => {
+    // A summary and a FlowRunEntry both represent the same run.
+    // Without deduplication, the run would appear twice and skew avg_duration_ms.
+    const sharedStarted = "2026-01-10T00:00:00.000Z";
+    const summaries: RunSummary[] = [
+      makeRunSummary({
+        run_metadata: {
+          branch: "main",
+          slug: "dup-test",
+          flow: "feature",
+          tier: "standard",
+          task: "T",
+          started_at: sharedStarted,
+          completed_at: sharedStarted,
+          archived_at: sharedStarted,
+          total_duration_ms: 90_000,
+        },
+      }),
+    ];
+    const runs: FlowRunEntry[] = [
+      makeFlowRunEntry({
+        flow: "feature",
+        started: sharedStarted,
+        total_duration_ms: 9_000_000, // wildly different — proves dedup is working
+      }),
+    ];
+
+    const result = computePerformanceTrends(summaries, runs);
+    expect(result).toHaveLength(1);
+    expect(result[0].run_count).toBe(1); // only one data point, not two
+    expect(result[0].avg_duration_ms).toBe(90_000); // summary value preferred
+  });
+
+
   test("returns 'stable' when fewer than 10 runs for a flow", () => {
     const summaries: RunSummary[] = [];
     const runs: FlowRunEntry[] = [
@@ -643,6 +677,31 @@ describe("analyzeCrossRunPatterns", () => {
     expect(result.agent_performance_trends).toHaveLength(1);
     expect(result.planner_patterns.total_runs_with_planner).toBe(1);
     expect(result.total_archived_runs).toBe(1); // 1 summary
+  });
+
+  test("respects `limit` option — caps performance trend data points per flow", () => {
+    // Insert 5 flow runs; request limit=3 → only the 3 most recent should appear in trends.
+    const base = new Date("2026-01-01T00:00:00.000Z").getTime();
+    for (let i = 0; i < 5; i++) {
+      store.appendFlowRun(
+        makeFlowRunEntry({
+          run_id: `run_limit_${i}`,
+          flow: "fast-path",
+          started: new Date(base + i * 3_600_000).toISOString(),
+          completed: new Date(base + i * 3_600_000 + 60_000).toISOString(),
+          total_duration_ms: (i + 1) * 10_000, // 10k, 20k, 30k, 40k, 50k
+          total_spawns: 1,
+        }),
+      );
+    }
+
+    const result = analyzeCrossRunPatterns(store, [], { limit: 3 });
+
+    const trend = result.agent_performance_trends.find((t) => t.flow === "fast-path");
+    expect(trend).toBeDefined();
+    expect(trend?.run_count).toBe(3); // most recent 3 of 5
+    // The 3 most recent runs have duration_ms 30k, 40k, 50k → avg = 40k
+    expect(trend?.avg_duration_ms).toBe(40_000);
   });
 
   test("respects `since` filter", () => {

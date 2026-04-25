@@ -262,7 +262,8 @@ export function computeFixCyclePatterns(
  *
  * Prefers step durations from run summaries when available.
  * Falls back to FlowRunEntry records for runs without summaries.
- * Applies the `since` filter if provided.
+ * Deduplicates on (flow, started): when a summary and a FlowRunEntry share the
+ * same (flow, started) pair, the summary entry is preferred.
  *
  * Trend classification compares recent 5 runs to previous 5:
  * - "improving": recent avg > 10% faster than prior avg
@@ -271,15 +272,20 @@ export function computeFixCyclePatterns(
  *
  * @param summaries - Run summaries with optional step_outcomes
  * @param runs - Flow run entries from drift.db
+ * @param limit - Optional cap on the number of data points per flow (most recent N kept)
  */
 export function computePerformanceTrends(
   summaries: RunSummary[],
   runs: FlowRunEntry[],
+  limit?: number,
 ): AgentPerformanceTrend[] {
   // Build a unified set of (flow, duration_ms, spawns, timestamp) data points
   type DataPoint = { flow: string; duration_ms: number; spawns: number; started: string };
 
   const points: DataPoint[] = [];
+
+  // Track (flow, started) pairs from summaries for deduplication.
+  const summaryKeys = new Set<string>();
 
   // From summaries — prefer summary data
   for (const summary of summaries) {
@@ -288,21 +294,20 @@ export function computePerformanceTrends(
 
     // Derive spawns from step_outcomes count
     const spawns = summary.step_outcomes.length;
+    const started = started_at ?? summary.run_metadata.archived_at;
 
+    summaryKeys.add(`${flow}\0${started}`);
     points.push({
       flow,
       duration_ms: total_duration_ms,
       spawns,
-      started: started_at ?? summary.run_metadata.archived_at,
+      started,
     });
   }
 
-  // From FlowRunEntry — only for runs NOT already covered by a summary
-  // (We can't directly correlate run_id to archive_id here, so we use all FlowRunEntries
-  // and deduplicate on (flow, started) proximity if needed. Since the plan says to fall
-  // back to driftDb.getAllFlowRuns() for runs without summaries, we include all FlowRunEntries
-  // if summaries is empty, otherwise only entries that don't overlap with summary coverage.)
+  // From FlowRunEntry — skip runs already covered by a summary (same flow + started).
   for (const run of runs) {
+    if (summaryKeys.has(`${run.flow}\0${run.started}`)) continue;
     points.push({
       flow: run.flow,
       duration_ms: run.total_duration_ms,
@@ -327,6 +332,11 @@ export function computePerformanceTrends(
   for (const [flow, flowPoints] of byFlow) {
     // Sort by started ASC
     flowPoints.sort((a, b) => a.started.localeCompare(b.started));
+
+    // Apply limit: keep only the most recent N data points.
+    if (limit !== undefined && limit > 0 && flowPoints.length > limit) {
+      flowPoints.splice(0, flowPoints.length - limit);
+    }
 
     const n = flowPoints.length;
     const avgDurationMs = flowPoints.reduce((sum, p) => sum + p.duration_ms, 0) / n;
@@ -458,7 +468,7 @@ export function analyzeCrossRunPatterns(
   summaries: RunSummary[],
   options?: { limit?: number; since?: string },
 ): CrossRunAnalysisResult {
-  const { since } = options ?? {};
+  const { since, limit } = options ?? {};
 
   // Get data from drift.db
   const allReviews = driftDb.getReviews();
@@ -475,7 +485,7 @@ export function analyzeCrossRunPatterns(
   // Run sub-analyses
   const recurring_violations = findRecurringViolations(summaryViolations, allReviews);
   const fix_cycle_patterns = computeFixCyclePatterns(summaryViolations, allReviews);
-  const agent_performance_trends = computePerformanceTrends(summaries, allFlowRuns);
+  const agent_performance_trends = computePerformanceTrends(summaries, allFlowRuns, limit);
   const planner_patterns = analyzePlannerPatterns(summaries);
 
   // Compute analysis window from all available timestamps
