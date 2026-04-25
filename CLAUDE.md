@@ -126,9 +126,10 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 1. Spawn `canon:planner` with the build request. The planner produces a runbook.
 2. Present the runbook to the user for approval. Iterate if the user requests changes.
-3. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` and `tier` come from the approved runbook's frontmatter, and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`.
-4. Call `log_step` for each step in the approved runbook (creates the checklist).
-5. Execute steps in order, spawning the agent specified by each step.
+3. After the planner returns and before presenting for approval, check the planning brief's Requirement Coverage Map section. If any requirements have disposition `descoped` or `partial`, present them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are `covered`, proceed silently to runbook approval.
+4. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` and `tier` come from the approved runbook's frontmatter, and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`.
+5. Call `log_step` for each step in the approved runbook (creates the checklist).
+6. Execute steps in order, spawning the agent specified by each step.
 
 ### Resume Protocol
 
