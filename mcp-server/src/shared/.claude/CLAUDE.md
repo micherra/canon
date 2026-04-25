@@ -6,24 +6,25 @@
 Shared kernel — cross-cutting utilities, constants, parsers, and low-level helpers used by all features. This is the dependency root of the codebase: every layer may import from `shared/`, but `shared/` must not import from any bounded context.
 
 ## Architecture
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-23 -->
 
 **Top-level modules:**
 
 | File | Responsibility |
 |------|---------------|
-| `constants.ts` | Canonical constants: `CANON_DIR`, `CANON_FILES`, `LAYER_CENTRALITY`, file extension sets, embedding config, `JOB_TIMEOUT_MS`, `PRINCIPLE_SECTIONS` |
+| `constants.ts` | Canonical constants: `CANON_DIR`, `CANON_FILES` (now includes `JANITOR_LOCK`), `LAYER_CENTRALITY`, file extension sets, embedding config, `JOB_TIMEOUT_MS`, `PRINCIPLE_SECTIONS` |
 | `schema.ts` | Shared Zod schemas: `reportInputSchema`, `ReportInput`, `ReviewEntry`, `ReviewViolation` — cross-boundary types used by pr-review, diagnostics, and orchestration |
 | `matcher.ts` | Principle matching engine: `matchPrinciples`, `inferLayer`, `loadPrinciplesFromDir`, `loadAllPrinciples` |
 | `parser.ts` | Principle file parser: `Principle`, `parsePrinciple`, `loadPrincipleFile`, `parseFrontmatter`, `extractSections`, `filterBodyBySections` |
 
 **`lib/`** — Focused utility modules with no cross-context knowledge:
+<!-- last-updated: 2026-04-23 -->
 
 | File | Key exports |
 |------|-------------|
 | `tool-result.ts` | `ToolResult<T>`, `CanonToolError`, `CanonErrorCode`, `toolOk`, `toolError`, `isToolError`, `assertOk` |
 | `wrap-handler.ts` | `wrapHandler` — wraps MCP tool handlers, converts unexpected throws to `UNEXPECTED` errors |
-| `config.ts` | `buildLayerInferrer`, `loadLayerMappings`, `loadLayerMappingsStrict`, `loadGraphCompositionConfig`, `loadConfigNumber` |
+| `config.ts` | `buildLayerInferrer`, `loadLayerMappings`, `loadLayerMappingsStrict`, `loadGraphCompositionConfig`, `loadConfigNumber`, `loadJanitorConfig`, `JanitorConfig` — janitor config from `.canon/config.json` `janitor` key; added 2026-04-23 |
 | `atomic-write.ts` | `atomicWriteFile` — write-then-rename for concurrent-safe file writes |
 | `id.ts` | `generateId` — prefixed, date-stamped ID generation |
 | `env.ts` | `isSyncMode`, `isCI` — environment detection predicates |
@@ -33,6 +34,7 @@ Shared kernel — cross-cutting utilities, constants, parsers, and low-level hel
 | `paths.ts` | `toPosix`, `loadPathAliases` — path normalization and tsconfig alias loading |
 | `fuzzy-field-validation.ts` | `suggestField`, `checkUnknownFields`, `installFuzzyValidation` — Levenshtein-based field name suggestions |
 | `learn-lock.ts` | Auto-learn lock file management |
+| `janitor-lock.ts` | `acquireJanitorLock`, `commitJanitorLock`, `releaseJanitorLock`, `getLastJanitorTimestamp` — `.canon/janitor.lock` PID+mtime lock for janitor concurrency control; added 2026-04-23 |
 | `commit-trailers.ts` | `TrailerOpts`, `formatCommitTrailers`, `buildCommitMessage` — formats Canon-Workflow/Agent/State/Task git trailer blocks; added 2026-04-09 |
 | `file-claims.ts` | `readClaims`, `writeClaims`, `registerClaims`, `releaseClaims`, `checkClaimOverlaps` — `.canon/claims.json` concurrent workflow conflict detection; added 2026-04-09 |
 

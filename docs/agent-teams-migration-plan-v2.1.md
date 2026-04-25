@@ -933,7 +933,7 @@ Every one of the 28 gaps from the integration audit must map to a concrete repla
 |---|------------|-------------|-------------|---------|
 | 23 | Variable interpolation | `${WORKSPACE}`, `${slug}`, etc. | **deprecate** | Runbooks use structured fields; Claude constructs prompts directly. Exception: `${slug}` / `${task_id}` / `${timestamp}` in `artifacts:` paths are lead-substituted workspace metadata per v2.1, not general templating. |
 | 24 | Template loading | `injectTemplates` | **guidance** | Agent definitions reference templates. Agents read templates from `templates/` as needed. |
-| 25 | Competitive / debate protocols | `compete.count`, `synthesis` | **native** | Lead spawns an agent team with N teammates and competing instructions. |
+| 25 | Competitive / debate protocols | `compete.count`, `synthesis` | **native + guidance** | Lead spawns an agent team with N teammates and competing instructions. Convergence heuristics, round framing, and synthesis strategies codified in `references/competition-debate.md`. |
 | 26 | Parallel roles | `type: parallel` with `roles: [...]` | **native** | Lead spawns multiple subagents or teammates. |
 | 27 | Skip conditions | `skip_when` | **native** | Claude evaluates skip conditions via judgment. |
 | 28 | Stuck detection / iteration caps | `max_iterations`, `stuck_when`, `max_revisions` | **guidance + hook** | CLAUDE.md instructs budget limits; `TeammateIdle` hook; `record_agent_metrics`. |
@@ -942,9 +942,9 @@ Every one of the 28 gaps from the integration audit must map to a concrete repla
 
 | Disposition | Count | Examples |
 |-------------|-------|---------|
-| **native** (Claude / Claude Code) | 12 | HITL, session continuation, wave briefing, skip conditions, parallel roles, debate |
+| **native** (Claude / Claude Code) | 11 | HITL, session continuation, wave briefing, skip conditions, parallel roles |
 | **mcp** (Canon MCP tool stays) | 10 | Principles, enrichment, file claims, metrics, drift, analytics, workspace bootstrap |
-| **guidance** (CLAUDE.md / vocabulary + synthesis skill — v2.1 update) | 4 | Commit provenance, learn gate, templates, budget limits |
+| **guidance** (CLAUDE.md / vocabulary + synthesis skill — v2.1 update) | 5 | Commit provenance, learn gate, templates, budget limits, competition/debate |
 | **hook** (Claude Code hooks) | 1 | Activity logging (with MCP backup) |
 | **deprecate** | 1 | Variable interpolation |
 

@@ -41,6 +41,8 @@ export const CANON_DIR = ".canon";
 export const CANON_FILES = {
   CONFIG: "config.json",
   DRIFT_DB: "drift.db",
+  HISTORY_DIR: "history",
+  JANITOR_LASTRUN: "janitor.lastrun",
   KNOWLEDGE_DB: "knowledge-graph.db",
   ORCHESTRATION_DB: "orchestration.db",
 } as const;

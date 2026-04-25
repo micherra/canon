@@ -100,8 +100,11 @@ function emitBoardEvents(
   ) => {
     try {
       store.appendEvent("board_updated", event as Record<string, unknown>);
-    } catch {
-      /* best-effort */
+    } catch (err: unknown) {
+      console.warn(
+        "[canon] failed to persist board_updated event:",
+        err instanceof Error ? err.message : err,
+      );
     }
   };
   flowEventBus.once("board_updated", onBoardUpdated);
@@ -117,8 +120,11 @@ function emitBoardEvents(
       ) => {
         try {
           store.appendEvent("state_entered", event as Record<string, unknown>);
-        } catch {
-          /* best-effort */
+        } catch (err: unknown) {
+          console.warn(
+            "[canon] failed to persist state_entered event:",
+            err instanceof Error ? err.message : err,
+          );
         }
       };
       flowEventBus.once("state_entered", onStateEntered);
@@ -181,8 +187,11 @@ async function appendFlowAnalytics(
         : {}),
     };
     await appendFlowRun(projectDir, flowRun);
-  } catch {
-    // Best-effort — analytics should never block flow completion
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] failed to append flow analytics:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 
@@ -244,11 +253,22 @@ async function handleCompleteFlow(opts: HandleCompleteFlowOptions): Promise<Boar
     const { releaseClaims } = await import("@shared/lib/file-claims.ts");
     const releaseSession = store.getSession();
     if (releaseSession) releaseClaims(projectDir, releaseSession.slug);
-  } catch {
-    // Claims release failure is non-blocking
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] failed to release file claims:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   await appendFlowAnalytics(updatedBoard, now, projectDir, sessionTier);
+
+  try {
+    const { runJanitor } = await import("../services/janitor.ts");
+    await runJanitor(projectDir);
+  } catch (err: unknown) {
+    console.warn("[canon] janitor run failed:", err instanceof Error ? err.message : err);
+  }
+
   return updatedBoard;
 }
 
@@ -411,8 +431,12 @@ async function applyAffectedFilesClaims(
       (o) => `${o.file_path} also claimed by: ${o.workflows.join(", ")}`,
     );
     return { ...metadata, claim_warnings: warningLines.join("; ") };
-  } catch {
-    return metadata; // Claims registration failure is non-blocking
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] failed to register file claims:",
+      err instanceof Error ? err.message : err,
+    );
+    return metadata;
   }
 }
 

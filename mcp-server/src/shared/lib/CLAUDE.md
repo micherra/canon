@@ -55,6 +55,27 @@ Manages `.canon/claims.json` — tracks which files are targeted by active workf
 - `update_board({ action: "complete_flow" })` → calls `releaseClaims`
 - `init_workspace` preflight → calls `checkClaimOverlaps` and surfaces warnings
 
+---
+
+### `janitor-lock.ts` — Janitor Concurrency Lock
+
+Manages `.canon/janitor.lock` — a PID + mtime lock that prevents concurrent janitor runs and tracks last-run timestamp. Independent from `learn-lock.ts`.
+
+**Exports:**
+- `JanitorLockResult` — `{ acquired: true; previousMtime: number | null } | { acquired: false; reason: "already_locked" | "stale_reclaim_failed" }`
+- `acquireJanitorLock(canonDir, staleAfterMs): Promise<JanitorLockResult>` — exclusive create (O_EXCL); reclaims stale locks by mtime threshold or dead PID detection
+- `commitJanitorLock(canonDir): Promise<void>` — updates lock mtime to now after a successful run
+- `releaseJanitorLock(canonDir): Promise<void>` — removes lock file; ignores ENOENT
+- `getLastJanitorTimestamp(canonDir): Promise<number | null>` — reads lock mtime; null when no lock exists
+
+**Key patterns:**
+- Lock body = current PID string; mtime = last successful janitor run timestamp
+- Stale reclaim: unlink then O_EXCL re-create; loser gets EEXIST → `stale_reclaim_failed` (fail-safe)
+- Dead PID detection via `process.kill(pid, 0)` probe before mtime staleness check
+- TOCTOU window acknowledged — acceptable for single-process CLI tool (documented in source)
+
+---
+
 ## Not Standalone MCP Tools
 
-These modules are consumed by `features/orchestration/` tools. Agents do not call them via MCP — they are wired into `init_workspace` and `update_board` automatically.
+These modules are consumed by `features/orchestration/` tools. Agents do not call them via MCP — they are wired into `init_workspace`, `update_board`, and the janitor service automatically.

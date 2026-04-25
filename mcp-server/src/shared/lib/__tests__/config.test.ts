@@ -6,6 +6,7 @@ import {
   buildLayerInferrer,
   deriveSourceDirsFromLayers,
   loadConfigNumber,
+  loadJanitorConfig,
   loadLearnGateConfig,
 } from "../config.ts";
 
@@ -300,5 +301,56 @@ describe("loadLearnGateConfig", () => {
     await writeConfig({ learn_gate: { min_flows_since_last: 3.9 } });
     const cfg = await loadLearnGateConfig(tmpDir);
     expect(cfg.min_flows_since_last).toBe(3);
+  });
+});
+
+describe("loadJanitorConfig", () => {
+  it("returns defaults when config file is missing", async () => {
+    const cfg = await loadJanitorConfig(tmpDir);
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.min_hours_between_runs).toBe(1);
+  });
+
+  it("returns defaults when janitor section is missing", async () => {
+    await writeConfig({ review: { max_principles_per_review: 10 } });
+    const cfg = await loadJanitorConfig(tmpDir);
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.min_hours_between_runs).toBe(1);
+  });
+
+  it("reads valid values from janitor section", async () => {
+    await writeConfig({
+      janitor: {
+        enabled: false,
+        min_hours_between_runs: 4,
+      },
+    });
+    const cfg = await loadJanitorConfig(tmpDir);
+    expect(cfg.enabled).toBe(false);
+    expect(cfg.min_hours_between_runs).toBe(4);
+  });
+
+  it("allows min_hours_between_runs = 0 (zero is valid — run every time)", async () => {
+    await writeConfig({ janitor: { min_hours_between_runs: 0 } });
+    const cfg = await loadJanitorConfig(tmpDir);
+    expect(cfg.min_hours_between_runs).toBe(0);
+  });
+
+  it("falls back to defaults for negative min_hours_between_runs", async () => {
+    await writeConfig({ janitor: { min_hours_between_runs: -1 } });
+    const cfg = await loadJanitorConfig(tmpDir);
+    expect(cfg.min_hours_between_runs).toBe(1);
+  });
+
+  it("falls back to defaults for wrong types", async () => {
+    await writeConfig({
+      janitor: {
+        enabled: "yes",
+        min_hours_between_runs: "2h",
+      },
+    });
+    const cfg = await loadJanitorConfig(tmpDir);
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.min_hours_between_runs).toBe(1);
   });
 });

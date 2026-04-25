@@ -77,13 +77,13 @@ Mine git history for files that frequently change together without explicit impo
 
 ### ADR-008 Integration
 
-When ADR-008 lands, it defines pipeline stages that inject context at spawn time. Git intelligence plugs in as additional data sources for stage 1 (`resolve-context`):
+ADR-008 (context assembly policy) is now built. Git intelligence plugs in as additional data sources for the lead's context enrichment before spawning agents:
 
-- File affinity resolution (already in ADR-008) gains hotspot scores and co-change partners for each file in scope
-- The `intent` parameter (review/implement/research) controls which signals are included — reviewer gets hotspot warnings and co-change alerts, implementor gets co-change partners for awareness
-- Item-count budgeting (already in ADR-008) caps how many co-change partners are injected
+- File affinity resolution gains hotspot scores and co-change partners for each file in scope
+- The agent role (review/implement/research) controls which signals are included — reviewer gets hotspot warnings and co-change alerts, implementor gets co-change partners for awareness
+- Item-count budgeting caps how many co-change partners are injected
 
-No new MCP tool needed. The delivery vehicle is the existing pipeline.
+The delivery vehicle is the existing MCP tool composition (`get_file_context`, `get_context`) used by the lead before spawning agents.
 
 ---
 
@@ -133,14 +133,14 @@ The [agent-skills analysis](.ai/agent-skills-analysis.md) identifies behavioral 
 | Anti-rationalization table amendments | Behavior | Not started |
 | Enriched domain primers (frontend, backend-api, deprecation) | Context | Not started |
 | `measure-before-optimizing` principle | Principle | Not started |
-| `define` flow (idea → spec) | Flow | Not started |
-| `pre-launch-check` fragment gate | Flow | Not started |
+| `define` pipeline (idea → spec) | Planner mode | Not started |
+| `pre-launch-check` checklist step | Runbook step | Not started |
 
 ### ADR-PACK Dependencies
 
-Git intelligence has no hard ADR dependencies — it can be built now. But it integrates best after:
+Git intelligence has no hard ADR dependencies — it can be built now. Both prerequisite ADRs are complete:
 
-- **ADR-005** (KG consolidation) — new tables live in the consolidated KG database
-- **ADR-008** (context assembly) — the delivery mechanism for injecting git signals into agent prompts
+- **ADR-005** (KG consolidation) — new tables live in the consolidated KG database ✓
+- **ADR-008** (context assembly) — the delivery mechanism for injecting git signals into agent prompts ✓
 
-If built before ADR-008, the signals surface through existing tools (`get_file_context`, `show_pr_impact`). When ADR-008 lands, they automatically flow into spawn prompts via the pipeline.
+Signals surface through existing tools (`get_file_context`, `show_pr_impact`) and flow into spawn prompts via the lead's MCP tool composition.

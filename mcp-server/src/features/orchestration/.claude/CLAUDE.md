@@ -20,9 +20,11 @@ Flow execution engine and all Canon orchestration MCP tools. This bounded contex
 | `consultation-executor.ts` | Consultation execution — runs before/after consultation prompts |
 
 **`tools/`** — MCP tool handlers. All handlers are thin wrappers calling services or engine functions.
+<!-- last-updated: 2026-04-23 -->
 
 | Tool file | MCP tool name |
 |-----------|--------------|
+| `invoke-janitor.ts` | `invoke_janitor` |
 | `drive-flow.ts` | `drive_flow` |
 | `init-workspace.ts` | `init_workspace` |
 | `load-flow.ts` | `load_flow` |
@@ -48,9 +50,11 @@ Flow execution engine and all Canon orchestration MCP tools. This bounded contex
 | `write-test-report.ts` | `write_test_report` |
 
 **`services/`** — Business logic backing tools and engine.
+<!-- last-updated: 2026-04-23 -->
 
 | File | Responsibility |
 |------|---------------|
+| `janitor.ts` | `runJanitor(projectDir)` — gate checks (enabled, time, lock), WAL checkpoint, prune detection; returns `JanitorResult` |
 | `context-budget.ts` | Token budget tracking for agent context windows |
 | `context-enrichment.ts` | Enriches spawn prompts with KG context and file summaries |
 | `contract-checker.ts` | Evaluates postcondition assertions after state completion |

@@ -255,6 +255,41 @@ export async function loadLearnGateConfig(projectDir: string): Promise<LearnGate
   };
 }
 
+export type JanitorConfig = {
+  enabled: boolean;
+  min_hours_between_runs: number;
+  /**
+   * Age threshold (hours) for pruning abandoned workspaces (no active lock).
+   * When null, abandoned workspaces are never pruned by age alone. Default: null.
+   */
+  max_abandoned_workspace_age_hours: number | null;
+};
+
+const DEFAULT_JANITOR_CONFIG: JanitorConfig = {
+  enabled: true,
+  max_abandoned_workspace_age_hours: null,
+  min_hours_between_runs: 1,
+};
+
+/** Load janitor config from .canon/config.json, falling back to defaults. */
+export async function loadJanitorConfig(projectDir: string): Promise<JanitorConfig> {
+  const config = await loadCanonConfig(projectDir);
+  const raw = config?.janitor as Record<string, unknown> | undefined;
+  if (!raw) return DEFAULT_JANITOR_CONFIG;
+  return {
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_JANITOR_CONFIG.enabled,
+    max_abandoned_workspace_age_hours:
+      typeof raw.max_abandoned_workspace_age_hours === "number" &&
+      raw.max_abandoned_workspace_age_hours >= 0
+        ? raw.max_abandoned_workspace_age_hours
+        : DEFAULT_JANITOR_CONFIG.max_abandoned_workspace_age_hours,
+    min_hours_between_runs:
+      typeof raw.min_hours_between_runs === "number" && raw.min_hours_between_runs >= 0
+        ? raw.min_hours_between_runs
+        : DEFAULT_JANITOR_CONFIG.min_hours_between_runs,
+  };
+}
+
 /** Read a numeric config value at a dotted path (e.g. "review.max_principles_per_review"). */
 export async function loadConfigNumber(
   projectDir: string,

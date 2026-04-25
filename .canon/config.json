@@ -16,5 +16,11 @@
   "hook": {
     "pre_commit_severity": "rule",
     "warn_on_opinions": true
+  },
+  "janitor": {
+    "enabled": true,
+    "min_hours_between_runs": 0,
+    "max_completed_workspace_age_hours": 48,
+    "max_abandoned_workspace_age_hours": 24
   }
 }
