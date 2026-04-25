@@ -12,7 +12,7 @@
  * - No board.json or .lock file created
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
@@ -330,24 +330,7 @@ describe("updateBoard — complete_flow", () => {
     expect(appendFlowRun).toHaveBeenCalled();
   });
 
-  it("writes a .completed marker file into the workspace directory", async () => {
-    const workspace = makeTmpDir();
-    seedWorkspace(workspace, {
-      currentState: "done",
-      states: { done: { entries: 1, status: "in_progress" } },
-    });
 
-    const result = await updateBoard({
-      action: "complete_flow",
-      workspace,
-    });
-
-    expect(result.ok).toBe(true);
-    const markerPath = join(workspace, ".completed");
-    expect(existsSync(markerPath)).toBe(true);
-    // Marker is a zero-byte file (no content required)
-    expect(readFileSync(markerPath, "utf-8")).toBe("");
-  });
 });
 
 describe("updateBoard — set_wave_progress", () => {

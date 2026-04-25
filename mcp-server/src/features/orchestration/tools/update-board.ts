@@ -1,5 +1,3 @@
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { enterState, setBlocked } from "@domains/board/board.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
@@ -251,14 +249,6 @@ async function handleCompleteFlow(opts: HandleCompleteFlowOptions): Promise<Boar
   }
 
   await appendFlowAnalytics(updatedBoard, now, projectDir, sessionTier);
-
-  // Write .completed marker so the janitor can distinguish completed from abandoned workspaces.
-  // Best-effort — marker write failure must never fail flow completion.
-  try {
-    writeFileSync(join(workspacePath, ".completed"), "");
-  } catch {
-    // Non-fatal: janitor falls back to abandoned-age logic when marker is absent
-  }
 
   try {
     const { runJanitor } = await import("../services/janitor.ts");

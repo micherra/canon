@@ -4,10 +4,12 @@
  * Runs gate checks (cheapest-first), then executes tasks:
  *   - wal_checkpoint: flush WAL files for root-level Canon SQLite databases
  *   - prune_worktrees: remove orphaned agent isolation worktrees from .claude/worktrees/
- *   - prune_workspaces: remove workspace slugs based on completion status + age (all branches)
+ *   - prune_workspaces: remove abandoned workspace slugs by age (all branches)
  *
- * Workspace pruning checks .completed marker: completed slugs use max_completed_workspace_age_hours;
- * abandoned slugs (no marker) use max_abandoned_workspace_age_hours (null = never auto-prune).
+ * Completed workspaces are archived and deleted immediately by verify_completion.
+ * The janitor only handles abandoned workspaces (no .lock file, older than
+ * max_abandoned_workspace_age_hours). When max_abandoned_workspace_age_hours is null,
+ * the prune_workspaces task is skipped entirely.
  * Empty branch directories are cleaned up after their slugs are removed.
  *
  * Canon principles:
@@ -210,14 +212,16 @@ function pruneWorktreesTask(projectDir: string): JanitorTaskResult {
 }
 
 /**
- * Prune workspace slug directories across ALL branch directories (including `main`).
+ * Prune abandoned workspace slug directories across ALL branch directories (including `main`).
  *
- * A workspace slug is a candidate for pruning when:
+ * Completed workspaces are archived and deleted immediately by verify_completion —
+ * the janitor only handles abandoned workspaces (no .lock file).
+ *
+ * A workspace slug is pruned when:
  *   - It has no `.lock` file (not an active workspace)
- *   - If it has a `.completed` marker: mtime is older than `config.max_completed_workspace_age_hours`
- *   - If it has no `.completed` marker (abandoned): `config.max_abandoned_workspace_age_hours` is
- *     not null AND mtime is older than `config.max_abandoned_workspace_age_hours`
+ *   - `config.max_abandoned_workspace_age_hours` is not null AND mtime is older than that threshold
  *
+ * When `max_abandoned_workspace_age_hours` is null, returns skipped immediately.
  * After pruning slugs, empty branch directories are removed too.
  * Archive is attempted best-effort before deletion.
  *
@@ -228,6 +232,11 @@ async function pruneWorkspacesTask(
   canonDir: string,
   config: JanitorConfig,
 ): Promise<JanitorTaskResult> {
+  // If no abandoned age threshold is set, there is nothing to do.
+  if (config.max_abandoned_workspace_age_hours === null) {
+    return { detail: "max_abandoned_workspace_age_hours not configured", status: "skipped" };
+  }
+
   const canonWorkspacesDir = join(canonDir, "workspaces");
 
   const branchEntries = listDir(canonWorkspacesDir);
@@ -235,11 +244,7 @@ async function pruneWorkspacesTask(
     return { detail: "no workspaces directory or empty", status: "skipped" };
   }
 
-  const completedMaxAgeMs = config.max_completed_workspace_age_hours * 60 * 60 * 1000;
-  const abandonedMaxAgeMs =
-    config.max_abandoned_workspace_age_hours !== null
-      ? config.max_abandoned_workspace_age_hours * 60 * 60 * 1000
-      : null;
+  const abandonedMaxAgeMs = config.max_abandoned_workspace_age_hours * 60 * 60 * 1000;
   const now = Date.now();
 
   let pruned = 0;
@@ -257,14 +262,7 @@ async function pruneWorkspacesTask(
       // Skip if active (has .lock file)
       if (existsSync(join(slugPath, ".lock"))) continue;
 
-      // Determine age threshold based on completion status
-      const isCompleted = existsSync(join(slugPath, ".completed"));
-      const maxAgeMs = isCompleted ? completedMaxAgeMs : abandonedMaxAgeMs;
-
-      // If no age threshold applies (null = never prune abandoned), skip
-      if (maxAgeMs === null) continue;
-
-      // Skip if younger than the applicable age threshold
+      // Skip if younger than the abandoned age threshold
       let mtimeMs: number;
       try {
         mtimeMs = statSync(slugPath).mtimeMs;
@@ -272,7 +270,7 @@ async function pruneWorkspacesTask(
         // If we can't stat it, skip conservatively
         continue;
       }
-      if (now - mtimeMs < maxAgeMs) continue;
+      if (now - mtimeMs < abandonedMaxAgeMs) continue;
 
       // Archive best-effort before deleting
       try {

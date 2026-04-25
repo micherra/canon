@@ -27,12 +27,18 @@
  * See v2 migration plan §2.9 and phase1-06 PLAN for the contract.
  */
 
-import { existsSync, globSync } from "node:fs";
+import { existsSync, globSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { archiveWorkspace } from "@features/history/services/archive-service.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+
+function resolveProjectDir(): string {
+  return process.env.CANON_PROJECT_DIR ?? process.cwd();
+}
 
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
 
@@ -128,6 +134,10 @@ export type VerifyCompletionResult = {
    */
   steps_missing: Array<{ step_id: string; status: JournalStepStatus }>;
   steps_skipped: string[];
+  /** Present only when complete is true. True when archive succeeded. */
+  workspace_archived?: boolean;
+  /** Present only when complete is true. True when workspace directory was deleted. */
+  workspace_deleted?: boolean;
 };
 
 function journalPath(workspace: string): string {
@@ -302,6 +312,32 @@ export async function verifyCompletion(
   const artifacts = scanArtifacts(workspace, completed);
   const complete = stepsMissing.length === 0 && artifacts.missing.length === 0;
 
+  let workspaceArchived: boolean | undefined;
+  let workspaceDeleted: boolean | undefined;
+
+  if (complete) {
+    // Archive workspace to .canon/history/{slug}/ (best-effort)
+    workspaceArchived = false;
+    try {
+      const session = getExecutionStore(workspace).getSession();
+      const branch = session?.branch ?? "unknown";
+      const slug = session?.slug ?? basename(workspace);
+      await archiveWorkspace({ workspacePath: workspace, projectDir: resolveProjectDir(), branch, slug });
+      workspaceArchived = true;
+    } catch {
+      // Best-effort: archive failure does not block completion
+    }
+
+    // Delete the workspace directory
+    workspaceDeleted = false;
+    try {
+      rmSync(workspace, { force: true, recursive: true });
+      workspaceDeleted = true;
+    } catch {
+      // Best-effort: deletion failure does not block completion
+    }
+  }
+
   return toolOk({
     artifacts_expected: artifacts.expected,
     artifacts_missing: artifacts.missing,
@@ -312,6 +348,7 @@ export async function verifyCompletion(
     steps_logged: steps.length,
     steps_missing: stepsMissing,
     steps_skipped: stepsSkipped,
+    ...(complete ? { workspace_archived: workspaceArchived, workspace_deleted: workspaceDeleted } : {}),
   });
 }
 

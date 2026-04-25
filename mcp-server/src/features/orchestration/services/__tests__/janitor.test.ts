@@ -107,7 +107,6 @@ beforeEach(async () => {
   mockLoadJanitorConfig.mockResolvedValue({
     enabled: true,
     max_abandoned_workspace_age_hours: null,
-    max_completed_workspace_age_hours: 48,
     min_hours_between_runs: 1,
   });
   mockGetLastJanitorTimestamp.mockResolvedValue(null);
@@ -134,7 +133,6 @@ describe("gate checks", () => {
     mockLoadJanitorConfig.mockResolvedValue({
       enabled: false,
       max_abandoned_workspace_age_hours: null,
-      max_completed_workspace_age_hours: 48,
       min_hours_between_runs: 1,
     });
 
@@ -154,7 +152,6 @@ describe("gate checks", () => {
     mockLoadJanitorConfig.mockResolvedValue({
       enabled: true,
       max_abandoned_workspace_age_hours: null,
-      max_completed_workspace_age_hours: 48,
       min_hours_between_runs: 1,
     });
 
@@ -342,10 +339,16 @@ describe("needs_prune semantics", () => {
   });
 
   test("needs_prune: true when prune_workspaces removed stale entries", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: 48,
+      min_hours_between_runs: 1,
+    });
+
     const branchDir = join(canonWorkspacesDir, "feat--some-feature");
     const slugDir = join(branchDir, "stale-build");
     await mkdir(slugDir, { recursive: true });
-    await writeFile(join(slugDir, ".completed"), "");
+    // No .completed — abandoned workspace
 
     // Make the workspace stale (72h past the 48h threshold)
     const secs = (Date.now() - 72 * 60 * 60 * 1000) / 1000;
@@ -414,15 +417,20 @@ function setMtime(p: string, ms: number): void {
 // --- prune_workspaces task ---
 
 describe("prune_workspaces task", () => {
-  const COMPLETED_AGE_HOURS = 48;
-  const COMPLETED_AGE_MS = COMPLETED_AGE_HOURS * 60 * 60 * 1000;
+  const ABANDONED_AGE_HOURS = 48;
+  const ABANDONED_AGE_MS = ABANDONED_AGE_HOURS * 60 * 60 * 1000;
 
-  test("skips workspaces with a .lock file (active workspace, regardless of .completed)", async () => {
+  test("skips workspaces with a .lock file (active workspace)", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: 24,
+      min_hours_between_runs: 1,
+    });
+
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "active-build");
     await mkdir(slugDir, { recursive: true });
     await writeFile(join(slugDir, ".lock"), "pid=1234");
-    await writeFile(join(slugDir, ".completed"), "");
 
     // Set mtime to 100h ago (well past threshold)
     setMtime(slugDir, Date.now() - 100 * 60 * 60 * 1000);
@@ -433,11 +441,17 @@ describe("prune_workspaces task", () => {
     expect(existsSync(slugDir)).toBe(true);
   });
 
-  test("skips completed workspaces younger than max_completed_workspace_age_hours", async () => {
+  test("skips abandoned workspaces younger than max_abandoned_workspace_age_hours", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
+      min_hours_between_runs: 1,
+    });
+
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "recent-build");
     await mkdir(slugDir, { recursive: true });
-    await writeFile(join(slugDir, ".completed"), "");
+    // No .completed, no .lock — abandoned workspace
 
     // Set mtime to 1h ago (younger than 48h threshold)
     setMtime(slugDir, Date.now() - 1 * 60 * 60 * 1000);
@@ -448,11 +462,17 @@ describe("prune_workspaces task", () => {
     expect(existsSync(slugDir)).toBe(true);
   });
 
-  test("archives and removes completed workspaces older than max_completed_workspace_age_hours", async () => {
+  test("archives and removes abandoned workspaces older than max_abandoned_workspace_age_hours", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
+      min_hours_between_runs: 1,
+    });
+
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "stale-build");
     await mkdir(slugDir, { recursive: true });
-    await writeFile(join(slugDir, ".completed"), "");
+    // No .completed, no .lock — abandoned workspace
 
     // Set mtime to 72h ago (past the 48h threshold)
     setMtime(slugDir, Date.now() - 72 * 60 * 60 * 1000);
@@ -493,7 +513,6 @@ describe("prune_workspaces task", () => {
     mockLoadJanitorConfig.mockResolvedValue({
       enabled: true,
       max_abandoned_workspace_age_hours: 72,
-      max_completed_workspace_age_hours: 48,
       min_hours_between_runs: 1,
     });
 
@@ -515,7 +534,6 @@ describe("prune_workspaces task", () => {
     mockLoadJanitorConfig.mockResolvedValue({
       enabled: true,
       max_abandoned_workspace_age_hours: 72,
-      max_completed_workspace_age_hours: 48,
       min_hours_between_runs: 1,
     });
 
@@ -537,7 +555,6 @@ describe("prune_workspaces task", () => {
     mockLoadJanitorConfig.mockResolvedValue({
       enabled: true,
       max_abandoned_workspace_age_hours: 24,
-      max_completed_workspace_age_hours: 48,
       min_hours_between_runs: 1,
     });
 
@@ -556,13 +573,19 @@ describe("prune_workspaces task", () => {
   });
 
   test("removes empty branch directory after all slugs are pruned", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
+      min_hours_between_runs: 1,
+    });
+
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "only-slug");
     await mkdir(slugDir, { recursive: true });
-    await writeFile(join(slugDir, ".completed"), "");
+    // No .completed, no .lock — abandoned workspace
 
     // Make it stale
-    setMtime(slugDir, Date.now() - (COMPLETED_AGE_MS + 1000));
+    setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
     const result = await runJanitor(tmpDir);
 
@@ -573,16 +596,21 @@ describe("prune_workspaces task", () => {
   });
 
   test("keeps non-empty branch directory when some slugs are retained", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
+      min_hours_between_runs: 1,
+    });
+
     const branchDir = join(canonWorkspacesDir, "main");
     const staleSlug = join(branchDir, "stale-slug");
     const recentSlug = join(branchDir, "recent-slug");
     await mkdir(staleSlug, { recursive: true });
     await mkdir(recentSlug, { recursive: true });
-    await writeFile(join(staleSlug, ".completed"), "");
-    await writeFile(join(recentSlug, ".completed"), "");
+    // Both abandoned (no .completed, no .lock)
 
     // Make stale-slug old, recent-slug fresh
-    setMtime(staleSlug, Date.now() - (COMPLETED_AGE_MS + 1000));
+    setMtime(staleSlug, Date.now() - (ABANDONED_AGE_MS + 1000));
     setMtime(recentSlug, Date.now() - 1 * 60 * 60 * 1000);
 
     const result = await runJanitor(tmpDir);
@@ -594,26 +622,38 @@ describe("prune_workspaces task", () => {
     expect(existsSync(branchDir)).toBe(true);
   });
 
-  test("needs_prune is true when completed stale workspaces are pruned", async () => {
+  test("needs_prune is true when stale abandoned workspaces are pruned", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
+      min_hours_between_runs: 1,
+    });
+
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "stale-main-build");
     await mkdir(slugDir, { recursive: true });
-    await writeFile(join(slugDir, ".completed"), "");
+    // No .completed, no .lock — abandoned workspace
 
-    setMtime(slugDir, Date.now() - (COMPLETED_AGE_MS + 1000));
+    setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
     const result = await runJanitor(tmpDir);
 
     expect(result.needs_prune).toBe(true);
   });
 
-  test("prunes completed stale workspace under any branch, not just main", async () => {
+  test("prunes abandoned stale workspace under any branch, not just main", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
+      min_hours_between_runs: 1,
+    });
+
     const branchDir = join(canonWorkspacesDir, "feat--some-feature");
     const slugDir = join(branchDir, "build-001");
     await mkdir(slugDir, { recursive: true });
-    await writeFile(join(slugDir, ".completed"), "");
+    // No .completed, no .lock — abandoned workspace
 
-    setMtime(slugDir, Date.now() - (COMPLETED_AGE_MS + 1000));
+    setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
     const result = await runJanitor(tmpDir);
 
