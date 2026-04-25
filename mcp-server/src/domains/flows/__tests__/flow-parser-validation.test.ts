@@ -270,13 +270,13 @@ describe("loadAndResolveFlow", () => {
     expect(flow.spawn_instructions.review).toContain("git diff");
   });
 
-  it("fast-path execute state has agent: implementor", async () => {
+  it("fast-path execute state has agent: engineer", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "fast-path");
 
     expect(flow.name).toBe("fast-path");
     expect(flow.entry).toBe("execute");
     expect(flow.states.execute).toBeDefined();
-    expect(flow.states.execute.agent).toBe("implementor");
+    expect(flow.states.execute.agent).toBe("engineer");
   });
 });
 

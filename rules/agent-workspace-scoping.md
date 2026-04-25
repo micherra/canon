@@ -29,8 +29,7 @@ Agents operate within a **branch-scoped workspace** at `.canon/workspaces/{branc
 │       ├── REVIEW.md
 │       ├── TEST-REPORT.md
 │       └── SECURITY.md
-├── reviews/                  # Review outputs
-└── notes/                    # Freeform notes from agents or users
+└── reviews/                  # Review outputs
 ```
 
 ## Branch Name Sanitization
@@ -58,8 +57,8 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 | **reviewer** | plans/{slug}/*-SUMMARY.md (post-Stage-2 cross-check only) | plans/{slug}/REVIEW.md, reviews/ |
 | **scribe** | plans/{slug}/*-SUMMARY.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md | plans/{slug}/CONTEXT-SYNC.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md |
 | **refactorer** | reviews/, decisions/, context.md | — |
-| **learner** | everything in workspace | notes/ |
-| **writer** | everything in workspace | notes/ |
+| **learner** | everything in workspace | — |
+| **writer** | everything in workspace | — |
 
 Key constraints:
 - **Build lock**: `.lock` prevents concurrent builds. Stale locks (>2 hours) are auto-removed.

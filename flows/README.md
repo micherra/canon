@@ -116,7 +116,7 @@ Spawns parallel agents across git worktrees, with a gate check between waves. Ea
 ```yaml
 implement:
   type: wave
-  agent: implementor
+  agent: engineer
   gate: test-suite
   consultations:
     before: [plan-review]
@@ -144,7 +144,7 @@ Fan-out over a dynamic list of items from a prior state's artifact. One agent is
 ```yaml
 fix-violations:
   type: parallel-per
-  agent: fixer
+  agent: engineer
   role: violation-fix
   iterate_on: violation_groups
   max_iterations: 3

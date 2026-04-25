@@ -86,7 +86,7 @@ When `agents` has one entry and `roles` has multiple, the agent is spawned once 
 ```yaml
 implement:
   type: wave
-  agent: implementor
+  agent: engineer
   gate: test-suite
   consultations:
     before: [plan-review]
@@ -133,7 +133,7 @@ All consultations within a timing group spawn concurrently. Consultation failure
 ```yaml
 fix-violations:
   type: parallel-per
-  agent: fixer
+  agent: engineer
   iterate_on: violation_groups
   transitions:
     done: review
@@ -199,10 +199,9 @@ Each state type has a default timeout. If an agent does not return within the ti
 |-----------|----------------|-----------|
 | `researcher` | 5 minutes | Scoped to one dimension; should complete quickly |
 | `architect` | 15 minutes | Produces design + plans; needs time for graph analysis |
-| `implementor` | 20 minutes | Writes code + tests; largest working scope |
+| `engineer` | 20 minutes | Writes code + tests, or fixes violations/test failures (dual-mode) |
 | `tester` | 10 minutes | Writes integration tests; runs test suite |
 | `reviewer` | 10 minutes | Reads diff + principles; no code writing |
-| `fixer` | 10 minutes | Fixes one violation group or test failure |
 | `security` | 10 minutes | Scans files + runs dependency audit |
 | `scribe` | 5 minutes | Classification + surgical edits |
 | `shipper` | 5 minutes | Read-only artifact synthesis; optional PR creation |
@@ -211,7 +210,7 @@ Flows can override the default timeout per state:
 ```yaml
 implement:
   type: wave
-  agent: implementor
+  agent: engineer
   timeout: 30m  # Override default 20m for large tasks
 ```
 

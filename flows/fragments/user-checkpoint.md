@@ -11,7 +11,7 @@ params:
 states:
   checkpoint:
     type: single
-    agent: guide
+    agent: researcher
     role: checkpoint
     skip_when: auto_approved
     max_iterations: 3

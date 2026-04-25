@@ -287,9 +287,9 @@ describe("ctx-09 integration — flow YAML inject_context declarations", () => {
     const flow = await loadAndResolveFlow(pluginDir, "fast-path");
 
     // fast-path has a single-agent execute or implement state
-    // Find a state with the implementor agent
+    // Find a state with the engineer agent (was: implementor)
     const implementorState = Object.values(flow.states).find(
-      (state) => state.type !== "terminal" && "agent" in state && state.agent === "implementor",
+      (state) => state.type !== "terminal" && "agent" in state && state.agent === "engineer",
     );
 
     expect(implementorState).toBeDefined();

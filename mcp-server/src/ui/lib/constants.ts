@@ -33,10 +33,6 @@ export const EDGE_ADJACENT_FOCUS = "rgba(255, 255, 255, 0.3)";
 // ── Node dim colors ────────────────────────────────────────────────────────────
 /** Node color when unfocused (focus mode, cascade non-members). */
 export const NODE_UNFOCUSED = "rgba(107, 115, 148, 0.07)";
-/** Node color when dimmed by a filter (PR/insight/search non-match). */
-export const NODE_DIM = "rgba(107, 115, 148, 0.2)";
-/** Node color when highly dimmed (show-changed-only, node not changed). */
-export const NODE_HIGHLY_DIM = "rgba(107, 115, 148, 0.13)";
 
 function colorFromLayerName(layer: string): string {
   let hash = 0;

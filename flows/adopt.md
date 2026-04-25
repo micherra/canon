@@ -14,7 +14,7 @@ states:
 
   fix:
     type: parallel-per
-    agent: fixer
+    agent: engineer
     role: violation-fix
     iterate_on: violation_groups
     max_iterations: 2

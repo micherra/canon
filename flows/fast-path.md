@@ -15,7 +15,7 @@ includes:
 states:
   execute:
     type: single
-    agent: implementor
+    agent: engineer
     template: implementation-log
     max_iterations: 1
     stuck_when: same_status

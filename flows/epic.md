@@ -92,7 +92,7 @@ states:
 
   implement:
     type: wave
-    agent: implementor
+    agent: engineer
     template: implementation-log
     gate: test-suite
     max_iterations: 10
