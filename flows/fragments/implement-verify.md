@@ -9,7 +9,7 @@ params:
 states:
   implement:
     type: single
-    agent: implementor
+    agent: engineer
     template: implementation-log
     transitions:
       done: verify
@@ -27,7 +27,7 @@ states:
 
   fix-impl:
     type: single
-    agent: fixer
+    agent: engineer
     role: test-fix
     template: implementation-log
     max_iterations: 1

@@ -60,9 +60,9 @@ src/
 | `get_compliance` | Returns compliance stats for a specific Canon principle. Shows violation counts, compliance rate, and trend. |
 | `report` | Log a Canon observation: a code review result. Feeds into drift tracking and the learning loop. |
 | `get_drift_report` | Returns a full drift report — compliance rates, most violated principles, hotspot directories, trend, and recommendations. |
-| `codebase_graph` | Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to `.canon/graph-data.json`. Returns a compact summary. |
+| `codebase_graph` | Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to `.canon/knowledge-graph.db` (SQLite). Returns a compact summary. |
 | `get_file_context` | Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data. |
-| `store_summaries` | Store file summaries to `.canon/summaries.json`. Merges with existing summaries so you can generate them incrementally. |
+| `store_summaries` | Store file summaries to `.canon/knowledge-graph.db` (SQLite). Merges with existing summaries so you can generate them incrementally. |
 | `store_pr_review` | Store a PR review result for drift tracking. Server generates `review_id` and timestamp. |
 | `show_pr_impact` | Open the PR Review MCP App view with change story, impact analysis, and review results. |
 
@@ -94,8 +94,7 @@ All runtime data lives under `.canon/` in the project root:
 | File | Written by | Purpose |
 |------|-----------|---------|
 | `reviews.jsonl` | `report` tool, flow effects | Code review results (violations, scores, verdicts) |
-| `graph-data.json` | `codebase_graph` tool | Full dependency graph snapshot |
-| `summaries.json` | `store_summaries` tool | File-level summaries |
+| `knowledge-graph.db` | `codebase_graph`, `store_summaries` tools | SQLite knowledge graph — dependency graph, file summaries, git-intel hotspots |
 | `workspaces/{slug}/board.json` | `init_workspace`, `update_board` | Flow state machine record |
 | `workspaces/{slug}/session.json` | `init_workspace` | Session metadata (flow, branch, tier) |
 | `workspaces/{slug}/progress.md` | `init_workspace`, orchestrator | Append-only cross-state learnings; injected into spawn prompts via `${progress}` |

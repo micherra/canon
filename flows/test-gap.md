@@ -38,7 +38,7 @@ states:
 
   fix-impl:
     type: single
-    agent: fixer
+    agent: engineer
     role: test-fix
     template: implementation-log
     transitions:

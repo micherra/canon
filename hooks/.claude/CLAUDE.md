@@ -24,7 +24,6 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `plan-mode-guard.sh` | PreToolUse (EnterPlanMode) | Guard against unintended plan mode entry |
 | `learn-nudge.sh` | PostToolUse (Bash) | Suggest principle creation/updates |
 | `compaction-check.sh` | PostToolUse (Bash) | Detect workspace file growth |
-| `post-merge-cleanup.sh` | PostToolUse | Clean up after branch merges |
 
 ## Conventions
 <!-- last-updated: 2026-04-09 -->

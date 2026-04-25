@@ -32,7 +32,6 @@ For each workspace to clean, show the user:
 - Number of research docs, decisions, plans, reviews
 - Size of `log.jsonl` (number of entries)
 - Number of transcript files in `transcripts/`
-- Any notes in `notes/`
 
 ### Step 3: Ask user what to do
 
@@ -52,7 +51,6 @@ Create `.canon/history/{sanitized-branch}/` and preserve:
 .canon/history/{sanitized-branch}/
 ├── archive-meta.json         # When archived, original branch, task description
 ├── decisions/                # All design decision docs (valuable long-term)
-├── notes/                    # User and agent notes
 └── summary.md                # Auto-generated summary of what happened
 ```
 

@@ -49,7 +49,7 @@ states:
 
   implement:
     type: wave
-    agent: implementor
+    agent: engineer
     template: implementation-log
     effects:
       - type: check_postconditions

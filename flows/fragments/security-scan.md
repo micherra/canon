@@ -24,7 +24,7 @@ states:
 
   fix-security:
     type: parallel-per
-    agent: fixer
+    agent: engineer
     role: violation-fix
     iterate_on: security_findings
     max_iterations: ${fix_max_iterations}

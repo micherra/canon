@@ -43,7 +43,7 @@ states:
 
   implement:
     type: wave
-    agent: implementor
+    agent: engineer
     gate: test-suite
     template: implementation-log
     inject_context:

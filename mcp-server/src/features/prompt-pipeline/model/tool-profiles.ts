@@ -80,34 +80,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
   },
-  fixer: {
-    allowed: [
-      "Read",
-      "Grep",
-      "Glob",
-      "Bash",
-      "Edit",
-      "Write",
-      "graph_query",
-      "semantic_search",
-      "get_file_context",
-      "post_event",
-    ],
-    disallowed: [],
-  },
-  guide: {
-    allowed: [
-      "Read",
-      "Grep",
-      "Glob",
-      "graph_query",
-      "semantic_search",
-      "get_file_context",
-      "codebase_graph",
-    ],
-    disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
-  },
-  implementor: {
+  engineer: {
     allowed: [
       "Read",
       "Grep",
@@ -120,6 +93,8 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
       "post_message",
       "get_messages",
       "graph_query",
+      "semantic_search",
+      "get_file_context",
       "post_event",
     ],
     disallowed: [],
