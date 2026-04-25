@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, utimesSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,8 +30,18 @@ vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
   };
 });
 
+vi.mock("@features/history/services/archive-service.ts", () => ({
+  archiveWorkspace: vi.fn().mockResolvedValue({
+    archived: true,
+    archive_path: "/tmp/archive",
+    manifest_entry: null,
+    run_summary_generated: false,
+  }),
+}));
+
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 // Import after mocks are set up
+import { archiveWorkspace } from "@features/history/services/archive-service.ts";
 import { loadJanitorConfig } from "@shared/lib/config.ts";
 import {
   acquireJanitorLock,
@@ -47,6 +57,7 @@ const mockCommitJanitorLock = commitJanitorLock as ReturnType<typeof vi.fn>;
 const mockReleaseJanitorLock = releaseJanitorLock as ReturnType<typeof vi.fn>;
 const mockGetLastJanitorTimestamp = getLastJanitorTimestamp as ReturnType<typeof vi.fn>;
 const mockGitExec = gitExec as ReturnType<typeof vi.fn>;
+const mockArchiveWorkspace = archiveWorkspace as ReturnType<typeof vi.fn>;
 
 type GitResult = {
   ok: boolean;
@@ -104,7 +115,11 @@ beforeEach(async () => {
   canonWorkspacesDir = join(canonDir, "workspaces");
   await mkdir(canonDir, { recursive: true });
 
-  mockLoadJanitorConfig.mockResolvedValue({ enabled: true, min_hours_between_runs: 1 });
+  mockLoadJanitorConfig.mockResolvedValue({
+    enabled: true,
+    max_workspace_age_hours: 48,
+    min_hours_between_runs: 1,
+  });
   mockGetLastJanitorTimestamp.mockResolvedValue(null);
   mockAcquireJanitorLock.mockResolvedValue({ acquired: true, previousMtime: null });
   mockCommitJanitorLock.mockResolvedValue(undefined);
@@ -129,7 +144,11 @@ afterEach(async () => {
 
 describe("gate checks", () => {
   test("returns gate_passed: false when config disabled", async () => {
-    mockLoadJanitorConfig.mockResolvedValue({ enabled: false, min_hours_between_runs: 1 });
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: false,
+      max_workspace_age_hours: 48,
+      min_hours_between_runs: 1,
+    });
 
     const result = await runJanitor(tmpDir);
 
@@ -144,7 +163,11 @@ describe("gate checks", () => {
     // Last run was 30 minutes ago, min is 1 hour
     const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
     mockGetLastJanitorTimestamp.mockResolvedValue(thirtyMinutesAgo);
-    mockLoadJanitorConfig.mockResolvedValue({ enabled: true, min_hours_between_runs: 1 });
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_workspace_age_hours: 48,
+      min_hours_between_runs: 1,
+    });
 
     const result = await runJanitor(tmpDir);
 
@@ -590,5 +613,230 @@ describe("lock lifecycle", () => {
     // Returns error result
     expect(result.tasks.unexpected_error).toBeDefined();
     expect(result.tasks.unexpected_error.status).toBe("error");
+  });
+});
+
+/** Set the mtime of a path to a past timestamp (ms). */
+function setMtime(p: string, ms: number): void {
+  const secs = ms / 1000;
+  utimesSync(p, secs, secs);
+}
+
+// --- Archive integration in prune_workspaces ---
+
+describe("prune_workspaces archive integration", () => {
+  test("archive is attempted before workspace deletion", async () => {
+    // Set up: a merged branch dir with one workspace slug
+    const mergedBranch = "feat/archived-branch";
+    const sanitized = "feat--archived-branch";
+    const branchDir = join(canonWorkspacesDir, sanitized);
+    const workspaceSlugDir = join(branchDir, "some-workspace-slug");
+    await mkdir(workspaceSlugDir, { recursive: true });
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        return makeGitBranchMergedResult([mergedBranch, "main"]);
+      }
+      return makeGitFailResult();
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    // Archive should have been called for the workspace slug
+    expect(mockArchiveWorkspace).toHaveBeenCalledTimes(1);
+    expect(mockArchiveWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspacePath: workspaceSlugDir,
+        projectDir: tmpDir,
+        branch: mergedBranch,
+        slug: "some-workspace-slug",
+      }),
+    );
+
+    // Workspace should still be deleted
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    expect(existsSync(branchDir)).toBe(false);
+  });
+
+  test("archive failure does not prevent workspace deletion", async () => {
+    const sanitized = "feat--archive-fails";
+    const branchDir = join(canonWorkspacesDir, sanitized);
+    const workspaceSlugDir = join(branchDir, "slug-that-fails");
+    await mkdir(workspaceSlugDir, { recursive: true });
+
+    // Make archiveWorkspace reject
+    mockArchiveWorkspace.mockRejectedValueOnce(new Error("archive disk full"));
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        return makeGitBranchMergedResult(["feat/archive-fails", "main"]);
+      }
+      return makeGitFailResult();
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    // Despite the archive failure, the workspace should still be pruned
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    expect(existsSync(branchDir)).toBe(false);
+  });
+
+  test("each workspace slug within a merged branch is archived", async () => {
+    const sanitized = "feat--multi-slug-branch";
+    const branchDir = join(canonWorkspacesDir, sanitized);
+    const slugA = join(branchDir, "build-feature-a");
+    const slugB = join(branchDir, "build-feature-b");
+    await mkdir(slugA, { recursive: true });
+    await mkdir(slugB, { recursive: true });
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
+      }
+      if (args[0] === "branch" && args[1] === "--merged") {
+        return makeGitBranchMergedResult(["feat/multi-slug-branch", "main"]);
+      }
+      return makeGitFailResult();
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    // Both slugs should have been archived
+    expect(mockArchiveWorkspace).toHaveBeenCalledTimes(2);
+    const calledPaths = (mockArchiveWorkspace.mock.calls as Array<[{ workspacePath: string }]>).map(
+      (call) => call[0].workspacePath,
+    );
+    expect(calledPaths).toContain(slugA);
+    expect(calledPaths).toContain(slugB);
+
+    // The branch directory should be removed
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    expect(existsSync(branchDir)).toBe(false);
+  });
+});
+
+// --- prune_stale_workspaces task ---
+
+describe("prune_stale_workspaces task", () => {
+  const AGE_HOURS = 48;
+  const AGE_MS = AGE_HOURS * 60 * 60 * 1000;
+
+  test("skips workspaces with a .lock file (active workspace)", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "active-build");
+    await mkdir(slugDir, { recursive: true });
+    await writeFile(join(slugDir, ".lock"), "pid=1234");
+
+    // Set mtime to 100h ago (well past threshold)
+    setMtime(slugDir, Date.now() - 100 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_stale_workspaces.status).toBe("skipped");
+    expect(existsSync(slugDir)).toBe(true);
+  });
+
+  test("skips workspaces younger than max_workspace_age_hours", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "recent-build");
+    await mkdir(slugDir, { recursive: true });
+
+    // Set mtime to 1h ago (younger than 48h threshold)
+    setMtime(slugDir, Date.now() - 1 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_stale_workspaces.status).toBe("skipped");
+    expect(existsSync(slugDir)).toBe(true);
+  });
+
+  test("archives and removes stale workspaces (no lock, old enough)", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "stale-build");
+    await mkdir(slugDir, { recursive: true });
+
+    // Set mtime to 72h ago (past the 48h threshold)
+    setMtime(slugDir, Date.now() - 72 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_stale_workspaces.status).toBe("success");
+    expect(result.tasks.prune_stale_workspaces.detail).toContain("1");
+    expect(existsSync(slugDir)).toBe(false);
+    expect(mockArchiveWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspacePath: slugDir,
+        projectDir: tmpDir,
+        branch: "main",
+        slug: "stale-build",
+      }),
+    );
+  });
+
+  test("removes empty branch directory after all slugs are pruned", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "only-slug");
+    await mkdir(slugDir, { recursive: true });
+
+    // Make it stale
+    setMtime(slugDir, Date.now() - (AGE_MS + 1000));
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_stale_workspaces.status).toBe("success");
+    // Both the slug and the now-empty branch dir are gone
+    expect(existsSync(slugDir)).toBe(false);
+    expect(existsSync(branchDir)).toBe(false);
+  });
+
+  test("keeps non-empty branch directory when some slugs are retained", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const staleSlug = join(branchDir, "stale-slug");
+    const recentSlug = join(branchDir, "recent-slug");
+    await mkdir(staleSlug, { recursive: true });
+    await mkdir(recentSlug, { recursive: true });
+
+    // Make stale-slug old, recent-slug fresh
+    setMtime(staleSlug, Date.now() - (AGE_MS + 1000));
+    setMtime(recentSlug, Date.now() - 1 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_stale_workspaces.status).toBe("success");
+    expect(existsSync(staleSlug)).toBe(false);
+    expect(existsSync(recentSlug)).toBe(true);
+    // Branch dir still exists because recentSlug remains
+    expect(existsSync(branchDir)).toBe(true);
+  });
+
+  test("needs_prune is true when stale workspaces are pruned", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "stale-main-build");
+    await mkdir(slugDir, { recursive: true });
+
+    setMtime(slugDir, Date.now() - (AGE_MS + 1000));
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.needs_prune).toBe(true);
+  });
+
+  test("prunes stale workspace under any branch, not just main", async () => {
+    const branchDir = join(canonWorkspacesDir, "feat--some-feature");
+    const slugDir = join(branchDir, "build-001");
+    await mkdir(slugDir, { recursive: true });
+
+    setMtime(slugDir, Date.now() - (AGE_MS + 1000));
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_stale_workspaces.status).toBe("success");
+    expect(existsSync(slugDir)).toBe(false);
   });
 });

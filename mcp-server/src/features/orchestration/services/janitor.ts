@@ -5,6 +5,7 @@
  *   - wal_checkpoint: flush WAL files for root-level Canon SQLite databases
  *   - prune_worktrees: remove orphaned agent isolation worktrees from .claude/worktrees/
  *   - prune_workspaces: remove workspace dirs for merged branches from .canon/workspaces/
+ *   - prune_stale_workspaces: remove workspace slugs older than max_workspace_age_hours (all branches)
  *
  * Canon principles:
  *   - fail-closed-by-default: gate fails → don't run; lock not acquired → don't run
@@ -13,12 +14,12 @@
  *   - subprocess-isolation: git commands via gitExec (spawnSync, shell never true)
  */
 
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { archiveWorkspace } from "@features/history/services/archive-service.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
-import { loadJanitorConfig } from "@shared/lib/config.ts";
+import { type JanitorConfig, loadJanitorConfig } from "@shared/lib/config.ts";
 import {
   acquireJanitorLock,
   commitJanitorLock,
@@ -319,6 +320,96 @@ async function pruneWorkspacesTask(projectDir: string, canonDir: string): Promis
 }
 
 /**
+ * Prune stale workspace slug directories across ALL branch directories (including `main`).
+ *
+ * A workspace slug is a candidate for pruning when:
+ *   - It has no `.lock` file (not an active workspace)
+ *   - Its mtime is older than `config.max_workspace_age_hours`
+ *
+ * After pruning slugs, empty branch directories are removed too.
+ * Archive is attempted best-effort before deletion (same as pruneWorkspacesTask).
+ *
+ * @returns JanitorTaskResult with count of pruned slugs in detail on success
+ */
+async function pruneStaleWorkspacesTask(
+  projectDir: string,
+  canonDir: string,
+  config: JanitorConfig,
+): Promise<JanitorTaskResult> {
+  const canonWorkspacesDir = join(canonDir, "workspaces");
+
+  const branchEntries = listDir(canonWorkspacesDir);
+  if (branchEntries === null) {
+    return { detail: "no workspaces directory or empty", status: "skipped" };
+  }
+
+  const maxAgeMs = config.max_workspace_age_hours * 60 * 60 * 1000;
+  const now = Date.now();
+
+  let pruned = 0;
+  const errors: string[] = [];
+
+  for (const branchEntry of branchEntries) {
+    const branchDir = join(canonWorkspacesDir, branchEntry);
+    const slugEntries = listDir(branchDir);
+    if (slugEntries === null) continue;
+
+    let prunedInBranch = 0;
+    for (const slug of slugEntries) {
+      const slugPath = join(branchDir, slug);
+
+      // Skip if active (has .lock file)
+      if (existsSync(join(slugPath, ".lock"))) continue;
+
+      // Skip if younger than the age threshold
+      let mtimeMs: number;
+      try {
+        mtimeMs = statSync(slugPath).mtimeMs;
+      } catch {
+        // If we can't stat it, skip conservatively
+        continue;
+      }
+      if (now - mtimeMs < maxAgeMs) continue;
+
+      // Archive best-effort before deleting
+      try {
+        await archiveWorkspace({ workspacePath: slugPath, projectDir, branch: branchEntry, slug });
+      } catch {
+        // Non-fatal: archive failure is intentional best-effort
+      }
+
+      try {
+        rmSync(slugPath, { force: true, recursive: true });
+        pruned++;
+        prunedInBranch++;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push(`${branchEntry}/${slug}: ${message}`);
+      }
+    }
+
+    // Remove branch directory only if we pruned slugs from it and it is now empty
+    if (prunedInBranch > 0) {
+      const remaining = listDir(branchDir);
+      if (remaining !== null && remaining.length === 0) {
+        try {
+          rmSync(branchDir, { force: true, recursive: true });
+        } catch {
+          // Best-effort: empty dir removal failure is non-fatal
+        }
+      }
+    }
+  }
+
+  return buildPruneResult(
+    pruned,
+    errors,
+    "stale workspace(s)",
+    "no stale workspace slug directories found",
+  );
+}
+
+/**
  * Run the janitor service.
  *
  * Gate check order (cheapest-first):
@@ -381,6 +472,9 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
     // Task: prune workspace dirs for merged branches (async — archives before deleting)
     tasks.prune_workspaces = await pruneWorkspacesTask(projectDir, canonDir);
 
+    // Task: prune stale workspace slugs by age (covers all branches, including main)
+    tasks.prune_stale_workspaces = await pruneStaleWorkspacesTask(projectDir, canonDir, config);
+
     // Commit lock (update mtime = last successful run timestamp)
     await commitJanitorLock(canonDir);
   } catch (err: unknown) {
@@ -391,9 +485,11 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
     await releaseJanitorLock(canonDir);
   }
 
-  // needs_prune is true when either prune task actually removed entries
+  // needs_prune is true when any prune task actually removed entries
   const needsPrune =
-    tasks.prune_worktrees?.status === "success" || tasks.prune_workspaces?.status === "success";
+    tasks.prune_worktrees?.status === "success" ||
+    tasks.prune_workspaces?.status === "success" ||
+    tasks.prune_stale_workspaces?.status === "success";
 
   return {
     gate_passed: true,
