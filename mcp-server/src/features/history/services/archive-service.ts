@@ -1,5 +1,5 @@
 /**
- * Archive Service — copies workspace artifacts to .canon/history/{branch}/{slug}/
+ * Archive Service — copies workspace artifacts to .canon/history/{slug}/
  * and records a manifest entry in drift.db.
  *
  * Canon principles:
@@ -79,7 +79,7 @@ export type ArchiveWorkspaceResult = {
 // ---- Public API ----
 
 /**
- * Archive a workspace to .canon/history/{sanitizedBranch}/{slug}/.
+ * Archive a workspace to .canon/history/{slug}/.
  * Copies artifact directories and files, generates run-summary.json,
  * and records the manifest entry in drift.db.
  *
@@ -126,13 +126,7 @@ export async function archiveWorkspace(
 
   // Compute archive destination
   const sanitizedBranch = sanitizeBranch(branch);
-  const archiveTargetPath = join(
-    projectDir,
-    CANON_DIR,
-    CANON_FILES.HISTORY_DIR,
-    sanitizedBranch,
-    slug,
-  );
+  const archiveTargetPath = join(projectDir, CANON_DIR, CANON_FILES.HISTORY_DIR, slug);
 
   try {
     mkdirSync(archiveTargetPath, { recursive: true });

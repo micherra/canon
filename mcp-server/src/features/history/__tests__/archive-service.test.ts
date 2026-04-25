@@ -272,7 +272,7 @@ describe("archiveWorkspace — happy path", () => {
     expect(types).toContain("journal.json");
   });
 
-  test("archive path follows expected structure: .canon/history/{branch}/{slug}/", async () => {
+  test("archive path follows expected structure: .canon/history/{slug}/", async () => {
     const result = await archiveWorkspace({
       workspacePath,
       projectDir,
@@ -282,8 +282,9 @@ describe("archiveWorkspace — happy path", () => {
 
     expect(result.archive_path).toContain(".canon");
     expect(result.archive_path).toContain("history");
-    expect(result.archive_path).toContain("main");
     expect(result.archive_path).toContain("my-feature");
+    // branch directory level is NOT part of the path
+    expect(result.archive_path).not.toMatch(/history\/main\//);
   });
 });
 
@@ -356,7 +357,7 @@ describe("archiveWorkspace — error handling", () => {
   });
 });
 
-describe("archiveWorkspace — branch sanitization", () => {
+describe("archiveWorkspace — branch in manifest", () => {
   let projectDir: string;
 
   beforeEach(() => {
@@ -368,7 +369,7 @@ describe("archiveWorkspace — branch sanitization", () => {
     rmSync(projectDir, { recursive: true, force: true });
   });
 
-  test("sanitizes branch with slashes for archive path", async () => {
+  test("branch with slashes is NOT part of archive path but IS stored in manifest", async () => {
     const workspacePath = makeWorkspace(projectDir, {
       dirs: ["plans"],
       files: ["journal.json"],
@@ -382,7 +383,11 @@ describe("archiveWorkspace — branch sanitization", () => {
     });
 
     expect(result.archived).toBe(true);
-    // Path should not contain raw slashes in the branch segment
-    expect(result.archive_path).not.toMatch(/feature\/my-feature/);
+    // Branch is not part of the archive path
+    expect(result.archive_path).not.toMatch(/feature/);
+    expect(result.archive_path).not.toMatch(/my-feature/);
+    // Branch metadata is preserved in the manifest entry
+    expect(result.manifest_entry?.branch).toBe("feature/my-feature");
+    expect(result.manifest_entry?.sanitized_branch).toBeDefined();
   });
 });
