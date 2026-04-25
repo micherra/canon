@@ -329,8 +329,8 @@ export async function verifyCompletion(
         workspacePath: workspace,
       });
       workspaceArchived = true;
-    } catch {
-      // Best-effort: archive failure does not block completion
+    } catch (err: unknown) {
+      console.warn("[canon] workspace archive failed:", err instanceof Error ? err.message : err);
     }
 
     // Delete the workspace directory
@@ -338,8 +338,8 @@ export async function verifyCompletion(
     try {
       rmSync(workspace, { force: true, recursive: true });
       workspaceDeleted = true;
-    } catch {
-      // Best-effort: deletion failure does not block completion
+    } catch (err: unknown) {
+      console.warn("[canon] workspace deletion failed:", err instanceof Error ? err.message : err);
     }
   }
 

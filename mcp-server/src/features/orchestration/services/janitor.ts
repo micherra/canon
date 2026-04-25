@@ -319,8 +319,11 @@ async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[])
 
   try {
     await archiveWorkspace({ branch: branchEntry, projectDir, slug, workspacePath: slugPath });
-  } catch {
-    // Non-fatal: archive failure is intentional best-effort
+  } catch (err: unknown) {
+    console.warn(
+      `[canon] janitor: archive failed for ${candidate.slug}:`,
+      err instanceof Error ? err.message : err,
+    );
   }
 
   try {
@@ -342,8 +345,11 @@ function cleanupEmptyBranchDir(branchDir: string, prunedInBranch: number): void 
   if (remaining !== null && remaining.length === 0) {
     try {
       rmSync(branchDir, { force: true, recursive: true });
-    } catch {
-      // Best-effort: empty dir removal failure is non-fatal
+    } catch (err: unknown) {
+      console.warn(
+        "[canon] janitor: failed to remove empty branch dir:",
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 }

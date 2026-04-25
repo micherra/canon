@@ -193,8 +193,11 @@ function copyArtifacts(workspacePath: string, archiveTargetPath: string): string
     try {
       cpSync(srcDir, join(archiveTargetPath, dir), { recursive: true });
       artifactTypes.push(dir);
-    } catch {
-      // Best-effort: log and continue
+    } catch (err: unknown) {
+      console.warn(
+        `[canon] archive: failed to copy dir ${dir}:`,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 
@@ -205,8 +208,11 @@ function copyArtifacts(workspacePath: string, archiveTargetPath: string): string
     try {
       cpSync(srcFile, join(archiveTargetPath, file));
       artifactTypes.push(file);
-    } catch {
-      // Best-effort: log and continue
+    } catch (err: unknown) {
+      console.warn(
+        `[canon] archive: failed to copy file ${file}:`,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 
@@ -244,8 +250,11 @@ function generateAndWriteRunSummary(input: {
     const summaryPath = join(archiveTargetPath, "run-summary.json");
     writeFileSync(summaryPath, JSON.stringify(runSummary, null, 2), "utf-8");
     return true;
-  } catch {
-    // Run summary failure is non-fatal — archive proceeds without it
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] archive: run summary generation failed:",
+      err instanceof Error ? err.message : err,
+    );
     return false;
   }
 }
@@ -296,8 +305,11 @@ function recordManifestEntry(input: {
 
   try {
     getDriftDb(projectDir).appendArchiveManifest(manifestEntry);
-  } catch {
-    // Manifest write failure is non-fatal
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] archive: manifest write to drift.db failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   return manifestEntry;
@@ -343,13 +355,17 @@ function extractWorkspaceMetadata(workspacePath: string): {
       task: row.task ?? "unknown",
       tier: row.tier ?? "unknown",
     };
-  } catch {
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] archive: failed to read workspace metadata:",
+      err instanceof Error ? err.message : err,
+    );
     return defaults;
   } finally {
     try {
       db?.close();
     } catch {
-      // Ignore close errors
+      // db.close() has no meaningful recovery — suppress
     }
   }
 }
