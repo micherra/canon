@@ -283,6 +283,36 @@ function computeFlowOutcome(steps: readonly JournalStep[]): VerifyCompletionResu
   };
 }
 
+async function archiveAndDeleteWorkspace(
+  workspace: string,
+): Promise<{ archived: boolean; deleted: boolean }> {
+  let archived = false;
+  try {
+    const session = getExecutionStore(workspace).getSession();
+    const branch = session?.branch ?? "unknown";
+    const slug = session?.slug ?? basename(workspace);
+    await archiveWorkspace({
+      branch,
+      projectDir: resolveProjectDir(),
+      slug,
+      workspacePath: workspace,
+    });
+    archived = true;
+  } catch (err: unknown) {
+    console.warn("[canon] workspace archive failed:", err instanceof Error ? err.message : err);
+  }
+
+  let deleted = false;
+  try {
+    rmSync(workspace, { force: true, recursive: true });
+    deleted = true;
+  } catch (err: unknown) {
+    console.warn("[canon] workspace deletion failed:", err instanceof Error ? err.message : err);
+  }
+
+  return { archived, deleted };
+}
+
 export async function verifyCompletion(
   input: VerifyCompletionInput,
 ): Promise<ToolResult<VerifyCompletionResult>> {
@@ -300,10 +330,6 @@ export async function verifyCompletion(
   const { steps } = await readJournal(workspace);
 
   const completed = steps.filter((s) => s.status === "completed");
-  // A step is "missing" whenever it has not reached a terminal state —
-  // terminal means completed or skipped. planned + started both count.
-  // The previous narrower filter (`started` only) let planned steps slip
-  // past the gate; see PR #119 review.
   const stepsMissing = steps
     .filter((s) => s.status === "planned" || s.status === "started")
     .map((s) => ({ status: s.status, step_id: s.step_id }));
@@ -312,36 +338,7 @@ export async function verifyCompletion(
   const artifacts = scanArtifacts(workspace, completed);
   const complete = stepsMissing.length === 0 && artifacts.missing.length === 0;
 
-  let workspaceArchived: boolean | undefined;
-  let workspaceDeleted: boolean | undefined;
-
-  if (complete) {
-    // Archive workspace to .canon/history/{slug}/ (best-effort)
-    workspaceArchived = false;
-    try {
-      const session = getExecutionStore(workspace).getSession();
-      const branch = session?.branch ?? "unknown";
-      const slug = session?.slug ?? basename(workspace);
-      await archiveWorkspace({
-        branch,
-        projectDir: resolveProjectDir(),
-        slug,
-        workspacePath: workspace,
-      });
-      workspaceArchived = true;
-    } catch (err: unknown) {
-      console.warn("[canon] workspace archive failed:", err instanceof Error ? err.message : err);
-    }
-
-    // Delete the workspace directory
-    workspaceDeleted = false;
-    try {
-      rmSync(workspace, { force: true, recursive: true });
-      workspaceDeleted = true;
-    } catch (err: unknown) {
-      console.warn("[canon] workspace deletion failed:", err instanceof Error ? err.message : err);
-    }
-  }
+  const cleanup = complete ? await archiveAndDeleteWorkspace(workspace) : undefined;
 
   return toolOk({
     artifacts_expected: artifacts.expected,
@@ -353,8 +350,8 @@ export async function verifyCompletion(
     steps_logged: steps.length,
     steps_missing: stepsMissing,
     steps_skipped: stepsSkipped,
-    ...(complete
-      ? { workspace_archived: workspaceArchived, workspace_deleted: workspaceDeleted }
+    ...(cleanup
+      ? { workspace_archived: cleanup.archived, workspace_deleted: cleanup.deleted }
       : {}),
   });
 }

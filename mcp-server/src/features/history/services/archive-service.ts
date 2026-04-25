@@ -184,15 +184,14 @@ function validateWorkspacePath(workspacePath: string): string | null {
  * Copy artifact directories and top-level files from workspacePath to archiveTargetPath.
  * Returns the list of artifact type names that were successfully copied.
  */
-function copyArtifacts(workspacePath: string, archiveTargetPath: string): string[] {
-  const artifactTypes: string[] = [];
-
+function copyDirs(workspacePath: string, archiveTargetPath: string): string[] {
+  const copied: string[] = [];
   for (const dir of ARCHIVE_DIRS) {
     const srcDir = join(workspacePath, dir);
     if (!existsSync(srcDir)) continue;
     try {
       cpSync(srcDir, join(archiveTargetPath, dir), { recursive: true });
-      artifactTypes.push(dir);
+      copied.push(dir);
     } catch (err: unknown) {
       console.warn(
         `[canon] archive: failed to copy dir ${dir}:`,
@@ -200,14 +199,18 @@ function copyArtifacts(workspacePath: string, archiveTargetPath: string): string
       );
     }
   }
+  return copied;
+}
 
+function copyFiles(workspacePath: string, archiveTargetPath: string): string[] {
+  const copied: string[] = [];
   for (const file of ARCHIVE_FILES) {
     if ((SKIP_PATTERNS as readonly string[]).includes(file)) continue;
     const srcFile = join(workspacePath, file);
     if (!existsSync(srcFile)) continue;
     try {
       cpSync(srcFile, join(archiveTargetPath, file));
-      artifactTypes.push(file);
+      copied.push(file);
     } catch (err: unknown) {
       console.warn(
         `[canon] archive: failed to copy file ${file}:`,
@@ -215,8 +218,14 @@ function copyArtifacts(workspacePath: string, archiveTargetPath: string): string
       );
     }
   }
+  return copied;
+}
 
-  return artifactTypes;
+function copyArtifacts(workspacePath: string, archiveTargetPath: string): string[] {
+  return [
+    ...copyDirs(workspacePath, archiveTargetPath),
+    ...copyFiles(workspacePath, archiveTargetPath),
+  ];
 }
 
 /**
