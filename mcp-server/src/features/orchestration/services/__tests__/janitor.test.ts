@@ -79,17 +79,6 @@ function makeGitWorktreeListResult(lines: string[]): GitResult {
   };
 }
 
-function makeGitBranchMergedResult(branches: string[]): GitResult {
-  return {
-    duration_ms: 10,
-    exitCode: 0,
-    ok: true,
-    stderr: "",
-    stdout: `${branches.map((b) => `  ${b}`).join("\n")}\n`,
-    timedOut: false,
-  };
-}
-
 function makeGitFailResult(): GitResult {
   return {
     duration_ms: 5,
@@ -127,9 +116,6 @@ beforeEach(async () => {
   mockGitExec.mockImplementation((args: string[]) => {
     if (args[0] === "worktree" && args[1] === "list") {
       return makeGitWorktreeListResult([]);
-    }
-    if (args[0] === "branch" && args[1] === "--merged") {
-      return makeGitBranchMergedResult([]);
     }
     return makeGitFailResult();
   });
@@ -232,12 +218,6 @@ describe("wal_checkpoint task", () => {
 describe("prune_worktrees task", () => {
   test("skips when .claude/worktrees directory does not exist", async () => {
     // agentWorktreesDir does not exist
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([]);
-      }
-      return makeGitBranchMergedResult([]);
-    });
 
     const result = await runJanitor(tmpDir);
 
@@ -248,12 +228,6 @@ describe("prune_worktrees task", () => {
 
   test("skips when .claude/worktrees directory is empty", async () => {
     await mkdir(agentWorktreesDir, { recursive: true });
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([]);
-      }
-      return makeGitBranchMergedResult([]);
-    });
 
     const result = await runJanitor(tmpDir);
 
@@ -267,12 +241,7 @@ describe("prune_worktrees task", () => {
     await mkdir(staleDir);
 
     // git worktree list returns nothing for this dir
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      return makeGitBranchMergedResult([]);
-    });
+    mockGitExec.mockReturnValue(makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]));
 
     const result = await runJanitor(tmpDir);
 
@@ -287,15 +256,12 @@ describe("prune_worktrees task", () => {
     await mkdir(activeDir);
 
     // git worktree list includes this dir
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([
-          `${tmpDir} abc123 [main]`,
-          `${activeDir} def456 [canon/some-task]`,
-        ]);
-      }
-      return makeGitBranchMergedResult([]);
-    });
+    mockGitExec.mockReturnValue(
+      makeGitWorktreeListResult([
+        `${tmpDir} abc123 [main]`,
+        `${activeDir} def456 [canon/some-task]`,
+      ]),
+    );
 
     const result = await runJanitor(tmpDir);
 
@@ -310,15 +276,12 @@ describe("prune_worktrees task", () => {
     await mkdir(activeDir);
     await mkdir(staleDir);
 
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([
-          `${tmpDir} abc123 [main]`,
-          `${activeDir} def456 [canon/some-task]`,
-        ]);
-      }
-      return makeGitBranchMergedResult([]);
-    });
+    mockGitExec.mockReturnValue(
+      makeGitWorktreeListResult([
+        `${tmpDir} abc123 [main]`,
+        `${activeDir} def456 [canon/some-task]`,
+      ]),
+    );
 
     const result = await runJanitor(tmpDir);
 
@@ -332,12 +295,7 @@ describe("prune_worktrees task", () => {
     await mkdir(agentWorktreesDir, { recursive: true });
     await mkdir(join(agentWorktreesDir, "agent-some-id"));
 
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitFailResult();
-      }
-      return makeGitBranchMergedResult([]);
-    });
+    mockGitExec.mockReturnValue(makeGitFailResult());
 
     const result = await runJanitor(tmpDir);
 
@@ -354,13 +312,8 @@ describe("prune_worktrees task", () => {
     await mkdir(staleDir1);
     await mkdir(staleDir2);
 
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        // Neither stale dir is in the list
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      return makeGitBranchMergedResult([]);
-    });
+    // Neither stale dir is in the list
+    mockGitExec.mockReturnValue(makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]));
 
     const result = await runJanitor(tmpDir);
 
@@ -371,165 +324,6 @@ describe("prune_worktrees task", () => {
   });
 });
 
-// --- prune_workspaces task ---
-
-describe("prune_workspaces task", () => {
-  test("skips when .canon/workspaces directory does not exist", async () => {
-    // canonWorkspacesDir does not exist
-
-    const result = await runJanitor(tmpDir);
-
-    expect(result.tasks.prune_workspaces).toBeDefined();
-    expect(result.tasks.prune_workspaces.status).toBe("skipped");
-  });
-
-  test("skips when .canon/workspaces directory is empty", async () => {
-    await mkdir(canonWorkspacesDir, { recursive: true });
-
-    const result = await runJanitor(tmpDir);
-
-    expect(result.tasks.prune_workspaces.status).toBe("skipped");
-  });
-
-  test("removes workspace dirs for merged branches", async () => {
-    // Branch "feat/my-feature" sanitizes to "feat--my-feature"
-    const mergedBranch = "feat/my-feature";
-    const sanitized = "feat--my-feature";
-    const workspaceDir = join(canonWorkspacesDir, sanitized);
-    await mkdir(workspaceDir, { recursive: true });
-
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        return makeGitBranchMergedResult([mergedBranch, "main"]);
-      }
-      return makeGitFailResult();
-    });
-
-    const result = await runJanitor(tmpDir);
-
-    expect(result.tasks.prune_workspaces.status).toBe("success");
-    expect(result.tasks.prune_workspaces.detail).toContain("1");
-    expect(existsSync(workspaceDir)).toBe(false);
-  });
-
-  test("handles + worktree marker in git branch output", async () => {
-    const workspaceDir = join(canonWorkspacesDir, "feat--worktree-branch");
-    await mkdir(workspaceDir, { recursive: true });
-
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        return {
-          ...makeGitBranchMergedResult(["main"]),
-          stdout: "+ feat/worktree-branch\n  main\n",
-        };
-      }
-      return makeGitFailResult();
-    });
-
-    const result = await runJanitor(tmpDir);
-
-    expect(result.tasks.prune_workspaces.status).toBe("success");
-    expect(existsSync(workspaceDir)).toBe(false);
-  });
-
-  test("keeps workspace dirs for unmerged branches", async () => {
-    const unmergedSanitized = "feat--active-branch";
-    const workspaceDir = join(canonWorkspacesDir, unmergedSanitized);
-    await mkdir(workspaceDir, { recursive: true });
-
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        // Only main is merged
-        return makeGitBranchMergedResult(["main"]);
-      }
-      return makeGitFailResult();
-    });
-
-    const result = await runJanitor(tmpDir);
-
-    // No merged branches match unmergedSanitized → skipped (0 pruned)
-    expect(result.tasks.prune_workspaces.status).toBe("skipped");
-    expect(existsSync(workspaceDir)).toBe(true);
-  });
-
-  test("never prunes the main workspace directory", async () => {
-    const mainDir = join(canonWorkspacesDir, "main");
-    await mkdir(mainDir, { recursive: true });
-
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        return makeGitBranchMergedResult(["main"]);
-      }
-      return makeGitFailResult();
-    });
-
-    const _result = await runJanitor(tmpDir);
-
-    // main is excluded from pruning
-    expect(existsSync(mainDir)).toBe(true);
-  });
-
-  test("reports error status when git branch --merged fails", async () => {
-    await mkdir(canonWorkspacesDir, { recursive: true });
-    await mkdir(join(canonWorkspacesDir, "feat--some-branch"));
-
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        return makeGitFailResult();
-      }
-      return makeGitFailResult();
-    });
-
-    const result = await runJanitor(tmpDir);
-
-    expect(result.tasks.prune_workspaces.status).toBe("error");
-    expect(result.tasks.prune_workspaces.detail).toBeDefined();
-  });
-
-  test("prunes multiple matched, keeps unmatched", async () => {
-    const mergedA = "feat--merged-a";
-    const mergedB = "fix--merged-b";
-    const activeC = "feat--active-c";
-    await mkdir(join(canonWorkspacesDir, mergedA), { recursive: true });
-    await mkdir(join(canonWorkspacesDir, mergedB), { recursive: true });
-    await mkdir(join(canonWorkspacesDir, activeC), { recursive: true });
-
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        // feat/merged-a and fix/merged-b are merged; feat/active-c is not
-        return makeGitBranchMergedResult(["feat/merged-a", "fix/merged-b", "main"]);
-      }
-      return makeGitFailResult();
-    });
-
-    const result = await runJanitor(tmpDir);
-
-    expect(result.tasks.prune_workspaces.status).toBe("success");
-    expect(result.tasks.prune_workspaces.detail).toContain("2");
-    expect(existsSync(join(canonWorkspacesDir, mergedA))).toBe(false);
-    expect(existsSync(join(canonWorkspacesDir, mergedB))).toBe(false);
-    expect(existsSync(join(canonWorkspacesDir, activeC))).toBe(true);
-  });
-});
-
 // --- needs_prune semantics ---
 
 describe("needs_prune semantics", () => {
@@ -537,30 +331,21 @@ describe("needs_prune semantics", () => {
     await mkdir(agentWorktreesDir, { recursive: true });
     await mkdir(join(agentWorktreesDir, "agent-stale-id"));
 
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      return makeGitBranchMergedResult(["main"]);
-    });
+    mockGitExec.mockReturnValue(makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]));
 
     const result = await runJanitor(tmpDir);
 
     expect(result.needs_prune).toBe(true);
   });
 
-  test("needs_prune: true when prune_workspaces removed entries", async () => {
-    await mkdir(join(canonWorkspacesDir, "feat--merged"), { recursive: true });
+  test("needs_prune: true when prune_workspaces removed stale entries", async () => {
+    const branchDir = join(canonWorkspacesDir, "feat--some-feature");
+    const slugDir = join(branchDir, "stale-build");
+    await mkdir(slugDir, { recursive: true });
 
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        return makeGitBranchMergedResult(["feat/merged", "main"]);
-      }
-      return makeGitFailResult();
-    });
+    // Make the workspace stale (72h past the 48h threshold)
+    const secs = (Date.now() - 72 * 60 * 60 * 1000) / 1000;
+    utimesSync(slugDir, secs, secs);
 
     const result = await runJanitor(tmpDir);
 
@@ -622,108 +407,9 @@ function setMtime(p: string, ms: number): void {
   utimesSync(p, secs, secs);
 }
 
-// --- Archive integration in prune_workspaces ---
+// --- prune_workspaces task (time-based) ---
 
-describe("prune_workspaces archive integration", () => {
-  test("archive is attempted before workspace deletion", async () => {
-    // Set up: a merged branch dir with one workspace slug
-    const mergedBranch = "feat/archived-branch";
-    const sanitized = "feat--archived-branch";
-    const branchDir = join(canonWorkspacesDir, sanitized);
-    const workspaceSlugDir = join(branchDir, "some-workspace-slug");
-    await mkdir(workspaceSlugDir, { recursive: true });
-
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        return makeGitBranchMergedResult([mergedBranch, "main"]);
-      }
-      return makeGitFailResult();
-    });
-
-    const result = await runJanitor(tmpDir);
-
-    // Archive should have been called for the workspace slug
-    expect(mockArchiveWorkspace).toHaveBeenCalledTimes(1);
-    expect(mockArchiveWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspacePath: workspaceSlugDir,
-        projectDir: tmpDir,
-        branch: mergedBranch,
-        slug: "some-workspace-slug",
-      }),
-    );
-
-    // Workspace should still be deleted
-    expect(result.tasks.prune_workspaces.status).toBe("success");
-    expect(existsSync(branchDir)).toBe(false);
-  });
-
-  test("archive failure does not prevent workspace deletion", async () => {
-    const sanitized = "feat--archive-fails";
-    const branchDir = join(canonWorkspacesDir, sanitized);
-    const workspaceSlugDir = join(branchDir, "slug-that-fails");
-    await mkdir(workspaceSlugDir, { recursive: true });
-
-    // Make archiveWorkspace reject
-    mockArchiveWorkspace.mockRejectedValueOnce(new Error("archive disk full"));
-
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        return makeGitBranchMergedResult(["feat/archive-fails", "main"]);
-      }
-      return makeGitFailResult();
-    });
-
-    const result = await runJanitor(tmpDir);
-
-    // Despite the archive failure, the workspace should still be pruned
-    expect(result.tasks.prune_workspaces.status).toBe("success");
-    expect(existsSync(branchDir)).toBe(false);
-  });
-
-  test("each workspace slug within a merged branch is archived", async () => {
-    const sanitized = "feat--multi-slug-branch";
-    const branchDir = join(canonWorkspacesDir, sanitized);
-    const slugA = join(branchDir, "build-feature-a");
-    const slugB = join(branchDir, "build-feature-b");
-    await mkdir(slugA, { recursive: true });
-    await mkdir(slugB, { recursive: true });
-
-    mockGitExec.mockImplementation((args: string[]) => {
-      if (args[0] === "worktree" && args[1] === "list") {
-        return makeGitWorktreeListResult([`${tmpDir} abc123 [main]`]);
-      }
-      if (args[0] === "branch" && args[1] === "--merged") {
-        return makeGitBranchMergedResult(["feat/multi-slug-branch", "main"]);
-      }
-      return makeGitFailResult();
-    });
-
-    const result = await runJanitor(tmpDir);
-
-    // Both slugs should have been archived
-    expect(mockArchiveWorkspace).toHaveBeenCalledTimes(2);
-    const calledPaths = (mockArchiveWorkspace.mock.calls as Array<[{ workspacePath: string }]>).map(
-      (call) => call[0].workspacePath,
-    );
-    expect(calledPaths).toContain(slugA);
-    expect(calledPaths).toContain(slugB);
-
-    // The branch directory should be removed
-    expect(result.tasks.prune_workspaces.status).toBe("success");
-    expect(existsSync(branchDir)).toBe(false);
-  });
-});
-
-// --- prune_stale_workspaces task ---
-
-describe("prune_stale_workspaces task", () => {
+describe("prune_workspaces task", () => {
   const AGE_HOURS = 48;
   const AGE_MS = AGE_HOURS * 60 * 60 * 1000;
 
@@ -738,7 +424,7 @@ describe("prune_stale_workspaces task", () => {
 
     const result = await runJanitor(tmpDir);
 
-    expect(result.tasks.prune_stale_workspaces.status).toBe("skipped");
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
     expect(existsSync(slugDir)).toBe(true);
   });
 
@@ -752,7 +438,7 @@ describe("prune_stale_workspaces task", () => {
 
     const result = await runJanitor(tmpDir);
 
-    expect(result.tasks.prune_stale_workspaces.status).toBe("skipped");
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
     expect(existsSync(slugDir)).toBe(true);
   });
 
@@ -766,8 +452,8 @@ describe("prune_stale_workspaces task", () => {
 
     const result = await runJanitor(tmpDir);
 
-    expect(result.tasks.prune_stale_workspaces.status).toBe("success");
-    expect(result.tasks.prune_stale_workspaces.detail).toContain("1");
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    expect(result.tasks.prune_workspaces.detail).toContain("1");
     expect(existsSync(slugDir)).toBe(false);
     expect(mockArchiveWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -789,7 +475,7 @@ describe("prune_stale_workspaces task", () => {
 
     const result = await runJanitor(tmpDir);
 
-    expect(result.tasks.prune_stale_workspaces.status).toBe("success");
+    expect(result.tasks.prune_workspaces.status).toBe("success");
     // Both the slug and the now-empty branch dir are gone
     expect(existsSync(slugDir)).toBe(false);
     expect(existsSync(branchDir)).toBe(false);
@@ -808,7 +494,7 @@ describe("prune_stale_workspaces task", () => {
 
     const result = await runJanitor(tmpDir);
 
-    expect(result.tasks.prune_stale_workspaces.status).toBe("success");
+    expect(result.tasks.prune_workspaces.status).toBe("success");
     expect(existsSync(staleSlug)).toBe(false);
     expect(existsSync(recentSlug)).toBe(true);
     // Branch dir still exists because recentSlug remains
@@ -836,7 +522,7 @@ describe("prune_stale_workspaces task", () => {
 
     const result = await runJanitor(tmpDir);
 
-    expect(result.tasks.prune_stale_workspaces.status).toBe("success");
+    expect(result.tasks.prune_workspaces.status).toBe("success");
     expect(existsSync(slugDir)).toBe(false);
   });
 });

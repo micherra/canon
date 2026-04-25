@@ -4,8 +4,11 @@
  * Runs gate checks (cheapest-first), then executes tasks:
  *   - wal_checkpoint: flush WAL files for root-level Canon SQLite databases
  *   - prune_worktrees: remove orphaned agent isolation worktrees from .claude/worktrees/
- *   - prune_workspaces: remove workspace dirs for merged branches from .canon/workspaces/
- *   - prune_stale_workspaces: remove workspace slugs older than max_workspace_age_hours (all branches)
+ *   - prune_workspaces: remove workspace slugs older than max_workspace_age_hours (all branches)
+ *
+ * Workspace pruning is purely time-based: slug directories with no .lock file and an
+ * mtime older than max_workspace_age_hours are archived then deleted regardless of branch.
+ * Empty branch directories are cleaned up after their slugs are removed.
  *
  * Canon principles:
  *   - fail-closed-by-default: gate fails → don't run; lock not acquired → don't run
@@ -39,7 +42,7 @@ export type JanitorResult = {
   gate_passed: boolean;
   reason?: string;
   tasks: Record<string, JanitorTaskResult>;
-  /** True when either prune task actually removed entries during this run. */
+  /** True when any prune task actually removed entries during this run. */
   needs_prune: boolean;
 };
 
@@ -131,35 +134,6 @@ function parseWorktreePaths(stdout: string): Set<string> {
 }
 
 /**
- * Parse `git branch --merged` output into a Set of branch names (trimmed, no leading spaces).
- */
-function parseMergedBranches(stdout: string): Set<string> {
-  const branches = new Set<string>();
-  for (const line of stdout.split("\n")) {
-    // Strip leading markers: "* " (current), "+ " (worktree), or "  " (plain)
-    const trimmed = line.replace(/^[*+]?\s+/, "").trim();
-    if (trimmed) branches.add(trimmed);
-  }
-  return branches;
-}
-
-/**
- * Sanitize a branch name the same way workspace directories are named.
- * Mirrors sanitizeBranch() from @domains/workspaces/workspace.ts.
- *
- * Replaces `/` with `--`, spaces with `-`, strips non-alphanumeric/hyphen chars,
- * lowercases, and truncates to 80 characters.
- */
-function sanitizeBranchForComparison(branch: string): string {
-  return branch
-    .replace(/\//g, "--")
-    .replace(/\s/g, "-")
-    .replace(/[^a-zA-Z0-9-]/g, "")
-    .toLowerCase()
-    .slice(0, 80);
-}
-
-/**
  * List directory entries under a given path.
  * Returns null when the directory does not exist or cannot be read.
  * Treats ENOENT as expected (returns null); re-throws unexpected errors.
@@ -236,90 +210,6 @@ function pruneWorktreesTask(projectDir: string): JanitorTaskResult {
 }
 
 /**
- * Prune workspace directories for merged branches from {projectDir}/.canon/workspaces/.
- *
- * A workspace directory is a candidate for pruning when its name matches the
- * sanitized form of a merged branch name. The "main" workspace is always kept.
- *
- * Before deleting each branch directory, attempts to archive each workspace slug
- * within it. Archive failures are non-fatal and logged but do not prevent deletion.
- *
- * Path safety: only paths strictly under canonWorkspacesDir are removed.
- *
- * @returns JanitorTaskResult with pruned count in detail on success
- */
-async function pruneWorkspacesTask(projectDir: string, canonDir: string): Promise<JanitorTaskResult> {
-  const canonWorkspacesDir = join(canonDir, "workspaces");
-
-  if (listDir(canonWorkspacesDir) === null) {
-    return { detail: "no workspaces directory or empty", status: "skipped" };
-  }
-
-  const branchResult = gitExec(["branch", "--merged", "main"], projectDir);
-  if (!branchResult.ok) {
-    return { detail: `git branch --merged failed: ${branchResult.stderr.trim()}`, status: "error" };
-  }
-
-  const sanitizedMerged = new Set<string>();
-  // Build map from sanitized → original branch name for archive calls
-  const sanitizedToOriginal = new Map<string, string>();
-  for (const branch of parseMergedBranches(branchResult.stdout)) {
-    const s = sanitizeBranchForComparison(branch);
-    if (s !== "main") {
-      sanitizedMerged.add(s);
-      sanitizedToOriginal.set(s, branch);
-    }
-  }
-
-  // Iterate branch dirs matching merged branches
-  const branchEntries = listDir(canonWorkspacesDir);
-  if (branchEntries === null) {
-    return { detail: "no workspaces directory or empty", status: "skipped" };
-  }
-
-  let pruned = 0;
-  const errors: string[] = [];
-
-  for (const branchEntry of branchEntries) {
-    if (branchEntry === "main") continue;
-    if (!sanitizedMerged.has(branchEntry)) continue;
-
-    const branchDir = join(canonWorkspacesDir, branchEntry);
-    const branchName = sanitizedToOriginal.get(branchEntry) ?? branchEntry;
-
-    // List workspace slugs within this branch directory
-    const slugEntries = listDir(branchDir);
-    if (slugEntries !== null) {
-      for (const slug of slugEntries) {
-        const workspacePath = join(branchDir, slug);
-        // Archive each workspace (best-effort — failure does not prevent deletion)
-        try {
-          await archiveWorkspace({ workspacePath, projectDir, branch: branchName, slug });
-        } catch {
-          // Non-fatal: archive failure is intentional best-effort
-        }
-      }
-    }
-
-    // Remove the branch directory
-    try {
-      rmSync(branchDir, { force: true, recursive: true });
-      pruned++;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      errors.push(`${branchEntry}: ${message}`);
-    }
-  }
-
-  return buildPruneResult(
-    pruned,
-    errors,
-    "workspace(s)",
-    "no merged-branch workspace directories found",
-  );
-}
-
-/**
  * Prune stale workspace slug directories across ALL branch directories (including `main`).
  *
  * A workspace slug is a candidate for pruning when:
@@ -327,7 +217,7 @@ async function pruneWorkspacesTask(projectDir: string, canonDir: string): Promis
  *   - Its mtime is older than `config.max_workspace_age_hours`
  *
  * After pruning slugs, empty branch directories are removed too.
- * Archive is attempted best-effort before deletion (same as pruneWorkspacesTask).
+ * Archive is attempted best-effort before deletion.
  *
  * @returns JanitorTaskResult with count of pruned slugs in detail on success
  */
@@ -469,11 +359,8 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
     // Task: prune orphaned agent isolation worktrees
     tasks.prune_worktrees = pruneWorktreesTask(projectDir);
 
-    // Task: prune workspace dirs for merged branches (async — archives before deleting)
-    tasks.prune_workspaces = await pruneWorkspacesTask(projectDir, canonDir);
-
     // Task: prune stale workspace slugs by age (covers all branches, including main)
-    tasks.prune_stale_workspaces = await pruneStaleWorkspacesTask(projectDir, canonDir, config);
+    tasks.prune_workspaces = await pruneStaleWorkspacesTask(projectDir, canonDir, config);
 
     // Commit lock (update mtime = last successful run timestamp)
     await commitJanitorLock(canonDir);
@@ -488,8 +375,7 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
   // needs_prune is true when any prune task actually removed entries
   const needsPrune =
     tasks.prune_worktrees?.status === "success" ||
-    tasks.prune_workspaces?.status === "success" ||
-    tasks.prune_stale_workspaces?.status === "success";
+    tasks.prune_workspaces?.status === "success";
 
   return {
     gate_passed: true,
