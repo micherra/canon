@@ -124,9 +124,9 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 ### Setup
 
-1. Spawn `canon:planner` with the build request. The planner produces a runbook.
-2. Present the runbook to the user for approval. Iterate if the user requests changes.
-3. After the planner returns and before presenting for approval, check the planning brief's Requirement Coverage Map section. If any requirements have disposition `descoped` or `partial`, present them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are `covered`, proceed silently to runbook approval.
+1. Spawn `canon:planner` with the build request. The planner produces a planning brief and runbook.
+2. Check the planning brief's Requirement Coverage Map section. If any requirements have disposition `descoped` or `partial`, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
+3. Present the runbook to the user for approval. Iterate if the user requests changes.
 4. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` and `tier` come from the approved runbook's frontmatter, and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`.
 5. Call `log_step` for each step in the approved runbook (creates the checklist).
 6. Execute steps in order, spawning the agent specified by each step.
@@ -197,8 +197,9 @@ Include results in the spawn prompt. Agents also have direct MCP access and will
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
-### HITL Patterns
+### HITL Patterns <!-- last-updated: 2026-04-25 -->
 
+- **Requirement coverage check**: After planner returns, check the planning brief's Requirement Coverage Map. If any requirements are `descoped` or `partial`, surface them explicitly before runbook approval. If all are `covered`, proceed silently.
 - **Architect approval**: Present the plan to the user. For agent teams, use native plan approval mode.
 - **Review verdict**: Present review results. If not clean, spawn engineer in fix mode.
 - **Gate failure**: Present the failure output and ask the user how to proceed.
