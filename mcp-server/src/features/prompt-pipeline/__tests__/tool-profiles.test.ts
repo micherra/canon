@@ -8,25 +8,23 @@ import { AGENT_TOOL_PROFILES, EMPTY_PROFILE, resolveToolProfile } from "../model
 const ALL_AGENTS = [
   "researcher",
   "architect",
-  "implementor",
+  "engineer",
   "tester",
   "reviewer",
-  "fixer",
   "security",
   "scribe",
   "learner",
-  "guide",
   "writer",
   "shipper",
   "chat",
 ] as const;
 
 describe("AGENT_TOOL_PROFILES", () => {
-  it("has entries for all 13 agent types", () => {
+  it("has entries for all 11 agent types", () => {
     for (const agent of ALL_AGENTS) {
       expect(AGENT_TOOL_PROFILES).toHaveProperty(agent);
     }
-    expect(Object.keys(AGENT_TOOL_PROFILES)).toHaveLength(13);
+    expect(Object.keys(AGENT_TOOL_PROFILES)).toHaveLength(11);
   });
 
   it("each profile has at least one entry (allowed or disallowed)", () => {
@@ -46,8 +44,8 @@ describe("AGENT_TOOL_PROFILES", () => {
     expect(AGENT_TOOL_PROFILES.researcher.allowed).toContain("codebase_graph");
   });
 
-  it("implementor profile includes post_message MCP tool", () => {
-    expect(AGENT_TOOL_PROFILES.implementor.allowed).toContain("post_message");
+  it("engineer profile includes post_message MCP tool", () => {
+    expect(AGENT_TOOL_PROFILES.engineer.allowed).toContain("post_message");
   });
 
   it("reviewer profile includes write_review MCP tool", () => {
@@ -70,10 +68,10 @@ describe("AGENT_TOOL_PROFILES", () => {
     expect(AGENT_TOOL_PROFILES.architect.allowed).toContain("update_board");
   });
 
-  it("fixer profile includes graph_query, semantic_search, get_file_context MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES.fixer.allowed).toContain("graph_query");
-    expect(AGENT_TOOL_PROFILES.fixer.allowed).toContain("semantic_search");
-    expect(AGENT_TOOL_PROFILES.fixer.allowed).toContain("get_file_context");
+  it("engineer profile includes graph_query, semantic_search, get_file_context MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES.engineer.allowed).toContain("graph_query");
+    expect(AGENT_TOOL_PROFILES.engineer.allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES.engineer.allowed).toContain("get_file_context");
   });
 
   it("security profile includes semantic_search and codebase_graph MCP tools", () => {
@@ -88,13 +86,6 @@ describe("AGENT_TOOL_PROFILES", () => {
     expect(AGENT_TOOL_PROFILES.learner.allowed).toContain("codebase_graph");
   });
 
-  it("guide profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES.guide.allowed).toContain("graph_query");
-    expect(AGENT_TOOL_PROFILES.guide.allowed).toContain("semantic_search");
-    expect(AGENT_TOOL_PROFILES.guide.allowed).toContain("get_file_context");
-    expect(AGENT_TOOL_PROFILES.guide.allowed).toContain("codebase_graph");
-  });
-
   it("chat profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
     expect(AGENT_TOOL_PROFILES.chat.allowed).toContain("graph_query");
     expect(AGENT_TOOL_PROFILES.chat.allowed).toContain("semantic_search");
@@ -102,9 +93,9 @@ describe("AGENT_TOOL_PROFILES", () => {
     expect(AGENT_TOOL_PROFILES.chat.allowed).toContain("codebase_graph");
   });
 
-  it("implementor profile includes write_implementation_summary and get_messages MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES.implementor.allowed).toContain("write_implementation_summary");
-    expect(AGENT_TOOL_PROFILES.implementor.allowed).toContain("get_messages");
+  it("engineer profile includes write_implementation_summary and get_messages MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES.engineer.allowed).toContain("write_implementation_summary");
+    expect(AGENT_TOOL_PROFILES.engineer.allowed).toContain("get_messages");
   });
 });
 
@@ -164,25 +155,25 @@ describe("resolveToolProfile", () => {
   });
 
   it("permission mode defaults to auto when worktreePath is provided", () => {
-    const result = resolveToolProfile("implementor", {
+    const result = resolveToolProfile("engineer", {
       worktreePath: "/some/path",
     });
     expect(result.permission_mode).toBe("auto");
   });
 
   it("permission mode defaults to prompt when no worktreePath provided", () => {
-    const result = resolveToolProfile("implementor");
+    const result = resolveToolProfile("engineer");
     expect(result.permission_mode).toBe("prompt");
   });
 
   it("permission mode defaults to prompt when worktreePath is undefined", () => {
     // worktree_path absent means no sandboxed directory — fall back to prompt
-    const result = resolveToolProfile("implementor", { worktreePath: undefined });
+    const result = resolveToolProfile("engineer", { worktreePath: undefined });
     expect(result.permission_mode).toBe("prompt");
   });
 
   it("permission_mode override from ToolOverrides takes precedence over worktreePath", () => {
-    const result = resolveToolProfile("implementor", {
+    const result = resolveToolProfile("engineer", {
       overrides: { permission_mode: "deny_unknown" },
       worktreePath: "/some/path",
     });
@@ -190,7 +181,7 @@ describe("resolveToolProfile", () => {
   });
 
   it("replace override with deny strips matching tools", () => {
-    const result = resolveToolProfile("implementor", {
+    const result = resolveToolProfile("engineer", {
       overrides: { deny: ["ToolB"], replace: ["ToolA", "ToolB", "ToolC"] },
     });
     expect(result.tools).toEqual(["ToolA", "ToolC"]);
@@ -198,7 +189,7 @@ describe("resolveToolProfile", () => {
   });
 
   it("implementor has Edit and Write in allowed", () => {
-    const result = resolveToolProfile("implementor");
+    const result = resolveToolProfile("engineer");
     expect(result.tools).toContain("Edit");
     expect(result.tools).toContain("Write");
   });
@@ -210,7 +201,7 @@ describe("resolveToolProfile", () => {
   });
 
   it("namespaced agent ID does not fall back to EMPTY_PROFILE", () => {
-    const result = resolveToolProfile("canon:implementor");
+    const result = resolveToolProfile("canon:engineer");
     expect(result.tools).toContain("Edit");
     expect(result.tools).toContain("Write");
   });
@@ -273,17 +264,17 @@ describe("resolveToolProfile", () => {
   // trustPermissionMode tests
 
   it("trustPermissionMode 'auto' is used when no override is set", () => {
-    const result = resolveToolProfile("implementor", { trustPermissionMode: "auto" });
+    const result = resolveToolProfile("engineer", { trustPermissionMode: "auto" });
     expect(result.permission_mode).toBe("auto");
   });
 
   it("trustPermissionMode 'prompt' is used when no override is set", () => {
-    const result = resolveToolProfile("implementor", { trustPermissionMode: "prompt" });
+    const result = resolveToolProfile("engineer", { trustPermissionMode: "prompt" });
     expect(result.permission_mode).toBe("prompt");
   });
 
   it("overrides.permission_mode takes precedence over trustPermissionMode", () => {
-    const result = resolveToolProfile("implementor", {
+    const result = resolveToolProfile("engineer", {
       overrides: { permission_mode: "deny_unknown" },
       trustPermissionMode: "auto",
     });
@@ -293,7 +284,7 @@ describe("resolveToolProfile", () => {
   it("trustPermissionMode takes precedence over worktreePath fallback", () => {
     // Without worktreePath, the fallback would be "prompt".
     // trustPermissionMode="auto" should override that.
-    const result = resolveToolProfile("implementor", {
+    const result = resolveToolProfile("engineer", {
       trustPermissionMode: "auto",
       worktreePath: undefined,
     });
@@ -302,7 +293,7 @@ describe("resolveToolProfile", () => {
 
   it("falls back to worktreePath check when trustPermissionMode is undefined", () => {
     // No trustPermissionMode, worktreePath present → worktreePath fallback applies → "auto"
-    const result = resolveToolProfile("implementor", {
+    const result = resolveToolProfile("engineer", {
       trustPermissionMode: undefined,
       worktreePath: "/some/path",
     });
@@ -310,8 +301,8 @@ describe("resolveToolProfile", () => {
   });
 
   it("backward compat: calling with only agent (no options) behaves identically — prompt mode", () => {
-    const withNoOptions = resolveToolProfile("implementor");
-    const withEmptyOptions = resolveToolProfile("implementor", {});
+    const withNoOptions = resolveToolProfile("engineer");
+    const withEmptyOptions = resolveToolProfile("engineer", {});
     expect(withNoOptions.permission_mode).toBe("prompt");
     expect(withEmptyOptions.permission_mode).toBe("prompt");
     expect(withNoOptions.tools).toEqual(withEmptyOptions.tools);
@@ -343,11 +334,6 @@ describe("resolveToolProfile", () => {
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("read-only agent (guide) with no worktreePath gets permission_mode 'auto'", () => {
-    const result = resolveToolProfile("guide");
-    expect(result.permission_mode).toBe("auto");
-  });
-
   it("read-only agent (chat) with no worktreePath gets permission_mode 'auto'", () => {
     const result = resolveToolProfile("chat");
     expect(result.permission_mode).toBe("auto");
@@ -358,15 +344,8 @@ describe("resolveToolProfile", () => {
     expect(result.permission_mode).toBe("auto");
   });
 
-  it("write agent (implementor) with no worktreePath still gets permission_mode 'prompt'", () => {
-    // implementor has Write and Edit in allowed — NOT read-only → prompt
-    const result = resolveToolProfile("implementor");
-    expect(result.permission_mode).toBe("prompt");
-  });
-
-  it("write agent (fixer) with no worktreePath still gets permission_mode 'prompt'", () => {
-    // fixer has Write and Edit in allowed, nothing in disallowed — NOT read-only → prompt
-    const result = resolveToolProfile("fixer");
+  it("write agent (engineer) with no worktreePath still gets permission_mode 'prompt'", () => {
+    const result = resolveToolProfile("engineer");
     expect(result.permission_mode).toBe("prompt");
   });
 

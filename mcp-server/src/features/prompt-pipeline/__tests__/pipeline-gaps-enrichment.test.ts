@@ -1,7 +1,7 @@
 /**
  * Integration and gap-fill tests for the ADR-006 prompt assembly pipeline (Part 2).
  *
- * These tests cover paths not exercised by the implementor-written unit tests:
+ * These tests cover paths not exercised by the engineer-written unit tests:
  *
  * 6. assemblePrompt skip_reason + warnings — warnings propagate through a skip result
  * 7. Multi-inject_context entries — multiple injections merged into mergedVariables
@@ -117,7 +117,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
     spawn_instructions: { implement: "Implement the task." },
     states: {
       done: { type: "terminal" },
-      implement: { agent: "implementor", type: "single" },
+      implement: { agent: "engineer", type: "single" },
     },
     ...overrides,
   };
@@ -162,7 +162,7 @@ describe("assemblePrompt — skip_reason result includes warnings accumulated be
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "implementor",
+          agent: "engineer",
           inject_context: [{ from: "state", name: "some-artifact" }] as unknown as never[],
           type: "single",
         },
@@ -219,7 +219,7 @@ describe("multi-inject_context entries — both variables substituted into promp
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "implementor",
+          agent: "engineer",
           inject_context: [
             { from: "state", name: "research_findings" },
             { from: "state", name: "design_spec" },
@@ -268,7 +268,7 @@ describe("multi-inject_context entries — both variables substituted into promp
       states: {
         done: { type: "terminal" },
         implement: {
-          agent: "implementor",
+          agent: "engineer",
           inject_context: [{ from: "state", name: "research_findings" }] as unknown as never[],
           type: "single",
         },
@@ -345,7 +345,7 @@ describe("cache prefix lifecycle — store to prompt end-to-end", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "implementor", type: "wave" },
+        build: { agent: "engineer", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -401,7 +401,7 @@ describe("pipeline error paths — pre-pipeline early returns", () => {
       spawn_instructions: {}, // deliberate: no instruction for "implement"
       states: {
         done: { type: "terminal" },
-        implement: { agent: "implementor", type: "single" },
+        implement: { agent: "engineer", type: "single" },
       },
     });
 
@@ -506,7 +506,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     const flow = makeFlow({
       spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { agent: "implementor", type: "wave" },
+        build: { agent: "engineer", type: "wave" },
         done: { type: "terminal" },
       },
     });
@@ -538,7 +538,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     expect(entry.permission_mode).toBeDefined();
   });
 
-  it("implementor single state has permission_mode: prompt without worktree_path (set post-pipeline)", async () => {
+  it("engineer single state has permission_mode: prompt without worktree_path (set post-pipeline)", async () => {
     const workspace = seedWorkspace();
 
     const result = await assemblePrompt(makeInput(workspace));
@@ -548,7 +548,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     // No worktree_path set by pipeline, no KG DB → prompt mode
     // (worktree_path is set by orchestrator post-pipeline for non-wave, Agent tool creates worktree)
     expect(entry.permission_mode).toBe("prompt");
-    // implementor can write
+    // engineer can write
     expect(entry.tools).toContain("Edit");
     expect(entry.tools).toContain("Write");
   });
@@ -562,7 +562,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     // Existing invariants still hold
     expect(result.prompts).toHaveLength(1);
     expect(result.state_type).toBe("single");
-    expect(result.prompts[0].agent).toBe("implementor");
+    expect(result.prompts[0].agent).toBe("engineer");
     expect(result.skip_reason).toBeUndefined();
     // Plus new tool scope fields
     expect(result.prompts[0].tools).toBeDefined();
