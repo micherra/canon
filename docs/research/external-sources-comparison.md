@@ -10,6 +10,7 @@
 - **SpecStory** (`specstory.com`) — commercial chat-capture + spec-driven-development tool. Framing: "intent is the new source code."
 - **Karpathy's LLM Wiki gist** (`gist.github.com/karpathy/442a6bf555914893e9891c11519de94f`) — architectural pattern for an LLM-maintained personal wiki as an alternative to RAG. Memorable framing: *"Obsidian is the IDE; the LLM is the programmer; the wiki is the codebase."*
 - **forrestchang/andrej-karpathy-skills** (`github.com/forrestchang/andrej-karpathy-skills`) — four behavioral rules distilled from a Karpathy tweet on coding-agent failure modes, packaged as a Claude Code plugin / per-project `CLAUDE.md` snippet / Cursor `.mdc` rule. Distinct from the LLM Wiki gist above.
+- **Gas Town** (`github.com/gastownhall/gastown`) — Go-based multi-agent orchestration system coordinating 20-30 cross-tool agents (Claude Code, Copilot, Codex, Gemini) via git-worktree-backed persistent state. Distinctive subsystems: a Bors-style bisecting merge queue (Refinery), three-tier agent-health watchdogs (Witness / Deacon / Dogs), a git-backed issue tracker (beads) with dependency-graph readiness filtering, federated cross-instance networking (Wasteland), and predecessor-session context recovery (Seance).
 
 Two sources reviewed and dropped from the shortlist: **pi-mono** (pi.dev) operates a layer below Canon (agent runtime, CLI, UI), and **codeflow's browser-shell ideas** are architecturally incompatible.
 
@@ -99,6 +100,14 @@ SpecStory's "chats as durable intent" collides cleanly with Canon roadmap **Item
 
 *Fit:* reshapes Item 28 rather than adding new scope. New artifact template + spec-synthesis role.
 
+### Flow execution
+
+**13. Bisecting merge queue for completed waves — `canon-shipper` Refinery mode** *(Gas Town)*
+
+Gas Town's Refinery is a Bors-style merge queue that batches completed agent work and bisects to isolate integration breakage when the batch fails CI. Canon's epic flow merges waves sequentially; an integration failure today requires re-running the failing wave or manually bisecting suspects. A Refinery-style mode in `canon-shipper` — queue completed waves, attempt batched merge, bisect on failure to find the offending wave, quarantine and retry — gives Canon faster integration on multi-wave epics without changing the orchestrator contract. Pure shipper-state addition.
+
+*Fit:* extends `canon-shipper` for epic-flow ship states. Worktree merge primitives Canon already has cover the mechanics.
+
 ### Behavioral-rule distillations
 
 **forrestchang/andrej-karpathy-skills — no novel items; full duplicate of existing principles.**
@@ -142,6 +151,14 @@ Consolidated across all sources. These conflict with Canon's ethos and should no
 | Unified multi-provider LLM client | pi-mono | Provider abstraction is the host's responsibility, not the orchestrator's. |
 | Behavioral rules as a `CLAUDE.md` snippet / plugin / Cursor `.mdc` | forrestchang/andrej-karpathy-skills | Canon encodes behavioral guidance as prescriptive principles with severity levels, drift tracking, and compliance scoring. Free-form `CLAUDE.md` rules have no enforcement surface, no drift signal, and no reviewer citation — they are advisory text, not infrastructure. |
 | Shipping coding-agent guidance as a cross-tool plugin (Claude Code + Cursor) | forrestchang/andrej-karpathy-skills | Canon is a Claude Code skill by design; cross-IDE distribution is out of scope (same reasoning as the SpecStory cross-tool row). |
+| Cross-tool agent coordination (Claude Code + Copilot + Codex + Gemini concurrently) | Gas Town | Canon is a Claude Code skill; multi-provider runtime is the host's responsibility. Same reasoning as SpecStory cross-tool and pi-mono multi-provider rows. |
+| Federated cross-instance networking (Wasteland) | Gas Town | Cross-machine sync of agent state inverts Canon's local-first threat model. Same reasoning as SpecStory cross-machine sync. |
+| Agent-to-agent comms via mailbox / nudge channels | Gas Town | Canon's orchestrator dispatches and aggregates results; agents do not communicate peer-to-peer. Adding an inter-agent channel breaks the pure-dispatcher contract. |
+| Three-tier external watchdog daemons monitoring agent health | Gas Town | Canon agents run as Claude Code spawns inside a single session; health monitoring is the host's job. A separate watchdog tier is a runtime-layer concern below Canon's scope (same reasoning as the pi-mono runtime row). |
+| Git-backed parallel issue tracker as primary task store | Gas Town | Canon's task state lives in `board.json` + workspace artifacts on purpose — they travel with the flow and feed drift/compliance. A second issue tracker fragments the source of truth. |
+| Predecessor-session transcript query (Seance) as a primary recovery surface | Gas Town | Canon recovers via `board.json` resume + structured artifacts, not raw prior-session transcripts. Same reasoning as the SpecStory raw-transcript row. |
+| Web dashboard as a primary monitoring surface for live agent fleets | Gas Town | Canon's primary surface is the agent pipeline; MCP apps are secondary visualization, not a fleet-ops console. Aligns with the CodeFlow "interactive UI as primary surface" non-fit. |
+| 20-30 concurrent agents as a target operating mode | Gas Town | Canon's epic flow runs bounded waves sized to dependency structure, not headcount. Optimizing for fleet scale changes the contract from "right-sized waves" to "keep N agents busy." |
 
 ---
 
