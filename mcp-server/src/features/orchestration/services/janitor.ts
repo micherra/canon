@@ -4,10 +4,10 @@
  * Runs gate checks (cheapest-first), then executes tasks:
  *   - wal_checkpoint: flush WAL files for root-level Canon SQLite databases
  *   - prune_worktrees: remove orphaned agent isolation worktrees from .claude/worktrees/
- *   - prune_workspaces: remove workspace slugs older than max_workspace_age_hours (all branches)
+ *   - prune_workspaces: remove workspace slugs based on completion status + age (all branches)
  *
- * Workspace pruning is purely time-based: slug directories with no .lock file and an
- * mtime older than max_workspace_age_hours are archived then deleted regardless of branch.
+ * Workspace pruning checks .completed marker: completed slugs use max_completed_workspace_age_hours;
+ * abandoned slugs (no marker) use max_abandoned_workspace_age_hours (null = never auto-prune).
  * Empty branch directories are cleaned up after their slugs are removed.
  *
  * Canon principles:
@@ -210,18 +210,20 @@ function pruneWorktreesTask(projectDir: string): JanitorTaskResult {
 }
 
 /**
- * Prune stale workspace slug directories across ALL branch directories (including `main`).
+ * Prune workspace slug directories across ALL branch directories (including `main`).
  *
  * A workspace slug is a candidate for pruning when:
  *   - It has no `.lock` file (not an active workspace)
- *   - Its mtime is older than `config.max_workspace_age_hours`
+ *   - If it has a `.completed` marker: mtime is older than `config.max_completed_workspace_age_hours`
+ *   - If it has no `.completed` marker (abandoned): `config.max_abandoned_workspace_age_hours` is
+ *     not null AND mtime is older than `config.max_abandoned_workspace_age_hours`
  *
  * After pruning slugs, empty branch directories are removed too.
  * Archive is attempted best-effort before deletion.
  *
  * @returns JanitorTaskResult with count of pruned slugs in detail on success
  */
-async function pruneStaleWorkspacesTask(
+async function pruneWorkspacesTask(
   projectDir: string,
   canonDir: string,
   config: JanitorConfig,
@@ -233,7 +235,11 @@ async function pruneStaleWorkspacesTask(
     return { detail: "no workspaces directory or empty", status: "skipped" };
   }
 
-  const maxAgeMs = config.max_workspace_age_hours * 60 * 60 * 1000;
+  const completedMaxAgeMs = config.max_completed_workspace_age_hours * 60 * 60 * 1000;
+  const abandonedMaxAgeMs =
+    config.max_abandoned_workspace_age_hours !== null
+      ? config.max_abandoned_workspace_age_hours * 60 * 60 * 1000
+      : null;
   const now = Date.now();
 
   let pruned = 0;
@@ -251,7 +257,14 @@ async function pruneStaleWorkspacesTask(
       // Skip if active (has .lock file)
       if (existsSync(join(slugPath, ".lock"))) continue;
 
-      // Skip if younger than the age threshold
+      // Determine age threshold based on completion status
+      const isCompleted = existsSync(join(slugPath, ".completed"));
+      const maxAgeMs = isCompleted ? completedMaxAgeMs : abandonedMaxAgeMs;
+
+      // If no age threshold applies (null = never prune abandoned), skip
+      if (maxAgeMs === null) continue;
+
+      // Skip if younger than the applicable age threshold
       let mtimeMs: number;
       try {
         mtimeMs = statSync(slugPath).mtimeMs;
@@ -294,8 +307,8 @@ async function pruneStaleWorkspacesTask(
   return buildPruneResult(
     pruned,
     errors,
-    "stale workspace(s)",
-    "no stale workspace slug directories found",
+    "workspace(s)",
+    "no workspace slug directories eligible for pruning",
   );
 }
 
@@ -359,8 +372,8 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
     // Task: prune orphaned agent isolation worktrees
     tasks.prune_worktrees = pruneWorktreesTask(projectDir);
 
-    // Task: prune stale workspace slugs by age (covers all branches, including main)
-    tasks.prune_workspaces = await pruneStaleWorkspacesTask(projectDir, canonDir, config);
+    // Task: prune workspace slugs by age + completion status (covers all branches, including main)
+    tasks.prune_workspaces = await pruneWorkspacesTask(projectDir, canonDir, config);
 
     // Commit lock (update mtime = last successful run timestamp)
     await commitJanitorLock(canonDir);
