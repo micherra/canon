@@ -6,10 +6,10 @@
  * pure in terms of side effects — they read files and return data.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   buildArtifactInventory,
@@ -50,7 +50,7 @@ describe("extractPlannerContext", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   test("returns null when no planner files exist", () => {
@@ -120,9 +120,9 @@ agent: reviewer
     const result = extractPlannerContext(plansDir, slug);
     expect(result).not.toBeNull();
     expect(result?.runbook_steps).toHaveLength(3);
-    expect(result?.runbook_steps[0]).toMatchObject({ step_id: "research", agent: "researcher" });
-    expect(result?.runbook_steps[1]).toMatchObject({ step_id: "implement", agent: "implementor" });
-    expect(result?.runbook_steps[2]).toMatchObject({ step_id: "review", agent: "reviewer" });
+    expect(result?.runbook_steps[0]).toMatchObject({ agent: "researcher", step_id: "research" });
+    expect(result?.runbook_steps[1]).toMatchObject({ agent: "implementor", step_id: "implement" });
+    expect(result?.runbook_steps[2]).toMatchObject({ agent: "reviewer", step_id: "review" });
   });
 
   test("handles malformed planning-brief.md gracefully", () => {
@@ -172,7 +172,7 @@ describe("extractStepOutcomes", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   test("returns empty array when journal.json missing", () => {
@@ -184,20 +184,20 @@ describe("extractStepOutcomes", () => {
     const journal = {
       steps: [
         {
-          step_id: "research",
           agent_type: "researcher",
-          status: "completed",
-          started_at: "2026-04-24T10:00:00.000Z",
-          completed_at: "2026-04-24T10:05:00.000Z",
           artifacts_expected: ["research/synthesis.md"],
+          completed_at: "2026-04-24T10:05:00.000Z",
+          started_at: "2026-04-24T10:00:00.000Z",
+          status: "completed",
+          step_id: "research",
         },
         {
-          step_id: "implement",
           agent_type: "implementor",
-          status: "completed",
-          started_at: "2026-04-24T10:05:00.000Z",
-          completed_at: "2026-04-24T10:30:00.000Z",
           artifacts_expected: ["plans/slug/SUMMARY.md"],
+          completed_at: "2026-04-24T10:30:00.000Z",
+          started_at: "2026-04-24T10:05:00.000Z",
+          status: "completed",
+          step_id: "implement",
         },
       ],
     };
@@ -216,18 +216,18 @@ describe("extractStepOutcomes", () => {
     const journal = {
       steps: [
         {
-          step_id: "research",
           agent_type: "researcher",
-          status: "started",
-          started_at: "2026-04-24T10:00:00.000Z",
-          completed_at: null,
           artifacts_expected: [],
+          completed_at: null,
+          started_at: "2026-04-24T10:00:00.000Z",
+          status: "started",
+          step_id: "research",
         },
         {
-          step_id: "implement",
           agent_type: "implementor",
-          status: "pending",
           artifacts_expected: [],
+          status: "pending",
+          step_id: "implement",
         },
       ],
     };
@@ -260,7 +260,7 @@ describe("extractReviewResults", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   test("returns empty array when reviews/ missing", () => {
@@ -354,7 +354,7 @@ describe("extractDecisionSummaries", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   test("returns empty array when decisions/ missing", () => {
@@ -438,7 +438,7 @@ describe("buildArtifactInventory", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   test("counts files per directory correctly", () => {
@@ -498,7 +498,7 @@ describe("buildRunSummary", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   test("produces complete RunSummary with all sections populated", () => {
@@ -522,28 +522,28 @@ describe("buildRunSummary", () => {
     const journal = {
       steps: [
         {
-          step_id: "research",
           agent_type: "researcher",
-          status: "completed",
-          started_at: "2026-04-24T10:00:00.000Z",
-          completed_at: "2026-04-24T10:10:00.000Z",
           artifacts_expected: [],
+          completed_at: "2026-04-24T10:10:00.000Z",
+          started_at: "2026-04-24T10:00:00.000Z",
+          status: "completed",
+          step_id: "research",
         },
       ],
     };
     writeJson(tmpDir, "journal.json", journal);
 
     const result = buildRunSummary({
-      workspacePath: tmpDir,
-      slug,
       archiveId: "arch_test_001",
       metadata: {
+        archivedAt: "2026-04-24T12:00:00.000Z",
         branch: "main",
         flow: "feature",
-        tier: "standard",
         task: "Test task",
-        archivedAt: "2026-04-24T12:00:00.000Z",
+        tier: "standard",
       },
+      slug,
+      workspacePath: tmpDir,
     });
 
     expect(result.version).toBe(1);
@@ -560,16 +560,16 @@ describe("buildRunSummary", () => {
 
   test("produces valid RunSummary when workspace is mostly empty", () => {
     const result = buildRunSummary({
-      workspacePath: tmpDir,
-      slug: "empty-slug",
       archiveId: "arch_empty_001",
       metadata: {
+        archivedAt: "2026-04-24T12:00:00.000Z",
         branch: "main",
         flow: "fast-path",
-        tier: "simple",
         task: "Minimal task",
-        archivedAt: "2026-04-24T12:00:00.000Z",
+        tier: "simple",
       },
+      slug: "empty-slug",
+      workspacePath: tmpDir,
     });
 
     expect(result.version).toBe(1);

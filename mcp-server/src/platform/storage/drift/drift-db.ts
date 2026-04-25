@@ -212,7 +212,6 @@ export class DriftDb {
   // ---- Archive manifest statements ----
   private readonly stmtInsertArchive: Database.Statement;
   private readonly stmtGetArchiveById: Database.Statement;
-  private readonly stmtGetAllArchives: Database.Statement;
   private readonly stmtCountArchives: Database.Statement;
 
   constructor(db: Database.Database) {
@@ -324,13 +323,7 @@ export class DriftDb {
       )
     `);
 
-    this.stmtGetArchiveById = db.prepare(
-      `SELECT * FROM build_archives WHERE archive_id = ?`,
-    );
-
-    this.stmtGetAllArchives = db.prepare(
-      `SELECT * FROM build_archives ORDER BY archived_at DESC`,
-    );
+    this.stmtGetArchiveById = db.prepare(`SELECT * FROM build_archives WHERE archive_id = ?`);
 
     this.stmtCountArchives = db.prepare(`SELECT COUNT(*) as count FROM build_archives`);
   }
@@ -656,7 +649,8 @@ export class DriftDb {
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const limitClause = limit !== undefined ? `LIMIT ${Math.max(0, limit)}` : "";
-    const sql = `SELECT * FROM build_archives ${where} ORDER BY archived_at DESC ${limitClause}`.trim();
+    const sql =
+      `SELECT * FROM build_archives ${where} ORDER BY archived_at DESC ${limitClause}`.trim();
 
     const rows = this.db.prepare(sql).all(...params) as ArchiveRow[];
     return rows.map(rowToArchiveManifestEntry);

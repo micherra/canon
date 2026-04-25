@@ -8,10 +8,10 @@
  * Mocks better-sqlite3 for orchestration.db reads and getDriftDb for manifest writes.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { ArchiveManifestEntry } from "../../../platform/storage/drift/drift-analytics-types.ts";
 
@@ -20,8 +20,8 @@ vi.mock("../../../platform/storage/drift/drift-db.ts", () => {
   const appendArchiveManifest = vi.fn();
   const mockDb = { appendArchiveManifest };
   return {
-    getDriftDb: vi.fn(() => mockDb),
     DriftDb: vi.fn(),
+    getDriftDb: vi.fn(() => mockDb),
   };
 });
 
@@ -31,16 +31,16 @@ vi.mock("better-sqlite3", () => {
     get: vi.fn(() => null),
   };
   const mockDb = {
-    prepare: vi.fn(() => mockStatement),
     close: vi.fn(),
+    prepare: vi.fn(() => mockStatement),
   };
   const MockDatabase = vi.fn(() => mockDb);
   return { default: MockDatabase };
 });
 
+import { getDriftDb } from "../../../platform/storage/drift/drift-db.ts";
 // Import after mocks so mocks are in place
 import { archiveWorkspace } from "../services/archive-service.ts";
-import { getDriftDb } from "../../../platform/storage/drift/drift-db.ts";
 
 // ---- Helpers ----
 
@@ -93,15 +93,15 @@ describe("archiveWorkspace — happy path", () => {
   });
 
   afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   test("archives all expected directories when they exist", async () => {
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     expect(result.archived).toBe(true);
@@ -123,10 +123,10 @@ describe("archiveWorkspace — happy path", () => {
     });
 
     const result = await archiveWorkspace({
-      workspacePath: ws,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "partial-feature",
+      workspacePath: ws,
     });
 
     expect(result.archived).toBe(true);
@@ -140,10 +140,10 @@ describe("archiveWorkspace — happy path", () => {
 
   test("copies log.jsonl, context.md, journal.json when present", async () => {
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     expect(result.archived).toBe(true);
@@ -162,10 +162,10 @@ describe("archiveWorkspace — happy path", () => {
     writeText(join(workspacePath, "session.json"), "{}");
 
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     expect(result.archived).toBe(true);
@@ -179,10 +179,10 @@ describe("archiveWorkspace — happy path", () => {
 
   test("generates run-summary.json in the archive directory", async () => {
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     expect(result.archived).toBe(true);
@@ -193,10 +193,10 @@ describe("archiveWorkspace — happy path", () => {
 
   test("run-summary.json is valid JSON matching RunSummary type", async () => {
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     expect(result.archived).toBe(true);
@@ -206,26 +206,26 @@ describe("archiveWorkspace — happy path", () => {
       const parsed = JSON.parse(raw) as unknown;
 
       expect(parsed).toMatchObject({
-        version: 1,
         archive_id: expect.any(String) as unknown,
+        artifact_inventory: expect.any(Object) as unknown,
+        decision_summaries: expect.any(Array) as unknown,
+        review_results: expect.any(Array) as unknown,
         run_metadata: expect.objectContaining({
           branch: "main",
           slug: "my-feature",
         }) as unknown,
         step_outcomes: expect.any(Array) as unknown,
-        review_results: expect.any(Array) as unknown,
-        decision_summaries: expect.any(Array) as unknown,
-        artifact_inventory: expect.any(Object) as unknown,
+        version: 1,
       });
     }
   });
 
   test("returns { archived: true, run_summary_generated: true } on success", async () => {
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     expect(result.archived).toBe(true);
@@ -235,10 +235,10 @@ describe("archiveWorkspace — happy path", () => {
 
   test("records manifest entry in drift.db with has_run_summary flag", async () => {
     await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     const mockDb = getDriftDb(projectDir) as unknown as {
@@ -255,10 +255,10 @@ describe("archiveWorkspace — happy path", () => {
 
   test("artifact_types array reflects which dirs/files were archived", async () => {
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     expect(result.manifest_entry).not.toBeNull();
@@ -274,10 +274,10 @@ describe("archiveWorkspace — happy path", () => {
 
   test("archive path follows expected structure: .canon/history/{slug}/", async () => {
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     expect(result.archive_path).toContain(".canon");
@@ -297,15 +297,15 @@ describe("archiveWorkspace — error handling", () => {
   });
 
   afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   test("returns { archived: false, error: ... } when workspace path doesn't exist", async () => {
     const result = await archiveWorkspace({
-      workspacePath: join(projectDir, "nonexistent"),
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath: join(projectDir, "nonexistent"),
     });
 
     expect(result.archived).toBe(false);
@@ -323,10 +323,10 @@ describe("archiveWorkspace — error handling", () => {
 
     // Should not throw — use default metadata
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "feature/test",
+      projectDir,
       slug: "test-slug",
+      workspacePath,
     });
 
     expect(result.archived).toBe(true);
@@ -342,10 +342,10 @@ describe("archiveWorkspace — error handling", () => {
     writeText(join(workspacePath, "journal.json"), "{ bad json !!! }");
 
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "main",
+      projectDir,
       slug: "my-feature",
+      workspacePath,
     });
 
     // Archive itself should succeed even if run summary generation encounters parse errors
@@ -366,7 +366,7 @@ describe("archiveWorkspace — branch in manifest", () => {
   });
 
   afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   test("branch with slashes is NOT part of archive path but IS stored in manifest", async () => {
@@ -376,10 +376,10 @@ describe("archiveWorkspace — branch in manifest", () => {
     });
 
     const result = await archiveWorkspace({
-      workspacePath,
-      projectDir,
       branch: "feature/my-feature",
+      projectDir,
       slug: "slug",
+      workspacePath,
     });
 
     expect(result.archived).toBe(true);

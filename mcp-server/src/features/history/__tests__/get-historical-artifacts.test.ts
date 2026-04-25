@@ -6,10 +6,10 @@
  * getDriftDb is mocked; real tmp directories are used for file I/O.
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { ArchiveManifestEntry } from "../../../platform/storage/drift/drift-analytics-types.ts";
 
@@ -33,17 +33,17 @@ let archivePath: string;
 function makeArchiveEntry(overrides: Partial<ArchiveManifestEntry> = {}): ArchiveManifestEntry {
   return {
     archive_id: "arch_test_001",
+    archive_path: archivePath,
+    archived_at: "2026-04-24T10:00:00.000Z",
+    artifact_types: ["plans"],
     branch: "feat/test",
+    flow: "feature",
+    has_run_summary: true,
     sanitized_branch: "feat--test",
     slug: "test-slug",
-    flow: "feature",
-    tier: "feature",
-    task: "test task",
-    archived_at: "2026-04-24T10:00:00.000Z",
-    archive_path: archivePath,
-    artifact_types: ["plans"],
-    has_run_summary: true,
     source_run_id: null,
+    task: "test task",
+    tier: "feature",
     ...overrides,
   };
 }
@@ -67,8 +67,8 @@ describe("getHistoricalArtifacts", () => {
     mockGetArchiveById.mockReturnValue(null);
 
     const result = await getHistoricalArtifacts({
-      project_dir: "/tmp/proj",
       archive_id: "nonexistent_id",
+      project_dir: "/tmp/proj",
     });
 
     expect(result.ok).toBe(false);
@@ -85,9 +85,9 @@ describe("getHistoricalArtifacts", () => {
     mockGetArchiveById.mockReturnValue(makeArchiveEntry());
 
     const result = await getHistoricalArtifacts({
-      project_dir: "/tmp/proj",
       archive_id: "arch_test_001",
       artifact_types: ["plans"],
+      project_dir: "/tmp/proj",
     });
 
     expect(result.ok).toBe(true);
@@ -110,9 +110,9 @@ describe("getHistoricalArtifacts", () => {
     mockGetArchiveById.mockReturnValue(makeArchiveEntry());
 
     const result = await getHistoricalArtifacts({
-      project_dir: "/tmp/proj",
       archive_id: "arch_test_001",
       artifact_types: ["plans"], // Only request plans
+      project_dir: "/tmp/proj",
     });
 
     expect(result.ok).toBe(true);
@@ -123,15 +123,15 @@ describe("getHistoricalArtifacts", () => {
   });
 
   test("returns run-summary.json when artifact_type 'run-summary' requested", async () => {
-    const summary = { version: 1, archive_id: "arch_test_001" };
+    const summary = { archive_id: "arch_test_001", version: 1 };
     writeFileSync(join(archivePath, "run-summary.json"), JSON.stringify(summary));
 
     mockGetArchiveById.mockReturnValue(makeArchiveEntry({ has_run_summary: true }));
 
     const result = await getHistoricalArtifacts({
-      project_dir: "/tmp/proj",
       archive_id: "arch_test_001",
       artifact_types: ["run-summary"],
+      project_dir: "/tmp/proj",
     });
 
     expect(result.ok).toBe(true);
@@ -149,9 +149,9 @@ describe("getHistoricalArtifacts", () => {
     mockGetArchiveById.mockReturnValue(makeArchiveEntry());
 
     const result = await getHistoricalArtifacts({
-      project_dir: "/tmp/proj",
       archive_id: "arch_test_001",
       artifact_types: ["../secret"],
+      project_dir: "/tmp/proj",
     });
 
     expect(result.ok).toBe(true);
@@ -166,8 +166,8 @@ describe("getHistoricalArtifacts", () => {
     mockGetArchiveById.mockReturnValue(entry);
 
     const result = await getHistoricalArtifacts({
-      project_dir: "/tmp/proj",
       archive_id: "arch_test_001",
+      project_dir: "/tmp/proj",
     });
 
     expect(result.ok).toBe(false);
@@ -185,10 +185,10 @@ describe("getHistoricalArtifacts", () => {
     mockGetArchiveById.mockReturnValue(makeArchiveEntry());
 
     const result = await getHistoricalArtifacts({
-      project_dir: "/tmp/proj",
       archive_id: "arch_test_001",
       artifact_types: ["plans"],
       file_pattern: "PLAN",
+      project_dir: "/tmp/proj",
     });
 
     expect(result.ok).toBe(true);
@@ -202,9 +202,9 @@ describe("getHistoricalArtifacts", () => {
     mockGetArchiveById.mockReturnValue(makeArchiveEntry());
 
     const result = await getHistoricalArtifacts({
-      project_dir: "/tmp/proj",
       archive_id: "arch_test_001",
       artifact_types: [], // No artifact types to read
+      project_dir: "/tmp/proj",
     });
 
     expect(result.ok).toBe(true);

@@ -329,8 +329,6 @@ describe("updateBoard — complete_flow", () => {
 
     expect(appendFlowRun).toHaveBeenCalled();
   });
-
-
 });
 
 describe("updateBoard — set_wave_progress", () => {

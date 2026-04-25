@@ -16,11 +16,11 @@
 import { cpSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
+import { sanitizeBranch } from "../../../domains/workspaces/workspace.ts";
 import type { ArchiveManifestEntry } from "../../../platform/storage/drift/drift-analytics-types.ts";
 import { getDriftDb } from "../../../platform/storage/drift/drift-db.ts";
 import { CANON_DIR, CANON_FILES } from "../../../shared/constants.ts";
 import { generateId } from "../../../shared/lib/id.ts";
-import { sanitizeBranch } from "../../../domains/workspaces/workspace.ts";
 import { buildRunSummary } from "./run-summary-builder.ts";
 
 // ---- Constants ----
@@ -90,57 +90,101 @@ export async function archiveWorkspace(
 ): Promise<ArchiveWorkspaceResult> {
   const { workspacePath, projectDir, branch, slug } = input;
 
-  // validate-at-trust-boundaries: verify workspace path exists
-  if (!existsSync(workspacePath)) {
-    return {
-      archived: false,
-      archive_path: null,
-      manifest_entry: null,
-      run_summary_generated: false,
-      error: `Workspace path does not exist: ${workspacePath}`,
-    };
-  }
+  const validationError = validateWorkspacePath(workspacePath);
+  if (validationError !== null) return failedArchiveResult(validationError);
 
-  let stat;
-  try {
-    stat = statSync(workspacePath);
-  } catch (err: unknown) {
-    return {
-      archived: false,
-      archive_path: null,
-      manifest_entry: null,
-      run_summary_generated: false,
-      error: `Cannot stat workspace path: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-
-  if (!stat.isDirectory()) {
-    return {
-      archived: false,
-      archive_path: null,
-      manifest_entry: null,
-      run_summary_generated: false,
-      error: `Workspace path is not a directory: ${workspacePath}`,
-    };
-  }
-
-  // Compute archive destination
   const sanitizedBranch = sanitizeBranch(branch);
   const archiveTargetPath = join(projectDir, CANON_DIR, CANON_FILES.HISTORY_DIR, slug);
 
+  const mkdirError = createArchiveDir(archiveTargetPath);
+  if (mkdirError !== null) return failedArchiveResult(mkdirError);
+
+  const artifactTypes = copyArtifacts(workspacePath, archiveTargetPath);
+  const workspaceMeta = extractWorkspaceMetadata(workspacePath);
+  const archiveId = generateId("arch");
+  const archivedAt = new Date().toISOString();
+
+  const runSummaryGenerated = generateAndWriteRunSummary({
+    archivedAt,
+    archiveId,
+    archiveTargetPath,
+    branch,
+    slug,
+    workspaceMeta,
+    workspacePath,
+  });
+
+  const manifestEntry = recordManifestEntry({
+    archivedAt,
+    archiveId,
+    archiveTargetPath,
+    artifactTypes,
+    branch,
+    projectDir,
+    runSummaryGenerated,
+    sanitizedBranch,
+    slug,
+    workspaceMeta,
+  });
+
+  return {
+    archive_path: archiveTargetPath,
+    archived: true,
+    manifest_entry: manifestEntry,
+    run_summary_generated: runSummaryGenerated,
+  };
+}
+
+// ---- Private helpers ----
+
+function failedArchiveResult(error: string): ArchiveWorkspaceResult {
+  return {
+    archive_path: null,
+    archived: false,
+    error,
+    manifest_entry: null,
+    run_summary_generated: false,
+  };
+}
+
+/** Create the archive target directory. Returns null on success, error string on failure. */
+function createArchiveDir(archiveTargetPath: string): string | null {
   try {
     mkdirSync(archiveTargetPath, { recursive: true });
+    return null;
   } catch (err: unknown) {
-    return {
-      archived: false,
-      archive_path: null,
-      manifest_entry: null,
-      run_summary_generated: false,
-      error: `Failed to create archive directory: ${err instanceof Error ? err.message : String(err)}`,
-    };
+    return `Failed to create archive directory: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
+
+/**
+ * Validate that workspacePath exists and is a directory.
+ * Returns null when valid, or an error string when invalid.
+ */
+function validateWorkspacePath(workspacePath: string): string | null {
+  if (!existsSync(workspacePath)) {
+    return `Workspace path does not exist: ${workspacePath}`;
   }
 
-  // Copy artifact directories
+  let stat: ReturnType<typeof statSync>;
+  try {
+    stat = statSync(workspacePath);
+  } catch (err: unknown) {
+    return `Cannot stat workspace path: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  if (!stat.isDirectory()) {
+    return `Workspace path is not a directory: ${workspacePath}`;
+  }
+
+  return null;
+}
+
+/**
+ * Copy artifact directories and top-level files from workspacePath to archiveTargetPath.
+ * Returns the list of artifact type names that were successfully copied.
+ */
+function copyArtifacts(workspacePath: string, archiveTargetPath: string): string[] {
   const artifactTypes: string[] = [];
 
   for (const dir of ARCHIVE_DIRS) {
@@ -154,7 +198,6 @@ export async function archiveWorkspace(
     }
   }
 
-  // Copy top-level files (excluding skip patterns)
   for (const file of ARCHIVE_FILES) {
     if ((SKIP_PATTERNS as readonly string[]).includes(file)) continue;
     const srcFile = join(workspacePath, file);
@@ -167,68 +210,98 @@ export async function archiveWorkspace(
     }
   }
 
-  // Extract workspace metadata from orchestration.db
-  const workspaceMeta = extractWorkspaceMetadata(workspacePath);
+  return artifactTypes;
+}
 
-  // Generate archive ID
-  const archiveId = generateId("arch");
-  const archivedAt = new Date().toISOString();
-
-  // Generate run summary (independently wrapped — failure does not abort archive)
-  let runSummaryGenerated = false;
+/**
+ * Generate run-summary.json and write it to the archive directory.
+ * Returns true on success. Failure is non-fatal — archive proceeds without it.
+ */
+function generateAndWriteRunSummary(input: {
+  workspacePath: string;
+  archiveTargetPath: string;
+  archiveId: string;
+  archivedAt: string;
+  branch: string;
+  slug: string;
+  workspaceMeta: { flow: string; tier: string; task: string; run_id: string | null };
+}): boolean {
+  const { workspacePath, archiveTargetPath, archiveId, archivedAt, branch, slug, workspaceMeta } =
+    input;
   try {
     const runSummary = buildRunSummary({
-      workspacePath,
-      slug,
       archiveId,
       metadata: {
+        archivedAt,
         branch,
         flow: workspaceMeta.flow,
-        tier: workspaceMeta.tier,
         task: workspaceMeta.task,
-        archivedAt,
+        tier: workspaceMeta.tier,
       },
+      slug,
+      workspacePath,
     });
     const summaryPath = join(archiveTargetPath, "run-summary.json");
     writeFileSync(summaryPath, JSON.stringify(runSummary, null, 2), "utf-8");
-    runSummaryGenerated = true;
+    return true;
   } catch {
     // Run summary failure is non-fatal — archive proceeds without it
-    runSummaryGenerated = false;
+    return false;
   }
+}
 
-  // Build manifest entry
+/**
+ * Build and record the manifest entry in drift.db.
+ * drift.db write failure is non-fatal — returns the entry regardless.
+ */
+function recordManifestEntry(input: {
+  archiveId: string;
+  archiveTargetPath: string;
+  archivedAt: string;
+  artifactTypes: string[];
+  branch: string;
+  projectDir: string;
+  runSummaryGenerated: boolean;
+  sanitizedBranch: string;
+  slug: string;
+  workspaceMeta: { flow: string; tier: string; task: string; run_id: string | null };
+}): ArchiveManifestEntry {
+  const {
+    archiveId,
+    archiveTargetPath,
+    archivedAt,
+    artifactTypes,
+    branch,
+    projectDir,
+    runSummaryGenerated,
+    sanitizedBranch,
+    slug,
+    workspaceMeta,
+  } = input;
+
   const manifestEntry: ArchiveManifestEntry = {
     archive_id: archiveId,
+    archive_path: archiveTargetPath,
+    archived_at: archivedAt,
+    artifact_types: artifactTypes,
     branch,
+    flow: workspaceMeta.flow,
+    has_run_summary: runSummaryGenerated,
     sanitized_branch: sanitizedBranch,
     slug,
-    flow: workspaceMeta.flow,
-    tier: workspaceMeta.tier,
-    task: workspaceMeta.task,
-    archived_at: archivedAt,
-    archive_path: archiveTargetPath,
-    artifact_types: artifactTypes,
-    has_run_summary: runSummaryGenerated,
     source_run_id: workspaceMeta.run_id,
+    task: workspaceMeta.task,
+    tier: workspaceMeta.tier,
   };
 
-  // Record manifest in drift.db (best-effort)
   try {
     getDriftDb(projectDir).appendArchiveManifest(manifestEntry);
   } catch {
     // Manifest write failure is non-fatal
   }
 
-  return {
-    archived: true,
-    archive_path: archiveTargetPath,
-    manifest_entry: manifestEntry,
-    run_summary_generated: runSummaryGenerated,
-  };
+  return manifestEntry;
 }
-
-// ---- Private helpers ----
 
 /**
  * Extract flow, tier, task, and run_id from the workspace's orchestration.db.
@@ -241,7 +314,7 @@ function extractWorkspaceMetadata(workspacePath: string): {
   task: string;
   run_id: string | null;
 } {
-  const defaults = { flow: "unknown", tier: "unknown", task: "unknown", run_id: null };
+  const defaults = { flow: "unknown", run_id: null, task: "unknown", tier: "unknown" };
   const dbPath = join(workspacePath, CANON_FILES.ORCHESTRATION_DB);
 
   if (!existsSync(dbPath)) {
@@ -252,9 +325,7 @@ function extractWorkspaceMetadata(workspacePath: string): {
   try {
     db = new Database(dbPath, { readonly: true });
     const row = db
-      .prepare(
-        "SELECT flow_name, tier, task, slug FROM execution WHERE id = 1 LIMIT 1",
-      )
+      .prepare("SELECT flow_name, tier, task, slug FROM execution WHERE id = 1 LIMIT 1")
       .get() as
       | {
           flow_name: string;
@@ -268,9 +339,9 @@ function extractWorkspaceMetadata(workspacePath: string): {
 
     return {
       flow: row.flow_name ?? "unknown",
-      tier: row.tier ?? "unknown",
-      task: row.task ?? "unknown",
       run_id: null, // run_id is not tracked in execution table directly
+      task: row.task ?? "unknown",
+      tier: row.tier ?? "unknown",
     };
   } catch {
     return defaults;

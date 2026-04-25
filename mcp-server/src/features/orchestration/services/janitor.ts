@@ -21,8 +21,8 @@
 
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { archiveWorkspace } from "@features/history/services/archive-service.ts";
+import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { type JanitorConfig, loadJanitorConfig } from "@shared/lib/config.ts";
 import {
@@ -227,79 +227,47 @@ function pruneWorktreesTask(projectDir: string): JanitorTaskResult {
  *
  * @returns JanitorTaskResult with count of pruned slugs in detail on success
  */
+type PruneContext = {
+  projectDir: string;
+  abandonedMaxAgeMs: number;
+  now: number;
+};
+
 async function pruneWorkspacesTask(
   projectDir: string,
   canonDir: string,
   config: JanitorConfig,
 ): Promise<JanitorTaskResult> {
-  // If no abandoned age threshold is set, there is nothing to do.
   if (config.max_abandoned_workspace_age_hours === null) {
     return { detail: "max_abandoned_workspace_age_hours not configured", status: "skipped" };
   }
 
   const canonWorkspacesDir = join(canonDir, "workspaces");
-
   const branchEntries = listDir(canonWorkspacesDir);
   if (branchEntries === null) {
     return { detail: "no workspaces directory or empty", status: "skipped" };
   }
 
-  const abandonedMaxAgeMs = config.max_abandoned_workspace_age_hours * 60 * 60 * 1000;
-  const now = Date.now();
+  const ctx: PruneContext = {
+    abandonedMaxAgeMs: config.max_abandoned_workspace_age_hours * 60 * 60 * 1000,
+    now: Date.now(),
+    projectDir,
+  };
 
   let pruned = 0;
   const errors: string[] = [];
 
   for (const branchEntry of branchEntries) {
     const branchDir = join(canonWorkspacesDir, branchEntry);
-    const slugEntries = listDir(branchDir);
-    if (slugEntries === null) continue;
+    const candidates = findPruneCandidates(branchDir, branchEntry, ctx);
 
-    let prunedInBranch = 0;
-    for (const slug of slugEntries) {
-      const slugPath = join(branchDir, slug);
-
-      // Skip if active (has .lock file)
-      if (existsSync(join(slugPath, ".lock"))) continue;
-
-      // Skip if younger than the abandoned age threshold
-      let mtimeMs: number;
-      try {
-        mtimeMs = statSync(slugPath).mtimeMs;
-      } catch {
-        // If we can't stat it, skip conservatively
-        continue;
-      }
-      if (now - mtimeMs < abandonedMaxAgeMs) continue;
-
-      // Archive best-effort before deleting
-      try {
-        await archiveWorkspace({ workspacePath: slugPath, projectDir, branch: branchEntry, slug });
-      } catch {
-        // Non-fatal: archive failure is intentional best-effort
-      }
-
-      try {
-        rmSync(slugPath, { force: true, recursive: true });
-        pruned++;
-        prunedInBranch++;
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        errors.push(`${branchEntry}/${slug}: ${message}`);
-      }
+    for (const candidate of candidates) {
+      // biome-ignore lint/performance/noAwaitInLoops: sequential archive-then-delete per slug is intentional — parallel would race on filesystem
+      const removed = await archiveAndRemoveSlug(candidate, errors);
+      if (removed) pruned++;
     }
 
-    // Remove branch directory only if we pruned slugs from it and it is now empty
-    if (prunedInBranch > 0) {
-      const remaining = listDir(branchDir);
-      if (remaining !== null && remaining.length === 0) {
-        try {
-          rmSync(branchDir, { force: true, recursive: true });
-        } catch {
-          // Best-effort: empty dir removal failure is non-fatal
-        }
-      }
-    }
+    cleanupEmptyBranchDir(branchDir, candidates.length);
   }
 
   return buildPruneResult(
@@ -308,6 +276,76 @@ async function pruneWorkspacesTask(
     "workspace(s)",
     "no workspace slug directories eligible for pruning",
   );
+}
+
+type PruneCandidate = { slugPath: string; branchEntry: string; slug: string; projectDir: string };
+
+/**
+ * Scan a branch directory for workspace slugs eligible for pruning.
+ * A slug is eligible when it has no .lock file and is older than the abandoned age threshold.
+ */
+function findPruneCandidates(
+  branchDir: string,
+  branchEntry: string,
+  ctx: PruneContext,
+): PruneCandidate[] {
+  const slugEntries = listDir(branchDir);
+  if (slugEntries === null) return [];
+
+  const candidates: PruneCandidate[] = [];
+  for (const slug of slugEntries) {
+    const slugPath = join(branchDir, slug);
+    if (existsSync(join(slugPath, ".lock"))) continue;
+
+    let mtimeMs: number;
+    try {
+      mtimeMs = statSync(slugPath).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (ctx.now - mtimeMs < ctx.abandonedMaxAgeMs) continue;
+
+    candidates.push({ branchEntry, projectDir: ctx.projectDir, slug, slugPath });
+  }
+  return candidates;
+}
+
+/**
+ * Archive a workspace slug (best-effort) and then remove it.
+ * Returns true when the slug directory was successfully deleted.
+ */
+async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[]): Promise<boolean> {
+  const { slugPath, branchEntry, slug, projectDir } = candidate;
+
+  try {
+    await archiveWorkspace({ branch: branchEntry, projectDir, slug, workspacePath: slugPath });
+  } catch {
+    // Non-fatal: archive failure is intentional best-effort
+  }
+
+  try {
+    rmSync(slugPath, { force: true, recursive: true });
+    return true;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    errors.push(`${branchEntry}/${slug}: ${message}`);
+    return false;
+  }
+}
+
+/**
+ * Remove a branch directory when it is now empty after slug pruning.
+ */
+function cleanupEmptyBranchDir(branchDir: string, prunedInBranch: number): void {
+  if (prunedInBranch === 0) return;
+  const remaining = listDir(branchDir);
+  if (remaining !== null && remaining.length === 0) {
+    try {
+      rmSync(branchDir, { force: true, recursive: true });
+    } catch {
+      // Best-effort: empty dir removal failure is non-fatal
+    }
+  }
 }
 
 /**
@@ -385,8 +423,7 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
 
   // needs_prune is true when any prune task actually removed entries
   const needsPrune =
-    tasks.prune_worktrees?.status === "success" ||
-    tasks.prune_workspaces?.status === "success";
+    tasks.prune_worktrees?.status === "success" || tasks.prune_workspaces?.status === "success";
 
   return {
     gate_passed: true,

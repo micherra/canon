@@ -19,17 +19,17 @@ function makeArchiveEntry(overrides: Partial<ArchiveManifestEntry> = {}): Archiv
   const id = `arc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   return {
     archive_id: id,
+    archive_path: `/archives/${id}`,
+    archived_at: new Date().toISOString(),
+    artifact_types: ["plans", "decisions"],
     branch: "main",
+    flow: "feature",
+    has_run_summary: false,
     sanitized_branch: "main",
     slug: "my-feature",
-    flow: "feature",
-    tier: "standard",
-    task: "Implement X",
-    archived_at: new Date().toISOString(),
-    archive_path: `/archives/${id}`,
-    artifact_types: ["plans", "decisions"],
-    has_run_summary: false,
     source_run_id: null,
+    task: "Implement X",
+    tier: "standard",
     ...overrides,
   };
 }
@@ -174,10 +174,10 @@ describe("getArchiveManifests", () => {
 
   test("flow filter returns only matching entries", () => {
     store.appendArchiveManifest(
-      makeArchiveEntry({ archive_id: "arc_feat", flow: "feature", branch: "main" }),
+      makeArchiveEntry({ archive_id: "arc_feat", branch: "main", flow: "feature" }),
     );
     store.appendArchiveManifest(
-      makeArchiveEntry({ archive_id: "arc_fp", flow: "fast-path", branch: "main" }),
+      makeArchiveEntry({ archive_id: "arc_fp", branch: "main", flow: "fast-path" }),
     );
 
     const results = store.getArchiveManifests({ flow: "feature" });
@@ -314,17 +314,17 @@ describe("round-trip serialization", () => {
   test("all fields survive a full round-trip", () => {
     const entry: ArchiveManifestEntry = {
       archive_id: "arc_full",
+      archive_path: "/archives/2026/arc_full",
+      archived_at: "2026-04-24T10:00:00.000Z",
+      artifact_types: ["plans", "decisions"],
       branch: "feature/my-feature",
+      flow: "feature",
+      has_run_summary: true,
       sanitized_branch: "feature-my-feature",
       slug: "build-xyz",
-      flow: "feature",
-      tier: "complex",
-      task: "Add archive manifest",
-      archived_at: "2026-04-24T10:00:00.000Z",
-      archive_path: "/archives/2026/arc_full",
-      artifact_types: ["plans", "decisions"],
-      has_run_summary: true,
       source_run_id: "run_xyz789",
+      task: "Add archive manifest",
+      tier: "complex",
     };
     store.appendArchiveManifest(entry);
 

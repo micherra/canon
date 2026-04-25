@@ -168,7 +168,6 @@ const MIGRATIONS: Migration[] = [
     version: "2",
   },
   {
-    version: "3",
     up: (db) => {
       db.exec(`CREATE TABLE IF NOT EXISTS build_archives (
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -194,6 +193,7 @@ const MIGRATIONS: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_build_archives_flow ON build_archives(flow)`);
       db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
     },
+    version: "3",
   },
 ];
 

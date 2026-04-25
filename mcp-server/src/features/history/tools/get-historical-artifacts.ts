@@ -10,9 +10,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
-import { isPathContained } from "@shared/lib/worktree-guard.ts";
-import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { isPathContained } from "@shared/lib/worktree-guard.ts";
 import { z } from "zod";
 import type { HistoricalArtifact, HistoricalArtifactsResult } from "../history-types.ts";
 
@@ -20,7 +20,6 @@ import type { HistoricalArtifact, HistoricalArtifactsResult } from "../history-t
 const MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024;
 
 export const GetHistoricalArtifactsInputSchema = z.object({
-  project_dir: z.string().describe("Project root directory path"),
   archive_id: z.string().describe("Archive ID to retrieve artifacts from"),
   artifact_types: z
     .array(z.string())
@@ -32,6 +31,7 @@ export const GetHistoricalArtifactsInputSchema = z.object({
     .string()
     .optional()
     .describe("Optional filename substring filter (case-insensitive)"),
+  project_dir: z.string().describe("Project root directory path"),
 });
 
 export type GetHistoricalArtifactsInput = z.input<typeof GetHistoricalArtifactsInputSchema>;
@@ -58,11 +58,7 @@ export async function getHistoricalArtifacts(
   const archive = db.getArchiveById(archive_id);
 
   if (archive === null) {
-    return toolError(
-      "WORKSPACE_NOT_FOUND",
-      `No archive found with ID: ${archive_id}`,
-      false,
-    );
+    return toolError("WORKSPACE_NOT_FOUND", `No archive found with ID: ${archive_id}`, false);
   }
 
   const archivePath = archive.archive_path;
@@ -75,78 +71,8 @@ export async function getHistoricalArtifacts(
     );
   }
 
-  const artifacts: HistoricalArtifact[] = [];
-
-  // Determine which artifact types to read
   const typesToRead = artifact_types ?? getDefaultArtifactTypes(archivePath);
-
-  for (const artifactType of typesToRead) {
-    if (artifactType === "run-summary") {
-      // Special case: run-summary.json in the archive root
-      const summaryPath = join(archivePath, "run-summary.json");
-
-      // Path safety check
-      if (!isPathContained(archivePath, summaryPath)) {
-        // fail-closed: skip this artifact
-        continue;
-      }
-
-      if (!existsSync(summaryPath)) continue;
-
-      const artifact = readFileSafe(summaryPath, archivePath, file_pattern, "run-summary.json");
-      if (artifact !== null) artifacts.push(artifact);
-      continue;
-    }
-
-    // Subdirectory case
-    const subdirPath = join(archivePath, artifactType);
-
-    // Path safety: validate the subdir path is inside archivePath
-    if (!isPathContained(archivePath, subdirPath)) {
-      // fail-closed: skip this artifact type (path traversal attempt)
-      continue;
-    }
-
-    if (!existsSync(subdirPath)) continue;
-
-    let subdirStat: ReturnType<typeof statSync> | null = null;
-    try {
-      subdirStat = statSync(subdirPath);
-    } catch {
-      continue;
-    }
-
-    if (!subdirStat.isDirectory()) continue;
-
-    // Read all files in the subdir
-    let entries: string[];
-    try {
-      entries = readdirSync(subdirPath);
-    } catch {
-      continue;
-    }
-
-    for (const entry of entries) {
-      const filePath = join(subdirPath, entry);
-
-      // Path safety: validate the file path
-      if (!isPathContained(archivePath, filePath)) {
-        continue; // fail-closed
-      }
-
-      let fileStat: ReturnType<typeof statSync> | null = null;
-      try {
-        fileStat = statSync(filePath);
-      } catch {
-        continue;
-      }
-
-      if (!fileStat.isFile()) continue;
-
-      const artifact = readFileSafe(filePath, archivePath, file_pattern, entry);
-      if (artifact !== null) artifacts.push(artifact);
-    }
-  }
+  const artifacts = collectArtifacts(archivePath, typesToRead, file_pattern);
 
   return toolOk({
     archive_id,
@@ -156,6 +82,104 @@ export async function getHistoricalArtifacts(
 }
 
 // ---- Private helpers ----
+
+/**
+ * Collect all artifacts from the archive for the requested artifact types.
+ * Handles the "run-summary" special case and the general subdirectory case.
+ */
+function collectArtifacts(
+  archivePath: string,
+  typesToRead: string[],
+  filePattern: string | undefined,
+): HistoricalArtifact[] {
+  const artifacts: HistoricalArtifact[] = [];
+
+  for (const artifactType of typesToRead) {
+    if (artifactType === "run-summary") {
+      const artifact = readRunSummaryArtifact(archivePath, filePattern);
+      if (artifact !== null) artifacts.push(artifact);
+    } else {
+      const subdirArtifacts = readArtifactsFromSubdir(archivePath, artifactType, filePattern);
+      for (const a of subdirArtifacts) artifacts.push(a);
+    }
+  }
+
+  return artifacts;
+}
+
+/**
+ * Read the run-summary.json from the archive root.
+ * Returns null when the file does not exist or fails path safety check.
+ */
+function readRunSummaryArtifact(
+  archivePath: string,
+  filePattern: string | undefined,
+): HistoricalArtifact | null {
+  const summaryPath = join(archivePath, "run-summary.json");
+  if (!isPathContained(archivePath, summaryPath)) return null; // fail-closed
+  if (!existsSync(summaryPath)) return null;
+  return readFileSafe(summaryPath, archivePath, filePattern, "run-summary.json");
+}
+
+/**
+ * Read all files from a single artifact subdirectory.
+ * Skips the subdir on path traversal, non-existence, or non-directory.
+ */
+function readArtifactsFromSubdir(
+  archivePath: string,
+  artifactType: string,
+  filePattern: string | undefined,
+): HistoricalArtifact[] {
+  const subdirPath = join(archivePath, artifactType);
+  if (!isPathContained(archivePath, subdirPath)) return []; // fail-closed: path traversal
+  if (!existsSync(subdirPath)) return [];
+
+  let subdirStat: ReturnType<typeof statSync> | null = null;
+  try {
+    subdirStat = statSync(subdirPath);
+  } catch {
+    return [];
+  }
+  if (!subdirStat.isDirectory()) return [];
+
+  let entries: string[];
+  try {
+    entries = readdirSync(subdirPath);
+  } catch {
+    return [];
+  }
+
+  const artifacts: HistoricalArtifact[] = [];
+  for (const entry of entries) {
+    const artifact = readSubdirEntry(archivePath, subdirPath, entry, filePattern);
+    if (artifact !== null) artifacts.push(artifact);
+  }
+  return artifacts;
+}
+
+/**
+ * Read a single file entry from a subdirectory.
+ * Returns null on path safety failure, non-file, or read error.
+ */
+function readSubdirEntry(
+  archivePath: string,
+  subdirPath: string,
+  entry: string,
+  filePattern: string | undefined,
+): HistoricalArtifact | null {
+  const filePath = join(subdirPath, entry);
+  if (!isPathContained(archivePath, filePath)) return null; // fail-closed
+
+  let fileStat: ReturnType<typeof statSync> | null = null;
+  try {
+    fileStat = statSync(filePath);
+  } catch {
+    return null;
+  }
+  if (!fileStat.isFile()) return null;
+
+  return readFileSafe(filePath, archivePath, filePattern, entry);
+}
 
 /**
  * List subdirectory names (artifact types) present in the archive directory.
@@ -197,10 +221,7 @@ function readFileSafe(
   entryName: string,
 ): HistoricalArtifact | null {
   // Apply file_pattern filter
-  if (
-    filePattern !== undefined &&
-    !entryName.toLowerCase().includes(filePattern.toLowerCase())
-  ) {
+  if (filePattern !== undefined && !entryName.toLowerCase().includes(filePattern.toLowerCase())) {
     return null;
   }
 

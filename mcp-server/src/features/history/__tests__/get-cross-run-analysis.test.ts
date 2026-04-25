@@ -6,27 +6,26 @@
  * getDriftDb is mocked; real tmp directories for file I/O.
  */
 
+import { randomBytes } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { ArchiveManifestEntry } from "../../../platform/storage/drift/drift-analytics-types.ts";
 import type { RunSummary } from "../history-types.ts";
 
 // ---- Mock getDriftDb ----
 
-const mockGetArchiveManifests = vi.fn<
-  (filter?: { branch?: string; flow?: string; limit?: number }) => ArchiveManifestEntry[]
->();
+const mockGetArchiveManifests =
+  vi.fn<(filter?: { branch?: string; flow?: string; limit?: number }) => ArchiveManifestEntry[]>();
 const mockGetReviews = vi.fn(() => []);
 const mockGetAllFlowRuns = vi.fn(() => []);
 
 vi.mock("@platform/storage/drift/drift-db.ts", () => ({
   getDriftDb: vi.fn(() => ({
+    getAllFlowRuns: mockGetAllFlowRuns,
     getArchiveManifests: mockGetArchiveManifests,
     getReviews: mockGetReviews,
-    getAllFlowRuns: mockGetAllFlowRuns,
   })),
 }));
 
@@ -50,44 +49,41 @@ function makeArchiveEntry(
 ): ArchiveManifestEntry {
   return {
     archive_id: `arch_${slug}`,
+    archive_path: archivePath,
+    archived_at: "2026-04-24T10:00:00.000Z",
+    artifact_types: ["plans"],
     branch: "feat/test",
+    flow: "feature",
+    has_run_summary: hasSummary,
     sanitized_branch: "feat--test",
     slug,
-    flow: "feature",
-    tier: "feature",
-    task: "test task",
-    archived_at: "2026-04-24T10:00:00.000Z",
-    archive_path: archivePath,
-    artifact_types: ["plans"],
-    has_run_summary: hasSummary,
     source_run_id: null,
+    task: "test task",
+    tier: "feature",
     ...overrides,
   };
 }
 
-function makeRunSummary(
-  archiveId: string,
-  overrides: Partial<RunSummary> = {},
-): RunSummary {
+function makeRunSummary(archiveId: string, overrides: Partial<RunSummary> = {}): RunSummary {
   return {
-    version: 1,
     archive_id: archiveId,
+    artifact_inventory: { directories: [], files: [], total_files: 0 },
+    decision_summaries: [],
+    planner_context: null,
+    review_results: [],
     run_metadata: {
-      branch: "feat/test",
-      slug: archiveId,
-      flow: "feature",
-      tier: "feature",
-      task: "test task",
-      started_at: "2026-04-24T09:00:00.000Z",
-      completed_at: "2026-04-24T10:00:00.000Z",
       archived_at: "2026-04-24T10:00:00.000Z",
+      branch: "feat/test",
+      completed_at: "2026-04-24T10:00:00.000Z",
+      flow: "feature",
+      slug: archiveId,
+      started_at: "2026-04-24T09:00:00.000Z",
+      task: "test task",
+      tier: "feature",
       total_duration_ms: 3600000,
     },
-    planner_context: null,
     step_outcomes: [],
-    review_results: [],
-    decision_summaries: [],
-    artifact_inventory: { directories: [], files: [], total_files: 0 },
+    version: 1,
     ...overrides,
   };
 }
@@ -128,22 +124,26 @@ describe("getCrossRunAnalysis", () => {
     const summary1 = makeRunSummary("arch_run-001", {
       review_results: [
         {
-          verdict: "needs-revision",
           files_reviewed: 3,
-          principles_checked: 5,
-          violations: [{ principle_id: "fail-closed", severity: "rule", file_path: "src/foo.ts", message: "" }],
           honored: [],
+          principles_checked: 5,
+          verdict: "needs-revision",
+          violations: [
+            { file_path: "src/foo.ts", message: "", principle_id: "fail-closed", severity: "rule" },
+          ],
         },
       ],
     });
     const summary2 = makeRunSummary("arch_run-002", {
       review_results: [
         {
-          verdict: "needs-revision",
           files_reviewed: 2,
-          principles_checked: 5,
-          violations: [{ principle_id: "fail-closed", severity: "rule", file_path: "src/bar.ts", message: "" }],
           honored: [],
+          principles_checked: 5,
+          verdict: "needs-revision",
+          violations: [
+            { file_path: "src/bar.ts", message: "", principle_id: "fail-closed", severity: "rule" },
+          ],
         },
       ],
     });
@@ -170,12 +170,12 @@ describe("getCrossRunAnalysis", () => {
     const archivePath1 = makeArchivePath("run-planner-001");
     const summary1 = makeRunSummary("arch_run-planner-001", {
       planner_context: {
-        outcome: "implement feature",
-        effort_estimate: "medium",
-        value_estimate: "high",
         assumptions: ["Tests pass", "No regressions"],
+        effort_estimate: "medium",
+        outcome: "implement feature",
         recommended_approach: "use existing patterns",
         runbook_steps: [],
+        value_estimate: "high",
       },
     });
     writeFileSync(join(archivePath1, "run-summary.json"), JSON.stringify(summary1));
@@ -212,8 +212,12 @@ describe("getCrossRunAnalysis", () => {
     writeFileSync(join(archivePathNew, "run-summary.json"), JSON.stringify(newSummary));
 
     mockGetArchiveManifests.mockReturnValue([
-      makeArchiveEntry("run-old", archivePathOld, true, { archived_at: "2026-01-01T00:00:00.000Z" }),
-      makeArchiveEntry("run-new", archivePathNew, true, { archived_at: "2026-04-24T10:00:00.000Z" }),
+      makeArchiveEntry("run-old", archivePathOld, true, {
+        archived_at: "2026-01-01T00:00:00.000Z",
+      }),
+      makeArchiveEntry("run-new", archivePathNew, true, {
+        archived_at: "2026-04-24T10:00:00.000Z",
+      }),
     ]);
 
     const result = await getCrossRunAnalysis({
@@ -231,14 +235,14 @@ describe("getCrossRunAnalysis", () => {
     const archivePath1 = makeArchivePath("run-window");
     const summary = makeRunSummary("arch_run-window", {
       run_metadata: {
-        branch: "feat/test",
-        slug: "run-window",
-        flow: "feature",
-        tier: "feature",
-        task: "test",
-        started_at: "2026-04-20T08:00:00.000Z",
-        completed_at: "2026-04-20T12:00:00.000Z",
         archived_at: "2026-04-20T12:05:00.000Z",
+        branch: "feat/test",
+        completed_at: "2026-04-20T12:00:00.000Z",
+        flow: "feature",
+        slug: "run-window",
+        started_at: "2026-04-20T08:00:00.000Z",
+        task: "test",
+        tier: "feature",
         total_duration_ms: 14400000,
       },
     });
@@ -276,9 +280,7 @@ describe("getCrossRunAnalysis", () => {
     writeFileSync(join(archivePath1, "run-summary.json"), JSON.stringify(summary));
 
     // Mark has_run_summary as false even though file exists
-    mockGetArchiveManifests.mockReturnValue([
-      makeArchiveEntry("run-no-flag", archivePath1, false),
-    ]);
+    mockGetArchiveManifests.mockReturnValue([makeArchiveEntry("run-no-flag", archivePath1, false)]);
 
     const result = await getCrossRunAnalysis({ project_dir: "/tmp/proj" });
 

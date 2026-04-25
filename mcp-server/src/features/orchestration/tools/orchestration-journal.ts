@@ -30,8 +30,8 @@
 import { existsSync, globSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { archiveWorkspace } from "@features/history/services/archive-service.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import { archiveWorkspace } from "@features/history/services/archive-service.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -322,7 +322,12 @@ export async function verifyCompletion(
       const session = getExecutionStore(workspace).getSession();
       const branch = session?.branch ?? "unknown";
       const slug = session?.slug ?? basename(workspace);
-      await archiveWorkspace({ workspacePath: workspace, projectDir: resolveProjectDir(), branch, slug });
+      await archiveWorkspace({
+        branch,
+        projectDir: resolveProjectDir(),
+        slug,
+        workspacePath: workspace,
+      });
       workspaceArchived = true;
     } catch {
       // Best-effort: archive failure does not block completion
@@ -348,7 +353,9 @@ export async function verifyCompletion(
     steps_logged: steps.length,
     steps_missing: stepsMissing,
     steps_skipped: stepsSkipped,
-    ...(complete ? { workspace_archived: workspaceArchived, workspace_deleted: workspaceDeleted } : {}),
+    ...(complete
+      ? { workspace_archived: workspaceArchived, workspace_deleted: workspaceDeleted }
+      : {}),
   });
 }
 

@@ -7,13 +7,12 @@
  */
 
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
-import { toolOk } from "@shared/lib/tool-result.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 import type { BuildHistoryResult } from "../history-types.ts";
 
 export const GetBuildHistoryInputSchema = z.object({
-  project_dir: z.string().describe("Project root directory path"),
   branch: z.string().optional().describe("Filter by branch name"),
   flow: z.string().optional().describe("Filter by flow name"),
   limit: z
@@ -23,6 +22,7 @@ export const GetBuildHistoryInputSchema = z.object({
     .optional()
     .default(20)
     .describe("Max entries to return (default 20)"),
+  project_dir: z.string().describe("Project root directory path"),
 });
 
 export type GetBuildHistoryInput = z.input<typeof GetBuildHistoryInputSchema>;

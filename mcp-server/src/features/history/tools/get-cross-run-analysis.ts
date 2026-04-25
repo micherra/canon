@@ -9,18 +9,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
-import { toolOk } from "@shared/lib/tool-result.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 import type { CrossRunAnalysisResult, RunSummary } from "../history-types.ts";
 import { analyzeCrossRunPatterns } from "../services/cross-run-analyzer.ts";
 
 export const GetCrossRunAnalysisInputSchema = z.object({
-  project_dir: z.string().describe("Project root directory path"),
-  since: z
-    .string()
-    .optional()
-    .describe("ISO-8601 timestamp — only include runs archived after this time"),
   limit: z
     .number()
     .int()
@@ -28,6 +23,11 @@ export const GetCrossRunAnalysisInputSchema = z.object({
     .optional()
     .default(50)
     .describe("Max archive entries to analyze (default 50)"),
+  project_dir: z.string().describe("Project root directory path"),
+  since: z
+    .string()
+    .optional()
+    .describe("ISO-8601 timestamp — only include runs archived after this time"),
 });
 
 export type GetCrossRunAnalysisInput = z.input<typeof GetCrossRunAnalysisInputSchema>;
@@ -76,9 +76,7 @@ export async function getCrossRunAnalysis(
 
   // 4. Apply since filter if provided
   const filteredSummaries =
-    since !== undefined
-      ? summaries.filter((s) => s.run_metadata.archived_at >= since)
-      : summaries;
+    since !== undefined ? summaries.filter((s) => s.run_metadata.archived_at >= since) : summaries;
 
   // 5. Run cross-run analysis
   const result = analyzeCrossRunPatterns(db, filteredSummaries, { limit, since });
