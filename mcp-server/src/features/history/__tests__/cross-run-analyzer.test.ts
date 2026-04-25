@@ -2,7 +2,8 @@
  * Cross-run analyzer tests — pure computation over run summaries and drift.db data.
  *
  * Uses in-memory SQLite (:memory:) via DriftDb for isolation.
- * Tests cover each exported function independently, then the top-level integrator.
+ * All assertions go through analyzeCrossRunPatterns() and assert on the relevant
+ * sub-field of the returned CrossRunAnalysisResult.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -11,13 +12,7 @@ import { DriftDb } from "../../../platform/storage/drift/drift-db.ts";
 import { initDriftDb } from "../../../platform/storage/drift/drift-schema.ts";
 import type { ReviewEntry } from "../../../shared/schema.ts";
 import type { RunSummary } from "../history-types.ts";
-import {
-  analyzeCrossRunPatterns,
-  computeFixCyclePatterns,
-  findRecurringViolations,
-} from "../services/cross-run-analyzer.ts";
-
-// Note: computePerformanceTrends and analyzePlannerPatterns tests are in cross-run-analyzer-trends.test.ts
+import { analyzeCrossRunPatterns } from "../services/cross-run-analyzer.ts";
 
 // ---- Helpers ----
 
@@ -90,9 +85,9 @@ function makeRunSummary(overrides: Partial<RunSummary> = {}): RunSummary {
   };
 }
 
-// ---- findRecurringViolations ----
+// ---- recurring_violations ----
 
-describe("findRecurringViolations", () => {
+describe("analyzeCrossRunPatterns — recurring_violations", () => {
   let store: DriftDb;
   let db: ReturnType<typeof initDriftDb>;
 
@@ -105,8 +100,8 @@ describe("findRecurringViolations", () => {
   });
 
   test("returns empty array when no reviews/summaries exist", () => {
-    const result = findRecurringViolations([], store.getReviews());
-    expect(result).toEqual([]);
+    const result = analyzeCrossRunPatterns(store, []);
+    expect(result.recurring_violations).toEqual([]);
   });
 
   test("returns violations appearing in 2+ reviews, sorted by count DESC", () => {
@@ -139,13 +134,13 @@ describe("findRecurringViolations", () => {
       }),
     );
 
-    const result = findRecurringViolations([], store.getReviews());
+    const result = analyzeCrossRunPatterns(store, []);
 
-    expect(result).toHaveLength(2);
-    expect(result[0].principle_id).toBe("principle-a");
-    expect(result[0].occurrence_count).toBe(3);
-    expect(result[1].principle_id).toBe("principle-b");
-    expect(result[1].occurrence_count).toBe(2);
+    expect(result.recurring_violations).toHaveLength(2);
+    expect(result.recurring_violations[0].principle_id).toBe("principle-a");
+    expect(result.recurring_violations[0].occurrence_count).toBe(3);
+    expect(result.recurring_violations[1].principle_id).toBe("principle-b");
+    expect(result.recurring_violations[1].occurrence_count).toBe(2);
   });
 
   test("does not include violations appearing in only 1 review", () => {
@@ -157,8 +152,8 @@ describe("findRecurringViolations", () => {
       }),
     );
 
-    const result = findRecurringViolations([], store.getReviews());
-    expect(result).toHaveLength(0);
+    const result = analyzeCrossRunPatterns(store, []);
+    expect(result.recurring_violations).toHaveLength(0);
   });
 
   test("correctly aggregates affected_files across reviews", () => {
@@ -177,10 +172,10 @@ describe("findRecurringViolations", () => {
       }),
     );
 
-    const result = findRecurringViolations([], store.getReviews());
-    expect(result).toHaveLength(1);
-    expect(result[0].affected_files).toContain("src/foo.ts");
-    expect(result[0].affected_files).toContain("src/bar.ts");
+    const result = analyzeCrossRunPatterns(store, []);
+    expect(result.recurring_violations).toHaveLength(1);
+    expect(result.recurring_violations[0].affected_files).toContain("src/foo.ts");
+    expect(result.recurring_violations[0].affected_files).toContain("src/bar.ts");
   });
 
   test("combines violations from summaries and drift.db reviews", () => {
@@ -193,26 +188,49 @@ describe("findRecurringViolations", () => {
       }),
     );
 
-    // summary provides second occurrence
-    const summaryViolations = [
-      {
-        filePath: "src/baz.ts",
-        principleId: "principle-x",
-        reviewTimestamp: "2026-01-02T00:00:00.000Z",
-        severity: "strong-opinion",
-      },
+    // summary provides second occurrence via review_results
+    const summaries: RunSummary[] = [
+      makeRunSummary({
+        review_results: [
+          {
+            files_reviewed: 1,
+            honored: [],
+            principles_checked: 1,
+            verdict: "violations",
+            violations: [
+              {
+                file_path: "src/baz.ts",
+                message: "",
+                principle_id: "principle-x",
+                severity: "strong-opinion",
+              },
+            ],
+          },
+        ],
+        run_metadata: {
+          archived_at: "2026-01-02T00:00:00.000Z",
+          branch: "main",
+          completed_at: "2026-01-02T00:00:00.000Z",
+          flow: "feature",
+          slug: "test-slug",
+          started_at: "2026-01-02T00:00:00.000Z",
+          task: "T",
+          tier: "standard",
+          total_duration_ms: 60_000,
+        },
+      }),
     ];
 
-    const result = findRecurringViolations(summaryViolations, store.getReviews());
-    expect(result).toHaveLength(1);
-    expect(result[0].principle_id).toBe("principle-x");
-    expect(result[0].occurrence_count).toBe(2);
+    const result = analyzeCrossRunPatterns(store, summaries);
+    expect(result.recurring_violations).toHaveLength(1);
+    expect(result.recurring_violations[0].principle_id).toBe("principle-x");
+    expect(result.recurring_violations[0].occurrence_count).toBe(2);
   });
 });
 
-// ---- computeFixCyclePatterns ----
+// ---- fix_cycle_patterns ----
 
-describe("computeFixCyclePatterns", () => {
+describe("analyzeCrossRunPatterns — fix_cycle_patterns", () => {
   let store: DriftDb;
   let db: ReturnType<typeof initDriftDb>;
 
@@ -234,8 +252,8 @@ describe("computeFixCyclePatterns", () => {
       }),
     );
 
-    const result = computeFixCyclePatterns([], store.getReviews());
-    expect(result).toEqual([]);
+    const result = analyzeCrossRunPatterns(store, []);
+    expect(result.fix_cycle_patterns).toEqual([]);
   });
 
   test("calculates correct recurrence_rate for a violation that reappears", () => {
@@ -265,12 +283,12 @@ describe("computeFixCyclePatterns", () => {
       }),
     );
 
-    const result = computeFixCyclePatterns([], store.getReviews());
-    expect(result).toHaveLength(1);
-    expect(result[0].principle_id).toBe("recur");
+    const result = analyzeCrossRunPatterns(store, []);
+    expect(result.fix_cycle_patterns).toHaveLength(1);
+    expect(result.fix_cycle_patterns[0].principle_id).toBe("recur");
     // 1 fix, 1 reappearance → recurrence_rate = 1/1 = 1
-    expect(result[0].recurrence_rate).toBe(1);
-    expect(result[0].fix_count).toBe(1);
+    expect(result.fix_cycle_patterns[0].recurrence_rate).toBe(1);
+    expect(result.fix_cycle_patterns[0].fix_count).toBe(1);
   });
 });
 

@@ -2,8 +2,8 @@
  * Run Summary Builder Tests
  *
  * Tests extraction of structured data from workspace files for run summary generation.
- * Uses tmp directories to simulate workspace state. All extraction functions are
- * pure in terms of side effects — they read files and return data.
+ * Uses tmp directories to simulate workspace state. All assertions go through
+ * buildRunSummary() and assert on the relevant field of the returned RunSummary.
  */
 
 import { randomBytes } from "node:crypto";
@@ -11,14 +11,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import {
-  buildArtifactInventory,
-  buildRunSummary,
-  extractDecisionSummaries,
-  extractPlannerContext,
-  extractReviewResults,
-  extractStepOutcomes,
-} from "../services/run-summary-builder.ts";
+import { buildRunSummary } from "../services/run-summary-builder.ts";
 
 // ---- Helpers ----
 
@@ -36,12 +29,30 @@ function writeText(dir: string, filename: string, content: string): void {
   writeFileSync(join(dir, filename), content, "utf-8");
 }
 
-// ---- extractPlannerContext ----
+const DEFAULT_SLUG = "test-slug";
+const DEFAULT_METADATA = {
+  archivedAt: "2026-04-24T12:00:00.000Z",
+  branch: "main",
+  flow: "feature",
+  task: "Test task",
+  tier: "standard",
+};
 
-describe("extractPlannerContext", () => {
+function callBuildRunSummary(workspacePath: string, slug = DEFAULT_SLUG) {
+  return buildRunSummary({
+    archiveId: "arch_test",
+    metadata: DEFAULT_METADATA,
+    slug,
+    workspacePath,
+  });
+}
+
+// ---- planner_context ----
+
+describe("buildRunSummary — planner_context", () => {
   let tmpDir: string;
   let plansDir: string;
-  const slug = "test-slug";
+  const slug = DEFAULT_SLUG;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -54,8 +65,8 @@ describe("extractPlannerContext", () => {
   });
 
   test("returns null when no planner files exist", () => {
-    const result = extractPlannerContext(plansDir, slug);
-    expect(result).toBeNull();
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.planner_context).toBeNull();
   });
 
   test("extracts outcome, effort, value, assumptions from planning-brief.md", () => {
@@ -81,17 +92,17 @@ Use the existing pattern from the orchestration module.
 `;
     writeText(join(plansDir, slug), "planning-brief.md", brief);
 
-    const result = extractPlannerContext(plansDir, slug);
-    expect(result).not.toBeNull();
-    expect(result?.outcome).toBe("approve");
-    expect(result?.effort_estimate).toBe("medium");
-    expect(result?.value_estimate).toBe("high");
-    expect(result?.assumptions).toEqual([
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.planner_context).not.toBeNull();
+    expect(result.planner_context?.outcome).toBe("approve");
+    expect(result.planner_context?.effort_estimate).toBe("medium");
+    expect(result.planner_context?.value_estimate).toBe("high");
+    expect(result.planner_context?.assumptions).toEqual([
       "The service already exists",
       "Tests are in place",
       "No breaking API changes needed",
     ]);
-    expect(result?.recommended_approach).toBe(
+    expect(result.planner_context?.recommended_approach).toBe(
       "Use the existing pattern from the orchestration module.",
     );
   });
@@ -117,12 +128,21 @@ agent: reviewer
 `;
     writeText(join(plansDir, slug), "runbook.md", runbook);
 
-    const result = extractPlannerContext(plansDir, slug);
-    expect(result).not.toBeNull();
-    expect(result?.runbook_steps).toHaveLength(3);
-    expect(result?.runbook_steps[0]).toMatchObject({ agent: "researcher", step_id: "research" });
-    expect(result?.runbook_steps[1]).toMatchObject({ agent: "implementor", step_id: "implement" });
-    expect(result?.runbook_steps[2]).toMatchObject({ agent: "reviewer", step_id: "review" });
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.planner_context).not.toBeNull();
+    expect(result.planner_context?.runbook_steps).toHaveLength(3);
+    expect(result.planner_context?.runbook_steps[0]).toMatchObject({
+      agent: "researcher",
+      step_id: "research",
+    });
+    expect(result.planner_context?.runbook_steps[1]).toMatchObject({
+      agent: "implementor",
+      step_id: "implement",
+    });
+    expect(result.planner_context?.runbook_steps[2]).toMatchObject({
+      agent: "reviewer",
+      step_id: "review",
+    });
   });
 
   test("handles malformed planning-brief.md gracefully", () => {
@@ -133,38 +153,38 @@ without any markers
     writeText(join(plansDir, slug), "planning-brief.md", malformed);
 
     // Should not throw — returns partial data
-    const result = extractPlannerContext(plansDir, slug);
-    expect(result).not.toBeNull();
-    expect(result?.outcome).toBe("");
-    expect(result?.effort_estimate).toBe("");
-    expect(result?.value_estimate).toBe("");
-    expect(result?.assumptions).toEqual([]);
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.planner_context).not.toBeNull();
+    expect(result.planner_context?.outcome).toBe("");
+    expect(result.planner_context?.effort_estimate).toBe("");
+    expect(result.planner_context?.value_estimate).toBe("");
+    expect(result.planner_context?.assumptions).toEqual([]);
   });
 
   test("returns partial data when only planning-brief.md exists", () => {
     const brief = `**Outcome**: approve\n**Effort estimate**: small\n**Value estimate**: medium\n`;
     writeText(join(plansDir, slug), "planning-brief.md", brief);
 
-    const result = extractPlannerContext(plansDir, slug);
-    expect(result).not.toBeNull();
-    expect(result?.outcome).toBe("approve");
-    expect(result?.runbook_steps).toEqual([]);
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.planner_context).not.toBeNull();
+    expect(result.planner_context?.outcome).toBe("approve");
+    expect(result.planner_context?.runbook_steps).toEqual([]);
   });
 
   test("returns partial data when only runbook.md exists", () => {
     const runbook = `### Step 1: research\nagent: researcher\n`;
     writeText(join(plansDir, slug), "runbook.md", runbook);
 
-    const result = extractPlannerContext(plansDir, slug);
-    expect(result).not.toBeNull();
-    expect(result?.runbook_steps).toHaveLength(1);
-    expect(result?.outcome).toBe("");
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.planner_context).not.toBeNull();
+    expect(result.planner_context?.runbook_steps).toHaveLength(1);
+    expect(result.planner_context?.outcome).toBe("");
   });
 });
 
-// ---- extractStepOutcomes ----
+// ---- step_outcomes ----
 
-describe("extractStepOutcomes", () => {
+describe("buildRunSummary — step_outcomes", () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -176,8 +196,8 @@ describe("extractStepOutcomes", () => {
   });
 
   test("returns empty array when journal.json missing", () => {
-    const result = extractStepOutcomes(tmpDir);
-    expect(result).toEqual([]);
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.step_outcomes).toEqual([]);
   });
 
   test("extracts step data with correct duration calculations", () => {
@@ -203,13 +223,13 @@ describe("extractStepOutcomes", () => {
     };
     writeJson(tmpDir, "journal.json", journal);
 
-    const result = extractStepOutcomes(tmpDir);
-    expect(result).toHaveLength(2);
-    expect(result[0].step_id).toBe("research");
-    expect(result[0].agent_type).toBe("researcher");
-    expect(result[0].status).toBe("completed");
-    expect(result[0].duration_ms).toBe(5 * 60 * 1000); // 5 minutes
-    expect(result[1].duration_ms).toBe(25 * 60 * 1000); // 25 minutes
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.step_outcomes).toHaveLength(2);
+    expect(result.step_outcomes[0].step_id).toBe("research");
+    expect(result.step_outcomes[0].agent_type).toBe("researcher");
+    expect(result.step_outcomes[0].status).toBe("completed");
+    expect(result.step_outcomes[0].duration_ms).toBe(5 * 60 * 1000); // 5 minutes
+    expect(result.step_outcomes[1].duration_ms).toBe(25 * 60 * 1000); // 25 minutes
   });
 
   test("handles incomplete journal entries (missing timestamps)", () => {
@@ -233,24 +253,24 @@ describe("extractStepOutcomes", () => {
     };
     writeJson(tmpDir, "journal.json", journal);
 
-    const result = extractStepOutcomes(tmpDir);
-    expect(result).toHaveLength(2);
-    expect(result[0].duration_ms).toBeNull();
-    expect(result[1].started_at).toBeNull();
-    expect(result[1].completed_at).toBeNull();
-    expect(result[1].duration_ms).toBeNull();
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.step_outcomes).toHaveLength(2);
+    expect(result.step_outcomes[0].duration_ms).toBeNull();
+    expect(result.step_outcomes[1].started_at).toBeNull();
+    expect(result.step_outcomes[1].completed_at).toBeNull();
+    expect(result.step_outcomes[1].duration_ms).toBeNull();
   });
 
   test("handles malformed journal.json gracefully", () => {
     writeFileSync(join(tmpDir, "journal.json"), "{ invalid json }", "utf-8");
-    const result = extractStepOutcomes(tmpDir);
-    expect(result).toEqual([]);
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.step_outcomes).toEqual([]);
   });
 });
 
-// ---- extractReviewResults ----
+// ---- review_results ----
 
-describe("extractReviewResults", () => {
+describe("buildRunSummary — review_results", () => {
   let tmpDir: string;
   let reviewsDir: string;
 
@@ -264,8 +284,8 @@ describe("extractReviewResults", () => {
   });
 
   test("returns empty array when reviews/ missing", () => {
-    const result = extractReviewResults(tmpDir);
-    expect(result).toEqual([]);
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.review_results).toEqual([]);
   });
 
   test("extracts verdict, violations, honored from REVIEW.md", () => {
@@ -289,15 +309,15 @@ principles-checked: 12
 `;
     writeText(reviewsDir, "REVIEW.md", reviewContent);
 
-    const result = extractReviewResults(tmpDir);
-    expect(result).toHaveLength(1);
-    expect(result[0].verdict).toBe("approved");
-    expect(result[0].files_reviewed).toBe(5);
-    expect(result[0].principles_checked).toBe(12);
-    expect(result[0].violations).toHaveLength(1);
-    expect(result[0].violations[0].principle_id).toBe("errors-are-values");
-    expect(result[0].honored).toContain("validate-at-trust-boundaries");
-    expect(result[0].honored).toContain("fail-closed-by-default");
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.review_results).toHaveLength(1);
+    expect(result.review_results[0].verdict).toBe("approved");
+    expect(result.review_results[0].files_reviewed).toBe(5);
+    expect(result.review_results[0].principles_checked).toBe(12);
+    expect(result.review_results[0].violations).toHaveLength(1);
+    expect(result.review_results[0].violations[0].principle_id).toBe("errors-are-values");
+    expect(result.review_results[0].honored).toContain("validate-at-trust-boundaries");
+    expect(result.review_results[0].honored).toContain("fail-closed-by-default");
   });
 
   test("handles 'No violations found.' as empty violations array", () => {
@@ -320,31 +340,31 @@ No violations found.
 `;
     writeText(reviewsDir, "REVIEW.md", reviewContent);
 
-    const result = extractReviewResults(tmpDir);
-    expect(result).toHaveLength(1);
-    expect(result[0].violations).toEqual([]);
-    expect(result[0].honored).toContain("bounded-context-boundaries");
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.review_results).toHaveLength(1);
+    expect(result.review_results[0].violations).toEqual([]);
+    expect(result.review_results[0].honored).toContain("bounded-context-boundaries");
   });
 
   test("returns empty array for non-.md files in reviews/", () => {
     mkdirSync(reviewsDir, { recursive: true });
     writeText(reviewsDir, "notes.txt", "some notes");
-    const result = extractReviewResults(tmpDir);
-    expect(result).toEqual([]);
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.review_results).toEqual([]);
   });
 
   test("handles malformed frontmatter gracefully", () => {
     mkdirSync(reviewsDir, { recursive: true });
     writeText(reviewsDir, "REVIEW.md", "no frontmatter here");
-    const result = extractReviewResults(tmpDir);
+    const result = callBuildRunSummary(tmpDir);
     // Should not throw — returns entry with defaults
-    expect(Array.isArray(result)).toBe(true);
+    expect(Array.isArray(result.review_results)).toBe(true);
   });
 });
 
-// ---- extractDecisionSummaries ----
+// ---- decision_summaries ----
 
-describe("extractDecisionSummaries", () => {
+describe("buildRunSummary — decision_summaries", () => {
   let tmpDir: string;
   let decisionsDir: string;
 
@@ -358,8 +378,8 @@ describe("extractDecisionSummaries", () => {
   });
 
   test("returns empty array when decisions/ missing", () => {
-    const result = extractDecisionSummaries(tmpDir);
-    expect(result).toEqual([]);
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.decision_summaries).toEqual([]);
   });
 
   test("extracts decision-id, title, chosen option, rationale snippet", () => {
@@ -382,13 +402,13 @@ File-based storage keeps archives as human-readable directories with no extra to
 `;
     writeText(decisionsDir, "history-01.md", decisionContent);
 
-    const result = extractDecisionSummaries(tmpDir);
-    expect(result).toHaveLength(1);
-    expect(result[0].decision_id).toBe("history-01");
-    expect(result[0].title).toBe("Archive storage strategy");
-    expect(result[0].chosen_option).toBe("file-based");
-    expect(result[0].rationale_snippet.length).toBeGreaterThan(0);
-    expect(result[0].rationale_snippet).toContain("File-based storage");
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.decision_summaries).toHaveLength(1);
+    expect(result.decision_summaries[0].decision_id).toBe("history-01");
+    expect(result.decision_summaries[0].title).toBe("Archive storage strategy");
+    expect(result.decision_summaries[0].chosen_option).toBe("file-based");
+    expect(result.decision_summaries[0].rationale_snippet.length).toBeGreaterThan(0);
+    expect(result.decision_summaries[0].rationale_snippet).toContain("File-based storage");
   });
 
   test("truncates rationale to ~200 chars", () => {
@@ -407,30 +427,30 @@ ${longRationale}
 `;
     writeText(decisionsDir, "long-01.md", decisionContent);
 
-    const result = extractDecisionSummaries(tmpDir);
-    expect(result).toHaveLength(1);
-    expect(result[0].rationale_snippet.length).toBeLessThanOrEqual(203); // ~200 + possible "..."
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.decision_summaries).toHaveLength(1);
+    expect(result.decision_summaries[0].rationale_snippet.length).toBeLessThanOrEqual(203); // ~200 + possible "..."
   });
 
   test("handles malformed decision files gracefully", () => {
     mkdirSync(decisionsDir, { recursive: true });
     writeText(decisionsDir, "bad.md", "no frontmatter at all\njust text");
     // Should not throw
-    const result = extractDecisionSummaries(tmpDir);
-    expect(Array.isArray(result)).toBe(true);
+    const result = callBuildRunSummary(tmpDir);
+    expect(Array.isArray(result.decision_summaries)).toBe(true);
   });
 
   test("ignores non-.md files", () => {
     mkdirSync(decisionsDir, { recursive: true });
     writeText(decisionsDir, "notes.txt", "some notes");
-    const result = extractDecisionSummaries(tmpDir);
-    expect(result).toEqual([]);
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.decision_summaries).toEqual([]);
   });
 });
 
-// ---- buildArtifactInventory ----
+// ---- artifact_inventory ----
 
-describe("buildArtifactInventory", () => {
+describe("buildRunSummary — artifact_inventory", () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -451,7 +471,8 @@ describe("buildArtifactInventory", () => {
     mkdirSync(decisionsDir, { recursive: true });
     writeText(decisionsDir, "decision-01.md", "decision");
 
-    const inventory = buildArtifactInventory(tmpDir);
+    const result = callBuildRunSummary(tmpDir);
+    const inventory = result.artifact_inventory;
     const plansEntry = inventory.directories.find((d) => d.name === "plans");
     const decisionsEntry = inventory.directories.find((d) => d.name === "decisions");
 
@@ -465,7 +486,8 @@ describe("buildArtifactInventory", () => {
     writeText(tmpDir, "journal.json", "{}");
     writeText(tmpDir, "context.md", "context");
 
-    const inventory = buildArtifactInventory(tmpDir);
+    const result = callBuildRunSummary(tmpDir);
+    const inventory = result.artifact_inventory;
     expect(inventory.files).toContain("journal.json");
     expect(inventory.files).toContain("context.md");
   });
@@ -476,12 +498,13 @@ describe("buildArtifactInventory", () => {
     writeText(plansDir, "PLAN.md", "content");
     writeText(tmpDir, "journal.json", "{}");
 
-    const inventory = buildArtifactInventory(tmpDir);
-    expect(inventory.total_files).toBe(2);
+    const result = callBuildRunSummary(tmpDir);
+    expect(result.artifact_inventory.total_files).toBe(2);
   });
 
   test("returns empty inventory when workspace is empty", () => {
-    const inventory = buildArtifactInventory(tmpDir);
+    const result = callBuildRunSummary(tmpDir);
+    const inventory = result.artifact_inventory;
     expect(inventory.directories).toEqual([]);
     expect(inventory.files).toEqual([]);
     expect(inventory.total_files).toBe(0);

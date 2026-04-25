@@ -226,7 +226,7 @@ function buildRecurringViolationResults(
   return result;
 }
 
-// ---- Exported pure functions ----
+// ---- Internal pure functions ----
 
 /**
  * Find violations that recur across multiple runs (occurrence_count >= 2).
@@ -234,11 +234,8 @@ function buildRecurringViolationResults(
  * Combines violations from run summaries and drift.db reviews.
  * Groups by principle_id, counts occurrences, and returns entries sorted
  * by occurrence_count descending.
- *
- * @param summaryViolations - Violations extracted from run summaries (see violationsFromSummaries)
- * @param driftReviews - All ReviewEntry records from drift.db (driftDb.getReviews())
  */
-export function findRecurringViolations(
+function findRecurringViolations(
   summaryViolations: NormalizedViolation[],
   driftReviews: ReviewEntry[],
 ): RecurringViolation[] {
@@ -259,7 +256,7 @@ export function findRecurringViolations(
  * @param summaryViolations - Violations from run summaries
  * @param driftReviews - All ReviewEntry records from drift.db
  */
-export function computeFixCyclePatterns(
+function computeFixCyclePatterns(
   summaryViolations: NormalizedViolation[],
   driftReviews: ReviewEntry[],
 ): FixCyclePattern[] {
@@ -297,7 +294,7 @@ export function computeFixCyclePatterns(
  * @param runs - Flow run entries from drift.db
  * @param limit - Optional cap on the number of data points per flow (most recent N kept)
  */
-export function computePerformanceTrends(
+function computePerformanceTrends(
   summaries: RunSummary[],
   runs: FlowRunEntry[],
   limit?: number,
@@ -414,7 +411,7 @@ function classifyTrend(flowPoints: DataPoint[], n: number): "improving" | "stabl
  *
  * @param summaries - Run summaries to analyze
  */
-export function analyzePlannerPatterns(summaries: RunSummary[]): PlannerPatternAnalysis {
+function analyzePlannerPatterns(summaries: RunSummary[]): PlannerPatternAnalysis {
   const withPlanner = summaries.filter((s) => s.planner_context !== null);
 
   if (withPlanner.length === 0) {

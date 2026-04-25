@@ -85,7 +85,7 @@ export function buildRunSummary(input: {
  * Extract planner context from planning-brief.md and runbook.md.
  * Returns null if neither file exists; partial data if only one exists.
  */
-export function extractPlannerContext(plansDir: string, slug: string): PlannerContext | null {
+function extractPlannerContext(plansDir: string, slug: string): PlannerContext | null {
   const briefPath = join(plansDir, slug, "planning-brief.md");
   const runbookPath = join(plansDir, slug, "runbook.md");
 
@@ -136,7 +136,7 @@ export function extractPlannerContext(plansDir: string, slug: string): PlannerCo
  * Extract step outcomes from journal.json.
  * Returns empty array when journal.json is missing or malformed.
  */
-export function extractStepOutcomes(workspacePath: string): StepOutcome[] {
+function extractStepOutcomes(workspacePath: string): StepOutcome[] {
   const journalPath = join(workspacePath, "journal.json");
   if (!existsSync(journalPath)) {
     return [];
@@ -162,7 +162,7 @@ export function extractStepOutcomes(workspacePath: string): StepOutcome[] {
  * Parses YAML frontmatter and violation/honored sections from .md files.
  * Returns empty array when reviews/ is missing.
  */
-export function extractReviewResults(workspacePath: string): ReviewResult[] {
+function extractReviewResults(workspacePath: string): ReviewResult[] {
   const reviewsDir = join(workspacePath, "reviews");
   if (!existsSync(reviewsDir)) {
     return [];
@@ -199,7 +199,7 @@ export function extractReviewResults(workspacePath: string): ReviewResult[] {
  * Parses YAML frontmatter and chosen option/rationale from .md files.
  * Returns empty array when decisions/ is missing.
  */
-export function extractDecisionSummaries(workspacePath: string): DecisionSummary[] {
+function extractDecisionSummaries(workspacePath: string): DecisionSummary[] {
   const decisionsDir = join(workspacePath, "decisions");
   if (!existsSync(decisionsDir)) {
     return [];
@@ -235,7 +235,7 @@ export function extractDecisionSummaries(workspacePath: string): DecisionSummary
  * Build artifact inventory — counts files per directory and lists top-level files.
  * Scans the workspace root for directories and files.
  */
-export function buildArtifactInventory(workspacePath: string): ArtifactInventory {
+function buildArtifactInventory(workspacePath: string): ArtifactInventory {
   const directories: { name: string; file_count: number }[] = [];
   const files: string[] = [];
 

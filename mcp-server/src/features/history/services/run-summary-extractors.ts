@@ -170,7 +170,7 @@ function parseRunbookLine(
   return { currentStep, emitPrevious: false };
 }
 
-export function finalizeStep(partial: Partial<RunbookStep>): RunbookStep {
+function finalizeStep(partial: Partial<RunbookStep>): RunbookStep {
   return {
     agent: partial.agent ?? "",
     step_id: partial.step_id ?? "",
@@ -251,7 +251,7 @@ export function parseDecisionFile(content: string): DecisionSummary | null {
  * Extract YAML frontmatter between --- delimiters.
  * Returns a parsed key/value object or null if no frontmatter found.
  */
-export function extractFrontmatter(content: string): Record<string, unknown> | null {
+function extractFrontmatter(content: string): Record<string, unknown> | null {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match?.[1]) return null;
 
@@ -277,7 +277,7 @@ export function extractFrontmatter(content: string): Record<string, unknown> | n
  * Extract violations from a "#### Violations" section in review content.
  * "No violations found." → empty array.
  */
-export function extractViolationsSection(content: string): ReviewViolation[] {
+function extractViolationsSection(content: string): ReviewViolation[] {
   const violations: ReviewViolation[] = [];
 
   const sectionMatch = content.match(/####\s+Violations\s*\n([\s\S]*?)(?=\n####|\n###|\n##|$)/);
@@ -314,7 +314,7 @@ export function extractViolationsSection(content: string): ReviewViolation[] {
 }
 
 /** Extract the trailing message from a violation line (after last —). */
-export function extractViolationMessage(line: string): string {
+function extractViolationMessage(line: string): string {
   const parts = line.split(/\s*[—–]\s*/);
   const last = parts[parts.length - 1]?.trim() ?? "";
   if (!last.startsWith("**")) return last;
@@ -325,7 +325,7 @@ export function extractViolationMessage(line: string): string {
  * Extract honored principles from "#### Honored" section.
  * Returns list of principle IDs (items starting with "- ").
  */
-export function extractHonoredSection(content: string): string[] {
+function extractHonoredSection(content: string): string[] {
   const honored: string[] = [];
 
   const sectionMatch = content.match(/####\s+Honored\s*\n([\s\S]*?)(?=\n####|\n###|\n##|$)/);
@@ -344,7 +344,7 @@ export function extractHonoredSection(content: string): string[] {
 /**
  * Extract the chosen option from "### Chosen: {option}" line.
  */
-export function extractChosenOption(content: string): string {
+function extractChosenOption(content: string): string {
   const match = content.match(/###\s+Chosen:\s*(.+)/);
   return match?.[1]?.trim() ?? "";
 }
@@ -353,7 +353,7 @@ export function extractChosenOption(content: string): string {
  * Extract and truncate rationale snippet from "### Rationale" section.
  * Truncates to ~200 characters.
  */
-export function extractRationaleSnippet(content: string): string {
+function extractRationaleSnippet(content: string): string {
   const sectionMatch = content.match(/###\s+Rationale\s*\n([\s\S]*?)(?=\n###|\n##|$)/);
   if (!sectionMatch?.[1]) return "";
 

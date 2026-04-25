@@ -43,7 +43,6 @@ export const CANON_FILES = {
   DRIFT_DB: "drift.db",
   HISTORY_DIR: "history",
   JANITOR_LASTRUN: "janitor.lastrun",
-  JANITOR_LOCK: "janitor.lock",
   KNOWLEDGE_DB: "knowledge-graph.db",
   ORCHESTRATION_DB: "orchestration.db",
 } as const;
