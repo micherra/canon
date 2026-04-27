@@ -71,7 +71,7 @@ const baseInput = {
 // New workspace: worktree creation
 
 describe("initWorkspaceFlow — worktree creation on new workspace", () => {
-  it("returns worktree_path pointing inside .canon/worktrees/{slug}", async () => {
+  it("returns worktree_path pointing inside {workspace}/worktree", async () => {
     const projectDir = makeTmpProjectDir();
     const baseCommit = initGitRepo(projectDir);
 
@@ -83,8 +83,10 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
 
     expect(result.created).toBe(true);
     expect(result.worktree_path).toBeDefined();
-    expect(result.worktree_path).toContain(".canon/worktrees/");
-    expect(result.worktree_path).toContain(result.slug);
+    // New path: {workspace}/worktree (not .canon/worktrees/{slug})
+    expect(result.worktree_path).toContain("/worktree");
+    expect(result.worktree_path).toContain(result.workspace);
+    expect(result.worktree_path).not.toContain(".canon/worktrees/");
   });
 
   it("returns worktree_branch matching canon/{slug}", async () => {
@@ -212,9 +214,8 @@ describe("initWorkspaceFlow — preflight skips worktree creation", () => {
     expect(result.preflight_issues).toBeDefined();
     expect(result.preflight_issues!.length).toBeGreaterThan(0);
 
-    // No worktree should exist
-    const worktreePath = join(projectDir, ".canon", "worktrees", result.slug);
-    expect(existsSync(worktreePath)).toBe(false);
+    // No worktree should exist at new path (preflight returns empty workspace path)
+    // When preflight fails, result.workspace is "" — so we just verify worktree_path is absent
     expect(result.worktree_path).toBeUndefined();
   });
 });
@@ -260,5 +261,109 @@ describe("initWorkspaceFlow — backward compat", () => {
     expect(typeof result.worktree_path === "string" || result.worktree_path === undefined).toBe(
       true,
     );
+  });
+});
+
+// New worktree path: {workspace}/worktree
+
+describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)", () => {
+  it("places worktree inside workspace directory, not .canon/worktrees/", async () => {
+    const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitRepo(projectDir);
+
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+
+    expect(result.created).toBe(true);
+    expect(result.worktree_path).toBeDefined();
+    // Must be inside the workspace directory
+    expect(result.worktree_path).toContain(result.workspace);
+    // Must end with /worktree
+    expect(result.worktree_path).toBe(join(result.workspace, "worktree"));
+    // Must NOT use old .canon/worktrees/ path
+    expect(result.worktree_path).not.toContain(".canon/worktrees/");
+  });
+
+  it("actually creates the worktree directory at {workspace}/worktree", async () => {
+    const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitRepo(projectDir);
+
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+
+    expect(result.worktree_path).toBeDefined();
+    expect(existsSync(result.worktree_path!)).toBe(true);
+    expect(result.worktree_path).toBe(join(result.workspace, "worktree"));
+  });
+
+  it("resume finds worktree at {workspace}/worktree (new location)", async () => {
+    const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitRepo(projectDir);
+
+    // Create workspace first
+    const first = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+    expect(first.created).toBe(true);
+    expect(first.worktree_path).toBe(join(first.workspace, "worktree"));
+
+    // Resume — should find the worktree at {workspace}/worktree
+    const second = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+    expect(second.created).toBe(false);
+    expect(second.worktree_path).toBeDefined();
+    expect(second.worktree_path).toBe(join(second.workspace, "worktree"));
+    expect(second.worktree_path).toBe(first.worktree_path);
+  });
+
+  it("resume falls back to .canon/worktrees/{slug} for old workspaces", async () => {
+    const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitRepo(projectDir);
+
+    // Create workspace at new location first, then simulate an "old" workspace
+    // by creating a worktree at the legacy path and pointing the session there
+    const first = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+    expect(first.created).toBe(true);
+
+    // Simulate old path: move the worktree from new to old location
+    // Remove new worktree and create one at the legacy path
+    const legacyPath = join(projectDir, ".canon", "worktrees", first.slug);
+    if (first.worktree_path && existsSync(first.worktree_path)) {
+      spawnSync("git", ["worktree", "remove", "--force", first.worktree_path], { cwd: projectDir });
+    }
+    // Create legacy worktree manually at old path
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(legacyPath, { recursive: true });
+    spawnSync("git", ["worktree", "add", "--detach", legacyPath, baseCommit], { cwd: projectDir });
+
+    // Clear the persisted worktree_path from the session (simulate old workspace with no persisted path)
+    const { getExecutionStore } = await import("@domains/workspaces/execution-store-cache.ts");
+    const store = getExecutionStore(first.workspace);
+    store.updateExecution({ worktree_path: null as unknown as string, worktree_branch: null as unknown as string });
+
+    // Resume — should fall back to legacy path
+    const second = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+    expect(second.created).toBe(false);
+    expect(second.worktree_path).toBeDefined();
+    expect(second.worktree_path).toBe(legacyPath);
   });
 });

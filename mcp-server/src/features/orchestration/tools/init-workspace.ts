@@ -196,8 +196,12 @@ function tryResumeWorkspace(
     const session = store.getSession();
     const board = store.getBoard();
     if (session && session.status === "active" && board) {
+      // Priority: persisted path → new {workspace}/worktree → legacy .canon/worktrees/{slug}
+      const newPath = join(candidateWorkspace, "worktree");
+      const legacyPath = join(projectDir, ".canon", "worktrees", session.slug);
       const worktreePath =
-        session.worktree_path ?? join(projectDir, ".canon", "worktrees", session.slug);
+        session.worktree_path ??
+        (existsSync(newPath) ? newPath : existsSync(legacyPath) ? legacyPath : newPath);
       const worktreeExists = existsSync(worktreePath);
       return {
         board,
@@ -344,7 +348,7 @@ async function buildCachePrefix(
 
 /** Options for creating and persisting a worktree. */
 type CreateWorktreeOptions = {
-  slug: string;
+  workspace: string;
   baseCommit: string;
   projectDir: string;
 };
@@ -360,8 +364,8 @@ function createAndPersistWorktree(
   session: Session,
   options: CreateWorktreeOptions,
 ): { worktree_path?: string; worktree_branch?: string } {
-  const { slug, baseCommit, projectDir } = options;
-  const worktreePath = join(projectDir, ".canon", "worktrees", slug);
+  const { workspace, baseCommit, projectDir } = options;
+  const worktreePath = join(workspace, "worktree");
   const worktreeBranch = session.worktree_branch ?? buildSessionBranchName(session);
   const wtResult = gitWorktreeAdd(worktreePath, projectDir, {
     baseCommit,
@@ -476,7 +480,7 @@ async function finalizeNewWorkspace(
   const worktreeInfo = createAndPersistWorktree(store, session, {
     baseCommit: input.base_commit,
     projectDir,
-    slug,
+    workspace,
   });
 
   return {
