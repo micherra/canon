@@ -7,9 +7,9 @@
 Pre/post tool-use interceptors that enforce policy and prevent mistakes without requiring agent compliance. Hooks run automatically on matched tool invocations.
 
 ## Architecture
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-26 -->
 
-`hooks.json` is the registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode) or `PostToolUse` (after Bash).
+`hooks.json` is the single registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode), `PostToolUse` (after Bash), `SessionStart`, or `SubagentStop`. The separate `canon-agent-teams/hooks.json` was merged into this file (2026-04-26); `canon-agent-teams/hooks.json` no longer exists.
 
 **Hook scripts:**
 
@@ -22,8 +22,13 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `large-file-guard.sh` | PreToolUse (Write/Edit) | Prevent accidental large file commits |
 | `principle-inject.sh` | PreToolUse (Write/Edit) | Inject principle summaries into prompts |
 | `plan-mode-guard.sh` | PreToolUse (EnterPlanMode) | Guard against unintended plan mode entry |
+| `canon-agent-teams/canon-workspace-check.sh` | PreToolUse (Edit/Write/Bash) | Block file edits when no active Canon workspace exists (L4 enforcement; no-op unless CANON_AGENT_TEAMS_MODE=on) |
 | `learn-nudge.sh` | PostToolUse (Bash) | Suggest principle creation/updates |
 | `compaction-check.sh` | PostToolUse (Bash) | Detect workspace file growth |
+| `canon-agent-teams/post-commit-trailers.sh` | PostToolUse (Bash) | Validate Canon commit trailers after each commit (no-op unless CANON_AGENT_TEAMS_MODE=on) |
+| `canon-agent-teams/session-start-doc-check.sh` | SessionStart | Nudge on stale documentation at session open (no-op unless CANON_AGENT_TEAMS_MODE=on) |
+| `canon-agent-teams/session-start-kg-check.sh` | SessionStart | Nudge on stale knowledge graph at session open (no-op unless CANON_AGENT_TEAMS_MODE=on) |
+| `canon-agent-teams/post-engineer-scribe.sh` | SubagentStop | Queue scribe sync after engineer subagent completes (no-op unless CANON_AGENT_TEAMS_MODE=on) |
 
 ## Conventions
 <!-- last-updated: 2026-04-09 -->

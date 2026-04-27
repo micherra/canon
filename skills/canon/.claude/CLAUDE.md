@@ -14,6 +14,27 @@ Claude Code skill definition that activates Canon when installed. This directory
 - `evals/` — Evaluation suite for testing Canon's intent classification and flow routing; contains `eval-set.json`, fixture data, and `run-evals.sh`
 - `references/` — Reference fragments injected into agent context at runtime; covers orchestrator protocol, principle loading, workspace logging, status protocol, and other cross-cutting concerns
 
+## Routing Contract
+<!-- last-updated: 2026-04-26 -->
+
+SKILL.md intent routing (authoritative; aligned to root CLAUDE.md as of 2026-04-26):
+
+| Intent | Action |
+|--------|--------|
+| build/fix/change | Drive flow state machine |
+| explore | Load `explore` flow → drive state machine |
+| test | Load `test-gap` flow |
+| review | Load `review-only` flow |
+| security | Load `security-audit` flow |
+| question | Respond directly |
+| chat / brainstorm | Respond directly |
+| greeting | Respond directly |
+| principle | Spawn `canon:writer` |
+| learn | Spawn `canon:learner` |
+| resume | Read `board.json` → resume state machine |
+
+**Removed agents (no longer referenced in SKILL.md):** `canon:chat`, `canon:guide`, `canon:implementor`, `canon:fixer`. **Removed escape hatch:** "Inline Mode" (Principle Loading outside a pipeline) was deleted.
+
 ## Conventions
 <!-- last-updated: 2026-04-09 -->
 
