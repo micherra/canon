@@ -50,9 +50,9 @@ describe("generateSlug", () => {
     expect(generateSlug("Fix bug #123!")).toBe("fix-bug-123");
   });
 
-  it("truncates to 40 characters", () => {
+  it("preserves long task names without truncation", () => {
     const long = "word ".repeat(20);
-    expect(generateSlug(long).length).toBeLessThanOrEqual(40);
+    expect(generateSlug(long)).toBe("word-" .repeat(19) + "word");
   });
 
   it("handles multiple spaces and hyphens", () => {
