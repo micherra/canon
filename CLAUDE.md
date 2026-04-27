@@ -209,6 +209,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 - After reviewer completes: call `store_pr_review` or `write_review`.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
+- After each agent spawn completes: call `capture_transcript({ workspace, step_id, agent_type, agent_id })` where `agent_id` comes from the Agent tool result. Pass the returned `transcript_path` to the `log_step` completion call. This is best-effort — capture failures do not block the flow.
 - Run contract-checker assertions via Bash when postconditions are declared.
 
 ### Completion Checklist
