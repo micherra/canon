@@ -9,9 +9,9 @@ read-by: [canon-orchestrator, architect, engineer]
 
 <!--
 DEPTH CALIBRATION — choose before writing:
-  Trivial  (1 runbook step)   -> one-sentence Problem Statement, one-line Recommended Approach, no Alternatives required, minimal Criteria.
-  Small    (3-4 step runbook) -> all 7 sections, at least one real Alternative + "Do nothing", explicit Criteria.
-  Complex  (multi-wave epic)  -> all 7 sections at full depth, multiple Alternatives, North-Star Criteria, risk-adjusted Value Assessment.
+  Trivial  (1 runbook step)   -> one-sentence Problem Statement, one-line Recommended Approach, no Alternatives required, minimal Criteria. Requirement Coverage Map: one row.
+  Small    (3-4 step runbook) -> all 8 sections, at least one real Alternative + "Do nothing", explicit Criteria, every requirement explicitly mapped.
+  Complex  (multi-wave epic)  -> all 8 sections at full depth, multiple Alternatives, North-Star Criteria, risk-adjusted Value Assessment, every requirement explicitly mapped.
 -->
 
 <!-- Outcome: GREENLIGHT | REDIRECT | OPEN_QUESTIONS -->
@@ -62,6 +62,28 @@ Trivial requests: one or two criteria maximum.
 Small features: explicit criteria covering happy path and key error cases.
 Complex epics: include a North-Star criterion (system-wide observable outcome) plus decomposed sub-criteria per wave or subsystem.
 If a criterion cannot be verified without user input, tag it in Open Questions instead.
+-->
+
+## Requirement Coverage Map
+
+Map each discrete requirement from the original request to its disposition in this brief. Every requirement the user stated or implied must appear in exactly one row. This section is the traceability contract — the orchestrator uses it to detect silent scope narrowing.
+
+| # | Requirement (from original request) | Disposition | Runbook step or rationale |
+|---|-------------------------------------|-------------|--------------------------|
+| 1 | {requirement extracted from request} | covered | {step ID or acceptance criterion that addresses it} |
+| 2 | {requirement} | descoped | {why — complexity, out of scope, deferred to follow-up} |
+| 3 | {requirement} | partial | {what is covered vs what is deferred} |
+
+<!--
+Disposition values:
+  covered  — fully addressed by the runbook's acceptance criteria and steps
+  descoped — deliberately excluded; rationale required
+  partial  — partially addressed; explain what is and isn't covered
+  
+If ALL requirements are "covered", the orchestrator proceeds silently to runbook approval.
+If ANY requirement is "descoped" or "partial", the orchestrator surfaces them to the user as an explicit HITL decision before approval.
+
+Trivial requests (single requirement): one row, disposition "covered". The section is still required but minimal.
 -->
 
 ## Alternatives Considered

@@ -22,7 +22,7 @@ This skill covers strategic analysis only. Do NOT do the following — they belo
 
 ## 1. Required Brief Sections
 
-Every planning brief must include all seven sections below. The output format follows `templates/planning-brief.md` (canonical path from project root). Write the brief to `${WORKSPACE}/plans/${slug}/planning-brief.md`.
+Every planning brief must include all eight sections below. The output format follows `templates/planning-brief.md` (canonical path from project root). Write the brief to `${WORKSPACE}/plans/${slug}/planning-brief.md`.
 
 ### 1.1 Problem Statement
 
@@ -58,7 +58,33 @@ Every planning brief must include all seven sections below. The output format fo
 
 **Example wording**: "- [ ] Filtering by date range returns only results within the specified window (integration test). - [ ] Invalid date input returns a 422 with a human-readable message. - [ ] Filter state persists across page reload."
 
-### 1.4 Alternatives Considered
+### 1.4 Requirement Coverage Map
+
+**Intent**: Create an explicit traceability contract between the user's original request and the runbook's scope. Every requirement the user stated or implied must be accounted for — silently dropping requirements is the failure mode this section prevents.
+
+**Quality bar**:
+- Extract each discrete requirement from the original request (stated and implied).
+- Assign exactly one disposition per requirement: `covered`, `descoped`, or `partial`.
+- For `covered`: cite the runbook step ID or acceptance criterion that addresses it.
+- For `descoped`: provide an explicit rationale (complexity, out of scope, deferred to follow-up).
+- For `partial`: explain what is covered vs what is deferred.
+- Every requirement must appear in exactly one row — no omissions, no duplicates.
+
+**Depth calibration**:
+- **Trivial**: one row, disposition `covered`. The section is still required but minimal.
+- **Small**: every requirement explicitly mapped; descoped or partial items require rationale.
+- **Complex**: every requirement explicitly mapped; descoped or partial items must be escalated as HITL decisions before the runbook is approved.
+
+**Disposition values**:
+- `covered` — fully addressed by the runbook's acceptance criteria and steps
+- `descoped` — deliberately excluded; rationale required
+- `partial` — partially addressed; explain what is and isn't covered
+
+**Orchestrator behavior**: If all requirements are `covered`, the orchestrator proceeds silently to runbook approval. If any requirement is `descoped` or `partial`, the orchestrator surfaces them to the user as an explicit HITL decision before approval — this prevents silent scope narrowing.
+
+**Example wording**: "| 1 | Support dark mode toggle | covered | implement step (task-1, AC-3) | | 2 | Persist preference across sessions | covered | implement step (task-2) | | 3 | Sync preference across devices | descoped | Out of scope for this brief — requires backend sync infrastructure; deferred to follow-up |"
+
+### 1.5 Alternatives Considered
 
 **Intent**: Ensure the recommended approach is the result of deliberate choice, not default.
 
@@ -70,7 +96,7 @@ Every planning brief must include all seven sections below. The output format fo
 
 **Example wording for Alternative C**: "Do nothing — users continue to filter manually post-export; churn risk increases as the dataset grows beyond ~5k rows."
 
-### 1.5 Recommended Approach
+### 1.6 Recommended Approach
 
 **Intent**: The planner's single recommended path, grounded in the alternatives analysis.
 
@@ -81,7 +107,7 @@ Every planning brief must include all seven sections below. The output format fo
 - Phrases the approach in terms of runbook steps from `references/runbook-vocabulary.md` so the synthesis skill can consume it directly. Example: "Recommended steps: `research` (codebase scope), `design` (API contract), `implement` (team dispatch, 2 tasks), `test`, `review`, `context-sync`, `learn`."
 - If the outcome is REDIRECT: state the redirect rationale explicitly and show how the redirected scope still satisfies the user's underlying need.
 
-### 1.6 Open Questions
+### 1.7 Open Questions
 
 **Intent**: Surface what cannot be resolved from the request alone — before the architect builds on a wrong assumption.
 
@@ -93,7 +119,7 @@ Every planning brief must include all seven sections below. The output format fo
 
 **Example wording**: "1. Should date-range filtering apply to all search result types or only document results? [user] — determines API scope. 2. Is timezone normalization required? [architect] — affects data model."
 
-### 1.7 Value Assessment
+### 1.8 Value Assessment
 
 **Intent**: Confirm the cost is proportional to the benefit before committing resources.
 
@@ -122,25 +148,28 @@ A request that resolves in a single runbook step (e.g., `fix` a specific bug, `c
 - **Open Questions**: include only if genuinely unresolved. Empty is correct when the request is fully specified.
 - **Acceptance Criteria**: one or two items maximum.
 - **Value Assessment**: one sentence.
+- **Requirement Coverage Map**: one row, disposition `covered`. The section is still required but minimal.
 
 ### Small feature (maps to a 3–4 step runbook)
 
 A request that requires research, implementation, and review (the standard fast-path or feature flow).
 
-- All seven sections required.
+- All eight sections required.
 - At least one real alternative plus "Do nothing".
 - Acceptance criteria are explicit and independently verifiable.
 - Recommended approach cites the runbook steps.
+- Requirement Coverage Map: every requirement explicitly mapped; descoped or partial items require rationale.
 
 ### Complex epic (maps to a multi-wave runbook)
 
 A request spanning multiple waves, multiple agents, or architectural change.
 
-- All seven sections required, with full depth.
+- All eight sections required, with full depth.
 - Multiple alternatives with honest tradeoffs.
 - North-Star-style acceptance criteria: a top-level observable outcome, plus decomposed sub-criteria per wave or subsystem.
 - Value assessment includes risk-adjusted estimate — what happens if the work runs long or scope expands?
 - Open Questions resolved before greenlight; unresolved questions block GREENLIGHT and produce OPEN_QUESTIONS outcome instead.
+- Requirement Coverage Map: every requirement explicitly mapped; any `descoped` or `partial` items are surfaced as an explicit HITL decision before the runbook is approved.
 
 ---
 
