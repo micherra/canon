@@ -20,7 +20,7 @@ Flow execution engine and all Canon orchestration MCP tools. This bounded contex
 | `consultation-executor.ts` | Consultation execution — runs before/after consultation prompts |
 
 **`tools/`** — MCP tool handlers. All handlers are thin wrappers calling services or engine functions.
-<!-- last-updated: 2026-04-23 -->
+<!-- last-updated: 2026-04-26 -->
 
 | Tool file | MCP tool name |
 |-----------|--------------|
@@ -43,6 +43,7 @@ Flow execution engine and all Canon orchestration MCP tools. This bounded contex
 | `simulate-flow.ts` | `simulate_flow` |
 | `get-spawn-prompt.ts` | `get_spawn_prompt` |
 | `get-transcript.ts` | `get_transcript` |
+| `capture-transcript.ts` | `capture_transcript` |
 | `write-design-brief.ts` | `write_design_brief` |
 | `write-implementation-summary.ts` | `write_implementation_summary` |
 | `write-research-synthesis.ts` | `write_research_synthesis` |
@@ -50,7 +51,7 @@ Flow execution engine and all Canon orchestration MCP tools. This bounded contex
 | `write-test-report.ts` | `write_test_report` |
 
 **`services/`** — Business logic backing tools and engine.
-<!-- last-updated: 2026-04-23 -->
+<!-- last-updated: 2026-04-26 -->
 
 | File | Responsibility |
 |------|---------------|
@@ -64,10 +65,11 @@ Flow execution engine and all Canon orchestration MCP tools. This bounded contex
 | `kg-context-formatter.ts` | Formats KG data for inclusion in agent prompts |
 | `learn-gate.ts` | Auto-learn gate evaluation at flow completion |
 | `scope-resolver.ts` | Resolves task scope from board state and flow definition |
+| `transcript-transformer.ts` | `transformClaudeCodeTranscript(entries)` — pure; converts CC JSONL entries to Canon `TranscriptEntry[]`; exports `ClaudeCodeEntry` type |
 | `wave-briefing.ts` | Assembles wave briefing payloads for parallel task agents |
 
 ## Contracts
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-26 -->
 Key tool functions (all return `ToolResult<T>` — see `@shared/lib/tool-result.ts`):
 
 - `driveFlow(input, pluginDir, projectDir?)` — advance flow state machine; returns `SpawnRequest | HitlBreakpoint | { action: "done" }`
@@ -79,6 +81,8 @@ Key tool functions (all return `ToolResult<T>` — see `@shared/lib/tool-result.
 - `postMessage(input)` / `getMessages(input)` — unified workspace channel messaging
 - `resolveWaveEvent(input)` — apply or reject a pending wave event
 - `resolveAfterConsultations(input)` — resolve after-consultation prompts for a state
+- `captureTranscript(input: CaptureTranscriptInput)` → `Promise<ToolResult<CaptureTranscriptResult>>` — best-effort; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon format, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; returns `warning` (never an error) when source file not found
+- `transformClaudeCodeTranscript(entries: ClaudeCodeEntry[])` → `TranscriptEntry[]` — pure function; maps CC JSONL content blocks to Canon transcript entries; malformed entries skipped silently; exported from `services/transcript-transformer.ts`
 
 ## Invariants
 <!-- last-updated: 2026-04-09 -->

@@ -43,7 +43,7 @@ src/
 - **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-04-09 (agent provenance: commit-trailers.ts + file-claims.ts contracts added; init_workspace + update_board tool rows updated for claims) -->
+<!-- last-updated: 2026-04-26 (NF-12: capture_transcript tool added; CaptureTranscriptInput, CaptureTranscriptResult, ClaudeCodeEntry types exported from features/orchestration) -->
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -249,6 +249,17 @@ src/
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result for drift tracking |
 
+**`capture_transcript` tool** (`src/features/orchestration/tools/capture-transcript.ts`) — added 2026-04-26 (NF-12):
+- `CaptureTranscriptInput` — `{ workspace: string; step_id: string; agent_type: string; agent_id: string; session_id?: string; project_id?: string }`
+- `CaptureTranscriptResult` — `{ transcript_path: string; entry_count: number; warning?: string }`
+- `captureTranscript(input: CaptureTranscriptInput)` → `Promise<ToolResult<CaptureTranscriptResult>>`; best-effort: always returns `ok: true`; missing source emits `warning`, not error
+- Output path is always inside `{workspace}/transcripts/` (path-traversal guard via `isPathContained`)
+- `project_id` derived from `CANON_PROJECT_DIR` env var when not supplied; `session_id` from `CLAUDE_SESSION_ID`
+
+**`transcript-transformer` service** (`src/features/orchestration/services/transcript-transformer.ts`) — added 2026-04-26 (NF-12):
+- `ClaudeCodeEntry` — Zod-inferred type; `{ agentId?, isSidechain?, message: { role, content, usage? }, parentUuid?, timestamp, type }`
+- `transformClaudeCodeTranscript(entries: ClaudeCodeEntry[])` → `TranscriptEntry[]` — pure, no I/O; malformed entries skipped; string content → 1 Canon entry; array content blocks → 1 entry per block (text/tool_use/tool_result); `turn_number` increments per output entry; `tokens` from `output_tokens`; `cumulative_tokens` tracks running total
+
 **`resolve_after_consultations` tool** (`src/features/orchestration/tools/resolve-after-consultations.ts`) — added 2026-03-26:
 - Input: `ResolveAfterConsultationsInput` — `{ workspace: string; state_id: string; flow: ResolvedFlow; variables: Record<string, string> }`
 - Output: `ResolveAfterConsultationsResult` — `{ consultation_prompts: ConsultationPromptEntry[]; warnings: string[] }`
@@ -332,6 +343,7 @@ src/
 | `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
 | `record_agent_metrics` | Agent-callable tool to record performance counters (`tool_calls`, `orientation_calls`, `turns`) directly into execution state metrics; merges with existing metrics preserving orchestrator fields; returns `INVALID_INPUT` if no fields provided, `WORKSPACE_NOT_FOUND` if state not found — added 2026-04-01 (ADR-003a) |
 | `post_event` | Agent-callable tool for structured activity logging; input: `{ workspace, agent, action: "start"\|"complete", detail, artifacts?: string[] }`; stores `agent_activity` event in execution store's event log via `appendEvent`; returns `{ ok: true; event_type; agent; action; timestamp }` or `WORKSPACE_NOT_FOUND`/`INVALID_INPUT` on error — added 2026-04-07 |
+| `capture_transcript` | Best-effort transcript capture; input: `{ workspace, step_id, agent_type, agent_id, session_id?, project_id? }`; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon `TranscriptEntry[]`, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; output: `{ transcript_path, entry_count, warning? }`; returns warning (never error) when source not found; `project_id` defaults to `CANON_PROJECT_DIR`-derived value; `session_id` defaults to `CLAUDE_SESSION_ID` env var — added 2026-04-26 (NF-12) |
 
 ## Dependencies
 <!-- last-updated: 2026-03-26 -->
