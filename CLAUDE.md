@@ -127,9 +127,9 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 1. Spawn `canon:planner` with the build request. The planner produces a planning brief and runbook.
 2. Check the planning brief's Requirement Coverage Map for **completeness and dispositions**. First, compare the map's rows against the original request — identify any requirements from the request that are missing from the map entirely. Treat missing requirements as `descoped` with rationale "omitted by planner." Then check dispositions: if any requirements are `descoped`, `partial`, or were missing from the map, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
 3. Present the runbook to the user for approval. Iterate if the user requests changes.
-4. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` and `tier` come from the approved runbook's frontmatter, and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`.
+4. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` and `tier` come from the approved runbook's frontmatter, and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
 5. Call `log_step` for each step in the approved runbook (creates the checklist).
-6. Execute steps in order, spawning the agent specified by each step.
+6. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### Resume Protocol
 
@@ -253,10 +253,24 @@ See the "Agent Spawn Error Handling" section below. The same retry logic (429 ra
 | Writer | `canon:writer` | Principle authoring |
 | Learner | `canon:learner` | Pattern analysis |
 
-**Isolation requirement:** Every `Agent` spawn MUST include `isolation: "worktree"` — except:
-- When the SpawnRequest carries a `worktree_path`. Wave task SpawnRequests include `worktree_path` pointing to Canon's worktree; the orchestrator spawns those agents without Agent tool isolation so they work directly in Canon's worktree.
-- When the agent's `permissionMode` is `plan`. Plan-mode agents are truly read-only (no `Edit`, `Write`, or file-modifying `Bash`). Worktree isolation provides no functional value and adds 5–8s of overhead per spawn. Currently applies to: planner, security. This exemption does NOT extend to `acceptEdits` agents, which can modify files and require worktree isolation.
-- When the agent writes exclusively to `.canon/` (gitignored workspace paths). Worktree cleanup destroys gitignored artifacts, so isolation causes silent data loss. Currently applies to: learner. This exemption does NOT extend to agents that also modify tracked files in any spawn context.
+**Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt and are spawned with `isolation: "none"`. Canon owns the worktree lifecycle — changes stay on the build branch until explicitly merged.
+
+Do NOT use Claude Code's `isolation: "worktree"` for agent-teams builds. It auto-merges the worktree branch back to the calling branch (main) on agent completion, bypassing Canon's controlled merge lifecycle.
+
+**Spawn pattern for code-writing agents:**
+```
+Agent({
+  subagent_type: "canon:engineer",
+  isolation: "none",    // Canon owns the worktree — no Agent tool isolation
+  prompt: "... Working directory: {worktree_path} ..."
+})
+```
+
+The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt.
+
+**Exceptions (no worktree needed):**
+- Plan-mode agents (read-only, no file modifications). Currently: planner, security.
+- Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
 
 ## Agent Spawn Error Handling
 
