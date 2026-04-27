@@ -1,5 +1,5 @@
 {
-  "description": "Canon hooks — secrets detection, destructive command guard, workspace lock guard, push review guard, large file guard, principle injection, learn nudge, and compaction check",
+  "description": "Canon hooks — secrets detection, destructive command guard, workspace lock guard, push review guard, large file guard, principle injection, learn nudge, compaction check, agent-teams workspace-check, commit trailer validation, doc/KG staleness nudges, and scribe queuing",
   "hooks": {
     "PreToolUse": [
       {
@@ -51,6 +51,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/canon-workspace-check.sh",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -66,6 +76,38 @@
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/compaction-check.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/post-commit-trailers.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/session-start-doc-check.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/session-start-kg-check.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/post-engineer-scribe.sh",
+            "timeout": 10
           }
         ]
       }
