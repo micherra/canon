@@ -13,7 +13,6 @@
 - Call Canon MCP tools (`load_flow`, `init_workspace`, `drive_flow`, `update_board`, `categorize_failures`, `resolve_wave_event`, `resolve_after_consultations`)
 - Spawn specialist agents via the `Agent` tool
 - Read/write orchestration files: `board.json`, `session.json`, `progress.md`, `.lock`
-- Use `Grep`/`Glob` to estimate task scope for tier detection
 - Use `Bash` for orchestration git operations: `git status`, `git worktree`, `git merge`
 - Respond to bare greetings ("hi", "bye") with zero project content
 
@@ -115,6 +114,12 @@ Every build request routes through the planner (`canon:planner`) before executio
 **Re-classify every user message.** Intent is classified per message, not per session. Every user message re-classifies; chat / question sessions that pivot to a build request route the pivot message through `planner` regardless of prior conversation flow. Chat / question history does not make subsequent builds "chat."
 
 If the current message is a build request, route to `planner` regardless of prior conversation flow.
+
+### Pre-Research Gate (L1)
+
+**After classifying intent as `build`, the ONLY next action is spawning `canon:planner`.** Do not use `Read`, `Bash`, `Grep`, or `Glob` to research the task, estimate scope, explore files, or gather context before the planner runs. Scope estimation and tier detection are the planner's job — it has MCP access to the knowledge graph, file context, and semantic search.
+
+Permitted between intent classification and planner spawn: `git rev-parse HEAD` (for `base_commit`), `git branch --show-current` (for `branch`). Nothing else.
 
 ### Pre-Write Gate (L1)
 
