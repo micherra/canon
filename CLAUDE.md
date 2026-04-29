@@ -146,9 +146,80 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 1. Spawn `canon:planner` with the build request. The planner produces a planning brief and runbook.
 2. Check the planning brief's Requirement Coverage Map for **completeness and dispositions**. First, compare the map's rows against the original request — identify any requirements from the request that are missing from the map entirely. Treat missing requirements as `descoped` with rationale "omitted by planner." Then check dispositions: if any requirements are `descoped`, `partial`, or were missing from the map, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
 3. Present the runbook to the user for approval. Iterate if the user requests changes.
-4. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` and `tier` come from the approved runbook's frontmatter, and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
+4. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` comes from the approved runbook's frontmatter, `tier` comes from the runbook frontmatter (optional — defaults to `"medium"` when omitted), and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
 5. Call `log_step` for each step in the approved runbook (creates the checklist).
 6. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
+
+### DAG Execution Protocol
+
+When the architect produces a `task-dag.yaml` alongside task plans, the orchestrator uses it for parallel dispatch instead of sequential step execution.
+
+#### Reading the DAG
+
+After the architect step completes, check for `${WORKSPACE}/plans/${slug}/task-dag.yaml`. If present:
+
+1. Parse the YAML file. Each entry has: `task_id`, `depends_on: []`, `parallel_safe: boolean`, `files: []`.
+2. Validate the DAG: no cycles, all `depends_on` refs resolve, no self-references. The `dag-validator.ts` utility in `mcp-server/src/shared/lib/` provides this validation. If validation fails, present errors to the user and re-spawn the architect.
+3. Initialize `completed_tasks = []` and `failed_tasks = []`.
+
+If no `task-dag.yaml` exists, fall back to sequential step execution (existing behavior).
+
+#### Dynamic Readiness Loop
+
+Repeat until all tasks are completed or failed:
+
+1. **Compute ready tasks**: A task is ready when:
+   - Its `task_id` is NOT in `completed_tasks` or `failed_tasks`
+   - ALL entries in its `depends_on` are in `completed_tasks`
+2. **Filter for parallel safety**: Separate ready tasks into:
+   - `parallel_batch`: tasks with `parallel_safe: true`
+   - `sequential_queue`: tasks with `parallel_safe: false`
+3. **Dispatch batch**:
+   - If `parallel_batch` is non-empty: dispatch all as an agent team (see Worktree Dispatch below)
+   - Else if `sequential_queue` is non-empty: dispatch the first task alone
+   - Else: all remaining tasks have unmet dependencies — this indicates a blocked state (dependencies failed). Enter HITL.
+4. **Await completion**: Wait for all dispatched tasks to complete.
+5. **Process results**:
+   - Successful tasks: add to `completed_tasks`
+   - Failed tasks: retry once via engineer fix mode (same worktree). If fix succeeds, add to `completed_tasks`. If fix fails, add to `failed_tasks` and enter HITL with failure details.
+6. **Merge batch results**: After all tasks in a batch complete, merge worktrees sequentially (see Merge Protocol below), then clean up.
+7. **Loop**: Return to step 1 to compute next ready batch.
+
+#### Worktree Dispatch
+
+For each batch of ready tasks, create isolated worktrees using the existing wave infrastructure:
+
+1. Call `createWaveWorktrees(tasks.map(t => ({ task_id: t.task_id })), projectDir, buildWorktreePath)` where `buildWorktreePath` is the build worktree at `{workspace}/worktree`.
+2. Each task gets a worktree at `{projectDir}/.canon/worktrees/{task_id}`, branch `canon-wave/{task_id}`.
+3. Spawn each task as an agent with `isolation: "none"` and `Working directory: {worktree_path}` in the prompt.
+4. For parallel batches (2+ tasks): spawn as an agent team for concurrent execution.
+5. For sequential tasks (`parallel_safe: false`): spawn one agent at a time.
+
+#### Merge Protocol
+
+After a batch completes:
+
+1. Call `mergeWaveResults(worktreeResults, buildWorktreePath, "sequential")` — merges each task's worktree into the build worktree in alphabetical `task_id` order.
+2. On conflict: `git merge --abort` runs automatically. Enter HITL with conflict details: `"Merge conflict in task {task_id} affecting files: {files}. Resolve manually or re-run the conflicting task."`.
+3. On success: call `cleanupWorktrees(worktreeResults, projectDir)` to remove task worktrees and branches.
+
+**Key asymmetry**: merges target the build worktree path (`buildWorktreePath`), but cleanup uses the project root (`projectDir`). This matches the existing wave infrastructure pattern.
+
+#### Post-DAG Tail
+
+After all DAG tasks complete (all in `completed_tasks`), execute the remaining runbook steps sequentially:
+- Review step (if present)
+- Context-sync step (if present)
+- Learn step (if present)
+
+These are NOT nodes in the DAG — they always run sequentially after all implementation tasks.
+
+#### Failure Handling
+
+- **Task failure**: Retry once via engineer fix mode in the same worktree. If fix fails, enter HITL.
+- **Merge conflict**: Enter HITL with conflict details. User can resolve manually or instruct re-run.
+- **DAG blocked** (ready set empty but tasks remain): Some tasks' dependencies failed. Enter HITL listing blocked tasks and their unmet dependencies.
+- **Validation failure**: If `task-dag.yaml` fails validation, present errors and re-spawn architect.
 
 ### Resume Protocol
 
