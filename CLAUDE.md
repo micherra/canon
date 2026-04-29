@@ -202,9 +202,10 @@ Include results in the spawn prompt. Agents also have direct MCP access and will
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
-### HITL Patterns <!-- last-updated: 2026-04-25 -->
+### HITL Patterns <!-- last-updated: 2026-04-28 -->
 
 - **Requirement coverage check**: After planner returns, check the planning brief's Requirement Coverage Map for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
+- **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
 - **Architect approval**: Present the plan to the user. For agent teams, use native plan approval mode.
 - **Review verdict**: Present review results. If not clean, spawn engineer in fix mode.
 - **Gate failure**: Present the failure output and ask the user how to proceed.

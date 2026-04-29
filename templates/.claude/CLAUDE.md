@@ -6,7 +6,7 @@
 Structured output templates that agents must follow for consistent, parseable artifacts. Enforced by the `agent-template-required` rule — agents must read the template before producing output.
 
 ## Architecture
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-04-28 -->
 
 Each template is a markdown file with placeholder sections that agents fill in.
 
@@ -16,7 +16,7 @@ Each template is a markdown file with placeholder sections that agents fill in.
 |----------|---------|---------|
 | `claudemd-template.md` | scribe | CLAUDE.md structure |
 | `design-decision.md` | architect | Architecture decisions with tradeoffs |
-| `implementation-log.md` | implementor | Task implementation summary |
+| `implementation-log.md` | implementor | Task implementation summary — required `#### Criteria Coverage` table maps every task-plan acceptance criterion to a disposition (`covered`, `descoped`, `partial`); reviewer checks this in Stage 3 compliance cross-check |
 | `research-finding.md` | researcher | Research findings per dimension |
 | `review-checklist.md` | reviewer | Code review output with violations |
 | `security-assessment.md` | security | Vulnerability findings and remediation |
@@ -26,7 +26,7 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `wave-briefing.md` | orchestrator | Wave execution briefing |
 | `wave-report.md` | orchestrator | Structured wave execution report for inter-wave handoff |
 | `design-document.md` | architect | Technical design with Canon alignment |
-| `task-plan.md` | architect | Atomic task plan for implementors |
+| `task-plan.md` | architect | Atomic task plan for implementors — required `### Brief Coverage` table maps every runbook requirement to a task element with disposition (`covered`, `descoped`, `partial`); missing or empty table is a plan defect that blocks progression |
 | `plan-index.md` | architect | Index of all task plans for a build |
 | `pr-description.md` | shipper | PR description from build artifacts |
 | `chat-brief.md` | chat | Structured brief for build handoff |
