@@ -275,7 +275,7 @@ Agent({
 The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt.
 
 **Exceptions (no worktree needed):**
-- Plan-mode agents (read-only, no file modifications). Currently: planner, security.
+- Plan-mode agents (read-only, no file modifications). Currently: planner.
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
 
 ## Agent Spawn Error Handling

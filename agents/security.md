@@ -7,7 +7,7 @@ description: >-
 model: opus
 color: red
 maxTurns: 25
-permissionMode: plan
+permissionMode: acceptEdits
 rules:
   - agent-assume-hostile-input
   - agent-template-required
