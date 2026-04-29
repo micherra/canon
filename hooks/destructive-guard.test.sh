@@ -138,6 +138,30 @@ run_test "checkout -- . passes when PWD is inside .claude/worktrees/" \
 # Precision: Canon exceptions must not over-extend the guard
 # -----------------------------------------------------------------------
 echo ""
+echo "-- Canon branch -D exemption: Canon-prefixed branches allowed (exit 0) --"
+
+run_test "git branch -D canon/some-slug passes" \
+  0 "$(make_input 'git branch -D canon/some-slug')" "$NON_WT_PWD"
+
+run_test "git branch -D canon-wave/wave-1 passes" \
+  0 "$(make_input 'git branch -D canon-wave/wave-1')" "$NON_WT_PWD"
+
+run_test "git branch -D multiple Canon branches passes" \
+  0 "$(make_input 'git branch -D canon/a canon/b canon-wave/c')" "$NON_WT_PWD"
+
+echo ""
+echo "-- Canon branch -D exemption: non-Canon branches still blocked (exit 2) --"
+
+run_test "git branch -D feature/my-work blocks" \
+  2 "$(make_input 'git branch -D feature/my-work')" "$NON_WT_PWD"
+
+run_test "git branch -D main blocks" \
+  2 "$(make_input 'git branch -D main')" "$NON_WT_PWD"
+
+run_test "git branch -D mixed canon and non-canon blocks" \
+  2 "$(make_input 'git branch -D canon/a feature/b')" "$NON_WT_PWD"
+
+echo ""
 echo "-- Precision: non-Canon branch -D still blocked --"
 
 run_test "reset --hard with path that is not .canon/worktrees/ still blocked" \

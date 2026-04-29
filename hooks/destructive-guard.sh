@@ -92,6 +92,22 @@ EOF
 fi
 
 if echo "$COMMAND" | grep -qE '\bgit\b.*\bbranch\b.*-D\b'; then
+  # Exception: allow force-deletion of Canon-managed branches.
+  # Extract all arguments that appear after -D (strip any flags starting with -).
+  # If ALL branch names start with canon/ or canon-wave/, the operation is safe.
+  branch_args=$(echo "$COMMAND" | sed 's/.*-D[[:space:]]*//' | tr ' ' '\n' | grep -v '^-')
+  if [[ -n "$branch_args" ]]; then
+    all_canon=true
+    while IFS= read -r branch; do
+      if ! echo "$branch" | grep -qE '^canon(-wave)?/'; then
+        all_canon=false
+        break
+      fi
+    done <<< "$branch_args"
+    if [[ "$all_canon" == "true" ]]; then
+      exit 0
+    fi
+  fi
   cat <<EOF >&2
 CANON: Destructive git operation detected — git branch -D. This force-deletes a branch even if it has unmerged changes.
 EOF
