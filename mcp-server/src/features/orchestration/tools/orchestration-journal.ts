@@ -217,6 +217,22 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
   if (input.outcome !== undefined) step.outcome = input.outcome;
 }
 
+/**
+ * Log or update a step's status in the workspace journal.
+ *
+ * When `status === "completed"`, this function enforces artifact presence:
+ * if any declared artifact paths (excluding `outcome:` sentinels and
+ * `${variable}` templates) do not exist on disk, the function refuses to
+ * mark the step completed and returns a recoverable `INVALID_INPUT` error.
+ * The journal entry remains at its pre-completion status so the orchestrator
+ * can retry after the agent writes the missing files.
+ *
+ * @param input - Step metadata including workspace path, step ID, status,
+ *   and optional agent context.
+ * @returns `toolOk` when the step is successfully logged; `toolError` with
+ *   `recoverable: true` and `context.artifacts_missing` when attempting
+ *   completion with missing artifacts.
+ */
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
@@ -228,9 +244,32 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   }
 
   const journal = await readJournal(input.workspace);
+
+  // Capture the pre-completion status so we can revert if artifact check fails.
+  const existingStep = journal.steps.find((s) => s.step_id === input.step_id);
+  const preCompletionStatus: JournalStepStatus = existingStep?.status ?? "planned";
+
   const step = upsertStep(journal, input);
   applyTimestamps(step, input.status);
   applyMetadata(step, input);
+
+  // Mechanical artifact enforcement: refuse to complete when declared artifacts
+  // are missing. Revert the step to its pre-completion status so the journal
+  // accurately reflects what has been done, and return a recoverable error so
+  // the orchestrator can prompt the agent to write the missing files.
+  if (input.status === "completed") {
+    const missing = scanArtifactsForStep(input.workspace, step);
+    if (missing.length > 0) {
+      step.status = preCompletionStatus;
+      await writeJournal(input.workspace, journal);
+      return toolError(
+        "INVALID_INPUT",
+        `Cannot complete step '${input.step_id}': missing artifacts: ${missing.join(", ")}`,
+        true,
+        { artifacts_missing: missing },
+      );
+    }
+  }
 
   const result: LogStepResult = { status: input.status, step_id: input.step_id };
 
@@ -252,12 +291,6 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
 
   await writeJournal(input.workspace, journal);
 
-  if (input.status === "completed") {
-    const missing = scanArtifactsForStep(input.workspace, step);
-    if (missing.length > 0) {
-      result.artifacts_missing = missing;
-    }
-  }
   return toolOk(result);
 }
 
