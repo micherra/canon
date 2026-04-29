@@ -49,6 +49,13 @@ commit: "{hash}"
 - {risk item}: tested via {test name} — {PASS/FAIL}
 - {risk item}: NOT tested — {reason, e.g., requires integration setup}
 
+#### Criteria Coverage
+<!-- Map every acceptance criterion from the task plan to what was implemented. -->
+<!-- The reviewer checks this section in Stage 3 (compliance cross-check). -->
+| # | Task plan criterion | Disposition | Implementation or rationale |
+|---|---------------------|-------------|----------------------------|
+| 1 | {criterion from task plan} | {covered &#124; descoped &#124; partial} | {what was implemented, or why it's deferred} |
+
 #### External Evidence
 <!-- Only include if web research materially informed implementation choices. -->
 - `{URL}` — {what implementation decision, API usage, or constraint this source informed}

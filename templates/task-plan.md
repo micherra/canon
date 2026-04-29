@@ -47,6 +47,13 @@ domains:
 
 ### Done when
 [Clear, testable completion criteria — must include "all tests pass" and "all risk mitigations addressed"]
+
+### Brief Coverage
+<!-- Map every requirement from the approved runbook to a task element or explicitly mark it out-of-scope. -->
+<!-- The orchestrator checks this section — missing rows or unjustified gaps block progression. -->
+| # | Runbook requirement | Disposition | Task element or rationale |
+|---|---------------------|-------------|--------------------------|
+| 1 | {requirement from runbook} | {covered &#124; descoped &#124; partial} | {which task element addresses it, or why it's out of scope} |
 ```
 
 ## Rules
