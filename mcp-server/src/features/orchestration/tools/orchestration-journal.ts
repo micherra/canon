@@ -232,6 +232,44 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
  *   `recoverable: true` and `context.artifacts_missing` when attempting
  *   completion with missing artifacts.
  */
+function enforceArtifacts(
+  workspace: string,
+  stepId: string,
+  journal: Journal,
+  inputArtifacts: string[] | undefined,
+): ToolResult<null> | null {
+  const existingStep = journal.steps.find((s) => s.step_id === stepId);
+  const artifacts = inputArtifacts ?? existingStep?.artifacts_expected ?? [];
+  const missing = scanArtifactList(workspace, artifacts);
+  if (missing.length > 0) {
+    return toolError(
+      "INVALID_INPUT",
+      `Cannot complete step '${stepId}': missing artifacts: ${missing.join(", ")}`,
+      true,
+      { artifacts_missing: missing },
+    );
+  }
+  return null;
+}
+
+async function tryTranscriptCapture(
+  step: JournalStep,
+  result: LogStepResult,
+  input: LogStepInput,
+): Promise<void> {
+  if (!input.agent_id) return;
+  const captureResult = await captureTranscript({
+    agent_id: input.agent_id,
+    agent_type: step.agent_type ?? "unknown",
+    step_id: input.step_id,
+    workspace: input.workspace,
+  });
+  if (captureResult.ok && captureResult.transcript_path) {
+    step.transcript_path = captureResult.transcript_path;
+    result.transcript_path = captureResult.transcript_path;
+  }
+}
+
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
@@ -244,21 +282,9 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
 
   const journal = await readJournal(input.workspace);
 
-  // Mechanical artifact enforcement: check BEFORE any mutation so there's
-  // nothing to roll back. The existing step's artifacts_expected (set during
-  // the "planned" call) are the source of truth.
   if (input.status === "completed") {
-    const existingStep = journal.steps.find((s) => s.step_id === input.step_id);
-    const artifacts = input.artifacts_expected ?? existingStep?.artifacts_expected ?? [];
-    const missing = scanArtifactList(input.workspace, artifacts);
-    if (missing.length > 0) {
-      return toolError(
-        "INVALID_INPUT",
-        `Cannot complete step '${input.step_id}': missing artifacts: ${missing.join(", ")}`,
-        true,
-        { artifacts_missing: missing },
-      );
-    }
+    const rejection = enforceArtifacts(input.workspace, input.step_id, journal, input.artifacts_expected);
+    if (rejection) return rejection;
   }
 
   const step = upsertStep(journal, input);
@@ -267,20 +293,8 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
 
   const result: LogStepResult = { status: input.status, step_id: input.step_id };
 
-  // Transcript capture: best-effort when agent_id is provided on a completed step.
-  // Capture failures never block the step from completing (fail-safe).
-  if (input.status === "completed" && input.agent_id) {
-    const agentType = step.agent_type ?? "unknown";
-    const captureResult = await captureTranscript({
-      agent_id: input.agent_id,
-      agent_type: agentType,
-      step_id: input.step_id,
-      workspace: input.workspace,
-    });
-    if (captureResult.ok && captureResult.transcript_path) {
-      step.transcript_path = captureResult.transcript_path;
-      result.transcript_path = captureResult.transcript_path;
-    }
+  if (input.status === "completed") {
+    await tryTranscriptCapture(step, result, input);
   }
 
   await writeJournal(input.workspace, journal);
