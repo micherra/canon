@@ -385,4 +385,3 @@ describe("reportResult — multiple required_handoffs, mixed valid/invalid", () 
     expect(warnings!.every((w) => !w.includes("RESEARCH-SYNTHESIS"))).toBe(true);
   });
 });
-
