@@ -21,6 +21,11 @@
  * - captureTranscript returns warning when source file does not exist
  * - captureTranscript output path is within {workspace}/transcripts/
  * - captureTranscript entry count matches expected output
+ *
+ * Also covers NF-17 deriveProjectIdFromEnv fix:
+ * - deriveProjectIdFromEnv preserves leading dash (CC convention)
+ * - deriveProjectIdFromEnv replaces all slashes with dashes
+ * - deriveProjectIdFromEnv returns null when CANON_PROJECT_DIR not set
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -32,7 +37,7 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { captureTranscript } from "../tools/capture-transcript.ts";
+import { captureTranscript, deriveProjectIdFromEnv } from "../tools/capture-transcript.ts";
 import { getTranscript } from "../tools/get-transcript.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { transformClaudeCodeTranscript } from "../services/transcript-transformer.ts";
@@ -947,6 +952,53 @@ describe("captureTranscript", () => {
     } finally {
       if (originalProjectDir !== undefined) {
         process.env.CANON_PROJECT_DIR = originalProjectDir;
+      }
+    }
+  });
+});
+
+// ─── NF-17: deriveProjectIdFromEnv ───────────────────────────────────────────
+
+describe("deriveProjectIdFromEnv", () => {
+  it("preserves leading dash (CC convention) — does NOT strip it", () => {
+    const original = process.env.CANON_PROJECT_DIR;
+    process.env.CANON_PROJECT_DIR = "/Users/michelle/Documents/canon";
+    try {
+      const result = deriveProjectIdFromEnv();
+      // Claude Code stores projects under a leading-dash path:
+      // /Users/michelle/Documents/canon → -Users-michelle-Documents-canon
+      expect(result).toBe("-Users-michelle-Documents-canon");
+    } finally {
+      if (original === undefined) {
+        delete process.env.CANON_PROJECT_DIR;
+      } else {
+        process.env.CANON_PROJECT_DIR = original;
+      }
+    }
+  });
+
+  it("replaces all forward slashes with dashes", () => {
+    const original = process.env.CANON_PROJECT_DIR;
+    process.env.CANON_PROJECT_DIR = "/a/b/c";
+    try {
+      expect(deriveProjectIdFromEnv()).toBe("-a-b-c");
+    } finally {
+      if (original === undefined) {
+        delete process.env.CANON_PROJECT_DIR;
+      } else {
+        process.env.CANON_PROJECT_DIR = original;
+      }
+    }
+  });
+
+  it("returns null when CANON_PROJECT_DIR is not set", () => {
+    const original = process.env.CANON_PROJECT_DIR;
+    delete process.env.CANON_PROJECT_DIR;
+    try {
+      expect(deriveProjectIdFromEnv()).toBeNull();
+    } finally {
+      if (original !== undefined) {
+        process.env.CANON_PROJECT_DIR = original;
       }
     }
   });

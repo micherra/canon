@@ -35,6 +35,7 @@ import { archiveWorkspace } from "@features/history/services/archive-service.ts"
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { captureTranscript } from "./capture-transcript.ts";
 
 function resolveProjectDir(): string {
   return process.env.CANON_PROJECT_DIR ?? process.cwd();
@@ -57,6 +58,7 @@ export type JournalStep = {
   started_at?: string;
   status: JournalStepStatus;
   step_id: string;
+  transcript_path?: string;
 };
 
 export type Journal = {
@@ -66,6 +68,11 @@ export type Journal = {
 };
 
 export type LogStepInput = {
+  /**
+   * Agent tool result ID. When provided alongside `status === "completed"`,
+   * triggers best-effort transcript capture via `captureTranscript`.
+   */
+  agent_id?: string;
   agent_type?: string | null;
   artifacts_expected?: string[];
   domain_skills_loaded?: string[];
@@ -88,6 +95,12 @@ export type LogStepResult = {
   artifacts_missing?: string[];
   status: JournalStepStatus;
   step_id: string;
+  /**
+   * Path to the captured transcript file when `agent_id` was provided and
+   * capture succeeded. Absent when capture was not attempted or did not
+   * produce a file (best-effort — capture failure never blocks step completion).
+   */
+  transcript_path?: string;
 };
 
 export type VerifyCompletionInput = {
@@ -228,6 +241,29 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     const missing = scanArtifactsForStep(input.workspace, step);
     if (missing.length > 0) {
       result.artifacts_missing = missing;
+    }
+
+    // Best-effort transcript capture — runs when agent_id is provided.
+    // The MCP server process has CANON_PROJECT_DIR and CLAUDE_SESSION_ID in its
+    // environment; the orchestrator shell does not, which is why capture is
+    // triggered here rather than by the caller.
+    if (input.agent_id && step.agent_type) {
+      try {
+        const captureResult = await captureTranscript({
+          agent_id: input.agent_id,
+          agent_type: step.agent_type,
+          step_id: input.step_id,
+          workspace: input.workspace,
+        });
+        if (captureResult.ok && captureResult.transcript_path) {
+          step.transcript_path = captureResult.transcript_path;
+          // Persist the transcript_path in the journal
+          await writeJournal(input.workspace, journal);
+          result.transcript_path = captureResult.transcript_path;
+        }
+      } catch {
+        // Best-effort — capture failure never blocks step completion
+      }
     }
   }
   return toolOk(result);
