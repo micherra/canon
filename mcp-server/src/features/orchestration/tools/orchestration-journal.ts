@@ -320,10 +320,6 @@ function scanArtifactList(workspace: string, artifacts: readonly string[]): stri
   return missing;
 }
 
-function scanArtifactsForStep(workspace: string, step: JournalStep): string[] {
-  return scanArtifactList(workspace, step.artifacts_expected ?? []);
-}
-
 type ArtifactScan = {
   expected: string[];
   missing: string[];
