@@ -60,7 +60,7 @@ Discovery and execution are both present and explicitly linked.
 Agents that intentionally do not execute certain gates due to scope constraints MUST document the intentional omission in their agent definition. Acceptable reasons to omit execution:
 
 - **Code-analysis-only agents** (e.g., security): scope is static analysis of source code, not build health. Running builds would mix concerns and extend scan time without improving findings quality. Document with a note: "Intentional omission: this agent does not run build or lint — scope is static code analysis only."
-- **Read-only agents** (planner, researcher, architect): these agents do not have execution context (no worktree, no build artifacts). They cannot meaningfully run build commands.
+- **Pre-implementation agents** (planner, architect): these agents produce artifacts (briefs, runbooks, task plans, design documents) but operate before build artifacts exist. They have no build to run gates against.
 - **Synthesis agents** (shipper, scribe): their role is to read artifacts and produce documentation, not to verify build health. The build was already verified by tester and reviewer.
 
 An intentional omission without documentation is indistinguishable from an accidental gap — and will be flagged as a violation in future audits.
