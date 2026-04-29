@@ -139,7 +139,7 @@ For each Canon principle in the plan: declare one of ✓ COMPLIANT (state how), 
 
 - All new tests pass.
 - Full project suite passes (no regressions).
-- Lint runs (if configured) and is clean.
+- Lint runs (if configured) and is clean. Check for gates discovered by upstream agents (tester, reviewer) in the workspace — if `discovered_gates` entries exist in the workspace journal or were passed in your spawn prompt, execute those commands as part of verification.
 
 **[impl]** Any additional plan verification steps.
 

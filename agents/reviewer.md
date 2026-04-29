@@ -237,6 +237,20 @@ Follow the `### Drift from Plan` section in the review-checklist template for ou
 
 **Severity**: Unplanned files and missing planned work are both WARNINGs. Neither is BLOCKING on its own, but both must be noted.
 
+## Build and Lint Verification
+
+After completing Stages 1–4, run the project build and lint to surface compilation errors and lint violations. This is not optional — lint errors are review findings.
+
+**Build**: Run `npm run build` (or the equivalent for the project's ecosystem). Compilation errors are BLOCKING findings. Report them under `## Build Verification` with the error output and classify them as `rule`-severity violations.
+
+**Lint**: Run the lint command you discovered in the "Discover Lint/Format Gate Commands" section above. If no lint configuration exists, note "No lint configuration found" and skip. If lint fails:
+- Add each distinct lint error category as a finding in your review output under `## Lint Verification`
+- Severity: treat lint errors as WARNING findings (unless the lint rule maps directly to a Canon `rule`-severity principle, in which case escalate to BLOCKING)
+- Format: `{file}:{line} — {rule}: {description}. Fix: {concrete suggestion}`
+- Include lint errors in the `violations` array of your `store_pr_review` / `write_review` call with `source: "lint"`
+
+Do not suppress or omit lint output because it is voluminous — summarize if needed (e.g., "47 `no-unused-vars` errors across 12 files — all unused import variables introduced in this diff") but always report it.
+
 ## Verdict
 
 Based on the most severe finding across all stages:
