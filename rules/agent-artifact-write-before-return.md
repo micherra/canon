@@ -14,7 +14,7 @@ Follow this sequence for every declared artifact:
 1. **Identify** all artifact paths from your spawn prompt. Look for:
    - Explicit paths like "save to `${WORKSPACE}/plans/${slug}/DESIGN.md`"
    - Structured artifact declarations from the orchestrator's `artifacts_expected` list
-2. **Write** each artifact using `Write` (for freeform files) or your designated MCP write tool (for structured artifacts with metadata sidecars such as `write_research_synthesis`, `write_review`, `write_test_report`)
+2. **Write** each artifact using `Write` (for freeform files) or your designated MCP write tool (for structured artifacts with metadata sidecars such as `write_review`, `write_test_report`)
 3. **Verify** the file exists by reading the first few lines after writing
 4. **Then** report your terminal status (DONE, CLEAN, UPDATED, etc.)
 
