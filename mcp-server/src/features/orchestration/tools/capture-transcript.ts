@@ -57,7 +57,7 @@ function claudeConfigHome(): string {
 function deriveProjectIdFromEnv(): string | null {
   const canonProjectDir = process.env.CANON_PROJECT_DIR;
   if (!canonProjectDir) return null;
-  return canonProjectDir.replace(/\//g, "-").replace(/^-/, "");
+  return canonProjectDir.replace(/\//g, "-");
 }
 
 /**

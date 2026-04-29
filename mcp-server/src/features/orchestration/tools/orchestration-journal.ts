@@ -35,6 +35,7 @@ import { archiveWorkspace } from "@features/history/services/archive-service.ts"
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { captureTranscript } from "./capture-transcript.ts";
 
 function resolveProjectDir(): string {
   return process.env.CANON_PROJECT_DIR ?? process.cwd();
@@ -57,6 +58,7 @@ export type JournalStep = {
   started_at?: string;
   status: JournalStepStatus;
   step_id: string;
+  transcript_path?: string;
 };
 
 export type Journal = {
@@ -66,6 +68,7 @@ export type Journal = {
 };
 
 export type LogStepInput = {
+  agent_id?: string;
   agent_type?: string | null;
   artifacts_expected?: string[];
   domain_skills_loaded?: string[];
@@ -88,6 +91,12 @@ export type LogStepResult = {
   artifacts_missing?: string[];
   status: JournalStepStatus;
   step_id: string;
+  /**
+   * Path to the captured transcript file inside `{workspace}/transcripts/`.
+   * Only present when `agent_id` was provided in `LogStepInput` and transcript
+   * capture succeeded. Absent when no `agent_id` was given or capture failed.
+   */
+  transcript_path?: string;
 };
 
 export type VerifyCompletionInput = {
@@ -221,6 +230,24 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   const step = upsertStep(journal, input);
   applyTimestamps(step, input.status);
   applyMetadata(step, input);
+
+  // Transcript capture: when agent_id is provided on a completed step, call
+  // captureTranscript and record transcript_path in the journal step.
+  let transcriptPath: string | undefined;
+  if (input.status === "completed" && input.agent_id) {
+    const agentType = step.agent_type ?? "unknown";
+    const captured = await captureTranscript({
+      agent_id: input.agent_id,
+      agent_type: agentType,
+      step_id: input.step_id,
+      workspace: input.workspace,
+    });
+    if (captured.ok && captured.transcript_path) {
+      transcriptPath = captured.transcript_path;
+      step.transcript_path = transcriptPath;
+    }
+  }
+
   await writeJournal(input.workspace, journal);
 
   const result: LogStepResult = { status: input.status, step_id: input.step_id };
@@ -228,6 +255,9 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     const missing = scanArtifactsForStep(input.workspace, step);
     if (missing.length > 0) {
       result.artifacts_missing = missing;
+    }
+    if (transcriptPath) {
+      result.transcript_path = transcriptPath;
     }
   }
   return toolOk(result);
