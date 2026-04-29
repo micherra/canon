@@ -35,6 +35,7 @@ import { archiveWorkspace } from "@features/history/services/archive-service.ts"
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { captureTranscript } from "./capture-transcript.ts";
 
 function resolveProjectDir(): string {
   return process.env.CANON_PROJECT_DIR ?? process.cwd();
@@ -57,6 +58,7 @@ export type JournalStep = {
   started_at?: string;
   status: JournalStepStatus;
   step_id: string;
+  transcript_path?: string;
 };
 
 export type Journal = {
@@ -66,6 +68,7 @@ export type Journal = {
 };
 
 export type LogStepInput = {
+  agent_id?: string;
   agent_type?: string | null;
   artifacts_expected?: string[];
   domain_skills_loaded?: string[];
@@ -86,6 +89,8 @@ export type LogStepResult = {
    * with `outcome:` are excluded from this check — they are not file paths.
    */
   artifacts_missing?: string[];
+  /** Path to the captured transcript JSONL file. Present only when transcript capture succeeded. */
+  transcript_path?: string;
   status: JournalStepStatus;
   step_id: string;
 };
@@ -230,6 +235,27 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
       result.artifacts_missing = missing;
     }
   }
+
+  // Best-effort transcript capture when agent_id is provided on completion
+  if (input.status === "completed" && input.agent_id) {
+    try {
+      const capture = await captureTranscript({
+        agent_id: input.agent_id,
+        agent_type: step.agent_type ?? "unknown",
+        step_id: input.step_id,
+        workspace: input.workspace,
+      });
+      if (capture.ok && capture.transcript_path) {
+        result.transcript_path = capture.transcript_path;
+        step.transcript_path = capture.transcript_path;
+        // Re-write journal with transcript_path persisted
+        await writeJournal(input.workspace, journal);
+      }
+    } catch {
+      // Best-effort — capture failure never blocks step completion
+    }
+  }
+
   return toolOk(result);
 }
 
