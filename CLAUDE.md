@@ -195,7 +195,7 @@ Include results in the spawn prompt. Agents also have direct MCP access and will
 ### Journal Protocol
 
 - Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
-- After each spawn: `log_step({ workspace, step_id, ..., status: "completed", artifacts_actual: [...] })`
+- After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
 - The journal is your checklist. The completion hook (`verify_completion`) verifies it.
 
 ### Post-Subagent Artifact Check
@@ -215,7 +215,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 - After reviewer completes: call `store_pr_review` or `write_review`.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
-- After each agent spawn completes: call `capture_transcript({ workspace, step_id, agent_type, agent_id })` where `agent_id` comes from the Agent tool result. Pass the returned `transcript_path` to the `log_step` completion call. This is best-effort — capture failures do not block the flow.
+- Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.
 
 ### Completion Checklist
