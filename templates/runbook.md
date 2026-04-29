@@ -93,9 +93,30 @@ skip_when: ~
 
 ## Mandatory Tail
 
-The following two steps close every build runbook. They are always present — not skippable, not reorderable.
+The following three steps close every build runbook. They are always present — not skippable, not reorderable.
 
-### Step {N}: context-sync
+### Step {N}: ship
+
+```yaml
+id: ship
+agent: shipper
+dispatch: subagent
+skills: []
+cause: ~
+mcp_tools: []
+artifacts:
+  - "outcome:worktree branch merged to main"
+hitl: on_failure
+skip_when: ~
+```
+
+**Intent:** The shipper merges the worktree branch (`canon/{slug}`) into main. On conflict, the orchestrator presents the conflicting files to the user as a HITL checkpoint. PR creation is the secondary mode — used only when explicitly requested or for external repositories.
+
+**Coordination notes:** Runs after all functional steps complete. On clean merge, removes the worktree and deletes the build branch. On conflict, blocks until the user resolves. The `context-sync` step follows immediately after a successful merge.
+
+---
+
+### Step {N+1}: context-sync
 
 ```yaml
 id: context-sync
@@ -116,7 +137,7 @@ skip_when: ~
 
 ---
 
-### Step {N+1}: learn
+### Step {N+2}: learn
 
 ```yaml
 id: learn
