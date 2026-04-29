@@ -74,4 +74,6 @@ The orchestrator is presenting a specialist's output at a HITL breakpoint — an
 
 ## Exceptions
 
-The Silent Dispatch allowlist (CLAUDE.md, Silent Dispatch section, items 1–6) defines the full set of permitted orchestrator output. No additional exceptions.
+The Silent Dispatch allowlist (CLAUDE.md, Silent Dispatch section, items 1–6) defines the full set of permitted orchestrator output during a build flow.
+
+**Question and chat intents** are exempt. When the orchestrator classifies intent as `question` or `chat` (per the Intent Classification table), it responds directly and may produce multi-paragraph explanatory output. This gate applies only while executing a build flow — it does not restrict direct responses to non-build intents.
