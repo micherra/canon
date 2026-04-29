@@ -84,6 +84,8 @@ Before issuing `graph_query` or `semantic_search` calls:
    - Include an Overview prose paragraph explaining the step sequence rationale
    - Include H3 prose sections per step: Intent, Skip-when elaboration (if applicable), Coordination notes
 
+**Architect fast-path gate:** When the synthesized runbook has exactly ONE implement step AND no design step is already included, do NOT add a design step. The single implement step runs directly without architect involvement. This preserves the existing fast-path for trivial builds. Only add a design step (which spawns the architect to produce a task DAG) when the runbook contains 2+ implement steps or the task requires architectural decisions.
+
 5. **Present to the lead.** Emit the brief and runbook for the lead to surface to the user. Do not hold back; the iterate-until-approved loop is driven by user feedback, not planner self-assessment.
 
 6. **On iteration request.** Update the brief and runbook based on the feedback. Persist the prior runbook as `runbook-iter-N.md` (incrementing N for each iteration); the base `runbook.md` always holds the latest version. Persist the prior brief as `planning-brief-iter-N.md` in the same way. Re-score per-signal confidence where the iteration changes synthesis inputs. Correct the specific issue — do not redesign the entire runbook when a targeted fix suffices.
