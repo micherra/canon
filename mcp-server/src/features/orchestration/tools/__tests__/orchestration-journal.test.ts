@@ -14,6 +14,56 @@ import { assertOk, isToolError } from "../../../../shared/lib/tool-result.ts";
 import type { Journal } from "../orchestration-journal.ts";
 import { logStep, verifyCompletion } from "../orchestration-journal.ts";
 
+// ─── Helpers for transcript-capture integration tests ────────────────────────
+
+/** Saved env vars that need to be restored after transcript tests. */
+type SavedEnv = {
+  CLAUDE_CONFIG_DIR: string | undefined;
+  CLAUDE_SESSION_ID: string | undefined;
+  CANON_PROJECT_DIR: string | undefined;
+};
+
+function saveEnv(): SavedEnv {
+  return {
+    CANON_PROJECT_DIR: process.env.CANON_PROJECT_DIR,
+    CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+    CLAUDE_SESSION_ID: process.env.CLAUDE_SESSION_ID,
+  };
+}
+
+function restoreEnv(saved: SavedEnv): void {
+  for (const [key, value] of Object.entries(saved)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
+/**
+ * Write a minimal Claude Code agent JSONL file in the expected location:
+ *   {configDir}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl
+ */
+function writeAgentJsonl(
+  configDir: string,
+  projectId: string,
+  sessionId: string,
+  agentId: string,
+): void {
+  const subagentsDir = join(configDir, "projects", projectId, sessionId, "subagents");
+  mkdirSync(subagentsDir, { recursive: true });
+  const entry = JSON.stringify({
+    agentId,
+    isSidechain: true,
+    message: { content: "Task complete.", role: "assistant", usage: { output_tokens: 42 } },
+    parentUuid: "parent-uuid",
+    timestamp: "2026-04-29T00:00:00.000Z",
+    type: "assistant",
+  });
+  writeFileSync(join(subagentsDir, `agent-${agentId}.jsonl`), entry, "utf-8");
+}
+
 let workspace: string;
 
 beforeEach(async () => {
@@ -407,5 +457,146 @@ describe("logStep artifact scanning on completion", () => {
     assertOk(result);
     // DESIGN.md exists, INDEX.md does not — only the missing one is reported
     expect(result.artifacts_missing).toEqual(["plans/INDEX.md"]);
+  });
+});
+
+// ─── NF-17: logStep transcript-capture integration ───────────────────────────
+
+describe("logStep — transcript capture via agent_id", () => {
+  const AGENT_ID = "nf17-agent-01";
+  // logStep calls captureTranscript without project_id/session_id, so they
+  // must come from CANON_PROJECT_DIR → deriveProjectIdFromEnv() and CLAUDE_SESSION_ID.
+  // CANON_PROJECT_DIR="/Users/test-project" → project_id = "-Users-test-project"
+  const CANON_PROJECT_DIR_VAL = "/Users/test-project";
+  const PROJECT_ID = "-Users-test-project"; // slash-replaced form used as folder name
+  const SESSION_ID = "session-nf17";
+
+  test("agent_id triggers capture and records transcript_path in result", async () => {
+    const saved = saveEnv();
+    const fakeConfigDir = await mkdtemp(join(tmpdir(), "canon-cc-config-"));
+
+    try {
+      writeAgentJsonl(fakeConfigDir, PROJECT_ID, SESSION_ID, AGENT_ID);
+
+      process.env.CLAUDE_CONFIG_DIR = fakeConfigDir;
+      process.env.CLAUDE_SESSION_ID = SESSION_ID;
+      process.env.CANON_PROJECT_DIR = CANON_PROJECT_DIR_VAL;
+
+      // First register the step with agent_type so step.agent_type is set
+      await logStep({
+        agent_type: "engineer",
+        status: "planned",
+        step_id: "implement",
+        workspace,
+      });
+
+      const result = await logStep({
+        agent_id: AGENT_ID,
+        status: "completed",
+        step_id: "implement",
+        workspace,
+      });
+
+      assertOk(result);
+      expect(result.step_id).toBe("implement");
+      expect(result.status).toBe("completed");
+      expect(result.transcript_path).toBeDefined();
+      expect(result.transcript_path).not.toBe("");
+      expect(result.transcript_path).toContain(join(workspace, "transcripts"));
+    } finally {
+      restoreEnv(saved);
+      await rm(fakeConfigDir, { force: true, recursive: true });
+    }
+  });
+
+  test("without agent_id, no transcript_path in result (backward compat)", async () => {
+    const result = await logStep({
+      agent_type: "engineer",
+      status: "completed",
+      step_id: "implement-no-capture",
+      workspace,
+      // intentionally no agent_id
+    });
+
+    assertOk(result);
+    expect(result.step_id).toBe("implement-no-capture");
+    expect(result.transcript_path).toBeUndefined();
+  });
+
+  test("agent_id provided but source file missing → step completes, no transcript_path", async () => {
+    const saved = saveEnv();
+    const emptyConfigDir = await mkdtemp(join(tmpdir(), "canon-cc-empty-"));
+
+    try {
+      // Point to a config dir that has no agent JSONL files
+      process.env.CLAUDE_CONFIG_DIR = emptyConfigDir;
+      process.env.CLAUDE_SESSION_ID = SESSION_ID;
+      process.env.CANON_PROJECT_DIR = CANON_PROJECT_DIR_VAL;
+
+      await logStep({
+        agent_type: "engineer",
+        status: "planned",
+        step_id: "implement-no-source",
+        workspace,
+      });
+
+      const result = await logStep({
+        agent_id: "nonexistent-agent",
+        status: "completed",
+        step_id: "implement-no-source",
+        workspace,
+      });
+
+      // Step must succeed (best-effort — capture failure never blocks)
+      assertOk(result);
+      expect(result.status).toBe("completed");
+      // No transcript_path because source file was missing
+      expect(result.transcript_path).toBeUndefined();
+    } finally {
+      restoreEnv(saved);
+      await rm(emptyConfigDir, { force: true, recursive: true });
+    }
+  });
+
+  test("transcript_path is persisted to journal.json after successful capture", async () => {
+    const saved = saveEnv();
+    const fakeConfigDir = await mkdtemp(join(tmpdir(), "canon-cc-config2-"));
+
+    try {
+      writeAgentJsonl(fakeConfigDir, PROJECT_ID, SESSION_ID, AGENT_ID);
+
+      process.env.CLAUDE_CONFIG_DIR = fakeConfigDir;
+      process.env.CLAUDE_SESSION_ID = SESSION_ID;
+      process.env.CANON_PROJECT_DIR = CANON_PROJECT_DIR_VAL;
+
+      // Plan then complete with agent_id
+      await logStep({
+        agent_type: "tester",
+        status: "planned",
+        step_id: "test-step",
+        workspace,
+      });
+
+      const result = await logStep({
+        agent_id: AGENT_ID,
+        status: "completed",
+        step_id: "test-step",
+        workspace,
+      });
+
+      assertOk(result);
+      expect(result.transcript_path).toBeDefined();
+      expect(result.transcript_path).not.toBe("");
+
+      // Read the journal.json from disk and verify transcript_path is persisted
+      const raw = await readFile(join(workspace, "journal.json"), "utf-8");
+      const journal = JSON.parse(raw) as Journal;
+      const step = journal.steps.find((s) => s.step_id === "test-step");
+      expect(step).toBeDefined();
+      expect(step?.transcript_path).toBe(result.transcript_path);
+    } finally {
+      restoreEnv(saved);
+      await rm(fakeConfigDir, { force: true, recursive: true });
+    }
   });
 });
