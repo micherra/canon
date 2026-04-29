@@ -13,12 +13,12 @@ Each rule is a standalone markdown file named with the `agent-` prefix (e.g., `a
 
 Rules are organized into behavioral categories:
 
-- **Artifact rules** — govern what agents must produce (`agent-artifacts-only`, `agent-template-required`, `agent-missing-artifact`)
+- **Artifact rules** — govern what agents must produce (`agent-artifacts-only`, `agent-template-required`, `agent-missing-artifact`, `agent-artifact-write-before-return`)
 - **Research rules** — govern how agents investigate (`agent-scoped-research`, `agent-evidence-over-intuition`, `agent-surface-assumptions`)
 - **Implementation rules** — govern how agents write code (`agent-tdd-required`, `agent-minimal-fix`, `agent-simplify-before-extending`, `agent-structured-triage`, `agent-document-public-apis`)
 - **Design rules** — govern pre-code planning (`agent-design-before-code`, `agent-plans-are-prompts`)
 - **Testing rules** — govern test quality (`agent-test-sad-paths`, `agent-test-the-contract`)
-- **Coordination rules** — govern agent collaboration (`agent-fresh-context`, `agent-workspace-scoping`, `agent-conflict-detection`, `agent-context-sync`, `agent-convergence-discipline`, `agent-document-decisions`)
+- **Coordination rules** — govern agent collaboration (`agent-fresh-context`, `agent-workspace-scoping`, `agent-conflict-detection`, `agent-context-sync`, `agent-convergence-discipline`, `agent-document-decisions`, `agent-worktree-orientation`)
 - **Review rules** — govern review behavior (`agent-cold-review`, `agent-assume-hostile-input`)
 
 ## Conventions
