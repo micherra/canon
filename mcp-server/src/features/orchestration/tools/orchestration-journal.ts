@@ -217,21 +217,6 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
   if (input.outcome !== undefined) step.outcome = input.outcome;
 }
 
-/**
- * Log or update a step's status in the workspace journal.
- *
- * When `status === "completed"`, this function enforces artifact presence
- * BEFORE mutating the journal: if any declared artifact paths (excluding
- * `outcome:` sentinels and `${variable}` templates) do not exist on disk,
- * the function returns a recoverable `INVALID_INPUT` error without writing
- * anything. The journal remains untouched — no rollback needed.
- *
- * @param input - Step metadata including workspace path, step ID, status,
- *   and optional agent context.
- * @returns `toolOk` when the step is successfully logged; `toolError` with
- *   `recoverable: true` and `context.artifacts_missing` when attempting
- *   completion with missing artifacts.
- */
 function enforceArtifacts(
   workspace: string,
   stepId: string,
@@ -283,7 +268,12 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   const journal = await readJournal(input.workspace);
 
   if (input.status === "completed") {
-    const rejection = enforceArtifacts(input.workspace, input.step_id, journal, input.artifacts_expected);
+    const rejection = enforceArtifacts(
+      input.workspace,
+      input.step_id,
+      journal,
+      input.artifacts_expected,
+    );
     if (rejection) return rejection;
   }
 

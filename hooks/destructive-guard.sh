@@ -95,7 +95,7 @@ if echo "$COMMAND" | grep -qE '\bgit\b.*\bbranch\b.*-D\b'; then
   # Exception: allow force-deletion of Canon-managed branches.
   # Extract all arguments that appear after -D (strip any flags starting with -).
   # If ALL branch names start with canon/ or canon-wave/, the operation is safe.
-  branch_args=$(echo "$COMMAND" | sed 's/.*-D[[:space:]]*//' | tr ' ' '\n' | grep -v '^-')
+  branch_args=$(echo "$COMMAND" | sed 's/.*-D[[:space:]]*//' | tr ' \t' '\n' | grep -v '^-')
   if [[ -n "$branch_args" ]]; then
     all_canon=true
     while IFS= read -r branch; do

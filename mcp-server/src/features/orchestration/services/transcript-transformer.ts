@@ -202,14 +202,12 @@ export function transformClaudeCodeTranscript(entries: ClaudeCodeEntry[]): Trans
 
     const { message, timestamp } = parsed.data;
 
-    if (typeof message.content === "string") {
-      output.push(
-        processStringContent(state, message as { content: string; role: "user" | "assistant"; usage?: { output_tokens?: number } }, timestamp),
-      );
+    const { content, ...rest } = message;
+
+    if (typeof content === "string") {
+      output.push(processStringContent(state, { content, ...rest }, timestamp));
     } else {
-      output.push(
-        ...processArrayContent(state, message as { content: ContentBlock[]; usage?: { output_tokens?: number } }, timestamp),
-      );
+      output.push(...processArrayContent(state, { content, ...rest }, timestamp));
     }
   }
 
