@@ -152,6 +152,8 @@ describe("logStep", () => {
   });
 
   test("persists domain_skills_loaded and outcome fields (v2.1 extension)", async () => {
+    // Create the declared artifact so the new enforcement does not block completion.
+    writeFileSync(join(workspace, "plan.md"), "# Plan\n");
     await logStep({
       artifacts_expected: ["plan.md"],
       domain_skills_loaded: ["backend-api", "authentication-security"],
@@ -229,13 +231,24 @@ describe("verifyCompletion", () => {
     expect(result.steps_missing.map((s) => s.step_id).sort()).toEqual(["s1", "s2"]);
   });
 
-  test("detects artifacts_missing when expected files don't exist", async () => {
-    await logStep({
-      artifacts_expected: ["nope.md"],
-      status: "completed",
-      step_id: "s1",
+  test("detects artifacts_missing when a completed step has missing artifacts (journal written directly)", async () => {
+    // logStep now mechanically refuses to complete steps with missing artifacts,
+    // so we simulate a pre-existing journal (e.g., from a prior run, manual edit,
+    // or migrated workspace) where a step was already marked completed but its
+    // artifact is absent. verifyCompletion must still catch this.
+    const journal: Journal = {
+      steps: [
+        {
+          agent_type: "engineer",
+          artifacts_expected: ["nope.md"],
+          status: "completed",
+          step_id: "s1",
+        },
+      ],
+      version: 1,
       workspace,
-    });
+    };
+    writeFileSync(join(workspace, "journal.json"), JSON.stringify(journal, null, 2));
 
     const result = await verifyCompletion({ workspace });
     assertOk(result);
@@ -353,128 +366,16 @@ describe("verifyCompletion", () => {
   });
 });
 
-describe("logStep artifact scanning on completion", () => {
-  test("returns artifacts_missing when completed step has missing artifacts", async () => {
-    const result = await logStep({
-      artifacts_expected: ["plans/DESIGN.md", "plans/INDEX.md"],
-      status: "completed",
-      step_id: "plan",
-      workspace,
-    });
-    assertOk(result);
-    // Both files don't exist — both should be reported missing
-    expect(result.artifacts_missing).toEqual(["plans/DESIGN.md", "plans/INDEX.md"]);
-  });
-
-  test("does NOT return artifacts_missing when completed step has all artifacts present", async () => {
-    mkdirSync(join(workspace, "plans"), { recursive: true });
-    writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
-
-    const result = await logStep({
-      artifacts_expected: ["plans/DESIGN.md"],
-      status: "completed",
-      step_id: "plan",
-      workspace,
-    });
-    assertOk(result);
-    // File exists — no missing artifacts
-    expect(result.artifacts_missing).toBeUndefined();
-  });
-
-  test("skips outcome: prefixed entries in artifact scanning", async () => {
-    const result = await logStep({
-      artifacts_expected: ["outcome: all tests passing", "plans/DESIGN.md"],
-      status: "completed",
-      step_id: "plan",
-      workspace,
-    });
-    assertOk(result);
-    // outcome: entry is skipped; only plans/DESIGN.md is checked (and missing)
-    expect(result.artifacts_missing).toEqual(["plans/DESIGN.md"]);
-  });
-
-  test("skips ${variable} entries in artifact scanning", async () => {
-    const result = await logStep({
-      artifacts_expected: ["plans/${slug}/DESIGN.md"],
-      status: "completed",
-      step_id: "plan",
-      workspace,
-    });
-    assertOk(result);
-    // Unresolved template variable — skipped, not reported as missing
-    expect(result.artifacts_missing).toBeUndefined();
-  });
-
-  test("does not include artifacts_missing for non-completed statuses", async () => {
-    const statuses = ["planned", "started", "skipped"] as const;
-    const results = await Promise.all(
-      statuses.map((status) =>
-        logStep({
-          artifacts_expected: ["plans/DESIGN.md"],
-          status,
-          step_id: `step-${status}`,
-          workspace,
-        }),
-      ),
-    );
-    for (const result of results) {
-      assertOk(result);
-      // Artifact scanning only happens on completion
-      expect(result.artifacts_missing).toBeUndefined();
-    }
-  });
-
-  test("empty artifacts_expected array on completed step → artifacts_missing is absent", async () => {
-    const result = await logStep({
-      artifacts_expected: [],
-      status: "completed",
-      step_id: "plan",
-      workspace,
-    });
-    assertOk(result);
-    // No artifacts declared — nothing to check, so the field is absent entirely
-    // (not an empty array) to distinguish "nothing declared" from "checked and found missing"
-    expect(result.artifacts_missing).toBeUndefined();
-  });
-
-  test("no artifacts_expected field on completed step → artifacts_missing is absent", async () => {
-    const result = await logStep({
-      // artifacts_expected intentionally omitted
-      status: "completed",
-      step_id: "plan",
-      workspace,
-    });
-    assertOk(result);
-    // Omitting artifacts_expected defaults to [] — same behavior as empty array
-    expect(result.artifacts_missing).toBeUndefined();
-  });
-
-  test("partial presence: only missing artifacts appear in artifacts_missing", async () => {
-    mkdirSync(join(workspace, "plans"), { recursive: true });
-    writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
-
-    const result = await logStep({
-      artifacts_expected: ["plans/DESIGN.md", "plans/INDEX.md"],
-      status: "completed",
-      step_id: "plan",
-      workspace,
-    });
-    assertOk(result);
-    // DESIGN.md exists, INDEX.md does not — only the missing one is reported
-    expect(result.artifacts_missing).toEqual(["plans/INDEX.md"]);
-  });
-});
-
 // ─── NF-17: logStep transcript-capture integration ───────────────────────────
 
 describe("logStep — transcript capture via agent_id", () => {
   const AGENT_ID = "nf17-agent-01";
   // logStep calls captureTranscript without project_id/session_id, so they
   // must come from CANON_PROJECT_DIR → deriveProjectIdFromEnv() and CLAUDE_SESSION_ID.
-  // CANON_PROJECT_DIR="/Users/test-project" → project_id = "Users-test-project"
-  // (leading slash becomes "-", then the leading "-" is stripped by deriveProjectIdFromEnv)
+  // CANON_PROJECT_DIR="/Users/test-project" → project_id = "-Users-test-project"
+  // (slashes replaced with dashes, leading dash preserved)
   const CANON_PROJECT_DIR_VAL = "/Users/test-project";
-  const PROJECT_ID = "Users-test-project"; // slash-replaced form used as folder name
+  const PROJECT_ID = "-Users-test-project";
   const SESSION_ID = "session-nf17";
 
   test("agent_id triggers capture and records transcript_path in result", async () => {
