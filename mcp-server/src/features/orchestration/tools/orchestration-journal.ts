@@ -89,15 +89,8 @@ export type LogStepResult = {
    * with `outcome:` are excluded from this check — they are not file paths.
    */
   artifacts_missing?: string[];
-  /** Path to the captured transcript JSONL file. Present only when transcript capture succeeded. */
-  transcript_path?: string;
   status: JournalStepStatus;
   step_id: string;
-  /**
-   * Path to the captured transcript file inside `{workspace}/transcripts/`.
-   * Only present when `agent_id` was provided in `LogStepInput` and transcript
-   * capture succeeded. Absent when no `agent_id` was given or capture failed.
-   */
   transcript_path?: string;
 };
 
@@ -218,20 +211,6 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
   if (input.outcome !== undefined) step.outcome = input.outcome;
 }
 
-async function tryCapture(input: LogStepInput, step: JournalStep): Promise<string | null> {
-  try {
-    const capture = await captureTranscript({
-      agent_id: input.agent_id!,
-      agent_type: step.agent_type ?? "unknown",
-      step_id: input.step_id,
-      workspace: input.workspace,
-    });
-    return capture.ok && capture.transcript_path ? capture.transcript_path : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
@@ -274,15 +253,6 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     }
     if (transcriptPath) {
       result.transcript_path = transcriptPath;
-    }
-  }
-
-  if (input.status === "completed" && input.agent_id) {
-    const path = await tryCapture(input, step);
-    if (path) {
-      result.transcript_path = path;
-      step.transcript_path = path;
-      await writeJournal(input.workspace, journal);
     }
   }
 

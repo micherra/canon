@@ -26,7 +26,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TranscriptEntry } from "@domains/flows/event-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
-import type { TranscriptEntry } from "@domains/flows/event-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
