@@ -225,6 +225,20 @@ Discovery heuristics:
 
 Only report commands for tools that have visible configuration. Do not guess or assume tools are installed.
 
+## Build and Lint Verification
+
+After completing Stages 1–4, run the project build and lint to surface compilation errors and lint violations. This is not optional — lint errors are review findings.
+
+**Build**: Run `npm run build` (or the equivalent for the project's ecosystem). Compilation errors are BLOCKING findings. Report them under `## Build Verification` with the error output and classify them as `rule`-severity violations.
+
+**Lint**: Run the lint command you discovered above. If no lint configuration exists, note "No lint configuration found" and skip. If lint fails:
+- Add each distinct lint error category as a finding in your review output under `## Lint Verification`
+- Severity: treat lint errors as WARNING findings (unless the lint rule maps directly to a Canon `rule`-severity principle, in which case escalate to BLOCKING)
+- Format: `{file}:{line} — {rule}: {description}. Fix: {concrete suggestion}`
+- Include lint errors in the `violations` array of your `store_pr_review` / `write_review` call with `source: "lint"`
+
+Do not suppress or omit lint output because it is voluminous — summarize if needed (e.g., "47 `no-unused-vars` errors across 12 files — all unused import variables introduced in this diff") but always report it.
+
 ## Stage 4: Drift-from-Plan Check
 
 When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md), compare what was actually changed against what the architect planned. If plan files (DESIGN.md or INDEX.md) are not available, include a note in your output: "Stage 4 skipped — no plan files (DESIGN.md, INDEX.md) in workspace." so the user knows the check exists but wasn't run.
