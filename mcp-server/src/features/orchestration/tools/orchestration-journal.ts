@@ -212,6 +212,20 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
   if (input.outcome !== undefined) step.outcome = input.outcome;
 }
 
+async function tryCapture(input: LogStepInput, step: JournalStep): Promise<string | null> {
+  try {
+    const capture = await captureTranscript({
+      agent_id: input.agent_id!,
+      agent_type: step.agent_type ?? "unknown",
+      step_id: input.step_id,
+      workspace: input.workspace,
+    });
+    return capture.ok && capture.transcript_path ? capture.transcript_path : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
@@ -236,23 +250,12 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     }
   }
 
-  // Best-effort transcript capture when agent_id is provided on completion
   if (input.status === "completed" && input.agent_id) {
-    try {
-      const capture = await captureTranscript({
-        agent_id: input.agent_id,
-        agent_type: step.agent_type ?? "unknown",
-        step_id: input.step_id,
-        workspace: input.workspace,
-      });
-      if (capture.ok && capture.transcript_path) {
-        result.transcript_path = capture.transcript_path;
-        step.transcript_path = capture.transcript_path;
-        // Re-write journal with transcript_path persisted
-        await writeJournal(input.workspace, journal);
-      }
-    } catch {
-      // Best-effort — capture failure never blocks step completion
+    const path = await tryCapture(input, step);
+    if (path) {
+      result.transcript_path = path;
+      step.transcript_path = path;
+      await writeJournal(input.workspace, journal);
     }
   }
 
