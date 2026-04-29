@@ -51,13 +51,15 @@ function claudeConfigHome(): string {
 
 /**
  * Derive the Claude Code project ID from CANON_PROJECT_DIR env var.
- * Sanitizes the path: replaces all "/" with "-", strips leading "-".
+ * Sanitizes the path: replaces all "/" with "-". The leading "-" produced
+ * by absolute paths is preserved — Claude Code stores projects under folder
+ * names like "-Users-foo-project" (leading dash retained).
  * Returns null when the env var is not set.
  */
 function deriveProjectIdFromEnv(): string | null {
   const canonProjectDir = process.env.CANON_PROJECT_DIR;
   if (!canonProjectDir) return null;
-  return canonProjectDir.replace(/\//g, "-").replace(/^-/, "");
+  return canonProjectDir.replace(/\//g, "-");
 }
 
 /**

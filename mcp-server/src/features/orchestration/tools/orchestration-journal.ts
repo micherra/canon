@@ -35,6 +35,7 @@ import { archiveWorkspace } from "@features/history/services/archive-service.ts"
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { captureTranscript } from "./capture-transcript.ts";
 
 function resolveProjectDir(): string {
   return process.env.CANON_PROJECT_DIR ?? process.cwd();
@@ -57,6 +58,7 @@ export type JournalStep = {
   started_at?: string;
   status: JournalStepStatus;
   step_id: string;
+  transcript_path?: string;
 };
 
 export type Journal = {
@@ -66,6 +68,8 @@ export type Journal = {
 };
 
 export type LogStepInput = {
+  /** Agent ID for transcript capture. When provided on a completed step, logStep calls captureTranscript internally. */
+  agent_id?: string;
   agent_type?: string | null;
   artifacts_expected?: string[];
   domain_skills_loaded?: string[];
@@ -88,6 +92,12 @@ export type LogStepResult = {
   artifacts_missing?: string[];
   status: JournalStepStatus;
   step_id: string;
+  /**
+   * Path to the captured transcript JSONL file. Present when agent_id was
+   * provided and transcript capture succeeded. Absent when agent_id was not
+   * provided or when capture returned an empty path (best-effort failure).
+   */
+  transcript_path?: string;
 };
 
 export type VerifyCompletionInput = {
@@ -221,9 +231,27 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   const step = upsertStep(journal, input);
   applyTimestamps(step, input.status);
   applyMetadata(step, input);
-  await writeJournal(input.workspace, journal);
 
   const result: LogStepResult = { status: input.status, step_id: input.step_id };
+
+  // Transcript capture: best-effort when agent_id is provided on a completed step.
+  // Capture failures never block the step from completing (fail-safe).
+  if (input.status === "completed" && input.agent_id) {
+    const agentType = step.agent_type ?? "unknown";
+    const captureResult = await captureTranscript({
+      agent_id: input.agent_id,
+      agent_type: agentType,
+      step_id: input.step_id,
+      workspace: input.workspace,
+    });
+    if (captureResult.ok && captureResult.transcript_path) {
+      step.transcript_path = captureResult.transcript_path;
+      result.transcript_path = captureResult.transcript_path;
+    }
+  }
+
+  await writeJournal(input.workspace, journal);
+
   if (input.status === "completed") {
     const missing = scanArtifactsForStep(input.workspace, step);
     if (missing.length > 0) {
