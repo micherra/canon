@@ -121,6 +121,8 @@ If the current message is a build request, route to `planner` regardless of prio
 
 Permitted between intent classification and planner spawn: `git rev-parse HEAD` (for `base_commit`), `git branch --show-current` (for `branch`). Nothing else.
 
+This gate also applies mid-flow: when an agent fails or returns incomplete results, diagnose the failure or respawn the agent — never substitute by performing the agent's work directly (`Read`, `Bash`, `Grep`, `Edit`, or `Write` on task files).
+
 ### Pre-Write Gate (L1)
 
 **Before using `Edit`, `Write`, or `Bash` for code changes**, verify Canon routing: ask yourself *"Is this request currently routed through a Canon build flow (planner + approved runbook)?"* If no, stop. Present the build request to the user and route through `planner`. Editing code outside a Canon flow is the failure mode this rule prevents.
