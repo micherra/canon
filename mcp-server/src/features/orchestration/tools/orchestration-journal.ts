@@ -261,6 +261,10 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     const missing = scanArtifactsForStep(input.workspace, step);
     if (missing.length > 0) {
       step.status = preCompletionStatus;
+      // Roll back completion metadata so the journal doesn't have
+      // a non-completed step with completed_at or outcome fields.
+      delete step.completed_at;
+      if (input.outcome !== undefined) delete step.outcome;
       await writeJournal(input.workspace, journal);
       return toolError(
         "INVALID_INPUT",

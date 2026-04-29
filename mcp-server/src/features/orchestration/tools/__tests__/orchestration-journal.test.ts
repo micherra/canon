@@ -581,6 +581,33 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     expect(step?.status).toBe("planned");
   });
 
+  test("artifact-check failure rolls back completed_at and outcome (P2 fix)", async () => {
+    // Step registered as started with expected artifacts and a missing artifact
+    await logStep({
+      artifacts_expected: ["plans/MISSING.md"],
+      status: "started",
+      step_id: "s1",
+      workspace,
+    });
+
+    // Attempt to complete with an outcome — artifact is missing so it should fail
+    const result = await logStep({
+      outcome: { review_verdict: "clean" },
+      status: "completed",
+      step_id: "s1",
+      workspace,
+    });
+
+    expect(isToolError(result)).toBe(true);
+
+    // Journal must have status reverted AND completion metadata cleared
+    const journal = await readJournalFile(workspace);
+    const step = journal.steps.find((s) => s.step_id === "s1");
+    expect(step?.status).toBe("started");
+    expect(step?.completed_at).toBeUndefined();
+    expect(step?.outcome).toBeUndefined();
+  });
+
   test("does not apply artifact enforcement for non-completed statuses", async () => {
     const statuses = ["planned", "started", "skipped"] as const;
     const results = await Promise.all(
