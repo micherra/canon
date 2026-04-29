@@ -368,4 +368,44 @@ describe("logStep artifact scanning on completion", () => {
       expect(result.artifacts_missing).toBeUndefined();
     }
   });
+
+  test("empty artifacts_expected array on completed step → artifacts_missing is absent", async () => {
+    const result = await logStep({
+      artifacts_expected: [],
+      status: "completed",
+      step_id: "plan",
+      workspace,
+    });
+    assertOk(result);
+    // No artifacts declared — nothing to check, so the field is absent entirely
+    // (not an empty array) to distinguish "nothing declared" from "checked and found missing"
+    expect(result.artifacts_missing).toBeUndefined();
+  });
+
+  test("no artifacts_expected field on completed step → artifacts_missing is absent", async () => {
+    const result = await logStep({
+      // artifacts_expected intentionally omitted
+      status: "completed",
+      step_id: "plan",
+      workspace,
+    });
+    assertOk(result);
+    // Omitting artifacts_expected defaults to [] — same behavior as empty array
+    expect(result.artifacts_missing).toBeUndefined();
+  });
+
+  test("partial presence: only missing artifacts appear in artifacts_missing", async () => {
+    mkdirSync(join(workspace, "plans"), { recursive: true });
+    writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
+
+    const result = await logStep({
+      artifacts_expected: ["plans/DESIGN.md", "plans/INDEX.md"],
+      status: "completed",
+      step_id: "plan",
+      workspace,
+    });
+    assertOk(result);
+    // DESIGN.md exists, INDEX.md does not — only the missing one is reported
+    expect(result.artifacts_missing).toEqual(["plans/INDEX.md"]);
+  });
 });
