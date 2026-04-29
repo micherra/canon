@@ -12,6 +12,7 @@ rules:
   - agent-assume-hostile-input
   - agent-template-required
   - agent-context-check
+  - agent-artifact-write-before-return
 references:
   - security-checklist
   - principle-loading
@@ -24,6 +25,7 @@ tools:
   - Glob
   - Grep
   - WebFetch
+  - Write
   - mcp__canon__semantic_search
   - mcp__canon__get_file_context
   - mcp__canon__graph_query

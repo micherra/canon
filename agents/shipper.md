@@ -13,6 +13,8 @@ rules:
   - agent-artifacts-only
   - agent-template-required
   - agent-context-check
+  - agent-artifact-write-before-return
+  - agent-worktree-orientation
 references:
   - status-protocol
 templates:

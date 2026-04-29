@@ -15,6 +15,8 @@ rules:
   - agent-test-sad-paths
   - agent-template-required
   - agent-context-check
+  - agent-artifact-write-before-return
+  - agent-worktree-orientation
 references:
   - principle-loading
   - status-protocol

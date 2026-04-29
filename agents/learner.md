@@ -13,6 +13,7 @@ rules:
   - agent-evidence-over-intuition
   - agent-template-required
   - agent-context-check
+  - agent-artifact-write-before-return
 references:
   - status-protocol
   - content-flow

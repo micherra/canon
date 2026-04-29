@@ -16,6 +16,8 @@ rules:
   - agent-template-required
   - agent-context-check
   - agent-document-decisions
+  - agent-artifact-write-before-return
+  - agent-worktree-orientation
 references:
   - workspace-logging
   - status-protocol
@@ -24,6 +26,7 @@ templates:
   - context-sync-report
 tools:
   - Read
+  - Write
   - Edit
   - Bash
   - Glob

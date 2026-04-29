@@ -13,6 +13,7 @@ rules:
   - agent-cold-review
   - agent-template-required
   - agent-context-check
+  - agent-artifact-write-before-return
 references:
   - principle-loading
   - status-protocol

@@ -20,6 +20,8 @@ rules:
   - agent-missing-artifact
   - agent-context-check
   - agent-document-public-apis
+  - agent-artifact-write-before-return
+  - agent-worktree-orientation
 references:
   - principle-loading
   - status-protocol
