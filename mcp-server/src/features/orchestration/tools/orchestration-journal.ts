@@ -76,6 +76,16 @@ export type LogStepInput = {
 };
 
 export type LogStepResult = {
+  /**
+   * Artifact paths declared in `artifacts_expected` that do not exist on disk
+   * after the step completed. Only populated when `status === "completed"` and
+   * at least one declared artifact is missing. Absent (not an empty array) when
+   * all artifacts are present or when the step is not completed.
+   *
+   * Paths with unresolved `${variable}` template fragments and paths prefixed
+   * with `outcome:` are excluded from this check — they are not file paths.
+   */
+  artifacts_missing?: string[];
   status: JournalStepStatus;
   step_id: string;
 };
@@ -213,7 +223,14 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   applyMetadata(step, input);
   await writeJournal(input.workspace, journal);
 
-  return toolOk({ status: input.status, step_id: input.step_id });
+  const result: LogStepResult = { status: input.status, step_id: input.step_id };
+  if (input.status === "completed") {
+    const missing = scanArtifactsForStep(input.workspace, step);
+    if (missing.length > 0) {
+      result.artifacts_missing = missing;
+    }
+  }
+  return toolOk(result);
 }
 
 /**
@@ -224,6 +241,30 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
  */
 function artifactExists(workspace: string, artifact: string): boolean {
   return globSync(artifact, { cwd: workspace }).length > 0;
+}
+
+/**
+ * Scan a single step's declared artifacts for missing files.
+ *
+ * Skips entries that are:
+ * - Prefixed with `outcome:` — these are outcome descriptions, not file paths
+ * - Containing `${` — these are unresolved template variables
+ *
+ * Returns an array of artifact paths that are missing from disk. Returns an
+ * empty array when all artifacts are present (or all entries are skipped).
+ */
+function scanArtifactsForStep(workspace: string, step: JournalStep): string[] {
+  const missing: string[] = [];
+  for (const art of step.artifacts_expected ?? []) {
+    // Skip outcome descriptions (not file paths)
+    if (art.startsWith("outcome:")) continue;
+    // Skip unresolved template variables
+    if (art.includes("${")) continue;
+    if (!artifactExists(workspace, art)) {
+      missing.push(art);
+    }
+  }
+  return missing;
 }
 
 type ArtifactScan = {
@@ -239,6 +280,10 @@ function scanArtifacts(workspace: string, completed: readonly JournalStep[]): Ar
   for (const step of completed) {
     for (const art of step.artifacts_expected ?? []) {
       expected.push(art);
+      // Skip outcome descriptions (not file paths) — defensive fix: outcome:
+      // entries would otherwise be passed to globSync which silently returns
+      // no matches, causing false-positive missing reports.
+      if (art.startsWith("outcome:")) continue;
       if (art.includes("${")) {
         skipped_unresolved.push(art);
       } else if (!artifactExists(workspace, art)) {

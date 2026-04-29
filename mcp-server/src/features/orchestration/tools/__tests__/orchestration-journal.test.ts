@@ -302,3 +302,70 @@ describe("verifyCompletion", () => {
     expect(result.complete).toBe(true);
   });
 });
+
+describe("logStep artifact scanning on completion", () => {
+  test("returns artifacts_missing when completed step has missing artifacts", async () => {
+    const result = await logStep({
+      artifacts_expected: ["plans/DESIGN.md", "plans/INDEX.md"],
+      status: "completed",
+      step_id: "plan",
+      workspace,
+    });
+    assertOk(result);
+    // Both files don't exist — both should be reported missing
+    expect(result.artifacts_missing).toEqual(["plans/DESIGN.md", "plans/INDEX.md"]);
+  });
+
+  test("does NOT return artifacts_missing when completed step has all artifacts present", async () => {
+    mkdirSync(join(workspace, "plans"), { recursive: true });
+    writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
+
+    const result = await logStep({
+      artifacts_expected: ["plans/DESIGN.md"],
+      status: "completed",
+      step_id: "plan",
+      workspace,
+    });
+    assertOk(result);
+    // File exists — no missing artifacts
+    expect(result.artifacts_missing).toBeUndefined();
+  });
+
+  test("skips outcome: prefixed entries in artifact scanning", async () => {
+    const result = await logStep({
+      artifacts_expected: ["outcome: all tests passing", "plans/DESIGN.md"],
+      status: "completed",
+      step_id: "plan",
+      workspace,
+    });
+    assertOk(result);
+    // outcome: entry is skipped; only plans/DESIGN.md is checked (and missing)
+    expect(result.artifacts_missing).toEqual(["plans/DESIGN.md"]);
+  });
+
+  test("skips ${variable} entries in artifact scanning", async () => {
+    const result = await logStep({
+      artifacts_expected: ["plans/${slug}/DESIGN.md"],
+      status: "completed",
+      step_id: "plan",
+      workspace,
+    });
+    assertOk(result);
+    // Unresolved template variable — skipped, not reported as missing
+    expect(result.artifacts_missing).toBeUndefined();
+  });
+
+  test("does not include artifacts_missing for non-completed statuses", async () => {
+    for (const status of ["planned", "started", "skipped"] as const) {
+      const result = await logStep({
+        artifacts_expected: ["plans/DESIGN.md"],
+        status,
+        step_id: `step-${status}`,
+        workspace,
+      });
+      assertOk(result);
+      // Artifact scanning only happens on completion
+      expect(result.artifacts_missing).toBeUndefined();
+    }
+  });
+});
