@@ -235,10 +235,16 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 ### Completion Checklist
 
 1. Call `verify_completion({ workspace })` — if steps or artifacts missing, resolve before proceeding.
-2. Call `update_board({ workspace, operation: "complete_flow" })`.
-3. Verify file claims released.
-4. Evaluate learn gate: run `.canon/learn.sh` if it exists.
-5. Record final flow metrics.
+2. Merge worktree branch to main:
+   - `git checkout main`
+   - `git merge canon/{slug} --no-edit`
+   - If merge conflicts: present conflicting files to user as HITL — do NOT force-push or use `--theirs`.
+   - If clean merge: proceed to step 3.
+   - After successful merge: `git worktree remove {worktree_path}` and `git branch -d canon/{slug}`.
+3. Call `update_board({ workspace, operation: "complete_flow" })`.
+4. Verify file claims released.
+5. Evaluate learn gate: run `.canon/learn.sh` if it exists.
+6. Record final flow metrics.
 
 ### Commit Provenance
 

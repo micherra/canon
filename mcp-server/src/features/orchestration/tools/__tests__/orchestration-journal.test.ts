@@ -471,9 +471,10 @@ describe("logStep — transcript capture via agent_id", () => {
   const AGENT_ID = "nf17-agent-01";
   // logStep calls captureTranscript without project_id/session_id, so they
   // must come from CANON_PROJECT_DIR → deriveProjectIdFromEnv() and CLAUDE_SESSION_ID.
-  // CANON_PROJECT_DIR="/Users/test-project" → project_id = "-Users-test-project"
+  // CANON_PROJECT_DIR="/Users/test-project" → project_id = "Users-test-project"
+  // (leading slash becomes "-", then the leading "-" is stripped by deriveProjectIdFromEnv)
   const CANON_PROJECT_DIR_VAL = "/Users/test-project";
-  const PROJECT_ID = "-Users-test-project"; // slash-replaced form used as folder name
+  const PROJECT_ID = "Users-test-project"; // slash-replaced form used as folder name
   const SESSION_ID = "session-nf17";
 
   test("agent_id triggers capture and records transcript_path in result", async () => {
