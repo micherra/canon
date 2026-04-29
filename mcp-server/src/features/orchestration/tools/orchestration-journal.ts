@@ -220,12 +220,11 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
 /**
  * Log or update a step's status in the workspace journal.
  *
- * When `status === "completed"`, this function enforces artifact presence:
- * if any declared artifact paths (excluding `outcome:` sentinels and
- * `${variable}` templates) do not exist on disk, the function refuses to
- * mark the step completed and returns a recoverable `INVALID_INPUT` error.
- * The journal entry remains at its pre-completion status so the orchestrator
- * can retry after the agent writes the missing files.
+ * When `status === "completed"`, this function enforces artifact presence
+ * BEFORE mutating the journal: if any declared artifact paths (excluding
+ * `outcome:` sentinels and `${variable}` templates) do not exist on disk,
+ * the function returns a recoverable `INVALID_INPUT` error without writing
+ * anything. The journal remains untouched — no rollback needed.
  *
  * @param input - Step metadata including workspace path, step ID, status,
  *   and optional agent context.
@@ -245,27 +244,14 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
 
   const journal = await readJournal(input.workspace);
 
-  // Capture the pre-completion status so we can revert if artifact check fails.
-  const existingStep = journal.steps.find((s) => s.step_id === input.step_id);
-  const preCompletionStatus: JournalStepStatus = existingStep?.status ?? "planned";
-
-  const step = upsertStep(journal, input);
-  applyTimestamps(step, input.status);
-  applyMetadata(step, input);
-
-  // Mechanical artifact enforcement: refuse to complete when declared artifacts
-  // are missing. Revert the step to its pre-completion status so the journal
-  // accurately reflects what has been done, and return a recoverable error so
-  // the orchestrator can prompt the agent to write the missing files.
+  // Mechanical artifact enforcement: check BEFORE any mutation so there's
+  // nothing to roll back. The existing step's artifacts_expected (set during
+  // the "planned" call) are the source of truth.
   if (input.status === "completed") {
-    const missing = scanArtifactsForStep(input.workspace, step);
+    const existingStep = journal.steps.find((s) => s.step_id === input.step_id);
+    const artifacts = input.artifacts_expected ?? existingStep?.artifacts_expected ?? [];
+    const missing = scanArtifactList(input.workspace, artifacts);
     if (missing.length > 0) {
-      step.status = preCompletionStatus;
-      // Roll back completion metadata so the journal doesn't have
-      // a non-completed step with completed_at or outcome fields.
-      delete step.completed_at;
-      if (input.outcome !== undefined) delete step.outcome;
-      await writeJournal(input.workspace, journal);
       return toolError(
         "INVALID_INPUT",
         `Cannot complete step '${input.step_id}': missing artifacts: ${missing.join(", ")}`,
@@ -274,6 +260,10 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
       );
     }
   }
+
+  const step = upsertStep(journal, input);
+  applyTimestamps(step, input.status);
+  applyMetadata(step, input);
 
   const result: LogStepResult = { status: input.status, step_id: input.step_id };
 
@@ -309,7 +299,7 @@ function artifactExists(workspace: string, artifact: string): boolean {
 }
 
 /**
- * Scan a single step's declared artifacts for missing files.
+ * Scan a list of artifact paths for missing files.
  *
  * Skips entries that are:
  * - Prefixed with `outcome:` — these are outcome descriptions, not file paths
@@ -318,18 +308,20 @@ function artifactExists(workspace: string, artifact: string): boolean {
  * Returns an array of artifact paths that are missing from disk. Returns an
  * empty array when all artifacts are present (or all entries are skipped).
  */
-function scanArtifactsForStep(workspace: string, step: JournalStep): string[] {
+function scanArtifactList(workspace: string, artifacts: readonly string[]): string[] {
   const missing: string[] = [];
-  for (const art of step.artifacts_expected ?? []) {
-    // Skip outcome descriptions (not file paths)
+  for (const art of artifacts) {
     if (art.startsWith("outcome:")) continue;
-    // Skip unresolved template variables
     if (art.includes("${")) continue;
     if (!artifactExists(workspace, art)) {
       missing.push(art);
     }
   }
   return missing;
+}
+
+function scanArtifactsForStep(workspace: string, step: JournalStep): string[] {
+  return scanArtifactList(workspace, step.artifacts_expected ?? []);
 }
 
 type ArtifactScan = {
