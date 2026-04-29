@@ -57,6 +57,8 @@ Minimize text output during the state machine loop. Conversations exceeding ~100
 5. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
 6. Error and preflight presentations
 
+This list also defines the behavioral boundary for the Pre-Analysis Gate — when adding a new permitted output type, add it here.
+
 Do not narrate individual tool calls. One line between state transitions is correct.
 
 ## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off)
