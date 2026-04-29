@@ -273,6 +273,19 @@ type ArtifactScan = {
   skipped_unresolved: string[];
 };
 
+/**
+ * Classify a single artifact path into one of three buckets: skip (outcome/unresolved),
+ * missing, or present. Returns "outcome" | "unresolved" | "missing" | "present".
+ */
+function classifyArtifact(
+  workspace: string,
+  art: string,
+): "outcome" | "unresolved" | "missing" | "present" {
+  if (art.startsWith("outcome:")) return "outcome";
+  if (art.includes("${")) return "unresolved";
+  return artifactExists(workspace, art) ? "present" : "missing";
+}
+
 function scanArtifacts(workspace: string, completed: readonly JournalStep[]): ArtifactScan {
   const expected: string[] = [];
   const missing: string[] = [];
@@ -280,15 +293,9 @@ function scanArtifacts(workspace: string, completed: readonly JournalStep[]): Ar
   for (const step of completed) {
     for (const art of step.artifacts_expected ?? []) {
       expected.push(art);
-      // Skip outcome descriptions (not file paths) — defensive fix: outcome:
-      // entries would otherwise be passed to globSync which silently returns
-      // no matches, causing false-positive missing reports.
-      if (art.startsWith("outcome:")) continue;
-      if (art.includes("${")) {
-        skipped_unresolved.push(art);
-      } else if (!artifactExists(workspace, art)) {
-        missing.push(art);
-      }
+      const classification = classifyArtifact(workspace, art);
+      if (classification === "unresolved") skipped_unresolved.push(art);
+      else if (classification === "missing") missing.push(art);
     }
   }
   return { expected, missing, skipped_unresolved };

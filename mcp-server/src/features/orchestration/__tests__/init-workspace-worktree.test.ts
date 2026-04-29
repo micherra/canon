@@ -354,7 +354,10 @@ describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)"
     // Clear the persisted worktree_path from the session (simulate old workspace with no persisted path)
     const { getExecutionStore } = await import("@domains/workspaces/execution-store-cache.ts");
     const store = getExecutionStore(first.workspace);
-    store.updateExecution({ worktree_path: null as unknown as string, worktree_branch: null as unknown as string });
+    store.updateExecution({
+      worktree_branch: null as unknown as string,
+      worktree_path: null as unknown as string,
+    });
 
     // Resume — should fall back to legacy path
     const second = await initWorkspaceFlow(

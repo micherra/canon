@@ -56,18 +56,20 @@ type InitWorkspaceResult = {
  * List active workspaces for a branch. Scans all task subdirectories under
  * the branch workspace directory and returns sessions with status "active".
  */
+type BranchWorkspaceEntry = {
+  workspace: string;
+  session: Session;
+  board: Board;
+  resume_state: string;
+};
+
 export async function listBranchWorkspaces(
   projectDir: string,
   branch: string,
-): Promise<Array<{ workspace: string; session: Session; board: Board; resume_state: string }>> {
+): Promise<BranchWorkspaceEntry[]> {
   const sanitized = sanitizeBranch(branch);
   const branchDir = join(projectDir, ".canon", "workspaces", sanitized);
-  const results: Array<{
-    workspace: string;
-    session: Session;
-    board: Board;
-    resume_state: string;
-  }> = [];
+  const results: BranchWorkspaceEntry[] = [];
 
   let entries: string[];
   try {
@@ -98,7 +100,6 @@ export async function listBranchWorkspaces(
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
-/** Check for active file claims and return an issue string if any exist. */
 async function checkFileClaimsIssue(projectDir: string): Promise<string | null> {
   try {
     const { readClaims } = await import("@shared/lib/file-claims.ts");
@@ -110,14 +111,11 @@ async function checkFileClaimsIssue(projectDir: string): Promise<string | null> 
     );
     return `Active file claims: ${totalClaimed} file(s) claimed by workflow(s): ${[...workflows].join(", ")}`;
   } catch {
-    return null; // Claims check failure — non-blocking
+    return null;
   }
 }
 
-/**
- * Run pre-flight checks: git status, lock, stale sessions, and active file claims.
- * Returns an array of issue descriptions (empty if clean).
- */
+/** Run pre-flight checks. Returns issue descriptions (empty if clean). */
 async function runPreflightChecks(
   projectDir: string,
   branch: string,
@@ -125,24 +123,18 @@ async function runPreflightChecks(
 ): Promise<string[]> {
   const issues: string[] = [];
 
-  // 1. Check for uncommitted changes
   try {
     const result = gitStatus(projectDir, 10_000);
     const output = result.stdout.trim();
-    if (output) {
-      const lineCount = output.split("\n").length;
-      issues.push(`Uncommitted changes: ${lineCount} file(s) modified`);
-    }
+    if (output) issues.push(`Uncommitted changes: ${output.split("\n").length} file(s) modified`);
   } catch {
     // git not available — skip this check
   }
 
-  // 2. Check for stale sessions on the same branch
   try {
     const active = await listBranchWorkspaces(projectDir, branch);
     for (const ws of active) {
-      const sessionAge = Date.now() - new Date(ws.session.created).getTime();
-      if (sessionAge > FOUR_HOURS_MS) {
+      if (Date.now() - new Date(ws.session.created).getTime() > FOUR_HOURS_MS) {
         issues.push(`Stale session: "${ws.session.task}" (created ${ws.session.created})`);
       }
     }
@@ -150,20 +142,15 @@ async function runPreflightChecks(
     // Scan failure — skip
   }
 
-  // 3. Check for active file claims
   const claimsIssue = await checkFileClaimsIssue(projectDir);
   if (claimsIssue) issues.push(claimsIssue);
 
   return issues;
 }
 
-/**
- * Exported for testing — delegates to runPreflightChecks.
- * Allows unit tests to exercise preflight logic without a full workspace.
- */
+/** Exported for testing — delegates to runPreflightChecks. */
 export const runPreflightChecksForTest = runPreflightChecks;
 
-/** Check if an error is an expected "no existing DB" error. */
 function isExpectedNoDbError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException).code;
   const message = err instanceof Error ? err.message : String(err);
@@ -177,13 +164,29 @@ function isExpectedNoDbError(err: unknown): boolean {
   );
 }
 
-/** Check if an error is a UNIQUE constraint error from concurrent insertion. */
 function isSqliteConstraintError(err: unknown): boolean {
   return (
     (err as { code?: string }).code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
     (err as { code?: string }).code === "SQLITE_CONSTRAINT" ||
     (err instanceof Error && err.message.includes("UNIQUE constraint"))
   );
+}
+
+/**
+ * Resolve the worktree path for a resumed session.
+ * Priority: persisted path → new {workspace}/worktree → legacy .canon/worktrees/{slug}
+ */
+function resolveWorktreePath(
+  candidateWorkspace: string,
+  projectDir: string,
+  session: { slug: string; worktree_path?: string },
+): string {
+  if (session.worktree_path) return session.worktree_path;
+  const newPath = join(candidateWorkspace, "worktree");
+  if (existsSync(newPath)) return newPath;
+  const legacyPath = join(projectDir, ".canon", "worktrees", session.slug);
+  if (existsSync(legacyPath)) return legacyPath;
+  return newPath;
 }
 
 /** Try to resume an existing workspace. Returns result if resume succeeds, null otherwise. */
@@ -196,12 +199,7 @@ function tryResumeWorkspace(
     const session = store.getSession();
     const board = store.getBoard();
     if (session && session.status === "active" && board) {
-      // Priority: persisted path → new {workspace}/worktree → legacy .canon/worktrees/{slug}
-      const newPath = join(candidateWorkspace, "worktree");
-      const legacyPath = join(projectDir, ".canon", "worktrees", session.slug);
-      const worktreePath =
-        session.worktree_path ??
-        (existsSync(newPath) ? newPath : existsSync(legacyPath) ? legacyPath : newPath);
+      const worktreePath = resolveWorktreePath(candidateWorkspace, projectDir, session);
       const worktreeExists = existsSync(worktreePath);
       return {
         board,
@@ -222,7 +220,6 @@ function tryResumeWorkspace(
   return null;
 }
 
-/** Persist initial state and iteration records to the execution store. */
 function persistInitialStates(
   store: ReturnType<typeof getExecutionStore>,
   flow: Awaited<ReturnType<typeof loadAndResolveFlow>>,
@@ -279,7 +276,6 @@ function generateProjectStructure(projectDir: string): string | null {
       .join(", ");
 
     const top5 = findTopHubs(kgQuery.getAllFileDegrees(), fileIdToPath, 5);
-
     const hubLine =
       top5.length > 0
         ? `Hub files (high in-degree): ${top5.map((h) => `${h.path} (${h.in_degree})`).join(", ")}`
@@ -297,18 +293,15 @@ function generateProjectStructure(projectDir: string): string | null {
   }
 }
 
-/** Options for building the cache prefix. */
-type BuildCachePrefixOptions = {
-  slug: string;
-  flow: Awaited<ReturnType<typeof loadAndResolveFlow>>;
-  projectDir: string;
-  pluginDir: string;
-};
-
 /** Build the shared prompt cache prefix. */
 async function buildCachePrefix(
   input: InitWorkspaceInput,
-  options: BuildCachePrefixOptions,
+  options: {
+    slug: string;
+    flow: Awaited<ReturnType<typeof loadAndResolveFlow>>;
+    projectDir: string;
+    pluginDir: string;
+  },
 ): Promise<string> {
   const { slug, flow, projectDir, pluginDir } = options;
   const prefixParts: string[] = [];
@@ -346,13 +339,6 @@ async function buildCachePrefix(
   return prefixParts.join("\n\n---\n\n");
 }
 
-/** Options for creating and persisting a worktree. */
-type CreateWorktreeOptions = {
-  workspace: string;
-  baseCommit: string;
-  projectDir: string;
-};
-
 /** Build a unique session branch name for the build worktree. */
 function buildSessionBranchName(session: Session): string {
   return `canon/${session.slug}`;
@@ -362,7 +348,7 @@ function buildSessionBranchName(session: Session): string {
 function createAndPersistWorktree(
   store: ReturnType<typeof getExecutionStore>,
   session: Session,
-  options: CreateWorktreeOptions,
+  options: { workspace: string; baseCommit: string; projectDir: string },
 ): { worktree_path?: string; worktree_branch?: string } {
   const { workspace, baseCommit, projectDir } = options;
   const worktreePath = join(workspace, "worktree");
@@ -449,7 +435,6 @@ async function runPreflightIfNeeded(
   };
 }
 
-/** Options for finalizing a new workspace. */
 type FinalizeWorkspaceOptions = {
   workspace: string;
   slug: string;

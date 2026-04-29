@@ -356,13 +356,18 @@ describe("logStep artifact scanning on completion", () => {
   });
 
   test("does not include artifacts_missing for non-completed statuses", async () => {
-    for (const status of ["planned", "started", "skipped"] as const) {
-      const result = await logStep({
-        artifacts_expected: ["plans/DESIGN.md"],
-        status,
-        step_id: `step-${status}`,
-        workspace,
-      });
+    const statuses = ["planned", "started", "skipped"] as const;
+    const results = await Promise.all(
+      statuses.map((status) =>
+        logStep({
+          artifacts_expected: ["plans/DESIGN.md"],
+          status,
+          step_id: `step-${status}`,
+          workspace,
+        }),
+      ),
+    );
+    for (const result of results) {
       assertOk(result);
       // Artifact scanning only happens on completion
       expect(result.artifacts_missing).toBeUndefined();

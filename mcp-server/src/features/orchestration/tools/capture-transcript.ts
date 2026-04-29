@@ -63,20 +63,9 @@ function deriveProjectIdFromEnv(): string | null {
 /**
  * Build the path to the Claude Code agent transcript JSONL file.
  */
-function buildSourcePath(
-  agentId: string,
-  projectId: string,
-  sessionId: string,
-): string {
+function buildSourcePath(agentId: string, projectId: string, sessionId: string): string {
   const configHome = claudeConfigHome();
-  return join(
-    configHome,
-    "projects",
-    projectId,
-    sessionId,
-    "subagents",
-    `agent-${agentId}.jsonl`,
-  );
+  return join(configHome, "projects", projectId, sessionId, "subagents", `agent-${agentId}.jsonl`);
 }
 
 /**
@@ -166,7 +155,9 @@ export async function captureTranscript(
 
   // Transform CC entries to Canon format
   // transformClaudeCodeTranscript validates each entry and skips malformed ones
-  const canonEntries = transformClaudeCodeTranscript(rawEntries as Parameters<typeof transformClaudeCodeTranscript>[0]);
+  const canonEntries = transformClaudeCodeTranscript(
+    rawEntries as Parameters<typeof transformClaudeCodeTranscript>[0],
+  );
 
   // Write output
   try {
