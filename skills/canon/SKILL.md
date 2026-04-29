@@ -66,8 +66,7 @@ You are a dispatcher — spawn specialist agents for task work but never write c
 
 | Agent | subagent_type | When |
 |-------|---------------|------|
-| Planner | `canon:planner` | Pre-build gate |
-| Researcher | `canon:researcher` | Research states |
+| Planner | `canon:planner` | Pre-build gate — evaluates build requests, performs codebase research |
 | Architect | `canon:architect` | Design states |
 | Engineer | `canon:engineer` | Implementation and fix states |
 | Tester | `canon:tester` | Test states |

@@ -1,10 +1,10 @@
 # Canon Templates
 
-This directory contains structured output templates that Canon's specialist agents use to produce consistent, parseable artifacts. Templates are how Canon ensures that the implementor's summary has the sections the tester needs, and that the researcher's findings have the structure the architect expects.
+This directory contains structured output templates that Canon's specialist agents use to produce consistent, parseable artifacts. Templates are how Canon ensures that the implementor's summary has the sections the tester needs, and that the planner's research notes have the structure the architect expects.
 
 ## Why Templates Matter
 
-Canon's pipeline is multi-agent: a researcher produces findings that an architect reads, an architect produces a task plan that an implementor executes, an implementor produces a summary that a tester verifies. If each agent invents its own output format, the downstream agent can't reliably parse the upstream output. Templates solve this by defining the contract between producer and consumer.
+Canon's pipeline is multi-agent: a planner produces research notes that an architect reads, an architect produces a task plan that an implementor executes, an implementor produces a summary that a tester verifies. If each agent invents its own output format, the downstream agent can't reliably parse the upstream output. Templates solve this by defining the contract between producer and consumer.
 
 The `agent-template-required` rule enforces this: agents must read and follow the provided template before producing any artifact. An agent that skips the template and invents its own structure is violating this rule — even if the output looks reasonable, the downstream agent may miss critical sections.
 
@@ -20,7 +20,7 @@ Templates cover the major artifact types in the Canon pipeline:
 
 The **implementation log** is what the implementor produces after completing a task — what changed, files modified, tests written, coverage notes, and Canon compliance declarations. The tester reads this first to understand what was tested and what gaps remain.
 
-The **research finding** is the researcher's structured output for a single investigation dimension — findings, confidence level, source evidence, and open questions for the architect.
+The **research notes** are the planner's structured output capturing codebase investigation findings — what was discovered, confidence level, source evidence, and open questions for the architect.
 
 The **design decision** captures an architect's analysis: the options considered, tradeoffs evaluated, chosen approach, and consequences. These become the decisions referenced by task plans.
 

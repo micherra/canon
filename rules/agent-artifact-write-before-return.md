@@ -30,7 +30,7 @@ Together these three rules form a complete artifact lifecycle: check input exist
 
 ## Rationale
 
-Downstream agents depend on upstream artifacts. When a researcher fails to write its findings, the architect has no input. When an engineer fails to write its summary, the tester cannot determine what to test. NF-14 showed that agents consistently skip artifact writes when not explicitly instructed, causing cascading pipeline failures.
+Downstream agents depend on upstream artifacts. When the planner omits its research notes, the architect has no research context. When an engineer fails to write its summary, the tester cannot determine what to test. NF-14 showed that agents consistently skip artifact writes when not explicitly instructed, causing cascading pipeline failures.
 
 The `logStep` tool now scans for missing artifacts on completion and returns an `artifacts_missing` field — the orchestrator can detect failures earlier, but prevention is better than detection.
 

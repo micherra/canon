@@ -17,7 +17,6 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `claudemd-template.md` | scribe | CLAUDE.md structure |
 | `design-decision.md` | architect | Architecture decisions with tradeoffs |
 | `implementation-log.md` | implementor | Task implementation summary — required `#### Criteria Coverage` table maps every task-plan acceptance criterion to a disposition (`covered`, `descoped`, `partial`); reviewer checks this in Stage 3 compliance cross-check |
-| `research-finding.md` | researcher | Research findings per dimension |
 | `review-checklist.md` | reviewer | Code review output with violations |
 | `security-assessment.md` | security | Vulnerability findings and remediation |
 | `session-context.md` | orchestrator | Session-level context and blockers |

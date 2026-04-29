@@ -16,7 +16,7 @@ When an agent declares templates in its `templates:` frontmatter field, each lis
 
 ## Why
 
-Templates exist so downstream agents can reliably parse upstream output. When an engineer skips the implementation-log template, the tester can't find the `### Tests Written` section. When a researcher skips the research-finding template, the architect gets unparseable findings. Consistency across the team is more valuable than any individual agent's formatting preference.
+Templates exist so downstream agents can reliably parse upstream output. When an engineer skips the implementation-log template, the tester can't find the `### Tests Written` section. Consistency across the team is more valuable than any individual agent's formatting preference.
 
 Preloading these templates into the spawn prompt (phase1-08.6) replaces the earlier pattern of "orchestrator provides a template path, agent reads it first." Preloaded means the agent already has the template content at turn zero — no Read call, no path to pass, no forgetting. The agent is responsible for producing output matching the preloaded shape.
 
@@ -28,8 +28,7 @@ Each agent's `templates:` frontmatter lists the specific templates it produces. 
 |-------|-----------|
 | architect | design-document, task-plan, design-decision, session-context |
 | engineer | implementation-log |
-| planner | planning-brief (v2.1a adds runbook) |
-| researcher | research-finding |
+| planner | planning-brief, runbook |
 | reviewer | review-checklist |
 | scribe | claudemd-template, context-sync-report |
 | security | security-assessment |
