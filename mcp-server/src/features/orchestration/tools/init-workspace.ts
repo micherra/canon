@@ -28,7 +28,7 @@ type InitWorkspaceInput = {
   task: string;
   branch: string;
   base_commit: string;
-  tier: "small" | "medium" | "large";
+  tier?: "small" | "medium" | "large";
   original_input?: string;
   skip_flags?: string[];
   preflight?: boolean;

@@ -224,7 +224,7 @@ export const SessionSchema = z.object({
   slug: z.string(),
   status: z.enum(["active", "completed", "aborted", "rolled_back"]),
   task: z.string(),
-  tier: z.enum(["small", "medium", "large"]),
+  tier: z.enum(["small", "medium", "large"]).optional(),
   worktree_branch: z.string().optional(),
   worktree_path: z.string().optional(),
 });
