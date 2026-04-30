@@ -91,8 +91,8 @@ export function persistProgressLine(
   if (!line) return;
   try {
     store.appendProgress(line);
-  } catch {
-    /* best-effort */
+  } catch (err) {
+    console.warn("[canon] progress write failed:", err instanceof Error ? err.message : err);
   }
 }
 
@@ -107,8 +107,8 @@ export async function runDriftEffects(
     artifacts: input.artifacts,
     projectDir,
     workspace: input.workspace,
-  }).catch(() => {
-    /* best-effort */
+  }).catch((err) => {
+    console.warn("[canon] drift effects failed:", err instanceof Error ? err.message : err);
   });
 }
 
@@ -120,35 +120,42 @@ export type EmitStuckEventOptions = {
   stateDef: { stuck_when?: StuckWhen } | undefined;
 };
 
-export function emitStuckEvent(
-  store: ReturnType<typeof getExecutionStore>,
-  options: EmitStuckEventOptions,
-): void {
-  const { board, input, stuck, stuck_reason, stateDef } = options;
-  if (!stuck || !stuck_reason) return;
-  const correlationId = store.getCorrelationId();
+function buildStuckPayload(options: EmitStuckEventOptions, correlationId: string | null) {
+  const { board, input, stuck_reason, stateDef } = options;
   const history = board.iterations[input.state_id]?.history ?? [];
-  const stuckPayload = {
+  return {
     comparison: {
       current: history.length >= 1 ? (history[history.length - 1] as Record<string, unknown>) : {},
       previous: history.length >= 2 ? (history[history.length - 2] as Record<string, unknown>) : {},
     },
     iteration_count: history.length,
-    reason: stuck_reason,
+    reason: stuck_reason!,
     stateId: input.state_id,
     strategy: stateDef?.stuck_when ?? "unknown",
     timestamp: new Date().toISOString(),
     ...(correlationId ? { correlation_id: correlationId } : {}),
   };
+}
+
+export function emitStuckEvent(
+  store: ReturnType<typeof getExecutionStore>,
+  options: EmitStuckEventOptions,
+): void {
+  if (!options.stuck || !options.stuck_reason) return;
+  const correlationId = store.getCorrelationId();
+  const payload = buildStuckPayload(options, correlationId);
   try {
-    store.appendEvent("stuck_detected", stuckPayload, correlationId ?? undefined);
-  } catch {
-    /* best-effort */
+    store.appendEvent("stuck_detected", payload, correlationId ?? undefined);
+  } catch (err) {
+    console.warn(
+      "[canon] stuck event persistence failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
   try {
-    flowEventBus.emit("stuck_detected", stuckPayload);
-  } catch {
-    /* best-effort */
+    flowEventBus.emit("stuck_detected", payload);
+  } catch (err) {
+    console.warn("[canon] stuck event emission failed:", err instanceof Error ? err.message : err);
   }
 }
 
@@ -175,8 +182,11 @@ export function emitReportEvents(
         event as Record<string, unknown>,
         correlationId ?? undefined,
       );
-    } catch {
-      /* best-effort */
+    } catch (err) {
+      console.warn(
+        "[canon] state_completed event persistence failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
   };
   const onTransitionEvaluated = (
@@ -188,8 +198,11 @@ export function emitReportEvents(
         event as Record<string, unknown>,
         correlationId ?? undefined,
       );
-    } catch {
-      /* best-effort */
+    } catch (err) {
+      console.warn(
+        "[canon] transition_evaluated event persistence failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
   };
   flowEventBus.once("state_completed", onStateCompleted);

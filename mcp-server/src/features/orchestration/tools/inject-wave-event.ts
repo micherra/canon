@@ -61,8 +61,11 @@ export async function injectWaveEvent(input: InjectWaveEventInput): Promise<Inje
   ) => {
     try {
       store.appendEvent("wave_event_injected", e as Record<string, unknown>);
-    } catch {
-      /* best-effort */
+    } catch (err) {
+      console.warn(
+        "[canon] wave_event_injected persistence failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
   };
   flowEventBus.once("wave_event_injected", onWaveEventInjected);

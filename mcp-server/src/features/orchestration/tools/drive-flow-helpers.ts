@@ -354,8 +354,8 @@ export async function buildDoneSummary(
   try {
     const gateResult = await evaluateLearnGate(projectDir);
     if (gateResult.passed) learn_gate_passed = true;
-  } catch {
-    // Best-effort — gate evaluation should never block flow completion
+  } catch (err) {
+    console.warn("[canon] learn gate evaluation failed:", err instanceof Error ? err.message : err);
   }
   if (learn_gate_passed !== undefined) result.learn_gate_passed = learn_gate_passed;
 

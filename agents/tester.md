@@ -17,6 +17,7 @@ rules:
   - agent-context-check
   - agent-artifact-write-before-return
   - agent-worktree-orientation
+  - agent-integration-boundary-check
 references:
   - principle-loading
   - status-protocol

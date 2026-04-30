@@ -2,6 +2,20 @@ import { EDGE_DEFAULT, NODE_CHANGED, NODE_DEFAULT, NODE_VIOLATION } from "@share
 import type { GraphData, GraphNode } from "@shared/lib/types";
 import Graph from "graphology";
 import Sigma from "sigma";
+import type { EdgeDisplayData, NodeDisplayData } from "sigma/types";
+
+declare global {
+  // biome-ignore lint/style/useConsistentTypeDefinitions: interface required for global Window augmentation
+  interface Window {
+    __SIGMA_GRAPH__?: {
+      api: SigmaGraphApi;
+      graph: Graph<NodeAttrs, EdgeAttrs>;
+      nodeIndex: Map<string, GraphNode>;
+      sigma: Sigma<NodeAttrs, EdgeAttrs>;
+    };
+  }
+}
+
 import {
   applyCommunityDetection,
   applyGraphLayout,
@@ -41,7 +55,10 @@ export type SigmaGraphApi = {
 
 // ── Drag support wiring ───────────────────────────────────────────────────────
 
-const wireDragHandlers = (sigma: Sigma, graph: Graph): { isDragging: () => boolean } => {
+const wireDragHandlers = (
+  sigma: Sigma<NodeAttrs, EdgeAttrs>,
+  graph: Graph<NodeAttrs, EdgeAttrs>,
+): { isDragging: () => boolean } => {
   let draggedNode: string | null = null;
   let dragging = false;
 
@@ -72,7 +89,7 @@ const wireDragHandlers = (sigma: Sigma, graph: Graph): { isDragging: () => boole
 // ── Click event wiring ────────────────────────────────────────────────────────
 
 type ClickHandlerCtx = {
-  sigma: Sigma;
+  sigma: Sigma<NodeAttrs, EdgeAttrs>;
   nodeIndex: Map<string, GraphNode>;
   isDragging: () => boolean;
   onNodeClick: (node: GraphNode) => void;
@@ -105,8 +122,8 @@ type RenderState = {
 // ── API method factory ────────────────────────────────────────────────────────
 
 type BuildApiCtx = {
-  sigma: Sigma;
-  graph: Graph;
+  sigma: Sigma<NodeAttrs, EdgeAttrs>;
+  graph: Graph<NodeAttrs, EdgeAttrs>;
   nodeIndex: Map<string, GraphNode>;
   state: RenderState;
   edges: { edgeIn: Map<string, string[]>; edgeOut: Map<string, string[]> };
@@ -120,7 +137,12 @@ const clearRenderState = (state: RenderState): void => {
   state.cascadeFiles = null;
 };
 
-const animateCamera = (sigma: Sigma, nodeId: string, ratio: number, duration: number): void => {
+const animateCamera = (
+  sigma: Sigma<NodeAttrs, EdgeAttrs>,
+  nodeId: string,
+  ratio: number,
+  duration: number,
+): void => {
   const display = sigma.getNodeDisplayData(nodeId);
   if (display) {
     sigma.getCamera().animate({ ratio, x: display.x, y: display.y }, { duration });
@@ -183,7 +205,7 @@ const buildApi = (ctx: BuildApiCtx): SigmaGraphApi => {
 // ── Main builder ───────────────────────────────────────────────────────────────
 
 type ReducerDeps = {
-  graph: Graph;
+  graph: Graph<NodeAttrs, EdgeAttrs>;
   nodeIndex: Map<string, GraphNode>;
   state: RenderState;
 };
@@ -200,7 +222,7 @@ const createNodeReducer = ({ nodeIndex, state }: ReducerDeps) => {
     q: string,
   ): boolean => matchesSearchFilter(gn, parsed, q);
 
-  return (nodeId: string, data: NodeAttrs): Partial<NodeAttrs> => {
+  return (nodeId: string, data: NodeAttrs): Partial<NodeDisplayData> => {
     const gn = nodeIndex.get(nodeId);
     if (!gn) return data;
     if (state.cascadeRoot && state.cascadeFiles) {
@@ -239,7 +261,7 @@ const createEdgeReducer = ({ graph, nodeIndex, state }: ReducerDeps) => {
   const nodeVisible = (nodeId: string, f: FilterOptions): boolean =>
     isNodeVisible(nodeId, f, nodeIndex);
 
-  return (edgeId: string, data: EdgeAttrs): Partial<EdgeAttrs> => {
+  return (edgeId: string, data: EdgeAttrs): Partial<EdgeDisplayData> => {
     const [s, t] = graph.extremities(edgeId);
     if (state.cascadeRoot && state.cascadeFiles) {
       return reduceEdgeCascade(s, t, data, state.cascadeFiles);
@@ -263,25 +285,19 @@ const createEdgeReducer = ({ graph, nodeIndex, state }: ReducerDeps) => {
 };
 
 const createSigmaRenderer = (
-  graph: Graph,
+  graph: Graph<NodeAttrs, EdgeAttrs>,
   container: HTMLElement,
-  nodeReducer: (nodeId: string, data: NodeAttrs) => Partial<NodeAttrs>,
-  edgeReducer: (edgeId: string, data: EdgeAttrs) => Partial<EdgeAttrs>,
-): Sigma =>
-  new Sigma(graph as unknown as import("graphology").default, container, {
+  nodeReducer: (nodeId: string, data: NodeAttrs) => Partial<NodeDisplayData>,
+  edgeReducer: (edgeId: string, data: EdgeAttrs) => Partial<EdgeDisplayData>,
+): Sigma<NodeAttrs, EdgeAttrs> =>
+  new Sigma(graph, container, {
     defaultEdgeColor: EDGE_DEFAULT,
     defaultNodeColor: NODE_DEFAULT,
-    edgeReducer: edgeReducer as unknown as (
-      edge: string,
-      data: Record<string, unknown>,
-    ) => Record<string, unknown>,
+    edgeReducer,
     labelColor: { color: "#9ca3af" },
     labelFont: "'Inter', sans-serif",
     labelSize: 11,
-    nodeReducer: nodeReducer as unknown as (
-      node: string,
-      data: Record<string, unknown>,
-    ) => Record<string, unknown>,
+    nodeReducer,
     renderEdgeLabels: false,
     renderLabels: false,
   });
@@ -300,7 +316,7 @@ export const buildSigmaGraph = (
   data: GraphData,
   opts: BuildSigmaGraphOpts,
 ): SigmaGraphApi => {
-  const graph = new Graph({ multi: false, type: "directed" });
+  const graph = new Graph<NodeAttrs, EdgeAttrs>({ multi: false, type: "directed" });
   const nodeIndex = new Map<string, GraphNode>();
   for (const node of data.nodes) nodeIndex.set(node.id, node);
 
@@ -336,14 +352,8 @@ export const buildSigmaGraph = (
 
   const api = buildApi({ edges: opts, graph, nodeIndex, sigma, state });
 
-  // Expose graph internals on window for Playwright integration tests.
   if (typeof window !== "undefined") {
-    (window as unknown as Record<string, unknown>).__SIGMA_GRAPH__ = {
-      api,
-      graph,
-      nodeIndex,
-      sigma,
-    };
+    window.__SIGMA_GRAPH__ = { api, graph, nodeIndex, sigma };
   }
 
   return api;

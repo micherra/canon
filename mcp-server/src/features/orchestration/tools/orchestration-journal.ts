@@ -92,12 +92,8 @@ export type LogStepResult = {
   artifacts_missing?: string[];
   status: JournalStepStatus;
   step_id: string;
-  /**
-   * Path to the captured transcript JSONL file. Present when agent_id was
-   * provided and transcript capture succeeded. Absent when agent_id was not
-   * provided or when capture returned an empty path (best-effort failure).
-   */
   transcript_path?: string;
+  transcript_warning?: string;
 };
 
 export type VerifyCompletionInput = {
@@ -252,6 +248,9 @@ async function tryTranscriptCapture(
   if (captureResult.ok && captureResult.transcript_path) {
     step.transcript_path = captureResult.transcript_path;
     result.transcript_path = captureResult.transcript_path;
+  }
+  if (captureResult.ok && captureResult.warning) {
+    result.transcript_warning = captureResult.warning;
   }
 }
 

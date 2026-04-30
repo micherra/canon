@@ -4,6 +4,7 @@ import {
   applyHostFonts,
   applyHostStyleVariables,
 } from "@modelcontextprotocol/ext-apps";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 let app: App | null = null;
 
@@ -19,11 +20,9 @@ function extractToolJson(result: { content?: Array<{ type: string; text?: string
 
 type ParsedToolResult = { data: unknown } | { error: Error };
 
-function parseToolResultParams(params: { isError?: boolean }): ParsedToolResult {
+function parseToolResultParams(params: CallToolResult): ParsedToolResult {
   try {
-    const parsed = params.isError
-      ? null
-      : extractToolJson(params as unknown as { content?: Array<{ type: string; text?: string }> });
+    const parsed = params.isError ? null : extractToolJson(params);
     return { data: parsed };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)) };

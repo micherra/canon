@@ -140,16 +140,6 @@ function registerCaptureTranscriptTool(): void {
         agent_type: z
           .string()
           .describe("Agent type label (e.g. 'engineer'). Used in the output filename."),
-        project_id: z
-          .string()
-          .optional()
-          .describe(
-            "Claude Code project ID (sanitized path). Defaults to CANON_PROJECT_DIR env var when omitted.",
-          ),
-        session_id: z
-          .string()
-          .optional()
-          .describe("Claude Code session ID. Defaults to CLAUDE_SESSION_ID env var when omitted."),
         step_id: z.string().describe("Workflow step ID. Used in the output filename."),
         workspace: z.string().describe("Workspace path for this flow execution."),
       },

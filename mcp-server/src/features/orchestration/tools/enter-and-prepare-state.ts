@@ -162,8 +162,11 @@ function emitStateEntryEvents(
   ) => {
     try {
       store.appendEvent("board_updated", event as Record<string, unknown>);
-    } catch {
-      /* best-effort */
+    } catch (err) {
+      console.warn(
+        "[canon] board_updated event persistence failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
   };
   flowEventBus.once("board_updated", onBoardUpdated);
@@ -178,8 +181,11 @@ function emitStateEntryEvents(
     ) => {
       try {
         store.appendEvent("state_entered", event as Record<string, unknown>);
-      } catch {
-        /* best-effort */
+      } catch (err) {
+        console.warn(
+          "[canon] state_entered event persistence failed:",
+          err instanceof Error ? err.message : err,
+        );
       }
     };
     flowEventBus.once("state_entered", onStateEntered);
@@ -310,7 +316,11 @@ function resolveReviewScope(enteredBoard: Board, state_id: string): Record<strin
       };
     }
     return { review_scope: "" };
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[canon] review scope resolution failed:",
+      err instanceof Error ? err.message : err,
+    );
     return { review_scope: "" };
   }
 }
@@ -342,7 +352,8 @@ async function resolveEnrichmentVars(
       console.error(`enrichment warnings: ${enrichment.warnings.join("; ")}`);
     }
     return { enrichment: enrichment.content || "" };
-  } catch {
+  } catch (err) {
+    console.warn("[canon] enrichment resolution failed:", err instanceof Error ? err.message : err);
     return { enrichment: "" };
   }
 }

@@ -19,6 +19,7 @@ rules:
   - agent-template-required
   - agent-missing-artifact
   - agent-context-check
+  - agent-integration-boundary-check
   - agent-document-public-apis
   - agent-artifact-write-before-return
   - agent-worktree-orientation

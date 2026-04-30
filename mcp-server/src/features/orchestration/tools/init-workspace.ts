@@ -63,38 +63,41 @@ type BranchWorkspaceEntry = {
   resume_state: string;
 };
 
+function tryReadActiveWorkspace(ws: string): BranchWorkspaceEntry | null {
+  try {
+    const store = getExecutionStore(ws);
+    const session = store.getSession();
+    if (!session || session.status !== "active") return null;
+    const board = store.getBoard();
+    if (!board) return null;
+    return { board, resume_state: board.current_state, session, workspace: ws };
+  } catch (err) {
+    console.warn("[canon] workspace scan skipped entry:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 export async function listBranchWorkspaces(
   projectDir: string,
   branch: string,
 ): Promise<BranchWorkspaceEntry[]> {
   const sanitized = sanitizeBranch(branch);
   const branchDir = join(projectDir, ".canon", "workspaces", sanitized);
-  const results: BranchWorkspaceEntry[] = [];
 
   let entries: string[];
   try {
     const { readdir } = await import("node:fs/promises");
     entries = await readdir(branchDir);
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return results;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
   }
 
+  const results: BranchWorkspaceEntry[] = [];
   for (const entry of entries) {
-    const ws = join(branchDir, entry);
-    try {
-      const store = getExecutionStore(ws);
-      const session = store.getSession();
-      if (!session) continue;
-      if (session.status !== "active") continue;
-      const board = store.getBoard();
-      if (!board) continue;
-      results.push({ board, resume_state: board.current_state, session, workspace: ws });
-    } catch {
-      // Not a valid workspace subdirectory — skip
-    }
+    const result = tryReadActiveWorkspace(join(branchDir, entry));
+    if (result) results.push(result);
   }
-
   return results;
 }
 
@@ -110,7 +113,8 @@ async function checkFileClaimsIssue(projectDir: string): Promise<string | null> 
       Object.values(claims.claims).flatMap((entries) => entries.map((e) => e.workflow)),
     );
     return `Active file claims: ${totalClaimed} file(s) claimed by workflow(s): ${[...workflows].join(", ")}`;
-  } catch {
+  } catch (err) {
+    console.warn("[canon] file claims check failed:", err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -127,8 +131,11 @@ async function runPreflightChecks(
     const result = gitStatus(projectDir, 10_000);
     const output = result.stdout.trim();
     if (output) issues.push(`Uncommitted changes: ${output.split("\n").length} file(s) modified`);
-  } catch {
-    // git not available — skip this check
+  } catch (err) {
+    console.warn(
+      "[canon] git status preflight check failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   try {
@@ -138,8 +145,8 @@ async function runPreflightChecks(
         issues.push(`Stale session: "${ws.session.task}" (created ${ws.session.created})`);
       }
     }
-  } catch {
-    // Scan failure — skip
+  } catch (err) {
+    console.warn("[canon] branch workspace scan failed:", err instanceof Error ? err.message : err);
   }
 
   const claimsIssue = await checkFileClaimsIssue(projectDir);
@@ -293,6 +300,28 @@ function generateProjectStructure(projectDir: string): string | null {
   }
 }
 
+async function tryReadFileContent(path: string, label: string): Promise<string | null> {
+  if (!existsSync(path)) return null;
+  try {
+    return await readFile(path, "utf-8");
+  } catch (err) {
+    console.warn(`[canon] ${label} read failed:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+function tryGenerateStructure(projectDir: string): string | null {
+  try {
+    return generateProjectStructure(projectDir);
+  } catch (err) {
+    console.warn(
+      "[canon] project structure generation failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
 /** Build the shared prompt cache prefix. */
 async function buildCachePrefix(
   input: InitWorkspaceInput,
@@ -307,34 +336,21 @@ async function buildCachePrefix(
   const prefixParts: string[] = [];
   if (flow.description) prefixParts.push(`## Flow: ${flow.name}\n\n${flow.description}`);
 
-  const claudeMdPath = join(pluginDir, "CLAUDE.md");
-  if (existsSync(claudeMdPath)) {
-    try {
-      prefixParts.push(await readFile(claudeMdPath, "utf-8"));
-    } catch {
-      /* graceful */
-    }
-  }
+  const claudeMd = await tryReadFileContent(join(pluginDir, "CLAUDE.md"), "cache prefix CLAUDE.md");
+  if (claudeMd) prefixParts.push(claudeMd);
 
   prefixParts.push(
     `## Workspace\n\n- Task: ${input.task}\n- Branch: ${input.branch}\n- Slug: ${slug}\n- Base commit: ${input.base_commit}`,
   );
 
-  try {
-    const structure = generateProjectStructure(projectDir);
-    if (structure) prefixParts.push(structure);
-  } catch {
-    /* graceful */
-  }
+  const structure = tryGenerateStructure(projectDir);
+  if (structure) prefixParts.push(structure);
 
-  try {
-    const conventionsPath = join(projectDir, CANON_DIR, "CONVENTIONS.md");
-    if (existsSync(conventionsPath)) {
-      prefixParts.push(`## Conventions\n\n${await readFile(conventionsPath, "utf-8")}`);
-    }
-  } catch {
-    /* graceful */
-  }
+  const conventions = await tryReadFileContent(
+    join(projectDir, CANON_DIR, "CONVENTIONS.md"),
+    "conventions",
+  );
+  if (conventions) prefixParts.push(`## Conventions\n\n${conventions}`);
 
   return prefixParts.join("\n\n---\n\n");
 }
@@ -479,11 +495,10 @@ async function finalizeNewWorkspace(
   };
 }
 
-/** Apply optional seed-from and run the legacy migration after workspace creation. */
+/** Apply optional seed-from after workspace creation. */
 async function applyPostCreateSteps(
   input: InitWorkspaceInput,
   workspace: string,
-  projectDir: string,
   result: InitWorkspaceResult,
 ): Promise<void> {
   if (input.seed_from) {
@@ -493,7 +508,6 @@ async function applyPostCreateSteps(
     }
     if (seedResult.seeded) result.seeded_from = input.seed_from;
   }
-  await runLegacyMigration(projectDir);
 }
 
 type CreateNewWorkspaceOptions = {
@@ -584,18 +598,6 @@ export async function initWorkspaceFlow(
     projectDir,
     sanitized,
   });
-  await applyPostCreateSteps(input, result.workspace, projectDir, result);
+  await applyPostCreateSteps(input, result.workspace, result);
   return result;
-}
-
-async function runLegacyMigration(projectDir: string): Promise<void> {
-  // Best-effort legacy summary migration (ADR-005)
-  try {
-    const { migrateSummaries } = await import(
-      "@features/knowledge-graph/services/migrate-summaries.ts"
-    );
-    await migrateSummaries(projectDir);
-  } catch {
-    // Non-blocking — legacy migration failure does not affect workspace init
-  }
 }

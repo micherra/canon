@@ -82,8 +82,8 @@ export function handlePendingWaveEvents(
         resolution: { skipped_by: "drive_flow" },
         status: "applied",
       });
-    } catch {
-      /* Already applied */
+    } catch (err) {
+      console.warn("[canon] wave event update failed:", err instanceof Error ? err.message : err);
     }
   }
   return null;

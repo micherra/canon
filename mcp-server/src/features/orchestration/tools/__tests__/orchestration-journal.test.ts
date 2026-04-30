@@ -16,42 +16,10 @@ import { logStep, verifyCompletion } from "../orchestration-journal.ts";
 
 // ─── Helpers for transcript-capture integration tests ────────────────────────
 
-/** Saved env vars that need to be restored after transcript tests. */
-type SavedEnv = {
-  CLAUDE_CONFIG_DIR: string | undefined;
-  CLAUDE_SESSION_ID: string | undefined;
-  CANON_PROJECT_DIR: string | undefined;
-};
-
-function saveEnv(): SavedEnv {
-  return {
-    CANON_PROJECT_DIR: process.env.CANON_PROJECT_DIR,
-    CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
-    CLAUDE_SESSION_ID: process.env.CLAUDE_SESSION_ID,
-  };
-}
-
-function restoreEnv(saved: SavedEnv): void {
-  for (const [key, value] of Object.entries(saved)) {
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
-    }
-  }
-}
-
-/**
- * Write a minimal Claude Code agent JSONL file in the expected location:
- *   {configDir}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl
- */
-function writeAgentJsonl(
-  configDir: string,
-  projectId: string,
-  sessionId: string,
-  agentId: string,
-): void {
-  const subagentsDir = join(configDir, "projects", projectId, sessionId, "subagents");
+// Plant a fake agent JSONL where captureTranscript will find it.
+function plantAgentJsonl(fakeHome: string, agentId: string): void {
+  const pid = process.cwd().replace(/\//g, "-");
+  const subagentsDir = join(fakeHome, ".claude", "projects", pid, "session-test", "subagents");
   mkdirSync(subagentsDir, { recursive: true });
   const entry = JSON.stringify({
     agentId,
@@ -370,25 +338,14 @@ describe("verifyCompletion", () => {
 
 describe("logStep — transcript capture via agent_id", () => {
   const AGENT_ID = "nf17-agent-01";
-  // logStep calls captureTranscript without project_id/session_id, so they
-  // must come from CANON_PROJECT_DIR → deriveProjectIdFromEnv() and CLAUDE_SESSION_ID.
-  // CANON_PROJECT_DIR="/Users/test-project" → project_id = "-Users-test-project"
-  const CANON_PROJECT_DIR_VAL = "/Users/test-project";
-  const PROJECT_ID = "-Users-test-project"; // slash-replaced form used as folder name
-  const SESSION_ID = "session-nf17";
 
   test("agent_id triggers capture and records transcript_path in result", async () => {
-    const saved = saveEnv();
-    const fakeConfigDir = await mkdtemp(join(tmpdir(), "canon-cc-config-"));
+    const fakeHome = await mkdtemp(join(tmpdir(), "canon-home-"));
+    plantAgentJsonl(fakeHome, AGENT_ID);
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
 
     try {
-      writeAgentJsonl(fakeConfigDir, PROJECT_ID, SESSION_ID, AGENT_ID);
-
-      process.env.CLAUDE_CONFIG_DIR = fakeConfigDir;
-      process.env.CLAUDE_SESSION_ID = SESSION_ID;
-      process.env.CANON_PROJECT_DIR = CANON_PROJECT_DIR_VAL;
-
-      // First register the step with agent_type so step.agent_type is set
       await logStep({
         agent_type: "engineer",
         status: "planned",
@@ -410,8 +367,8 @@ describe("logStep — transcript capture via agent_id", () => {
       expect(result.transcript_path).not.toBe("");
       expect(result.transcript_path).toContain(join(workspace, "transcripts"));
     } finally {
-      restoreEnv(saved);
-      await rm(fakeConfigDir, { force: true, recursive: true });
+      process.env.HOME = originalHome;
+      await rm(fakeHome, { force: true, recursive: true });
     }
   });
 
@@ -421,7 +378,6 @@ describe("logStep — transcript capture via agent_id", () => {
       status: "completed",
       step_id: "implement-no-capture",
       workspace,
-      // intentionally no agent_id
     });
 
     assertOk(result);
@@ -430,15 +386,11 @@ describe("logStep — transcript capture via agent_id", () => {
   });
 
   test("agent_id provided but source file missing → step completes, no transcript_path", async () => {
-    const saved = saveEnv();
-    const emptyConfigDir = await mkdtemp(join(tmpdir(), "canon-cc-empty-"));
+    const fakeHome = await mkdtemp(join(tmpdir(), "canon-home-empty-"));
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
 
     try {
-      // Point to a config dir that has no agent JSONL files
-      process.env.CLAUDE_CONFIG_DIR = emptyConfigDir;
-      process.env.CLAUDE_SESSION_ID = SESSION_ID;
-      process.env.CANON_PROJECT_DIR = CANON_PROJECT_DIR_VAL;
-
       await logStep({
         agent_type: "engineer",
         status: "planned",
@@ -453,29 +405,22 @@ describe("logStep — transcript capture via agent_id", () => {
         workspace,
       });
 
-      // Step must succeed (best-effort — capture failure never blocks)
       assertOk(result);
       expect(result.status).toBe("completed");
-      // No transcript_path because source file was missing
       expect(result.transcript_path).toBeUndefined();
     } finally {
-      restoreEnv(saved);
-      await rm(emptyConfigDir, { force: true, recursive: true });
+      process.env.HOME = originalHome;
+      await rm(fakeHome, { force: true, recursive: true });
     }
   });
 
   test("transcript_path is persisted to journal.json after successful capture", async () => {
-    const saved = saveEnv();
-    const fakeConfigDir = await mkdtemp(join(tmpdir(), "canon-cc-config2-"));
+    const fakeHome = await mkdtemp(join(tmpdir(), "canon-home-"));
+    plantAgentJsonl(fakeHome, AGENT_ID);
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
 
     try {
-      writeAgentJsonl(fakeConfigDir, PROJECT_ID, SESSION_ID, AGENT_ID);
-
-      process.env.CLAUDE_CONFIG_DIR = fakeConfigDir;
-      process.env.CLAUDE_SESSION_ID = SESSION_ID;
-      process.env.CANON_PROJECT_DIR = CANON_PROJECT_DIR_VAL;
-
-      // Plan then complete with agent_id
       await logStep({
         agent_type: "tester",
         status: "planned",
@@ -494,15 +439,14 @@ describe("logStep — transcript capture via agent_id", () => {
       expect(result.transcript_path).toBeDefined();
       expect(result.transcript_path).not.toBe("");
 
-      // Read the journal.json from disk and verify transcript_path is persisted
       const raw = await readFile(join(workspace, "journal.json"), "utf-8");
       const journal = JSON.parse(raw) as Journal;
       const step = journal.steps.find((s) => s.step_id === "test-step");
       expect(step).toBeDefined();
       expect(step?.transcript_path).toBe(result.transcript_path);
     } finally {
-      restoreEnv(saved);
-      await rm(fakeConfigDir, { force: true, recursive: true });
+      process.env.HOME = originalHome;
+      await rm(fakeHome, { force: true, recursive: true });
     }
   });
 });
