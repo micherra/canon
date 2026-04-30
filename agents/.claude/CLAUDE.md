@@ -28,7 +28,7 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 | `writer` | Creates and edits Canon principles and agent-rules | sonnet |
 
 ## Conventions
-<!-- last-updated: 2026-04-22 -->
+<!-- last-updated: 2026-04-29 -->
 
 - Each agent has a declarative `permissionMode` enforced by Claude Code:
   - **`plan`** — truly read-only. No `Write` / `Edit` / `Bash`-to-modify AND no MCP `write_*` / `update_*` tools. For agents that emit artifacts inline (the lead writes them): `planner`.
@@ -47,4 +47,6 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 - Agents log activity per `workspace-logging.md` protocol.
 - `engineer` has direct access to `mcp__canon__get_messages` and `mcp__canon__write_implementation_summary` for collaboration during wave execution.
 - `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.
+- `engineer` (verify mode): before reporting any build or test failure as BLOCKING, must verify whether the failure exists on the base branch. Pre-existing failures are noted as PRE-EXISTING and do not block.
+- `reviewer` writes its review artifact to `${WORKSPACE}/reviews/REVIEW.md` (exact path). The orchestrator must inject `WORKSPACE={workspace_path}` (workspace root, not worktree path) into the reviewer's spawn prompt to ensure correct artifact placement.
 - Agents with `memory: project` (planner, engineer, researcher, architect, scribe, learner, tester) persist agent memory across sessions; others do not.
