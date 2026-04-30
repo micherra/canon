@@ -6,7 +6,7 @@ description: >-
   structured learning report. Spawned by the lead orchestrator.
 model: sonnet
 color: blue
-maxTurns: 25
+maxTurns: 60
 permissionMode: acceptEdits
 memory: project
 rules:
