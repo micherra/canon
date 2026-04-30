@@ -68,6 +68,7 @@ export type Journal = {
 };
 
 export type LogStepInput = {
+  /** Agent ID for transcript capture. When provided on a completed step, logStep calls captureTranscript internally. */
   agent_id?: string;
   agent_type?: string | null;
   artifacts_expected?: string[];
@@ -92,10 +93,9 @@ export type LogStepResult = {
   status: JournalStepStatus;
   step_id: string;
   /**
-   * Path to the captured transcript JSONL file for this step. Only present
-   * when `status === "completed"`, `agent_id` was provided in the input, and
-   * the transcript capture succeeded. Absent when capture was not attempted
-   * (no agent_id) or when the source file was not found (best-effort).
+   * Path to the captured transcript JSONL file. Present when agent_id was
+   * provided and transcript capture succeeded. Absent when agent_id was not
+   * provided or when capture returned an empty path (best-effort failure).
    */
   transcript_path?: string;
 };
@@ -217,17 +217,32 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
   if (input.outcome !== undefined) step.outcome = input.outcome;
 }
 
-/**
- * NF-17: When agent_id is provided on completion, capture the transcript.
- * Best-effort: capture failures never block step completion.
- * Returns the transcript path when capture succeeds, undefined otherwise.
- */
-async function captureStepTranscript(
-  input: LogStepInput,
-  step: JournalStep,
+function enforceArtifacts(
+  workspace: string,
+  stepId: string,
   journal: Journal,
-): Promise<string | undefined> {
-  if (!input.agent_id) return undefined;
+  inputArtifacts: string[] | undefined,
+): ToolResult<null> | null {
+  const existingStep = journal.steps.find((s) => s.step_id === stepId);
+  const artifacts = inputArtifacts ?? existingStep?.artifacts_expected ?? [];
+  const missing = scanArtifactList(workspace, artifacts);
+  if (missing.length > 0) {
+    return toolError(
+      "INVALID_INPUT",
+      `Cannot complete step '${stepId}': missing artifacts: ${missing.join(", ")}`,
+      true,
+      { artifacts_missing: missing },
+    );
+  }
+  return null;
+}
+
+async function tryTranscriptCapture(
+  step: JournalStep,
+  result: LogStepResult,
+  input: LogStepInput,
+): Promise<void> {
+  if (!input.agent_id) return;
   const captureResult = await captureTranscript({
     agent_id: input.agent_id,
     agent_type: step.agent_type ?? "unknown",
@@ -236,10 +251,8 @@ async function captureStepTranscript(
   });
   if (captureResult.ok && captureResult.transcript_path) {
     step.transcript_path = captureResult.transcript_path;
-    await writeJournal(input.workspace, journal);
-    return captureResult.transcript_path;
+    result.transcript_path = captureResult.transcript_path;
   }
-  return undefined;
 }
 
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
@@ -253,23 +266,29 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   }
 
   const journal = await readJournal(input.workspace);
+
+  if (input.status === "completed") {
+    const rejection = enforceArtifacts(
+      input.workspace,
+      input.step_id,
+      journal,
+      input.artifacts_expected,
+    );
+    if (rejection) return rejection;
+  }
+
   const step = upsertStep(journal, input);
   applyTimestamps(step, input.status);
   applyMetadata(step, input);
-  await writeJournal(input.workspace, journal);
 
   const result: LogStepResult = { status: input.status, step_id: input.step_id };
-  if (input.status === "completed") {
-    const missing = scanArtifactsForStep(input.workspace, step);
-    if (missing.length > 0) {
-      result.artifacts_missing = missing;
-    }
 
-    const transcriptPath = await captureStepTranscript(input, step, journal);
-    if (transcriptPath) {
-      result.transcript_path = transcriptPath;
-    }
+  if (input.status === "completed") {
+    await tryTranscriptCapture(step, result, input);
   }
+
+  await writeJournal(input.workspace, journal);
+
   return toolOk(result);
 }
 
@@ -284,7 +303,7 @@ function artifactExists(workspace: string, artifact: string): boolean {
 }
 
 /**
- * Scan a single step's declared artifacts for missing files.
+ * Scan a list of artifact paths for missing files.
  *
  * Skips entries that are:
  * - Prefixed with `outcome:` — these are outcome descriptions, not file paths
@@ -293,12 +312,10 @@ function artifactExists(workspace: string, artifact: string): boolean {
  * Returns an array of artifact paths that are missing from disk. Returns an
  * empty array when all artifacts are present (or all entries are skipped).
  */
-function scanArtifactsForStep(workspace: string, step: JournalStep): string[] {
+function scanArtifactList(workspace: string, artifacts: readonly string[]): string[] {
   const missing: string[] = [];
-  for (const art of step.artifacts_expected ?? []) {
-    // Skip outcome descriptions (not file paths)
+  for (const art of artifacts) {
     if (art.startsWith("outcome:")) continue;
-    // Skip unresolved template variables
     if (art.includes("${")) continue;
     if (!artifactExists(workspace, art)) {
       missing.push(art);

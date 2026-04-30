@@ -210,6 +210,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 - **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
 - **Architect approval**: Present the plan to the user. For agent teams, use native plan approval mode.
 - **Review verdict**: Present review results. If not clean, spawn engineer in fix mode.
+- **Review-fix iteration loop**: After the fix agent completes, re-spawn the reviewer to verify ALL previously flagged violations were addressed — not just some. The loop continues until the reviewer returns CLEAN or WARNING. Maximum 3 fix→review iterations before escalating to the user via HITL. Iteration pattern: fix → re-review → (if still BLOCKING) → fix → re-review → (if still BLOCKING after 3 iterations) → HITL.
 - **Gate failure**: Present the failure output and ask the user how to proceed.
 - **Merge conflict**: Present conflicting files and ask for resolution strategy.
 
@@ -220,13 +221,29 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.
 
+### Step Enforcement Contracts
+
+**Verify step**: When the runbook contains a step with `type: verify` (or the step name is `verify`), the engineer executing it MUST run all three gates in order:
+
+1. `npm run build` — TypeScript compilation. Any error is a BLOCKING failure.
+2. `npm run lint` — Biome/ESLint check. Any error is a BLOCKING failure.
+3. `npm test` — Full test suite. Any failure is a BLOCKING failure.
+
+ALL three must pass for the verify step to succeed. If any gate fails, the engineer reports BLOCKED with the exact failure output and does NOT proceed past the verify step. The orchestrator presents the failure to the user via HITL (`on_failure` handler). The engineer reports DONE only when all three gates exit 0.
+
 ### Completion Checklist
 
 1. Call `verify_completion({ workspace })` — if steps or artifacts missing, resolve before proceeding.
-2. Call `update_board({ workspace, operation: "complete_flow" })`.
-3. Verify file claims released.
-4. Evaluate learn gate: run `.canon/learn.sh` if it exists.
-5. Record final flow metrics.
+2. Merge worktree branch to main:
+   - `git checkout main`
+   - `git merge canon/{slug} --no-edit`
+   - If merge conflicts: present conflicting files to user as HITL — do NOT force-push or use `--theirs`.
+   - If clean merge: proceed to step 3.
+   - After successful merge: `git worktree remove {worktree_path}` and `git branch -d canon/{slug}`.
+3. Call `update_board({ workspace, operation: "complete_flow" })`.
+4. Verify file claims released.
+5. Evaluate learn gate: run `.canon/learn.sh` if it exists.
+6. Record final flow metrics.
 
 ### Commit Provenance
 

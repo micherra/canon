@@ -241,6 +241,10 @@ After completing Stages 1–4, run the project build and lint to surface compila
 
 Do not suppress or omit lint output because it is voluminous — summarize if needed (e.g., "47 `no-unused-vars` errors across 12 files — all unused import variables introduced in this diff") but always report it.
 
+**Baseline comparison**: Before classifying errors as BLOCKING or WARNING, establish a baseline error count from the target branch (e.g., `main`). Run the same build and lint commands on the base branch and record the error count. Only NEW errors — those present in the worktree branch but absent from the base branch (delta above baseline) — are BLOCKING or WARNING findings. Pre-existing errors that exist on the base branch are noted as NON-BLOCKING context and tagged `[baseline]` in the Build Verification section of the review checklist. This prevents inherited errors from blocking otherwise-clean diffs.
+
+**Re-review protocol**: When spawned for re-review after a fix cycle, check that ALL previously flagged violations in the prior review report were addressed — not just some. For each BLOCKING and WARNING finding from the previous report: verify the specific file and line was changed, and re-run the relevant check. Report any unresolved violations as new BLOCKING findings so the iteration loop terminates only when the code is genuinely clean.
+
 ## Stage 4: Drift-from-Plan Check
 
 When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md), compare what was actually changed against what the architect planned. If plan files (DESIGN.md or INDEX.md) are not available, include a note in your output: "Stage 4 skipped — no plan files (DESIGN.md, INDEX.md) in workspace." so the user knows the check exists but wasn't run.

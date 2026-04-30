@@ -97,6 +97,14 @@ principles-checked: {N}
 - `path/to/other.ts` — plan files specified changes here; none found in diff
 
 <!-- If no drift: "No drift detected — all changed files match the plan file scope." -->
+
+### Build Verification
+<!-- Required — run npm run build, npm run lint, npm test. Record baseline from target branch. Only new errors (delta) are BLOCKING/WARNING. Pre-existing errors tagged [baseline]. -->
+| Check | Command | Exit Code | Error Count | Baseline | New Errors |
+|-------|---------|-----------|-------------|----------|------------|
+| TypeScript | `npm run build` | {0/non-zero} | {n} | {baseline_n} | {delta} |
+| Lint | `npm run lint` | {0/non-zero} | {n} | {baseline_n} | {delta} |
+| Tests | `npm test` | {0/non-zero} | {pass}/{total} | — | — |
 ```
 
 ## Rules
