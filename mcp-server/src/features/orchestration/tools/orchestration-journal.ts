@@ -35,6 +35,7 @@ import { archiveWorkspace } from "@features/history/services/archive-service.ts"
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { captureTranscript } from "./capture-transcript.ts";
 
 function resolveProjectDir(): string {
   return process.env.CANON_PROJECT_DIR ?? process.cwd();
@@ -57,6 +58,7 @@ export type JournalStep = {
   started_at?: string;
   status: JournalStepStatus;
   step_id: string;
+  transcript_path?: string;
 };
 
 export type Journal = {
@@ -66,6 +68,7 @@ export type Journal = {
 };
 
 export type LogStepInput = {
+  agent_id?: string;
   agent_type?: string | null;
   artifacts_expected?: string[];
   domain_skills_loaded?: string[];
@@ -88,6 +91,13 @@ export type LogStepResult = {
   artifacts_missing?: string[];
   status: JournalStepStatus;
   step_id: string;
+  /**
+   * Path to the captured transcript JSONL file for this step. Only present
+   * when `status === "completed"`, `agent_id` was provided in the input, and
+   * the transcript capture succeeded. Absent when capture was not attempted
+   * (no agent_id) or when the source file was not found (best-effort).
+   */
+  transcript_path?: string;
 };
 
 export type VerifyCompletionInput = {
@@ -207,6 +217,31 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
   if (input.outcome !== undefined) step.outcome = input.outcome;
 }
 
+/**
+ * NF-17: When agent_id is provided on completion, capture the transcript.
+ * Best-effort: capture failures never block step completion.
+ * Returns the transcript path when capture succeeds, undefined otherwise.
+ */
+async function captureStepTranscript(
+  input: LogStepInput,
+  step: JournalStep,
+  journal: Journal,
+): Promise<string | undefined> {
+  if (!input.agent_id) return undefined;
+  const captureResult = await captureTranscript({
+    agent_id: input.agent_id,
+    agent_type: step.agent_type ?? "unknown",
+    step_id: input.step_id,
+    workspace: input.workspace,
+  });
+  if (captureResult.ok && captureResult.transcript_path) {
+    step.transcript_path = captureResult.transcript_path;
+    await writeJournal(input.workspace, journal);
+    return captureResult.transcript_path;
+  }
+  return undefined;
+}
+
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
@@ -228,6 +263,11 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     const missing = scanArtifactsForStep(input.workspace, step);
     if (missing.length > 0) {
       result.artifacts_missing = missing;
+    }
+
+    const transcriptPath = await captureStepTranscript(input, step, journal);
+    if (transcriptPath) {
+      result.transcript_path = transcriptPath;
     }
   }
   return toolOk(result);

@@ -201,11 +201,12 @@ export function transformClaudeCodeTranscript(entries: ClaudeCodeEntry[]): Trans
     if (!parsed.success) continue;
 
     const { message, timestamp } = parsed.data;
+    const content = message.content;
 
-    if (typeof message.content === "string") {
-      output.push(processStringContent(state, message, timestamp));
+    if (typeof content === "string") {
+      output.push(processStringContent(state, { ...message, content }, timestamp));
     } else {
-      output.push(...processArrayContent(state, message, timestamp));
+      output.push(...processArrayContent(state, { ...message, content }, timestamp));
     }
   }
 
