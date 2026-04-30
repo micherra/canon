@@ -30,7 +30,7 @@ You receive from the orchestrator:
 
 ## Process
 
-### Step 1: Load baseline
+### Step 1: Load baseline and initialize the report
 
 Load the current state of Canon in this project:
 
@@ -40,17 +40,36 @@ Load the current state of Canon in this project:
    - **Suppressed suggestions**: entries with `"action": "dismissed"` — do NOT re-suggest these
    - **Recurring suggestions**: entries with `"action": "suggested"` appearing 3+ times — flag as persistent
 4. This is your baseline. Every suggestion must be checked against it — don't suggest what already exists and don't re-suggest dismissed items.
+5. **Initialize the report file**: Write `.canon/LEARNING-REPORT.md` with a header containing the date and scope summary. Use this format:
+
+```markdown
+# Canon Learning Report
+
+Generated: {ISO date}
+Dimensions: {comma-separated list of requested dimensions}
+Status: in-progress
+
+---
+```
+
+This ensures the file exists even if the agent hits its turn limit during analysis.
 
 ### Step 2: Run requested dimensions
 
-Run dimensions in order of data availability. **Skip dimensions without sufficient data** and note it in the report:
+Run dimensions in order of data availability. **Skip dimensions without sufficient data** and note it in the report. **After completing each dimension's analysis, immediately append its findings section to `.canon/LEARNING-REPORT.md`** before moving to the next dimension. This ensures partial results are persisted if the turn limit is reached mid-analysis.
+
+Data sufficiency thresholds:
 
 - **principle-health** requires >= 10 reviews (from `get_drift_report`)
 - **codebase-patterns** requires >= 5 files with >= 70% consistency per pattern
 - **convention-lifecycle** requires >= 3 builds for promotion sub-analysis; graduation and staleness run regardless
 - **process-health** requires >= 5 flow runs (from `.canon/flow-runs.jsonl`)
 
-Collect suggestions into a unified list.
+For each dimension:
+1. Run the dimension analysis per the specs in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.
+2. If data is insufficient, append a skip notice for that dimension to the report immediately.
+3. If data is sufficient, append the full dimension section (suggestions, evidence, counts) to the report immediately.
+4. Proceed to the next dimension only after appending.
 
 ### Dimension Specifications
 
@@ -62,15 +81,19 @@ Run each requested dimension per the specs in `${CLAUDE_PLUGIN_ROOT}/references/
 
 Skip dimensions without sufficient data (thresholds are in the reference file).
 
-### Step 3: Compile the report
+### Step 3: Finalize the report
 
-Combine all suggestions into `.canon/LEARNING-REPORT.md` using the report template in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.
+Enhance the existing `.canon/LEARNING-REPORT.md` by appending summary sections and updating the header metadata:
 
-If a dimension was not requested (flags), omit its section entirely.
+1. Append a `## Recurring Suggestions` section listing any suggestions that appeared 3+ times in the learning log.
+2. Append a `## No Action Needed` section listing any skipped dimensions and their reason (insufficient data or not requested).
+3. Update the `Status: in-progress` line in the header to `Status: complete` and add a final suggestion count: `Suggestions: {N}`.
+
+This step enhances the existing file — it does NOT rewrite it from scratch. All dimension sections written in Step 2 are preserved.
 
 ### Step 4: Append to learning log
 
-After writing the report, append a structured entry to `.canon/learning.jsonl` using the schema in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.
+After finalizing the report, append a structured entry to `.canon/learning.jsonl` using the schema in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.
 
 ### Step 5: Write structured proposals (auto-trigger mode only)
 
