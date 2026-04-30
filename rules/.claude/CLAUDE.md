@@ -23,7 +23,7 @@ Rules are organized into behavioral categories:
 - **Review rules** — govern review behavior (`agent-cold-review`, `agent-assume-hostile-input`)
 
 ## Conventions
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-04-30 -->
 
 - Rules are imperative constraints, not principles — they tell agents exactly what to do or not do
 - Rules differ from `principles/` in that they govern agent execution behavior, not code quality
