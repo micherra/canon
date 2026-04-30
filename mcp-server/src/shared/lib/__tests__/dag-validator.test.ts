@@ -17,17 +17,15 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { validateDag } from "../dag-validator.ts";
 import type { TaskDag } from "../dag-validator.ts";
+import { validateDag } from "../dag-validator.ts";
 
 // ─── Test 1: Valid DAG — single task, no dependencies ───────────────────────
 
 describe("validateDag — single task, no dependencies", () => {
   it("returns valid: true with empty errors", () => {
     const dag: TaskDag = {
-      tasks: [
-        { task_id: "task-a", depends_on: [], parallel_safe: true, files: [] },
-      ],
+      tasks: [{ depends_on: [], files: [], parallel_safe: true, task_id: "task-a" }],
     };
     const result = validateDag(dag);
     expect(result.valid).toBe(true);
@@ -41,9 +39,9 @@ describe("validateDag — linear chain A -> B -> C", () => {
   it("returns valid: true with empty errors", () => {
     const dag: TaskDag = {
       tasks: [
-        { task_id: "A", depends_on: [], parallel_safe: true, files: [] },
-        { task_id: "B", depends_on: ["A"], parallel_safe: true, files: [] },
-        { task_id: "C", depends_on: ["B"], parallel_safe: true, files: [] },
+        { depends_on: [], files: [], parallel_safe: true, task_id: "A" },
+        { depends_on: ["A"], files: [], parallel_safe: true, task_id: "B" },
+        { depends_on: ["B"], files: [], parallel_safe: true, task_id: "C" },
       ],
     };
     const result = validateDag(dag);
@@ -58,14 +56,14 @@ describe("validateDag — diamond A -> B, A -> C, B -> D, C -> D", () => {
   it("returns valid: true with empty errors", () => {
     const dag: TaskDag = {
       tasks: [
-        { task_id: "A", depends_on: [], parallel_safe: true, files: [] },
-        { task_id: "B", depends_on: ["A"], parallel_safe: true, files: [] },
-        { task_id: "C", depends_on: ["A"], parallel_safe: true, files: [] },
+        { depends_on: [], files: [], parallel_safe: true, task_id: "A" },
+        { depends_on: ["A"], files: [], parallel_safe: true, task_id: "B" },
+        { depends_on: ["A"], files: [], parallel_safe: true, task_id: "C" },
         {
-          task_id: "D",
           depends_on: ["B", "C"],
-          parallel_safe: true,
           files: [],
+          parallel_safe: true,
+          task_id: "D",
         },
       ],
     };
@@ -93,12 +91,12 @@ describe("validateDag — empty task_id", () => {
     const dag: TaskDag = {
       tasks: [
         {
-          task_id: "ok-task",
           depends_on: [],
-          parallel_safe: true,
           files: [],
+          parallel_safe: true,
+          task_id: "ok-task",
         },
-        { task_id: "", depends_on: [], parallel_safe: true, files: [] },
+        { depends_on: [], files: [], parallel_safe: true, task_id: "" },
       ],
     };
     const result = validateDag(dag);
@@ -108,9 +106,7 @@ describe("validateDag — empty task_id", () => {
 
   it("returns error for whitespace-only task_id", () => {
     const dag: TaskDag = {
-      tasks: [
-        { task_id: "   ", depends_on: [], parallel_safe: true, files: [] },
-      ],
+      tasks: [{ depends_on: [], files: [], parallel_safe: true, task_id: "   " }],
     };
     const result = validateDag(dag);
     expect(result.valid).toBe(false);
@@ -124,8 +120,8 @@ describe("validateDag — duplicate task_ids", () => {
   it("returns valid: false with duplicate id error", () => {
     const dag: TaskDag = {
       tasks: [
-        { task_id: "task-a", depends_on: [], parallel_safe: true, files: [] },
-        { task_id: "task-a", depends_on: [], parallel_safe: true, files: [] },
+        { depends_on: [], files: [], parallel_safe: true, task_id: "task-a" },
+        { depends_on: [], files: [], parallel_safe: true, task_id: "task-a" },
       ],
     };
     const result = validateDag(dag);
@@ -141,10 +137,10 @@ describe("validateDag — self-reference", () => {
     const dag: TaskDag = {
       tasks: [
         {
-          task_id: "task-a",
           depends_on: ["task-a"],
-          parallel_safe: true,
           files: [],
+          parallel_safe: true,
+          task_id: "task-a",
         },
       ],
     };
@@ -161,18 +157,16 @@ describe("validateDag — unresolved reference", () => {
     const dag: TaskDag = {
       tasks: [
         {
-          task_id: "task-a",
           depends_on: ["nonexistent"],
-          parallel_safe: true,
           files: [],
+          parallel_safe: true,
+          task_id: "task-a",
         },
       ],
     };
     const result = validateDag(dag);
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain(
-      "Task 'task-a' depends on unknown task 'nonexistent'",
-    );
+    expect(result.errors).toContain("Task 'task-a' depends on unknown task 'nonexistent'");
   });
 });
 
@@ -182,15 +176,13 @@ describe("validateDag — simple cycle A -> B -> A", () => {
   it("returns valid: false with cycle error mentioning both tasks", () => {
     const dag: TaskDag = {
       tasks: [
-        { task_id: "A", depends_on: ["B"], parallel_safe: true, files: [] },
-        { task_id: "B", depends_on: ["A"], parallel_safe: true, files: [] },
+        { depends_on: ["B"], files: [], parallel_safe: true, task_id: "A" },
+        { depends_on: ["A"], files: [], parallel_safe: true, task_id: "B" },
       ],
     };
     const result = validateDag(dag);
     expect(result.valid).toBe(false);
-    const cycleError = result.errors.find((e) =>
-      e.startsWith("Cycle detected involving tasks:"),
-    );
+    const cycleError = result.errors.find((e) => e.startsWith("Cycle detected involving tasks:"));
     expect(cycleError).toBeDefined();
     expect(cycleError).toContain("A");
     expect(cycleError).toContain("B");
@@ -203,17 +195,15 @@ describe("validateDag — complex cycle A -> B -> C -> A with D not in cycle", (
   it("returns valid: false; cycle error includes A, B, C; D is not mentioned in cycle error", () => {
     const dag: TaskDag = {
       tasks: [
-        { task_id: "A", depends_on: ["C"], parallel_safe: true, files: [] },
-        { task_id: "B", depends_on: ["A"], parallel_safe: true, files: [] },
-        { task_id: "C", depends_on: ["B"], parallel_safe: true, files: [] },
-        { task_id: "D", depends_on: [], parallel_safe: true, files: [] },
+        { depends_on: ["C"], files: [], parallel_safe: true, task_id: "A" },
+        { depends_on: ["A"], files: [], parallel_safe: true, task_id: "B" },
+        { depends_on: ["B"], files: [], parallel_safe: true, task_id: "C" },
+        { depends_on: [], files: [], parallel_safe: true, task_id: "D" },
       ],
     };
     const result = validateDag(dag);
     expect(result.valid).toBe(false);
-    const cycleError = result.errors.find((e) =>
-      e.startsWith("Cycle detected involving tasks:"),
-    );
+    const cycleError = result.errors.find((e) => e.startsWith("Cycle detected involving tasks:"));
     expect(cycleError).toBeDefined();
     expect(cycleError).toContain("A");
     expect(cycleError).toContain("B");
@@ -225,10 +215,10 @@ describe("validateDag — complex cycle A -> B -> C -> A with D not in cycle", (
   it("reports exactly one cycle error", () => {
     const dag: TaskDag = {
       tasks: [
-        { task_id: "A", depends_on: ["C"], parallel_safe: true, files: [] },
-        { task_id: "B", depends_on: ["A"], parallel_safe: true, files: [] },
-        { task_id: "C", depends_on: ["B"], parallel_safe: true, files: [] },
-        { task_id: "D", depends_on: [], parallel_safe: true, files: [] },
+        { depends_on: ["C"], files: [], parallel_safe: true, task_id: "A" },
+        { depends_on: ["A"], files: [], parallel_safe: true, task_id: "B" },
+        { depends_on: ["B"], files: [], parallel_safe: true, task_id: "C" },
+        { depends_on: [], files: [], parallel_safe: true, task_id: "D" },
       ],
     };
     const result = validateDag(dag);
@@ -246,12 +236,12 @@ describe("validateDag — multiple errors (duplicate ids + self-reference)", () 
     const dag: TaskDag = {
       tasks: [
         {
-          task_id: "task-a",
           depends_on: ["task-a"],
-          parallel_safe: true,
           files: [],
+          parallel_safe: true,
+          task_id: "task-a",
         },
-        { task_id: "task-a", depends_on: [], parallel_safe: true, files: [] },
+        { depends_on: [], files: [], parallel_safe: true, task_id: "task-a" },
       ],
     };
     const result = validateDag(dag);
@@ -268,16 +258,16 @@ describe("validateDag — parallel_safe: false tasks", () => {
     const dag: TaskDag = {
       tasks: [
         {
-          task_id: "sequential-task",
           depends_on: [],
-          parallel_safe: false,
           files: ["src/index.ts"],
+          parallel_safe: false,
+          task_id: "sequential-task",
         },
         {
-          task_id: "another-task",
           depends_on: ["sequential-task"],
-          parallel_safe: false,
           files: ["src/utils.ts"],
+          parallel_safe: false,
+          task_id: "another-task",
         },
       ],
     };

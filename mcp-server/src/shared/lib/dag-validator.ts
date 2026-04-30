@@ -21,6 +21,67 @@ export type DagValidationResult = {
   errors: string[];
 };
 
+/** Check 2: Collect tasks with empty/whitespace-only task_id. */
+function collectEmptyIdErrors(tasks: TaskNode[]): string[] {
+  const errors: string[] = [];
+  for (let i = 0; i < tasks.length; i++) {
+    if (tasks[i].task_id.trim() === "") {
+      errors.push(`Task at index ${i} has empty task_id`);
+    }
+  }
+  return errors;
+}
+
+/** Check 3: Collect duplicate task_id errors (skips empty ids). */
+function collectDuplicateIdErrors(tasks: TaskNode[]): string[] {
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  const reported = new Set<string>();
+  for (const task of tasks) {
+    const id = task.task_id;
+    if (id.trim() === "") continue;
+    if (seen.has(id) && !reported.has(id)) {
+      errors.push(`Duplicate task_id: ${id}`);
+      reported.add(id);
+    } else {
+      seen.add(id);
+    }
+  }
+  return errors;
+}
+
+/** Check 4: Collect self-reference errors (skips empty ids). */
+function collectSelfReferenceErrors(tasks: TaskNode[]): string[] {
+  const errors: string[] = [];
+  for (const task of tasks) {
+    if (task.task_id.trim() === "") continue;
+    if (task.depends_on.includes(task.task_id)) {
+      errors.push(`Task '${task.task_id}' depends on itself`);
+    }
+  }
+  return errors;
+}
+
+/** Check 5: Collect unresolved dependency reference errors. Returns errors and whether any exist. */
+function collectUnresolvedRefErrors(
+  tasks: TaskNode[],
+  allIds: Set<string>,
+): { errors: string[]; hasUnresolved: boolean } {
+  const errors: string[] = [];
+  let hasUnresolved = false;
+  for (const task of tasks) {
+    if (task.task_id.trim() === "") continue;
+    for (const dep of task.depends_on) {
+      if (dep === task.task_id) continue; // Already caught as self-reference
+      if (!allIds.has(dep)) {
+        errors.push(`Task '${task.task_id}' depends on unknown task '${dep}'`);
+        hasUnresolved = true;
+      }
+    }
+  }
+  return { errors, hasUnresolved };
+}
+
 /**
  * Validate a TaskDag structure.
  *
@@ -40,68 +101,98 @@ export function validateDag(dag: TaskDag): DagValidationResult {
 
   // Check 1: Empty DAG
   if (dag.tasks.length === 0) {
-    return { valid: false, errors: ["DAG must contain at least one task"] };
+    return { errors: ["DAG must contain at least one task"], valid: false };
   }
 
   // Check 2: Empty task_id
-  for (let i = 0; i < dag.tasks.length; i++) {
-    const task = dag.tasks[i];
-    if (task.task_id.trim() === "") {
-      errors.push(`Task at index ${i} has empty task_id`);
-    }
-  }
+  errors.push(...collectEmptyIdErrors(dag.tasks));
 
   // Check 3: Duplicate task_ids
-  // (Only check non-empty ids to avoid duplicate "empty" errors)
-  const seenIds = new Set<string>();
-  const duplicateIds = new Set<string>();
-  for (const task of dag.tasks) {
-    if (task.task_id.trim() === "") continue;
-    if (seenIds.has(task.task_id)) {
-      if (!duplicateIds.has(task.task_id)) {
-        errors.push(`Duplicate task_id: ${task.task_id}`);
-        duplicateIds.add(task.task_id);
-      }
-    } else {
-      seenIds.add(task.task_id);
-    }
-  }
+  errors.push(...collectDuplicateIdErrors(dag.tasks));
 
   // Build set of all known (non-empty) ids for reference checks
-  const allIds = new Set<string>(
-    dag.tasks.map((t) => t.task_id).filter((id) => id.trim() !== ""),
-  );
+  const allIds = new Set<string>(dag.tasks.map((t) => t.task_id).filter((id) => id.trim() !== ""));
 
   // Check 4: Self-references
-  for (const task of dag.tasks) {
-    if (task.task_id.trim() === "") continue;
-    if (task.depends_on.includes(task.task_id)) {
-      errors.push(`Task '${task.task_id}' depends on itself`);
-    }
-  }
+  errors.push(...collectSelfReferenceErrors(dag.tasks));
 
   // Check 5: Unresolved references
-  let hasUnresolvedRefs = false;
-  for (const task of dag.tasks) {
-    if (task.task_id.trim() === "") continue;
-    for (const dep of task.depends_on) {
-      if (dep === task.task_id) continue; // Already caught as self-reference
-      if (!allIds.has(dep)) {
-        errors.push(`Task '${task.task_id}' depends on unknown task '${dep}'`);
-        hasUnresolvedRefs = true;
-      }
-    }
-  }
+  const { errors: refErrors, hasUnresolved } = collectUnresolvedRefErrors(dag.tasks, allIds);
+  errors.push(...refErrors);
 
   // Check 6: Cycle detection (only when no unresolved references)
-  if (!hasUnresolvedRefs) {
+  if (!hasUnresolved) {
     const cycleError = detectCycle(dag);
     if (cycleError !== null) {
       errors.push(cycleError);
     }
   }
 
-  return { valid: errors.length === 0, errors };
+  return { errors, valid: errors.length === 0 };
+}
+
+/** Initialize graph node entries for each task. */
+function initGraphNodes(
+  tasks: TaskNode[],
+  inDegree: Map<string, number>,
+  dependents: Map<string, string[]>,
+): void {
+  for (const task of tasks) {
+    if (!inDegree.has(task.task_id)) inDegree.set(task.task_id, 0);
+    if (!dependents.has(task.task_id)) dependents.set(task.task_id, []);
+  }
+}
+
+/** Add edges for a single task's dependencies. */
+function addTaskEdges(
+  task: TaskNode,
+  inDegree: Map<string, number>,
+  dependents: Map<string, string[]>,
+): void {
+  for (const dep of task.depends_on) {
+    if (dep === task.task_id) continue; // Self-references already reported
+    inDegree.set(task.task_id, (inDegree.get(task.task_id) ?? 0) + 1);
+    const depDependents = dependents.get(dep) ?? [];
+    depDependents.push(task.task_id);
+    dependents.set(dep, depDependents);
+  }
+}
+
+/** Build in-degree map and dependents adjacency list for non-empty tasks. */
+function buildGraph(tasks: TaskNode[]): {
+  dependents: Map<string, string[]>;
+  inDegree: Map<string, number>;
+} {
+  const inDegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
+
+  initGraphNodes(tasks, inDegree, dependents);
+  for (const task of tasks) {
+    addTaskEdges(task, inDegree, dependents);
+  }
+
+  return { dependents, inDegree };
+}
+
+/** Run Kahn's algorithm; return count of processed nodes. */
+function kahnProcess(inDegree: Map<string, number>, dependents: Map<string, string[]>): number {
+  const queue: string[] = [];
+  for (const [id, degree] of inDegree) {
+    if (degree === 0) queue.push(id);
+  }
+
+  let processedCount = 0;
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    processedCount++;
+    for (const dependent of dependents.get(current) ?? []) {
+      const newDegree = (inDegree.get(dependent) ?? 0) - 1;
+      inDegree.set(dependent, newDegree);
+      if (newDegree === 0) queue.push(dependent);
+    }
+  }
+
+  return processedCount;
 }
 
 /**
@@ -117,60 +208,14 @@ function detectCycle(dag: TaskDag): string | null {
   // Skip tasks with empty task_ids (already caught above)
   const tasks = dag.tasks.filter((t) => t.task_id.trim() !== "");
 
-  // Build in-degree map and adjacency list (edge: dep -> task)
-  const inDegree = new Map<string, number>();
-  const dependents = new Map<string, string[]>(); // task_id -> tasks that depend on it
-
-  for (const task of tasks) {
-    if (!inDegree.has(task.task_id)) {
-      inDegree.set(task.task_id, 0);
-    }
-    if (!dependents.has(task.task_id)) {
-      dependents.set(task.task_id, []);
-    }
-  }
-
-  for (const task of tasks) {
-    for (const dep of task.depends_on) {
-      if (dep === task.task_id) continue; // Self-references already reported
-      // Edge: dep -> task (dep must come before task)
-      inDegree.set(task.task_id, (inDegree.get(task.task_id) ?? 0) + 1);
-      const depDependents = dependents.get(dep) ?? [];
-      depDependents.push(task.task_id);
-      dependents.set(dep, depDependents);
-    }
-  }
-
-  // Kahn's algorithm: seed queue with zero-in-degree nodes
-  const queue: string[] = [];
-  for (const [id, degree] of inDegree) {
-    if (degree === 0) {
-      queue.push(id);
-    }
-  }
-
-  let processedCount = 0;
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    processedCount++;
-
-    for (const dependent of dependents.get(current) ?? []) {
-      const newDegree = (inDegree.get(dependent) ?? 0) - 1;
-      inDegree.set(dependent, newDegree);
-      if (newDegree === 0) {
-        queue.push(dependent);
-      }
-    }
-  }
+  const { inDegree, dependents } = buildGraph(tasks);
+  const processedCount = kahnProcess(inDegree, dependents);
 
   // If not all nodes were processed, remaining nodes are in a cycle
   if (processedCount < tasks.length) {
     const cycleNodes: string[] = [];
     for (const [id, degree] of inDegree) {
-      if (degree > 0) {
-        cycleNodes.push(id);
-      }
+      if (degree > 0) cycleNodes.push(id);
     }
     cycleNodes.sort();
     return `Cycle detected involving tasks: ${cycleNodes.join(", ")}`;
