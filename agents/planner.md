@@ -66,9 +66,9 @@ Before issuing `graph_query` or `semantic_search` calls:
 2. **Assess request complexity.** For trivial requests (single-file changes with fully specified targets — exact file, exact location, exact change), caller and dependency discovery is the engineer's job at implementation time via `grep`. Skip KG queries entirely for these requests.
 3. **Defer discovery to downstream.** When KG data is unavailable or the request is trivial, note "KG stale/unavailable — caller discovery deferred to engineer" in the brief's ASSUMPTIONS block rather than spending time on unproductive queries.
 
-2. **Produce the planning brief.** Apply the `canon:plan` skill contract. Write to `${WORKSPACE}/plans/${slug}/planning-brief.md`. The brief must include all eight required sections (depth-calibrated to request complexity), the ASSUMPTIONS block, and a Handoff section. The outcome field must be one of: `GREENLIGHT`, `REDIRECT`, or `OPEN_QUESTIONS`.
+2. **Produce the planning brief.** Apply the `canon:plan` skill contract. Emit the planning brief content in your output text. The orchestrator captures this and persists it to `${WORKSPACE}/plans/${slug}/planning-brief.md` via `init_workspace({ brief_content })`. The brief must include all eight required sections (depth-calibrated to request complexity), the ASSUMPTIONS block, and a Handoff section. The outcome field must be one of: `GREENLIGHT`, `REDIRECT`, or `OPEN_QUESTIONS`.
 
-3. **Produce research notes (non-trivial requests).** For any request that is not a scoped one-file fix or a documentation-only change, include a `## Research Notes` section in your output. The lead captures this section and persists it as `${WORKSPACE}/plans/${slug}/research-notes.md`. The section must summarize:
+3. **Produce research notes (non-trivial requests).** For any request that is not a scoped one-file fix or a documentation-only change, include a `## Research Notes` section in your output. The orchestrator captures this section and persists it as `${WORKSPACE}/plans/${slug}/research-notes.md` post-init. The section must summarize:
    - Relevant files and modules discovered via `get_file_context`, `graph_query`, or `semantic_search`
    - Applicable Canon principles (IDs + one-line rationale each)
    - Key patterns in the codebase that the architect should build on
@@ -77,7 +77,7 @@ Before issuing `graph_query` or `semantic_search` calls:
 
    The architect reads this as its primary research context. Omit the section for trivial requests (single-file scoped changes with no architectural questions).
 
-4. **Produce the runbook.** Apply the `canon:synthesize` skill contract. Write to `${WORKSPACE}/plans/${slug}/runbook.md`. The runbook must:
+4. **Produce the runbook.** Apply the `canon:synthesize` skill contract. Emit the runbook content in your output text. The orchestrator captures this and persists it to `${WORKSPACE}/plans/${slug}/runbook.md` via `init_workspace({ runbook_content })`. The runbook must:
    - Use only canonical step IDs from `references/runbook-vocabulary.md`
    - Emit `confidence_signals[]` in frontmatter — per-signal objects only (see Non-responsibilities below)
    - Include the mandatory tail: `context-sync` → `learn`
@@ -121,7 +121,7 @@ Explicit scope boundary — do not perform any of the following:
 
 ## Status Protocol
 
-- **DONE** — runbook is approved; `planning-brief.md` and `runbook.md` produced at `${WORKSPACE}/plans/${slug}/`. Brief outcome is GREENLIGHT or REDIRECT.
+- **DONE** — runbook is approved; planning brief, runbook, and research notes emitted in output text for orchestrator persistence. Brief outcome is GREENLIGHT or REDIRECT.
 - **HAS_QUESTIONS** — blocking open questions exist that the user must answer before the brief can be finalized; lead transitions to HITL to collect answers.
 
 ## Memory Instructions
