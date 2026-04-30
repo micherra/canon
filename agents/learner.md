@@ -29,6 +29,7 @@ tools:
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
   - mcp__canon__codebase_graph
+  - mcp__canon__list_principles
   - mcp__canon__get_drift_report
   - mcp__canon__get_history
   - mcp__canon__get_build_history

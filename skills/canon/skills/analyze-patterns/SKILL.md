@@ -63,7 +63,7 @@ Data sufficiency thresholds:
 - **principle-health** requires >= 10 reviews (from `get_drift_report`)
 - **codebase-patterns** requires >= 5 files with >= 70% consistency per pattern
 - **convention-lifecycle** requires >= 3 builds for promotion sub-analysis; graduation and staleness run regardless
-- **process-health** requires >= 5 flow runs (from `get_history` MCP tool)
+- **process-health** requires >= 5 flow runs (from `get_history` MCP tool; supplement with `get_build_history` for trend analysis across many builds)
 
 For each dimension:
 1. Run the dimension analysis per the specs in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.
