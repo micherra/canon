@@ -225,6 +225,8 @@ Discovery heuristics:
 
 Only report commands for tools that have visible configuration. Do not guess or assume tools are installed.
 
+**Validation**: After discovering a lint command, verify the tool is actually available before treating the command as required. Run `which <tool-binary>` (e.g., `which cargo` for `cargo clippy`, `which biome` for Biome, `which golangci-lint` for golangci-lint). If the tool binary is not found on PATH, skip lint execution and note "Lint tool not available: {tool}" in the review output. Do not report a lint failure for a tool that is not installed.
+
 ## Build and Lint Verification
 
 After completing Stages 1–4, run the project build and lint to surface compilation errors and lint violations. This is not optional — lint errors are review findings.
