@@ -168,14 +168,14 @@ skills: []
 cause: ~
 mcp_tools: []
 artifacts:
-  - ${WORKSPACE}/learning.md
+  - "outcome:learning analysis complete"
 hitl: none
 skip_when: ~
 ```
 
-**Intent:** The learner analyzes the completed flow for patterns — recurring fix cycles, contract pairing gaps, vocabulary stretches — and proposes principle improvements. The output feeds Canon's continuous improvement loop.
+**Intent:** The learner analyzes the completed flow for patterns — recurring fix cycles, contract pairing gaps, vocabulary stretches — and proposes principle improvements. In auto-trigger mode, writes proposals to `.canon/proposed-learnings/`. In manual mode, writes `.canon/LEARNING-REPORT.md`. The output feeds Canon's continuous improvement loop.
 
-**Coordination notes:** Final step. Produces `learning.md`. No subsequent steps; orchestrator transitions to `complete_flow` after this step.
+**Coordination notes:** Final step. In auto-trigger mode, produces proposals in `.canon/proposed-learnings/{timestamp}/`. In manual mode, produces `.canon/LEARNING-REPORT.md` and appends to `.canon/learning.jsonl`. No subsequent steps; orchestrator transitions to `complete_flow` after this step.
 ```
 
 ---

@@ -38,7 +38,7 @@ All step IDs come from `references/runbook-vocabulary.md` (Version 1.0). No new 
 
 | Step | Default agent | HITL | Notes |
 |------|---------------|------|-------|
-| `research` | researcher | none | Investigate existing principles, prior learnings, coverage gaps. May be skipped for trivial edits (one-line corrections). |
+| `research` | planner | none | Investigate existing principles, prior learnings, coverage gaps. May be skipped for trivial edits (one-line corrections). |
 | `implement` | writer | none | Content-authoring mode. The writer edits the target file(s) and produces an `implementation-log.md`. No code is written. The writer handles all principle edits — including those originating from learner proposals — to ensure conflict detection and format validation run consistently. |
 | `review` | reviewer | checkpoint | Principle compliance and factual correctness of the edited content. |
 | `context-sync` | scribe | none | Mandatory tail — update CLAUDE.md, context.md, CONVENTIONS.md if contract-level changes occurred. |
