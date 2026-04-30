@@ -12,6 +12,12 @@ export function registerJournalTools(): void {
       description:
         "Log a step in the orchestration journal. Records step execution for audit trail and completion verification.",
       inputSchema: {
+        agent_id: z
+          .string()
+          .optional()
+          .describe(
+            "Agent ID from the Agent tool result. When provided with status=completed, triggers best-effort transcript capture inside the MCP server process.",
+          ),
         agent_type: z
           .string()
           .nullable()

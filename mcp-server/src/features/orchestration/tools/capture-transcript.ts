@@ -56,7 +56,7 @@ function claudeConfigHome(): string {
  * names like "-Users-foo-project" (leading dash retained).
  * Returns null when the env var is not set.
  */
-function deriveProjectIdFromEnv(): string | null {
+export function deriveProjectIdFromEnv(): string | null {
   const canonProjectDir = process.env.CANON_PROJECT_DIR;
   if (!canonProjectDir) return null;
   return canonProjectDir.replace(/\//g, "-");

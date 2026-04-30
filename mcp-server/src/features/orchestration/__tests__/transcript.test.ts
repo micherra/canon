@@ -18,7 +18,8 @@
  * - Handles malformed CC entries gracefully
  * - Tracks cumulative_tokens across entries
  *
- * See transcript-capture.test.ts for captureTranscript end-to-end tests.
+ * See transcript-capture.test.ts for captureTranscript end-to-end tests
+ * and deriveProjectIdFromEnv tests.
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
