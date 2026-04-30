@@ -222,7 +222,17 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 - **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
 - **Architect approval**: Present the plan to the user. For agent teams, use native plan approval mode.
 - **Review verdict**: Present review results. If not clean, spawn engineer in fix mode.
-- **Review-fix iteration loop**: After the fix agent completes, re-spawn the reviewer to verify ALL previously flagged violations were addressed — not just some. The loop continues until the reviewer returns CLEAN or WARNING. Maximum 3 fix→review iterations before escalating to the user via HITL. Iteration pattern: fix → re-review → (if still BLOCKING) → fix → re-review → (if still BLOCKING after 3 iterations) → HITL.
+- **Review-fix iteration loop**: After the fix agent completes, re-spawn the reviewer to verify ALL previously flagged violations were addressed — not just some.
+  - Loop continues until reviewer returns CLEAN or WARNING.
+  - Maximum 3 fix→review iterations before escalating to the user via HITL.
+  - Iteration pattern: fix → re-review → (if still BLOCKING) → fix → re-review → (if still BLOCKING after 3 iterations) → HITL.
+  - When the reviewer flags Stage 3 cross-check discrepancies (tagged `SUMMARY CORRECTION REQUIRED`), the fix spawn prompt MUST include the discrepancy details and instruct the engineer to correct the implementation summary (`*-SUMMARY.md`) in addition to fixing any code violations. The corrected summary replaces the original at the same artifact path.
+  - Note: the `SUMMARY CORRECTION REQUIRED` flow is L1-only enforcement — there is no automated check that the orchestrator included discrepancy details in the fix prompt; correct behavior depends on the orchestrator following this rule.
+- **WARNING advisory close-out**: After the review-fix loop resolves BLOCKING items (or if the initial verdict is WARNING with no BLOCKING violations), the orchestrator surfaces WARNING advisory items to the user as a HITL checkpoint before proceeding to ship. Three options:
+  - (a) **fix** — spawns another engineer fix cycle targeting the advisory items; build resumes after fix.
+  - (b) **acknowledge** — items logged as accepted in the journal via `log_step` outcome, build proceeds (accept as-is — no follow-up planned).
+  - (c) **defer** — items noted as follow-up, build proceeds (plan to address later — noted as follow-up).
+  - This checkpoint occurs between the review step and the ship step. It does NOT apply if the review verdict is CLEAN.
 - **Gate failure**: Present the failure output and ask the user how to proceed.
 - **Merge conflict**: Present conflicting files and ask for resolution strategy.
 

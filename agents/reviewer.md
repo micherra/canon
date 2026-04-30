@@ -207,6 +207,8 @@ When the orchestrator provides engineer summary paths (`${WORKSPACE}/plans/{slug
 | Violated | VIOLATION_FOUND → FIXED | Flag — fix may be incomplete |
 
 3. Follow the **Compliance Cross-Check** section of the review-checklist template
+4. For each discrepancy found, explicitly tag it with the marker **`SUMMARY CORRECTION REQUIRED`** in the review output. This marker signals the orchestrator to include summary correction instructions in the fix spawn prompt. Example format:
+   > `SUMMARY CORRECTION REQUIRED — {principle-id}: engineer declared COMPLIANT but reviewer found violation at {file}:{line}.`
 
 Stage 3 does NOT change the verdict. Discrepancies are addenda for the next review cycle.
 
