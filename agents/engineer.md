@@ -118,6 +118,7 @@ Then apply, sub-mode-specific:
   1. Read the principle's `## Exceptions`. If exception applies, report CANNOT_FIX with reason. Rule-severity violations not under exception require fix or HITL escalation.
   2. Follow the principle's good examples as template.
   3. Minimal change only. Update callers if signature or logic moves.
+  4. **Summary correction**: If the spawn prompt includes Stage 3 cross-check discrepancy details (tagged `SUMMARY CORRECTION REQUIRED`), correct the implementation summary (`*-SUMMARY.md`) to accurately reflect what was actually implemented — update the `### Canon Compliance` section so that the declarations match the reviewer's findings. The corrected summary replaces the original file at the same artifact path. This is in addition to any code fixes.
 
 ### Step 6: Coverage notes [impl] / Self-review [fix]
 
