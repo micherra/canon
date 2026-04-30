@@ -37,7 +37,7 @@ Every synthesized step carries these first-class fields (per v2.1 §5.2):
 
 - `id` — must match a vocabulary entry exactly (case-sensitive). Unknown IDs are synthesis errors.
 - `agent` — use the vocabulary's Default Agent column. Override only when the brief body explicitly names a different agent and provides justification. `null` means no agent; the lead handles the step via Bash.
-- `dispatch` — use the vocabulary's Dispatch column. `team` is valid only for `implement` steps; all others are `subagent` or `n/a`.
+- `dispatch` — use the vocabulary's Dispatch column. `team` is valid for `implement`, `design`, `review`, `test`, and `security` steps; all others are `subagent` or `n/a`.
 - `skills` — if present, every name must correspond to a file at `references/<name>.md` or `skills/canon/skills/<name>/SKILL.md`. Unknown skill names are synthesis errors.
 - `cause` — required on every `fix` step. One of: `test-failure`, `security`, `review`, `verify`. Indicates which upstream step triggered this fix. Do not emit a `fix` step without a `cause`.
 - `mcp_tools` — list of MCP tool names (e.g., `mcp__canon__get_principles`) the lead should call before spawning this step's agent. Used to compose context.

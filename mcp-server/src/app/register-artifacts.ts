@@ -1,7 +1,6 @@
 import { writeDesignBrief } from "@features/orchestration/tools/write-design-brief.ts";
 import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
-import { writeResearchSynthesis } from "@features/orchestration/tools/write-research-synthesis.ts";
 import { writeReview } from "@features/orchestration/tools/write-review.ts";
 import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
 import { z } from "zod";
@@ -116,36 +115,6 @@ function registerReviewArtifactTools(): void {
 }
 
 function registerHandoffArtifactTools(): void {
-  server.registerTool(
-    "write_research_synthesis",
-    {
-      description:
-        "Write a structured research synthesis for researcher-to-architect handoff. Produces RESEARCH-SYNTHESIS.md + .meta.json sidecar in workspace handoffs/ directory.",
-      inputSchema: {
-        affected_subsystems: z.array(z.string()),
-        key_findings: z.array(
-          z.object({
-            confidence: z.enum(["high", "medium", "low"]),
-            finding: z.string(),
-            source: z.string().optional(),
-          }),
-        ),
-        open_questions: z.array(z.string()),
-        risk_areas: z.array(
-          z.object({
-            area: z.string(),
-            mitigation: z.string().optional(),
-            severity: z.enum(["high", "medium", "low"]),
-          }),
-        ),
-        slug: z.string(),
-        sources: z.array(z.string()).optional(),
-        workspace: z.string(),
-      },
-    },
-    gatedWrapHandler(async (input) => writeResearchSynthesis(input)),
-  );
-
   server.registerTool(
     "write_design_brief",
     {

@@ -2,7 +2,6 @@
  * Integration tests for ADR-018: Workspace Communication Structure
  *
  * Tests cross-task boundaries:
- *   - writeResearchSynthesis → resolveHandoffInjection (adr018-01 + write-research-synthesis)
  *   - writeDesignBrief → validateRequiredHandoffs via reportResult (write-design-brief + adr018-02)
  *   - Known gaps from implementor summaries: readdir failure, file read failure,
  *     smaller-file-fits-after-large-skip, malformed meta JSON, multiple mixed handoffs
@@ -19,7 +18,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveContextInjections } from "../services/inject-context.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { writeDesignBrief } from "../tools/write-design-brief.ts";
-import { writeResearchSynthesis } from "../tools/write-research-synthesis.ts";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Shared test helpers
@@ -97,81 +95,6 @@ afterEach(async () => {
   await Promise.all(tmpDirs.map((dir) => rm(dir, { force: true, recursive: true })));
   tmpDirs = [];
   vi.restoreAllMocks();
-});
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Integration: writeResearchSynthesis → resolveHandoffInjection
-// ──────────────────────────────────────────────────────────────────────────────
-
-describe("ADR-018 integration: writeResearchSynthesis → handoff injection", () => {
-  it("content written by writeResearchSynthesis is readable via from:handoff injection", async () => {
-    const workspace = await makeTmpDir();
-    const board = makeBoard();
-
-    // Task adr018-write: researcher writes synthesis
-    const writeResult = await writeResearchSynthesis({
-      affected_subsystems: ["orchestration"],
-      key_findings: [{ confidence: "high", finding: "Handoffs are stored in handoffs/ directory" }],
-      open_questions: ["Does section filtering work cross-tool?"],
-      risk_areas: [{ area: "Backward compat", severity: "low" }],
-      slug: "adr-018",
-      workspace,
-    });
-    assertOk(writeResult);
-
-    // Task adr018-01: downstream agent receives synthesis via from:handoff injection
-    const injections: ContextInjection[] = [{ as: "RESEARCH", from: "handoff" }];
-    const result = await resolveContextInjections(injections, board, workspace);
-
-    expect(result.warnings).toHaveLength(0);
-    expect(result.variables.RESEARCH).toBeDefined();
-    expect(result.variables.RESEARCH).toContain("RESEARCH-SYNTHESIS");
-    expect(result.variables.RESEARCH).toContain("Handoffs are stored in handoffs/ directory");
-    expect(result.variables.RESEARCH).toContain("orchestration");
-  });
-
-  it("section filter on RESEARCH-SYNTHESIS filename matches the written file", async () => {
-    const workspace = await makeTmpDir();
-    const board = makeBoard();
-
-    await writeResearchSynthesis({
-      affected_subsystems: ["orchestration"],
-      key_findings: [{ confidence: "high", finding: "Finding A" }],
-      open_questions: [],
-      risk_areas: [],
-      slug: "adr-018",
-      workspace,
-    });
-
-    // Write a second handoff file to confirm filtering excludes it
-    await writeFile(join(workspace, "handoffs", "OTHER.md"), "Other handoff content.");
-
-    const injections: ContextInjection[] = [
-      { as: "SYNTH", from: "handoff", section: "RESEARCH-SYNTHESIS" },
-    ];
-    const result = await resolveContextInjections(injections, board, workspace);
-
-    expect(result.warnings).toHaveLength(0);
-    expect(result.variables.SYNTH).toContain("Finding A");
-    expect(result.variables.SYNTH).not.toContain("Other handoff content.");
-  });
-
-  it("section filter is filename-based, not heading-based: heading match without filename match is excluded", async () => {
-    const workspace = await makeTmpDir();
-    const board = makeBoard();
-
-    await mkdir(join(workspace, "handoffs"), { recursive: true });
-    // File named "alpha.md" but content contains ## Beta heading
-    await writeFile(join(workspace, "handoffs", "alpha.md"), "## Beta\nBeta heading content.");
-
-    // section: "Beta" should NOT match — the filename is "alpha", not "beta"
-    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "handoff", section: "Beta" }];
-    const result = await resolveContextInjections(injections, board, workspace);
-
-    // Should warn (no matching filename) and not inject
-    expect(result.warnings.length).toBeGreaterThan(0);
-    expect(result.variables).not.toHaveProperty("OUTPUT");
-  });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -460,96 +383,5 @@ describe("reportResult — multiple required_handoffs, mixed valid/invalid", () 
     expect(warnings!.some((w) => w.includes("missing-handoff"))).toBe(true);
     // The valid RESEARCH-SYNTHESIS should NOT appear in warnings
     expect(warnings!.every((w) => !w.includes("RESEARCH-SYNTHESIS"))).toBe(true);
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Integration: writeResearchSynthesis → validateRequiredHandoffs round-trip
-// The _type written by writeResearchSynthesis is "research_synthesis"
-// ──────────────────────────────────────────────────────────────────────────────
-
-describe("ADR-018 integration: writeResearchSynthesis _type matches required_handoffs type", () => {
-  it("validateRequiredHandoffs recognizes the _type written by writeResearchSynthesis", async () => {
-    const workspace = await makeTmpDir();
-
-    // Researcher writes synthesis
-    const writeResult = await writeResearchSynthesis({
-      affected_subsystems: ["inject-context"],
-      key_findings: [{ confidence: "high", finding: "Handoff pipeline works end-to-end" }],
-      open_questions: [],
-      risk_areas: [],
-      slug: "adr-018",
-      workspace,
-    });
-    assertOk(writeResult);
-
-    // Flow requires the handoff with type "research_synthesis"
-    const flow = makeMinimalFlow({
-      states: {
-        build: {
-          required_handoffs: [{ name: "RESEARCH-SYNTHESIS", type: "research_synthesis" }],
-          transitions: { done: "review", failed: "hitl" },
-          type: "single",
-        },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
-      },
-    });
-    setupWorkspace(workspace, flow);
-
-    const result = await reportResult({
-      flow,
-      state_id: "build",
-      status_keyword: "DONE",
-      workspace,
-    });
-    assertOk(result);
-
-    // No warnings — _type matches
-    expect((result as Record<string, unknown>).warnings).toBeUndefined();
-  });
-
-  it("wrong type expectation on RESEARCH-SYNTHESIS meta produces warning", async () => {
-    const workspace = await makeTmpDir();
-
-    await writeResearchSynthesis({
-      affected_subsystems: [],
-      key_findings: [],
-      open_questions: [],
-      risk_areas: [],
-      slug: "adr-018",
-      workspace,
-    });
-
-    const flow = makeMinimalFlow({
-      states: {
-        build: {
-          required_handoffs: [
-            // Expect design_brief but synthesis was written (type: research_synthesis)
-            { name: "RESEARCH-SYNTHESIS", type: "design_brief" },
-          ],
-          transitions: { done: "review", failed: "hitl" },
-          type: "single",
-        },
-        hitl: { type: "terminal" },
-        review: { transitions: { done: "ship" }, type: "single" },
-        ship: { type: "terminal" },
-      },
-    });
-    setupWorkspace(workspace, flow);
-
-    const result = await reportResult({
-      flow,
-      state_id: "build",
-      status_keyword: "DONE",
-      workspace,
-    });
-    assertOk(result);
-
-    const warnings = (result as Record<string, unknown>).warnings as string[] | undefined;
-    expect(warnings).toBeDefined();
-    expect(warnings!.some((w) => w.includes("research_synthesis"))).toBe(true);
-    expect(warnings!.some((w) => w.includes("design_brief"))).toBe(true);
   });
 });

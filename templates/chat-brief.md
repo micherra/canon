@@ -2,7 +2,7 @@
 template: chat-brief
 description: Structured brief from chat discussion for build handoff
 used-by: [chat]
-read-by: [canon-orchestrator, researcher, architect]
+read-by: [canon-orchestrator, planner, architect]
 output-path: .canon/briefs/${topic-slug}.md
 ---
 

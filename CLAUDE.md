@@ -42,7 +42,7 @@ Everything else — implementation, research, review, testing — is agent work.
 
 - **Don't ask which flow to use.** Auto-detect and pick it.
 - **Don't ask for confirmation before starting** unless the request is genuinely ambiguous.
-- **Don't expose Canon jargon.** Say "I'll research this first, then plan and implement" — not "entering research state, spawning researcher".
+- **Don't expose Canon jargon.** Say "I'll research and plan this first, then implement" — not "entering research state, invoking planner".
 - **Do give progress updates** in plain language.
 
 ## Silent Dispatch
@@ -101,7 +101,7 @@ If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — u
 | Build, fix, change, improve (any scope) | Spawn `planner` |
 | Review PR or branch | Spawn `reviewer` |
 | Security audit | Spawn `security`, then `reviewer` |
-| Investigate / "how does X work" | Spawn `researcher`(s), synthesize findings |
+| Investigate / "how does X work" | Spawn `planner` — the planner performs codebase research and synthesizes findings |
 | Scan for violations (via init) | Spawn `engineer` to scan + fix |
 | Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
 | Analyze patterns / learn | Route to `learner` for mining |
@@ -187,7 +187,6 @@ Table of which Canon MCP tools to call before spawning each step type:
 | Step type | MCP tools to call |
 |-----------|------------------|
 | Any step before spawn | `resolve_agent_skills` (preloaded rules + references injected into the spawn prompt) |
-| Research | `get_principles`, `get_file_context`, `graph_query`, `semantic_search` |
 | Design | `get_principles`, `get_file_context`, `graph_query` |
 | Implement | `get_principles`, `get_file_context`, `get_drift_report` |
 | Review | `get_principles`, `get_drift_report` |
@@ -288,8 +287,7 @@ See the "Agent Spawn Error Handling" section below. The same retry logic (429 ra
 
 | Agent | subagent_type | When |
 |-------|---------------|------|
-| Planner | `canon:planner` | Pre-build gate — evaluates build requests |
-| Researcher | `canon:researcher` | Research states |
+| Planner | `canon:planner` | Pre-build gate — evaluates build requests, performs codebase research |
 | Architect | `canon:architect` | Design states |
 | Engineer | `canon:engineer` | Implementation and fix states (dual-mode) |
 | Tester | `canon:tester` | Test states |
