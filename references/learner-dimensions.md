@@ -185,7 +185,9 @@ Suggest: {update convention to match current practice | remove convention | inve
 
 ### Data source
 
-Read `.canon/flow-runs.jsonl` directly (no MCP tool needed). Each entry represents one completed flow run with state-level data.
+Call the `get_history` MCP tool to retrieve recent flow runs from the drift database. Each entry includes flow name, completion timestamp, and associated decisions. For state-level iteration data, read workspace journals from `.canon/workspaces/*/journal.json`.
+
+The `get_build_history` MCP tool provides archived build metadata (branch, flow, archived artifacts). Use it to supplement `get_history` when analyzing trends across many builds.
 
 **Minimum threshold**: 5 flow runs required for any suggestion. Below → note "Skipped: process-health — requires 5 flow runs, have {current}."
 
@@ -216,7 +218,7 @@ Combine all suggestions into `.canon/LEARNING-REPORT.md`:
 
 ```markdown
 ## Canon Learning Report
-Generated: {YYYY-MM-DD} | Reviews analyzed: {N} | Source files scanned: {N} | Flow runs analyzed: {N}
+Generated: {YYYY-MM-DD} | Reviews analyzed: {N} | Source files scanned: {N} | Builds analyzed: {N}
 
 ### Principle Health (from review history)
 
@@ -243,7 +245,7 @@ Generated: {YYYY-MM-DD} | Reviews analyzed: {N} | Source files scanned: {N} | Fl
 #### Stale Conventions
 {convention-lifecycle sub-C suggestions, or "All conventions are current." if none}
 
-### Process Health (from flow-runs.jsonl)
+### Process Health (from build history)
 {process-health suggestions, or "No process health issues detected." if none}
 
 ### Recurring Suggestions
@@ -272,7 +274,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
     "reviews_analyzed": 0,
     "source_files_scanned": 0,
     "task_conventions_read": 0,
-    "flow_runs_analyzed": 0
+    "builds_analyzed": 0
   },
   "suggestions": [
     {

@@ -23,8 +23,8 @@ You receive from the orchestrator:
 - Data availability summary
 - Paths to principles directory, conventions file, project root
 - Previous learning history (`.canon/learning.jsonl`) if it exists — check for suppressed suggestions
-- **[Auto-trigger mode]** Recent flow transcript paths (ADR-015) when spawned after flow completion
-- **[Auto-trigger mode]** Flow execution summary from the completed flow
+- **[Auto-trigger mode]** Recent build transcript paths when spawned after flow completion
+- **[Auto-trigger mode]** Build execution summary from the completed flow (via workspace journal)
 
 ---
 
@@ -63,7 +63,7 @@ Data sufficiency thresholds:
 - **principle-health** requires >= 10 reviews (from `get_drift_report`)
 - **codebase-patterns** requires >= 5 files with >= 70% consistency per pattern
 - **convention-lifecycle** requires >= 3 builds for promotion sub-analysis; graduation and staleness run regardless
-- **process-health** requires >= 5 flow runs (from `.canon/flow-runs.jsonl`)
+- **process-health** requires >= 5 flow runs (from `get_history` MCP tool)
 
 For each dimension:
 1. Run the dimension analysis per the specs in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.
