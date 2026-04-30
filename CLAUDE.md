@@ -57,6 +57,8 @@ Minimize text output during the state machine loop. Conversations exceeding ~100
 5. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
 6. Error and preflight presentations
 
+This list also defines the behavioral boundary for the Pre-Analysis Gate — when adding a new permitted output type, add it here.
+
 Do not narrate individual tool calls. One line between state transitions is correct.
 
 ## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off)
@@ -128,6 +130,16 @@ This gate also applies mid-flow: when an agent fails or returns incomplete resul
 **Before using `Edit`, `Write`, or `Bash` for code changes**, verify Canon routing: ask yourself *"Is this request currently routed through a Canon build flow (planner + approved runbook)?"* If no, stop. Present the build request to the user and route through `planner`. Editing code outside a Canon flow is the failure mode this rule prevents.
 
 This is the soft enforcement layer (L1). The hard backstop is the `canon-workspace-check.sh` PreToolUse hook (L4, v2_1a-05) that blocks `Edit` / `Write` / `Bash`-on-tracked-files when no active Canon workspace exists for the current flow. L4 fires only on `Edit` / `Write` / tracked-Bash calls — MCP tool calls used by the lead to call `init_workspace` are not `Edit` / `Write` / `Bash` and are never blocked.
+
+### Pre-Analysis Gate (L1)
+
+**Before producing substantive analytical text output**, verify it is on the Silent Dispatch allowlist (see the Silent Dispatch section — items 1–6). If the output you are about to write is not on that list, it is agent work — dispatch it instead of writing it yourself.
+
+This gate applies when the orchestrator is executing a build flow. Question and chat intents respond directly per the Intent Classification table and are not subject to this gate.
+
+This gate closes the third seam in the enforcement triangle. Pre-Research Gate covers tool-based investigation before planner spawn. Pre-Write Gate covers code edits outside a Canon flow. This gate covers the remaining failure mode: the orchestrator generating multi-paragraph analysis, root-cause explanations, design tradeoff evaluations, or research summaries directly in its response. These are specialist-agent deliverables regardless of whether a tool call is involved. The mechanism is a self-check: *"Am I about to write something a researcher, architect, or analyst would produce?"* If yes, spawn that agent.
+
+This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool calls, not text generation. Enforcement is entirely behavioral.
 
 ### Setup
 
