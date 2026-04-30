@@ -237,7 +237,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### Post-Step Effects
 
-- After reviewer completes: call `store_pr_review` or `write_review`.
+- After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.

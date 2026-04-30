@@ -142,6 +142,8 @@ For each Canon principle in the plan: declare one of ✓ COMPLIANT (state how), 
 - Full project suite passes (no regressions).
 - Lint runs (if configured) and is clean. Check for gates discovered by upstream agents (tester, reviewer) in the workspace — if `discovered_gates` entries exist in the workspace journal or were passed in your spawn prompt, execute those commands as part of verification.
 
+**Baseline-check before reporting BLOCKING**: Before reporting any build or test failure as BLOCKING, verify whether the failure exists on the base branch. Run the same failing command on the base branch (`git stash && git checkout {base_branch} && {failing_command} && git checkout - && git stash pop`, or equivalent). A failure that exists on the base branch is pre-existing and not a regression — note it as PRE-EXISTING in your report and do not report BLOCKED. Only failures absent on the base branch are regressions that should block.
+
 **[impl]** Any additional plan verification steps.
 
 **[fix]** test-fix: all previously failing tests now pass, plus full suite. violation-fix: if no tests exist, verify manually by reading code paths and confirming contract preservation.
