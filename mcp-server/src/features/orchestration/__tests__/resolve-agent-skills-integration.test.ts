@@ -57,50 +57,49 @@ describe("resolve_agent_skills against shipped agents", () => {
   });
 
   for (const name of listAgents()) {
-    it(
-      `${name}: every rules/references/primers/templates entry resolves`,
-      { retry: 2 },
-      () => {
-        const result = resolveAgentSkills({ agent_name: name }, REPO_ROOT);
-        assertOk<ResolveAgentSkillsResult>(result);
-        const fm = agentFrontmatter(name);
-        const declaredCount =
-          coerceList(fm.rules).length +
-          coerceList(fm.references).length +
-          coerceList(fm.primers).length +
-          coerceList(fm.templates).length;
+    it(`${name}: every rules/references/primers/templates entry resolves`, { retry: 2 }, () => {
+      const result = resolveAgentSkills({ agent_name: name }, REPO_ROOT);
+      assertOk<ResolveAgentSkillsResult>(result);
+      const fm = agentFrontmatter(name);
+      const declaredCount =
+        coerceList(fm.rules).length +
+        coerceList(fm.references).length +
+        coerceList(fm.primers).length +
+        coerceList(fm.templates).length;
 
-        if (result.unresolved.length > 0) {
-          // Distinguish transient FS errors (EMFILE under parallel load) from
-          // genuine missing files. tryReadSkill silently swallows ALL errors;
-          // if the file exists on disk but was not read, the failure is
-          // environmental, not a real contract violation.
-          const KIND_DIR: Record<string, string> = {
-            primer: "primers",
-            ref: "references",
-            rule: "rules",
-            template: "templates",
-          };
-          const genuinelyMissing = result.unresolved.filter((entry) => {
-            const colonIdx = entry.indexOf(":");
-            const kind = entry.slice(0, colonIdx);
-            const entryName = entry.slice(colonIdx + 1);
-            const dir = KIND_DIR[kind];
-            if (!dir) return true; // unknown kind — treat as genuine
-            const filePath = join(REPO_ROOT, dir, `${entryName}.md`);
-            return !existsSync(filePath);
-          });
+      if (result.unresolved.length > 0) {
+        // Distinguish transient FS errors (EMFILE under parallel load) from
+        // genuine missing files. tryReadSkill silently swallows ALL errors;
+        // if the file exists on disk but was not read, the failure is
+        // environmental, not a real contract violation.
+        const KIND_DIR: Record<string, string> = {
+          primer: "primers",
+          ref: "references",
+          rule: "rules",
+          template: "templates",
+        };
+        const genuinelyMissing = result.unresolved.filter((entry) => {
+          const colonIdx = entry.indexOf(":");
+          const kind = entry.slice(0, colonIdx);
+          const entryName = entry.slice(colonIdx + 1);
+          const dir = KIND_DIR[kind];
+          if (!dir) return true; // unknown kind — treat as genuine
+          const filePath = join(REPO_ROOT, dir, `${entryName}.md`);
+          return !existsSync(filePath);
+        });
 
-          expect(genuinelyMissing, [
+        expect(
+          genuinelyMissing,
+          [
             `Agent "${name}" has unresolved skill entries that are missing from disk.`,
             `Unresolved: ${result.unresolved.join(", ")}`,
             `Genuinely missing (not a transient FS error): ${genuinelyMissing.join(", ")}`,
-          ].join("\n")).toEqual([]);
-        }
+          ].join("\n"),
+        ).toEqual([]);
+      }
 
-        expect(result.skills.length).toBe(declaredCount);
-      },
-    );
+      expect(result.skills.length).toBe(declaredCount);
+    });
 
     it(`${name}: does not carry Canon rules/refs/primers/templates in skills:`, () => {
       const fm = agentFrontmatter(name);
