@@ -2,7 +2,7 @@
 name: analyze-patterns
 description: >-
   Pattern mining and proposal generation for Canon's learning loop.
-  Analyzes codebase patterns, review history, flow execution logs,
+  Analyzes codebase patterns, review history, build execution data,
   and conventions to produce structured improvement proposals.
   Covers manual analysis and auto-trigger modes. Loaded by the
   learner agent.
