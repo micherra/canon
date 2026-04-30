@@ -81,7 +81,7 @@ Before producing the planning brief, evaluate whether the request needs clarific
 - Ask follow-up questions (another `HAS_QUESTIONS` round) if answers revealed new ambiguity requiring investigation
 - Proceed to produce the planning brief, incorporating the answers
 
-**Round limit**: Soft cap of 2 interview rounds. After 2 rounds, proceed with best available understanding and note remaining uncertainty in the brief's ASSUMPTIONS block. Use judgment — if one round resolves everything, do not force a second round.
+**Ending the interview**: The interview continues until the user indicates the requirements are clear. After each round, check in: "I think I have a clear picture now — ready for me to produce the planning brief, or is there more to clarify?" The conversation ends when the user says to proceed, not when a counter runs out.
 
 ### Knowledge Graph Awareness
 

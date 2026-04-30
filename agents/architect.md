@@ -109,11 +109,8 @@ Structure your `HAS_QUESTIONS` response as:
 
 On re-spawn with user feedback, read the user's response:
 - If the user confirms the lean or provides a correction: proceed to Step 2 incorporating the feedback. The confirmed lean (or the user's correction) becomes the recommended approach.
-- If the user raises a new dimension you hadn't considered: do one more round to think through the implication before proceeding to Step 2.
-
-**Round limit:**
-
-Soft cap of 1 round. The design conversation is a quick alignment check, not an extended discussion. Most of the time, 1 round is sufficient — you state your thinking, the user corrects or confirms, you proceed. A second round is acceptable if your mental model was significantly wrong. After 2 rounds, proceed with best available understanding and note any remaining uncertainty in the DESIGN.md ASSUMPTIONS block.
+- If the user raises a new dimension you hadn't considered: think through the implication and continue the conversation.
+- Periodically check in: "I think we have a direction — ready to move to implementation, or is there more to explore?" The conversation ends when the user says to proceed, not when a counter runs out.
 
 **Integration with Step 2:**
 

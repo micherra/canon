@@ -38,7 +38,7 @@ Before producing the planning brief, evaluate whether the request warrants a req
 
 4. **Handle re-spawn with answers.** On re-spawn, read the user's answers from the HITL feedback in your spawn prompt. Either ask follow-up questions if answers revealed new ambiguity requiring investigation, or proceed to produce the brief incorporating the answers.
 
-5. **Respect the soft cap.** 2 rounds maximum. After 2 rounds, proceed with best available understanding and note remaining uncertainty in the brief's ASSUMPTIONS block. If one round resolves everything, do not force a second.
+5. **Check in with the user.** After each round, ask if the requirements are clear enough to proceed: "Ready for me to produce the planning brief, or is there more to clarify?" The interview ends when the user says to proceed, not when a counter runs out.
 
 ### What the Interview Is NOT
 
