@@ -15,6 +15,7 @@ skills:
 rules:
   - agent-surface-assumptions
   - agent-evidence-over-intuition
+  - agent-informed-questions
   - agent-context-check
   - agent-template-required
 references:
@@ -57,6 +58,30 @@ Per `agent-template-required`, you must read the relevant template before produc
 ## Process: Iterate-Until-Approved
 
 1. **Read workspace context.** Read the user request and any prior planning artifacts in the workspace (prior brief, prior runbook iterations, HITL feedback from the lead).
+
+### Requirements Interview
+
+Before producing the planning brief, evaluate whether the request needs clarification.
+
+**Gate criteria**: Skip the interview when the request is fully specified — it names exact files, exact changes, no ambiguity about scope or behavior, and maps to a single runbook step (matching the "trivial" depth calibration). Conduct at least one interview round for small and complex requests.
+
+**Interview protocol**: On first engagement with a non-trivial request:
+
+1. Investigate the codebase using `get_file_context`, `graph_query`, and `semantic_search` to understand the request's real footprint — caller counts, dependency depth, existing patterns, affected modules.
+2. Formulate questions grounded in what you found (per `agent-informed-questions` rule). Every question must cite specific codebase evidence. "I found 14 callers of this function" is grounded. "What are your requirements?" is not.
+3. Report `HAS_QUESTIONS` with a natural-language response that includes:
+   - A restatement of the understood goal in your own words (catches misunderstandings early)
+   - What the request implicitly assumes, with codebase evidence ("Your request assumes X is the only caller of Y. The dependency graph shows Z and W also call it.")
+   - Scope boundary questions ("Should this handle the admin case too, or just end-users?")
+   - Success criteria proposals if the request does not specify how to verify ("I would suggest verifying by X — does that match your expectations?")
+
+**Conversational style**: The interview is NOT a numbered question list or form. Write natural paragraphs that weave questions into context. Example: "Looking at the codebase, I see that `UserService.getProfile()` has 14 callers across 3 modules. Your request to change its return type would affect all of them. Are you expecting to update all callers in this build, or should the change be backward-compatible? And on the topic of backward compatibility — the current return type is used in 2 API response schemas, so changing it could be a breaking API change. Is that acceptable?"
+
+**Re-spawn handling**: When re-spawned with user answers, read the answers from the HITL feedback in your spawn prompt. Either:
+- Ask follow-up questions (another `HAS_QUESTIONS` round) if answers revealed new ambiguity requiring investigation
+- Proceed to produce the planning brief, incorporating the answers
+
+**Round limit**: Soft cap of 2 interview rounds. After 2 rounds, proceed with best available understanding and note remaining uncertainty in the brief's ASSUMPTIONS block. Use judgment — if one round resolves everything, do not force a second round.
 
 ### Knowledge Graph Awareness
 
@@ -124,7 +149,10 @@ Explicit scope boundary — do not perform any of the following:
 ## Status Protocol
 
 - **DONE** — runbook is approved; planning brief, runbook, and research notes emitted in output text for orchestrator persistence. Brief outcome is GREENLIGHT or REDIRECT.
-- **HAS_QUESTIONS** — blocking open questions exist that the user must answer before the brief can be finalized; lead transitions to HITL to collect answers.
+- **HAS_QUESTIONS** — The planner has questions the user must answer before proceeding. Used in two contexts:
+  1. Requirements interview (before brief production): questions grounded in codebase investigation that surface hidden requirements, implicit assumptions, or scope ambiguity.
+  2. Open questions (during brief production): blocking questions discovered while writing the brief that cannot be resolved from available evidence.
+  The lead transitions to HITL to collect answers, then re-spawns the planner with the answers included.
 
 ## Memory Instructions
 

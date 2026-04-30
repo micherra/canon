@@ -20,11 +20,39 @@ This skill covers strategic analysis only. Do NOT do the following — they belo
 
 ---
 
-## 1. Required Brief Sections
+## 0. Requirements Interview
+
+Before producing the planning brief, evaluate whether the request warrants a requirements conversation.
+
+### Gate
+
+**Skip the interview** when the request is fully specified: it names exact files, exact changes, no ambiguity about scope or behavior, and maps to a single runbook step (trivial depth calibration). Conduct at least one interview round for small and complex depth calibrations.
+
+### Interview Process
+
+1. **Investigate first.** Use `get_file_context`, `graph_query`, and `semantic_search` to understand the request's real footprint before formulating any questions. Caller counts, dependency depth, existing patterns, and affected modules are all discoverable. Questions must be grounded in what you found.
+
+2. **Formulate questions as conversation.** Write natural paragraphs that weave questions into context. Do not produce a numbered list of requirements questions or a form. Good example: "Looking at the codebase, I see that `UserService.getProfile()` has 14 callers across 3 modules. Your request to change its return type would affect all of them. Are you expecting to update all callers in this build, or should the change be backward-compatible? And on the topic of backward compatibility — the current return type is used in 2 API response schemas, so changing it could be a breaking API change. Is that acceptable?" Bad example: "1. What callers should be updated? 2. Is backward compatibility required?"
+
+3. **Report HAS_QUESTIONS.** Include: a restatement of the goal in your own words, implicit assumptions with codebase evidence, scope boundary questions, and success criteria proposals when the request does not specify how to verify.
+
+4. **Handle re-spawn with answers.** On re-spawn, read the user's answers from the HITL feedback in your spawn prompt. Either ask follow-up questions if answers revealed new ambiguity requiring investigation, or proceed to produce the brief incorporating the answers.
+
+5. **Respect the soft cap.** 2 rounds maximum. After 2 rounds, proceed with best available understanding and note remaining uncertainty in the brief's ASSUMPTIONS block. If one round resolves everything, do not force a second.
+
+### What the Interview Is NOT
+
+- **Not a form or checklist.** Questions are woven into natural paragraphs with codebase context, not enumerated requirements fields to fill in.
+- **Not a requirements document.** The interview surfaces ambiguity before the brief is written; it is not the brief itself.
+- **Not a re-hash of information already in the request.** Investigate the codebase first. Do not ask the user to tell you what you can discover yourself.
+
+---
+
+## 2. Required Brief Sections
 
 Every planning brief must include all eight sections below. The output format follows `templates/planning-brief.md` (canonical path from project root). Write the brief to `${WORKSPACE}/plans/${slug}/planning-brief.md`.
 
-### 1.1 Problem Statement
+### 2.1 Problem Statement
 
 **Intent**: State the real outcome the user wants, not the solution they proposed. Distinguish observed (evidenced) from speculative (imagined) problems.
 
@@ -35,7 +63,7 @@ Every planning brief must include all eight sections below. The output format fo
 
 **Example wording**: "Users cannot filter search results by date range. Evidence: 12 open GitHub issues tagged `search-ux`; no date-range parameter in the current API."
 
-### 1.2 Target Users
+### 2.2 Target Users
 
 **Intent**: Name who benefits and who does not. Scope prevents over-building.
 
@@ -46,7 +74,7 @@ Every planning brief must include all eight sections below. The output format fo
 
 **Example wording**: "Primary: end-users performing recurring search queries (daily). Secondary: admins auditing search usage (weekly). Out of scope: API consumers — the filter is UI-only in this brief."
 
-### 1.3 Acceptance Criteria
+### 2.3 Acceptance Criteria
 
 **Intent**: Observable, testable conditions that define "done" without ambiguity.
 
@@ -58,7 +86,7 @@ Every planning brief must include all eight sections below. The output format fo
 
 **Example wording**: "- [ ] Filtering by date range returns only results within the specified window (integration test). - [ ] Invalid date input returns a 422 with a human-readable message. - [ ] Filter state persists across page reload."
 
-### 1.4 Requirement Coverage Map
+### 2.4 Requirement Coverage Map
 
 **Intent**: Create an explicit traceability contract between the user's original request and the runbook's scope. Every requirement the user stated or implied must be accounted for — silently dropping requirements is the failure mode this section prevents.
 
@@ -84,7 +112,7 @@ Every planning brief must include all eight sections below. The output format fo
 
 **Example wording**: "| 1 | Support dark mode toggle | covered | implement step (task-1, AC-3) | | 2 | Persist preference across sessions | covered | implement step (task-2) | | 3 | Sync preference across devices | descoped | Out of scope for this brief — requires backend sync infrastructure; deferred to follow-up |"
 
-### 1.5 Alternatives Considered
+### 2.5 Alternatives Considered
 
 **Intent**: Ensure the recommended approach is the result of deliberate choice, not default.
 
@@ -96,7 +124,7 @@ Every planning brief must include all eight sections below. The output format fo
 
 **Example wording for Alternative C**: "Do nothing — users continue to filter manually post-export; churn risk increases as the dataset grows beyond ~5k rows."
 
-### 1.6 Recommended Approach
+### 2.6 Recommended Approach
 
 **Intent**: The planner's single recommended path, grounded in the alternatives analysis.
 
@@ -107,7 +135,7 @@ Every planning brief must include all eight sections below. The output format fo
 - Phrases the approach in terms of runbook steps from `references/runbook-vocabulary.md` so the synthesis skill can consume it directly. Example: "Recommended steps: `research` (codebase scope), `design` (API contract), `implement` (team dispatch, 2 tasks), `test`, `review`, `context-sync`, `learn`."
 - If the outcome is REDIRECT: state the redirect rationale explicitly and show how the redirected scope still satisfies the user's underlying need.
 
-### 1.7 Open Questions
+### 2.7 Open Questions
 
 **Intent**: Surface what cannot be resolved from the request alone — before the architect builds on a wrong assumption.
 
@@ -119,7 +147,7 @@ Every planning brief must include all eight sections below. The output format fo
 
 **Example wording**: "1. Should date-range filtering apply to all search result types or only document results? [user] — determines API scope. 2. Is timezone normalization required? [architect] — affects data model."
 
-### 1.8 Value Assessment
+### 2.8 Value Assessment
 
 **Intent**: Confirm the cost is proportional to the benefit before committing resources.
 
@@ -134,7 +162,7 @@ Every planning brief must include all eight sections below. The output format fo
 
 ---
 
-## 2. Depth Calibration Rules
+## 3. Depth Calibration Rules
 
 Scale the brief to the complexity of the request. Never produce a full-length brief for a one-step fix; never produce a one-liner for a multi-wave epic.
 
@@ -173,7 +201,7 @@ A request spanning multiple waves, multiple agents, or architectural change.
 
 ---
 
-## 3. Constructive Push-Back Discipline
+## 4. Constructive Push-Back Discipline
 
 The planner's job is to challenge the request before resources are committed. Apply the following four checks in order before writing the brief body:
 
@@ -189,7 +217,7 @@ The outcome field (`GREENLIGHT` / `REDIRECT` / `OPEN_QUESTIONS`) communicates th
 
 ---
 
-## 4. Artifact Contract
+## 5. Artifact Contract
 
 ### Output path
 
@@ -222,7 +250,7 @@ The synthesized runbook (produced by `canon:synthesize`) references this brief b
 
 ---
 
-## 5. Evidence Requirements
+## 6. Evidence Requirements
 
 Apply `agent-evidence-over-intuition` throughout:
 

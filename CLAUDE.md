@@ -330,7 +330,7 @@ Write the consolidated review using the `write_review` MCP tool.
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
-### HITL Patterns <!-- last-updated: 2026-04-29 -->
+### HITL Patterns <!-- last-updated: 2026-04-30 -->
 
 - **Requirement coverage check**: After planner returns, check the planning brief's Requirement Coverage Map for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
 - **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
@@ -354,6 +354,15 @@ After each subagent returns, verify expected artifacts exist at the paths listed
   - Skip this checkpoint when `CANON_SKIP_SESSION_CHECKPOINTS=1` is set.
   - This checkpoint does NOT apply to tail steps (ship, context-sync, learn) — only to steps of type design, implement, verify, review.
 - **Gate failure**: Present the failure output and ask the user how to proceed.
+- **Planner requirements interview**: For non-trivial requests, the planner conducts a requirements interview before producing the planning brief. The planner investigates the codebase, then reports `HAS_QUESTIONS` with evidence-grounded questions about scope, assumptions, and success criteria. The orchestrator surfaces these to the user. On re-spawn, the planner receives the user's answers and either asks follow-up questions (another `HAS_QUESTIONS` round) or proceeds to produce the brief.
+  - Gate: skipped for trivial requests (fully specified, single-step). Conducted for small and complex requests.
+  - Round limit: soft cap of 2 rounds. After 2 rounds, the planner proceeds with best available understanding and notes uncertainty in the brief's ASSUMPTIONS block.
+  - Re-spawn: include the user's answers verbatim in the planner's spawn prompt on each re-spawn.
+- **Architect design conversation**: For requests with genuine design tradeoffs, the architect thinks out loud about the problem space before committing to design approaches. The architect reports `HAS_QUESTIONS` with reasoning about tradeoffs, a stated lean, and a request for the user's correction or confirmation. The orchestrator surfaces this to the user. On re-spawn, the architect reads the feedback and proceeds to design production.
+  - Gate: skipped when only one reasonable approach exists or changes are mechanical. Conducted when "a reasonable engineer could disagree about the right approach."
+  - Round limit: soft cap of 1 round (quick alignment check). A second round is acceptable if the architect's mental model was significantly wrong.
+  - Style: think-out-loud, NOT multiple choice. The architect states a lean and invites correction, not options for selection.
+  - Re-spawn: include the user's feedback verbatim in the architect's spawn prompt on each re-spawn.
 - **Merge conflict**: Present conflicting files and ask for resolution strategy.
 
 ### Post-Step Effects
