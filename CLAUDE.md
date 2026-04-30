@@ -147,8 +147,9 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 2. Check the planning brief's Requirement Coverage Map for **completeness and dispositions**. First, compare the map's rows against the original request — identify any requirements from the request that are missing from the map entirely. Treat missing requirements as `descoped` with rationale "omitted by planner." Then check dispositions: if any requirements are `descoped`, `partial`, or were missing from the map, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
 3. Present the runbook to the user for approval. Iterate if the user requests changes.
 4. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` comes from the approved runbook's frontmatter, `tier` comes from the runbook frontmatter (optional — defaults to `"medium"` when omitted), and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
-5. Call `log_step` for each step in the approved runbook (creates the checklist).
-6. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
+5. Persist planner research notes. If the planner's output contains a `## Research Notes` section, extract it and write to `${WORKSPACE}/plans/${slug}/research-notes.md` using `Write`.
+6. Call `log_step` for each step in the approved runbook (creates the checklist).
+7. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -346,6 +347,12 @@ After each subagent returns, verify expected artifacts exist at the paths listed
   - (b) **acknowledge** — items logged as accepted in the journal via `log_step` outcome, build proceeds (accept as-is — no follow-up planned).
   - (c) **defer** — items noted as follow-up, build proceeds (plan to address later — noted as follow-up).
   - This checkpoint occurs between the review step and the ship step. It does NOT apply if the review verdict is CLEAN.
+- **Build-step checkpoint**: After each major build step completes (design, implement, verify, review), the orchestrator offers a session checkpoint:
+  - "Step {N} of {total} complete ({step_name}). Continue, or start a fresh session and say 'resume'?"
+  - If the user says "keep going", "continue", or similar affirmative: proceed to the next step.
+  - If the user starts a fresh session: Canon's resume protocol picks up from the next unstarted step via journal state.
+  - Skip this checkpoint when `CANON_SKIP_SESSION_CHECKPOINTS=1` is set.
+  - This checkpoint does NOT apply to tail steps (ship, context-sync, learn) — only to steps of type design, implement, verify, review.
 - **Gate failure**: Present the failure output and ask the user how to proceed.
 - **Merge conflict**: Present conflicting files and ask for resolution strategy.
 

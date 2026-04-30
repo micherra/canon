@@ -28,6 +28,8 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `canon-agent-teams/post-commit-trailers.sh` | PostToolUse (Bash) | Validate Canon commit trailers after each commit (no-op unless CANON_AGENT_TEAMS_MODE=on) |
 | `canon-agent-teams/session-start-doc-check.sh` | SessionStart | Nudge on stale documentation at session open (no-op unless CANON_AGENT_TEAMS_MODE=on) |
 | `canon-agent-teams/session-start-kg-check.sh` | SessionStart | Nudge on stale knowledge graph at session open (no-op unless CANON_AGENT_TEAMS_MODE=on) |
+| `canon-agent-teams/session-start-timestamp.sh` | SessionStart | Write session start timestamp for duration watchdog (no-op unless CANON_AGENT_TEAMS_MODE=on) |
+| `canon-agent-teams/session-duration-watchdog.sh` | PreToolUse (*) | Advisory session duration warning after configurable threshold (no-op unless CANON_AGENT_TEAMS_MODE=on) |
 | `canon-agent-teams/post-engineer-scribe.sh` | SubagentStop | Queue scribe sync after engineer subagent completes (no-op unless CANON_AGENT_TEAMS_MODE=on) |
 
 ## Conventions
