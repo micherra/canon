@@ -297,9 +297,16 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
  * Plain paths and glob patterns are both handled by node:fs globSync —
  * returns true when at least one file matches. `${var}` template fragments
  * are handled upstream in scanArtifacts and never reach this function.
+ *
+ * Falls back to searching under `{workspace}/worktree/` when the workspace-
+ * root search returns no results. Code-writing agents produce artifacts
+ * in the worktree (e.g. src/ files), while orchestration artifacts (reviews,
+ * plans) land at the workspace root — checking both avoids false negatives.
  */
 function artifactExists(workspace: string, artifact: string): boolean {
-  return globSync(artifact, { cwd: workspace }).length > 0;
+  if (globSync(artifact, { cwd: workspace }).length > 0) return true;
+  const worktreePath = join(workspace, "worktree");
+  return globSync(artifact, { cwd: worktreePath }).length > 0;
 }
 
 /**

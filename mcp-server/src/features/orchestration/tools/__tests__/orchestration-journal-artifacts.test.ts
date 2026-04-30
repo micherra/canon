@@ -271,4 +271,95 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       expect(result.artifacts_missing).toBeUndefined();
     }
   });
+
+  test("logStep finds artifacts in workspace root (reviews, plans)", async () => {
+    mkdirSync(join(workspace, "reviews"), { recursive: true });
+    writeFileSync(join(workspace, "reviews", "REVIEW.md"), "# Review\n");
+
+    await logStep({
+      artifacts_expected: ["reviews/REVIEW.md"],
+      status: "started",
+      step_id: "review",
+      workspace,
+    });
+
+    const result = await logStep({
+      status: "completed",
+      step_id: "review",
+      workspace,
+    });
+
+    assertOk(result);
+    expect(result.status).toBe("completed");
+    expect(result.artifacts_missing).toBeUndefined();
+  });
+
+  test("logStep finds artifacts in worktree/ subdirectory (code files from engineer agents)", async () => {
+    mkdirSync(join(workspace, "worktree", "src"), { recursive: true });
+    writeFileSync(join(workspace, "worktree", "src", "feature.ts"), "export {};\n");
+
+    await logStep({
+      artifacts_expected: ["src/feature.ts"],
+      status: "started",
+      step_id: "implement",
+      workspace,
+    });
+
+    const result = await logStep({
+      status: "completed",
+      step_id: "implement",
+      workspace,
+    });
+
+    assertOk(result);
+    expect(result.status).toBe("completed");
+    expect(result.artifacts_missing).toBeUndefined();
+  });
+
+  test("logStep finds artifacts when some are at workspace root and some in worktree/", async () => {
+    mkdirSync(join(workspace, "plans"), { recursive: true });
+    writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
+    mkdirSync(join(workspace, "worktree", "src"), { recursive: true });
+    writeFileSync(join(workspace, "worktree", "src", "service.ts"), "export {};\n");
+
+    await logStep({
+      artifacts_expected: ["plans/DESIGN.md", "src/service.ts"],
+      status: "started",
+      step_id: "mixed",
+      workspace,
+    });
+
+    const result = await logStep({
+      status: "completed",
+      step_id: "mixed",
+      workspace,
+    });
+
+    assertOk(result);
+    expect(result.status).toBe("completed");
+    expect(result.artifacts_missing).toBeUndefined();
+  });
+
+  test("logStep still reports missing when artifact is absent from both workspace root and worktree/", async () => {
+    mkdirSync(join(workspace, "worktree"), { recursive: true });
+
+    await logStep({
+      artifacts_expected: ["src/missing-file.ts"],
+      status: "started",
+      step_id: "implement",
+      workspace,
+    });
+
+    const result = await logStep({
+      status: "completed",
+      step_id: "implement",
+      workspace,
+    });
+
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.context?.artifacts_missing).toEqual(["src/missing-file.ts"]);
+    }
+  });
 });

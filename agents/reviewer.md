@@ -300,6 +300,8 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 2. **Save to reviews/**: Save a copy to `${WORKSPACE}/reviews/REVIEW.md`.
 3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
+**WORKSPACE path resolution**: When passing `workspace` to the `write_review` MCP tool, you MUST use the explicit `WORKSPACE=` value provided in your spawn prompt — NOT the current working directory. The reviewer's working directory is the worktree (a code checkout), but review artifacts must land in the workspace root (e.g. `${WORKSPACE}/reviews/REVIEW.md`). Using CWD will place the review inside the worktree and the orchestrator will not find it. Extract the `WORKSPACE=` value from your spawn prompt text and pass it verbatim as the `workspace` parameter to `write_review`.
+
 **Cold review is preserved**: Do NOT read research, plan files, decisions, or context.md until Stages 1 and 2 are complete. After Stages 1 and 2, you may read engineer `*-SUMMARY.md` files for Stage 3, and plan files (DESIGN.md, INDEX.md) for Stage 4.
 
 Do NOT write to `reviews.jsonl` directly — the caller handles persistence via the `report` MCP tool.
