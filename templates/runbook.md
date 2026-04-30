@@ -91,6 +91,27 @@ skip_when: ~
 
 ---
 
+### Step {N}: review (example)
+
+```yaml
+id: review
+agent: reviewer
+dispatch: subagent
+skills: []
+cause: ~
+mcp_tools: []
+artifacts:
+  - ${WORKSPACE}/reviews/REVIEW.md
+hitl: checkpoint
+skip_when: ~
+```
+
+**Intent:** {What this review is assessing — principle compliance, drift from plan, or targeted scope. Explain why review appears at this point in the runbook.}
+
+**Coordination notes:** The reviewer writes its output to `${WORKSPACE}/reviews/REVIEW.md`. The orchestrator must inject `WORKSPACE={workspace_path}` (the workspace root, not the worktree path) into the reviewer's spawn prompt so the artifact lands in the workspace, not inside the worktree. After the reviewer completes, verify the file exists before proceeding.
+
+---
+
 ## Mandatory Tail
 
 The following three steps close every build runbook. They are always present — not skippable, not reorderable.

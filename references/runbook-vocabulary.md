@@ -79,6 +79,15 @@ artifacts:
 
 The `outcome:` prefix signals a pass/fail outcome rather than a file artifact. The description is human-readable and appears in HITL output when the step fails. Paths and outcome sentinels may coexist in the same `artifacts` list.
 
+### `review`
+
+The standard artifact path for a review step is `${WORKSPACE}/reviews/REVIEW.md`. Runbooks that include a `review` step should declare this artifact path explicitly so the orchestrator's post-step artifact check can verify it exists:
+
+```yaml
+artifacts:
+  - ${WORKSPACE}/reviews/REVIEW.md
+```
+
 ### `fix`
 
 The `fix` step requires a `cause` field indicating which upstream step triggered the fix:
@@ -93,6 +102,8 @@ The `cause` field serves two purposes: analytic lineage (which upstream step tri
 ### `implement`
 
 When dispatched as `team`, the planner decomposes the implementation into wave-parallel tasks. Each task gets an isolated worktree. The orchestrator manages worktree creation, merge, and cleanup.
+
+When dispatching two or more parallel engineers to the same worktree, the runbook should designate one as the committer responsible for verifying and committing after parallel completion, or include an explicit consolidation step. Without this, neither engineer commits, forcing the orchestrator to spawn a third agent for consolidation.
 
 ### `design`, `review`, `test`, `security` (team dispatch)
 

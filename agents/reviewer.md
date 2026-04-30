@@ -295,7 +295,7 @@ Include `## Canon Review — Verdict: {BLOCKING|WARNING|CLEAN}` at the top of th
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Use template**: Read the review-checklist template and follow its structure exactly. If no template path is provided, report `NEEDS_CONTEXT`.
-2. **Save to reviews/**: Save a copy to `${WORKSPACE}/reviews/`.
+2. **Save to reviews/**: Save a copy to `${WORKSPACE}/reviews/REVIEW.md`.
 3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 **Cold review is preserved**: Do NOT read research, plan files, decisions, or context.md until Stages 1 and 2 are complete. After Stages 1 and 2, you may read engineer `*-SUMMARY.md` files for Stage 3, and plan files (DESIGN.md, INDEX.md) for Stage 4.
