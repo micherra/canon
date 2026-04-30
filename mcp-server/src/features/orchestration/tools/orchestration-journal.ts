@@ -35,11 +35,8 @@ import { archiveWorkspace } from "@features/history/services/archive-service.ts"
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { projectDir } from "../../../app/server-state.ts";
 import { captureTranscript } from "./capture-transcript.ts";
-
-function resolveProjectDir(): string {
-  return process.env.CANON_PROJECT_DIR ?? process.cwd();
-}
 
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
 
@@ -408,7 +405,7 @@ async function archiveAndDeleteWorkspace(
     const slug = session?.slug ?? basename(workspace);
     await archiveWorkspace({
       branch,
-      projectDir: resolveProjectDir(),
+      projectDir,
       slug,
       workspacePath: workspace,
     });

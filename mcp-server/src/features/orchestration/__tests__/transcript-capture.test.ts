@@ -4,10 +4,24 @@ import { join } from "node:path";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClaudeCodeEntry } from "../services/transcript-transformer.ts";
 import { captureTranscript } from "../tools/capture-transcript.ts";
 import { getTranscript } from "../tools/get-transcript.ts";
+
+// Mock server-state so captureTranscript uses the fake project dir set per-test.
+vi.mock("../../../app/server-state.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../app/server-state.ts")>();
+  return {
+    ...actual,
+    get projectDir() {
+      return mockProjectDir;
+    },
+  };
+});
+
+// Mutable variable updated by each test before calling captureTranscript.
+let mockProjectDir = process.cwd();
 
 let tmpDirs: string[] = [];
 
@@ -80,8 +94,13 @@ function makeMinimalCCEntries(): ClaudeCodeEntry[] {
   ];
 }
 
-function plantAgentTranscript(fakeHome: string, agentId: string, entries: ClaudeCodeEntry[]): void {
-  const pid = process.cwd().replace(/\//g, "-");
+function plantAgentTranscript(
+  fakeHome: string,
+  agentId: string,
+  entries: ClaudeCodeEntry[],
+  projectDir?: string,
+): void {
+  const pid = (projectDir ?? mockProjectDir).replace(/\//g, "-");
   const dir = join(fakeHome, ".claude", "projects", pid, "session-test", "subagents");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
@@ -98,6 +117,39 @@ afterEach(() => {
 });
 
 describe("captureTranscript", () => {
+  it("uses projectDir from server-state (not process.cwd) to derive the project path", async () => {
+    const workspace = makeTmpDir();
+    setupWorkspace(workspace, makeMinimalFlow());
+
+    const fakeHome = makeTmpDir();
+    // Use a fake project dir that differs from process.cwd()
+    const fakeProjectDir = "/Users/fake/my-project";
+    mockProjectDir = fakeProjectDir;
+
+    // Plant the transcript under the fake project dir path
+    plantAgentTranscript(fakeHome, AGENT_ID, makeMinimalCCEntries(), fakeProjectDir);
+
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+
+    try {
+      const result = await captureTranscript({
+        agent_id: AGENT_ID,
+        agent_type: "engineer",
+        step_id: "build",
+        workspace,
+      });
+
+      assertOk(result);
+      // Should find the transcript at the fakeProjectDir-derived path, not process.cwd()
+      expect(result.warning).toBeUndefined();
+      expect(result.entry_count).toBe(2);
+    } finally {
+      process.env.HOME = originalHome;
+      mockProjectDir = process.cwd();
+    }
+  });
+
   it("captures transcript and writes JSONL readable by get_transcript", async () => {
     const workspace = makeTmpDir();
     const flow = makeMinimalFlow();

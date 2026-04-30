@@ -5,6 +5,7 @@ import { createInterface } from "node:readline";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import { isPathContained } from "@shared/lib/worktree-guard.ts";
+import { projectDir } from "../../../app/server-state.ts";
 import { transformClaudeCodeTranscript } from "../services/transcript-transformer.ts";
 
 export type CaptureTranscriptInput = {
@@ -20,22 +21,17 @@ export type CaptureTranscriptResult = {
   warning?: string;
 };
 
-function projectId(): string {
-  const dir = process.env.CANON_PROJECT_DIR ?? process.cwd();
-  return dir.replace(/\//g, "-");
-}
-
 async function findAgentTranscript(agentId: string): Promise<string | null> {
   const home = process.env.HOME ?? "/tmp";
-  const projectDir = join(home, ".claude", "projects", projectId());
+  const projectsDir = join(home, ".claude", "projects", projectDir.replace(/\//g, "-"));
   let sessionDirs: string[];
   try {
-    sessionDirs = await readdir(projectDir);
+    sessionDirs = await readdir(projectsDir);
   } catch {
     return null;
   }
   const candidates = sessionDirs.map((s) =>
-    join(projectDir, s, "subagents", `agent-${agentId}.jsonl`),
+    join(projectsDir, s, "subagents", `agent-${agentId}.jsonl`),
   );
   const checks = await Promise.all(
     candidates.map((c) =>
