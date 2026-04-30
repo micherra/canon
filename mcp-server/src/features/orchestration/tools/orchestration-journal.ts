@@ -255,7 +255,6 @@ async function tryTranscriptCapture(
   }
 }
 
-
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
