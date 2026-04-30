@@ -204,6 +204,49 @@ Include results in the spawn prompt. Agents also have direct MCP access and will
 | Debate / competing hypotheses | Agent team |
 | Advisory consultation | Subagent |
 | Background housekeeping | Subagent (background) |
+| Team review/security (scoped) | Agent team |
+
+### Team Dispatch Protocol
+
+Team dispatch follows a three-phase loop. The reviewer is the concrete implementation; security, tester, and architect teams follow the same pattern with different partitioning strategies (to be implemented later).
+
+#### Phase 1 — Partition
+
+Before spawning a team-dispatched review step, call `get_file_context` for each changed file and examine blast radius data (`in_degree`, `impact_score`, `blast_radius`). The fan-out decision is based on **aggregate blast radius** — NOT a fixed file count threshold. Signals that warrant fan-out:
+
+- Total blast radius entries across all changed files exceeds ~50 (many downstream dependents affected)
+- Multiple changed files have `impact_score > 0.7` (high-centrality changes)
+- Changed files span 3+ layers with cross-layer dependencies
+
+When fan-out is warranted, partition files into N groups (typically 2–3). Partitioning rules:
+
+- Files in the same dependency cycle stay together
+- High `in_degree` files get smaller groups (more attention per reviewer)
+- Files in the same directory/module stay together when possible
+- Co-change partners (from `co_change_partners`) stay together
+
+When fan-out is NOT warranted, spawn a single reviewer with the full file list (standard single-subagent pattern).
+
+#### Phase 2 — Spawn
+
+Spawn N reviewers in parallel via `Agent()`, each with:
+
+- The standard preloaded context from `resolve_agent_skills`
+- `WORKSPACE={workspace_path}` (workspace root, not worktree)
+- Their assigned file list
+- Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
+- `isolation: "none"` (shared workspace)
+
+#### Phase 3 — Consolidate
+
+After all reviewers complete, read all `REVIEW-{N}.md` files and produce the final `REVIEW.md`:
+
+- **Violations**: union of all violations, deduplicated by `(file_path, principle_id, line_number)`
+- **Honored**: union of all honored principle lists
+- **Score**: sum numerators and denominators across all scopes
+- **Verdict**: worst-case across all reviewers (BLOCKING > WARNING > CLEAN)
+
+Write the consolidated review using the `write_review` MCP tool.
 
 ### Journal Protocol
 

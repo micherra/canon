@@ -133,6 +133,10 @@ artifacts:
   - "outcome:all discovered gates pass"
 ```
 
+### `review`
+
+Team dispatch: orchestrator partitions files by blast radius, spawns N reviewers with scoped file lists, consolidates into single REVIEW.md. See CLAUDE.md Team Dispatch Protocol.
+
 ---
 
 ## Versioning Policy
