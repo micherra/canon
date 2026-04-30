@@ -125,6 +125,39 @@ const reportResultInputSchema = {
   workspace: z.string(),
 };
 
+function registerCaptureTranscriptTool(): void {
+  server.registerTool(
+    "capture_transcript",
+    {
+      description:
+        "Capture a Claude Code agent transcript and write it to the workspace transcripts directory in Canon format. Best-effort: returns a warning (never an error) when the source transcript cannot be found.",
+      inputSchema: {
+        agent_id: z
+          .string()
+          .describe(
+            "Agent ID from the Agent tool result (e.g. 'a10bf0a3a2543f7b5'). Used to locate the source JSONL file.",
+          ),
+        agent_type: z
+          .string()
+          .describe("Agent type label (e.g. 'engineer'). Used in the output filename."),
+        project_id: z
+          .string()
+          .optional()
+          .describe(
+            "Claude Code project ID (sanitized path). Defaults to CANON_PROJECT_DIR env var when omitted.",
+          ),
+        session_id: z
+          .string()
+          .optional()
+          .describe("Claude Code session ID. Defaults to CLAUDE_SESSION_ID env var when omitted."),
+        step_id: z.string().describe("Workflow step ID. Used in the output filename."),
+        workspace: z.string().describe("Workspace path for this flow execution."),
+      },
+    },
+    gatedWrapHandler(async (input) => captureTranscript(input)),
+  );
+}
+
 export function registerReportTools(): void {
   server.registerTool(
     "report_result",
@@ -176,36 +209,5 @@ export function registerReportTools(): void {
     gatedWrapHandler(async (input) => getTranscript(input)),
   );
 
-  server.registerTool(
-    "capture_transcript",
-    {
-      description:
-        "Capture a Claude Code agent transcript and write it to the workspace transcripts directory in Canon format. Best-effort: returns a warning (never an error) when the source transcript cannot be found.",
-      inputSchema: {
-        agent_id: z
-          .string()
-          .describe(
-            "Agent ID from the Agent tool result (e.g. 'a10bf0a3a2543f7b5'). Used to locate the source JSONL file.",
-          ),
-        agent_type: z
-          .string()
-          .describe("Agent type label (e.g. 'engineer'). Used in the output filename."),
-        project_id: z
-          .string()
-          .optional()
-          .describe(
-            "Claude Code project ID (sanitized path). Defaults to CANON_PROJECT_DIR env var when omitted.",
-          ),
-        session_id: z
-          .string()
-          .optional()
-          .describe(
-            "Claude Code session ID. Defaults to CLAUDE_SESSION_ID env var when omitted.",
-          ),
-        step_id: z.string().describe("Workflow step ID. Used in the output filename."),
-        workspace: z.string().describe("Workspace path for this flow execution."),
-      },
-    },
-    gatedWrapHandler(async (input) => captureTranscript(input)),
-  );
+  registerCaptureTranscriptTool();
 }

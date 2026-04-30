@@ -145,25 +145,34 @@ Then review each engineer's test file against its source file:
 
 ### Step 6.5: Report discovered gate commands
 
-After detecting the test framework (Step 4) and running the test suite, report the discovered test commands so the gate runner can use them for automated quality gates. Include these in your `report_result` call:
+After detecting the test framework (Step 4) and running the test suite, report the discovered test and lint commands so the gate runner can use them for automated quality gates. Include these in your `report_result` call:
 
 - `discovered_gates`: An array of gate commands you verified work in this project. Only include commands you actually ran successfully. Format: `[{ command: "npm test", source: "tester" }]`
 
+Discover the lint command by inspecting `package.json` for a `lint` script, or checking for linter configuration files (`.eslintrc*`, `eslint.config.*`, `pyproject.toml` with `[tool.ruff]`, `.golangci.yml`, `Makefile` with a `lint` target). Include the lint command alongside the test command if it exists.
+
 Examples by ecosystem:
-- Node.js with Vitest: `[{ command: "npx vitest run", source: "tester" }]`
-- Node.js with Jest: `[{ command: "npx jest", source: "tester" }]`
-- Python with pytest: `[{ command: "pytest", source: "tester" }]`
-- Go: `[{ command: "go test ./...", source: "tester" }]`
-- Rust: `[{ command: "cargo test", source: "tester" }]`
+- Node.js with Vitest: `[{ command: "npx vitest run", source: "tester" }, { command: "npm run lint", source: "tester" }]`
+- Node.js with Jest: `[{ command: "npx jest", source: "tester" }, { command: "npm run lint", source: "tester" }]`
+- Python with pytest: `[{ command: "pytest", source: "tester" }, { command: "ruff check .", source: "tester" }]`
+- Go: `[{ command: "go test ./...", source: "tester" }, { command: "golangci-lint run", source: "tester" }]`
+- Rust: `[{ command: "cargo test", source: "tester" }, { command: "cargo clippy", source: "tester" }]`
 
 Only report commands that actually exist and work in this project. Do not guess.
 
-### Step 7: Run full test suite
+### Step 7: Run full test suite and lint
 
 Run the complete test suite (engineer tests + your new tests). If tests fail:
 - Determine if it's a test bug or an implementation bug
 - If test bug: fix the test and re-run (max 2 retries)
 - If implementation bug: include a structured entry in the `### Issues found` section of your test report (see format below) and report `IMPLEMENTATION_ISSUE` to the orchestrator
+
+After the test suite passes, run the project's lint command (discovered in Step 6.5). If no lint command exists in the project, skip this step and note it in your report.
+
+If lint fails:
+- Include a structured entry in the `### Issues found` table with `IMPLEMENTATION_ISSUE` severity
+- Use the same required columns (File, Failing Test, Root Cause, Suggested Fix) — for lint failures, "Failing Test" is the lint rule or error, "File" is the file with the violation, and "Root Cause" / "Suggested Fix" describe the code problem and how to fix it
+- Report `IMPLEMENTATION_ISSUE` to the orchestrator (same as a failing test)
 
 ### Step 8: Commit tests
 

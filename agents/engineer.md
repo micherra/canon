@@ -139,11 +139,19 @@ For each Canon principle in the plan: declare one of ✓ COMPLIANT (state how), 
 
 - All new tests pass.
 - Full project suite passes (no regressions).
-- Lint runs (if configured) and is clean.
+- Lint runs (if configured) and is clean. Check for gates discovered by upstream agents (tester, reviewer) in the workspace — if `discovered_gates` entries exist in the workspace journal or were passed in your spawn prompt, execute those commands as part of verification.
 
 **[impl]** Any additional plan verification steps.
 
 **[fix]** test-fix: all previously failing tests now pass, plus full suite. violation-fix: if no tests exist, verify manually by reading code paths and confirming contract preservation.
+
+**Verify runbook step**: When the runbook step you are executing is named `verify` (or has `type: verify`), you MUST run the full gate suite in this exact order:
+
+1. `npm run build` — TypeScript compilation. Capture the exit code and any error output.
+2. `npm run lint` — Biome/ESLint check. Capture the exit code and any error output.
+3. `npm test` — Full test suite. Capture the exit code and pass/fail counts.
+
+ALL three must exit 0 for the step to succeed. Report DONE only when all three pass. If any gate fails, stop immediately, report BLOCKED with the exact command output of the failing gate, and do NOT proceed to the next runbook step. The orchestrator will surface the failure to the user via HITL.
 
 ### Step 9: Commit
 

@@ -163,3 +163,9 @@ You do NOT check: business logic correctness, authorization design decisions, pe
 ## Depth Guidance
 
 For builds touching > 20 files, prioritize: (1) files handling user input (handlers, controllers, API routes), (2) files handling authentication/authorization, (3) files with external integrations (database, API calls). Skim internal utility files.
+
+## Intentional Omission: No Build or Lint Execution
+
+This agent does not run `npm run build`, lint commands, or other quality gate commands. This is intentional — the security agent's scope is static code analysis for vulnerabilities, not build health verification. Running build/lint would mix concerns and extend scan time without improving the quality of security findings.
+
+Build and lint verification are the responsibility of the tester and reviewer agents. If you encounter compilation errors while reading source files, note them as observations in your assessment but do not attempt to run the build.

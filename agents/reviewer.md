@@ -225,6 +225,24 @@ Discovery heuristics:
 
 Only report commands for tools that have visible configuration. Do not guess or assume tools are installed.
 
+## Build and Lint Verification
+
+After completing Stages 1–4, run the project build and lint to surface compilation errors and lint violations. This is not optional — lint errors are review findings.
+
+**Build**: Run `npm run build` (or the equivalent for the project's ecosystem). Compilation errors are BLOCKING findings. Report them under `## Build Verification` with the error output and classify them as `rule`-severity violations.
+
+**Lint**: Run the lint command you discovered above. If no lint configuration exists, note "No lint configuration found" and skip. If lint fails:
+- Add each distinct lint error category as a finding in your review output under `## Lint Verification`
+- Severity: treat lint errors as WARNING findings (unless the lint rule maps directly to a Canon `rule`-severity principle, in which case escalate to BLOCKING)
+- Format: `{file}:{line} — {rule}: {description}. Fix: {concrete suggestion}`
+- Include lint errors in the `violations` array of your `store_pr_review` / `write_review` call with `source: "lint"`
+
+Do not suppress or omit lint output because it is voluminous — summarize if needed (e.g., "47 `no-unused-vars` errors across 12 files — all unused import variables introduced in this diff") but always report it.
+
+**Baseline comparison**: Before classifying errors as BLOCKING or WARNING, establish a baseline error count from the target branch (e.g., `main`). Run the same build and lint commands on the base branch and record the error count. Only NEW errors — those present in the worktree branch but absent from the base branch (delta above baseline) — are BLOCKING or WARNING findings. Pre-existing errors that exist on the base branch are noted as NON-BLOCKING context and tagged `[baseline]` in the Build Verification section of the review checklist. This prevents inherited errors from blocking otherwise-clean diffs.
+
+**Re-review protocol**: When spawned for re-review after a fix cycle, check that ALL previously flagged violations in the prior review report were addressed — not just some. For each BLOCKING and WARNING finding from the previous report: verify the specific file and line was changed, and re-run the relevant check. Report any unresolved violations as new BLOCKING findings so the iteration loop terminates only when the code is genuinely clean.
+
 ## Stage 4: Drift-from-Plan Check
 
 When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md), compare what was actually changed against what the architect planned. If plan files (DESIGN.md or INDEX.md) are not available, include a note in your output: "Stage 4 skipped — no plan files (DESIGN.md, INDEX.md) in workspace." so the user knows the check exists but wasn't run.
@@ -236,6 +254,20 @@ When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN
 Follow the `### Drift from Plan` section in the review-checklist template for output format.
 
 **Severity**: Unplanned files and missing planned work are both WARNINGs. Neither is BLOCKING on its own, but both must be noted.
+
+## Build and Lint Verification
+
+After completing Stages 1–4, run the project build and lint to surface compilation errors and lint violations. This is not optional — lint errors are review findings.
+
+**Build**: Run `npm run build` (or the equivalent for the project's ecosystem). Compilation errors are BLOCKING findings. Report them under `## Build Verification` with the error output and classify them as `rule`-severity violations.
+
+**Lint**: Run the lint command you discovered in the "Discover Lint/Format Gate Commands" section above. If no lint configuration exists, note "No lint configuration found" and skip. If lint fails:
+- Add each distinct lint error category as a finding in your review output under `## Lint Verification`
+- Severity: treat lint errors as WARNING findings (unless the lint rule maps directly to a Canon `rule`-severity principle, in which case escalate to BLOCKING)
+- Format: `{file}:{line} — {rule}: {description}. Fix: {concrete suggestion}`
+- Include lint errors in the `violations` array of your `store_pr_review` / `write_review` call with `source: "lint"`
+
+Do not suppress or omit lint output because it is voluminous — summarize if needed (e.g., "47 `no-unused-vars` errors across 12 files — all unused import variables introduced in this diff") but always report it.
 
 ## Verdict
 

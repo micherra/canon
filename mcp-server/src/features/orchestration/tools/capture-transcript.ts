@@ -51,9 +51,9 @@ function claudeConfigHome(): string {
 
 /**
  * Derive the Claude Code project ID from CANON_PROJECT_DIR env var.
- * Replaces all "/" with "-". Preserves any leading "-" — Claude Code
- * uses a leading dash by convention (e.g. `/Users/michelle/Documents/canon`
- * → `-Users-michelle-Documents-canon`).
+ * Sanitizes the path: replaces all "/" with "-". The leading "-" produced
+ * by absolute paths is preserved — Claude Code stores projects under folder
+ * names like "-Users-foo-project" (leading dash retained).
  * Returns null when the env var is not set.
  */
 export function deriveProjectIdFromEnv(): string | null {
@@ -65,20 +65,9 @@ export function deriveProjectIdFromEnv(): string | null {
 /**
  * Build the path to the Claude Code agent transcript JSONL file.
  */
-function buildSourcePath(
-  agentId: string,
-  projectId: string,
-  sessionId: string,
-): string {
+function buildSourcePath(agentId: string, projectId: string, sessionId: string): string {
   const configHome = claudeConfigHome();
-  return join(
-    configHome,
-    "projects",
-    projectId,
-    sessionId,
-    "subagents",
-    `agent-${agentId}.jsonl`,
-  );
+  return join(configHome, "projects", projectId, sessionId, "subagents", `agent-${agentId}.jsonl`);
 }
 
 /**
@@ -168,7 +157,9 @@ export async function captureTranscript(
 
   // Transform CC entries to Canon format
   // transformClaudeCodeTranscript validates each entry and skips malformed ones
-  const canonEntries = transformClaudeCodeTranscript(rawEntries as Parameters<typeof transformClaudeCodeTranscript>[0]);
+  const canonEntries = transformClaudeCodeTranscript(
+    rawEntries as Parameters<typeof transformClaudeCodeTranscript>[0],
+  );
 
   // Write output
   try {

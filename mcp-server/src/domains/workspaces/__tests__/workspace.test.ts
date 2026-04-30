@@ -52,7 +52,7 @@ describe("generateSlug", () => {
 
   it("preserves long task names without truncation", () => {
     const long = "word ".repeat(20);
-    expect(generateSlug(long)).toBe("word-" .repeat(19) + "word");
+    expect(generateSlug(long)).toBe(`${"word-".repeat(19)}word`);
   });
 
   it("handles multiple spaces and hyphens", () => {
