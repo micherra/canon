@@ -109,7 +109,7 @@ export type InitExecutionParams = {
   sanitized: string;
   created: string;
   original_task?: string;
-  tier: "small" | "medium" | "large";
+  tier?: "small" | "medium" | "large";
   flow_name: string;
   slug: string;
   status?: string;

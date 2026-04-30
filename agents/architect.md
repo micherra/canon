@@ -167,6 +167,36 @@ For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md` 
 
 **Write affected files to board metadata**: After producing all task plans, collect every file path listed across all task `files:` frontmatter fields. Call `update_board` with `action: "set_metadata"` and `metadata: { affected_files: "<JSON array of file paths>" }`. Example: `update_board({ workspace: "${WORKSPACE}", action: "set_metadata", metadata: { affected_files: '["src/foo.ts","src/bar.ts"]' } })`. This enables downstream `file_context` injection to pre-load file summaries for engineers. The value must be a JSON-stringified array of strings.
 
+### Step 7b: Produce task DAG
+
+For multi-task designs (2+ tasks), produce a `task-dag.yaml` file at `${WORKSPACE}/plans/${slug}/task-dag.yaml`. This is the dependency graph the orchestrator uses for parallel dispatch.
+
+**Format** (see `templates/task-dag.md` for full schema):
+
+```yaml
+tasks:
+  - task_id: "{task-id}"
+    depends_on: []
+    parallel_safe: true
+    files:
+      - "path/to/file.ts"
+```
+
+**Rules:**
+- Every `task_id` must match a task plan's `task_id` in the same directory
+- `depends_on` entries must reference existing task_ids in the DAG
+- No cycles — validate by checking that every chain of depends_on terminates
+- Set `parallel_safe: false` for tasks that must not run concurrently (e.g., tasks touching shared config files or requiring sequential git operations)
+- `files` lists the same paths as the task plan's `files:` frontmatter
+- Root tasks (no dependencies) are dispatched first; downstream tasks wait for their dependencies
+
+**When to produce a DAG:**
+- Always for 2+ task designs
+- Never for single-task designs (the orchestrator executes directly)
+- The DAG is the LAST artifact produced before the plan index — produce it after all task plans
+
+**Validation:** The orchestrator validates the DAG before execution using `dag-validator.ts`. If validation fails (cycles, unresolved refs), the orchestrator presents the errors and asks for correction.
+
 ### Step 8: Produce plan index
 
 Call the `write_plan_index` MCP tool to save the plan index to the Canon index so downstream agents can locate task plans:

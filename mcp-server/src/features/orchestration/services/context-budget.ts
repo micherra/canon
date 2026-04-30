@@ -10,7 +10,7 @@
 
 import type { Session } from "@domains/flows/board-state-schemas.ts";
 
-const TIER_CAPS: Record<Session["tier"], number> = {
+const TIER_CAPS: Record<"small" | "medium" | "large", number> = {
   large: 30,
   medium: 15,
   small: 5,
@@ -19,9 +19,10 @@ const TIER_CAPS: Record<Session["tier"], number> = {
 /**
  * Returns the maximum item count for context injection given a session tier.
  *
- * @param tier - The session tier ("small", "medium", or "large")
- * @returns The item count cap for the tier; defaults to 15 (medium) for unexpected values
+ * @param tier - The session tier ("small", "medium", or "large"), or undefined
+ * @returns The item count cap for the tier; defaults to 15 (medium) for unknown or missing tier
  */
 export function getItemCountCap(tier: Session["tier"]): number {
+  if (!tier) return 15;
   return TIER_CAPS[tier] ?? 15;
 }
