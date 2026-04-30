@@ -72,6 +72,8 @@ Determine the diff to review based on what you received:
 
 **Scoped review mode**: When you receive a specific file list, restrict your review to those files only. Your verdict applies only to your scope — the caller aggregates verdicts across parallel reviewers. Load principles for ALL scoped files, not just the first one.
 
+**Numbered output path**: When your spawn prompt includes "You are reviewer {N} of {total}", write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md` using the `Write` tool (not the `write_review` MCP tool, which writes to a fixed path). Follow the same review-checklist template structure. Your verdict applies only to your scoped file list — the orchestrator consolidates all reviewer verdicts into the final `REVIEW.md`.
+
 ## Stage 1: Principle Compliance
 
 ### Step 1: Resolve matched principles
