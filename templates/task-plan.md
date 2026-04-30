@@ -47,9 +47,10 @@ domains:
 
 ### Done when
 [Clear, testable completion criteria — must include "all tests pass" and "all risk mitigations addressed"]
-<!-- If this task introduces a new gate or rule, also include: -->
-<!-- - Negative scope: state what intents or contexts this gate does NOT apply to -->
-<!-- - Taxonomy registration: rule file is listed in `rules/.claude/CLAUDE.md` under the appropriate behavioral category -->
+- [ ] All tests pass and all risk mitigations addressed
+<!-- If this task introduces a new gate or rule, add the following items: -->
+- [ ] Negative scope stated: what intents or contexts this gate does NOT apply to (required for any new gate or rule)
+- [ ] Taxonomy registration: rule file is listed in `rules/.claude/CLAUDE.md` under the appropriate behavioral category (required for any new rule file)
 
 ### Brief Coverage
 <!-- Map every requirement from the approved runbook to a task element or explicitly mark it out-of-scope. -->

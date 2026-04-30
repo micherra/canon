@@ -29,3 +29,4 @@ Rules are organized into behavioral categories:
 - Rules differ from `principles/` in that they govern agent execution behavior, not code quality
 - Each rule file is loaded verbatim into agent context; keep files concise and actionable
 - New rules follow the `agent-{behavior-name}.md` naming convention
+- New rule files must be registered in this document's taxonomy table (the Architecture section above) under the appropriate behavioral category upon creation

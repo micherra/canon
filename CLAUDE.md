@@ -57,7 +57,7 @@ Minimize text output during the state machine loop. Conversations exceeding ~100
 5. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
 6. Error and preflight presentations
 
-This list also defines the behavioral boundary for the Pre-Analysis Gate — when adding a new permitted output type, add it here.
+This list serves two roles: (1) verbosity control — it limits how much the orchestrator outputs during the state machine loop; and (2) it is the Pre-Analysis Gate allowlist — outputs not on this list are agent deliverables, not orchestrator output. Additions or removals affect both roles; consider both when editing this list.
 
 Do not narrate individual tool calls. One line between state transitions is correct.
 
@@ -325,6 +325,8 @@ Write the consolidated review using the `write_review` MCP tool.
 - Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
 - After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
 - The journal is your checklist. The completion hook (`verify_completion`) verifies it.
+- When a tail step (context-sync, learn) is skipped, the journal entry MUST include a `skip_reason` field explaining why (e.g., `"markdown-only change, no context drift"`, `"session timeout"`, `"no new patterns observed"`). Omitting a tail step without a `skip_reason` is not permitted — the completion hook treats a missing reason as a journal defect.
+- When a WARNING verdict is resolved by the orchestrator inline (no fix agent spawned), log a synthetic step entry with `step_id: inline-fix`, `status: completed`, and the resolution details in `outcome`.
 
 ### Post-Subagent Artifact Check
 

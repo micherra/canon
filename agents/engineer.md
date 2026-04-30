@@ -161,6 +161,8 @@ ALL three must exit 0 for the step to succeed. Report DONE only when all three p
 
 Follow Commit Protocol below. Trailer block required.
 
+Before committing, check: if any modified file contains a `<!-- last-updated: ... -->` annotation in a section header, update the date to today's date.
+
 **[impl]** Final commit: `feat({task-id}): {description}` (with body + Canon trailers). If you made wip commits, squash or keep depending on plan requirements.
 
 **[fix]** Mode-specific subject:
