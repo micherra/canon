@@ -261,6 +261,18 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     });
   }
 
+  if (
+    input.status === "completed" &&
+    !input.agent_id &&
+    input.step_id !== "inline-fix"
+  ) {
+    return toolError(
+      "INVALID_INPUT",
+      "completed steps must include agent_id for transcript capture (exempt: inline-fix step_id, skipped status)",
+      false,
+    );
+  }
+
   const journal = await readJournal(input.workspace);
 
   if (input.status === "completed") {

@@ -38,6 +38,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-01",
       status: "completed",
       step_id: "plan",
       workspace,
@@ -68,6 +69,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-02",
       status: "completed",
       step_id: "plan",
       workspace,
@@ -91,6 +93,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-03",
       status: "completed",
       step_id: "plan",
       workspace,
@@ -113,6 +116,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-04",
       status: "completed",
       step_id: "plan",
       workspace,
@@ -131,6 +135,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-05",
       status: "completed",
       step_id: "plan",
       workspace,
@@ -149,6 +154,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-06",
       status: "completed",
       step_id: "plan",
       workspace,
@@ -177,6 +183,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-07",
       status: "completed",
       step_id: "plan",
       workspace,
@@ -200,6 +207,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-08",
       status: "completed",
       step_id: "plan",
       workspace,
@@ -218,6 +226,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-09",
       status: "completed",
       step_id: "plan",
       workspace,
@@ -239,6 +248,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-10",
       outcome: { review_verdict: "clean" },
       status: "completed",
       step_id: "s1",
@@ -284,6 +294,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-11",
       status: "completed",
       step_id: "review",
       workspace,
@@ -306,6 +317,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-12",
       status: "completed",
       step_id: "implement",
       workspace,
@@ -330,6 +342,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-art-13",
       status: "completed",
       step_id: "mixed",
       workspace,
@@ -351,6 +364,7 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
     });
 
     const result = await logStep({
+      agent_id: "test-agent-missing-artifact",
       status: "completed",
       step_id: "implement",
       workspace,
