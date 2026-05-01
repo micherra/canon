@@ -25,8 +25,7 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
-import { initWorkspaceFlow } from "../tools/init-workspace.ts";
-import { validateRunbookTailForTest } from "../tools/init-workspace.ts";
+import { initWorkspaceFlow, validateRunbookTailForTest } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 
@@ -47,7 +46,7 @@ afterEach(() => {
 function makeRunbook(stepIds: string[]): string {
   const steps = stepIds
     .map(
-      (id, i) => `\`\`\`yaml
+      (id, _i) => `\`\`\`yaml
 - id: ${id}
   agent: engineer
   artifacts:
