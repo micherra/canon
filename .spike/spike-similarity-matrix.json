@@ -2186,5 +2186,1019 @@
         }
       ]
     }
+  ],
+  "iter3_metrics": {
+    "aggRecall10": 0.3923076923076923,
+    "aggRecall10Stage1": 0.3576923076923077,
+    "aggPrecision10": 0.37179487179487175,
+    "avgLatencyMs": 28615.76923076923,
+    "totalLatencyMs": 372005,
+    "costEstimatePerFile": 0.00084
+  },
+  "iter3_per_file": [
+    {
+      "file": "graph/kg-embedding.ts",
+      "recall10": 0.5,
+      "recall10Stage1": 0.5,
+      "precision10": 0.6666666666666666,
+      "truePositives": 2,
+      "falsePositives": 1,
+      "latencyMs": 28367,
+      "llmRanked": [
+        "observable-best-effort",
+        "deep-modules",
+        "simplicity-first"
+      ],
+      "stage1Top15": [
+        {
+          "id": "aggregates-reference-by-id",
+          "score": 0.45306133453739683
+        },
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.44249436765708605
+        },
+        {
+          "id": "deep-modules",
+          "score": 0.42586494157624
+        },
+        {
+          "id": "refactoring-integrity",
+          "score": 0.41167357591001197
+        },
+        {
+          "id": "consistent-abstraction-levels",
+          "score": 0.4109475333501841
+        },
+        {
+          "id": "simplicity-first",
+          "score": 0.3988753316529157
+        },
+        {
+          "id": "observable-best-effort",
+          "score": 0.39430190633553636
+        },
+        {
+          "id": "normalize-first-denormalize-intentionally",
+          "score": 0.38971113695230236
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.37417223609610145
+        },
+        {
+          "id": "design-tokens-as-style-contract",
+          "score": 0.364174496295118
+        },
+        {
+          "id": "unidirectional-data-flow",
+          "score": 0.3641480888406219
+        },
+        {
+          "id": "bounded-context-boundaries",
+          "score": 0.36280678371637
+        },
+        {
+          "id": "minimize-client-side-state",
+          "score": 0.349485145289733
+        },
+        {
+          "id": "ubiquitous-language-in-code",
+          "score": 0.3444555339614195
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.343726180988984
+        }
+      ]
+    },
+    {
+      "file": "graph/kg-store.ts",
+      "recall10": 0.25,
+      "recall10Stage1": 0.25,
+      "precision10": 0.16666666666666666,
+      "truePositives": 1,
+      "falsePositives": 5,
+      "latencyMs": 29647,
+      "llmRanked": [
+        "information-hiding",
+        "idempotent-operations",
+        "deep-modules",
+        "explicit-transaction-boundaries",
+        "measure-before-optimizing",
+        "command-query-separation"
+      ],
+      "stage1Top15": [
+        {
+          "id": "normalize-first-denormalize-intentionally",
+          "score": 0.5816364234441206
+        },
+        {
+          "id": "backward-compatible-schema-changes",
+          "score": 0.48505763222166737
+        },
+        {
+          "id": "explicit-transaction-boundaries",
+          "score": 0.46947660160062177
+        },
+        {
+          "id": "services-own-their-data",
+          "score": 0.443751020794484
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.4390004071699318
+        },
+        {
+          "id": "aggregates-reference-by-id",
+          "score": 0.42605468662612517
+        },
+        {
+          "id": "idempotent-operations",
+          "score": 0.41932317243235734
+        },
+        {
+          "id": "command-query-separation",
+          "score": 0.4038682359490438
+        },
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.4014877607958415
+        },
+        {
+          "id": "prefer-composition-over-inheritance",
+          "score": 0.3987993902520175
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.3859600128236214
+        },
+        {
+          "id": "deep-modules",
+          "score": 0.38504299165981004
+        },
+        {
+          "id": "colocate-component-assets",
+          "score": 0.38162543708693
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.3792625833201116
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.3782272240068128
+        }
+      ]
+    },
+    {
+      "file": "graph/kg-pipeline.ts",
+      "recall10": 0.25,
+      "recall10Stage1": 0.25,
+      "precision10": 0.2,
+      "truePositives": 1,
+      "falsePositives": 4,
+      "latencyMs": 33565,
+      "llmRanked": [
+        "observable-best-effort",
+        "explicit-transaction-boundaries",
+        "structured-logging-with-levels",
+        "information-hiding",
+        "consistent-abstraction-levels"
+      ],
+      "stage1Top15": [
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.4979340841213748
+        },
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.4745541480930884
+        },
+        {
+          "id": "structured-logging-with-levels",
+          "score": 0.44872855418179924
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.44717102998891417
+        },
+        {
+          "id": "normalize-first-denormalize-intentionally",
+          "score": 0.43383934175514105
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.4322270931682376
+        },
+        {
+          "id": "aggregates-reference-by-id",
+          "score": 0.4308096766493942
+        },
+        {
+          "id": "refactoring-integrity",
+          "score": 0.417579474166752
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.41624558991124105
+        },
+        {
+          "id": "observable-best-effort",
+          "score": 0.40231340464561366
+        },
+        {
+          "id": "design-for-self-healing",
+          "score": 0.3978128969076061
+        },
+        {
+          "id": "consistent-abstraction-levels",
+          "score": 0.39465358584258814
+        },
+        {
+          "id": "explicit-transaction-boundaries",
+          "score": 0.3877209022493781
+        },
+        {
+          "id": "backward-compatible-schema-changes",
+          "score": 0.38504283800602895
+        },
+        {
+          "id": "infrastructure-tested-like-code",
+          "score": 0.38498955343215574
+        }
+      ]
+    },
+    {
+      "file": "graph/kg-query.ts",
+      "recall10": 1,
+      "recall10Stage1": 1,
+      "precision10": 0.6666666666666666,
+      "truePositives": 4,
+      "falsePositives": 2,
+      "latencyMs": 23134,
+      "llmRanked": [
+        "information-hiding",
+        "command-query-separation",
+        "measure-before-optimizing",
+        "consistent-abstraction-levels",
+        "deep-modules",
+        "no-hidden-side-effects"
+      ],
+      "stage1Top15": [
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.5138404279055349
+        },
+        {
+          "id": "deep-modules",
+          "score": 0.49614087021090136
+        },
+        {
+          "id": "normalize-first-denormalize-intentionally",
+          "score": 0.47523612656629677
+        },
+        {
+          "id": "aggregates-reference-by-id",
+          "score": 0.4651681037004792
+        },
+        {
+          "id": "consistent-abstraction-levels",
+          "score": 0.4181572791443125
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.3851073932680966
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.3835550493311903
+        },
+        {
+          "id": "structured-logging-with-levels",
+          "score": 0.38140445627893005
+        },
+        {
+          "id": "command-query-separation",
+          "score": 0.37622058670361563
+        },
+        {
+          "id": "minimize-attack-surface",
+          "score": 0.3620425000098775
+        },
+        {
+          "id": "no-hidden-side-effects",
+          "score": 0.3445383792122391
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.3438683972110041
+        },
+        {
+          "id": "refactoring-integrity",
+          "score": 0.33869694083528445
+        },
+        {
+          "id": "prefer-composition-over-inheritance",
+          "score": 0.3358144001732697
+        },
+        {
+          "id": "least-privilege-access",
+          "score": 0.32700481475734894
+        }
+      ]
+    },
+    {
+      "file": "graph/kg-vector-store.ts",
+      "recall10": 0.25,
+      "recall10Stage1": 0,
+      "precision10": 0.25,
+      "truePositives": 1,
+      "falsePositives": 3,
+      "latencyMs": 27359,
+      "llmRanked": [
+        "information-hiding",
+        "explicit-transaction-boundaries",
+        "backward-compatible-schema-changes",
+        "command-query-separation"
+      ],
+      "stage1Top15": [
+        {
+          "id": "normalize-first-denormalize-intentionally",
+          "score": 0.4828978760091942
+        },
+        {
+          "id": "aggregates-reference-by-id",
+          "score": 0.40867698627046073
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.3943143289857886
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.38930170922364543
+        },
+        {
+          "id": "backward-compatible-schema-changes",
+          "score": 0.3730115210371649
+        },
+        {
+          "id": "props-are-the-component-contract",
+          "score": 0.3618480779292155
+        },
+        {
+          "id": "structured-logging-with-levels",
+          "score": 0.36136435248328985
+        },
+        {
+          "id": "prefer-composition-over-inheritance",
+          "score": 0.3594847692721762
+        },
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.35837473010061094
+        },
+        {
+          "id": "explicit-transaction-boundaries",
+          "score": 0.3555120229414032
+        },
+        {
+          "id": "unidirectional-data-flow",
+          "score": 0.35490240870290524
+        },
+        {
+          "id": "isolate-frontend-runtime-state",
+          "score": 0.351774425722728
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.3395743463915503
+        },
+        {
+          "id": "bounded-context-boundaries",
+          "score": 0.3334856725116453
+        },
+        {
+          "id": "command-query-separation",
+          "score": 0.3283629482159827
+        }
+      ]
+    },
+    {
+      "file": "features/orchestration/tools/drive-flow.ts",
+      "recall10": 0.4,
+      "recall10Stage1": 0.2,
+      "precision10": 0.5,
+      "truePositives": 2,
+      "falsePositives": 2,
+      "latencyMs": 45621,
+      "llmRanked": [
+        "errors-are-values",
+        "validate-at-trust-boundaries",
+        "observable-best-effort",
+        "fail-closed-by-default"
+      ],
+      "stage1Top15": [
+        {
+          "id": "observable-best-effort",
+          "score": 0.5575598308179903
+        },
+        {
+          "id": "design-for-self-healing",
+          "score": 0.4629364439573058
+        },
+        {
+          "id": "unidirectional-data-flow",
+          "score": 0.44917934584952457
+        },
+        {
+          "id": "explicit-transaction-boundaries",
+          "score": 0.438375012179577
+        },
+        {
+          "id": "fail-closed-by-default",
+          "score": 0.42282601707867584
+        },
+        {
+          "id": "prefer-async-between-services",
+          "score": 0.42025577672560555
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.4185957475954571
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.41561677692455185
+        },
+        {
+          "id": "resilient-frontend-composition",
+          "score": 0.40025716526905186
+        },
+        {
+          "id": "errors-are-values",
+          "score": 0.3968871303565704
+        },
+        {
+          "id": "simplicity-first",
+          "score": 0.3938346131859927
+        },
+        {
+          "id": "isolate-frontend-runtime-state",
+          "score": 0.38896917120866115
+        },
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.38290957791688884
+        },
+        {
+          "id": "validate-at-trust-boundaries",
+          "score": 0.38145861408020637
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.37732537964655694
+        }
+      ]
+    },
+    {
+      "file": "features/orchestration/tools/report-result.ts",
+      "recall10": 0.25,
+      "recall10Stage1": 0.25,
+      "precision10": 0.2,
+      "truePositives": 1,
+      "falsePositives": 4,
+      "latencyMs": 21869,
+      "llmRanked": [
+        "explicit-transaction-boundaries",
+        "no-hidden-side-effects",
+        "information-hiding",
+        "idempotent-operations",
+        "observable-best-effort"
+      ],
+      "stage1Top15": [
+        {
+          "id": "observable-best-effort",
+          "score": 0.44886072091320467
+        },
+        {
+          "id": "resilient-frontend-composition",
+          "score": 0.40222035254545585
+        },
+        {
+          "id": "design-for-self-healing",
+          "score": 0.39148512511556033
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.38795630214440496
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.3850940426688137
+        },
+        {
+          "id": "explicit-transaction-boundaries",
+          "score": 0.38224769414675547
+        },
+        {
+          "id": "no-hidden-side-effects",
+          "score": 0.3789832236966092
+        },
+        {
+          "id": "tests-are-deterministic",
+          "score": 0.3717177917017481
+        },
+        {
+          "id": "unidirectional-data-flow",
+          "score": 0.3704125907592216
+        },
+        {
+          "id": "isolate-frontend-runtime-state",
+          "score": 0.3640591539898249
+        },
+        {
+          "id": "minimize-client-side-state",
+          "score": 0.3638745057197153
+        },
+        {
+          "id": "infrastructure-tested-like-code",
+          "score": 0.35614472790270063
+        },
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.3526901291432066
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.3428547625130296
+        },
+        {
+          "id": "idempotent-operations",
+          "score": 0.3380109360727745
+        }
+      ]
+    },
+    {
+      "file": "features/orchestration/tools/init-workspace.ts",
+      "recall10": 0,
+      "recall10Stage1": 0,
+      "precision10": 0,
+      "truePositives": 0,
+      "falsePositives": 2,
+      "latencyMs": 48031,
+      "llmRanked": [
+        "observable-best-effort",
+        "ubiquitous-language-in-code"
+      ],
+      "stage1Top15": [
+        {
+          "id": "observable-best-effort",
+          "score": 0.5386709206750754
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.4878353007846442
+        },
+        {
+          "id": "design-for-self-healing",
+          "score": 0.43453721058376465
+        },
+        {
+          "id": "infrastructure-tested-like-code",
+          "score": 0.421117780301707
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.37233071544292295
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.3677344659536217
+        },
+        {
+          "id": "refactoring-integrity",
+          "score": 0.3626849650505462
+        },
+        {
+          "id": "externalize-configuration",
+          "score": 0.3546067437872628
+        },
+        {
+          "id": "colocate-component-assets",
+          "score": 0.3517378932760449
+        },
+        {
+          "id": "isolate-frontend-runtime-state",
+          "score": 0.3506432137175379
+        },
+        {
+          "id": "immutable-infrastructure",
+          "score": 0.3305651979714511
+        },
+        {
+          "id": "ubiquitous-language-in-code",
+          "score": 0.3252356846568077
+        },
+        {
+          "id": "bounded-context-boundaries",
+          "score": 0.32480001226669053
+        },
+        {
+          "id": "design-tokens-as-style-contract",
+          "score": 0.31518146515433787
+        },
+        {
+          "id": "prefer-composition-over-inheritance",
+          "score": 0.3080547020593244
+        }
+      ]
+    },
+    {
+      "file": "features/principles/tools/get-principles.ts",
+      "recall10": 0.25,
+      "recall10Stage1": 0.25,
+      "precision10": 0.25,
+      "truePositives": 1,
+      "falsePositives": 3,
+      "latencyMs": 25023,
+      "llmRanked": [
+        "information-hiding",
+        "deep-modules",
+        "least-privilege-access",
+        "consistent-abstraction-levels"
+      ],
+      "stage1Top15": [
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.5142094744025278
+        },
+        {
+          "id": "refactoring-integrity",
+          "score": 0.4416040733899376
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.4280806762758019
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.3771012678630318
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.3677557343182778
+        },
+        {
+          "id": "bounded-context-boundaries",
+          "score": 0.3655180044695177
+        },
+        {
+          "id": "observable-best-effort",
+          "score": 0.3564774155796996
+        },
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.334101287631296
+        },
+        {
+          "id": "design-tokens-as-style-contract",
+          "score": 0.33007709135870467
+        },
+        {
+          "id": "least-privilege-access",
+          "score": 0.3290914190467805
+        },
+        {
+          "id": "consistent-abstraction-levels",
+          "score": 0.32155861669602004
+        },
+        {
+          "id": "ubiquitous-language-in-code",
+          "score": 0.3214740015549252
+        },
+        {
+          "id": "deep-modules",
+          "score": 0.31067503325771756
+        },
+        {
+          "id": "infrastructure-tested-like-code",
+          "score": 0.3021432178575567
+        },
+        {
+          "id": "prefer-composition-over-inheritance",
+          "score": 0.30198651961288764
+        }
+      ]
+    },
+    {
+      "file": "features/file-context/tools/get-file-context.ts",
+      "recall10": 0.2,
+      "recall10Stage1": 0.2,
+      "precision10": 0.25,
+      "truePositives": 1,
+      "falsePositives": 3,
+      "latencyMs": 22335,
+      "llmRanked": [
+        "information-hiding",
+        "observable-best-effort",
+        "deep-modules",
+        "minimize-attack-surface"
+      ],
+      "stage1Top15": [
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.5320746643698174
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.48287455025416154
+        },
+        {
+          "id": "refactoring-integrity",
+          "score": 0.4826920006689768
+        },
+        {
+          "id": "infrastructure-tested-like-code",
+          "score": 0.45016172584275554
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.41785129368106216
+        },
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.4108553718891612
+        },
+        {
+          "id": "secrets-never-in-code",
+          "score": 0.39422631946738995
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.38981707967080365
+        },
+        {
+          "id": "externalize-configuration",
+          "score": 0.3885950671910313
+        },
+        {
+          "id": "colocate-component-assets",
+          "score": 0.38526300261791696
+        },
+        {
+          "id": "design-tokens-as-style-contract",
+          "score": 0.36400235173130147
+        },
+        {
+          "id": "minimize-attack-surface",
+          "score": 0.3591602273565334
+        },
+        {
+          "id": "observable-best-effort",
+          "score": 0.3556399507330894
+        },
+        {
+          "id": "deep-modules",
+          "score": 0.33485646079588144
+        },
+        {
+          "id": "design-for-self-healing",
+          "score": 0.3305529388770953
+        }
+      ]
+    },
+    {
+      "file": "shared/matcher.ts",
+      "recall10": 0.75,
+      "recall10Stage1": 0.75,
+      "precision10": 0.75,
+      "truePositives": 3,
+      "falsePositives": 1,
+      "latencyMs": 27324,
+      "llmRanked": [
+        "measure-before-optimizing",
+        "information-hiding",
+        "consistent-abstraction-levels",
+        "deep-modules"
+      ],
+      "stage1Top15": [
+        {
+          "id": "refactoring-integrity",
+          "score": 0.5567529100183877
+        },
+        {
+          "id": "measure-before-optimizing",
+          "score": 0.5522052723839019
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.522955251925194
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.5191500463164732
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.4424818766791461
+        },
+        {
+          "id": "patterns-need-justification",
+          "score": 0.4285927003698165
+        },
+        {
+          "id": "deep-modules",
+          "score": 0.4050440005707916
+        },
+        {
+          "id": "consistent-abstraction-levels",
+          "score": 0.40440414917293105
+        },
+        {
+          "id": "colocate-component-assets",
+          "score": 0.38012449561136186
+        },
+        {
+          "id": "design-tokens-as-style-contract",
+          "score": 0.3747776901195272
+        },
+        {
+          "id": "ubiquitous-language-in-code",
+          "score": 0.3680753441751806
+        },
+        {
+          "id": "prefer-composition-over-inheritance",
+          "score": 0.3573889826716101
+        },
+        {
+          "id": "simplicity-first",
+          "score": 0.35457729435641167
+        },
+        {
+          "id": "observable-best-effort",
+          "score": 0.351308967995176
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.3378100343748484
+        }
+      ]
+    },
+    {
+      "file": "shared/parser.ts",
+      "recall10": 0.25,
+      "recall10Stage1": 0.25,
+      "precision10": 0.3333333333333333,
+      "truePositives": 1,
+      "falsePositives": 2,
+      "latencyMs": 18008,
+      "llmRanked": [
+        "consistent-abstraction-levels",
+        "information-hiding",
+        "deep-modules"
+      ],
+      "stage1Top15": [
+        {
+          "id": "refactoring-integrity",
+          "score": 0.5160157060555912
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.44826390785669235
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.3864958010041829
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.3858805268245654
+        },
+        {
+          "id": "observable-best-effort",
+          "score": 0.3757126785398037
+        },
+        {
+          "id": "consistent-abstraction-levels",
+          "score": 0.3754825548992481
+        },
+        {
+          "id": "bounded-context-boundaries",
+          "score": 0.37022859493944943
+        },
+        {
+          "id": "design-tokens-as-style-contract",
+          "score": 0.366172794877622
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.3316424417133381
+        },
+        {
+          "id": "ubiquitous-language-in-code",
+          "score": 0.32155135660556045
+        },
+        {
+          "id": "structured-logging-with-levels",
+          "score": 0.3204842539521795
+        },
+        {
+          "id": "deep-modules",
+          "score": 0.31797569695380845
+        },
+        {
+          "id": "colocate-component-assets",
+          "score": 0.3069115734074394
+        },
+        {
+          "id": "aggregates-reference-by-id",
+          "score": 0.3029315041558777
+        },
+        {
+          "id": "prefer-composition-over-inheritance",
+          "score": 0.3016434732890111
+        }
+      ]
+    },
+    {
+      "file": "shared/lib/tool-result.ts",
+      "recall10": 0.75,
+      "recall10Stage1": 0.75,
+      "precision10": 0.6,
+      "truePositives": 3,
+      "falsePositives": 2,
+      "latencyMs": 21722,
+      "llmRanked": [
+        "fail-closed-by-default",
+        "errors-are-values",
+        "information-hiding",
+        "observable-best-effort",
+        "wrap-external-exceptions"
+      ],
+      "stage1Top15": [
+        {
+          "id": "observable-best-effort",
+          "score": 0.6215817670681311
+        },
+        {
+          "id": "fail-closed-by-default",
+          "score": 0.44660884257011096
+        },
+        {
+          "id": "refactoring-integrity",
+          "score": 0.445145153756495
+        },
+        {
+          "id": "errors-are-values",
+          "score": 0.43992642667766696
+        },
+        {
+          "id": "wrap-external-exceptions",
+          "score": 0.4374530215511202
+        },
+        {
+          "id": "leave-touched-files-better",
+          "score": 0.4279027699634306
+        },
+        {
+          "id": "structured-logging-with-levels",
+          "score": 0.4150043809149798
+        },
+        {
+          "id": "information-hiding",
+          "score": 0.40256564850373977
+        },
+        {
+          "id": "architectural-fitness-functions",
+          "score": 0.3997266157188033
+        },
+        {
+          "id": "prefer-composition-over-inheritance",
+          "score": 0.3932707547590175
+        },
+        {
+          "id": "resilient-frontend-composition",
+          "score": 0.39314712688255177
+        },
+        {
+          "id": "bounded-context-boundaries",
+          "score": 0.390782478174
+        },
+        {
+          "id": "decompose-by-domain-not-layer",
+          "score": 0.38844551297975755
+        },
+        {
+          "id": "define-errors-out-of-existence",
+          "score": 0.380659288068233
+        },
+        {
+          "id": "simplicity-first",
+          "score": 0.37258867987312433
+        }
+      ]
+    }
   ]
 }

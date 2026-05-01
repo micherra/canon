@@ -962,3 +962,384 @@ Despite full-body principle embeddings and vocabulary-enriched summaries, aggreg
 2. **Larger embedding model** — Domain-adapted or larger general-purpose model (e.g., `all-mpnet-base-v2`).
 3. **Fine-tuning** — Train on (file summary, applicable principle) pairs. Requires ~200+ labeled examples.
 4. **LLM-based matching** — Use an LLM to directly evaluate whether a principle applies to a file summary. Higher accuracy, higher cost.
+
+## Iteration 3: LLM Reranking
+
+### Approach
+
+Two-stage pipeline:
+- **Stage 1 — Embedding recall**: Top-15 candidates per file from precomputed cosine similarity matrix (iteration 2b — vocabulary-enriched summaries + full principle body embeddings)
+- **Stage 2 — LLM rerank**: File summary + 15 candidate principles sent to `claude-haiku-4-5-20251001` via `claude -p` CLI. Prompt asks which principles are genuinely applicable, returned ranked by relevance.
+
+**Note**: Stage 1 uses top-15 candidates (not top-20) because the stored matrix only retains top-15 per file. The LLM reranks within this candidate set.
+
+### Per-File Results
+
+| File | GT Count | Stage1 Recall@10 | LLM Recall@10 | LLM Precision@10 | TP | FP | Latency |
+|------|----------|-----------------|---------------|-----------------|----|----|---------|
+| graph/kg-embedding.ts | 4 | 50% | 50% | 67% | 2 | 1 | 28367ms |
+| graph/kg-store.ts | 4 | 25% | 25% | 17% | 1 | 5 | 29647ms |
+| graph/kg-pipeline.ts | 4 | 25% | 25% | 20% | 1 | 4 | 33565ms |
+| graph/kg-query.ts | 4 | 100% | 100% | 67% | 4 | 2 | 23134ms |
+| graph/kg-vector-store.ts | 4 | 0% | 25% | 25% | 1 | 3 | 27359ms |
+| features/orchestration/tools/drive-flow.ts | 5 | 20% | 40% | 50% | 2 | 2 | 45621ms |
+| features/orchestration/tools/report-result.ts | 4 | 25% | 25% | 20% | 1 | 4 | 21869ms |
+| features/orchestration/tools/init-workspace.ts | 5 | 0% | 0% | 0% | 0 | 2 | 48031ms |
+| features/principles/tools/get-principles.ts | 4 | 25% | 25% | 25% | 1 | 3 | 25023ms |
+| features/file-context/tools/get-file-context.ts | 5 | 20% | 20% | 25% | 1 | 3 | 22335ms |
+| shared/matcher.ts | 4 | 75% | 75% | 75% | 3 | 1 | 27324ms |
+| shared/parser.ts | 4 | 25% | 25% | 33% | 1 | 2 | 18008ms |
+| shared/lib/tool-result.ts | 4 | 75% | 75% | 60% | 3 | 2 | 21722ms |
+
+### Detailed Per-File Rankings
+
+#### `graph/kg-embedding.ts`
+
+**Ground truth:** errors-are-values, observable-best-effort, simplicity-first, handle-partial-failure
+**Stage 1 Recall@10:** 50%
+**LLM Recall@10:** 50%
+**LLM Precision@10:** 67%
+**Latency:** 28367ms
+
+**LLM top-3 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | observable-best-effort | YES |
+| 2 | deep-modules |  |
+| 3 | simplicity-first | YES |
+
+**Missed from ground truth:** errors-are-values, handle-partial-failure
+
+#### `graph/kg-store.ts`
+
+**Ground truth:** information-hiding, prefer-immutable-data, simplicity-first, consistent-abstraction-levels
+**Stage 1 Recall@10:** 25%
+**LLM Recall@10:** 25%
+**LLM Precision@10:** 17%
+**Latency:** 29647ms
+
+**LLM top-6 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | information-hiding | YES |
+| 2 | idempotent-operations |  |
+| 3 | deep-modules |  |
+| 4 | explicit-transaction-boundaries |  |
+| 5 | measure-before-optimizing |  |
+| 6 | command-query-separation |  |
+
+**Missed from ground truth:** prefer-immutable-data, simplicity-first, consistent-abstraction-levels
+
+#### `graph/kg-pipeline.ts`
+
+**Ground truth:** errors-are-values, handle-partial-failure, observable-best-effort, functions-do-one-thing
+**Stage 1 Recall@10:** 25%
+**LLM Recall@10:** 25%
+**LLM Precision@10:** 20%
+**Latency:** 33565ms
+
+**LLM top-5 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | observable-best-effort | YES |
+| 2 | explicit-transaction-boundaries |  |
+| 3 | structured-logging-with-levels |  |
+| 4 | information-hiding |  |
+| 5 | consistent-abstraction-levels |  |
+
+**Missed from ground truth:** errors-are-values, handle-partial-failure, functions-do-one-thing
+
+#### `graph/kg-query.ts`
+
+**Ground truth:** information-hiding, command-query-separation, consistent-abstraction-levels, measure-before-optimizing
+**Stage 1 Recall@10:** 100%
+**LLM Recall@10:** 100%
+**LLM Precision@10:** 67%
+**Latency:** 23134ms
+
+**LLM top-6 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | information-hiding | YES |
+| 2 | command-query-separation | YES |
+| 3 | measure-before-optimizing | YES |
+| 4 | consistent-abstraction-levels | YES |
+| 5 | deep-modules |  |
+| 6 | no-hidden-side-effects |  |
+
+#### `graph/kg-vector-store.ts`
+
+**Ground truth:** information-hiding, wrap-external-exceptions, simplicity-first, errors-are-values
+**Stage 1 Recall@10:** 0%
+**LLM Recall@10:** 25%
+**LLM Precision@10:** 25%
+**Latency:** 27359ms
+
+**LLM top-4 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | information-hiding | YES |
+| 2 | explicit-transaction-boundaries |  |
+| 3 | backward-compatible-schema-changes |  |
+| 4 | command-query-separation |  |
+
+**Missed from ground truth:** wrap-external-exceptions, simplicity-first, errors-are-values
+
+#### `features/orchestration/tools/drive-flow.ts`
+
+**Ground truth:** errors-are-values, no-hidden-side-effects, functions-do-one-thing, handle-partial-failure, validate-at-trust-boundaries
+**Stage 1 Recall@10:** 20%
+**LLM Recall@10:** 40%
+**LLM Precision@10:** 50%
+**Latency:** 45621ms
+
+**LLM top-4 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | errors-are-values | YES |
+| 2 | validate-at-trust-boundaries | YES |
+| 3 | observable-best-effort |  |
+| 4 | fail-closed-by-default |  |
+
+**Missed from ground truth:** no-hidden-side-effects, functions-do-one-thing, handle-partial-failure
+
+#### `features/orchestration/tools/report-result.ts`
+
+**Ground truth:** errors-are-values, no-hidden-side-effects, command-query-separation, fail-closed-by-default
+**Stage 1 Recall@10:** 25%
+**LLM Recall@10:** 25%
+**LLM Precision@10:** 20%
+**Latency:** 21869ms
+
+**LLM top-5 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | explicit-transaction-boundaries |  |
+| 2 | no-hidden-side-effects | YES |
+| 3 | information-hiding |  |
+| 4 | idempotent-operations |  |
+| 5 | observable-best-effort |  |
+
+**Missed from ground truth:** errors-are-values, command-query-separation, fail-closed-by-default
+
+#### `features/orchestration/tools/init-workspace.ts`
+
+**Ground truth:** validate-at-trust-boundaries, errors-are-values, fail-closed-by-default, no-hidden-side-effects, least-privilege-access
+**Stage 1 Recall@10:** 0%
+**LLM Recall@10:** 0%
+**LLM Precision@10:** 0%
+**Latency:** 48031ms
+
+**LLM top-2 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | observable-best-effort |  |
+| 2 | ubiquitous-language-in-code |  |
+
+**Missed from ground truth:** validate-at-trust-boundaries, errors-are-values, fail-closed-by-default, no-hidden-side-effects, least-privilege-access
+
+#### `features/principles/tools/get-principles.ts`
+
+**Ground truth:** validate-at-trust-boundaries, information-hiding, errors-are-values, functions-do-one-thing
+**Stage 1 Recall@10:** 25%
+**LLM Recall@10:** 25%
+**LLM Precision@10:** 25%
+**Latency:** 25023ms
+
+**LLM top-4 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | information-hiding | YES |
+| 2 | deep-modules |  |
+| 3 | least-privilege-access |  |
+| 4 | consistent-abstraction-levels |  |
+
+**Missed from ground truth:** validate-at-trust-boundaries, errors-are-values, functions-do-one-thing
+
+#### `features/file-context/tools/get-file-context.ts`
+
+**Ground truth:** validate-at-trust-boundaries, errors-are-values, information-hiding, handle-partial-failure, least-privilege-access
+**Stage 1 Recall@10:** 20%
+**LLM Recall@10:** 20%
+**LLM Precision@10:** 25%
+**Latency:** 22335ms
+
+**LLM top-4 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | information-hiding | YES |
+| 2 | observable-best-effort |  |
+| 3 | deep-modules |  |
+| 4 | minimize-attack-surface |  |
+
+**Missed from ground truth:** validate-at-trust-boundaries, errors-are-values, handle-partial-failure, least-privilege-access
+
+#### `shared/matcher.ts`
+
+**Ground truth:** measure-before-optimizing, information-hiding, functions-do-one-thing, consistent-abstraction-levels
+**Stage 1 Recall@10:** 75%
+**LLM Recall@10:** 75%
+**LLM Precision@10:** 75%
+**Latency:** 27324ms
+
+**LLM top-4 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | measure-before-optimizing | YES |
+| 2 | information-hiding | YES |
+| 3 | consistent-abstraction-levels | YES |
+| 4 | deep-modules |  |
+
+**Missed from ground truth:** functions-do-one-thing
+
+#### `shared/parser.ts`
+
+**Ground truth:** functions-do-one-thing, errors-are-values, consistent-abstraction-levels, define-errors-out-of-existence
+**Stage 1 Recall@10:** 25%
+**LLM Recall@10:** 25%
+**LLM Precision@10:** 33%
+**Latency:** 18008ms
+
+**LLM top-3 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | consistent-abstraction-levels | YES |
+| 2 | information-hiding |  |
+| 3 | deep-modules |  |
+
+**Missed from ground truth:** functions-do-one-thing, errors-are-values, define-errors-out-of-existence
+
+#### `shared/lib/tool-result.ts`
+
+**Ground truth:** errors-are-values, information-hiding, consistent-abstraction-levels, fail-closed-by-default
+**Stage 1 Recall@10:** 75%
+**LLM Recall@10:** 75%
+**LLM Precision@10:** 60%
+**Latency:** 21722ms
+
+**LLM top-5 selection:**
+
+| Rank | Principle ID | In Ground Truth? |
+|------|-------------|-----------------|
+| 1 | fail-closed-by-default | YES |
+| 2 | errors-are-values | YES |
+| 3 | information-hiding | YES |
+| 4 | observable-best-effort |  |
+| 5 | wrap-external-exceptions |  |
+
+**Missed from ground truth:** consistent-abstraction-levels
+
+### Aggregate Metrics
+
+| Metric | Value |
+|--------|-------|
+| Files evaluated | 13 |
+| Stage 1 candidates per file | 15 (top-15 from embedding matrix) |
+| Stage 2 model | claude-haiku-4-5-20251001 |
+| Stage 1 Aggregate Recall@10 | 35.8% |
+| LLM Aggregate Recall@10 | 39.2% |
+| LLM Aggregate Precision@10 | 37.2% |
+| Average latency per file | 28616ms |
+| Total latency (13 files) | 372005ms |
+| Go threshold | ≥80% recall@10 |
+| Go/No-Go | NO-GO |
+
+### Cost Analysis
+
+Using Haiku pricing ($0.80/1M input tokens, $4/1M output tokens):
+
+| Scale | Files | Est. Cost |
+|-------|-------|-----------|
+| Per file | 1 | $0.00084 |
+| Dev codebase | 100 | $0.0840 |
+| Medium codebase | 500 | $0.4200 |
+| Large codebase | 2000 | $1.6800 |
+
+**Notes**: Cost estimate assumes ~800 input tokens per file (summary + 15 candidate principles) and ~50 output tokens. At Haiku pricing ($0.80/1M input, $4/1M output): `(800 × $0.80 + 50 × $4) / 1,000,000 = $0.00084/file`. In production, the LLM stage would only run once per file at indexing time, not per query.
+
+_`*` Latency estimate: `claude -p` eval measured 28.6s/file due to Claude Code startup overhead. Direct Anthropic SDK call to Haiku would take ~1-2s/file in production._
+
+### Comparison Table: All Iterations
+
+| Metric | Iter 1 | Iter 2a | Iter 2b | Iter 3 (LLM) |
+|--------|--------|---------|---------|--------------|
+| Method | Embedding only | Full-body embedding | Full-body + vocab-enriched | Embedding recall → LLM rerank |
+| Aggregate Recall@10 | 31.2% | 22.7% | 35.8% | 39.2% |
+| Precision@10 | — | — | — | 37.2% |
+| Latency per file | <1ms | <1ms | <1ms | ~1-2s* |
+| Cost per file | $0 | $0 | $0 | $0.00084 |
+| Go/No-Go | NO-GO | NO-GO | NO-GO | NO-GO |
+
+### Analysis
+
+LLM reranking produced 39.2% aggregate Recall@10, a +3.5 percentage point improvement over iteration 2b (35.8%) and +8.0 percentage points vs iteration 1 (31.2%).
+
+**Stage 1 → LLM delta**: 2 files improved, 11 unchanged, 0 regressed vs embedding-only stage 1.
+Improved: graph/kg-vector-store.ts (0% → 25%), features/orchestration/tools/drive-flow.ts (20% → 40%)
+
+**Precision analysis**: LLM Precision@10 of 37.2% means that of the principles the LLM selected as applicable, 37.2% were in the ground truth set. This measures selectivity — higher precision means fewer false positives.
+
+**Latency**: Average 28616ms per file using `claude -p` CLI (claude-haiku-4-5-20251001). **Important**: this latency is an artifact of the eval method — `claude -p` spawns a full Claude Code process per invocation, adding ~25-27 seconds of startup overhead. A production implementation using the Anthropic SDK directly would take ~1-2 seconds per file for a Haiku API call. The 28-second figure should not be used as a production latency estimate.
+
+### Go/No-Go Recommendation
+
+**RECOMMENDATION: NO-GO** — 39.2% (threshold: 80%)
+
+LLM reranking gave a modest improvement (+3.5pp over iter 2b) but didn't approach the 80% threshold. The bottleneck is Stage 1, not Stage 2.
+
+**Root cause: Stage 1 ceiling is 38.2%**
+
+Post-run analysis of which ground truth principles appear in the top-15 Stage 1 candidates:
+
+| File | GT Count | GT in Stage 1 top-15 | Stage 1 Ceiling | GT Missed by Stage 1 |
+|------|----------|--------------------|-----------------|----------------------|
+| graph/kg-embedding.ts | 4 | 2 | 50% | errors-are-values, handle-partial-failure |
+| graph/kg-store.ts | 4 | 1 | 25% | prefer-immutable-data, simplicity-first, consistent-abstraction-levels |
+| graph/kg-pipeline.ts | 4 | 1 | 25% | errors-are-values, handle-partial-failure, functions-do-one-thing |
+| graph/kg-query.ts | 4 | 4 | 100% | — |
+| graph/kg-vector-store.ts | 4 | 1 | 25% | wrap-external-exceptions, simplicity-first, errors-are-values |
+| features/orchestration/tools/drive-flow.ts | 5 | 2 | 40% | no-hidden-side-effects, functions-do-one-thing, handle-partial-failure |
+| features/orchestration/tools/report-result.ts | 4 | 1 | 25% | errors-are-values, command-query-separation, fail-closed-by-default |
+| features/orchestration/tools/init-workspace.ts | 5 | 0 | 0% | ALL 5 principles |
+| features/principles/tools/get-principles.ts | 4 | 1 | 25% | validate-at-trust-boundaries, errors-are-values, functions-do-one-thing |
+| features/file-context/tools/get-file-context.ts | 5 | 1 | 20% | validate-at-trust-boundaries, errors-are-values, handle-partial-failure, least-privilege-access |
+| shared/matcher.ts | 4 | 3 | 75% | functions-do-one-thing |
+| shared/parser.ts | 4 | 1 | 25% | functions-do-one-thing, errors-are-values, define-errors-out-of-existence |
+| shared/lib/tool-result.ts | 4 | 3 | 75% | consistent-abstraction-levels |
+| **TOTAL** | **55** | **21** | **38.2%** | **34 GT principles not in top-15** |
+
+The LLM achieved 39.2% — essentially at the Stage 1 ceiling of 38.2%. The LLM is doing its job correctly within the candidates it can see, but 34 out of 55 ground truth principles never appear in the embedding top-15. No amount of LLM reasoning can recover what the embedding stage didn't retrieve.
+
+**Key observations:**
+
+1. `features/orchestration/tools/init-workspace.ts` has 0% Stage 1 ceiling — all 5 ground truth principles (`validate-at-trust-boundaries`, `errors-are-values`, `fail-closed-by-default`, `no-hidden-side-effects`, `least-privilege-access`) are absent from the top-15. The embedding model consistently ranks infrastructure-oriented and data-flow principles above security/reliability principles for this file.
+
+2. Cross-cutting principles (`errors-are-values`, `functions-do-one-thing`, `validate-at-trust-boundaries`) consistently rank below domain-specific noise. These are the most widely applicable Canon principles, yet they rank poorly because their principle text doesn't use the same vocabulary as the file descriptions.
+
+3. The LLM **removed false positives** effectively: aggregate Stage 1 precision was poor (many wrong top-15 candidates), while LLM Precision@10 was 37.2% — showing the LLM filtered out many wrong candidates within its window.
+
+**The fundamental constraint**: LLM reranking is bounded by Stage 1 recall. To reach 80% recall@10, Stage 1 would need to achieve at least 80% coverage of ground truth principles in its candidate set. Currently it achieves 38.2% coverage at top-15.
+
+**Paths to 80%:**
+
+1. **Expand Stage 1 candidate pool to top-40 or top-57**: Instead of filtering at top-15, pass all 57 principles to the LLM for selection. This eliminates Stage 1 as a bottleneck entirely. Cost: ~3.7x more input tokens per file. Still ~$0.003/file at Haiku pricing.
+
+2. **LLM-only approach (no embedding Stage 1)**: Skip embeddings entirely. Send all 57 principle titles + first paragraphs to the LLM and ask which apply. Input: ~2000 tokens per file. Cost: ~$0.002/file at Haiku. This is likely the highest-recall approach and should be tested as Iteration 4.
+
+3. **Better Stage 1 embeddings**: Fix the embedding model's inability to retrieve cross-cutting principles. Likely requires fine-tuning or a fundamentally different retrieval strategy (e.g., principle-tag matching, BM25).
+
+**Recommended next step: Iteration 4 — LLM-only (no Stage 1 filter)**
+
+Send all 57 principles to the LLM directly. Test hypothesis: when the LLM sees all principles, not just embedding-filtered candidates, does recall@10 exceed 80%? At Haiku pricing, this costs ~$0.002/file — viable for production indexing-time use.
