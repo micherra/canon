@@ -158,6 +158,55 @@ async function runPreflightChecks(
 /** Exported for testing — delegates to runPreflightChecks. */
 export const runPreflightChecksForTest = runPreflightChecks;
 
+/**
+ * Extract step IDs from YAML code blocks in runbook content.
+ * Matches `id: <value>` entries within fenced code blocks.
+ */
+function extractStepIds(runbookContent: string): string[] {
+  // Find all YAML code blocks
+  const codeBlockPattern = /```ya?ml([\s\S]*?)```/g;
+  const stepIds: string[] = [];
+  let match: RegExpExecArray | null;
+
+  // biome-ignore lint/suspicious/noAssignInExpressions: standard regex loop
+  while ((match = codeBlockPattern.exec(runbookContent)) !== null) {
+    const block = match[1];
+    // Extract all `id: <value>` entries in this block
+    const idPattern = /^\s*-\s+id:\s+(\S+)/gm;
+    let idMatch: RegExpExecArray | null;
+    // biome-ignore lint/suspicious/noAssignInExpressions: standard regex loop
+    while ((idMatch = idPattern.exec(block)) !== null) {
+      stepIds.push(idMatch[1]);
+    }
+  }
+
+  return stepIds;
+}
+
+/**
+ * Validate that a runbook ends with the mandatory tail: ship → context-sync → learn.
+ * Returns a preflight issue message if validation fails, null if valid.
+ * Fails closed: if step IDs cannot be parsed, returns an issue.
+ */
+function validateRunbookTail(runbookContent: string): string | null {
+  const stepIds = extractStepIds(runbookContent);
+
+  if (stepIds.length === 0) {
+    return "Runbook tail validation: no step IDs found in runbook YAML blocks — cannot verify mandatory tail (ship → context-sync → learn)";
+  }
+
+  const tail = stepIds.slice(-3);
+  if (tail.length < 3 || tail[0] !== "ship" || tail[1] !== "context-sync" || tail[2] !== "learn") {
+    const found = tail.join(" → ");
+    return `Runbook tail validation: last three steps must be "ship → context-sync → learn" but found "${found}". Add the mandatory tail steps in order.`;
+  }
+
+  return null;
+}
+
+/** Exported for testing. */
+export const validateRunbookTailForTest = validateRunbookTail;
+
 function isExpectedNoDbError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException).code;
   const message = err instanceof Error ? err.message : String(err);
@@ -542,8 +591,11 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
 
   const flow = await loadAndResolveFlow(pluginDir, input.flow_name);
   await mkdir(join(workspace, "plans", slug), { recursive: true });
+  const tailIssues: string[] = [];
   if (input.runbook_content) {
     await writeFile(join(workspace, "plans", slug, "runbook.md"), input.runbook_content);
+    const tailIssue = validateRunbookTail(input.runbook_content);
+    if (tailIssue) tailIssues.push(tailIssue);
   }
   if (input.brief_content) {
     await writeFile(join(workspace, "plans", slug, "planning-brief.md"), input.brief_content);
@@ -562,7 +614,7 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     tier: input.tier,
   };
 
-  return finalizeNewWorkspace(store, input, {
+  const result = await finalizeNewWorkspace(store, input, {
     board,
     flow,
     pluginDir,
@@ -571,6 +623,10 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     slug,
     workspace,
   });
+  if (tailIssues.length > 0) {
+    result.preflight_issues = [...(result.preflight_issues ?? []), ...tailIssues];
+  }
+  return result;
 }
 
 export async function initWorkspaceFlow(
