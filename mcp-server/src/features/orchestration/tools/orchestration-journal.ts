@@ -326,9 +326,9 @@ export async function batchLogSteps(
   await writeJournal(input.workspace, journal);
 
   // 6. Run transcript captures in parallel (no await inside a loop).
-  await Promise.all(captureTasks.map(({ logInput, result, step }) =>
-    tryTranscriptCapture(step, result, logInput),
-  ));
+  await Promise.all(
+    captureTasks.map(({ logInput, result, step }) => tryTranscriptCapture(step, result, logInput)),
+  );
 
   // 7. If any captures added a transcript_path, persist those fields to the journal.
   const hasCaptures = captureTasks.some(({ step }) => step.transcript_path);
@@ -349,11 +349,7 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     });
   }
 
-  if (
-    input.status === "completed" &&
-    !input.agent_id &&
-    input.step_id !== "inline-fix"
-  ) {
+  if (input.status === "completed" && !input.agent_id && input.step_id !== "inline-fix") {
     return toolError(
       "INVALID_INPUT",
       "completed steps must include agent_id for transcript capture (exempt: inline-fix step_id, skipped status)",
