@@ -153,62 +153,72 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 
 ### DAG Execution Protocol
 
-When the architect produces a `task-dag.yaml` alongside task plans, the orchestrator uses it for parallel dispatch instead of sequential step execution.
+When the architect produces a `task-dag.yaml` alongside task plans, the orchestrator uses it for parallel dispatch instead of sequential step execution. The orchestrator delegates scheduling and dependency enforcement to Claude Code's native agent teams API. Canon owns worktree isolation, merge, and quality gates.
 
 #### Reading the DAG
 
 After the architect step completes, check for `${WORKSPACE}/plans/${slug}/task-dag.yaml`. If present:
 
-1. Parse the YAML file. Each entry has: `task_id`, `depends_on: []`, `parallel_safe: boolean`, `files: []`.
+1. Parse the YAML file. Each entry has: `task_id`, `depends_on: []`, `files: []`. The `depends_on` field expresses all ordering constraints — no pre-processing or conversion needed.
 2. Validate the DAG: no cycles, all `depends_on` refs resolve, no self-references. The `dag-validator.ts` utility in `mcp-server/src/shared/lib/` provides this validation. If validation fails, present errors to the user and re-spawn the architect.
-3. Initialize `completed_tasks = []` and `failed_tasks = []`.
 
 If no `task-dag.yaml` exists, fall back to sequential step execution (existing behavior).
 
-#### Dynamic Readiness Loop
+#### Task Queue Setup
 
-Repeat until all tasks are completed or failed:
+1. **Create the team**: `TeamCreate({ team_name: "canon-{slug}" })` — creates a team with a shared task list.
 
-1. **Compute ready tasks**: A task is ready when:
-   - Its `task_id` is NOT in `completed_tasks` or `failed_tasks`
-   - ALL entries in its `depends_on` are in `completed_tasks`
-2. **Filter for parallel safety**: Separate ready tasks into:
-   - `parallel_batch`: tasks with `parallel_safe: true`
-   - `sequential_queue`: tasks with `parallel_safe: false`
-3. **Dispatch batch**:
-   - If `parallel_batch` is non-empty: dispatch all as an agent team (see Worktree Dispatch below)
-   - Else if `sequential_queue` is non-empty: dispatch the first task alone
-   - Else: all remaining tasks have unmet dependencies — this indicates a blocked state (dependencies failed). Enter HITL.
-4. **Await completion**: Wait for all dispatched tasks to complete.
-5. **Process results**:
-   - Successful tasks: add to `completed_tasks`
-   - Failed tasks: retry once via engineer fix mode (same worktree). If fix succeeds, add to `completed_tasks`. If fix fails, add to `failed_tasks` and enter HITL with failure details.
-6. **Merge batch results**: After all tasks in a batch complete, merge worktrees sequentially (see Merge Protocol below), then clean up.
-7. **Loop**: Return to step 1 to compute next ready batch.
+2. **Create tasks**: For each DAG node, call `TaskCreate` with:
+   - `title`: the task_id
+   - `description`: Full agent enrichment payload — the same context that would go in a subagent spawn prompt:
+     - Preloaded context from `resolve_agent_skills("engineer")`
+     - Relevant principles from `get_principles(task.files)`
+     - File context from `get_file_context(task.files)`
+     - The task plan content (read from `{task_id}-PLAN.md`)
+     - Working instructions: worktree creation command, commit provenance trailers, task completion protocol
+   - For tasks with `depends_on`: call `TaskUpdate({ addBlockedBy: [dependent_task_ids] })` after creation
 
-#### Worktree Dispatch
+3. **Enrichment follows the MCP Tool Composition table**: Call `resolve_agent_skills`, `get_principles`, and `get_file_context` before creating each task, exactly as done for subagent spawns.
 
-For each batch of ready tasks, create isolated worktrees using the existing wave infrastructure:
+#### Worker Dispatch
 
-1. Call `createWaveWorktrees(tasks.map(t => ({ task_id: t.task_id })), projectDir, buildWorktreePath)` where `buildWorktreePath` is the build worktree at `{workspace}/worktree`.
-2. Each task gets a worktree at `{projectDir}/.canon/worktrees/{task_id}`, branch `canon-wave/{task_id}`.
-3. Spawn each task as an agent with `isolation: "none"` and `Working directory: {worktree_path}` in the prompt.
-4. For parallel batches (2+ tasks): spawn as an agent team for concurrent execution.
-5. For sequential tasks (`parallel_safe: false`): spawn one agent at a time.
+1. **Spawn N workers**: Use `Agent({ team_name: "canon-{slug}", name: "worker-{N}", subagent_type: "canon:engineer", isolation: "none" })`.
+
+2. **Worker count**: Spawn as many workers as there are root tasks (tasks with empty `depends_on`), capped at 5.
+
+3. **Worker prompt** (the spawn prompt for each worker): A generic pull-loop prompt:
+   ```
+   You are a Canon build worker. Your loop:
+   1. Call TaskList to find available (unblocked, unclaimed) tasks
+   2. If no tasks available, wait and retry
+   3. Claim a task: TaskUpdate({ task_id, owner: your_name, status: "in_progress" })
+   4. Read the task description — it contains your full instructions, principles, and file context
+   5. Create your worktree: run createWaveWorktrees for this single task_id
+   6. Work in the worktree. Follow the task plan. Commit with Canon provenance trailers.
+   7. Mark complete: TaskUpdate({ task_id, status: "completed" })
+   8. Loop back to step 1
+   9. If TaskList returns empty (all tasks completed), you are done
+   ```
+
+4. **Worktree creation by workers**: Each worker creates its own worktree after claiming a task:
+   - Worktree path: `{projectDir}/.canon/worktrees/{task_id}`
+   - Branch: `canon-wave/{task_id}`
+
+5. **Model selection**: Workers default to Sonnet. For complex tasks, pass `model: "opus"` in the Agent call.
 
 #### Merge Protocol
 
-After a batch completes:
+After ALL team tasks complete (monitor via `TaskList` — when empty, all done):
 
 1. Call `mergeWaveResults(worktreeResults, buildWorktreePath, "sequential")` — merges each task's worktree into the build worktree in alphabetical `task_id` order.
 2. On conflict: `git merge --abort` runs automatically. Enter HITL with conflict details: `"Merge conflict in task {task_id} affecting files: {files}. Resolve manually or re-run the conflicting task."`.
-3. On success: call `cleanupWorktrees(worktreeResults, projectDir)` to remove task worktrees and branches.
+3. On success: call `cleanupWorktrees(worktreeResults, projectDir)` then `TeamDelete({ team_name: "canon-{slug}" })`.
 
 **Key asymmetry**: merges target the build worktree path (`buildWorktreePath`), but cleanup uses the project root (`projectDir`). This matches the existing wave infrastructure pattern.
 
 #### Post-DAG Tail
 
-After all DAG tasks complete (all in `completed_tasks`), execute the remaining runbook steps sequentially:
+After all DAG tasks complete, execute the remaining runbook steps sequentially:
 - Review step (if present)
 - Context-sync step (if present)
 - Learn step (if present)
@@ -217,10 +227,11 @@ These are NOT nodes in the DAG — they always run sequentially after all implem
 
 #### Failure Handling
 
-- **Task failure**: Retry once via engineer fix mode in the same worktree. If fix fails, enter HITL.
-- **Merge conflict**: Enter HITL with conflict details. User can resolve manually or instruct re-run.
-- **DAG blocked** (ready set empty but tasks remain): Some tasks' dependencies failed. Enter HITL listing blocked tasks and their unmet dependencies.
+- **Task failure**: Re-create task via `TaskCreate` for another worker. One retry, then HITL.
+- **Merge conflict**: HITL with conflict details. User can resolve manually or instruct re-run.
+- **Team stalled**: `TaskList` shows remaining tasks all blocked, none in-progress — dependencies failed. Enter HITL listing blocked tasks and their unmet dependencies.
 - **Validation failure**: If `task-dag.yaml` fails validation, present errors and re-spawn architect.
+- **Race condition**: Two workers may claim the same task. Low risk (worktree isolation). Discard the later result.
 
 ### Resume Protocol
 
