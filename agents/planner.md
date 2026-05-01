@@ -105,9 +105,11 @@ Before issuing `graph_query` or `semantic_search` calls:
 4. **Produce the runbook.** Apply the `canon:synthesize` skill contract. Emit the runbook content in your output text. The orchestrator captures this and persists it to `${WORKSPACE}/plans/${slug}/runbook.md` via `init_workspace({ runbook_content })`. The runbook must:
    - Use only canonical step IDs from `references/runbook-vocabulary.md`
    - Emit `confidence_signals[]` in frontmatter — per-signal objects only (see Non-responsibilities below)
-   - Include the mandatory tail: `context-sync` → `learn`
+   - Include the mandatory tail: `ship` → `context-sync` → `learn`
    - Include an Overview prose paragraph explaining the step sequence rationale
    - Include H3 prose sections per step: Intent, Skip-when elaboration (if applicable), Coordination notes
+
+   **Mandatory tail reminder (positional — read this last before emitting):** Every build runbook MUST end with `ship` → `context-sync` → `learn` as the final three steps, in that exact order. Verify this before emitting the runbook.
 
 **Architect fast-path gate:** When the synthesized runbook has exactly ONE implement step AND no design step is already included, do NOT add a design step. The single implement step runs directly without architect involvement. This preserves the existing fast-path for trivial builds. Only add a design step (which spawns the architect to produce a task DAG) when the runbook contains 2+ implement steps or the task requires architectural decisions.
 

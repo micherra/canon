@@ -57,12 +57,13 @@ The planner MUST NOT remove baseline HITL from step defaults. The runbook's decl
 
 ## Mandatory Tail
 
-Every build runbook MUST end with the two mandatory tail steps in order:
+Every build runbook MUST end with the three mandatory tail steps in order:
 
-1. `context-sync` — scribe updates CLAUDE.md, context.md, and CONVENTIONS.md when contract-level changes occurred during the flow
-2. `learn` — learner analyzes the completed flow for patterns and suggests principle improvements
+1. `ship` — shipper merges the worktree branch to main; PR creation when explicitly requested
+2. `context-sync` — scribe updates CLAUDE.md, context.md, and CONVENTIONS.md when contract-level changes occurred during the flow
+3. `learn` — learner analyzes the completed flow for patterns and suggests principle improvements
 
-The planner MUST NOT skip these steps regardless of flow size, user preference, or confidence signal. They are the mechanism by which Canon's documentation and principles stay current.
+The planner MUST NOT skip these steps regardless of flow size, user preference, or confidence signal. They are the mechanism by which Canon ships work and keeps its documentation and principles current.
 
 ---
 
