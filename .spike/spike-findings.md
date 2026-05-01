@@ -448,3 +448,517 @@ Try option 1 (full principle body in embedding) before any other change. This is
 - Principle corpus is small (57 items) — scores cluster in a narrow band (0.15–0.47), which amplifies ranking noise
 - The model was not fine-tuned on engineering principle text — domain adaptation is expected to improve recall significantly
 - This eval used only cosine similarity over normalized vectors — re-ranking with principle tags or severity weights could improve results without changing embeddings
+
+## Iteration 2
+
+### Change Made
+
+**Iteration 2a**: Modified `composePrincipleText()` to use the **full principle body** (title + complete markdown body including Rationale, Examples, Anti-Rationalization, and Verification sections) instead of just the title + first paragraph + 300-char anti-rationalization excerpt.
+
+**Iteration 2b**: Same full-body principle embeddings, but also added **explicit principle-vocabulary bridges** to each file summary. Each summary was augmented with a "Pattern vocabulary" paragraph that names the patterns in principle-language terms (e.g., "errors-as-values pattern using discriminated unions", "validate-at-trust-boundaries", "information hiding / encapsulation of design decision").
+
+### Iteration 2a Results — Full Principle Body
+
+**Aggregate Recall@10: 22.7%** (Iteration 1 baseline: 31.2%)
+**Average discrimination gap: 0.2412** (Iteration 1: 0.1984)
+**Go threshold: ≥80% → NO-GO**
+
+#### Per-File Recall@10 (Iteration 2a)
+
+| File | Iter 1 | Iter 2a | Delta | Hits (top 10) | Misses |
+|------|--------|---------|-------|----------------|--------|
+| graph/kg-embedding.ts | 0% | 0% | = | none | errors-are-values, observable-best-effort, simplicity-first, handle-partial-failure |
+| graph/kg-store.ts | 50% | 25% | -25% | information-hiding | prefer-immutable-data, simplicity-first, consistent-abstraction-levels |
+| graph/kg-pipeline.ts | 25% | 0% | -25% | none | errors-are-values, handle-partial-failure, observable-best-effort, functions-do-one-thing |
+| graph/kg-query.ts | 50% | 100% | +50% | information-hiding, command-query-separation, consistent-abstraction-levels, measure-before-optimizing | none |
+| graph/kg-vector-store.ts | 0% | 0% | = | none | information-hiding, wrap-external-exceptions, simplicity-first, errors-are-values |
+| features/orchestration/tools/drive-flow.ts | 40% | 0% | -40% | none | errors-are-values, no-hidden-side-effects, functions-do-one-thing, handle-partial-failure, validate-at-trust-boundaries |
+| features/orchestration/tools/report-result.ts | 0% | 0% | = | none | errors-are-values, no-hidden-side-effects, command-query-separation, fail-closed-by-default |
+| features/orchestration/tools/init-workspace.ts | 0% | 0% | = | none | validate-at-trust-boundaries, errors-are-values, fail-closed-by-default, no-hidden-side-effects, least-privilege-access |
+| features/principles/tools/get-principles.ts | 50% | 25% | -25% | information-hiding | validate-at-trust-boundaries, errors-are-values, functions-do-one-thing |
+| features/file-context/tools/get-file-context.ts | 40% | 20% | -20% | information-hiding | validate-at-trust-boundaries, errors-are-values, handle-partial-failure, least-privilege-access |
+| shared/matcher.ts | 75% | 50% | -25% | measure-before-optimizing, information-hiding | functions-do-one-thing, consistent-abstraction-levels |
+| shared/parser.ts | 0% | 0% | = | none | functions-do-one-thing, errors-are-values, consistent-abstraction-levels, define-errors-out-of-existence |
+| shared/lib/tool-result.ts | 75% | 75% | = | errors-are-values, information-hiding, fail-closed-by-default | consistent-abstraction-levels |
+
+#### Top-5 Rankings for Key Files (Iteration 2a)
+
+**`graph/kg-embedding.ts`** (ground truth: errors-are-values, observable-best-effort, simplicity-first, handle-partial-failure)
+Recall@10: 0% | Top: 0.3610 | Median: 0.1850 | Gap: 0.1760
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | normalize-first-denormalize-intentionally | 0.3610 |  |
+| 2 | aggregates-reference-by-id | 0.3384 |  |
+| 3 | measure-before-optimizing | 0.3300 |  |
+| 4 | design-tokens-as-style-contract | 0.3219 |  |
+| 5 | deep-modules | 0.3125 |  |
+| 6 | refactoring-integrity | 0.2856 |  |
+| 7 | colocate-component-assets | 0.2768 |  |
+| 8 | consistent-abstraction-levels | 0.2702 |  |
+| 9 | unidirectional-data-flow | 0.2619 |  |
+| 10 | prefer-composition-over-inheritance | 0.2580 |  |
+
+**`graph/kg-store.ts`** (ground truth: information-hiding, prefer-immutable-data, simplicity-first, consistent-abstraction-levels)
+Recall@10: 25% | Top: 0.5430 | Median: 0.2817 | Gap: 0.2612
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | normalize-first-denormalize-intentionally | 0.5430 |  |
+| 2 | backward-compatible-schema-changes | 0.4519 |  |
+| 3 | explicit-transaction-boundaries | 0.4339 |  |
+| 4 | services-own-their-data | 0.4227 |  |
+| 5 | aggregates-reference-by-id | 0.3972 |  |
+| 6 | information-hiding | 0.3932 | YES |
+| 7 | measure-before-optimizing | 0.3920 |  |
+| 8 | colocate-component-assets | 0.3896 |  |
+| 9 | architectural-fitness-functions | 0.3871 |  |
+| 10 | leave-touched-files-better | 0.3665 |  |
+
+**`graph/kg-pipeline.ts`** (ground truth: errors-are-values, handle-partial-failure, observable-best-effort, functions-do-one-thing)
+Recall@10: 0% | Top: 0.4642 | Median: 0.2885 | Gap: 0.1757
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | architectural-fitness-functions | 0.4642 |  |
+| 2 | normalize-first-denormalize-intentionally | 0.4475 |  |
+| 3 | measure-before-optimizing | 0.4426 |  |
+| 4 | aggregates-reference-by-id | 0.3976 |  |
+| 5 | information-hiding | 0.3868 |  |
+| 6 | backward-compatible-schema-changes | 0.3855 |  |
+| 7 | leave-touched-files-better | 0.3778 |  |
+| 8 | structured-logging-with-levels | 0.3712 |  |
+| 9 | refactoring-integrity | 0.3651 |  |
+| 10 | explicit-transaction-boundaries | 0.3526 |  |
+
+**`graph/kg-query.ts`** (ground truth: information-hiding, command-query-separation, consistent-abstraction-levels, measure-before-optimizing)
+Recall@10: 100% | Top: 0.4536 | Median: 0.2450 | Gap: 0.2086
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | normalize-first-denormalize-intentionally | 0.4536 |  |
+| 2 | deep-modules | 0.4435 |  |
+| 3 | measure-before-optimizing | 0.4380 | YES |
+| 4 | aggregates-reference-by-id | 0.4353 |  |
+| 5 | structured-logging-with-levels | 0.3728 |  |
+| 6 | consistent-abstraction-levels | 0.3530 | YES |
+| 7 | architectural-fitness-functions | 0.3484 |  |
+| 8 | minimize-attack-surface | 0.3404 |  |
+| 9 | information-hiding | 0.3346 | YES |
+| 10 | command-query-separation | 0.3138 | YES |
+
+**`graph/kg-vector-store.ts`** (ground truth: information-hiding, wrap-external-exceptions, simplicity-first, errors-are-values)
+Recall@10: 0% | Top: 0.4464 | Median: 0.2497 | Gap: 0.1967
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | normalize-first-denormalize-intentionally | 0.4464 |  |
+| 2 | aggregates-reference-by-id | 0.3713 |  |
+| 3 | architectural-fitness-functions | 0.3476 |  |
+| 4 | unidirectional-data-flow | 0.3408 |  |
+| 5 | props-are-the-component-contract | 0.3395 |  |
+| 6 | backward-compatible-schema-changes | 0.3376 |  |
+| 7 | measure-before-optimizing | 0.3200 |  |
+| 8 | structured-logging-with-levels | 0.3188 |  |
+| 9 | leave-touched-files-better | 0.3183 |  |
+| 10 | isolate-frontend-runtime-state | 0.3125 |  |
+
+**`features/orchestration/tools/drive-flow.ts`** (ground truth: errors-are-values, no-hidden-side-effects, functions-do-one-thing, handle-partial-failure, validate-at-trust-boundaries)
+Recall@10: 0% | Top: 0.5121 | Median: 0.2752 | Gap: 0.2370
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | observable-best-effort | 0.5121 |  |
+| 2 | design-for-self-healing | 0.4240 |  |
+| 3 | prefer-async-between-services | 0.3897 |  |
+| 4 | unidirectional-data-flow | 0.3858 |  |
+| 5 | decompose-by-domain-not-layer | 0.3848 |  |
+| 6 | architectural-fitness-functions | 0.3670 |  |
+| 7 | explicit-transaction-boundaries | 0.3623 |  |
+| 8 | fail-closed-by-default | 0.3576 |  |
+| 9 | measure-before-optimizing | 0.3528 |  |
+| 10 | simplicity-first | 0.3507 |  |
+
+**`features/orchestration/tools/report-result.ts`** (ground truth: errors-are-values, no-hidden-side-effects, command-query-separation, fail-closed-by-default)
+Recall@10: 0% | Top: 0.4241 | Median: 0.2701 | Gap: 0.1540
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | observable-best-effort | 0.4241 |  |
+| 2 | resilient-frontend-composition | 0.4106 |  |
+| 3 | design-for-self-healing | 0.4101 |  |
+| 4 | isolate-frontend-runtime-state | 0.3940 |  |
+| 5 | minimize-client-side-state | 0.3868 |  |
+| 6 | unidirectional-data-flow | 0.3695 |  |
+| 7 | explicit-transaction-boundaries | 0.3659 |  |
+| 8 | prefer-async-between-services | 0.3630 |  |
+| 9 | leave-touched-files-better | 0.3626 |  |
+| 10 | idempotent-operations | 0.3589 |  |
+
+**`features/orchestration/tools/init-workspace.ts`** (ground truth: validate-at-trust-boundaries, errors-are-values, fail-closed-by-default, no-hidden-side-effects, least-privilege-access)
+Recall@10: 0% | Top: 0.4392 | Median: 0.1862 | Gap: 0.2530
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | observable-best-effort | 0.4392 |  |
+| 2 | leave-touched-files-better | 0.4269 |  |
+| 3 | design-for-self-healing | 0.3682 |  |
+| 4 | colocate-component-assets | 0.3321 |  |
+| 5 | infrastructure-tested-like-code | 0.3188 |  |
+| 6 | architectural-fitness-functions | 0.3135 |  |
+| 7 | externalize-configuration | 0.3073 |  |
+| 8 | isolate-frontend-runtime-state | 0.2922 |  |
+| 9 | refactoring-integrity | 0.2815 |  |
+| 10 | decompose-by-domain-not-layer | 0.2797 |  |
+
+**`features/principles/tools/get-principles.ts`** (ground truth: validate-at-trust-boundaries, information-hiding, errors-are-values, functions-do-one-thing)
+Recall@10: 25% | Top: 0.4761 | Median: 0.1845 | Gap: 0.2915
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | architectural-fitness-functions | 0.4761 |  |
+| 2 | refactoring-integrity | 0.4087 |  |
+| 3 | leave-touched-files-better | 0.3908 |  |
+| 4 | information-hiding | 0.3292 | YES |
+| 5 | decompose-by-domain-not-layer | 0.3119 |  |
+| 6 | measure-before-optimizing | 0.3082 |  |
+| 7 | colocate-component-assets | 0.3018 |  |
+| 8 | bounded-context-boundaries | 0.2992 |  |
+| 9 | observable-best-effort | 0.2943 |  |
+| 10 | design-tokens-as-style-contract | 0.2891 |  |
+
+**`features/file-context/tools/get-file-context.ts`** (ground truth: validate-at-trust-boundaries, errors-are-values, information-hiding, handle-partial-failure, least-privilege-access)
+Recall@10: 20% | Top: 0.4625 | Median: 0.2093 | Gap: 0.2532
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | leave-touched-files-better | 0.4625 |  |
+| 2 | refactoring-integrity | 0.4447 |  |
+| 3 | architectural-fitness-functions | 0.4247 |  |
+| 4 | measure-before-optimizing | 0.3692 |  |
+| 5 | information-hiding | 0.3538 | YES |
+| 6 | colocate-component-assets | 0.3406 |  |
+| 7 | decompose-by-domain-not-layer | 0.3279 |  |
+| 8 | externalize-configuration | 0.3120 |  |
+| 9 | infrastructure-tested-like-code | 0.3084 |  |
+| 10 | design-tokens-as-style-contract | 0.3077 |  |
+
+**`shared/matcher.ts`** (ground truth: measure-before-optimizing, information-hiding, functions-do-one-thing, consistent-abstraction-levels)
+Recall@10: 50% | Top: 0.5277 | Median: 0.2179 | Gap: 0.3098
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | architectural-fitness-functions | 0.5277 |  |
+| 2 | refactoring-integrity | 0.4963 |  |
+| 3 | leave-touched-files-better | 0.4661 |  |
+| 4 | measure-before-optimizing | 0.4599 | YES |
+| 5 | information-hiding | 0.3797 | YES |
+| 6 | colocate-component-assets | 0.3510 |  |
+| 7 | design-tokens-as-style-contract | 0.3077 |  |
+| 8 | deep-modules | 0.3050 |  |
+| 9 | decompose-by-domain-not-layer | 0.2956 |  |
+| 10 | single-source-of-component-styles | 0.2908 |  |
+
+**`shared/parser.ts`** (ground truth: functions-do-one-thing, errors-are-values, consistent-abstraction-levels, define-errors-out-of-existence)
+Recall@10: 0% | Top: 0.4421 | Median: 0.1400 | Gap: 0.3021
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | refactoring-integrity | 0.4421 |  |
+| 2 | information-hiding | 0.3380 |  |
+| 3 | leave-touched-files-better | 0.3313 |  |
+| 4 | architectural-fitness-functions | 0.3218 |  |
+| 5 | design-tokens-as-style-contract | 0.3176 |  |
+| 6 | observable-best-effort | 0.3076 |  |
+| 7 | colocate-component-assets | 0.2845 |  |
+| 8 | bounded-context-boundaries | 0.2841 |  |
+| 9 | decompose-by-domain-not-layer | 0.2430 |  |
+| 10 | props-are-the-component-contract | 0.2389 |  |
+
+**`shared/lib/tool-result.ts`** (ground truth: errors-are-values, information-hiding, consistent-abstraction-levels, fail-closed-by-default)
+Recall@10: 75% | Top: 0.5603 | Median: 0.2441 | Gap: 0.3161
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | observable-best-effort | 0.5603 |  |
+| 2 | leave-touched-files-better | 0.4057 |  |
+| 3 | refactoring-integrity | 0.4054 |  |
+| 4 | fail-closed-by-default | 0.3897 | YES |
+| 5 | architectural-fitness-functions | 0.3741 |  |
+| 6 | wrap-external-exceptions | 0.3634 |  |
+| 7 | resilient-frontend-composition | 0.3624 |  |
+| 8 | information-hiding | 0.3541 | YES |
+| 9 | errors-are-values | 0.3535 | YES |
+| 10 | structured-logging-with-levels | 0.3456 |  |
+
+### Iteration 2b Results — Full Principle Body + Vocabulary-Enriched Summaries
+
+**Aggregate Recall@10: 35.8%** (Iteration 1: 31.2%, Iteration 2a: 22.7%)
+**Average discrimination gap: 0.2410** (Iteration 1: 0.1984, Iteration 2a: 0.2412)
+**Go threshold: ≥80% → NO-GO**
+
+#### Per-File Recall@10 (Iteration 2b)
+
+| File | Iter 1 | Iter 2a | Iter 2b | Delta vs 2a | Hits (top 10) | Misses |
+|------|--------|---------|---------|-------------|----------------|--------|
+| graph/kg-embedding.ts | 0% | 0% | 50% | +50% | observable-best-effort, simplicity-first | errors-are-values, handle-partial-failure |
+| graph/kg-store.ts | 50% | 25% | 25% | = | information-hiding | prefer-immutable-data, simplicity-first, consistent-abstraction-levels |
+| graph/kg-pipeline.ts | 25% | 0% | 25% | +25% | observable-best-effort | errors-are-values, handle-partial-failure, functions-do-one-thing |
+| graph/kg-query.ts | 50% | 100% | 100% | = | information-hiding, command-query-separation, consistent-abstraction-levels, measure-before-optimizing | none |
+| graph/kg-vector-store.ts | 0% | 0% | 0% | = | none | information-hiding, wrap-external-exceptions, simplicity-first, errors-are-values |
+| features/orchestration/tools/drive-flow.ts | 40% | 0% | 20% | +20% | errors-are-values | no-hidden-side-effects, functions-do-one-thing, handle-partial-failure, validate-at-trust-boundaries |
+| features/orchestration/tools/report-result.ts | 0% | 0% | 25% | +25% | no-hidden-side-effects | errors-are-values, command-query-separation, fail-closed-by-default |
+| features/orchestration/tools/init-workspace.ts | 0% | 0% | 0% | = | none | validate-at-trust-boundaries, errors-are-values, fail-closed-by-default, no-hidden-side-effects, least-privilege-access |
+| features/principles/tools/get-principles.ts | 50% | 25% | 25% | = | information-hiding | validate-at-trust-boundaries, errors-are-values, functions-do-one-thing |
+| features/file-context/tools/get-file-context.ts | 40% | 20% | 20% | = | information-hiding | validate-at-trust-boundaries, errors-are-values, handle-partial-failure, least-privilege-access |
+| shared/matcher.ts | 75% | 50% | 75% | +25% | measure-before-optimizing, information-hiding, consistent-abstraction-levels | functions-do-one-thing |
+| shared/parser.ts | 0% | 0% | 25% | +25% | consistent-abstraction-levels | functions-do-one-thing, errors-are-values, define-errors-out-of-existence |
+| shared/lib/tool-result.ts | 75% | 75% | 75% | = | errors-are-values, information-hiding, fail-closed-by-default | consistent-abstraction-levels |
+
+#### Top-5 Rankings for Key Files (Iteration 2b)
+
+**`graph/kg-embedding.ts`** (ground truth: errors-are-values, observable-best-effort, simplicity-first, handle-partial-failure)
+Recall@10: 50% | Top: 0.4531 | Median: 0.3006 | Gap: 0.1524
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | aggregates-reference-by-id | 0.4531 |  |
+| 2 | measure-before-optimizing | 0.4425 |  |
+| 3 | deep-modules | 0.4259 |  |
+| 4 | refactoring-integrity | 0.4117 |  |
+| 5 | consistent-abstraction-levels | 0.4109 |  |
+| 6 | simplicity-first | 0.3989 | YES |
+| 7 | observable-best-effort | 0.3943 | YES |
+| 8 | normalize-first-denormalize-intentionally | 0.3897 |  |
+| 9 | architectural-fitness-functions | 0.3742 |  |
+| 10 | design-tokens-as-style-contract | 0.3642 |  |
+
+**`graph/kg-store.ts`** (ground truth: information-hiding, prefer-immutable-data, simplicity-first, consistent-abstraction-levels)
+Recall@10: 25% | Top: 0.5816 | Median: 0.3183 | Gap: 0.2634
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | normalize-first-denormalize-intentionally | 0.5816 |  |
+| 2 | backward-compatible-schema-changes | 0.4851 |  |
+| 3 | explicit-transaction-boundaries | 0.4695 |  |
+| 4 | services-own-their-data | 0.4438 |  |
+| 5 | information-hiding | 0.4390 | YES |
+| 6 | aggregates-reference-by-id | 0.4261 |  |
+| 7 | idempotent-operations | 0.4193 |  |
+| 8 | command-query-separation | 0.4039 |  |
+| 9 | measure-before-optimizing | 0.4015 |  |
+| 10 | prefer-composition-over-inheritance | 0.3988 |  |
+
+**`graph/kg-pipeline.ts`** (ground truth: errors-are-values, handle-partial-failure, observable-best-effort, functions-do-one-thing)
+Recall@10: 25% | Top: 0.4979 | Median: 0.3417 | Gap: 0.1562
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | architectural-fitness-functions | 0.4979 |  |
+| 2 | measure-before-optimizing | 0.4746 |  |
+| 3 | structured-logging-with-levels | 0.4487 |  |
+| 4 | information-hiding | 0.4472 |  |
+| 5 | normalize-first-denormalize-intentionally | 0.4338 |  |
+| 6 | decompose-by-domain-not-layer | 0.4322 |  |
+| 7 | aggregates-reference-by-id | 0.4308 |  |
+| 8 | refactoring-integrity | 0.4176 |  |
+| 9 | leave-touched-files-better | 0.4162 |  |
+| 10 | observable-best-effort | 0.4023 | YES |
+
+**`graph/kg-query.ts`** (ground truth: information-hiding, command-query-separation, consistent-abstraction-levels, measure-before-optimizing)
+Recall@10: 100% | Top: 0.5138 | Median: 0.2832 | Gap: 0.2307
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | measure-before-optimizing | 0.5138 | YES |
+| 2 | deep-modules | 0.4961 |  |
+| 3 | normalize-first-denormalize-intentionally | 0.4752 |  |
+| 4 | aggregates-reference-by-id | 0.4652 |  |
+| 5 | consistent-abstraction-levels | 0.4182 | YES |
+| 6 | information-hiding | 0.3851 | YES |
+| 7 | architectural-fitness-functions | 0.3836 |  |
+| 8 | structured-logging-with-levels | 0.3814 |  |
+| 9 | command-query-separation | 0.3762 | YES |
+| 10 | minimize-attack-surface | 0.3620 |  |
+
+**`graph/kg-vector-store.ts`** (ground truth: information-hiding, wrap-external-exceptions, simplicity-first, errors-are-values)
+Recall@10: 0% | Top: 0.4829 | Median: 0.2993 | Gap: 0.1836
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | normalize-first-denormalize-intentionally | 0.4829 |  |
+| 2 | aggregates-reference-by-id | 0.4087 |  |
+| 3 | leave-touched-files-better | 0.3943 |  |
+| 4 | architectural-fitness-functions | 0.3893 |  |
+| 5 | backward-compatible-schema-changes | 0.3730 |  |
+| 6 | props-are-the-component-contract | 0.3618 |  |
+| 7 | structured-logging-with-levels | 0.3614 |  |
+| 8 | prefer-composition-over-inheritance | 0.3595 |  |
+| 9 | measure-before-optimizing | 0.3584 |  |
+| 10 | explicit-transaction-boundaries | 0.3555 |  |
+
+**`features/orchestration/tools/drive-flow.ts`** (ground truth: errors-are-values, no-hidden-side-effects, functions-do-one-thing, handle-partial-failure, validate-at-trust-boundaries)
+Recall@10: 20% | Top: 0.5576 | Median: 0.3314 | Gap: 0.2261
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | observable-best-effort | 0.5576 |  |
+| 2 | design-for-self-healing | 0.4629 |  |
+| 3 | unidirectional-data-flow | 0.4492 |  |
+| 4 | explicit-transaction-boundaries | 0.4384 |  |
+| 5 | fail-closed-by-default | 0.4228 |  |
+| 6 | prefer-async-between-services | 0.4203 |  |
+| 7 | architectural-fitness-functions | 0.4186 |  |
+| 8 | decompose-by-domain-not-layer | 0.4156 |  |
+| 9 | resilient-frontend-composition | 0.4003 |  |
+| 10 | errors-are-values | 0.3969 | YES |
+
+**`features/orchestration/tools/report-result.ts`** (ground truth: errors-are-values, no-hidden-side-effects, command-query-separation, fail-closed-by-default)
+Recall@10: 25% | Top: 0.4489 | Median: 0.2730 | Gap: 0.1758
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | observable-best-effort | 0.4489 |  |
+| 2 | resilient-frontend-composition | 0.4022 |  |
+| 3 | design-for-self-healing | 0.3915 |  |
+| 4 | leave-touched-files-better | 0.3880 |  |
+| 5 | information-hiding | 0.3851 |  |
+| 6 | explicit-transaction-boundaries | 0.3822 |  |
+| 7 | no-hidden-side-effects | 0.3790 | YES |
+| 8 | tests-are-deterministic | 0.3717 |  |
+| 9 | unidirectional-data-flow | 0.3704 |  |
+| 10 | isolate-frontend-runtime-state | 0.3641 |  |
+
+**`features/orchestration/tools/init-workspace.ts`** (ground truth: validate-at-trust-boundaries, errors-are-values, fail-closed-by-default, no-hidden-side-effects, least-privilege-access)
+Recall@10: 0% | Top: 0.5387 | Median: 0.2687 | Gap: 0.2700
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | observable-best-effort | 0.5387 |  |
+| 2 | leave-touched-files-better | 0.4878 |  |
+| 3 | design-for-self-healing | 0.4345 |  |
+| 4 | infrastructure-tested-like-code | 0.4211 |  |
+| 5 | decompose-by-domain-not-layer | 0.3723 |  |
+| 6 | architectural-fitness-functions | 0.3677 |  |
+| 7 | refactoring-integrity | 0.3627 |  |
+| 8 | externalize-configuration | 0.3546 |  |
+| 9 | colocate-component-assets | 0.3517 |  |
+| 10 | isolate-frontend-runtime-state | 0.3506 |  |
+
+**`features/principles/tools/get-principles.ts`** (ground truth: validate-at-trust-boundaries, information-hiding, errors-are-values, functions-do-one-thing)
+Recall@10: 25% | Top: 0.5142 | Median: 0.2118 | Gap: 0.3024
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | architectural-fitness-functions | 0.5142 |  |
+| 2 | refactoring-integrity | 0.4416 |  |
+| 3 | leave-touched-files-better | 0.4281 |  |
+| 4 | information-hiding | 0.3771 | YES |
+| 5 | decompose-by-domain-not-layer | 0.3678 |  |
+| 6 | bounded-context-boundaries | 0.3655 |  |
+| 7 | observable-best-effort | 0.3565 |  |
+| 8 | measure-before-optimizing | 0.3341 |  |
+| 9 | design-tokens-as-style-contract | 0.3301 |  |
+| 10 | least-privilege-access | 0.3291 |  |
+
+**`features/file-context/tools/get-file-context.ts`** (ground truth: validate-at-trust-boundaries, errors-are-values, information-hiding, handle-partial-failure, least-privilege-access)
+Recall@10: 20% | Top: 0.5321 | Median: 0.2909 | Gap: 0.2412
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | leave-touched-files-better | 0.5321 |  |
+| 2 | architectural-fitness-functions | 0.4829 |  |
+| 3 | refactoring-integrity | 0.4827 |  |
+| 4 | infrastructure-tested-like-code | 0.4502 |  |
+| 5 | information-hiding | 0.4179 | YES |
+| 6 | measure-before-optimizing | 0.4109 |  |
+| 7 | secrets-never-in-code | 0.3942 |  |
+| 8 | decompose-by-domain-not-layer | 0.3898 |  |
+| 9 | externalize-configuration | 0.3886 |  |
+| 10 | colocate-component-assets | 0.3853 |  |
+
+**`shared/matcher.ts`** (ground truth: measure-before-optimizing, information-hiding, functions-do-one-thing, consistent-abstraction-levels)
+Recall@10: 75% | Top: 0.5568 | Median: 0.2536 | Gap: 0.3031
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | refactoring-integrity | 0.5568 |  |
+| 2 | measure-before-optimizing | 0.5522 | YES |
+| 3 | leave-touched-files-better | 0.5230 |  |
+| 4 | architectural-fitness-functions | 0.5192 |  |
+| 5 | information-hiding | 0.4425 | YES |
+| 6 | patterns-need-justification | 0.4286 |  |
+| 7 | deep-modules | 0.4050 |  |
+| 8 | consistent-abstraction-levels | 0.4044 | YES |
+| 9 | colocate-component-assets | 0.3801 |  |
+| 10 | design-tokens-as-style-contract | 0.3748 |  |
+
+**`shared/parser.ts`** (ground truth: functions-do-one-thing, errors-are-values, consistent-abstraction-levels, define-errors-out-of-existence)
+Recall@10: 25% | Top: 0.5160 | Median: 0.2211 | Gap: 0.2949
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | refactoring-integrity | 0.5160 |  |
+| 2 | information-hiding | 0.4483 |  |
+| 3 | architectural-fitness-functions | 0.3865 |  |
+| 4 | leave-touched-files-better | 0.3859 |  |
+| 5 | observable-best-effort | 0.3757 |  |
+| 6 | consistent-abstraction-levels | 0.3755 | YES |
+| 7 | bounded-context-boundaries | 0.3702 |  |
+| 8 | design-tokens-as-style-contract | 0.3662 |  |
+| 9 | decompose-by-domain-not-layer | 0.3316 |  |
+| 10 | ubiquitous-language-in-code | 0.3216 |  |
+
+**`shared/lib/tool-result.ts`** (ground truth: errors-are-values, information-hiding, consistent-abstraction-levels, fail-closed-by-default)
+Recall@10: 75% | Top: 0.6216 | Median: 0.2879 | Gap: 0.3336
+
+| Rank | Principle | Score | In GT? |
+|------|-----------|-------|--------|
+| 1 | observable-best-effort | 0.6216 |  |
+| 2 | fail-closed-by-default | 0.4466 | YES |
+| 3 | refactoring-integrity | 0.4451 |  |
+| 4 | errors-are-values | 0.4399 | YES |
+| 5 | wrap-external-exceptions | 0.4375 |  |
+| 6 | leave-touched-files-better | 0.4279 |  |
+| 7 | structured-logging-with-levels | 0.4150 |  |
+| 8 | information-hiding | 0.4026 | YES |
+| 9 | architectural-fitness-functions | 0.3997 |  |
+| 10 | prefer-composition-over-inheritance | 0.3933 |  |
+
+### Comparison Table: All Iterations
+
+| Metric | Iteration 1 | Iteration 2a | Iteration 2b |
+|--------|-------------|--------------|--------------|
+| Principle embedding text | Title + first para + 300-char anti-rat | Title + full body | Title + full body |
+| Summary type | Enriched (role/relationships/concerns) | Same as iter 1 | Enriched + pattern vocabulary |
+| Aggregate Recall@10 | 31.2% | 22.7% | 35.8% |
+| Average discrimination gap | 0.1984 | 0.2412 | 0.2410 |
+| Files at 0% recall | 5 | 7 | 2 |
+| Files at 100% recall | 0 | 1 | 1 |
+| Go/No-Go | NO-GO | NO-GO | NO-GO |
+
+### Analysis
+
+**Full principle body (2a)** changed aggregate recall by -8.5 percentage points (31.2% → 22.7%).
+
+**Vocabulary-enriched summaries (2b)** changed aggregate recall by +13.1 percentage points vs 2a (22.7% → 35.8%), and +4.6 percentage points vs iteration 1.
+
+In iteration 2a: **1 files improved**, **6 unchanged**, **6 regressed**.
+Improved: graph/kg-query.ts (50% → 100%)
+Regressed: graph/kg-store.ts (50% → 25%), graph/kg-pipeline.ts (25% → 0%), features/orchestration/tools/drive-flow.ts (40% → 0%), features/principles/tools/get-principles.ts (50% → 25%), features/file-context/tools/get-file-context.ts (40% → 20%), shared/matcher.ts (75% → 50%)
+
+In iteration 2b vs 2a: **6 files improved**, **7 unchanged**, **0 regressed**.
+Improved: graph/kg-embedding.ts (0% → 50%), graph/kg-pipeline.ts (0% → 25%), features/orchestration/tools/drive-flow.ts (0% → 20%), features/orchestration/tools/report-result.ts (0% → 25%), shared/matcher.ts (50% → 75%), shared/parser.ts (0% → 25%)
+
+### Updated Go/No-Go Recommendation
+
+**RECOMMENDATION: NO-GO** — Best: 35.8% (threshold: 80%)
+
+Despite full-body principle embeddings and vocabulary-enriched summaries, aggregate Recall@10 remains well below 80%. The semantic gap between descriptive file summaries and prescriptive principle text is not bridgeable by vocabulary alignment alone.
+
+**What would need to change:**
+
+1. **Hybrid lexical+semantic matching** — The most direct path: add principle tag/keyword matching alongside cosine similarity.
+2. **Larger embedding model** — Domain-adapted or larger general-purpose model (e.g., `all-mpnet-base-v2`).
+3. **Fine-tuning** — Train on (file summary, applicable principle) pairs. Requires ~200+ labeled examples.
+4. **LLM-based matching** — Use an LLM to directly evaluate whether a principle applies to a file summary. Higher accuracy, higher cost.
