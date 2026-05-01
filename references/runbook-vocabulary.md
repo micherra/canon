@@ -24,7 +24,7 @@ This file is the single source of truth. The synthesis skill (`references/runboo
 | `review` | reviewer | subagent or team | checkpoint | Principle compliance |
 | `fix` | engineer | subagent | on_failure | Fix mode — requires `cause: test-failure \| security \| review \| verify` |
 | `pre-launch-check` | null | n/a | on_failure | Gate-only — lead runs discovered checks via Bash |
-| `ship` | shipper | subagent | on_failure | Merge worktree branch to main; PR creation when explicitly requested — **mandatory tail** |
+| `ship` | shipper | subagent | on_failure | Create PR from worktree branch to main; direct merge when explicitly requested — **mandatory tail** |
 | `context-sync` | scribe | subagent | none | Doc sync — **mandatory tail** |
 | `learn` | learner | subagent | none | Pattern analysis — **mandatory tail** |
 
@@ -59,7 +59,7 @@ The planner MUST NOT remove baseline HITL from step defaults. The runbook's decl
 
 Every build runbook MUST end with the three mandatory tail steps in order:
 
-1. `ship` — shipper merges the worktree branch to main; PR creation when explicitly requested
+1. `ship` — shipper creates a PR from the worktree branch to main; direct merge when explicitly requested
 2. `context-sync` — scribe updates CLAUDE.md, context.md, and CONVENTIONS.md when contract-level changes occurred during the flow
 3. `learn` — learner analyzes the completed flow for patterns and suggests principle improvements
 
