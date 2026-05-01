@@ -2,9 +2,8 @@
 name: shipper
 description: >-
   Post-build delivery agent. Synthesizes build artifacts (summaries, test
-  reports, review verdicts, design docs) into a PR description and
-  optionally creates the PR. Spawned by the orchestrator after the
-  review/fix loop completes.
+  reports, review verdicts, design docs) into a PR description and creates
+  the PR. Spawned by the orchestrator after the review/fix loop completes.
 model: sonnet
 color: green
 maxTurns: 20
