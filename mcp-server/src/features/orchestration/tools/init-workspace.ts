@@ -17,10 +17,10 @@ import {
   generateSlug,
   sanitizeBranch,
 } from "@domains/workspaces/workspace.ts";
-import { KgQuery } from "@graph/kg-query.ts";
-import { initDatabase } from "@graph/kg-schema.ts";
 import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
-import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { CANON_DIR } from "@shared/constants.ts";
+import { validateRunbookTail } from "../services/runbook-tail-validator.ts";
+import { tryGenerateStructure } from "../services/workspace-structure.ts";
 import { seedFromPriorWorkspace } from "./seed-workspace.ts";
 
 type InitWorkspaceInput = {
@@ -158,55 +158,6 @@ async function runPreflightChecks(
 /** Exported for testing — delegates to runPreflightChecks. */
 export const runPreflightChecksForTest = runPreflightChecks;
 
-/**
- * Extract step IDs from YAML code blocks in runbook content.
- * Matches `id: <value>` entries within fenced code blocks.
- */
-function extractStepIds(runbookContent: string): string[] {
-  // Find all YAML code blocks
-  const codeBlockPattern = /```ya?ml([\s\S]*?)```/g;
-  const stepIds: string[] = [];
-  let match: RegExpExecArray | null;
-
-  // biome-ignore lint/suspicious/noAssignInExpressions: standard regex loop
-  while ((match = codeBlockPattern.exec(runbookContent)) !== null) {
-    const block = match[1];
-    // Extract all `id: <value>` entries in this block
-    const idPattern = /^\s*-\s+id:\s+(\S+)/gm;
-    let idMatch: RegExpExecArray | null;
-    // biome-ignore lint/suspicious/noAssignInExpressions: standard regex loop
-    while ((idMatch = idPattern.exec(block)) !== null) {
-      stepIds.push(idMatch[1]);
-    }
-  }
-
-  return stepIds;
-}
-
-/**
- * Validate that a runbook ends with the mandatory tail: ship → context-sync → learn.
- * Returns a preflight issue message if validation fails, null if valid.
- * Fails closed: if step IDs cannot be parsed, returns an issue.
- */
-function validateRunbookTail(runbookContent: string): string | null {
-  const stepIds = extractStepIds(runbookContent);
-
-  if (stepIds.length === 0) {
-    return "Runbook tail validation: no step IDs found in runbook YAML blocks — cannot verify mandatory tail (ship → context-sync → learn)";
-  }
-
-  const tail = stepIds.slice(-3);
-  if (tail.length < 3 || tail[0] !== "ship" || tail[1] !== "context-sync" || tail[2] !== "learn") {
-    const found = tail.join(" → ");
-    return `Runbook tail validation: last three steps must be "ship → context-sync → learn" but found "${found}". Add the mandatory tail steps in order.`;
-  }
-
-  return null;
-}
-
-/** Exported for testing. */
-export const validateRunbookTailForTest = validateRunbookTail;
-
 function isExpectedNoDbError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException).code;
   const message = err instanceof Error ? err.message : String(err);
@@ -292,81 +243,12 @@ function persistInitialStates(
   }
 }
 
-/** Find the top N hub files by in-degree. */
-function findTopHubs(
-  allDegrees: Map<number, { in_degree: number; out_degree: number }>,
-  fileIdToPath: Map<number, string>,
-  n: number,
-): Array<{ path: string; in_degree: number }> {
-  const entries: Array<{ path: string; in_degree: number }> = [];
-  for (const [fileId, degrees] of allDegrees) {
-    const path = fileIdToPath.get(fileId);
-    if (path !== undefined && degrees.in_degree > 0)
-      entries.push({ in_degree: degrees.in_degree, path });
-  }
-  entries.sort((a, b) => b.in_degree - a.in_degree);
-  return entries.slice(0, n);
-}
-
-/** Generate the project structure section from the KG database. */
-function generateProjectStructure(projectDir: string): string | null {
-  const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  if (!existsSync(kgDbPath)) return null;
-
-  const db = initDatabase(kgDbPath);
-  try {
-    const kgQuery = new KgQuery(db);
-    const allFiles = kgQuery.getAllFilesWithStats();
-
-    const layerCounts = new Map<string, number>();
-    const fileIdToPath = new Map<number, string>();
-    for (const file of allFiles) {
-      if (file.file_id !== undefined) fileIdToPath.set(file.file_id, file.path);
-      const layer = file.layer || "unknown";
-      layerCounts.set(layer, (layerCounts.get(layer) ?? 0) + 1);
-    }
-
-    const layerBreakdown = [...layerCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([layer, count]) => `${layer} (${count} file${count === 1 ? "" : "s"})`)
-      .join(", ");
-
-    const top5 = findTopHubs(kgQuery.getAllFileDegrees(), fileIdToPath, 5);
-    const hubLine =
-      top5.length > 0
-        ? `Hub files (high in-degree): ${top5.map((h) => `${h.path} (${h.in_degree})`).join(", ")}`
-        : "Hub files (high in-degree): none";
-
-    return [
-      "## Project Structure",
-      "",
-      `Layers: ${layerBreakdown || "none"}`,
-      hubLine,
-      `Total files in graph: ${allFiles.length}`,
-    ].join("\n");
-  } finally {
-    db.close();
-  }
-}
-
 async function tryReadFileContent(path: string, label: string): Promise<string | null> {
   if (!existsSync(path)) return null;
   try {
     return await readFile(path, "utf-8");
   } catch (err) {
     console.warn(`[canon] ${label} read failed:`, err instanceof Error ? err.message : err);
-    return null;
-  }
-}
-
-function tryGenerateStructure(projectDir: string): string | null {
-  try {
-    return generateProjectStructure(projectDir);
-  } catch (err) {
-    console.warn(
-      "[canon] project structure generation failed:",
-      err instanceof Error ? err.message : err,
-    );
     return null;
   }
 }

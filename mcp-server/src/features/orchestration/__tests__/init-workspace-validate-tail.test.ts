@@ -25,7 +25,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
-import { initWorkspaceFlow, validateRunbookTailForTest } from "../tools/init-workspace.ts";
+import { validateRunbookTail as validateRunbookTailForTest } from "../services/runbook-tail-validator.ts";
+import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 
