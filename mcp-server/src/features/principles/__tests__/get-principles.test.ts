@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getPrinciples } from "../tools/get-principles.ts";
+import { getPrinciples, getPrinciplesBatch } from "../tools/get-principles.ts";
 
 describe("getPrinciples", () => {
   let tmpDir: string;
@@ -210,5 +210,128 @@ describe("getPrinciples", () => {
       expect(so1!.body).toBe("Opinion body.");
       expect(so1!.body).not.toContain("##");
     });
+  });
+});
+
+describe("getPrinciplesBatch", () => {
+  let tmpDir: string;
+  let pluginDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-gpb-test-"));
+    pluginDir = join(tmpDir, "plugin");
+
+    const rulesDir = join(pluginDir, "principles", "rules");
+    const opinionsDir = join(pluginDir, "principles", "strong-opinions");
+    const conventionsDir = join(pluginDir, "principles", "conventions");
+    await mkdir(rulesDir, { recursive: true });
+    await mkdir(opinionsDir, { recursive: true });
+    await mkdir(conventionsDir, { recursive: true });
+
+    await writeFile(
+      join(rulesDir, "r1.md"),
+      `---\nid: r1\ntitle: Rule One\nseverity: rule\n---\n\nRule body paragraph one.\n\n## Rationale\n\nMore detail here.`,
+    );
+    await writeFile(
+      join(opinionsDir, "so1.md"),
+      `---\nid: so1\ntitle: Opinion One\nseverity: strong-opinion\n---\n\nOpinion body.`,
+    );
+    await writeFile(
+      join(conventionsDir, "c1.md"),
+      `---\nid: c1\ntitle: Convention One\nseverity: convention\n---\n\nConvention body.`,
+    );
+
+    await mkdir(join(tmpDir, ".canon", "principles", "rules"), { recursive: true });
+    await mkdir(join(tmpDir, ".canon", "principles", "strong-opinions"), { recursive: true });
+    await mkdir(join(tmpDir, ".canon", "principles", "conventions"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { force: true, recursive: true });
+  });
+
+  it("returns deduplicated principles across multiple files", async () => {
+    const result = await getPrinciplesBatch(
+      { file_paths: ["src/features/principles/tools/get-principles.ts", "src/shared/matcher.ts"] },
+      tmpDir,
+      pluginDir,
+    );
+    // All 3 principles are returned exactly once (deduplicated by ID)
+    expect(result.total_in_canon).toBe(3);
+    const ids = result.principles.map((p) => p.id);
+    const uniqueIds = new Set(ids);
+    expect(ids.length).toBe(uniqueIds.size);
+  });
+
+  it("returns graph_context_by_file keyed by each file path", async () => {
+    const filePaths = ["src/a.ts", "src/b.ts"];
+    const result = await getPrinciplesBatch({ file_paths: filePaths }, tmpDir, pluginDir);
+    // Both file paths appear as keys in graph_context_by_file
+    expect(Object.keys(result.graph_context_by_file)).toEqual(expect.arrayContaining(filePaths));
+    expect(Object.keys(result.graph_context_by_file)).toHaveLength(filePaths.length);
+  });
+
+  it("handles empty file_paths array gracefully", async () => {
+    const result = await getPrinciplesBatch({ file_paths: [] }, tmpDir, pluginDir);
+    expect(result.principles).toBeDefined();
+    expect(Array.isArray(result.principles)).toBe(true);
+    expect(result.graph_context_by_file).toEqual({});
+    expect(result.total_in_canon).toBeGreaterThan(0);
+  });
+
+  it("applies summary_only formatting to all returned principles", async () => {
+    const result = await getPrinciplesBatch(
+      { file_paths: ["src/a.ts"], summary_only: true },
+      tmpDir,
+      pluginDir,
+    );
+    const rule = result.principles.find((p) => p.id === "r1");
+    expect(rule).toBeDefined();
+    expect(rule!.body).toBe("Rule body paragraph one.");
+    expect(rule!.body).not.toContain("## Rationale");
+  });
+
+  it("applies sections filtering to all returned principles", async () => {
+    // Add a principle with sections
+    const rulesDir = join(pluginDir, "principles", "rules");
+    await writeFile(
+      join(rulesDir, "r-sections.md"),
+      [
+        "---",
+        "id: r-sections",
+        "title: Rule With Sections",
+        "severity: rule",
+        "---",
+        "",
+        "Summary paragraph here.",
+        "",
+        "## Anti-Rationalization",
+        "",
+        "| Excuse | Rebuttal |",
+        "| --- | --- |",
+        "| It's fast | Correctness first |",
+        "",
+        "## Verification",
+        "",
+        "Run: `npm test`",
+      ].join("\n"),
+    );
+
+    const result = await getPrinciplesBatch(
+      { file_paths: ["src/a.ts"], sections: ["verification"] },
+      tmpDir,
+      pluginDir,
+    );
+    const p = result.principles.find((p) => p.id === "r-sections");
+    expect(p).toBeDefined();
+    expect(p!.body).toContain("Summary paragraph here.");
+    expect(p!.body).toContain("## Verification");
+    expect(p!.body).not.toContain("## Anti-Rationalization");
+  });
+
+  it("returns graph_context_by_file with undefined values when KG DB is absent", async () => {
+    const result = await getPrinciplesBatch({ file_paths: ["src/a.ts"] }, tmpDir, pluginDir);
+    // When no KG DB exists, graph_context_by_file values should be undefined
+    expect(result.graph_context_by_file["src/a.ts"]).toBeUndefined();
   });
 });
