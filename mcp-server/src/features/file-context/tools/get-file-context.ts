@@ -599,3 +599,19 @@ export async function getFileContext(
     }),
   });
 }
+
+export async function getFileContextBatch(
+  input: { file_paths: string[] },
+  projectDir: string,
+): Promise<ToolResult<{ results: FileContextOutput[] }>> {
+  const results: FileContextOutput[] = [];
+  for (const fp of input.file_paths) {
+    const result = await getFileContext({ file_path: fp }, projectDir);
+    if (!result.ok) {
+      return toolError(result.error_code, `Error for ${fp}: ${result.message}`);
+    }
+    const { ok, ...data } = result;
+    results.push(data as FileContextOutput);
+  }
+  return toolOk({ results });
+}
