@@ -5,7 +5,7 @@
  * JSON file at `${workspace}/journal.json`.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -75,7 +75,7 @@ describe("logStep", () => {
       workspace,
     });
     await logStep({ status: "started", step_id: "step-a", workspace });
-    await logStep({ status: "completed", step_id: "step-a", workspace });
+    await logStep({ agent_id: "test-agent-01", status: "completed", step_id: "step-a", workspace });
 
     const journal = await readJournalFile(workspace);
     expect(journal.steps).toHaveLength(1);
@@ -89,7 +89,7 @@ describe("logStep", () => {
     expect(journal.steps[0]?.started_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(journal.steps[0]?.completed_at).toBeUndefined();
 
-    await logStep({ status: "completed", step_id: "s1", workspace });
+    await logStep({ agent_id: "test-agent-ts", status: "completed", step_id: "s1", workspace });
     journal = await readJournalFile(workspace);
     expect(journal.steps[0]?.completed_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
@@ -123,6 +123,7 @@ describe("logStep", () => {
     // Create the declared artifact so the new enforcement does not block completion.
     writeFileSync(join(workspace, "plan.md"), "# Plan\n");
     await logStep({
+      agent_id: "test-agent-meta",
       artifacts_expected: ["plan.md"],
       domain_skills_loaded: ["backend-api", "authentication-security"],
       outcome: { fix_iterations: 2, review_verdict: "approve", test_pass_rate: 0.95 },
@@ -149,6 +150,7 @@ describe("verifyCompletion", () => {
     writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
 
     await logStep({
+      agent_id: "test-agent-design",
       artifacts_expected: ["plans/DESIGN.md"],
       status: "completed",
       step_id: "design",
@@ -165,7 +167,7 @@ describe("verifyCompletion", () => {
 
   test("detects steps_missing (started but not completed)", async () => {
     await logStep({ status: "started", step_id: "s1", workspace });
-    await logStep({ status: "completed", step_id: "s2", workspace });
+    await logStep({ agent_id: "test-agent-vc1", status: "completed", step_id: "s2", workspace });
 
     const result = await verifyCompletion({ workspace });
     assertOk(result);
@@ -178,7 +180,7 @@ describe("verifyCompletion", () => {
     // A planned step that never transitioned must block completion —
     // otherwise a forgotten checklist item slips past the gate.
     await logStep({ status: "planned", step_id: "s1", workspace });
-    await logStep({ status: "completed", step_id: "s2", workspace });
+    await logStep({ agent_id: "test-agent-vc2", status: "completed", step_id: "s2", workspace });
 
     const result = await verifyCompletion({ workspace });
     assertOk(result);
@@ -190,7 +192,7 @@ describe("verifyCompletion", () => {
   test("mixed planned + started are both reported as missing", async () => {
     await logStep({ status: "planned", step_id: "s1", workspace });
     await logStep({ status: "started", step_id: "s2", workspace });
-    await logStep({ status: "completed", step_id: "s3", workspace });
+    await logStep({ agent_id: "test-agent-vc3", status: "completed", step_id: "s3", workspace });
 
     const result = await verifyCompletion({ workspace });
     assertOk(result);
@@ -236,7 +238,7 @@ describe("verifyCompletion", () => {
 
   test("handles skipped steps correctly (not counted as missing)", async () => {
     await logStep({ status: "skipped", step_id: "s1", workspace });
-    await logStep({ status: "completed", step_id: "s2", workspace });
+    await logStep({ agent_id: "test-agent-skip", status: "completed", step_id: "s2", workspace });
 
     const result = await verifyCompletion({ workspace });
     assertOk(result);
@@ -247,6 +249,7 @@ describe("verifyCompletion", () => {
 
   test("flow_outcome aggregates domain_skills_used, review_verdict, and fix_iterations", async () => {
     await logStep({
+      agent_id: "test-agent-fo1",
       domain_skills_loaded: ["backend-api"],
       outcome: { fix_iterations: 1 },
       status: "completed",
@@ -254,6 +257,7 @@ describe("verifyCompletion", () => {
       workspace,
     });
     await logStep({
+      agent_id: "test-agent-fo2",
       domain_skills_loaded: ["backend-api", "testing"],
       outcome: { fix_iterations: 2, review_verdict: "approve" },
       status: "completed",
@@ -275,18 +279,21 @@ describe("verifyCompletion", () => {
 
   test("review_verdict reports the LAST verdict, not the first (review→fix→re-review)", async () => {
     await logStep({
+      agent_id: "test-agent-rv1",
       outcome: { review_verdict: "block" },
       status: "completed",
       step_id: "review-1",
       workspace,
     });
     await logStep({
+      agent_id: "test-agent-rv2",
       outcome: { fix_iterations: 2 },
       status: "completed",
       step_id: "fix",
       workspace,
     });
     await logStep({
+      agent_id: "test-agent-rv3",
       outcome: { review_verdict: "approve" },
       status: "completed",
       step_id: "review-2",
@@ -304,6 +311,7 @@ describe("verifyCompletion", () => {
     writeFileSync(join(workspace, "plans", "my-slug", "INDEX.md"), "# I\n");
 
     await logStep({
+      agent_id: "test-agent-glob",
       artifacts_expected: ["plans/my-slug/*.md"],
       status: "completed",
       step_id: "plan",
@@ -318,6 +326,7 @@ describe("verifyCompletion", () => {
 
   test("unresolved ${variable} patterns are surfaced via artifacts_skipped_unresolved", async () => {
     await logStep({
+      agent_id: "test-agent-unresolved",
       artifacts_expected: ["plans/${slug}/DESIGN.md"],
       status: "completed",
       step_id: "plan",
@@ -372,7 +381,7 @@ describe("logStep — transcript capture via agent_id", () => {
     }
   });
 
-  test("without agent_id, no transcript_path in result (backward compat)", async () => {
+  test("without agent_id, completed step is rejected with INVALID_INPUT", async () => {
     const result = await logStep({
       agent_type: "engineer",
       status: "completed",
@@ -380,9 +389,10 @@ describe("logStep — transcript capture via agent_id", () => {
       workspace,
     });
 
-    assertOk(result);
-    expect(result.step_id).toBe("implement-no-capture");
-    expect(result.transcript_path).toBeUndefined();
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+    }
   });
 
   test("agent_id provided but source file missing → step completes, no transcript_path", async () => {
@@ -444,6 +454,150 @@ describe("logStep — transcript capture via agent_id", () => {
       const step = journal.steps.find((s) => s.step_id === "test-step");
       expect(step).toBeDefined();
       expect(step?.transcript_path).toBe(result.transcript_path);
+    } finally {
+      process.env.HOME = originalHome;
+      await rm(fakeHome, { force: true, recursive: true });
+    }
+  });
+});
+
+// ─── agent_id enforcement ─────────────────────────────────────────────────────
+
+describe("logStep — agent_id enforcement", () => {
+  test("completed step without agent_id is rejected; exemptions pass through", async () => {
+    // Rejection: completed + no agent_id + non-exempt step_id
+    const rejected = await logStep({
+      status: "completed",
+      step_id: "some-step",
+      workspace,
+    });
+    expect(isToolError(rejected)).toBe(true);
+    if (isToolError(rejected)) {
+      expect(rejected.error_code).toBe("INVALID_INPUT");
+    }
+
+    // Exemption 1: step_id "inline-fix" bypasses the guard
+    const inlineFix = await logStep({
+      status: "completed",
+      step_id: "inline-fix",
+      workspace,
+    });
+    expect(isToolError(inlineFix)).toBe(false);
+    if (!isToolError(inlineFix)) {
+      expect(inlineFix.step_id).toBe("inline-fix");
+    }
+
+    // Exemption 2: status "skipped" bypasses the guard (skipped steps never have an agent)
+    const skipped = await logStep({
+      status: "skipped",
+      step_id: "skipped-step",
+      workspace,
+    });
+    expect(isToolError(skipped)).toBe(false);
+    if (!isToolError(skipped)) {
+      expect(skipped.step_id).toBe("skipped-step");
+    }
+  });
+
+  test("full capture pipeline — fake JSONL in, Canon transcript out", async () => {
+    const AGENT_ID = "enforce-pipeline-agent-01";
+    const fakeHome = await mkdtemp(join(tmpdir(), "canon-home-enforce-"));
+    plantAgentJsonl(fakeHome, AGENT_ID);
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+
+    try {
+      // Step 1: planned
+      await logStep({
+        agent_type: "engineer",
+        status: "planned",
+        step_id: "enforce-step",
+        workspace,
+      });
+
+      // Step 2: started
+      await logStep({
+        status: "started",
+        step_id: "enforce-step",
+        workspace,
+      });
+
+      // Step 3: completed with agent_id — triggers transcript capture
+      const result = await logStep({
+        agent_id: AGENT_ID,
+        status: "completed",
+        step_id: "enforce-step",
+        workspace,
+      });
+
+      // logStep must succeed
+      assertOk(result);
+      expect(result.transcript_path).toBeDefined();
+      expect(result.transcript_path).not.toBe("");
+
+      // transcripts/ directory must contain a .jsonl file
+      const transcriptsDir = join(workspace, "transcripts");
+      expect(existsSync(transcriptsDir)).toBe(true);
+      const transcriptFiles = readdirSync(transcriptsDir).filter((f) => f.endsWith(".jsonl"));
+      expect(transcriptFiles.length).toBeGreaterThan(0);
+
+      // Read and parse the transcript JSONL — entries must have Canon shape
+      const transcriptContent = await readFile(join(transcriptsDir, transcriptFiles[0]!), "utf-8");
+      const lines = transcriptContent.split("\n").filter((l) => l.trim());
+      expect(lines.length).toBeGreaterThan(0);
+      const firstEntry = JSON.parse(lines[0]!) as Record<string, unknown>;
+      expect(firstEntry).toHaveProperty("role");
+      expect(firstEntry).toHaveProperty("content");
+      expect(firstEntry).toHaveProperty("turn_number");
+      expect(firstEntry).toHaveProperty("timestamp");
+
+      // Journal step must have transcript_path populated
+      const raw = await readFile(join(workspace, "journal.json"), "utf-8");
+      const journal = JSON.parse(raw) as Journal;
+      const step = journal.steps.find((s) => s.step_id === "enforce-step");
+      expect(step).toBeDefined();
+      expect(step?.transcript_path).toBe(result.transcript_path);
+      expect(existsSync(step!.transcript_path!)).toBe(true);
+    } finally {
+      process.env.HOME = originalHome;
+      await rm(fakeHome, { force: true, recursive: true });
+    }
+  });
+
+  test("bogus agent_id (no matching JSONL) — step succeeds with transcript_warning, no transcript file", async () => {
+    const fakeHome = await mkdtemp(join(tmpdir(), "canon-home-bogus-"));
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+
+    try {
+      await logStep({
+        agent_type: "engineer",
+        status: "planned",
+        step_id: "bogus-step",
+        workspace,
+      });
+
+      const result = await logStep({
+        agent_id: "bogus-agent-no-file-xyz",
+        status: "completed",
+        step_id: "bogus-step",
+        workspace,
+      });
+
+      // Call must succeed — agent_id IS provided, missing source is a warning not an error
+      assertOk(result);
+      expect(result.transcript_path).toBeUndefined();
+
+      // A warning must be present explaining why transcript capture failed
+      expect(result.transcript_warning).toBeDefined();
+      expect(result.transcript_warning).toContain("bogus-agent-no-file-xyz");
+
+      // No file should appear in transcripts/ directory
+      const transcriptsDir = join(workspace, "transcripts");
+      if (existsSync(transcriptsDir)) {
+        const transcriptFiles = readdirSync(transcriptsDir).filter((f) => f.endsWith(".jsonl"));
+        expect(transcriptFiles.length).toBe(0);
+      }
     } finally {
       process.env.HOME = originalHome;
       await rm(fakeHome, { force: true, recursive: true });
