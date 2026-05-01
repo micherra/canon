@@ -1,6 +1,6 @@
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import type { FileContextOutput } from "@features/file-context/tools/get-file-context.ts";
-import { getFileContextBatch } from "@features/file-context/tools/get-file-context.ts";
+import { getFileContextBatch } from "@features/file-context/tools/get-file-context-batch.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import type { GetPrinciplesBatchOutput } from "@features/principles/tools/get-principles.ts";
 import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";

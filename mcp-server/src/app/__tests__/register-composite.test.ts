@@ -13,7 +13,7 @@ vi.mock("@features/principles/tools/get-principles.ts", () => ({
   getPrinciplesBatch: vi.fn(),
 }));
 
-vi.mock("@features/file-context/tools/get-file-context.ts", () => ({
+vi.mock("@features/file-context/tools/get-file-context-batch.ts", () => ({
   getFileContextBatch: vi.fn(),
 }));
 
@@ -27,7 +27,7 @@ vi.mock("@features/knowledge-graph/tools/graph-query.ts", () => ({
 
 // Import after mocks are set up
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
-import { getFileContextBatch } from "@features/file-context/tools/get-file-context.ts";
+import { getFileContextBatch } from "@features/file-context/tools/get-file-context-batch.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
 
