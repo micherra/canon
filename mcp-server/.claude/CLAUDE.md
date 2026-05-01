@@ -12,7 +12,7 @@ ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for sch
 
 ```
 src/
-├── app/                  # Entry point — tool registration (index.ts, all handlers via wrapHandler)
+├── app/                  # Entry point — tool registration (index.ts, register-*.ts, all handlers via wrapHandler)
 ├── domains/              # Shared domain types and persistence
 │   ├── board/            # Board mutation logic (pure functions)
 │   ├── drift/            # Drift/review type definitions
@@ -43,7 +43,7 @@ src/
 - **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-04-26 (NF-12: capture_transcript tool added; CaptureTranscriptInput, CaptureTranscriptResult, ClaudeCodeEntry types exported from features/orchestration) -->
+<!-- last-updated: 2026-04-30 (P0 composite MCP tool: get_context, getPrinciplesBatch, getFileContextBatch, PrinciplesGraphContext export) -->
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -176,6 +176,17 @@ src/
 - `CANON_FILES.SUMMARIES` — REMOVED; `summaries.json` no longer written
 - Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 
+**Principles — Batch** (`src/features/principles/tools/get-principles.ts`) — added 2026-04-30:
+- `PrinciplesGraphContext` — exported type (was private); `{ in_degree, out_degree, is_hub, in_cycle, impact_score, layer }`
+- `GetPrinciplesBatchInput` — `{ file_paths: string[] }`
+- `GetPrinciplesBatchOutput` — `{ file_paths: string[]; principles: Array<{ id, name, severity, body, applies_to_files }>; graph_context: Record<string, PrinciplesGraphContext> }`
+- `getPrinciplesBatch(input: GetPrinciplesBatchInput, projectDir, pluginDir)` → `Promise<GetPrinciplesBatchOutput>` — deduplicates principles by ID across files; opens KG DB once; `applies_to_files` lists which input files each principle matched; `graph_context` keyed by file path
+- Existing `getPrinciples` function unchanged
+
+**File Context — Batch** (`src/features/file-context/tools/get-file-context-batch.ts`) — added 2026-04-30:
+- `getFileContextBatch(input: { file_paths: string[] }, projectDir: string)` → `Promise<ToolResult<{ results: FileContextOutput[] }>>` — calls `getFileContext` per file via `Promise.all`; fail-closed: if any file fails, the entire batch returns the error; empty `file_paths` returns empty results array
+- Exported from separate file to stay under line-count lint limit; does NOT modify `get-file-context.ts`
+
 **File Context** (`src/features/file-context/tools/get-file-context.ts`):
 - `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`, `hotspot_score?: HotspotScoreOutput`, `co_change_partners?: Array<CoChangePartner>` — git-intel fields added 2026-04-08
 - `loadKgData(dbPath, filePath, projectDir?)` — exported for testing; third `projectDir` param triggers `ensureGitIntelFresh` and populates `hotspot_score` and `co_change_partners`; co-change query uses UNION across both edge directions
@@ -234,6 +245,19 @@ src/
 | `show_pr_impact` | `ui://canon/pr-review` | PR Review — change analysis (always), blast radius, hotspots, violations, subgraph (when stored review exists) |
 | `codebase_graph` | `ui://canon/codebase-graph` | Interactive dependency graph with compliance overlay |
 | `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
+
+**Composite context tool:**
+
+| Tool | Purpose |
+|------|---------|
+| `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContextBatch`, `getDriftReport`, `graphQuery` in a single call; `include` param gates sections (default: all) |
+
+**`get_context` tool** (`src/app/register-composite.ts`) — added 2026-04-30:
+- `registerCompositeTools()` — registers `get_context` MCP tool; called by `index.ts`
+- Input: `file_paths: string[]` (required), `include?: Array<"principles"|"file_context"|"drift"|"graph">` (defaults to all 4 sections)
+- Returns `{ ok: true, file_paths, principles?, file_context?, drift?, graph? }` — sections present only when included
+- `file_context` errors propagated (fail-closed); graph query failures skipped gracefully (KG may not be indexed)
+- `GetContextOutput` type exported for test assertions
 
 **Text-only principle/review tools:**
 
