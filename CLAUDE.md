@@ -178,7 +178,7 @@ If no `task-dag.yaml` exists, fall back to sequential step execution (existing b
      - Working instructions: worktree creation command, commit provenance trailers, task completion protocol
    - For tasks with `depends_on`: call `TaskUpdate({ addBlockedBy: [dependent_task_ids] })` after creation
 
-3. **Enrichment follows the MCP Tool Composition table**: Call `resolve_agent_skills`, `get_principles`, and `get_file_context` before creating each task, exactly as done for subagent spawns.
+3. **Enrichment follows the MCP Tool Composition table**: Call `resolve_agent_skills` and `get_context(include: ["principles", "file_context"])` before creating each task, exactly as done for subagent spawns.
 
 #### Worker Dispatch
 
@@ -270,13 +270,13 @@ Table of which Canon MCP tools to call before spawning each step type:
 | Step type | MCP tools to call |
 |-----------|------------------|
 | Any step before spawn | `resolve_agent_skills` (preloaded rules + references injected into the spawn prompt) |
-| Design | `get_principles`, `get_file_context`, `graph_query` |
-| Implement | `get_principles`, `get_file_context`, `get_drift_report` |
-| Review | `get_principles`, `get_drift_report` |
-| Test | `get_principles`, `get_file_context` |
-| Security | `get_principles`, `get_file_context` |
+| Design | `get_context(include: ["principles", "file_context", "graph"])` |
+| Implement | `get_context(include: ["principles", "file_context", "drift"])` |
+| Review | `get_context(include: ["principles", "drift"])` |
+| Test | `get_context(include: ["principles", "file_context"])` |
+| Security | `get_context(include: ["principles", "file_context"])` |
 
-Include results in the spawn prompt. Agents also have direct MCP access and will self-serve missing context (via `agent-context-check` skill).
+`get_context` is a composite tool that batches multiple lookups into a single MCP round-trip. Include results in the spawn prompt. Agents also have direct MCP access and will self-serve missing context (via `agent-context-check` skill).
 
 ### Dispatch Framework
 
