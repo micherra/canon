@@ -84,31 +84,47 @@ function matchesScopeTags(p: Principle, computedTags: string[] | undefined): boo
   return computedTags.some((t) => p.scope.tags!.includes(t));
 }
 
+/**
+ * Check if a principle passes the layer/scope-tags gate.
+ * When both scope.tags and computed_tags are present, OR semantics apply:
+ * either a layer match or a tag match is sufficient. Otherwise, layer-only.
+ */
+function passesLayerGate(
+  p: Principle,
+  layers: string[],
+  computedTags: string[] | undefined,
+): boolean {
+  const layersMatch = matchesLayers(p, layers);
+  const hasScopeTags = (p.scope.tags?.length ?? 0) > 0;
+  const hasComputedTags = (computedTags?.length ?? 0) > 0;
+  if (hasScopeTags && hasComputedTags) {
+    return layersMatch || matchesScopeTags(p, computedTags);
+  }
+  return layersMatch;
+}
+
+/**
+ * Check if a principle passes all active filters.
+ * Layers OR scope.tags: principle matches if either signal matches.
+ * When computed_tags are available and scope.tags is set, a tag match
+ * can compensate for a layer mismatch (the whole point of this feature).
+ */
+function principleMatchesFilters(p: Principle, filters: MatchFilters, layers: string[]): boolean {
+  if (p.archived && !filters.include_archived) return false;
+  if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
+  if (!passesLayerGate(p, layers, filters.computed_tags)) return false;
+  if (!matchesFilePattern(p, filters.file_path)) return false;
+  if (!matchesTags(p, filters.tags)) return false;
+  return true;
+}
+
 export function matchPrinciples(principles: Principle[], filters: MatchFilters): Principle[] {
   const layers =
     filters.layers ||
     (filters.file_path ? ([inferLayer(filters.file_path)].filter(Boolean) as string[]) : []);
 
   return principles
-    .filter((p) => {
-      if (p.archived && !filters.include_archived) return false;
-      if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
-
-      // Layers OR scope.tags: principle matches if either signal matches.
-      // When computed_tags are available and scope.tags is set, a tag match
-      // can compensate for a layer mismatch (the whole point of this feature).
-      const layersMatch = matchesLayers(p, layers);
-      const tagsMatch = matchesScopeTags(p, filters.computed_tags);
-      if (p.scope.tags && p.scope.tags.length > 0 && filters.computed_tags && filters.computed_tags.length > 0) {
-        if (!layersMatch && !tagsMatch) return false;
-      } else {
-        if (!layersMatch) return false;
-      }
-
-      if (!matchesFilePattern(p, filters.file_path)) return false;
-      if (!matchesTags(p, filters.tags)) return false;
-      return true;
-    })
+    .filter((p) => principleMatchesFilters(p, filters, layers))
     .sort((a, b) => {
       const sevDiff = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
       if (sevDiff !== 0) return sevDiff;

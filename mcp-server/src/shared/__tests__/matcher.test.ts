@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { inferLayer, matchPrinciples } from "../matcher.ts";
-import { parsePrinciple } from "../parser.ts";
 import type { Principle } from "../parser.ts";
+import { parsePrinciple } from "../parser.ts";
 
 function makePrinciple(overrides: Partial<Principle> = {}): Principle {
   return {
@@ -192,8 +192,8 @@ describe("matchPrinciples", () => {
       ];
       // computed_tags has error-handling, layers don't match (api vs [])
       const result = matchPrinciples(principles, {
-        layers: ["api"],
         computed_tags: ["error-handling"],
+        layers: ["api"],
       });
       expect(result.map((p) => p.id)).toContain("error-scoped");
     });
@@ -218,7 +218,7 @@ describe("matchPrinciples", () => {
         id: "api-only",
         scope: { file_patterns: [], layers: ["api"], tags: ["error-handling"] },
       });
-      const result = matchPrinciples([api], { layers: ["api"], computed_tags: [] });
+      const result = matchPrinciples([api], { computed_tags: [], layers: ["api"] });
       expect(result.map((p) => p.id)).toContain("api-only");
     });
 
@@ -229,8 +229,8 @@ describe("matchPrinciples", () => {
       });
       // layers match but computed_tags doesn't intersect
       const result = matchPrinciples([p], {
-        layers: ["api"],
         computed_tags: ["observability"],
+        layers: ["api"],
       });
       expect(result.map((p) => p.id)).toContain("both");
     });
@@ -242,8 +242,8 @@ describe("matchPrinciples", () => {
       });
       // layers don't match but computed_tags does
       const result = matchPrinciples([p], {
-        layers: ["ui"],
         computed_tags: ["error-handling"],
+        layers: ["ui"],
       });
       expect(result.map((p) => p.id)).toContain("tag-match");
     });
@@ -254,8 +254,8 @@ describe("matchPrinciples", () => {
         scope: { file_patterns: [], layers: ["api"], tags: ["error-handling"] },
       });
       const result = matchPrinciples([p], {
-        layers: ["ui"],
         computed_tags: ["observability"],
+        layers: ["ui"],
       });
       expect(result).toHaveLength(0);
     });
