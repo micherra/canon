@@ -231,8 +231,7 @@ function groupByCommunity(
   const groups = new Map<number, Array<{ file_id: number }>>();
   for (const file of allFiles) {
     if (file.file_id === undefined) continue;
-    // community_id is in the files table but not in getAllFilesWithStats return type
-    const communityId = (file as unknown as { community_id?: number | null }).community_id;
+    const communityId = file.community_id;
     if (communityId === null || communityId === undefined) continue;
 
     let group = groups.get(communityId);

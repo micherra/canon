@@ -52,6 +52,8 @@ export type FileRow = {
   language: string;
   layer: string;
   last_indexed_at: number;
+  /** Community assignment from Louvain detection; null when not yet computed. */
+  community_id?: number | null;
 };
 
 /** Matches the `entities` table. `entity_id` is undefined before DB insert. */
