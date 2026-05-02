@@ -117,9 +117,9 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
 
   test("consultation spawns get tool scope from their agent profile", () => {
     const consultation: ConsultationPromptEntry = {
-      agent: "canon:researcher",
-      name: "research-consult",
-      prompt: "Consult on the research",
+      agent: "canon:reviewer",
+      name: "review-consult",
+      prompt: "Consult on the review",
       role: "consultation",
     };
     const reqs = buildSpawnRequests([baseEntry()], [consultation]);
@@ -127,9 +127,9 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
     expect(consultReq).toBeDefined();
     expect(consultReq!.tools).toBeDefined();
     expect(consultReq!.tools!.length).toBeGreaterThan(0);
-    // researcher has Write/Edit in base disallowed → isReadOnly → auto even without worktreePath
+    // reviewer has Write/Edit in base disallowed → isReadOnly → auto even without worktreePath
     expect(consultReq!.permission_mode).toBe("auto");
-    // researcher has Edit/Write/NotebookEdit disallowed
+    // reviewer has Edit/Write/NotebookEdit disallowed
     expect(consultReq!.disallowed_tools).toContain("Edit");
   });
 });

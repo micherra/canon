@@ -429,24 +429,23 @@ describe("pipeline error paths — pre-pipeline early returns", () => {
 // and appears in the final SpawnPromptResult.
 
 describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
-  it("researcher state produces entries with tools and disallowed_tools from registry", async () => {
+  it("reviewer state produces entries with tools and disallowed_tools from registry", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { research: "Research the codebase." },
+      spawn_instructions: { review: "Review the codebase." },
       states: {
         done: { type: "terminal" },
-        research: { agent: "researcher", type: "single" },
+        review: { agent: "reviewer", type: "single" },
       },
     });
 
-    const result = await assemblePrompt(makeInput(workspace, { flow, state_id: "research" }));
+    const result = await assemblePrompt(makeInput(workspace, { flow, state_id: "review" }));
 
     expect(result.prompts).toHaveLength(1);
     const entry = result.prompts[0];
-    // researcher is allowed to read and search, but not write
+    // reviewer is allowed to read and search, but not write
     expect(entry.tools).toContain("Read");
     expect(entry.tools).toContain("Grep");
-    expect(entry.tools).toContain("WebFetch");
     expect(entry.disallowed_tools).toContain("Edit");
     expect(entry.disallowed_tools).toContain("Write");
   });
@@ -454,22 +453,22 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
   it("tool_overrides.allow on state merges extra tool into allowed list", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
-      spawn_instructions: { research: "Research the codebase." },
+      spawn_instructions: { review: "Review the codebase." },
       states: {
         done: { type: "terminal" },
-        research: {
-          agent: "researcher",
-          tool_overrides: { allow: ["Edit"] },
+        review: {
+          agent: "reviewer",
+          tool_overrides: { allow: ["ExtraTool"] },
           type: "single",
         },
       },
     });
 
-    const result = await assemblePrompt(makeInput(workspace, { flow, state_id: "research" }));
+    const result = await assemblePrompt(makeInput(workspace, { flow, state_id: "review" }));
 
     expect(result.prompts).toHaveLength(1);
     const entry = result.prompts[0];
-    // researcher base has "Edit" in disallowed, but allow override is applied first,
+    // reviewer base has "Edit" in disallowed, but allow override is applied first,
     // and disallowed wins — so Edit should still be excluded because disallowed wins
     // (This tests that the pipeline passes overrides to the resolver correctly)
     expect(entry.tools).toBeDefined();
