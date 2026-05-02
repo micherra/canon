@@ -8,7 +8,6 @@ import { CANON_DIR, CANON_FILES, extractSummary } from "@shared/constants.ts";
 import { loadConfigNumber } from "@shared/lib/config.ts";
 import { loadAllPrinciples, matchPrinciples } from "@shared/matcher.ts";
 import { filterBodyBySections } from "@shared/parser.ts";
-import { rerankPrinciples } from "@shared/principle-reranker.ts";
 
 export type GetPrinciplesInput = {
   file_path?: string;
@@ -108,22 +107,7 @@ export async function getPrinciples(
     layers: input.layers,
   });
 
-  // Apply reranker when file content is available; otherwise fall back to slice
-  let top = matched.slice(0, maxPrinciples);
-  if (input.file_path && matched.length > maxPrinciples) {
-    try {
-      const { readFile } = await import("node:fs/promises");
-      const { resolve } = await import("node:path");
-      const absPath = resolve(projectDir, input.file_path);
-      const rawContent = await readFile(absPath, "utf-8");
-      const lines = rawContent.split("\n").slice(0, 200).join("\n");
-      const reranked = await rerankPrinciples(matched, lines, input.file_path, maxPrinciples);
-      const idIndex = new Map(matched.map((p) => [p.id, p]));
-      top = reranked.selected.map((id) => idIndex.get(id)).filter((p) => p !== undefined);
-    } catch {
-      // Reranker failed — fall back to the already-sliced top
-    }
-  }
+  const top = matched.slice(0, maxPrinciples);
 
   return {
     graph_context,

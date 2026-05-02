@@ -4,19 +4,8 @@ import { join } from "node:path";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { FileRow } from "@graph/kg-types.ts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getPrinciples } from "../tools/get-principles.ts";
-
-// Mock Anthropic SDK to prevent real API calls (reranker may be triggered)
-vi.mock("@anthropic-ai/sdk", () => {
-  return {
-    default: vi.fn(() => ({
-      messages: {
-        create: vi.fn().mockRejectedValue(new Error("Mocked — no real API calls in tests")),
-      },
-    })),
-  };
-});
 
 describe("getPrinciples", () => {
   let tmpDir: string;
@@ -279,7 +268,6 @@ describe("getPrinciples — computed_tags from KG", () => {
 
   afterEach(async () => {
     await rm(tmpDir, { force: true, recursive: true });
-    vi.clearAllMocks();
   });
 
   it("returns results (graceful degradation) when no KG database exists", async () => {
