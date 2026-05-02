@@ -158,6 +158,7 @@ export async function getPrinciplesBatch(
   pluginDir: string,
 ): Promise<GetPrinciplesBatchOutput> {
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
+  const maxPrinciples = await loadMaxPrinciples(projectDir);
 
   const deduped = new Map<string, (typeof allPrinciples)[number]>();
   for (const filePath of input.file_paths) {
@@ -171,12 +172,14 @@ export async function getPrinciplesBatch(
   }
 
   const sections = input.sections ?? [];
-  const principles = Array.from(deduped.values()).map((p) => ({
-    body: formatPrincipleBody(p, input.summary_only, sections),
-    id: p.id,
-    severity: p.severity,
-    title: p.title,
-  }));
+  const principles = Array.from(deduped.values())
+    .slice(0, maxPrinciples)
+    .map((p) => ({
+      body: formatPrincipleBody(p, input.summary_only, sections),
+      id: p.id,
+      severity: p.severity,
+      title: p.title,
+    }));
 
   let graph_context_by_file: Record<string, PrinciplesGraphContext | undefined> = {};
   if (input.file_paths.length > 0) {

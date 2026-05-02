@@ -43,16 +43,17 @@ afterEach(() => {
   tmpDirs = [];
 });
 
-// Helper to build a minimal runbook YAML code block with given step IDs
+// Helper to build a minimal runbook YAML code block with given step IDs.
+// Uses the real runbook format: `id: <value>` (no leading dash).
 function makeRunbook(stepIds: string[]): string {
   const steps = stepIds
     .map(
-      (id, _i) => `\`\`\`yaml
-- id: ${id}
-  agent: engineer
-  artifacts:
-    - outcome:done
-  hitl: none
+      (id) => `\`\`\`yaml
+id: ${id}
+agent: engineer
+artifacts:
+  - outcome:done
+hitl: none
 \`\`\``,
     )
     .join("\n\n");
@@ -102,6 +103,47 @@ describe("validateRunbookTail", () => {
     const runbook = makeRunbook(["implement", "verify", "ship"]);
     const result = validateRunbookTailForTest(runbook);
     expect(result).not.toBeNull();
+  });
+
+  it("parses real runbook template format — multi-field YAML blocks with no leading dash", () => {
+    // Reproduces the actual planner output format where each step is a YAML block
+    // with `id:` at the top level (no leading `- id:`).
+    const realFormatRunbook = `# Runbook
+
+\`\`\`yaml
+id: implement
+agent: engineer
+artifacts:
+  - plans/SUMMARY.md
+hitl: none
+\`\`\`
+
+\`\`\`yaml
+id: ship
+agent: shipper
+artifacts:
+  - outcome:done
+hitl: none
+\`\`\`
+
+\`\`\`yaml
+id: context-sync
+agent: scribe
+artifacts:
+  - outcome:done
+hitl: none
+\`\`\`
+
+\`\`\`yaml
+id: learn
+agent: learner
+artifacts:
+  - outcome:done
+hitl: none
+\`\`\`
+`;
+    const result = validateRunbookTailForTest(realFormatRunbook);
+    expect(result).toBeNull();
   });
 });
 

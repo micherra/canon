@@ -118,7 +118,7 @@ describe("register-composite handler", () => {
       expect(result.principles).toEqual(mockPrinciplesResult);
       expect(result.file_context).toEqual(mockFileContextResult.results);
       expect(result.drift).toEqual(mockDriftResult);
-      expect(result.graph).toEqual(mockGraphResult);
+      expect(result.graph).toEqual([mockGraphResult]);
     });
 
     it("includes file_paths and include in response metadata", async () => {

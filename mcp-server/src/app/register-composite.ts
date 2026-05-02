@@ -80,17 +80,23 @@ async function handleGetContext(input: {
   }
 
   if (sections.includes("graph")) {
-    // graph section: skip gracefully when KG is not indexed
+    // graph section: skip gracefully when KG is not indexed.
+    // Query blast_radius for each file and aggregate the results.
     tasks.push(
       Promise.resolve().then(() => {
         if (input.file_paths.length === 0) return;
-        const target = input.file_paths[0];
-        const result = graphQuery({ query_type: "blast_radius", target }, projectDir);
-        if (!result.ok) {
-          // KG not indexed or other recoverable error — skip gracefully
-          return;
+        const aggregated: unknown[] = [];
+        for (const target of input.file_paths) {
+          const result = graphQuery({ query_type: "blast_radius", target }, projectDir);
+          if (!result.ok) {
+            // KG not indexed or other recoverable error — skip this file gracefully
+            continue;
+          }
+          aggregated.push(result);
         }
-        output.graph = result;
+        if (aggregated.length > 0) {
+          output.graph = aggregated;
+        }
       }),
     );
   }
