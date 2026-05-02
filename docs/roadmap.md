@@ -15,7 +15,6 @@ The v2.1a soak period (2026-04-23 to 2026-04-30) validated the transition from C
 - **Runbook synthesis** — the planner synthesizes a runbook from a canonical step vocabulary per build, replacing 10 hardcoded flow YAML files
 - **Sequential subagent orchestration** — the orchestrator reads the approved runbook and spawns agents one at a time via the `Agent` tool; no state machine involved
 - **Workspace + journal system** — `init_workspace`, `log_step`, `batch_log_steps`, `verify_completion` create and track per-build workspaces with artifact contracts
-- **DAG parallel dispatch** — when the architect's `task-dag.yaml` has 2+ root tasks, the orchestrator uses Claude Code native teams (`TeamCreate`/`TaskCreate`/`TaskList`) for parallel execution within a step
 - **Knowledge graph** — `codebase_graph`, `graph_query`, `semantic_search`, `get_file_context`, `get_context` (composite) provide principle-grounded context for every agent spawn
 - **58 principles** — rules, strong-opinions, and conventions covering architecture, testing, error handling, and more
 - **Review + PR tools** — `write_review`, `store_pr_review`, `show_pr_impact`, `review_code`
@@ -68,6 +67,12 @@ Expected outcome: 30–40% reduction in `mcp-server/src/features/orchestration/`
 #### v2.1c: SubagentStop hook for architect
 
 When the architect finishes, check for `task-dag.yaml` and inject a DAG summary into the orchestrator context. This closes the feedback loop so the orchestrator knows a DAG is present before the implement step begins.
+
+#### v2.1d: Validate DAG parallel dispatch end-to-end
+
+The DAG execution protocol is fully specified in CLAUDE.md: the architect produces `task-dag.yaml`, the orchestrator detects it, calls `TeamCreate`/`TaskCreate`/`TaskList`, spawns N worker engineers, and merges results. The `dag-validator.ts` utility exists in `mcp-server/src/shared/lib/`. However, no build has ever triggered this path — all 20 soak runs were small/medium scope with single-task implementations. The protocol is specified but unexercised.
+
+To validate: run any build with a design step and 2+ separable implementation tasks (e.g., a feature touching both a data layer and a UI layer). The architect should produce a `task-dag.yaml` with two root tasks. The orchestrator should create a team, spawn two workers, and merge results. This path is a prerequisite to claiming DAG parallel dispatch as shipped.
 
 #### Cleanup
 
