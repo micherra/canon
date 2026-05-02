@@ -4,6 +4,7 @@ import { z } from "zod";
 import { gatedWrapHandler, pluginDir, projectDir, server } from "./server-state.ts";
 
 export function registerFlowCoreTools(): void {
+  if (process.env.CANON_AGENT_TEAMS_MODE === "on") return;
   server.registerTool(
     "load_flow",
     {
