@@ -11,6 +11,8 @@ export type MatchFilters = {
   file_path?: string;
   severity_filter?: "rule" | "strong-opinion" | "convention";
   tags?: string[];
+  /** Tags computed from the KG for the target file. Used for tag-based scope matching (OR vs layers). */
+  computed_tags?: string[];
   include_archived?: boolean;
 };
 
@@ -68,6 +70,20 @@ function matchesTags(p: Principle, tags: string[] | undefined): boolean {
   return tags.some((t) => p.tags.includes(t));
 }
 
+/**
+ * Check if a file's computed tags intersect with a principle's scope.tags.
+ *
+ * Returns true when:
+ * - principle has no scope.tags (backward compat — matches all files)
+ * - computed_tags is empty/undefined (no KG data — skip tag filter)
+ * - intersection of scope.tags and computed_tags is non-empty
+ */
+function matchesScopeTags(p: Principle, computedTags: string[] | undefined): boolean {
+  if (!p.scope.tags || p.scope.tags.length === 0) return true;
+  if (!computedTags || computedTags.length === 0) return true;
+  return computedTags.some((t) => p.scope.tags!.includes(t));
+}
+
 export function matchPrinciples(principles: Principle[], filters: MatchFilters): Principle[] {
   const layers =
     filters.layers ||
@@ -77,7 +93,18 @@ export function matchPrinciples(principles: Principle[], filters: MatchFilters):
     .filter((p) => {
       if (p.archived && !filters.include_archived) return false;
       if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
-      if (!matchesLayers(p, layers)) return false;
+
+      // Layers OR scope.tags: principle matches if either signal matches.
+      // When computed_tags are available and scope.tags is set, a tag match
+      // can compensate for a layer mismatch (the whole point of this feature).
+      const layersMatch = matchesLayers(p, layers);
+      const tagsMatch = matchesScopeTags(p, filters.computed_tags);
+      if (p.scope.tags && p.scope.tags.length > 0 && filters.computed_tags && filters.computed_tags.length > 0) {
+        if (!layersMatch && !tagsMatch) return false;
+      } else {
+        if (!layersMatch) return false;
+      }
+
       if (!matchesFilePattern(p, filters.file_path)) return false;
       if (!matchesTags(p, filters.tags)) return false;
       return true;
