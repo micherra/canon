@@ -177,10 +177,10 @@ src/
 - Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 
 **Principles — Batch** (`src/features/principles/tools/get-principles.ts`) — added 2026-04-30:
-- `PrinciplesGraphContext` — exported type (was private); `{ in_degree, out_degree, is_hub, in_cycle, impact_score, layer }`
-- `GetPrinciplesBatchInput` — `{ file_paths: string[] }`
-- `GetPrinciplesBatchOutput` — `{ file_paths: string[]; principles: Array<{ id, name, severity, body, applies_to_files }>; graph_context: Record<string, PrinciplesGraphContext> }`
-- `getPrinciplesBatch(input: GetPrinciplesBatchInput, projectDir, pluginDir)` → `Promise<GetPrinciplesBatchOutput>` — deduplicates principles by ID across files; opens KG DB once; `applies_to_files` lists which input files each principle matched; `graph_context` keyed by file path
+- `PrinciplesGraphContext` — exported type; `{ in_degree, out_degree, is_hub, in_cycle, impact_score }` (no `layer` field)
+- `GetPrinciplesBatchInput` — `{ file_paths: string[]; layers?: string[]; task_description?: string; summary_only?: boolean; sections?: string[] }`
+- `GetPrinciplesBatchOutput` — `{ principles: Array<{ id, title, severity, body }>; total_matched: number; total_in_canon: number; graph_context_by_file: Record<string, PrinciplesGraphContext | undefined> }`
+- `getPrinciplesBatch(input: GetPrinciplesBatchInput, projectDir, pluginDir)` → `Promise<GetPrinciplesBatchOutput>` — deduplicates principles by ID across files; opens KG DB once; `graph_context_by_file` keyed by file path
 - Existing `getPrinciples` function unchanged
 
 **File Context — Batch** (`src/features/file-context/tools/get-file-context-batch.ts`) — added 2026-04-30:

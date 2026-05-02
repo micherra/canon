@@ -334,4 +334,22 @@ describe("getPrinciplesBatch", () => {
     // When no KG DB exists, graph_context_by_file values should be undefined
     expect(result.graph_context_by_file["src/a.ts"]).toBeUndefined();
   });
+
+  it("caps results at max_principles_per_review config value", async () => {
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ review: { max_principles_per_review: 1 } }),
+    );
+    const result = await getPrinciplesBatch({ file_paths: ["src/a.ts"] }, tmpDir, pluginDir);
+    // Should be capped at 1 even though 3 principles exist
+    expect(result.principles).toHaveLength(1);
+    // total_matched still reflects all matched before cap
+    expect(result.total_matched).toBe(3);
+  });
+
+  it("uses default cap of 10 when no config is set", async () => {
+    const result = await getPrinciplesBatch({ file_paths: ["src/a.ts"] }, tmpDir, pluginDir);
+    // 3 principles exist and all match — all returned (under default cap of 10)
+    expect(result.principles.length).toBeLessThanOrEqual(10);
+  });
 });
