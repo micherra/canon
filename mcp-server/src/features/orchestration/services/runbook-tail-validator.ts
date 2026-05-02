@@ -5,7 +5,7 @@
 
 /**
  * Extract step IDs from YAML code blocks in runbook content.
- * Matches `- id: <value>` entries within fenced code blocks.
+ * Matches both `- id: <value>` (list item) and bare `id: <value>` entries within fenced code blocks.
  */
 export function extractStepIds(runbookContent: string): string[] {
   // Find all YAML code blocks
