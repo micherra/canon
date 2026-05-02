@@ -13,11 +13,14 @@
 import path from "node:path";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import type { Database } from "better-sqlite3";
+import { detectCommunities } from "./kg-community.ts";
 import { EmbeddingService } from "./kg-embedding.ts";
 import type { FileImportMap } from "./kg-pipeline-phases.ts";
 import { parsePhase2, resolveLinkPhases, shouldReindex } from "./kg-pipeline-phases.ts";
+import { KgQuery } from "./kg-query.ts";
 import { initDatabase } from "./kg-schema.ts";
 import { KgStore } from "./kg-store.ts";
+import { propagateAllTags } from "./kg-tags.ts";
 import { KgVectorStore } from "./kg-vector-store.ts";
 import { initParsers } from "./kg-wasm-parser.ts";
 import { scanSourceFiles } from "./scanner.ts";
@@ -46,6 +49,10 @@ export type PipelineResult = {
   edgesTotal: number;
   durationMs: number;
   embeddingsGenerated?: number;
+  /** Number of distinct communities detected during Phase 5. */
+  communitiesDetected?: number;
+  /** Total number of file tags computed during Phase 6. */
+  tagsComputed?: number;
 };
 
 export type ReindexResult = {
@@ -159,6 +166,36 @@ async function runEmbedPhase(
   }
 }
 
+type PhaseResult = {
+  communityResult: ReturnType<typeof detectCommunities>;
+  tagResult: ReturnType<typeof propagateAllTags>;
+  embedResult: Awaited<ReturnType<typeof runEmbedPhase>>;
+};
+
+/** Phases 5-7: Community detection, tag propagation, and embedding. */
+async function runEnrichmentPhases(
+  db: Database,
+  store: KgStore,
+  progress: NonNullable<PipelineOptions["onProgress"]>,
+): Promise<PhaseResult> {
+  // Phase 5: Community detection
+  progress("community", 0, 0);
+  const kgQuery = new KgQuery(db);
+  const adjacencyList = kgQuery.getFileAdjacencyList();
+  const communityResult = detectCommunities(adjacencyList, store);
+  progress("community", communityResult.filesAssigned, communityResult.filesAssigned);
+
+  // Phase 6: Tag propagation
+  progress("tags", 0, 0);
+  const tagResult = propagateAllTags(store, kgQuery);
+  progress("tags", tagResult.totalTags, tagResult.totalTags);
+
+  // Phase 7: Embed
+  const embedResult = await runEmbedPhase(db, progress);
+
+  return { communityResult, embedResult, tagResult };
+}
+
 /** Phase 1: Scan files and determine which need reindexing. */
 async function scanAndFilterPhase(
   store: KgStore,
@@ -233,17 +270,23 @@ export async function runPipeline(
       progress,
     });
 
-    // Phase 5: Embed
-    const embedResult = await runEmbedPhase(db, progress);
+    // Phases 5-7: Community detection, tag propagation, embedding
+    const { communityResult, tagResult, embedResult } = await runEnrichmentPhases(
+      db,
+      store,
+      progress,
+    );
 
     const stats = store.getStats();
     return {
+      communitiesDetected: communityResult.communityCount,
       durationMs: Date.now() - startMs,
       edgesTotal: stats.edges + stats.fileEdges,
       embeddingsGenerated: embedResult.entitiesEmbedded + embedResult.summariesEmbedded,
       entitiesTotal: stats.entities,
       filesScanned: relPaths.length,
       filesUpdated,
+      tagsComputed: tagResult.totalTags,
     };
   } finally {
     store.close();

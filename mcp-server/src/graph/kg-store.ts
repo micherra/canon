@@ -7,7 +7,14 @@
  */
 
 import type Database from "better-sqlite3";
-import type { EdgeRow, EntityRow, FileEdgeRow, FileRow, FileTagRow, SummaryRow } from "./kg-types.ts";
+import type {
+  EdgeRow,
+  EntityRow,
+  FileEdgeRow,
+  FileRow,
+  FileTagRow,
+  SummaryRow,
+} from "./kg-types.ts";
 
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean
 
