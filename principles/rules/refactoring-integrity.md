@@ -4,6 +4,9 @@ title: Refactoring Must Be Substantive, Not Cosmetic
 severity: rule
 scope:
   layers: []
+  tags:
+    - refactoring
+    - code-structure
 tags:
   - ddd
   - refactoring
