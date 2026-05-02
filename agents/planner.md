@@ -102,7 +102,7 @@ Before issuing `graph_query` or `semantic_search` calls:
    - The request involves integration tests or server-side validation
    - The request involves protocol or architecture changes
 
-   Research notes may be omitted ONLY when ALL of the following are true: the request is a single-file scoped fix with no architectural questions, the runbook has exactly 1 implement step, and the runbook has no design step.
+   **Precedence**: If ANY trigger above matches, research notes are required — the omission path below does not apply. Research notes may be omitted ONLY when NONE of the triggers above match AND ALL of the following are true: the request is a single-file scoped fix with no architectural questions, the runbook has exactly 1 implement step, and the runbook has no design step.
 
    The orchestrator captures this section and persists it as `${WORKSPACE}/plans/${slug}/research-notes.md` post-init. The section must summarize:
    - Relevant files and modules discovered via `get_file_context`, `graph_query`, or `semantic_search`

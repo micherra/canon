@@ -39,8 +39,12 @@ describe("AC1: planner.md uses positive criteria (required by default)", () => {
     expect(plannerContent).toMatch(/ANY of the following.*true/is);
   });
 
-  it("lists narrow exemption conditions (ALL of the following must be true to omit)", () => {
-    expect(plannerContent).toMatch(/omitted ONLY when ALL of the following.*true/is);
+  it("lists narrow exemption conditions with explicit precedence", () => {
+    expect(plannerContent).toMatch(/omitted ONLY when NONE of the triggers.*match.*AND ALL of the following.*true/is);
+  });
+
+  it("has explicit precedence statement (triggers override omission)", () => {
+    expect(plannerContent).toMatch(/Precedence.*ANY trigger.*matches.*required/is);
   });
 });
 
@@ -113,6 +117,10 @@ describe("AC3: CLAUDE.md has validation check between planner return and runbook
     expect(claudeContent).toMatch(/re-spawn.*planner|re-running.*planner|Re-running.*planner/is);
   });
 
+  it("re-runs steps 2-3 on re-spawned planner output", () => {
+    expect(claudeContent).toMatch(/re-run steps 2.*3.*new output/is);
+  });
+
   it("proceeds silently when research notes are present", () => {
     expect(claudeContent).toMatch(
       /Research Notes.*section.*proceed silently/is
@@ -154,14 +162,14 @@ describe("AC4: validation check uses the same 'trivial' criteria as the planner"
   it("planner.md exemption criteria match CLAUDE.md trivial criteria (same 3 conditions)", () => {
     // Extract the planner's exemption criteria
     const plannerExemptionMatch = plannerContent.match(
-      /omitted ONLY when ALL.*?(?=\n\s*The orchestrator|\n\s*\d+\.)/is
+      /omitted ONLY when NONE.*?(?=\n\s*The orchestrator|\n\s*\d+\.)/is
     );
     expect(plannerExemptionMatch).not.toBeNull();
     const plannerExemption = plannerExemptionMatch![0].toLowerCase();
 
     // Extract CLAUDE.md trivial criteria
     const claudeTrivialMatch = claudeContent.match(
-      /trivial.*?ALL of the following must be true.*?(?=Then:|\.)/is
+      /trivial.*?ALL of the following.*?true.*?(?=Then:|\.)/is
     );
     expect(claudeTrivialMatch).not.toBeNull();
     const claudeTrivial = claudeTrivialMatch![0].toLowerCase();
@@ -176,7 +184,7 @@ describe("AC4: validation check uses the same 'trivial' criteria as the planner"
 
 describe("AC5: legitimately-skipped builds still correctly skip under new threshold", () => {
   const exemptionMatch = plannerContent.match(
-    /omitted ONLY when ALL of the following are true:([\s\S]*?)(?=\n\s*The orchestrator)/i
+    /omitted ONLY when NONE of the triggers above match AND ALL of the following are true:([\s\S]*?)(?=\n\s*The orchestrator)/i
   );
 
   it("exemption criteria exist in planner.md", () => {
