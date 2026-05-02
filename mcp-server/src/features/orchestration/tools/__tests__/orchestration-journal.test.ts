@@ -177,8 +177,6 @@ describe("verifyCompletion", () => {
   });
 
   test("counts planned steps as missing (PR #119 P1 fix)", async () => {
-    // A planned step that never transitioned must block completion —
-    // otherwise a forgotten checklist item slips past the gate.
     await logStep({ status: "planned", step_id: "s1", workspace });
     await logStep({ agent_id: "test-agent-vc2", status: "completed", step_id: "s2", workspace });
 
@@ -202,10 +200,8 @@ describe("verifyCompletion", () => {
   });
 
   test("detects artifacts_missing when a completed step has missing artifacts (journal written directly)", async () => {
-    // logStep now mechanically refuses to complete steps with missing artifacts,
-    // so we simulate a pre-existing journal (e.g., from a prior run, manual edit,
-    // or migrated workspace) where a step was already marked completed but its
-    // artifact is absent. verifyCompletion must still catch this.
+    // Simulate a pre-existing journal where a step is completed but its artifact is absent.
+    // verifyCompletion must still catch this.
     const journal: Journal = {
       steps: [
         {
@@ -507,7 +503,6 @@ describe("logStep — agent_id enforcement", () => {
     process.env.HOME = fakeHome;
 
     try {
-      // Step 1: planned
       await logStep({
         agent_type: "engineer",
         status: "planned",
@@ -515,7 +510,6 @@ describe("logStep — agent_id enforcement", () => {
         workspace,
       });
 
-      // Step 2: started
       await logStep({
         status: "started",
         step_id: "enforce-step",
