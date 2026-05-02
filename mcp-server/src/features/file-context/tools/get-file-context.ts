@@ -96,6 +96,8 @@ export type FileContextOutput = {
   hotspot_score?: HotspotScoreOutput;
   /** Co-change partners from git history. Present when git intel data is available. */
   co_change_partners?: Array<CoChangePartner>;
+  /** Computed tags from community detection and tag propagation pipeline. */
+  computed_tags?: string[];
 };
 
 // Module-level cache for project_max_impact
@@ -314,6 +316,7 @@ export function loadKgData(
   imported_by: string[];
   hotspot_score?: HotspotScoreOutput;
   co_change_partners?: Array<CoChangePartner>;
+  computed_tags?: string[];
 } {
   const result = {
     imported_by: [] as string[],
@@ -349,6 +352,12 @@ export function loadKgData(
     loadEntitiesAndSummary(store, filePath, result);
     result.imported_by = loadImportedByFromDb(db, store, filePath);
     result.blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2 });
+
+    // Look up computed tags from community detection / tag propagation pipeline
+    const tagRows = kgQuery.getFileTagsByPath(filePath);
+    if (tagRows.length > 0) {
+      result.computed_tags = tagRows.map((r) => r.tag);
+    }
 
     // Git-intel: only when projectDir is provided (second loadKgData call in getFileContext).
     // The first call (inside resolveFileRelationships) intentionally omits projectDir
@@ -597,5 +606,6 @@ export async function getFileContext(
     ...(kgData.co_change_partners !== undefined && {
       co_change_partners: kgData.co_change_partners,
     }),
+    ...(kgData.computed_tags !== undefined && { computed_tags: kgData.computed_tags }),
   });
 }
