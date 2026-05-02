@@ -68,6 +68,30 @@ export function initBoard(flow: ResolvedFlow, task: string, baseCommit: string):
 }
 
 /**
+ * Create a minimal Board for agent-teams mode workspaces.
+ * Does not depend on ResolvedFlow — states and iterations are empty.
+ * The entry and current_state are set to "init" as a placeholder;
+ * the agent-teams orchestrator does not use the legacy state machine.
+ */
+export function initBoardMinimal(flowName: string, task: string, baseCommit: string): Board {
+  const now = new Date().toISOString();
+  return {
+    base_commit: baseCommit,
+    blocked: null,
+    concerns: [],
+    current_state: "init",
+    entry: "init",
+    flow: flowName,
+    iterations: {},
+    last_updated: now,
+    skipped: [],
+    started: now,
+    states: {},
+    task,
+  };
+}
+
+/**
  * Enter a state — sets status to in_progress, increments entries, and
  * optionally increments iteration count.
  *
