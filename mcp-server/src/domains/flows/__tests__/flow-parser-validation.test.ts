@@ -1,14 +1,11 @@
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type {
   FlowDefinition,
   FragmentDefinition,
   FragmentInclude,
 } from "../flow-definition-schemas.ts";
-import { loadAndResolveFlow, resolveFragments } from "../flow-parser.ts";
+import { resolveFragments } from "../flow-parser.ts";
 import { validateFlow, validateStateIdParams } from "../flow-parser-validation.ts";
-
-const pluginDir = resolve(process.cwd(), "..");
 
 // validateStateIdParams
 
@@ -251,86 +248,6 @@ describe("resolveFragments — typed params", () => {
   });
 });
 
-// loadAndResolveFlow (real files)
-
-describe("loadAndResolveFlow", () => {
-  it("loads the review-only flow from real files", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "review-only");
-
-    expect(flow.name).toBe("review-only");
-    expect(flow.entry).toBe("review");
-    expect(flow.states.review).toBeDefined();
-    expect(flow.states.done).toBeDefined();
-    expect(flow.states.review.type).toBe("single");
-    expect(flow.states.review.agent).toBe("reviewer");
-    expect(flow.states.done.type).toBe("terminal");
-
-    // Should have spawn instruction for review
-    expect(flow.spawn_instructions.review).toBeDefined();
-    expect(flow.spawn_instructions.review).toContain("git diff");
-  });
-
-  it("fast-path execute state has agent: engineer", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "fast-path");
-
-    expect(flow.name).toBe("fast-path");
-    expect(flow.entry).toBe("execute");
-    expect(flow.states.execute).toBeDefined();
-    expect(flow.states.execute.agent).toBe("engineer");
-  });
-});
-
-// Integration: all 11 production flows load with no unresolved ${...} refs
-
-const ALL_FLOWS = [
-  "feature",
-  "epic",
-  "refactor",
-  "migrate",
-  "fast-path",
-  "review-only",
-  "test-gap",
-  "explore",
-  "security-audit",
-  "adopt",
-] as const;
-
-describe("all production flows: load without errors (integration)", () => {
-  for (const flowName of ALL_FLOWS) {
-    it(`${flowName} loads without throwing`, async () => {
-      const flow = await loadAndResolveFlow(pluginDir, flowName);
-      expect(flow).toBeDefined();
-      expect(flow.entry).toBeDefined();
-    });
-  }
-});
-
-describe("all production flows: no unresolved ${...} references after fragment substitution", () => {
-  for (const flowName of ALL_FLOWS) {
-    it(`${flowName} has no unresolved variable refs`, async () => {
-      const flow = await loadAndResolveFlow(pluginDir, flowName);
-      const errors = validateFlow(flow).filter((e) => e.includes("unresolved reference"));
-      expect(errors, `${flowName}: ${errors.join(", ")}`).toEqual([]);
-    });
-  }
-});
-
-describe("all production flows: all non-terminal states have spawn instructions", () => {
-  for (const flowName of ALL_FLOWS) {
-    it(`${flowName} has full spawn coverage`, async () => {
-      const flow = await loadAndResolveFlow(pluginDir, flowName);
-      const errors = validateFlow(flow).filter((e) => e.includes("no spawn instruction"));
-      expect(errors, `${flowName}: ${errors.join(", ")}`).toEqual([]);
-    });
-  }
-});
-
-describe("all production flows: all transition targets are valid states", () => {
-  for (const flowName of ALL_FLOWS) {
-    it(`${flowName} has no broken transitions`, async () => {
-      const flow = await loadAndResolveFlow(pluginDir, flowName);
-      const errors = validateFlow(flow).filter((e) => e.includes("targets non-existent state"));
-      expect(errors, `${flowName}: ${errors.join(", ")}`).toEqual([]);
-    });
-  }
-});
+// Integration tests that loaded real flow YAML files from disk have been removed.
+// The flow YAML files in flows/ were deleted as part of agent-teams decoupling (delete-flows-06).
+// The flow-parser machinery is fully tested above using inline fixtures.

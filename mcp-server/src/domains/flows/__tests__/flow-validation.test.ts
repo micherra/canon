@@ -9,7 +9,6 @@
  * Also tests that loadAndResolveFlow throws (hard-blocking) on validation errors.
  */
 
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import { loadAndResolveFlow } from "../flow-parser.ts";
@@ -19,8 +18,6 @@ import {
   validateFlow,
   validateSpawnCoverage,
 } from "../flow-parser-validation.ts";
-
-const pluginDir = resolve(process.cwd(), "..");
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
@@ -338,14 +335,6 @@ describe("validateFlow — new passes", () => {
 // Hard-blocking: loadAndResolveFlow throws on validation errors
 
 describe("loadAndResolveFlow — hard-blocking validation", () => {
-  it("loads the review-only flow without errors (regression — no LoadFlowResult.errors field)", async () => {
-    // After removing the errors field, loadAndResolveFlow returns just ResolvedFlow
-    const flow = await loadAndResolveFlow(pluginDir, "review-only");
-    expect(flow.name).toBe("review-only");
-    expect(flow.states.review).toBeDefined();
-    expect(flow.states.done).toBeDefined();
-  });
-
   it("throws an Error for invalid flow name characters (path traversal)", async () => {
     await expect(loadAndResolveFlow("/some/dir", "../../etc/passwd")).rejects.toThrow();
   });
@@ -356,27 +345,8 @@ describe("loadAndResolveFlow — hard-blocking validation", () => {
     );
   });
 
-  it("all 10 production flows load successfully with hard-blocking validation", async () => {
-    const flows = [
-      "review-only",
-      "epic",
-      "feature",
-      "fast-path",
-      "refactor",
-      "migrate",
-      "explore",
-      "test-gap",
-      "security-audit",
-      "adopt",
-    ];
-
-    await Promise.all(
-      flows.map((flowName) =>
-        expect(
-          loadAndResolveFlow(pluginDir, flowName),
-          `Flow "${flowName}" should load without throwing`,
-        ).resolves.toBeDefined(),
-      ),
-    );
-  });
+  // Tests that loaded real flow YAML files (review-only, all 10 production flows)
+  // have been removed. The flows/ directory was deleted as part of agent-teams
+  // decoupling (delete-flows-06). The hard-blocking throw contract is covered by
+  // the path-traversal and not-found tests above.
 });

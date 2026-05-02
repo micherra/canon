@@ -34,7 +34,7 @@ import {
 } from "@domains/flows/flow-parser-validation.ts";
 import { describe, expect, it } from "vitest";
 
-const pluginDir = resolve(process.cwd(), ".."); // mcp-server/src/__tests__ → project root
+const pluginDir = resolve(process.cwd(), ".."); // mcp-server/ → project root (no flows/ dir anymore)
 
 // Helper
 
@@ -370,56 +370,10 @@ describe("FragmentStateDefinitionSchema — malformed state edge cases", () => {
   });
 });
 
-// 6. Boolean typed param substitution (verify-fix-loop write_tests pattern)
-
-describe("resolveFragments — boolean typed param (write_tests pattern)", () => {
-  it("substitutes boolean typed param value as string in spawn instructions", async () => {
-    // Load the feature flow which includes verify-fix-loop with write_tests: boolean
-    // The flow must load cleanly — if boolean substitution is broken this would throw
-    const flow = await loadAndResolveFlow(pluginDir, "feature");
-    expect(flow).toBeDefined();
-    // The feature flow includes verify-fix-loop; check that no ${write_tests} refs remain.
-    // write_tests should be substituted (either "false" literal or absent as a runtime var)
-    // RUNTIME_VARIABLES includes write_tests, so it may appear there — but should not appear
-    // as an unresolved fragment param reference
-    const refErrors = checkUnresolvedRefs(flow).filter((e) => e.includes("write_tests"));
-    expect(refErrors).toEqual([]);
-  });
-});
-
-// 7. Cross-task integration: typed params → state_id validation → real flow load
-
-describe("Cross-task: typed param state_id validation with real production flows", () => {
-  it("feature flow: all fragment state_id params resolve to real states", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "feature");
-    // This exercises validateStateIdParams inside loadAndResolveFlow —
-    // any invalid state_id typed param in a fragment include would have thrown
-    expect(flow.entry).toBeDefined();
-    expect(Object.keys(flow.states).length).toBeGreaterThan(0);
-  });
-
-  it("security-audit flow: on_critical hitl default is valid", async () => {
-    // The security-scan fragment has on_critical: { type: state_id, default: hitl }
-    // hitl is a virtual sink — should not throw during state_id validation
-    const flow = await loadAndResolveFlow(pluginDir, "security-audit");
-    expect(flow).toBeDefined();
-  });
-
-  it("refactor flow: all typed state_id params resolve", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "refactor");
-    expect(flow).toBeDefined();
-    // validateFlow must be clean (only warnings allowed)
-    const errors = validateFlow(flow).filter((m) => !m.startsWith("Warning:"));
-    expect(errors).toEqual([]);
-  });
-
-  it("migrate flow: typed params and fragment substitution produce clean flow", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "migrate");
-    expect(flow).toBeDefined();
-    const errors = validateFlow(flow).filter((m) => !m.startsWith("Warning:"));
-    expect(errors).toEqual([]);
-  });
-});
+// Tests 6 and 7 that loaded real production flow YAML files have been removed.
+// The flows/ directory was deleted as part of agent-teams decoupling (delete-flows-06).
+// Boolean typed param substitution and typed state_id param validation are covered
+// by the inline fixture tests above.
 
 // 8. validateSpawnCoverage: parallel state type coverage
 

@@ -158,23 +158,10 @@ afterAll(async () => {
   await rm(tmpDir, { force: true, recursive: true });
 });
 
-// Plugin-only resolution (no projectDir) — backward compat
-
-describe("loadAndResolveFlow — plugin-only (no projectDir)", () => {
-  it("loads the feature flow from plugin dir without projectDir", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "feature");
-
-    expect(flow.name).toBe("feature");
-    expect(flow.entry).toBeDefined();
-  });
-
-  it("loads review-only from plugin dir (regression check)", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "review-only");
-
-    expect(flow.name).toBe("review-only");
-    expect(flow.entry).toBe("review");
-  });
-});
+// Plugin-only resolution tests have been removed.
+// The flows/ directory was deleted as part of agent-teams decoupling (delete-flows-06).
+// These tests verified that loadAndResolveFlow resolved flows from the plugin flows/ dir,
+// which no longer exists.
 
 // Project-level flow resolution
 
@@ -188,26 +175,13 @@ describe("loadAndResolveFlow — project-level resolution", () => {
     expect(flow.states.research.agent).toBe("researcher");
   });
 
-  it("project-level flow overrides plugin-level flow of the same name", async () => {
-    // The project has a "feature.md" that overrides the plugin's "feature.md"
+  it("project-level flow can be loaded (no plugin-level override check — flows/ deleted)", async () => {
+    // The project has a "feature.md" override; plugin flows/ is deleted
     const projectFlow = await loadAndResolveFlow(pluginDir, "feature", projectDir);
-    const pluginFlow = await loadAndResolveFlow(pluginDir, "feature");
 
     // Project flow has "build" state with custom-implementor
     expect(projectFlow.states.build).toBeDefined();
     expect(projectFlow.states.build.agent).toBe("custom-implementor");
-
-    // Plugin flow uses a different structure (no "build" state with custom-implementor)
-    // The plugin feature flow uses "design", "implement", etc.
-    expect(pluginFlow.states.build).toBeUndefined();
-  });
-
-  it("falls back to plugin flow when flow not in project dir", async () => {
-    // review-only is only in plugin dir; project dir does not have it
-    const flow = await loadAndResolveFlow(pluginDir, "review-only", projectDir);
-
-    expect(flow.name).toBe("review-only");
-    expect(flow.entry).toBe("review");
   });
 
   it("throws informative error when flow not found in either location", async () => {
@@ -228,19 +202,6 @@ describe("loadFragment — project dir first", () => {
     expect(definition.states?.["frag-work"]?.agent).toBe("project-agent");
   });
 
-  it("loads fragment from plugin dir when projectDir provided but fragment not in project dir", async () => {
-    // "implement-verify" only exists in plugin dir
-    const { definition } = await loadFragment(pluginDir, "implement-verify", projectDir);
-
-    expect(definition.fragment).toBe("implement-verify");
-  });
-
-  it("loads fragment from plugin dir when no projectDir provided (backward compat)", async () => {
-    const { definition } = await loadFragment(pluginDir, "implement-verify");
-
-    expect(definition.fragment).toBe("implement-verify");
-  });
-
   it("loads targeted-research fragment with skip_when from project dir", async () => {
     const { definition } = await loadFragment(pluginDir, "targeted-research", projectDir);
 
@@ -248,6 +209,9 @@ describe("loadFragment — project dir first", () => {
     expect(definition.type).toBe("consultation");
     expect(definition.skip_when).toBe("no_open_questions");
   });
+
+  // Tests that loaded plugin-level fragments (implement-verify) have been removed.
+  // The flows/fragments/ directory was deleted as part of agent-teams decoupling (delete-flows-06).
 });
 
 // Mixed resolution — project-level fragment referenced in project-level flow
