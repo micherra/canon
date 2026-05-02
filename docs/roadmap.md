@@ -180,11 +180,11 @@ The items below are independent of the coordination layer. Each is scoped to pri
 
 ### Tier 4: Cross-Session Learning and History
 
-#### 17. Background Janitor Agent
+#### 17. Expand Janitor Scope (Full Housekeeping Agent)
 
-**What:** A single background agent that owns all housekeeping: pruning stale worktrees and merged-branch workspaces, checkpointing databases, extracting decision records from completed builds, trimming old transcripts, refreshing the knowledge graph, and running the learner when its gate opens. Triggered automatically after builds and on session start.
+**What:** The basic janitor (worktree pruning, workspace archival, database checkpointing) shipped in soak run #4. The planned expansion adds the remaining housekeeping capabilities: extracting decision records from completed builds, trimming old transcripts, refreshing the knowledge graph, and triggering the learner when its gate opens.
 
-**Why:** Half of Canon's housekeeping runs inline at build completion (making each build slower as features accumulate) and the other half depends on manual action or optional git hooks. A single idempotent janitor fixes all of it without blocking any build.
+**Why:** The shipped janitor covers the most common cleanup cases, but Canon's deeper housekeeping still runs inline at build completion (slowing builds as features accumulate) or depends on manual action. Expanding the janitor to own all housekeeping makes each build faster and removes the dependency on optional git hooks.
 
 #### 18. Short-Term Memory for Recently-Touched Areas
 
