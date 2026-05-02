@@ -163,7 +163,7 @@ the debate has converged and there's nothing meaningful left to discuss, say so 
 - **Channel**: `debate-round-{N}` (e.g., `debate-round-1`, `debate-round-3`)
 - **Sender**: `round-{N}-{team-slug}-{agent-slug}` — slugified lowercase, non-alphanumeric characters replaced with hyphens
 
-Example: round 2, team "Team Alpha", agent "researcher" → `round-2-team-alpha-researcher`
+Example: round 2, team "Team Alpha", agent "architect" → `round-2-team-alpha-architect`
 
 ### Convergence Detection
 

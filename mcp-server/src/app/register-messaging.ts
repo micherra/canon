@@ -30,7 +30,7 @@ export function registerMessagingTools(): void {
         action: z
           .enum(["start", "complete"])
           .describe("Whether the agent is starting or completing work"),
-        agent: z.string().describe("Agent name (e.g. 'researcher', 'engineer')"),
+        agent: z.string().describe("Agent name (e.g. 'engineer', 'architect')"),
         artifacts: z
           .array(z.string())
           .optional()
