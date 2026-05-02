@@ -208,4 +208,53 @@ describe("register-composite handler", () => {
       expect(result.graph).toBeUndefined();
     });
   });
+
+  describe("graph section: queries all file paths, not just the first", () => {
+    it("calls graphQuery once per file path and returns all successful results", async () => {
+      const mockGraphResult2 = {
+        count: 1,
+        ok: true as const,
+        query_type: "blast_radius" as const,
+        results: [{ depth: 2, name: "baz" }],
+        target: "src/bar.ts",
+      };
+      vi.mocked(graphQuery)
+        .mockReturnValueOnce(mockGraphResult)
+        .mockReturnValueOnce(mockGraphResult2);
+
+      const result = (await handler({
+        file_paths: ["src/foo.ts", "src/bar.ts"],
+        include: ["graph"],
+      })) as Record<string, unknown>;
+
+      expect(graphQuery).toHaveBeenCalledTimes(2);
+      expect(graphQuery).toHaveBeenCalledWith(
+        { query_type: "blast_radius", target: "src/foo.ts" },
+        "/mock/project",
+      );
+      expect(graphQuery).toHaveBeenCalledWith(
+        { query_type: "blast_radius", target: "src/bar.ts" },
+        "/mock/project",
+      );
+      expect(result.graph).toEqual([mockGraphResult, mockGraphResult2]);
+    });
+
+    it("skips failed files but includes successful ones in the aggregate", async () => {
+      vi.mocked(graphQuery).mockReturnValueOnce(mockGraphResult).mockReturnValueOnce({
+        error_code: "KG_NOT_INDEXED",
+        message: "KG not indexed",
+        ok: false,
+        recoverable: true,
+      });
+
+      const result = (await handler({
+        file_paths: ["src/foo.ts", "src/bar.ts"],
+        include: ["graph"],
+      })) as Record<string, unknown>;
+
+      expect(graphQuery).toHaveBeenCalledTimes(2);
+      // Only the first file succeeded; result is still present but with one entry
+      expect(result.graph).toEqual([mockGraphResult]);
+    });
+  });
 });
