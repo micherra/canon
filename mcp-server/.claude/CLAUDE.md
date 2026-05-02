@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-04-09 (bounded-context refactor: directory tree updated to reflect new layout under app/, domains/, features/, platform/, shared/) -->
+<!-- last-updated: 2026-05-02 (unified graph intelligence: kg-community.ts + kg-tags.ts added; register-composite.ts, get-file-context-batch.ts, workspace-structure.ts, runbook-tail-validator.ts, principle-reranker.ts removed) -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -39,11 +39,20 @@ src/
 **Key subsystems:**
 - **Drift tracking** (`platform/storage/drift/`) — JSONL-backed store for reviews with auto-rotation
 - **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs; `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01)
-- **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity
+- **Community detection** (`features/knowledge-graph/kg-community.ts`) — Louvain algorithm assigns `community_id` to each file in the KG; added 2026-05-02
+- **Tag propagation** (`features/knowledge-graph/kg-tags.ts`) — 4-signal pipeline (directory, imports, community, cross-ref) writes computed tags to `file_tags` table; used by `get-principles` and `get-file-context`; added 2026-05-02
+- **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity; OR semantics: matches if layers OR scope.tags intersect (updated 2026-05-02)
 - **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
+**Removed modules** (2026-05-02):
+- ~~`src/app/register-composite.ts`~~ — composite tool registration removed 2026-05-02 (get_context inlined or restructured)
+- ~~`src/features/file-context/tools/get-file-context-batch.ts`~~ — batch file context helper removed 2026-05-02
+- ~~`workspace-structure.ts`~~ — workspace structure service removed 2026-05-02
+- ~~`runbook-tail-validator.ts`~~ — tail validator removed 2026-05-02
+- ~~`principle-reranker.ts`~~ — LLM-based reranker removed 2026-05-02; replaced by structural tag matching via `matchesScopeTags`
+
 ## Contracts
-<!-- last-updated: 2026-04-30 (P0 composite MCP tool: get_context, getPrinciplesBatch, getFileContextBatch, PrinciplesGraphContext export) -->
+<!-- last-updated: 2026-05-02 (unified graph intelligence: community detection, tag propagation, semantic principle matching, scope.tags OR semantics) -->
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -92,10 +101,12 @@ src/
 - `ExecutionStore.transaction()` — now wraps the callback in `withRetry` internally; callers see transparent SQLITE_BUSY retry — updated 2026-04-09
 - `updateExecution`, `upsertState`, `upsertIteration` — annotated `@internal`; tool handlers should call `updateExecutionVersioned` instead of `updateExecution` directly — updated 2026-04-09
 
-**KG schema** (`src/graph/kg-schema.ts`) — updated 2026-04-08 (git-intel Phase 1):
-- `SCHEMA_VERSION = "4"` — bumped from `"3"`; migration v4 adds `hotspot_scores` and `co_change_edges` tables to all DBs initialized via `initDatabase()`
+**KG schema** (`src/graph/kg-schema.ts`) — updated 2026-04-08 (git-intel Phase 1); updated 2026-05-02 (community detection + tag propagation):
+- `SCHEMA_VERSION = "5"` — bumped from `"4"`; migration v5 adds `community_id` column on `files` table and new `file_tags` table
 - `hotspot_scores` table — columns: `file_path TEXT PRIMARY KEY`, `churn_raw`, `churn_percentile`, `complexity_raw`, `complexity_pctile`, `score`, `is_hotspot INTEGER`, `computed_at_commit TEXT`
 - `co_change_edges` table — columns: `file_a TEXT`, `file_b TEXT`, `co_count INTEGER`, `jaccard REAL`, `computed_at_commit TEXT`; indexes on both `file_a` and `file_b`; pair keys normalized alphabetically (`file_a <= file_b`)
+- `file_tags` table (v5) — stores computed tags per file from 4-signal tag propagation pipeline
+- `community_id` column (v5) — `INTEGER NULL` on `files` table; assigned by Louvain community detection
 
 **Execution schema** (`src/domains/workspaces/execution-schema.ts`) — updated 2026-04-01 (ADR-004); updated 2026-04-09 (migration v11):
 <!-- last-updated: 2026-04-09 (SCHEMA_VERSION bumped to "11"; migration v11 adds version column) -->
@@ -138,9 +149,10 @@ src/
 **`get_drift_report` tool** (`src/features/diagnostics/tools/get-drift-report.ts`):
 - Output field `pr_reviews` is `ReviewEntry[]` (was `PrReviewEntry[]` until 2026-03-25); entries are filtered by `pr_number !== undefined || branch !== undefined`
 
-**Knowledge Graph types** (`src/graph/kg-types.ts`) — updated ADR-005 2026-04-01:
+**Knowledge Graph types** (`src/graph/kg-types.ts`) — updated ADR-005 2026-04-01; updated 2026-05-02 (community detection):
 - `FileMetrics` interface — `{ in_degree, out_degree, is_hub, in_cycle, cycle_peers: string[], layer, layer_violation_count, layer_violations: LayerViolation[], impact_score }`
 - `LayerViolation` interface — `{ target: string; source_layer: string; target_layer: string }`
+- `FileRow` type gained `community_id?: number | null` (schema v5 migration)
 
 **KgQuery** (`src/graph/kg-query.ts`) — updated ADR-005 2026-04-01:
 - `computeImpactScore(inDegree, violationCount, isChanged, layer)` → `number` — re-exported (moved from deleted `query.ts`); uses `LAYER_CENTRALITY` from `constants.ts`
@@ -176,6 +188,24 @@ src/
 - `CANON_FILES.SUMMARIES` — REMOVED; `summaries.json` no longer written
 - Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 
+**Principle parser types** (`src/shared/parser.ts`) — updated 2026-05-02:
+- `PrincipleScope` type gained `tags?: string[]` — optional computed tags field; used for KG-tag-based principle matching
+
+**Principle matcher** (`src/shared/matcher.ts`) — updated 2026-05-02:
+- `MatchFilters` type gained `computed_tags?: string[]` — KG-computed tags for the file being matched
+- `matchPrinciples(principles, filters)` — now uses OR semantics: a principle matches if its layers intersect the file's layers OR its `scope.tags` intersect the file's `computed_tags`; previously layers-only
+- `matchesScopeTags(principle, computedTags: string[]): boolean` — new export; returns `true` when principle `scope.tags` and `computedTags` share at least one tag
+
+**`get-principles` tool** (`src/features/principles/tools/get-principles.ts`) — updated 2026-05-02:
+- Now loads KG computed tags via `loadKgFileData` helper and passes `computed_tags` to `matchPrinciples`; tag-based matching active when KG is indexed
+
+**`get-file-context` tool** (`src/features/file-context/tools/get-file-context.ts`) — updated 2026-05-02:
+- `FileContextOutput` now surfaces `computed_tags?: string[]` — KG-propagated tags for the file
+
+**`graph_query` tool** (`src/features/knowledge-graph/`) — updated 2026-05-02:
+- Entity results now include `computed_tags?: string[]` — tags propagated via 4-signal pipeline
+- New optional input param `min_confidence?: number` — filters tag results by confidence threshold
+
 **Principles — Batch** (`src/features/principles/tools/get-principles.ts`) — added 2026-04-30:
 - `PrinciplesGraphContext` — exported type; `{ in_degree, out_degree, is_hub, in_cycle, impact_score }` (no `layer` field)
 - `GetPrinciplesBatchInput` — `{ file_paths: string[]; layers?: string[]; task_description?: string; summary_only?: boolean; sections?: string[] }`
@@ -183,9 +213,8 @@ src/
 - `getPrinciplesBatch(input: GetPrinciplesBatchInput, projectDir, pluginDir)` → `Promise<GetPrinciplesBatchOutput>` — deduplicates principles by ID across files; opens KG DB once; `graph_context_by_file` keyed by file path
 - Existing `getPrinciples` function unchanged
 
-**File Context — Batch** (`src/features/file-context/tools/get-file-context-batch.ts`) — added 2026-04-30:
-- `getFileContextBatch(input: { file_paths: string[] }, projectDir: string)` → `Promise<ToolResult<{ results: FileContextOutput[] }>>` — calls `getFileContext` per file via `Promise.all`; fail-closed: if any file fails, the entire batch returns the error; empty `file_paths` returns empty results array
-- Exported from separate file to stay under line-count lint limit; does NOT modify `get-file-context.ts`
+**File Context — Batch** (`src/features/file-context/tools/get-file-context-batch.ts`) — added 2026-04-30; ~~REMOVED 2026-05-02~~:
+- ~~`getFileContextBatch(input: { file_paths: string[] }, projectDir: string)` → `Promise<ToolResult<{ results: FileContextOutput[] }>>` — removed 2026-05-02~~
 
 **File Context** (`src/features/file-context/tools/get-file-context.ts`):
 - `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`, `hotspot_score?: HotspotScoreOutput`, `co_change_partners?: Array<CoChangePartner>` — git-intel fields added 2026-04-08
@@ -252,12 +281,12 @@ src/
 |------|---------|
 | `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContextBatch`, `getDriftReport`, `graphQuery` in a single call; `include` param gates sections (default: all) |
 
-**`get_context` tool** (`src/app/register-composite.ts`) — added 2026-04-30:
-- `registerCompositeTools()` — registers `get_context` MCP tool; called by `index.ts`
+**`get_context` tool** (`src/app/register-composite.ts`) — added 2026-04-30; ~~`register-composite.ts` removed 2026-05-02~~:
 - Input: `file_paths: string[]` (required), `include?: Array<"principles"|"file_context"|"drift"|"graph">` (defaults to all 4 sections)
 - Returns `{ ok: true, file_paths, principles?, file_context?, drift?, graph? }` — sections present only when included
 - `file_context` errors propagated (fail-closed); graph query failures skipped gracefully (KG may not be indexed)
 - `GetContextOutput` type exported for test assertions
+- Note: `getFileContextBatch` helper (previously in `get-file-context-batch.ts`) removed 2026-05-02
 
 **Text-only principle/review tools:**
 
@@ -371,7 +400,7 @@ src/
 | `capture_transcript` | Best-effort transcript capture; input: `{ workspace, step_id, agent_type, agent_id, session_id?, project_id? }`; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon `TranscriptEntry[]`, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; output: `{ transcript_path, entry_count, warning? }`; returns warning (never error) when source not found; `project_id` defaults to `CANON_PROJECT_DIR`-derived value; `session_id` defaults to `CLAUDE_SESSION_ID` env var — added 2026-04-26 (NF-12) |
 
 ## Dependencies
-<!-- last-updated: 2026-03-26 -->
+<!-- last-updated: 2026-05-02 (@anthropic-ai/sdk removed) -->
 
 | Package | Purpose |
 |---------|---------|
@@ -380,6 +409,7 @@ src/
 | `gray-matter` | YAML frontmatter parsing in `parser.ts` (replaced hand-rolled parser 2026-03-26) |
 | `tsx` | TypeScript execution (dev) |
 | `vitest` | Unit testing (dev) |
+| ~~`@anthropic-ai/sdk`~~ | ~~LLM API client~~ — removed 2026-05-02 (added then removed; no LLM calls in MCP tools) |
 
 **Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — added 2026-04-08:
 - `profileToAllowRules(tools: string[]): string[]` — filters tool names to the `BUILTIN_CLAUDE_TOOLS` set (`Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `NotebookEdit`, `WebFetch`); MCP tools are excluded (already covered by project-level `settings.json`)
