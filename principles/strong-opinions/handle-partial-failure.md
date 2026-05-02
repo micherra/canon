@@ -3,10 +3,9 @@ id: handle-partial-failure
 title: Handle Partial Failure in Distributed Calls
 severity: strong-opinion
 scope:
-  layers:
-    - domain
-    - api
-    - infra
+  layers: []
+  tags:
+    - error-handling
 tags:
   - distributed-systems
   - reliability

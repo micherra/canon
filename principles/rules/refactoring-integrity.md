@@ -3,11 +3,7 @@ id: refactoring-integrity
 title: Refactoring Must Be Substantive, Not Cosmetic
 severity: rule
 scope:
-  layers:
-    - domain
-    - api
-    - data
-    - shared
+  layers: []
 tags:
   - ddd
   - refactoring

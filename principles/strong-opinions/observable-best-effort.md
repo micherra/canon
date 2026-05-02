@@ -3,10 +3,9 @@ id: observable-best-effort
 title: Best-Effort Operations Must Be Observable
 severity: strong-opinion
 scope:
-  layers:
-    - api
-    - domain
-    - infra
+  layers: []
+  tags:
+    - observability
 tags:
   - observability
   - reliability
