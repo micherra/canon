@@ -18,6 +18,8 @@
     "@modelcontextprotocol/ext-apps": "^1.5.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.8.0",
+    "graphology": "^0.26",
+    "graphology-communities-louvain": "^2.0.2",
     "gray-matter": "^4.0.3",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
@@ -30,13 +32,12 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.92.0",
     "@biomejs/biome": "2.4.10",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.5.2",
     "dependency-cruiser": "^17.3.10",
-    "graphology": "^0.26",
-    "graphology-communities-louvain": "^2.0.2",
     "graphology-layout-forceatlas2": "^0.10.1",
     "sigma": "^3",
     "svelte": "^5.55.1",

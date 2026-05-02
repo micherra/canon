@@ -7,7 +7,7 @@
  */
 
 import type Database from "better-sqlite3";
-import type { EdgeRow, EntityRow, FileEdgeRow, FileRow, SummaryRow } from "./kg-types.ts";
+import type { EdgeRow, EntityRow, FileEdgeRow, FileRow, FileTagRow, SummaryRow } from "./kg-types.ts";
 
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean
 
@@ -58,6 +58,12 @@ export class KgStore {
   private stmtDeleteSummariesByFile!: Database.Statement;
   private stmtGetStaleSummaries!: Database.Statement;
 
+  // ---- File tag statements ----
+  private stmtUpsertFileTag!: Database.Statement;
+  private stmtDeleteFileTagsByFile!: Database.Statement;
+  private stmtGetFileTagsByFileId!: Database.Statement;
+  private stmtUpdateCommunityId!: Database.Statement;
+
   // ---- Stats statements ----
   private stmtCountFiles!: Database.Statement;
   private stmtCountEntities!: Database.Statement;
@@ -71,6 +77,7 @@ export class KgStore {
     this.prepareEdgeStatements(db);
     this.prepareFileEdgeStatements(db);
     this.prepareSummaryStatements(db);
+    this.prepareFileTagStatements(db);
     this.stmtCountFiles = db.prepare(`SELECT COUNT(*) AS n FROM files`);
     this.stmtCountEntities = db.prepare(`SELECT COUNT(*) AS n FROM entities`);
     this.stmtCountEdges = db.prepare(`SELECT COUNT(*) AS n FROM edges`);
@@ -137,6 +144,18 @@ export class KgStore {
     this.stmtGetFileEdgesTo = db.prepare(`SELECT * FROM file_edges WHERE target_file_id = ?`);
     this.stmtDeleteFileEdgesByFile = db.prepare(
       `DELETE FROM file_edges WHERE source_file_id = ? OR target_file_id = ?`,
+    );
+  }
+
+  private prepareFileTagStatements(db: Database.Database): void {
+    this.stmtUpsertFileTag = db.prepare(`
+      INSERT OR REPLACE INTO file_tags (file_id, tag, source, confidence)
+      VALUES (@file_id, @tag, @source, @confidence)
+    `);
+    this.stmtDeleteFileTagsByFile = db.prepare(`DELETE FROM file_tags WHERE file_id = ?`);
+    this.stmtGetFileTagsByFileId = db.prepare(`SELECT * FROM file_tags WHERE file_id = ?`);
+    this.stmtUpdateCommunityId = db.prepare(
+      `UPDATE files SET community_id = @community_id WHERE file_id = @file_id`,
     );
   }
 
@@ -304,6 +323,53 @@ export class KgStore {
     return this.stmtGetStaleSummaries.all(limit) as Array<
       SummaryRow & { path: string; file_content_hash: string }
     >;
+  }
+
+  // File Tags
+
+  /**
+   * Insert or replace a single file tag.
+   * On (file_id, tag) conflict, replaces the existing row (updates source and confidence).
+   */
+  upsertFileTag(tag: FileTagRow): void {
+    this.stmtUpsertFileTag.run(tag);
+  }
+
+  /**
+   * Delete all tags for the given file_id.
+   * No-op when the file has no tags.
+   */
+  deleteFileTagsByFile(fileId: number): void {
+    this.stmtDeleteFileTagsByFile.run(fileId);
+  }
+
+  /**
+   * Return all tags for the given file_id.
+   * Returns an empty array when the file has no tags or does not exist.
+   */
+  getFileTagsByFileId(fileId: number): FileTagRow[] {
+    return this.stmtGetFileTagsByFileId.all(fileId) as FileTagRow[];
+  }
+
+  /**
+   * Set the community_id for a file.
+   * No-op when file_id does not exist in the files table.
+   */
+  updateCommunityId(fileId: number, communityId: number): void {
+    this.stmtUpdateCommunityId.run({ community_id: communityId, file_id: fileId });
+  }
+
+  /**
+   * Insert or replace multiple file tags in a single transaction.
+   * Equivalent to calling upsertFileTag for each tag, but atomic and faster.
+   */
+  bulkUpsertFileTags(tags: FileTagRow[]): void {
+    if (tags.length === 0) return;
+    this.transaction(() => {
+      for (const tag of tags) {
+        this.upsertFileTag(tag);
+      }
+    });
   }
 
   // Bulk operations

@@ -16,6 +16,7 @@ import type {
   FileBlastRadiusResult,
   FileMetrics,
   FileRow,
+  FileTagRow,
   LayerViolation,
   SearchResult,
 } from "./kg-types.ts";
@@ -43,6 +44,8 @@ export class KgQuery {
   private readonly stmtGetFileAdjacencyList: Database.Statement;
   private readonly stmtGetFileIdByPath: Database.Statement;
   private readonly stmtGetKgFreshness: Database.Statement;
+  private readonly stmtGetFileTagsByPath: Database.Statement;
+  private readonly stmtGetFileTagsByFileId: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -86,6 +89,12 @@ export class KgQuery {
     );
     this.stmtGetFileIdByPath = db.prepare(`SELECT file_id, layer FROM files WHERE path = ?`);
     this.stmtGetKgFreshness = db.prepare(`SELECT MIN(last_indexed_at) AS min_ts FROM files`);
+    this.stmtGetFileTagsByPath = db.prepare(`
+      SELECT ft.* FROM file_tags ft
+      JOIN files f ON f.file_id = ft.file_id
+      WHERE f.path = ?
+    `);
+    this.stmtGetFileTagsByFileId = db.prepare(`SELECT * FROM file_tags WHERE file_id = ?`);
     this.prepareDeadCodeStatements(db);
     this.prepareFileStatStatements(db);
     this.prepareFileDegreeStatements(db);
@@ -491,6 +500,24 @@ export class KgQuery {
     }
 
     return Date.now() - epochMs;
+  }
+
+  // File Tag Queries
+
+  /**
+   * Return all tags for the file identified by its path.
+   * Returns an empty array when the file does not exist or has no tags.
+   */
+  getFileTagsByPath(path: string): FileTagRow[] {
+    return this.stmtGetFileTagsByPath.all(path) as FileTagRow[];
+  }
+
+  /**
+   * Return all tags for the given file_id.
+   * Returns an empty array when the file has no tags or does not exist.
+   */
+  getFileTagsByFileId(fileId: number): FileTagRow[] {
+    return this.stmtGetFileTagsByFileId.all(fileId) as FileTagRow[];
   }
 
   /**

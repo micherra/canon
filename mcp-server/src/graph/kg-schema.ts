@@ -10,7 +10,7 @@ import * as sqliteVec from "sqlite-vec";
 
 // Schema version — increment when DDL changes require a migration
 
-export const SCHEMA_VERSION = "4";
+export const SCHEMA_VERSION = "5";
 
 // DDL statements (v1+v2 base schema)
 
@@ -21,8 +21,8 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
-  // Note: schema_version is set to '4' for new databases.
-  // runMigrations() will upgrade existing v1/v2/v3 databases.
+  // Note: schema_version is set to '5' for new databases.
+  // runMigrations() will upgrade existing v1/v2/v3/v4 databases.
   `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`,
 
   // Files table
@@ -33,7 +33,8 @@ const DDL_STATEMENTS = [
     content_hash    TEXT    NOT NULL,
     language        TEXT    NOT NULL,
     layer           TEXT    NOT NULL DEFAULT 'unknown',
-    last_indexed_at TEXT    NOT NULL
+    last_indexed_at TEXT    NOT NULL,
+    community_id    INTEGER
   )`,
 
   `CREATE INDEX IF NOT EXISTS idx_files_path     ON files(path)`,
@@ -184,6 +185,17 @@ const DDL_STATEMENTS = [
 
   `CREATE INDEX IF NOT EXISTS idx_co_change_a ON co_change_edges(file_a)`,
   `CREATE INDEX IF NOT EXISTS idx_co_change_b ON co_change_edges(file_b)`,
+
+  // File tags table — computed tags from community detection and other signals
+  `CREATE TABLE IF NOT EXISTS file_tags (
+    file_id    INTEGER NOT NULL REFERENCES files(file_id) ON DELETE CASCADE,
+    tag        TEXT    NOT NULL,
+    source     TEXT    NOT NULL,
+    confidence REAL    NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (file_id, tag)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_file_tags_tag ON file_tags(tag)`,
 ];
 
 // Migration definitions
@@ -260,6 +272,28 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
     },
     version: "4",
+  },
+  {
+    up: (db) => {
+      // ALTER TABLE ADD COLUMN does not support IF NOT EXISTS in SQLite < 3.35.
+      // The migration is version-gated so it runs only once, but wrap in try/catch
+      // as a defensive measure against re-runs during tests or partial failures.
+      try {
+        db.exec(`ALTER TABLE files ADD COLUMN community_id INTEGER`);
+      } catch {
+        // Column already exists — idempotent no-op
+      }
+      db.exec(`CREATE TABLE IF NOT EXISTS file_tags (
+        file_id    INTEGER NOT NULL REFERENCES files(file_id) ON DELETE CASCADE,
+        tag        TEXT    NOT NULL,
+        source     TEXT    NOT NULL,
+        confidence REAL    NOT NULL DEFAULT 1.0,
+        PRIMARY KEY (file_id, tag)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_file_tags_tag ON file_tags(tag)`);
+      db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
+    },
+    version: "5",
   },
 ];
 

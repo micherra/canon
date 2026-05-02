@@ -227,6 +227,20 @@ export type SummaryRow = {
   updated_at: string;
 };
 
+/**
+ * Matches the `file_tags` table.
+ * Stores computed tags for a file from community detection or other signals.
+ * The primary key is (file_id, tag) — one row per unique tag per file.
+ */
+export type FileTagRow = {
+  file_id: number;
+  tag: string;
+  /** Source of the tag, e.g. "louvain", "manual", "infer-domains" */
+  source: string;
+  /** Confidence score in [0, 1]; 1.0 when certain */
+  confidence: number;
+};
+
 /** Matches the entity_vector_meta / summary_vector_meta tables */
 export type VectorMetaRow = {
   entity_id?: number; // or summary_id for summary vectors
