@@ -49,10 +49,17 @@ describe("registerDriveFlowTool — legacy flow gate", () => {
     expect(vi.mocked(server.registerTool).mock.calls[0][0]).toBe("drive_flow");
   });
 
-  it("skips registration when CANON_AGENT_TEAMS_MODE=on", () => {
+  it("registers drive_flow but handler returns INVALID_INPUT when CANON_AGENT_TEAMS_MODE=on", async () => {
     process.env.CANON_AGENT_TEAMS_MODE = "on";
     registerDriveFlowTool();
-    expect(server.registerTool).not.toHaveBeenCalled();
+    expect(server.registerTool).toHaveBeenCalledOnce();
+    expect(vi.mocked(server.registerTool).mock.calls[0][0]).toBe("drive_flow");
+
+    const handler = vi.mocked(server.registerTool).mock.calls[0][2] as (
+      input: unknown,
+    ) => Promise<unknown>;
+    const result = await handler({});
+    expect(result).toMatchObject({ error_code: "INVALID_INPUT", ok: false });
   });
 });
 
@@ -83,9 +90,22 @@ describe("registerFlowCoreTools — legacy flow gate", () => {
     expect(server.registerTool).toHaveBeenCalledTimes(2);
   });
 
-  it("skips registration when CANON_AGENT_TEAMS_MODE=on", () => {
+  it("registers tools but handlers return INVALID_INPUT when CANON_AGENT_TEAMS_MODE=on", async () => {
     process.env.CANON_AGENT_TEAMS_MODE = "on";
     registerFlowCoreTools();
-    expect(server.registerTool).not.toHaveBeenCalled();
+    expect(server.registerTool).toHaveBeenCalledTimes(2);
+
+    const loadHandler = vi.mocked(server.registerTool).mock.calls[0][2] as (
+      input: unknown,
+    ) => Promise<unknown>;
+    const simHandler = vi.mocked(server.registerTool).mock.calls[1][2] as (
+      input: unknown,
+    ) => Promise<unknown>;
+
+    const loadResult = await loadHandler({ flow_name: "test" });
+    expect(loadResult).toMatchObject({ error_code: "INVALID_INPUT", ok: false });
+
+    const simResult = await simHandler({ flow: "test", scenario: [] });
+    expect(simResult).toMatchObject({ error_code: "INVALID_INPUT", ok: false });
   });
 });

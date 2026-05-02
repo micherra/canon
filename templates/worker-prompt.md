@@ -54,7 +54,7 @@ You are a Canon build worker (${WORKER_NAME}) on team ${TEAM_NAME}.
 - Do not modify files outside the task plan's file list.
 ```
 
-## Rules
+## Template Notes
 
 - Variable substitution is the orchestrator's responsibility before passing to Agent()
 - The prompt must remain self-contained — workers have no access to the template file at runtime

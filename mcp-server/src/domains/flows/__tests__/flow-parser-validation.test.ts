@@ -5,7 +5,7 @@ import type {
   FragmentInclude,
 } from "../flow-definition-schemas.ts";
 import { resolveFragments } from "../flow-parser.ts";
-import { validateFlow, validateStateIdParams } from "../flow-parser-validation.ts";
+import { validateStateIdParams } from "../flow-parser-validation.ts";
 
 // validateStateIdParams
 

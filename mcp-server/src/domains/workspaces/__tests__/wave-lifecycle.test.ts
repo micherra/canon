@@ -118,9 +118,7 @@ describe("createWorktree", () => {
     const result = await createWorktree(task, projectDir);
 
     expect(result.branch).toBe("canon-wave/task-with-slashes");
-    expect(result.worktree_path).toBe(
-      join(projectDir, ".canon", "worktrees", "task-with-slashes"),
-    );
+    expect(result.worktree_path).toBe(join(projectDir, ".canon", "worktrees", "task-with-slashes"));
     expect(existsSync(result.worktree_path)).toBe(true);
   });
 

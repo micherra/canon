@@ -1,10 +1,18 @@
 import { ResolvedFlowSchema } from "@domains/flows/flow-definition-schemas.ts";
 import { driveFlow } from "@features/orchestration/tools/drive-flow.ts";
+import { toolError } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 import { gatedWrapHandler, projectDir, server } from "./server-state.ts";
 
+const TEAMS_MODE_ERROR = toolError(
+  "INVALID_INPUT",
+  "Legacy flow tools are not available when CANON_AGENT_TEAMS_MODE=on. Use agent-teams orchestration instead.",
+  false,
+);
+
 export function registerDriveFlowTool(): void {
-  if (process.env.CANON_AGENT_TEAMS_MODE === "on") return;
+  const teamsMode = process.env.CANON_AGENT_TEAMS_MODE === "on";
+
   server.registerTool(
     "drive_flow",
     {
@@ -55,6 +63,9 @@ export function registerDriveFlowTool(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    gatedWrapHandler(async (input) => driveFlow(input, projectDir)),
+    gatedWrapHandler(async (input) => {
+      if (teamsMode) return TEAMS_MODE_ERROR;
+      return driveFlow(input, projectDir);
+    }),
   );
 }

@@ -1,10 +1,18 @@
 import { loadFlow } from "@features/orchestration/tools/load-flow.ts";
 import { simulateFlowTool } from "@features/orchestration/tools/simulate-flow.ts";
+import { toolError } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 import { gatedWrapHandler, pluginDir, projectDir, server } from "./server-state.ts";
 
+const TEAMS_MODE_ERROR = toolError(
+  "INVALID_INPUT",
+  "Legacy flow tools are not available when CANON_AGENT_TEAMS_MODE=on. Use agent-teams orchestration instead.",
+  false,
+);
+
 export function registerFlowCoreTools(): void {
-  if (process.env.CANON_AGENT_TEAMS_MODE === "on") return;
+  const teamsMode = process.env.CANON_AGENT_TEAMS_MODE === "on";
+
   server.registerTool(
     "load_flow",
     {
@@ -14,7 +22,10 @@ export function registerFlowCoreTools(): void {
         flow_name: z.string().describe("Name of the flow file (without .md extension)"),
       },
     },
-    gatedWrapHandler(async (input) => loadFlow(input, pluginDir, projectDir)),
+    gatedWrapHandler(async (input) => {
+      if (teamsMode) return TEAMS_MODE_ERROR;
+      return loadFlow(input, pluginDir, projectDir);
+    }),
   );
 
   server.registerTool(
@@ -42,6 +53,9 @@ export function registerFlowCoreTools(): void {
           .describe("Sequence of mocked agent results (max 1000 entries)"),
       },
     },
-    gatedWrapHandler(async (input) => simulateFlowTool(input, pluginDir, projectDir)),
+    gatedWrapHandler(async (input) => {
+      if (teamsMode) return TEAMS_MODE_ERROR;
+      return simulateFlowTool(input, pluginDir, projectDir);
+    }),
   );
 }

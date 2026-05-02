@@ -70,15 +70,12 @@ export function getProjectDir(workspace: string): string {
 
 /**
  * Sanitize a task_id for safe use in filesystem paths and git branch names.
- * Strips path separators (/ \), null bytes, and other shell metacharacters
- * that could enable path traversal or command injection.
+ * Uses an allowlist: only alphanumeric, hyphens, underscores, and dots pass through.
+ * Everything else (including characters invalid per git-check-ref-format like
+ * colons, tildes, carets, and control chars) is replaced with a dash.
  */
 function sanitizeTaskId(taskId: string): string {
-  // Replace path separators, null bytes, and shell metacharacters with dashes.
-  // Allowed characters: alphanumeric, hyphens, underscores, and dots (safe in
-  // both filesystem paths and git branch names).
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally stripping null bytes for security
-  return taskId.replace(/[/\\\x00$`&|;(){}<>!?*[\]"' \t\n\r]/g, "-");
+  return taskId.replace(/[^A-Za-z0-9._-]/g, "-");
 }
 
 /**

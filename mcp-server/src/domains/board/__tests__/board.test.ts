@@ -1,5 +1,5 @@
-import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
+import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import {
