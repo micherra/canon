@@ -32,6 +32,23 @@ const getContextInputSchema = {
 
 const ALL_SECTIONS: IncludeSection[] = ["principles", "file_context", "drift", "graph"];
 
+// --- Helpers ---
+
+/**
+ * Query blast_radius for each file path and return the aggregate results.
+ * Skips files where KG is not indexed or returns a recoverable error.
+ * Returns undefined when no results could be collected.
+ */
+function queryGraphForFiles(filePaths: string[]): unknown[] | undefined {
+  if (filePaths.length === 0) return undefined;
+  const aggregated: unknown[] = [];
+  for (const target of filePaths) {
+    const result = graphQuery({ query_type: "blast_radius", target }, projectDir);
+    if (result.ok) aggregated.push(result);
+  }
+  return aggregated.length > 0 ? aggregated : undefined;
+}
+
 // --- Handler ---
 
 async function handleGetContext(input: {
@@ -80,17 +97,12 @@ async function handleGetContext(input: {
   }
 
   if (sections.includes("graph")) {
-    // graph section: skip gracefully when KG is not indexed
+    // graph section: skip gracefully when KG is not indexed.
+    // Query blast_radius for each file and aggregate the results.
     tasks.push(
       Promise.resolve().then(() => {
-        if (input.file_paths.length === 0) return;
-        const target = input.file_paths[0];
-        const result = graphQuery({ query_type: "blast_radius", target }, projectDir);
-        if (!result.ok) {
-          // KG not indexed or other recoverable error — skip gracefully
-          return;
-        }
-        output.graph = result;
+        const results = queryGraphForFiles(input.file_paths);
+        if (results !== undefined) output.graph = results;
       }),
     );
   }

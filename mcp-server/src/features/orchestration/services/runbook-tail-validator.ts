@@ -5,7 +5,7 @@
 
 /**
  * Extract step IDs from YAML code blocks in runbook content.
- * Matches `- id: <value>` entries within fenced code blocks.
+ * Matches both `- id: <value>` (list item) and bare `id: <value>` entries within fenced code blocks.
  */
 export function extractStepIds(runbookContent: string): string[] {
   // Find all YAML code blocks
@@ -16,8 +16,8 @@ export function extractStepIds(runbookContent: string): string[] {
   // biome-ignore lint/suspicious/noAssignInExpressions: standard regex loop
   while ((match = codeBlockPattern.exec(runbookContent)) !== null) {
     const block = match[1];
-    // Extract all `id: <value>` entries in this block
-    const idPattern = /^\s*-\s+id:\s+(\S+)/gm;
+    // Extract all `id: <value>` entries in this block (dash prefix optional)
+    const idPattern = /^\s*(?:-\s+)?id:\s+(\S+)/gm;
     let idMatch: RegExpExecArray | null;
     // biome-ignore lint/suspicious/noAssignInExpressions: standard regex loop
     while ((idMatch = idPattern.exec(block)) !== null) {

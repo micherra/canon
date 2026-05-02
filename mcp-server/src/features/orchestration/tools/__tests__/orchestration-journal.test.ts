@@ -1,9 +1,5 @@
-/**
- * orchestration-journal — unit tests for log_step and verify_completion.
- *
- * Uses a per-test tmpdir workspace. No SQLite — the journal is a plain
- * JSON file at `${workspace}/journal.json`.
- */
+/** orchestration-journal — unit tests for log_step and verify_completion. */
+// batchLogSteps tests live in batch-log-steps.test.ts (line-count split)
 
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -13,8 +9,6 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { assertOk, isToolError } from "../../../../shared/lib/tool-result.ts";
 import type { Journal } from "../orchestration-journal.ts";
 import { batchLogSteps, logStep, verifyCompletion } from "../orchestration-journal.ts";
-
-// ─── Helpers for transcript-capture integration tests ────────────────────────
 
 // Plant a fake agent JSONL where captureTranscript will find it.
 function plantAgentJsonl(fakeHome: string, agentId: string): void {
@@ -339,8 +333,7 @@ describe("verifyCompletion", () => {
   });
 });
 
-// ─── NF-17: logStep transcript-capture integration ───────────────────────────
-
+// ─── NF-17: logStep transcript-capture integration ──────────────────────────
 describe("logStep — transcript capture via agent_id", () => {
   const AGENT_ID = "nf17-agent-01";
 
@@ -457,8 +450,7 @@ describe("logStep — transcript capture via agent_id", () => {
   });
 });
 
-// ─── agent_id enforcement ─────────────────────────────────────────────────────
-
+// ─── agent_id enforcement ────────────────────────────────────────────────────
 describe("logStep — agent_id enforcement", () => {
   test("completed step without agent_id is rejected; exemptions pass through", async () => {
     // Rejection: completed + no agent_id + non-exempt step_id

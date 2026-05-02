@@ -126,14 +126,14 @@ skills: []
 cause: ~
 mcp_tools: []
 artifacts:
-  - "outcome:worktree branch merged to main"
+  - "outcome:PR created for worktree branch"
 hitl: on_failure
 skip_when: ~
 ```
 
-**Intent:** The shipper merges the worktree branch (`canon/{slug}`) into main. On conflict, the orchestrator presents the conflicting files to the user as a HITL checkpoint. PR creation is the secondary mode — used only when explicitly requested or for external repositories.
+**Intent:** The shipper creates a PR from the worktree branch (`canon/{slug}`) to main. Direct merge is the fallback mode — used only when the user explicitly requests it (e.g., "merge it", "skip PR").
 
-**Coordination notes:** Runs after all functional steps complete. On clean merge, removes the worktree and deletes the build branch. On conflict, blocks until the user resolves. The `context-sync` step follows immediately after a successful merge.
+**Coordination notes:** Runs after all functional steps complete. On PR creation, the shipper removes the worktree but keeps the build branch (needed for the PR). On conflict (fallback merge path only), blocks until the user resolves. The `context-sync` step follows immediately after a successful ship.
 
 ---
 
