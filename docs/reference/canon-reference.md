@@ -79,6 +79,12 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `get_file_context` | File dependencies, entities, blast radius, metrics |
 | `graph_query` | Call trees, blast radius, dead code, search |
 
+**Composite context tools:**
+
+| Tool | Purpose |
+|------|---------|
+| `get_context` | Batch context for multiple files — composes principles, file context, drift, and graph in one call; `include` param gates sections |
+
 **Principle & review tools:**
 
 | Tool | Purpose |

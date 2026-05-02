@@ -17,10 +17,10 @@ import {
   generateSlug,
   sanitizeBranch,
 } from "@domains/workspaces/workspace.ts";
-import { KgQuery } from "@graph/kg-query.ts";
-import { initDatabase } from "@graph/kg-schema.ts";
 import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
-import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { CANON_DIR } from "@shared/constants.ts";
+import { validateRunbookTail } from "../services/runbook-tail-validator.ts";
+import { tryGenerateStructure } from "../services/workspace-structure.ts";
 import { seedFromPriorWorkspace } from "./seed-workspace.ts";
 
 type InitWorkspaceInput = {
@@ -243,81 +243,12 @@ function persistInitialStates(
   }
 }
 
-/** Find the top N hub files by in-degree. */
-function findTopHubs(
-  allDegrees: Map<number, { in_degree: number; out_degree: number }>,
-  fileIdToPath: Map<number, string>,
-  n: number,
-): Array<{ path: string; in_degree: number }> {
-  const entries: Array<{ path: string; in_degree: number }> = [];
-  for (const [fileId, degrees] of allDegrees) {
-    const path = fileIdToPath.get(fileId);
-    if (path !== undefined && degrees.in_degree > 0)
-      entries.push({ in_degree: degrees.in_degree, path });
-  }
-  entries.sort((a, b) => b.in_degree - a.in_degree);
-  return entries.slice(0, n);
-}
-
-/** Generate the project structure section from the KG database. */
-function generateProjectStructure(projectDir: string): string | null {
-  const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  if (!existsSync(kgDbPath)) return null;
-
-  const db = initDatabase(kgDbPath);
-  try {
-    const kgQuery = new KgQuery(db);
-    const allFiles = kgQuery.getAllFilesWithStats();
-
-    const layerCounts = new Map<string, number>();
-    const fileIdToPath = new Map<number, string>();
-    for (const file of allFiles) {
-      if (file.file_id !== undefined) fileIdToPath.set(file.file_id, file.path);
-      const layer = file.layer || "unknown";
-      layerCounts.set(layer, (layerCounts.get(layer) ?? 0) + 1);
-    }
-
-    const layerBreakdown = [...layerCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([layer, count]) => `${layer} (${count} file${count === 1 ? "" : "s"})`)
-      .join(", ");
-
-    const top5 = findTopHubs(kgQuery.getAllFileDegrees(), fileIdToPath, 5);
-    const hubLine =
-      top5.length > 0
-        ? `Hub files (high in-degree): ${top5.map((h) => `${h.path} (${h.in_degree})`).join(", ")}`
-        : "Hub files (high in-degree): none";
-
-    return [
-      "## Project Structure",
-      "",
-      `Layers: ${layerBreakdown || "none"}`,
-      hubLine,
-      `Total files in graph: ${allFiles.length}`,
-    ].join("\n");
-  } finally {
-    db.close();
-  }
-}
-
 async function tryReadFileContent(path: string, label: string): Promise<string | null> {
   if (!existsSync(path)) return null;
   try {
     return await readFile(path, "utf-8");
   } catch (err) {
     console.warn(`[canon] ${label} read failed:`, err instanceof Error ? err.message : err);
-    return null;
-  }
-}
-
-function tryGenerateStructure(projectDir: string): string | null {
-  try {
-    return generateProjectStructure(projectDir);
-  } catch (err) {
-    console.warn(
-      "[canon] project structure generation failed:",
-      err instanceof Error ? err.message : err,
-    );
     return null;
   }
 }
@@ -542,8 +473,11 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
 
   const flow = await loadAndResolveFlow(pluginDir, input.flow_name);
   await mkdir(join(workspace, "plans", slug), { recursive: true });
+  const tailIssues: string[] = [];
   if (input.runbook_content) {
     await writeFile(join(workspace, "plans", slug, "runbook.md"), input.runbook_content);
+    const tailIssue = validateRunbookTail(input.runbook_content);
+    if (tailIssue) tailIssues.push(tailIssue);
   }
   if (input.brief_content) {
     await writeFile(join(workspace, "plans", slug, "planning-brief.md"), input.brief_content);
@@ -562,7 +496,7 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     tier: input.tier,
   };
 
-  return finalizeNewWorkspace(store, input, {
+  const result = await finalizeNewWorkspace(store, input, {
     board,
     flow,
     pluginDir,
@@ -571,6 +505,10 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     slug,
     workspace,
   });
+  if (tailIssues.length > 0) {
+    result.preflight_issues = [...(result.preflight_issues ?? []), ...tailIssues];
+  }
+  return result;
 }
 
 export async function initWorkspaceFlow(

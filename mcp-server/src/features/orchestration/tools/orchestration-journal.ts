@@ -251,6 +251,94 @@ async function tryTranscriptCapture(
   }
 }
 
+export type BatchLogStepsInput = {
+  workspace: string;
+  steps: Array<{
+    step_id: string;
+    status: JournalStepStatus;
+    agent_type?: string | null;
+    artifacts_expected?: string[];
+    domain_skills_loaded?: string[];
+    outcome?: JournalOutcome;
+    agent_id?: string;
+  }>;
+};
+
+export type BatchLogStepsResult = {
+  results: LogStepResult[];
+};
+
+/**
+ * Batch version of logStep — logs all entries in a single read-modify-write
+ * cycle. Validates all entries upfront (fail-closed). If any entry has an
+ * empty step_id the entire batch is rejected and nothing is written.
+ */
+export async function batchLogSteps(
+  input: BatchLogStepsInput,
+): Promise<ToolResult<BatchLogStepsResult>> {
+  // 1. Empty array fast-path — no I/O needed.
+  if (input.steps.length === 0) {
+    return toolOk({ results: [] });
+  }
+
+  // 2. Validate all entries upfront (fail-closed).
+  for (const entry of input.steps) {
+    if (!entry.step_id?.trim()) {
+      return toolError("INVALID_INPUT", "Each step entry must have a non-empty step_id", false);
+    }
+  }
+
+  // 3. Single journal read.
+  const journal = await readJournal(input.workspace);
+
+  // 4. Process each entry synchronously against the in-memory journal.
+  //    Collect transcript capture work for parallel execution after the write.
+  const results: LogStepResult[] = [];
+  type CaptureTask = { logInput: LogStepInput; result: LogStepResult; step: JournalStep };
+  const captureTasks: CaptureTask[] = [];
+
+  for (const entry of input.steps) {
+    const logInput: LogStepInput = {
+      agent_id: entry.agent_id,
+      agent_type: entry.agent_type,
+      artifacts_expected: entry.artifacts_expected,
+      domain_skills_loaded: entry.domain_skills_loaded,
+      outcome: entry.outcome,
+      status: entry.status,
+      step_id: entry.step_id,
+      workspace: input.workspace,
+    };
+
+    const step = upsertStep(journal, logInput);
+    applyTimestamps(step, entry.status);
+    applyMetadata(step, logInput);
+
+    const result: LogStepResult = { status: entry.status, step_id: entry.step_id };
+
+    if (entry.status === "completed" && entry.agent_id) {
+      captureTasks.push({ logInput, result, step });
+    }
+
+    results.push(result);
+  }
+
+  // 5. Single journal write (before transcript capture — captures are best-effort).
+  await writeJournal(input.workspace, journal);
+
+  // 6. Run transcript captures in parallel (no await inside a loop).
+  await Promise.all(
+    captureTasks.map(({ logInput, result, step }) => tryTranscriptCapture(step, result, logInput)),
+  );
+
+  // 7. If any captures added a transcript_path, persist those fields to the journal.
+  const hasCaptures = captureTasks.some(({ step }) => step.transcript_path);
+  if (hasCaptures) {
+    await writeJournal(input.workspace, journal);
+  }
+
+  return toolOk({ results });
+}
+
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
@@ -261,11 +349,7 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     });
   }
 
-  if (
-    input.status === "completed" &&
-    !input.agent_id &&
-    input.step_id !== "inline-fix"
-  ) {
+  if (input.status === "completed" && !input.agent_id && input.step_id !== "inline-fix") {
     return toolError(
       "INVALID_INPUT",
       "completed steps must include agent_id for transcript capture (exempt: inline-fix step_id, skipped status)",

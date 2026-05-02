@@ -1,6 +1,4 @@
-/** Get rich context for a file — contents, graph relationships, exports.
- * Designed to give Claude everything needed to write a meaningful summary. */
-
+/** Get rich context for a file — contents, graph relationships, exports. */
 import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";

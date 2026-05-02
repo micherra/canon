@@ -12,7 +12,7 @@ ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for sch
 
 ```
 src/
-├── app/                  # Entry point — tool registration (index.ts, all handlers via wrapHandler)
+├── app/                  # Entry point — tool registration (index.ts, register-*.ts, all handlers via wrapHandler)
 ├── domains/              # Shared domain types and persistence
 │   ├── board/            # Board mutation logic (pure functions)
 │   ├── drift/            # Drift/review type definitions
@@ -43,7 +43,7 @@ src/
 - **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-04-26 (NF-12: capture_transcript tool added; CaptureTranscriptInput, CaptureTranscriptResult, ClaudeCodeEntry types exported from features/orchestration) -->
+<!-- last-updated: 2026-04-30 (P0 composite MCP tool: get_context, getPrinciplesBatch, getFileContextBatch, PrinciplesGraphContext export) -->
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -176,6 +176,17 @@ src/
 - `CANON_FILES.SUMMARIES` — REMOVED; `summaries.json` no longer written
 - Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 
+**Principles — Batch** (`src/features/principles/tools/get-principles.ts`) — added 2026-04-30:
+- `PrinciplesGraphContext` — exported type; `{ in_degree, out_degree, is_hub, in_cycle, impact_score }` (no `layer` field)
+- `GetPrinciplesBatchInput` — `{ file_paths: string[]; layers?: string[]; task_description?: string; summary_only?: boolean; sections?: string[] }`
+- `GetPrinciplesBatchOutput` — `{ principles: Array<{ id, title, severity, body }>; total_matched: number; total_in_canon: number; graph_context_by_file: Record<string, PrinciplesGraphContext | undefined> }`
+- `getPrinciplesBatch(input: GetPrinciplesBatchInput, projectDir, pluginDir)` → `Promise<GetPrinciplesBatchOutput>` — deduplicates principles by ID across files; opens KG DB once; `graph_context_by_file` keyed by file path
+- Existing `getPrinciples` function unchanged
+
+**File Context — Batch** (`src/features/file-context/tools/get-file-context-batch.ts`) — added 2026-04-30:
+- `getFileContextBatch(input: { file_paths: string[] }, projectDir: string)` → `Promise<ToolResult<{ results: FileContextOutput[] }>>` — calls `getFileContext` per file via `Promise.all`; fail-closed: if any file fails, the entire batch returns the error; empty `file_paths` returns empty results array
+- Exported from separate file to stay under line-count lint limit; does NOT modify `get-file-context.ts`
+
 **File Context** (`src/features/file-context/tools/get-file-context.ts`):
 - `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`, `hotspot_score?: HotspotScoreOutput`, `co_change_partners?: Array<CoChangePartner>` — git-intel fields added 2026-04-08
 - `loadKgData(dbPath, filePath, projectDir?)` — exported for testing; third `projectDir` param triggers `ensureGitIntelFresh` and populates `hotspot_score` and `co_change_partners`; co-change query uses UNION across both edge directions
@@ -234,6 +245,19 @@ src/
 | `show_pr_impact` | `ui://canon/pr-review` | PR Review — change analysis (always), blast radius, hotspots, violations, subgraph (when stored review exists) |
 | `codebase_graph` | `ui://canon/codebase-graph` | Interactive dependency graph with compliance overlay |
 | `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
+
+**Composite context tool:**
+
+| Tool | Purpose |
+|------|---------|
+| `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContextBatch`, `getDriftReport`, `graphQuery` in a single call; `include` param gates sections (default: all) |
+
+**`get_context` tool** (`src/app/register-composite.ts`) — added 2026-04-30:
+- `registerCompositeTools()` — registers `get_context` MCP tool; called by `index.ts`
+- Input: `file_paths: string[]` (required), `include?: Array<"principles"|"file_context"|"drift"|"graph">` (defaults to all 4 sections)
+- Returns `{ ok: true, file_paths, principles?, file_context?, drift?, graph? }` — sections present only when included
+- `file_context` errors propagated (fail-closed); graph query failures skipped gracefully (KG may not be indexed)
+- `GetContextOutput` type exported for test assertions
 
 **Text-only principle/review tools:**
 
@@ -343,6 +367,7 @@ src/
 | `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
 | `record_agent_metrics` | Agent-callable tool to record performance counters (`tool_calls`, `orientation_calls`, `turns`) directly into execution state metrics; merges with existing metrics preserving orchestrator fields; returns `INVALID_INPUT` if no fields provided, `WORKSPACE_NOT_FOUND` if state not found — added 2026-04-01 (ADR-003a) |
 | `post_event` | Agent-callable tool for structured activity logging; input: `{ workspace, agent, action: "start"\|"complete", detail, artifacts?: string[] }`; stores `agent_activity` event in execution store's event log via `appendEvent`; returns `{ ok: true; event_type; agent; action; timestamp }` or `WORKSPACE_NOT_FOUND`/`INVALID_INPUT` on error — added 2026-04-07 |
+| `batch_log_steps` | Log multiple steps in a single journal read-modify-write cycle; input: `{ workspace, steps: Array<{ step_id, status, agent_type?, artifacts_expected?, domain_skills_loaded?, outcome?, agent_id? }> }`; validates all entries upfront (fail-closed: entire batch rejected if any `step_id` is empty); runs transcript captures in parallel for completed entries with `agent_id`; returns `{ results: LogStepResult[] }`; registered only when `CANON_AGENT_TEAMS_MODE=on` — added 2026-04-30 |
 | `capture_transcript` | Best-effort transcript capture; input: `{ workspace, step_id, agent_type, agent_id, session_id?, project_id? }`; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon `TranscriptEntry[]`, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; output: `{ transcript_path, entry_count, warning? }`; returns warning (never error) when source not found; `project_id` defaults to `CANON_PROJECT_DIR`-derived value; `session_id` defaults to `CLAUDE_SESSION_ID` env var — added 2026-04-26 (NF-12) |
 
 ## Dependencies

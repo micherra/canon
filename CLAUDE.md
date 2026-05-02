@@ -148,7 +148,7 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 3. Present the runbook to the user for approval. Iterate if the user requests changes.
 4. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` comes from the approved runbook's frontmatter, `tier` comes from the runbook frontmatter (optional — defaults to `"medium"` when omitted), and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
 5. Persist planner research notes. If the planner's output contains a `## Research Notes` section, extract it and write to `${WORKSPACE}/plans/${slug}/research-notes.md` using `Write`.
-6. Call `log_step` for each step in the approved runbook (creates the checklist).
+6. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
 7. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
@@ -387,12 +387,14 @@ ALL three must pass for the verify step to succeed. If any gate fails, the engin
 ### Completion Checklist
 
 1. Call `verify_completion({ workspace })` — if steps or artifacts missing, resolve before proceeding.
-2. Merge worktree branch to main:
-   - `git checkout main`
-   - `git merge canon/{slug} --no-edit`
-   - If merge conflicts: present conflicting files to user as HITL — do NOT force-push or use `--theirs`.
-   - If clean merge: proceed to step 3.
-   - After successful merge: `git worktree remove {worktree_path}` and `git branch -d canon/{slug}`.
+2. Ship the build:
+   - **Default**: spawn the shipper agent. The shipper pushes the worktree branch to origin and creates a PR to main. After PR creation, the shipper removes the worktree (`git worktree remove {worktree_path}`) but does NOT delete the build branch — it is needed for the PR.
+   - **Fallback (direct merge)** — only when the user explicitly requests it (e.g., "merge it", "skip PR"):
+     - `git checkout main`
+     - `git merge canon/{slug} --no-edit`
+     - If merge conflicts: present conflicting files to user as HITL — do NOT force-push or use `--theirs`.
+     - If clean merge: proceed to step 3.
+     - After successful merge: `git worktree remove {worktree_path}` and `git branch -d canon/{slug}`.
 3. Call `update_board({ workspace, operation: "complete_flow" })`.
 4. Verify file claims released.
 5. Evaluate learn gate: run `.canon/learn.sh` if it exists.

@@ -51,7 +51,7 @@ Every synthesized step carries these first-class fields (per v2.1 §5.2):
 
 Apply every rule below on every build runbook synthesis:
 
-1. **Include the mandatory tail.** Every build runbook ends with `context-sync` followed by `learn`, in that order. No exceptions — not for small flows, not for doc-only changes, not on user request. These steps keep Canon's documentation and principles current.
+1. **Include the mandatory tail.** Every build runbook ends with `ship` followed by `context-sync` followed by `learn`, in that order. These three steps are the mandatory tail. No exceptions — not for small flows, not for doc-only changes, not on user request. `ship` delivers the work; `context-sync` and `learn` keep Canon's documentation and principles current.
 
 2. **Use canonical step IDs only.** Every `id` field must appear in `references/runbook-vocabulary.md`. Reject and report unknown IDs at synthesis time; do not emit them.
 
@@ -98,7 +98,9 @@ These constraints are absolute — no exception, no override:
 
 2. **Do not remove baseline HITL.** The vocabulary's Default HITL is a policy floor. Confidence signals (per §5.2 below) are advisory and informational. A high-confidence signal does not permit removing an `approval` or `checkpoint` HITL posture.
 
-3. **Do not skip the mandatory tail.** `context-sync` and `learn` are required on every build runbook regardless of flow size, user preference, or confidence level.
+3. **Do not skip the mandatory tail.** `ship`, `context-sync`, and `learn` are required on every build runbook regardless of flow size, user preference, or confidence level.
+
+**Self-check:** Before emitting the runbook, verify the last three steps are `ship` → `context-sync` → `learn` in that order. If they are not, correct the runbook before emitting.
 
 ---
 
