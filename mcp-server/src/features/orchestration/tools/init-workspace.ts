@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { initBoard } from "@domains/board/board.ts";
+import { initBoard, initBoardMinimal } from "@domains/board/board.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
@@ -258,14 +258,16 @@ async function buildCachePrefix(
   input: InitWorkspaceInput,
   options: {
     slug: string;
-    flow: Awaited<ReturnType<typeof loadAndResolveFlow>>;
+    flowName?: string;
+    flowDescription?: string;
     projectDir: string;
     pluginDir: string;
   },
 ): Promise<string> {
-  const { slug, flow, projectDir, pluginDir } = options;
+  const { slug, flowName, flowDescription, projectDir, pluginDir } = options;
   const prefixParts: string[] = [];
-  if (flow.description) prefixParts.push(`## Flow: ${flow.name}\n\n${flow.description}`);
+  if (flowDescription)
+    prefixParts.push(`## Flow: ${flowName ?? input.flow_name}\n\n${flowDescription}`);
 
   const claudeMd = await tryReadFileContent(join(pluginDir, "CLAUDE.md"), "cache prefix CLAUDE.md");
   if (claudeMd) prefixParts.push(claudeMd);
@@ -387,7 +389,7 @@ type FinalizeWorkspaceOptions = {
   slug: string;
   board: Board;
   session: Session;
-  flow: Awaited<ReturnType<typeof loadAndResolveFlow>>;
+  flow?: Awaited<ReturnType<typeof loadAndResolveFlow>>;
   projectDir: string;
   pluginDir: string;
 };
@@ -402,9 +404,17 @@ async function finalizeNewWorkspace(
   const raceResult = initExecutionOrRace(store, board, session, workspace);
   if (raceResult) return raceResult;
 
-  persistInitialStates(store, flow);
+  if (flow) {
+    persistInitialStates(store, flow);
+  }
 
-  const cachePrefix = await buildCachePrefix(input, { flow, pluginDir, projectDir, slug });
+  const cachePrefix = await buildCachePrefix(input, {
+    flowDescription: flow?.description,
+    flowName: flow?.name ?? input.flow_name,
+    pluginDir,
+    projectDir,
+    slug,
+  });
   store.setCachePrefix(cachePrefix);
   const prefixHash = createHash("sha256").update(cachePrefix).digest("hex").slice(0, 12);
   store.appendProgress(`## Progress: ${input.task}`);
@@ -471,7 +481,17 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     };
   }
 
-  const flow = await loadAndResolveFlow(pluginDir, input.flow_name);
+  const isTeamsMode = process.env.CANON_AGENT_TEAMS_MODE === "on";
+
+  let board: Board;
+  let flow: Awaited<ReturnType<typeof loadAndResolveFlow>> | undefined;
+  if (isTeamsMode) {
+    board = initBoardMinimal(input.flow_name, input.task, input.base_commit);
+  } else {
+    flow = await loadAndResolveFlow(pluginDir, input.flow_name);
+    board = initBoard(flow, input.task, input.base_commit);
+  }
+
   await mkdir(join(workspace, "plans", slug), { recursive: true });
   const tailIssues: string[] = [];
   if (input.runbook_content) {
@@ -482,7 +502,6 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
   if (input.brief_content) {
     await writeFile(join(workspace, "plans", slug, "planning-brief.md"), input.brief_content);
   }
-  const board = initBoard(flow, input.task, input.base_commit);
   const now = new Date().toISOString();
   const session: Session = {
     branch: input.branch,
@@ -498,7 +517,7 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
 
   const result = await finalizeNewWorkspace(store, input, {
     board,
-    flow,
+    flow: isTeamsMode ? undefined : flow,
     pluginDir,
     projectDir,
     session,

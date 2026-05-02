@@ -18,7 +18,7 @@ import {
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import Database from "better-sqlite3";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock loadAndResolveFlow + git adapter so initWorkspaceFlow is testable
 
@@ -262,6 +262,17 @@ describe("ExecutionStore getCachePrefix / setCachePrefix", () => {
 // 3. initWorkspaceFlow computes and stores cache prefix
 
 describe("initWorkspaceFlow — cache prefix computation", () => {
+  // These tests exercise legacy (flow-mode) cache prefix assembly.
+  // Force legacy mode so loadAndResolveFlow runs and the flow description
+  // is available for buildCachePrefix.
+  beforeEach(() => {
+    process.env.CANON_AGENT_TEAMS_MODE = "off";
+  });
+
+  afterEach(() => {
+    delete process.env.CANON_AGENT_TEAMS_MODE;
+  });
+
   async function initWs(projectDir: string) {
     const { initWorkspaceFlow } = await import("@features/orchestration/tools/init-workspace.ts");
     return initWorkspaceFlow(
