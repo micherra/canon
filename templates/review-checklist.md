@@ -17,6 +17,8 @@ agent: reviewer
 timestamp: "{ISO-8601}"
 files-reviewed: {N}
 principles-checked: {N}
+e2e-criteria-tested: {N}
+e2e-criteria-passed: {N}
 ---
 
 ## Canon Review — Verdict: {verdict}
@@ -97,6 +99,23 @@ principles-checked: {N}
 - `path/to/other.ts` — plan files specified changes here; none found in diff
 
 <!-- If no drift: "No drift detected — all changed files match the plan file scope." -->
+
+### E2E Acceptance Test
+<!-- Only during build pipelines when a runbook exists. Otherwise note "Stage 5 skipped -- no runbook available." -->
+
+**Test file**: `__tests__/canon-e2e-ac.test.ts`
+
+| # | Acceptance Criterion | Result | Detail |
+|---|---------------------|--------|--------|
+| 1 | {criterion from runbook} | {PASS/FAIL/SKIP} | {assertion detail or skip rationale} |
+
+**Test output**:
+```
+{vitest stdout — truncated to last 50 lines if verbose}
+```
+
+<!-- If all pass: "All acceptance criteria verified." -->
+<!-- If any fail: "N of M acceptance criteria failed — see details above." -->
 
 ### Build Verification
 <!-- Required — run npm run build, npm run lint, npm test. Record baseline from target branch. Only new errors (delta) are BLOCKING/WARNING. Pre-existing errors tagged [baseline]. -->
