@@ -44,12 +44,12 @@ describe("migration v4 — hotspot_scores and co_change_edges", () => {
     db.close();
   });
 
-  test("schema_version is 4 after initDatabase", () => {
+  test("schema_version is 5 after initDatabase", () => {
     const db = initDatabase(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("4");
+    expect(row.value).toBe("5");
     db.close();
   });
 
@@ -111,14 +111,14 @@ describe("migration v4 — hotspot_scores and co_change_edges", () => {
     expect(tableExists(db, "hotspot_scores")).toBe(false);
     expect(tableExists(db, "co_change_edges")).toBe(false);
 
-    // Run migrations — should upgrade v3 → v4
+    // Run migrations — should upgrade v3 → v4 → v5
     runMigrations(db);
 
-    // Verify upgrade
+    // Verify upgrade — final version is current SCHEMA_VERSION (5)
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("4");
+    expect(row.value).toBe("5");
     expect(tableExists(db, "hotspot_scores")).toBe(true);
     expect(tableExists(db, "co_change_edges")).toBe(true);
     db.close();

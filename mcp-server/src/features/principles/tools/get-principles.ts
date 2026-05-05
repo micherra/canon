@@ -40,6 +40,46 @@ function loadMaxPrinciples(projectDir: string): Promise<number> {
   return loadConfigNumber(projectDir, "review.max_principles_per_review", DEFAULT_MAX_PRINCIPLES);
 }
 
+type KgFileData = {
+  graph_context?: GetPrinciplesOutput["graph_context"];
+  computed_tags?: string[];
+};
+
+function loadKgFileData(dbPath: string, filePath: string): KgFileData {
+  let db: ReturnType<typeof initDatabase> | undefined;
+  try {
+    db = initDatabase(dbPath);
+    const kgQuery = new KgQuery(db);
+    const insightMaps = computeFileInsightMaps(db);
+    const metrics = kgQuery.getFileMetrics(filePath, {
+      cycleMemberPaths: insightMaps.cycleMemberPaths,
+      hubPaths: insightMaps.hubPaths,
+      layerViolationsByPath: insightMaps.layerViolationsByPath,
+    });
+
+    let graph_context: KgFileData["graph_context"];
+    if (metrics) {
+      graph_context = {
+        impact_score: metrics.impact_score,
+        in_cycle: metrics.in_cycle,
+        in_degree: metrics.in_degree,
+        is_hub: metrics.is_hub,
+        out_degree: metrics.out_degree,
+      };
+    }
+
+    const tagRows = kgQuery.getFileTagsByPath(filePath);
+    const computed_tags = tagRows.length > 0 ? tagRows.map((r) => r.tag) : undefined;
+
+    return { computed_tags, graph_context };
+  } catch {
+    // KG unavailable — graceful degradation
+    return {};
+  } finally {
+    db?.close();
+  }
+}
+
 function metricsToContext(metrics: FileMetrics): PrinciplesGraphContext {
   return {
     impact_score: metrics.impact_score,
@@ -67,35 +107,26 @@ export async function getPrinciples(
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
   const maxPrinciples = await loadMaxPrinciples(projectDir);
 
+  // Load graph context and computed tags if file_path is provided
+  let graph_context: GetPrinciplesOutput["graph_context"];
+  let computed_tags: string[] | undefined;
+
+  if (input.file_path) {
+    const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+    if (existsSync(dbPath)) {
+      const kgData = loadKgFileData(dbPath, input.file_path);
+      graph_context = kgData.graph_context;
+      computed_tags = kgData.computed_tags;
+    }
+  }
+
   const matched = matchPrinciples(allPrinciples, {
+    computed_tags,
     file_path: input.file_path,
     layers: input.layers,
   });
 
   const top = matched.slice(0, maxPrinciples);
-
-  let graph_context: GetPrinciplesOutput["graph_context"];
-  if (input.file_path) {
-    const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-    if (existsSync(dbPath)) {
-      let db: ReturnType<typeof initDatabase> | undefined;
-      try {
-        db = initDatabase(dbPath);
-        const kgQuery = new KgQuery(db);
-        const insightMaps = computeFileInsightMaps(db);
-        const metrics = kgQuery.getFileMetrics(input.file_path, {
-          cycleMemberPaths: insightMaps.cycleMemberPaths,
-          hubPaths: insightMaps.hubPaths,
-          layerViolationsByPath: insightMaps.layerViolationsByPath,
-        });
-        if (metrics) graph_context = metricsToContext(metrics);
-      } catch {
-        // KG unavailable — graceful degradation
-      } finally {
-        db?.close();
-      }
-    }
-  }
 
   const sections = input.sections ?? [];
   return {

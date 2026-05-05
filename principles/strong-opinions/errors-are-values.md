@@ -3,9 +3,9 @@ id: errors-are-values
 title: Errors Are Values, Not Surprises
 severity: strong-opinion
 scope:
-  layers:
-    - domain
-    - api
+  layers: []
+  tags:
+    - error-handling
 tags:
   - error-handling
   - reliability

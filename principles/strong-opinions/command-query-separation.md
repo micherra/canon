@@ -3,10 +3,9 @@ id: command-query-separation
 title: Commands and Queries Don't Mix
 severity: strong-opinion
 scope:
-  layers:
-    - domain
-    - data
-    - api
+  layers: []
+  tags:
+    - design
 tags:
   - side-effects
   - predictability

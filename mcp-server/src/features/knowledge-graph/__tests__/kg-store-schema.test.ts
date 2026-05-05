@@ -108,12 +108,12 @@ describe("Schema v3 — vector tables", () => {
     expect(colNames).toContain("updated_at");
   });
 
-  test("schema_version is '4' for new databases", () => {
+  test("schema_version is '5' for new databases", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("4");
-    expect(SCHEMA_VERSION).toBe("4");
+    expect(row?.value).toBe("5");
+    expect(SCHEMA_VERSION).toBe("5");
   });
 
   test("entity_vectors accepts insert with valid embedding", () => {
@@ -141,11 +141,11 @@ describe("Schema v3 — migration from v2", () => {
     // then calling runMigrations() to migrate forward.
     const db = initDatabase(":memory:");
 
-    // Confirm the migration already ran (new DB starts at v4)
+    // Confirm the migration already ran (new DB starts at v5)
     const before = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(before.value).toBe("4");
+    expect(before.value).toBe("5");
 
     // Simulate a v2 DB: downgrade schema_version to '2' and drop v3 tables
     db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
@@ -154,14 +154,14 @@ describe("Schema v3 — migration from v2", () => {
     // Note: vec0 virtual tables need sqlite-vec loaded; can't drop and recreate
     // but we can verify meta tables are created by the migration
 
-    // Re-run migrations — should upgrade from 2 to 3
+    // Re-run migrations — should upgrade from 2 to 3 to 4 to 5
     runMigrations(db);
 
-    // schema_version should now be '4' (v3→v4 migration also runs)
+    // schema_version should now be '5' (all pending migrations run)
     const after = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(after.value).toBe("4");
+    expect(after.value).toBe("5");
 
     // entity_vector_meta should exist
     const metaTable = db
@@ -172,14 +172,14 @@ describe("Schema v3 — migration from v2", () => {
     db.close();
   });
 
-  test("runMigrations is idempotent when already at v4", () => {
+  test("runMigrations is idempotent when already at current version", () => {
     const db = initDatabase(":memory:");
     // Should not throw on double-call
     expect(() => runMigrations(db)).not.toThrow();
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("4");
+    expect(row.value).toBe("5");
     db.close();
   });
 });

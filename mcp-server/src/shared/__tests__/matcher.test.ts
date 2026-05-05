@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { inferLayer, matchPrinciples } from "../matcher.ts";
 import type { Principle } from "../parser.ts";
+import { parsePrinciple } from "../parser.ts";
 
 function makePrinciple(overrides: Partial<Principle> = {}): Principle {
   return {
@@ -179,5 +180,145 @@ describe("matchPrinciples", () => {
     const result = matchPrinciples(principles, {});
     expect(result[0].id).toBe("specific");
     expect(result[1].id).toBe("generic");
+  });
+
+  describe("scope.tags matching (computed_tags)", () => {
+    it("matches principle with scope.tags via computed_tags even when layers don't match", () => {
+      const principles = [
+        makePrinciple({
+          id: "error-scoped",
+          scope: { file_patterns: [], layers: [], tags: ["error-handling"] },
+        }),
+      ];
+      // computed_tags has error-handling, layers don't match (api vs [])
+      const result = matchPrinciples(principles, {
+        computed_tags: ["error-handling"],
+        layers: ["api"],
+      });
+      expect(result.map((p) => p.id)).toContain("error-scoped");
+    });
+
+    it("falls back to layer matching when computed_tags is undefined", () => {
+      const api = makePrinciple({
+        id: "api-only",
+        scope: { file_patterns: [], layers: ["api"], tags: ["error-handling"] },
+      });
+      const ui = makePrinciple({
+        id: "ui-only",
+        scope: { file_patterns: [], layers: ["ui"], tags: ["error-handling"] },
+      });
+      // No computed_tags — layer-only matching
+      const result = matchPrinciples([api, ui], { layers: ["api"] });
+      expect(result.map((p) => p.id)).toContain("api-only");
+      expect(result.map((p) => p.id)).not.toContain("ui-only");
+    });
+
+    it("falls back to layer matching when computed_tags is empty", () => {
+      const api = makePrinciple({
+        id: "api-only",
+        scope: { file_patterns: [], layers: ["api"], tags: ["error-handling"] },
+      });
+      const result = matchPrinciples([api], { computed_tags: [], layers: ["api"] });
+      expect(result.map((p) => p.id)).toContain("api-only");
+    });
+
+    it("uses OR semantics: layer match alone is sufficient", () => {
+      const p = makePrinciple({
+        id: "both",
+        scope: { file_patterns: [], layers: ["api"], tags: ["error-handling"] },
+      });
+      // layers match but computed_tags doesn't intersect
+      const result = matchPrinciples([p], {
+        computed_tags: ["observability"],
+        layers: ["api"],
+      });
+      expect(result.map((p) => p.id)).toContain("both");
+    });
+
+    it("uses OR semantics: tag match alone is sufficient", () => {
+      const p = makePrinciple({
+        id: "tag-match",
+        scope: { file_patterns: [], layers: ["api"], tags: ["error-handling"] },
+      });
+      // layers don't match but computed_tags does
+      const result = matchPrinciples([p], {
+        computed_tags: ["error-handling"],
+        layers: ["ui"],
+      });
+      expect(result.map((p) => p.id)).toContain("tag-match");
+    });
+
+    it("excludes principle when neither layer nor scope.tags match", () => {
+      const p = makePrinciple({
+        id: "no-match",
+        scope: { file_patterns: [], layers: ["api"], tags: ["error-handling"] },
+      });
+      const result = matchPrinciples([p], {
+        computed_tags: ["observability"],
+        layers: ["ui"],
+      });
+      expect(result).toHaveLength(0);
+    });
+
+    it("principles without scope.tags are unaffected by computed_tags", () => {
+      const p = makePrinciple({
+        id: "no-scope-tags",
+        scope: { file_patterns: [], layers: [] },
+      });
+      // No scope.tags → always matches (layer check: empty scope.layers → true)
+      const result = matchPrinciples([p], { computed_tags: ["anything"] });
+      expect(result.map((p) => p.id)).toContain("no-scope-tags");
+    });
+  });
+});
+
+describe("parsePrinciple scope.tags", () => {
+  it("extracts scope.tags from frontmatter", () => {
+    const content = `---
+id: test-principle
+title: Test
+severity: convention
+scope:
+  layers: []
+  tags:
+    - error-handling
+    - reliability
+tags: []
+---
+
+Body text.
+`;
+    const p = parsePrinciple(content, "test.md");
+    expect(p.scope.tags).toEqual(["error-handling", "reliability"]);
+  });
+
+  it("returns undefined scope.tags when not present in frontmatter", () => {
+    const content = `---
+id: test-principle
+title: Test
+severity: convention
+scope:
+  layers: []
+tags: []
+---
+
+Body text.
+`;
+    const p = parsePrinciple(content, "test.md");
+    expect(p.scope.tags).toBeUndefined();
+  });
+
+  it("returns undefined scope.tags when scope block is absent", () => {
+    const content = `---
+id: test-principle
+title: Test
+severity: convention
+tags: []
+---
+
+Body text.
+`;
+    const p = parsePrinciple(content, "test.md");
+    expect(p.scope.tags).toBeUndefined();
   });
 });

@@ -157,6 +157,14 @@ function registerGraphQueryTool(): void {
               .max(10)
               .optional()
               .describe("Max depth for blast_radius (default 3)"),
+            min_confidence: z
+              .number()
+              .min(0)
+              .max(1)
+              .optional()
+              .describe(
+                "Minimum confidence threshold for file-edge queries (0–1). Applies to future file-edge query types.",
+              ),
           })
           .optional(),
         query_type: z
