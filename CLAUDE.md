@@ -63,7 +63,7 @@ Do not narrate individual tool calls. One line between state transitions is corr
 
 ## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off) <!-- last-updated: 2026-05-02 -->
 
-_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off. When `CANON_AGENT_TEAMS_MODE=on`, `load_flow`, `drive_flow`, and `simulate_flow` are registered but return `INVALID_INPUT` errors._
+_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off. The `load_flow`, `drive_flow`, and `simulate_flow` MCP tools have been removed._
 
 Full protocol: `references/canon-orchestrator.md`. Key loop:
 
