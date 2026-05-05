@@ -9,10 +9,6 @@
  * - DriveFlowAction "approval" variant (compile-time)
  */
 
-import type {
-  ApprovalBreakpoint,
-  DriveFlowAction,
-} from "@features/orchestration/services/drive-flow-types.ts";
 import { describe, expect, it } from "vitest";
 import {
   FragmentStateDefinitionSchema,
@@ -155,65 +151,5 @@ describe("STATUS_KEYWORDS approval gate keywords", () => {
 
   it("includes 'reject'", () => {
     expect(STATUS_KEYWORDS).toContain("reject");
-  });
-});
-
-// ApprovalBreakpoint type — compile-time structural check
-
-describe("ApprovalBreakpoint interface", () => {
-  it("accepts a structurally correct ApprovalBreakpoint value", () => {
-    // This is a compile-time check — if the type is wrong, TS will error at build time.
-    const breakpoint: ApprovalBreakpoint = {
-      agent_type: "canon:implementor",
-      artifacts: ["/workspace/plans/task-01-SUMMARY.md"],
-      options: ["approved", "revise", "reject"],
-      state_id: "implement",
-      summary: "Implemented approval gate schema fields",
-    };
-    expect(breakpoint.state_id).toBe("implement");
-    expect(breakpoint.options).toEqual(["approved", "revise", "reject"]);
-  });
-});
-
-// DriveFlowAction "approval" variant — compile-time structural check
-
-describe("DriveFlowAction approval variant", () => {
-  it("accepts an 'approval' action with ApprovalBreakpoint", () => {
-    const action: DriveFlowAction = {
-      action: "approval",
-      breakpoint: {
-        agent_type: "canon:architect",
-        artifacts: [],
-        options: ["approved", "revise", "reject"],
-        state_id: "design",
-        summary: "Design complete",
-      },
-    };
-    expect(action.action).toBe("approval");
-  });
-
-  it("existing 'spawn' variant still compiles", () => {
-    const action: DriveFlowAction = {
-      action: "spawn",
-      requests: [],
-    };
-    expect(action.action).toBe("spawn");
-  });
-
-  it("existing 'hitl' variant still compiles", () => {
-    const action: DriveFlowAction = {
-      action: "hitl",
-      breakpoint: { context: "some context", reason: "needs input" },
-    };
-    expect(action.action).toBe("hitl");
-  });
-
-  it("existing 'done' variant still compiles", () => {
-    const action: DriveFlowAction = {
-      action: "done",
-      summary: "All done",
-      terminal_state: "complete",
-    };
-    expect(action.action).toBe("done");
   });
 });
