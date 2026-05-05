@@ -2,7 +2,9 @@
  * Tests for wave-lifecycle.ts
  *
  * Covers:
- * - createWaveWorktrees: creates worktrees and branches in a real git repo
+ * - createWorktree: creates a single worktree and branch for one task
+ * - createWorktrees: creates worktrees and branches in a real git repo (batch)
+ * - createWaveWorktrees: deprecated alias for createWorktrees — still works
  * - mergeWaveResults: merges non-conflicting branches sequentially
  * - mergeWaveResults: detects conflicts and returns structured error (not silent resolution)
  * - cleanupWorktrees: removes worktrees and branches best-effort
@@ -18,6 +20,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanupWorktrees,
   createWaveWorktrees,
+  createWorktree,
+  createWorktrees,
   getProjectDir,
   mergeWaveResults,
 } from "../wave-lifecycle.ts";
@@ -65,15 +69,90 @@ describe("getProjectDir", () => {
   });
 });
 
-// createWaveWorktrees
+// createWorktree (single-task)
 
-describe("createWaveWorktrees", () => {
+describe("createWorktree", () => {
+  it("creates a worktree directory for the task", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    const task = { task_id: "single-task-01" };
+    const result = await createWorktree(task, projectDir);
+
+    expect(existsSync(result.worktree_path)).toBe(true);
+  });
+
+  it("returns correct worktree_path and branch for the task", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    const task = { task_id: "single-task-01" };
+    const result = await createWorktree(task, projectDir);
+
+    expect(result.task_id).toBe("single-task-01");
+    expect(result.worktree_path).toBe(join(projectDir, ".canon", "worktrees", "single-task-01"));
+    expect(result.branch).toBe("canon-wave/single-task-01");
+  });
+
+  it("returns a single WaveWorktreeResult (not an array)", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    const task = { task_id: "single-task-01" };
+    const result = await createWorktree(task, projectDir);
+
+    // Must be an object, not an array
+    expect(Array.isArray(result)).toBe(false);
+    expect(typeof result).toBe("object");
+    expect(result).toHaveProperty("task_id");
+    expect(result).toHaveProperty("worktree_path");
+    expect(result).toHaveProperty("branch");
+  });
+
+  it("sanitizes task_id with special characters in branch name", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    // Slashes in task_id would break git branch names — must be sanitized
+    const task = { task_id: "task/with/slashes" };
+    const result = await createWorktree(task, projectDir);
+
+    expect(result.branch).toBe("canon-wave/task-with-slashes");
+    expect(result.worktree_path).toBe(join(projectDir, ".canon", "worktrees", "task-with-slashes"));
+    expect(existsSync(result.worktree_path)).toBe(true);
+  });
+
+  it("sanitizes dot-dot sequences to prevent path traversal and invalid refs", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    const task = { task_id: "a..b" };
+    const result = await createWorktree(task, projectDir);
+
+    expect(result.branch).toBe("canon-wave/a-b");
+    expect(result.worktree_path).toBe(join(projectDir, ".canon", "worktrees", "a-b"));
+    expect(existsSync(result.worktree_path)).toBe(true);
+  });
+
+  it("throws on git failure (not a git repo)", async () => {
+    const notAGitDir = makeTmpDir();
+    const task = { task_id: "task-01" };
+
+    await expect(createWorktree(task, notAGitDir)).rejects.toThrow(
+      /Failed to create worktree for task task-01/,
+    );
+  });
+});
+
+// createWorktrees (batch)
+
+describe("createWorktrees", () => {
   it("creates a worktree directory for each task", async () => {
     const projectDir = makeTmpDir();
     initGitRepo(projectDir);
 
     const tasks = [{ task_id: "task-01" }, { task_id: "task-02" }];
-    const results = await createWaveWorktrees(tasks, projectDir);
+    const results = await createWorktrees(tasks, projectDir);
 
     expect(results).toHaveLength(2);
     for (const r of results) {
@@ -86,7 +165,7 @@ describe("createWaveWorktrees", () => {
     initGitRepo(projectDir);
 
     const tasks = [{ task_id: "task-01" }];
-    const results = await createWaveWorktrees(tasks, projectDir);
+    const results = await createWorktrees(tasks, projectDir);
 
     expect(results[0].task_id).toBe("task-01");
     expect(results[0].worktree_path).toBe(join(projectDir, ".canon", "worktrees", "task-01"));
@@ -97,7 +176,7 @@ describe("createWaveWorktrees", () => {
     const notAGitDir = makeTmpDir();
     const tasks = [{ task_id: "task-01" }];
 
-    await expect(createWaveWorktrees(tasks, notAGitDir)).rejects.toThrow();
+    await expect(createWorktrees(tasks, notAGitDir)).rejects.toThrow();
   });
 
   it("creates multiple worktrees without overlap", async () => {
@@ -109,7 +188,7 @@ describe("createWaveWorktrees", () => {
       { task_id: "wave-task-b" },
       { task_id: "wave-task-c" },
     ];
-    const results = await createWaveWorktrees(tasks, projectDir);
+    const results = await createWorktrees(tasks, projectDir);
 
     const paths = results.map((r) => r.worktree_path);
     const unique = new Set(paths);
@@ -121,11 +200,27 @@ describe("createWaveWorktrees", () => {
     initGitRepo(projectDir);
 
     const tasks = [{ task_id: "t1" }, { task_id: "t2" }];
-    const results = await createWaveWorktrees(tasks, projectDir);
+    const results = await createWorktrees(tasks, projectDir);
 
     const branches = results.map((r) => r.branch);
     expect(branches[0]).toBe("canon-wave/t1");
     expect(branches[1]).toBe("canon-wave/t2");
+  });
+});
+
+// createWaveWorktrees (deprecated alias)
+
+describe("createWaveWorktrees (deprecated alias)", () => {
+  it("createWaveWorktrees still works as a deprecated alias for createWorktrees", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    const tasks = [{ task_id: "alias-task-01" }];
+    const results = await createWaveWorktrees(tasks, projectDir);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].task_id).toBe("alias-task-01");
+    expect(existsSync(results[0].worktree_path)).toBe(true);
   });
 });
 
@@ -138,7 +233,7 @@ describe("mergeWaveResults — sequential, no conflict", () => {
 
     // Create two task worktrees
     const tasks = [{ task_id: "task-A" }, { task_id: "task-B" }];
-    const worktrees = await createWaveWorktrees(tasks, projectDir);
+    const worktrees = await createWorktrees(tasks, projectDir);
 
     // Add a unique file in each worktree (no conflicts)
     writeFileSync(join(worktrees[0].worktree_path, "fileA.txt"), "content A");
@@ -165,7 +260,7 @@ describe("mergeWaveResults — sequential, no conflict", () => {
     initGitRepo(projectDir);
 
     const tasks = [{ task_id: "ta" }];
-    const worktrees = await createWaveWorktrees(tasks, projectDir);
+    const worktrees = await createWorktrees(tasks, projectDir);
 
     writeFileSync(join(worktrees[0].worktree_path, "ta.txt"), "hello");
     spawnSync("git", ["add", "."], { cwd: worktrees[0].worktree_path });
@@ -190,7 +285,7 @@ describe("mergeWaveResults — conflict detection", () => {
 
     // Create two task worktrees
     const tasks = [{ task_id: "conflict-a" }, { task_id: "conflict-b" }];
-    const worktrees = await createWaveWorktrees(tasks, projectDir);
+    const worktrees = await createWorktrees(tasks, projectDir);
 
     // Both tasks modify the same file with different content → conflict after sequential merge
     const conflictFile = "shared.txt";
@@ -221,7 +316,7 @@ describe("mergeWaveResults — conflict detection", () => {
     initGitRepo(projectDir);
 
     const tasks = [{ task_id: "c1" }, { task_id: "c2" }];
-    const worktrees = await createWaveWorktrees(tasks, projectDir);
+    const worktrees = await createWorktrees(tasks, projectDir);
 
     const conflictFile = "conflict.txt";
 
@@ -254,7 +349,7 @@ describe("cleanupWorktrees", () => {
     initGitRepo(projectDir);
 
     const tasks = [{ task_id: "cleanup-01" }];
-    const worktrees = await createWaveWorktrees(tasks, projectDir);
+    const worktrees = await createWorktrees(tasks, projectDir);
 
     expect(existsSync(worktrees[0].worktree_path)).toBe(true);
 
@@ -268,7 +363,7 @@ describe("cleanupWorktrees", () => {
     initGitRepo(projectDir);
 
     const tasks = [{ task_id: "c-01" }, { task_id: "c-02" }];
-    const worktrees = await createWaveWorktrees(tasks, projectDir);
+    const worktrees = await createWorktrees(tasks, projectDir);
 
     const result = await cleanupWorktrees(worktrees, projectDir);
     expect(result.removed).toBe(2);
@@ -301,7 +396,7 @@ describe("cleanupWorktrees", () => {
     initGitRepo(projectDir);
 
     const tasks = [{ task_id: "multi-1" }, { task_id: "multi-2" }, { task_id: "multi-3" }];
-    const worktrees = await createWaveWorktrees(tasks, projectDir);
+    const worktrees = await createWorktrees(tasks, projectDir);
 
     for (const wt of worktrees) {
       expect(existsSync(wt.worktree_path)).toBe(true);
@@ -324,7 +419,7 @@ describe("Integration — create, modify, merge, cleanup", () => {
 
     // 1. Create worktrees
     const tasks = [{ task_id: "int-task-1" }, { task_id: "int-task-2" }];
-    const worktrees = await createWaveWorktrees(tasks, projectDir);
+    const worktrees = await createWorktrees(tasks, projectDir);
     expect(worktrees).toHaveLength(2);
 
     // 2. Each task writes a unique file
@@ -370,7 +465,7 @@ describe("Integration — create, modify, merge, cleanup", () => {
       { task_id: "order-second" },
       { task_id: "order-third" },
     ];
-    const worktrees = await createWaveWorktrees(tasks, projectDir);
+    const worktrees = await createWorktrees(tasks, projectDir);
 
     // Each task writes a unique file
     for (let i = 0; i < worktrees.length; i++) {

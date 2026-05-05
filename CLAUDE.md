@@ -61,9 +61,9 @@ This list serves two roles: (1) verbosity control — it limits how much the orc
 
 Do not narrate individual tool calls. One line between state transitions is correct.
 
-## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off)
+## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off) <!-- last-updated: 2026-05-02 -->
 
-_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off._
+_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off. The `load_flow`, `drive_flow`, and `simulate_flow` MCP tools have been removed._
 
 Full protocol: `references/canon-orchestrator.md`. Key loop:
 
@@ -190,19 +190,7 @@ If no `task-dag.yaml` exists, fall back to sequential step execution (existing b
 
 2. **Worker count**: Spawn as many workers as there are root tasks (tasks with empty `depends_on`), capped at 5.
 
-3. **Worker prompt** (the spawn prompt for each worker): A generic pull-loop prompt:
-   ```
-   You are a Canon build worker. Your loop:
-   1. Call TaskList to find available (unblocked, unclaimed) tasks
-   2. If no tasks available, wait and retry
-   3. Claim a task: TaskUpdate({ task_id, owner: your_name, status: "in_progress" })
-   4. Read the task description — it contains your full instructions, principles, and file context
-   5. Create your worktree: run createWaveWorktrees for this single task_id
-   6. Work in the worktree. Follow the task plan. Commit with Canon provenance trailers.
-   7. Mark complete: TaskUpdate({ task_id, status: "completed" })
-   8. Loop back to step 1
-   9. If TaskList returns empty (all tasks completed), you are done
-   ```
+3. **Worker prompt** (the spawn prompt for each worker): Use `templates/worker-prompt.md` — fill in `${TEAM_NAME}`, `${WORKER_NAME}`, `${PROJECT_DIR}`, `${WORKSPACE}`, `${SLUG}` variables before injecting into the Agent spawn prompt.
 
 4. **Worktree creation by workers**: Each worker creates its own worktree after claiming a task:
    - Worktree path: `{projectDir}/.canon/worktrees/{task_id}`
@@ -478,13 +466,12 @@ Detect and retry transient failures:
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
 
-## Project Structure
+## Project Structure <!-- last-updated: 2026-05-02 -->
 
 ```
 canon/
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
-├── flows/                # Flow state machine definitions
-│   └── fragments/        # Reusable state groups included by flows
+├── flows/                # REMOVED 2026-05-02 — all 28 flow YAML files deleted; legacy flows gated behind CANON_AGENT_TEAMS_MODE=off
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/
@@ -509,7 +496,7 @@ canon/
 ├── skills/canon/         # Claude Code skill definition — entry point for Canon activation
 │   ├── commands/         # Slash command definitions (/canon:init, /canon:check, etc.)
 │   └── evals/            # Eval suite for intent classification
-├── templates/            # Artifact templates agents must follow
+├── templates/            # Artifact templates agents must follow (includes worker-prompt.md for DAG worker spawn)
 └── .canon/               # Runtime data (workspaces, principles, config, JSONL drift store, SQLite DBs)
     └── workspaces/       # Per-branch/task build state
 ```
