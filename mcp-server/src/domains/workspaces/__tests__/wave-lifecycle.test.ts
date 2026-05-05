@@ -122,6 +122,18 @@ describe("createWorktree", () => {
     expect(existsSync(result.worktree_path)).toBe(true);
   });
 
+  it("sanitizes dot-dot sequences to prevent path traversal and invalid refs", async () => {
+    const projectDir = makeTmpDir();
+    initGitRepo(projectDir);
+
+    const task = { task_id: "a..b" };
+    const result = await createWorktree(task, projectDir);
+
+    expect(result.branch).toBe("canon-wave/a-b");
+    expect(result.worktree_path).toBe(join(projectDir, ".canon", "worktrees", "a-b"));
+    expect(existsSync(result.worktree_path)).toBe(true);
+  });
+
   it("throws on git failure (not a git repo)", async () => {
     const notAGitDir = makeTmpDir();
     const task = { task_id: "task-01" };

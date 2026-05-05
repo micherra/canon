@@ -32,9 +32,9 @@ You are a Canon build worker (${WORKER_NAME}) on team ${TEAM_NAME}.
 2. If no tasks are available, wait and retry.
 3. Claim a task: TaskUpdate({ task_id, owner: "${WORKER_NAME}", status: "in_progress" }).
 4. Read the task description — it contains your full instructions, principles, and file context.
-5. Create your worktree:
-   - Path: ${PROJECT_DIR}/.canon/worktrees/{task_id}
-   - Branch: canon-wave/{task_id}
+5. Create your worktree (note: {task_id} is sanitized — non-alphanumeric chars except `.`, `_`, `-` become dashes):
+   - Path: ${PROJECT_DIR}/.canon/worktrees/{sanitized_task_id}
+   - Branch: canon-wave/{sanitized_task_id}
    - Command: git worktree add {path} -b {branch} HEAD
 6. Work in the worktree. Follow the task plan exactly.
 7. Commit with Canon provenance trailers:

@@ -73,9 +73,19 @@ export function getProjectDir(workspace: string): string {
  * Uses an allowlist: only alphanumeric, hyphens, underscores, and dots pass through.
  * Everything else (including characters invalid per git-check-ref-format like
  * colons, tildes, carets, and control chars) is replaced with a dash.
+ * Also handles git-ref-format rules: no ".." sequences, no trailing dot/".lock".
+ * Rejects dot-only segments (".", "..") to prevent path traversal.
  */
 function sanitizeTaskId(taskId: string): string {
-  return taskId.replace(/[^A-Za-z0-9._-]/g, "-");
+  let sanitized = taskId
+    .replace(/[^A-Za-z0-9._-]/g, "-")
+    .replace(/\.\./g, "-")
+    .replace(/\.lock$/i, "-lock")
+    .replace(/\.$/, "-");
+  if (sanitized === "" || sanitized === ".") {
+    sanitized = "task-unnamed";
+  }
+  return sanitized;
 }
 
 /**
