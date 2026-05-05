@@ -183,10 +183,16 @@ export function computeGraphRoleTags(query: KgQuery): FileTagRow[] {
 
   if (degrees.size === 0) return result;
 
-  // Compute top-10% hub threshold from all in-degrees
+  // Compute top-10% hub threshold from all in-degrees.
+  // Math.ceil(N * 0.1) gives the count of files in the top decile (at least 1).
+  // The threshold is the in-degree of the last file in that top slice, i.e.
+  // index (count - 1) in the sorted-descending array.
+  // Example: N=10 → count=1 → index=0 → only the single highest in-degree is a hub (10%).
+  //          N=10 with Math.floor gave index=1 → 2 files = 20% (off-by-one bug).
   const inDegrees = Array.from(degrees.values()).map((d) => d.in_degree);
   inDegrees.sort((a, b) => b - a);
-  const top10Index = Math.floor(inDegrees.length * 0.1);
+  const top10Count = Math.max(1, Math.ceil(inDegrees.length * 0.1));
+  const top10Index = top10Count - 1;
   const top10Threshold = top10Index < inDegrees.length ? (inDegrees[top10Index] ?? 0) : Infinity;
 
   for (const [fileId, { in_degree, out_degree }] of degrees) {

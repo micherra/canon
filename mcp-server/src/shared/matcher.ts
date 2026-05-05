@@ -86,21 +86,41 @@ function matchesScopeTags(p: Principle, computedTags: string[] | undefined): boo
 
 /**
  * Check if a principle passes the layer/scope-tags gate.
- * When both scope.tags and computed_tags are present, OR semantics apply:
- * either a layer match or a tag match is sufficient. Otherwise, layer-only.
+ *
+ * Three cases:
+ * 1. scope.layers non-empty AND scope.tags non-empty (with computed_tags):
+ *    OR semantics — either a layer match or a tag match is sufficient.
+ * 2. scope.layers empty AND scope.tags non-empty (tag-only principle):
+ *    Tag match is REQUIRED — the principle only applies to files with matching
+ *    computed_tags. When no computed_tags are available (KG not indexed), the
+ *    principle is skipped to avoid spurious matches.
+ * 3. scope.tags empty or absent (layer-only or universal principle):
+ *    Layer-only matching (empty scope.layers means universal — matches all).
  */
 function passesLayerGate(
   p: Principle,
   layers: string[],
   computedTags: string[] | undefined,
 ): boolean {
-  const layersMatch = matchesLayers(p, layers);
+  const hasScopeLayers = p.scope.layers.length > 0;
   const hasScopeTags = (p.scope.tags?.length ?? 0) > 0;
   const hasComputedTags = (computedTags?.length ?? 0) > 0;
-  if (hasScopeTags && hasComputedTags) {
-    return layersMatch || matchesScopeTags(p, computedTags);
+
+  if (hasScopeTags) {
+    if (hasScopeLayers) {
+      // Case 1: Both layers and tags specified — OR semantics.
+      // Layer match is evaluated without the "empty = universal" short-circuit
+      // because we have an explicit tag constraint.
+      const layersMatch = layers.some((l) => p.scope.layers.includes(l));
+      return layersMatch || (hasComputedTags && matchesScopeTags(p, computedTags));
+    }
+    // Case 2: Tag-only principle (no layers) — tag match is controlling.
+    // When KG is unavailable (no computed_tags), skip this principle.
+    return hasComputedTags && matchesScopeTags(p, computedTags);
   }
-  return layersMatch;
+
+  // Case 3: No scope.tags — layer-only (empty scope.layers = universal).
+  return matchesLayers(p, layers);
 }
 
 /**

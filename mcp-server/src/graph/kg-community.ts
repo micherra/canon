@@ -50,6 +50,10 @@ export function detectCommunities(
   adjacencyList: Map<number, number[]>,
   store: KgStore,
 ): CommunityResult {
+  // Clear stale community assignments from previous runs so that files no
+  // longer in the adjacency graph do not retain their old community_id.
+  store.clearAllCommunityIds();
+
   // Build undirected graphology Graph from adjacency list
   // biome-ignore lint/suspicious/noExplicitAny: graphology-types not installed; cast via any to pass options
   const graph = new (GraphCtor as any)({ type: "undirected" }) as GraphInstance;

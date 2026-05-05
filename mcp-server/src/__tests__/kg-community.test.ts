@@ -139,4 +139,37 @@ describe("detectCommunities", () => {
     // 3 nodes: A, B, C
     expect(spy).toHaveBeenCalledTimes(3);
   });
+
+  test("stale community_id is cleared when file is absent from subsequent adjacency list", () => {
+    // First run: A and B are connected — both get a community_id.
+    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts" }));
+
+    const idA = fileA.file_id!;
+    const idB = fileB.file_id!;
+
+    detectCommunities(new Map([[idA, [idB]]]), store);
+
+    // Confirm both files have a community_id after the first run.
+    const afterFirst = (fileId: number) =>
+      (
+        db.prepare("SELECT community_id FROM files WHERE file_id = ?").get(fileId) as
+          | {
+              community_id: number | null;
+            }
+          | undefined
+      )?.community_id;
+
+    expect(afterFirst(idA)).not.toBeNull();
+    expect(afterFirst(idB)).not.toBeNull();
+
+    // Second run: only A is in the adjacency list (B has become isolated).
+    // B's stale community_id should be cleared.
+    detectCommunities(new Map([[idA, []]]), store);
+
+    // A is still in the graph (sole node) — it gets a fresh community_id.
+    expect(afterFirst(idA)).not.toBeNull();
+    // B is no longer in the graph — its community_id must be NULL.
+    expect(afterFirst(idB)).toBeNull();
+  });
 });

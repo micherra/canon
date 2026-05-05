@@ -269,6 +269,54 @@ describe("matchPrinciples", () => {
       const result = matchPrinciples([p], { computed_tags: ["anything"] });
       expect(result.map((p) => p.id)).toContain("no-scope-tags");
     });
+
+    it("tag-only principle (empty layers) does NOT match when computed_tags differ", () => {
+      // Bug 1 regression test: empty scope.layers must NOT cause universal match
+      // when scope.tags is non-empty.
+      const p = makePrinciple({
+        id: "tag-only",
+        scope: { file_patterns: [], layers: [], tags: ["authentication"] },
+      });
+      // File has "observability" tag — NOT "authentication"
+      const result = matchPrinciples([p], {
+        computed_tags: ["observability"],
+        layers: ["api"],
+      });
+      expect(result).toHaveLength(0);
+    });
+
+    it("tag-only principle (empty layers) matches when computed_tags contain the tag", () => {
+      const p = makePrinciple({
+        id: "tag-only-auth",
+        scope: { file_patterns: [], layers: [], tags: ["authentication"] },
+      });
+      // File has "authentication" tag
+      const result = matchPrinciples([p], {
+        computed_tags: ["authentication", "observability"],
+        layers: ["api"],
+      });
+      expect(result.map((p) => p.id)).toContain("tag-only-auth");
+    });
+
+    it("tag-only principle (empty layers) is skipped when no computed_tags available (KG not indexed)", () => {
+      const p = makePrinciple({
+        id: "tag-only-skipped",
+        scope: { file_patterns: [], layers: [], tags: ["authentication"] },
+      });
+      // No computed_tags (KG not indexed) — principle should be skipped
+      const result = matchPrinciples([p], { layers: ["api"] });
+      expect(result).toHaveLength(0);
+    });
+
+    it("universal principle (empty layers, empty tags) still matches everything", () => {
+      const p = makePrinciple({
+        id: "universal",
+        scope: { file_patterns: [], layers: [] },
+      });
+      // No scope.tags → always matches regardless of computed_tags
+      const result = matchPrinciples([p], { computed_tags: [], layers: ["ui"] });
+      expect(result.map((p) => p.id)).toContain("universal");
+    });
   });
 });
 

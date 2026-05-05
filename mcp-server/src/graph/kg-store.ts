@@ -70,6 +70,7 @@ export class KgStore {
   private stmtDeleteFileTagsByFile!: Database.Statement;
   private stmtGetFileTagsByFileId!: Database.Statement;
   private stmtUpdateCommunityId!: Database.Statement;
+  private stmtClearAllCommunityIds!: Database.Statement;
 
   // ---- Stats statements ----
   private stmtCountFiles!: Database.Statement;
@@ -164,6 +165,7 @@ export class KgStore {
     this.stmtUpdateCommunityId = db.prepare(
       `UPDATE files SET community_id = @community_id WHERE file_id = @file_id`,
     );
+    this.stmtClearAllCommunityIds = db.prepare(`UPDATE files SET community_id = NULL`);
   }
 
   private prepareSummaryStatements(db: Database.Database): void {
@@ -356,6 +358,15 @@ export class KgStore {
    */
   getFileTagsByFileId(fileId: number): FileTagRow[] {
     return this.stmtGetFileTagsByFileId.all(fileId) as FileTagRow[];
+  }
+
+  /**
+   * Clear community_id for all files.
+   * Called before each community detection run to remove stale assignments
+   * from files that are no longer in the adjacency graph.
+   */
+  clearAllCommunityIds(): void {
+    this.stmtClearAllCommunityIds.run();
   }
 
   /**

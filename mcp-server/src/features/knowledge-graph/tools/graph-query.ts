@@ -20,14 +20,6 @@ export type GraphQueryOptions = {
   max_depth?: number;
   limit?: number;
   include_tests?: boolean;
-  /**
-   * Minimum confidence threshold for file-edge-based queries.
-   * Filters `file_edges` rows by their `confidence` column.
-   * Accepted but currently applies to future file-edge query types only;
-   * existing entity-based queries (callers, callees, blast_radius, ancestors)
-   * use the `edges` table and are unaffected.
-   */
-  min_confidence?: number;
 };
 
 export type GraphQueryInput = {
