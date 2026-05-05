@@ -1,6 +1,5 @@
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
-import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import {
   accumulateCannotFix,
@@ -9,71 +8,21 @@ import {
   completeState,
   enterState,
   initBoard,
-  initBoardMinimal,
   recordConsultationResult,
   recordGateResult,
   setBlocked,
 } from "../board.ts";
 
-function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
-  return {
-    description: "A test flow",
-    entry: "start",
-    name: "test-flow",
-    spawn_instructions: {},
-    states: {
-      done: { type: "terminal" },
-      review: { agent: "canon:implementor", max_iterations: 3, type: "single" },
-      start: { agent: "canon:implementor", type: "single" },
-    },
-    ...overrides,
-  };
-}
-
 function makeBoard(): Board {
-  return initBoard(makeMinimalFlow(), "build feature X", "abc123");
+  const board = initBoard("test-flow", "build feature X", "abc123");
+  board.states.start = { entries: 0, status: "pending" };
+  board.states.review = { entries: 0, status: "pending" };
+  board.states.done = { entries: 0, status: "pending" };
+  board.iterations.review = { cannot_fix: [], count: 0, history: [], max: 3 };
+  board.entry = "start";
+  board.current_state = "start";
+  return board;
 }
-
-// initBoard
-
-describe("initBoard", () => {
-  it("creates correct structure from a minimal ResolvedFlow", () => {
-    const flow = makeMinimalFlow();
-    const board = initBoard(flow, "my task", "deadbeef");
-
-    expect(board.flow).toBe("test-flow");
-    expect(board.task).toBe("my task");
-    expect(board.entry).toBe("start");
-    expect(board.current_state).toBe("start");
-    expect(board.base_commit).toBe("deadbeef");
-    expect(board.started).toBeTruthy();
-    expect(board.last_updated).toBe(board.started);
-    expect(board.blocked).toBeNull();
-    expect(board.concerns).toEqual([]);
-    expect(board.skipped).toEqual([]);
-
-    // All states should be pending with 0 entries
-    for (const key of Object.keys(flow.states)) {
-      expect(board.states[key]).toEqual({ entries: 0, status: "pending" });
-    }
-  });
-
-  it("populates iterations for states with max_iterations", () => {
-    const board = makeBoard();
-
-    // "review" has max_iterations: 3
-    expect(board.iterations.review).toEqual({
-      cannot_fix: [],
-      count: 0,
-      history: [],
-      max: 3,
-    });
-
-    // "start" and "done" do not have max_iterations
-    expect(board.iterations.start).toBeUndefined();
-    expect(board.iterations.done).toBeUndefined();
-  });
-});
 
 // enterState
 
@@ -541,16 +490,16 @@ describe("accumulateCannotFix", () => {
   });
 });
 
-// initBoardMinimal
+// initBoard
 
-describe("initBoardMinimal", () => {
+describe("initBoard", () => {
   it("returns a valid Board that passes BoardSchema.parse()", () => {
-    const board = initBoardMinimal("fast-path", "build feature X", "abc123");
+    const board = initBoard("fast-path", "build feature X", "abc123");
     expect(() => BoardSchema.parse(board)).not.toThrow();
   });
 
   it("sets flow, task, base_commit, entry, and current_state correctly", () => {
-    const board = initBoardMinimal("fast-path", "my task", "deadbeef");
+    const board = initBoard("fast-path", "my task", "deadbeef");
     expect(board.flow).toBe("fast-path");
     expect(board.task).toBe("my task");
     expect(board.base_commit).toBe("deadbeef");
@@ -559,20 +508,20 @@ describe("initBoardMinimal", () => {
   });
 
   it("returns empty states and iterations objects", () => {
-    const board = initBoardMinimal("fast-path", "my task", "deadbeef");
+    const board = initBoard("fast-path", "my task", "deadbeef");
     expect(board.states).toEqual({});
     expect(board.iterations).toEqual({});
   });
 
   it("sets blocked to null and empty arrays for concerns and skipped", () => {
-    const board = initBoardMinimal("fast-path", "my task", "deadbeef");
+    const board = initBoard("fast-path", "my task", "deadbeef");
     expect(board.blocked).toBeNull();
     expect(board.concerns).toEqual([]);
     expect(board.skipped).toEqual([]);
   });
 
   it("sets started and last_updated timestamps as ISO strings", () => {
-    const board = initBoardMinimal("fast-path", "my task", "deadbeef");
+    const board = initBoard("fast-path", "my task", "deadbeef");
     expect(board.started).toBeTruthy();
     expect(board.last_updated).toBeTruthy();
     expect(new Date(board.started).toISOString()).toBe(board.started);
@@ -580,9 +529,9 @@ describe("initBoardMinimal", () => {
   });
 
   it("does not depend on ResolvedFlow — no flow object needed", () => {
-    // This test documents that initBoardMinimal accepts only primitive strings.
+    // This test documents that initBoard accepts only primitive strings.
     // Calling it with any valid strings should succeed.
-    const board = initBoardMinimal("agent-teams-flow", "some task", "1234abcd");
+    const board = initBoard("agent-teams-flow", "some task", "1234abcd");
     expect(board.flow).toBe("agent-teams-flow");
   });
 });

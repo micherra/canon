@@ -7,9 +7,8 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { initBoard, initBoardMinimal } from "@domains/board/board.ts";
+import { initBoard } from "@domains/board/board.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
-import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import {
   checkSlugCollision,
@@ -227,22 +226,6 @@ function tryResumeWorkspace(
   return null;
 }
 
-function persistInitialStates(
-  store: ReturnType<typeof getExecutionStore>,
-  flow: Awaited<ReturnType<typeof loadAndResolveFlow>>,
-): void {
-  for (const [stateId] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { entries: 0, status: "pending" });
-    const stateDef = flow.states[stateId];
-    const maxIter = stateDef.max_revisions ?? stateDef.max_iterations;
-    if (maxIter !== undefined) {
-      store.upsertIteration(stateId, { cannot_fix: [], count: 0, history: [], max: maxIter });
-    } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
-      store.upsertIteration(stateId, { cannot_fix: [], count: 0, history: [], max: 3 });
-    }
-  }
-}
-
 async function tryReadFileContent(path: string, label: string): Promise<string | null> {
   if (!existsSync(path)) return null;
   try {
@@ -259,15 +242,13 @@ async function buildCachePrefix(
   options: {
     slug: string;
     flowName?: string;
-    flowDescription?: string;
     projectDir: string;
     pluginDir: string;
   },
 ): Promise<string> {
-  const { slug, flowName, flowDescription, projectDir, pluginDir } = options;
+  const { slug, flowName, projectDir, pluginDir } = options;
   const prefixParts: string[] = [];
-  if (flowDescription)
-    prefixParts.push(`## Flow: ${flowName ?? input.flow_name}\n\n${flowDescription}`);
+  prefixParts.push(`## Flow: ${flowName ?? input.flow_name}`);
 
   const claudeMd = await tryReadFileContent(join(pluginDir, "CLAUDE.md"), "cache prefix CLAUDE.md");
   if (claudeMd) prefixParts.push(claudeMd);
@@ -389,7 +370,6 @@ type FinalizeWorkspaceOptions = {
   slug: string;
   board: Board;
   session: Session;
-  flow?: Awaited<ReturnType<typeof loadAndResolveFlow>>;
   projectDir: string;
   pluginDir: string;
 };
@@ -400,17 +380,12 @@ async function finalizeNewWorkspace(
   input: InitWorkspaceInput,
   options: FinalizeWorkspaceOptions,
 ): Promise<InitWorkspaceResult> {
-  const { workspace, slug, board, session, flow, projectDir, pluginDir } = options;
+  const { workspace, slug, board, session, projectDir, pluginDir } = options;
   const raceResult = initExecutionOrRace(store, board, session, workspace);
   if (raceResult) return raceResult;
 
-  if (flow) {
-    persistInitialStates(store, flow);
-  }
-
   const cachePrefix = await buildCachePrefix(input, {
-    flowDescription: flow?.description,
-    flowName: flow?.name ?? input.flow_name,
+    flowName: input.flow_name,
     pluginDir,
     projectDir,
     slug,
@@ -481,16 +456,7 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     };
   }
 
-  const isTeamsMode = process.env.CANON_AGENT_TEAMS_MODE === "on";
-
-  let board: Board;
-  let flow: Awaited<ReturnType<typeof loadAndResolveFlow>> | undefined;
-  if (isTeamsMode) {
-    board = initBoardMinimal(input.flow_name, input.task, input.base_commit);
-  } else {
-    flow = await loadAndResolveFlow(pluginDir, input.flow_name);
-    board = initBoard(flow, input.task, input.base_commit);
-  }
+  const board = initBoard(input.flow_name, input.task, input.base_commit);
 
   await mkdir(join(workspace, "plans", slug), { recursive: true });
   const tailIssues: string[] = [];
@@ -517,7 +483,6 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
 
   const result = await finalizeNewWorkspace(store, input, {
     board,
-    flow: isTeamsMode ? undefined : flow,
     pluginDir,
     projectDir,
     session,

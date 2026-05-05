@@ -18,22 +18,9 @@ import {
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Mock loadAndResolveFlow + git adapter so initWorkspaceFlow is testable
-
-vi.mock("@domains/flows/flow-parser.ts", () => ({
-  loadAndResolveFlow: vi.fn().mockResolvedValue({
-    description: "A fast single-agent pipeline for small tasks.",
-    entry: "build",
-    name: "fast-path",
-    spawn_instructions: {},
-    states: {
-      build: { transitions: { done: "done" }, type: "single" },
-      done: { type: "terminal" },
-    },
-  }),
-}));
+// Mock git adapter so initWorkspaceFlow is testable without real git
 
 vi.mock("@platform/adapters/git-adapter.ts", () => ({
   gitStatus: vi
@@ -262,17 +249,6 @@ describe("ExecutionStore getCachePrefix / setCachePrefix", () => {
 // 3. initWorkspaceFlow computes and stores cache prefix
 
 describe("initWorkspaceFlow — cache prefix computation", () => {
-  // These tests exercise legacy (flow-mode) cache prefix assembly.
-  // Force legacy mode so loadAndResolveFlow runs and the flow description
-  // is available for buildCachePrefix.
-  beforeEach(() => {
-    process.env.CANON_AGENT_TEAMS_MODE = "off";
-  });
-
-  afterEach(() => {
-    delete process.env.CANON_AGENT_TEAMS_MODE;
-  });
-
   async function initWs(projectDir: string) {
     const { initWorkspaceFlow } = await import("@features/orchestration/tools/init-workspace.ts");
     return initWorkspaceFlow(
@@ -298,16 +274,14 @@ describe("initWorkspaceFlow — cache prefix computation", () => {
     expect(result.cache_prefix_hash).toMatch(/^[0-9a-f]{12}$/);
   });
 
-  it("prefix content includes flow description", async () => {
+  it("prefix content includes flow name", async () => {
     const projectDir = makeTmpProjectDir();
     const result = await initWs(projectDir);
 
-    // Read prefix from store
     const store = getExecutionStore(result.workspace);
     const prefix = store.getCachePrefix();
 
     expect(prefix).toContain("fast-path");
-    expect(prefix).toContain("A fast single-agent pipeline for small tasks.");
   });
 
   it("prefix content includes workspace metadata (task, branch, slug)", async () => {

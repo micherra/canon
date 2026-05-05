@@ -15,24 +15,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-// Mock loadAndResolveFlow to avoid needing real flow files
-vi.mock("@domains/flows/flow-parser.ts", () => ({
-  loadAndResolveFlow: vi.fn().mockResolvedValue({
-    description: "test",
-    entry: "build",
-    name: "fast-path",
-    spawn_instructions: {},
-    states: {
-      build: { transitions: { done: "done" }, type: "single" },
-      done: { type: "terminal" },
-    },
-  }),
-}));
-
-import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import { afterEach, describe, expect, it } from "vitest";
 import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
@@ -217,42 +201,6 @@ describe("initWorkspaceFlow — workspace scoped to projectDir", () => {
 
     const expectedBase = join(projectDir, ".canon", "workspaces");
     expect(result.workspace.startsWith(expectedBase)).toBe(true);
-  });
-});
-
-// initWorkspaceFlow — agent-teams mode (CANON_AGENT_TEAMS_MODE=on)
-
-describe("initWorkspaceFlow — agent-teams mode", () => {
-  beforeEach(() => {
-    process.env.CANON_AGENT_TEAMS_MODE = "on";
-    vi.mocked(loadAndResolveFlow).mockClear();
-  });
-
-  afterEach(() => {
-    delete process.env.CANON_AGENT_TEAMS_MODE;
-  });
-
-  it("does NOT call loadAndResolveFlow when CANON_AGENT_TEAMS_MODE=on", async () => {
-    const projectDir = makeTmpProjectDir();
-    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
-
-    expect(loadAndResolveFlow).not.toHaveBeenCalled();
-    expect(result.created).toBe(true);
-    expect(result.workspace).toBeTruthy();
-    expect(result.board).toBeDefined();
-    expect(result.board.flow).toBe("fast-path");
-    expect(result.session.status).toBe("active");
-  });
-
-  it("creates workspace successfully without a resolved flow", async () => {
-    const projectDir = makeTmpProjectDir();
-    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
-
-    const store = getExecutionStore(result.workspace);
-    const execution = store.getExecution();
-    expect(execution).not.toBeNull();
-    expect(execution!.task).toBe("fix the bug");
-    expect(execution!.status).toBe("active");
   });
 });
 
