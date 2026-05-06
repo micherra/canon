@@ -61,7 +61,7 @@ export function registerWaveEventTools(): void {
     {
       description: "Resolve after-consultation prompts for a state.",
       inputSchema: {
-        flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
+        flow: ResolvedFlowSchema.describe("Resolved flow object"),
         state_id: z.string(),
         variables: z.record(z.string(), z.string()),
         workspace: z.string(),

@@ -1,4 +1,4 @@
-/** orchestration-journal — unit tests for log_step and verify_completion. */
+/** orchestration-journal — unit tests for log_step and finalize_workspace. */
 // batchLogSteps tests live in batch-log-steps.test.ts (line-count split)
 
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { assertOk, isToolError } from "../../../../shared/lib/tool-result.ts";
 import type { Journal } from "../orchestration-journal.ts";
-import { logStep, verifyCompletion } from "../orchestration-journal.ts";
+import { finalizeWorkspace, logStep } from "../orchestration-journal.ts";
 
 // Plant a fake agent JSONL where captureTranscript will find it.
 function plantAgentJsonl(fakeHome: string, agentId: string): void {
@@ -138,7 +138,7 @@ describe("logStep", () => {
   });
 });
 
-describe("verifyCompletion", () => {
+describe("finalizeWorkspace", () => {
   test("returns complete: true when all steps completed and artifacts exist", async () => {
     mkdirSync(join(workspace, "plans"), { recursive: true });
     writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
@@ -151,7 +151,7 @@ describe("verifyCompletion", () => {
       workspace,
     });
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
     expect(result.steps_completed).toBe(1);
@@ -163,7 +163,7 @@ describe("verifyCompletion", () => {
     await logStep({ status: "started", step_id: "s1", workspace });
     await logStep({ agent_id: "test-agent-vc1", status: "completed", step_id: "s2", workspace });
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_missing).toEqual([{ status: "started", step_id: "s1" }]);
@@ -174,7 +174,7 @@ describe("verifyCompletion", () => {
     await logStep({ status: "planned", step_id: "s1", workspace });
     await logStep({ agent_id: "test-agent-vc2", status: "completed", step_id: "s2", workspace });
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_missing).toEqual([{ status: "planned", step_id: "s1" }]);
@@ -186,7 +186,7 @@ describe("verifyCompletion", () => {
     await logStep({ status: "started", step_id: "s2", workspace });
     await logStep({ agent_id: "test-agent-vc3", status: "completed", step_id: "s3", workspace });
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_missing).toHaveLength(2);
@@ -195,7 +195,7 @@ describe("verifyCompletion", () => {
 
   test("detects artifacts_missing when a completed step has missing artifacts (journal written directly)", async () => {
     // Simulate a pre-existing journal where a step is completed but its artifact is absent.
-    // verifyCompletion must still catch this.
+    // finalizeWorkspace must still catch this.
     const journal: Journal = {
       steps: [
         {
@@ -210,7 +210,7 @@ describe("verifyCompletion", () => {
     };
     writeFileSync(join(workspace, "journal.json"), JSON.stringify(journal, null, 2));
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.artifacts_missing).toEqual(["nope.md"]);
@@ -218,7 +218,7 @@ describe("verifyCompletion", () => {
 
   test("returns WORKSPACE_NOT_FOUND when no journal exists", async () => {
     const ghost = await mkdtemp(join(tmpdir(), "canon-journal-no-file-"));
-    const result = await verifyCompletion({ workspace: ghost });
+    const result = await finalizeWorkspace({ workspace: ghost });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
       expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
@@ -230,7 +230,7 @@ describe("verifyCompletion", () => {
     await logStep({ status: "skipped", step_id: "s1", workspace });
     await logStep({ agent_id: "test-agent-skip", status: "completed", step_id: "s2", workspace });
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.steps_skipped).toEqual(["s1"]);
     expect(result.steps_missing).toEqual([]);
@@ -255,7 +255,7 @@ describe("verifyCompletion", () => {
       workspace,
     });
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.flow_outcome.domain_skills_used).toEqual(["backend-api", "testing"]);
     expect(result.flow_outcome.review_verdict).toBe("approve");
@@ -290,7 +290,7 @@ describe("verifyCompletion", () => {
       workspace,
     });
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.flow_outcome.review_verdict).toBe("approve");
   });
@@ -308,7 +308,7 @@ describe("verifyCompletion", () => {
       workspace,
     });
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
     expect(result.artifacts_missing).toEqual([]);
@@ -323,7 +323,7 @@ describe("verifyCompletion", () => {
       workspace,
     });
 
-    const result = await verifyCompletion({ workspace });
+    const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     // Not a false-negative: we don't claim the file is missing.
     expect(result.artifacts_missing).toEqual([]);

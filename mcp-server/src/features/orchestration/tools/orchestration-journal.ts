@@ -5,9 +5,9 @@
  *   - log_step: record a step's status (planned/started/completed/skipped)
  *     and associated metadata (agent, expected artifacts, domain skills
  *     loaded, outcome signals).
- *   - verify_completion: read the journal back and report which steps are
- *     incomplete, which expected artifacts are missing, and aggregate
- *     quality signals across the flow run.
+ *   - finalize_workspace: read the journal back and report which steps are
+ *     incomplete, which expected artifacts are missing, aggregate
+ *     quality signals, release file claims, record analytics, and archive.
  *
  * Both tools are gated behind CANON_AGENT_TEAMS_MODE=on via their
  * registration in register-orchestration.ts; the handlers themselves are
@@ -100,9 +100,6 @@ export type FinalizeWorkspaceInput = {
   workspace: string;
 };
 
-/** @deprecated Use FinalizeWorkspaceInput */
-export type VerifyCompletionInput = FinalizeWorkspaceInput;
-
 export type FinalizeWorkspaceResult = {
   artifacts_expected: string[];
   artifacts_missing: string[];
@@ -162,9 +159,6 @@ export type FinalizeWorkspaceResult = {
   /** Present only when complete is true. True when flow analytics were recorded successfully. */
   analytics_recorded?: boolean;
 };
-
-/** @deprecated Use FinalizeWorkspaceResult */
-export type VerifyCompletionResult = FinalizeWorkspaceResult;
 
 function journalPath(workspace: string): string {
   return join(workspace, "journal.json");
@@ -658,9 +652,6 @@ export async function finalizeWorkspace(
     ...(complete ? { analytics_recorded, claims_released } : {}),
   });
 }
-
-/** @deprecated Use finalizeWorkspace */
-export const verifyCompletion = finalizeWorkspace;
 
 // Re-export for registration layer.
 export const journalFilename = "journal.json";

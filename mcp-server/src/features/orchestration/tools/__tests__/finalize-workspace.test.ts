@@ -1,11 +1,10 @@
 /**
- * finalize-workspace — tests for the renamed and absorbed finalizeWorkspace function.
+ * finalize-workspace — tests for finalizeWorkspace.
  *
  * Covers:
- *  - Rename: finalizeWorkspace is exported and callable; verifyCompletion is a re-export shim
+ *  - finalizeWorkspace is exported and callable
  *  - Absorbed claims: claims_released is true when a session exists
  *  - Absorbed analytics: analytics_recorded is true when the journal has timestamps
- *  - Backward compat: VerifyCompletionInput/Result re-exports still work
  *  - FinalizeWorkspaceInput/FinalizeWorkspaceResult are exported types
  */
 
@@ -19,7 +18,6 @@ import {
   type FinalizeWorkspaceResult,
   finalizeWorkspace,
   logStep,
-  verifyCompletion,
 } from "../orchestration-journal.ts";
 
 let workspace: string;
@@ -37,10 +35,6 @@ describe("finalizeWorkspace — rename and backward compat", () => {
     expect(typeof finalizeWorkspace).toBe("function");
   });
 
-  test("verifyCompletion is a deprecated re-export of finalizeWorkspace", () => {
-    expect(verifyCompletion).toBe(finalizeWorkspace);
-  });
-
   test("FinalizeWorkspaceInput and FinalizeWorkspaceResult types are exported", () => {
     // Type-level test: if these imports compile, the types are exported.
     const input: FinalizeWorkspaceInput = { workspace };
@@ -50,7 +44,7 @@ describe("finalizeWorkspace — rename and backward compat", () => {
   });
 });
 
-describe("finalizeWorkspace — core completion logic (preserved from verifyCompletion)", () => {
+describe("finalizeWorkspace — core completion logic", () => {
   test("returns complete: true when all steps completed", async () => {
     await logStep({
       agent_id: "test-agent-fw1",
@@ -153,12 +147,5 @@ describe("finalizeWorkspace — absorbed analytics_recorded field", () => {
     assertOk(result);
     expect(result.complete).toBe(false);
     expect("analytics_recorded" in result).toBe(false);
-  });
-});
-
-describe("finalizeWorkspace — register-journal shim (verify_completion MCP tool)", () => {
-  test("verifyCompletion is a re-export alias for finalizeWorkspace (same reference)", () => {
-    // The deprecated shim must point to the same function — not a wrapper
-    expect(verifyCompletion).toBe(finalizeWorkspace);
   });
 });

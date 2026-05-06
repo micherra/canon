@@ -260,7 +260,6 @@ export function canEnterState(
 
 /**
  * Append a concern entry to board.concerns. Pure — returns a new Board.
- * Moved from report-result.ts — belongs in the Board aggregate.
  */
 export function appendConcern(
   board: Board,
@@ -284,7 +283,6 @@ export function appendConcern(
  * Accumulate cannot_fix items into the board's iteration for a state.
  * Creates a cross-product of principleIds × filePaths, deduplicates against
  * existing items, and returns a new Board.
- * Moved from report-result.ts — belongs in the Board aggregate.
  */
 export function accumulateCannotFix(
   board: Board,

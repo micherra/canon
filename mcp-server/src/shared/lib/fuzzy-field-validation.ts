@@ -6,7 +6,7 @@
  * undefined" error. This utility detects unknown fields before Zod strips them
  * and produces actionable suggestions like:
  *
- *   Unknown field "status" in report_result — did you mean "status_keyword"?
+ *   Unknown field "status" in log_step — did you mean "status_keyword"?
  *
  * Usage: call `installFuzzyValidation(server)` after creating the McpServer
  * but before connecting the transport. It patches `validateToolInput` to run

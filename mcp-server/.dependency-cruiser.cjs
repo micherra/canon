@@ -28,7 +28,7 @@ module.exports = {
       name: "no-orchestration-to-drift-direct",
       comment:
         "Orchestration must not import directly from platform/storage/drift/ — use IDriftStore interface in domains/drift/. " +
-        "DEFERRED-DI exceptions: effects.ts, report.ts, context-enrichment.ts, and update-board.ts still instantiate " +
+        "DEFERRED-DI exceptions: report.ts and orchestration-journal.ts still instantiate " +
         "DriftStore/appendFlowRun directly because full DI wiring is deferred to a future task. " +
         "Remove these pathNot entries once a DI container is wired.",
       severity: "error",
@@ -39,9 +39,7 @@ module.exports = {
         pathNot: [
           "^src/features/orchestration/__tests__/",
           "\\.test\\.ts$",
-          "^src/features/orchestration/engine/effects\\.ts$",
           "^src/features/orchestration/tools/report\\.ts$",
-          "^src/features/orchestration/services/context-enrichment\\.ts$",
           "^src/features/orchestration/tools/orchestration-journal\\.ts$",
           // ADR-016: learn-gate reads drift DB directly for flow count — deferred DI exception
           "^src/features/orchestration/services/learn-gate\\.ts$",

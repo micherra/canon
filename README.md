@@ -159,7 +159,7 @@ Key capabilities in Agent Teams mode:
 - **Per-message re-classification** — intent is re-classified on every message, not once per session. A design discussion that pivots to a build request is routed through the planner regardless of prior context.
 - **Pre-write gate (L1 + L4)** — prevents code changes outside a Canon flow. L1 is a soft enforcement check; L4 is the `canon-workspace-check.sh` hook that blocks `Edit`/`Write`/`Bash` when no active Canon workspace exists.
 - **Skill preloading** — before each agent spawn, `resolve_agent_skills` reads the agent's declared rules, references, primers, and templates, then injects the resolved content directly into the spawn prompt. Agents receive governing context without runtime reads.
-- **Journal-based tracking** — each step is logged with `log_step` before and after spawn. `verify_completion` checks that all expected artifacts exist before the flow closes.
+- **Journal-based tracking** — each step is logged with `log_step` before and after spawn. `finalize_workspace` checks that all expected artifacts exist before the flow closes.
 - **Resume protocol** — reads `journal.json` to identify the last completed step, then continues from the first unfinished step.
 
 ### Hooks
@@ -280,7 +280,7 @@ Canon's tooling is provided by a TypeScript MCP server (`mcp-server/`) that Clau
 
 | Area | Tools |
 |------|-------|
-| **Orchestration** | `load_flow`, `init_workspace`, `drive_flow`, `update_board`, `report_result`, `post_message`, `get_messages`, `inject_wave_event`, `get_transcript`, `simulate_flow`, `resolve_wave_event`, `resolve_after_consultations`, `resolve_agent_skills`, `log_step`, `verify_completion` |
+| **Orchestration** | `load_flow`, `init_workspace`, `drive_flow`, `update_board`, `report_result`, `post_message`, `get_messages`, `inject_wave_event`, `get_transcript`, `simulate_flow`, `resolve_wave_event`, `resolve_after_consultations`, `resolve_agent_skills`, `log_step`, `finalize_workspace` |
 | **Principles** | `get_principles`, `list_principles`, `get_compliance`, `review_code` |
 | **Knowledge graph** | `codebase_graph`, `graph_query`, `semantic_search`, `store_summaries` |
 | **PR review** | `show_pr_impact`, `review_code`, `store_pr_review` |

@@ -3,8 +3,94 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseReviewArtifact } from "../engine/effects.ts";
 import { VERDICT_MAP, type WriteReviewInput, writeReview } from "../tools/write-review.ts";
+
+type ParsedReview = {
+  verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  files: string[];
+  violations: Array<{ principle_id: string; severity: string; file_path?: string }>;
+  honored: string[];
+  score: {
+    rules: { passed: number; total: number };
+    opinions: { passed: number; total: number };
+    conventions: { passed: number; total: number };
+  };
+};
+
+function parseScoreCell(s: string): { passed: number; total: number } {
+  const m = s.match(/(\d+)\s*\/\s*(\d+)/);
+  return m ? { passed: parseInt(m[1], 10), total: parseInt(m[2], 10) } : { passed: 0, total: 0 };
+}
+
+function parseReviewArtifact(content: string): ParsedReview | null {
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  let verdict: ParsedReview["verdict"] = "CLEAN";
+  if (fmMatch) {
+    const vm = fmMatch[1].match(/verdict:\s*"?(BLOCKING|WARNING|CLEAN)"?/i);
+    if (vm) verdict = vm[1].toUpperCase() as ParsedReview["verdict"];
+  }
+
+  const violations: ParsedReview["violations"] = [];
+  const filesReviewed: string[] = [];
+  const tableMatch = content.match(
+    /#### Violations\s*\n(?:<!--.*?-->\s*\n)?\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/,
+  );
+  if (tableMatch) {
+    for (const row of tableMatch[1].trim().split("\n")) {
+      const cells = row
+        .split("|")
+        .map((c) => c.trim())
+        .filter(Boolean);
+      if (cells.length < 3) continue;
+      const filePath = cells[2]?.replace(/`/g, "").split(":")[0];
+      violations.push({
+        principle_id: cells[0],
+        severity: cells[1],
+        ...(filePath ? { file_path: filePath } : {}),
+      });
+      if (filePath && !filesReviewed.includes(filePath)) filesReviewed.push(filePath);
+    }
+  }
+
+  const honored: string[] = [];
+  const honoredMatch = content.match(/#### Honored\s*\n(?:<!--.*?-->\s*\n)?((?:- \*\*.*\n)*)/);
+  if (honoredMatch) {
+    for (const line of honoredMatch[1].trim().split("\n")) {
+      const idMatch = line.match(/- \*\*([^*]+)\*\*/);
+      if (idMatch) honored.push(idMatch[1]);
+    }
+  }
+
+  const scoreTableMatch = content.match(
+    /#### Score\s*\n\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/,
+  );
+  let rules = { passed: 0, total: 0 },
+    opinions = { passed: 0, total: 0 },
+    conventions = { passed: 0, total: 0 };
+  if (scoreTableMatch) {
+    for (const row of scoreTableMatch[1].trim().split("\n")) {
+      const cells = row
+        .split("|")
+        .map((c) => c.trim())
+        .filter(Boolean);
+      if (cells.length < 4) continue;
+      const r = parseScoreCell(cells[1]);
+      const o = parseScoreCell(cells[2]);
+      const c = parseScoreCell(cells[3]);
+      rules = { passed: rules.passed + r.passed, total: rules.total + r.total };
+      opinions = { passed: opinions.passed + o.passed, total: opinions.total + o.total };
+      conventions = { passed: conventions.passed + c.passed, total: conventions.total + c.total };
+    }
+  }
+
+  return {
+    files: filesReviewed,
+    honored,
+    score: { conventions, opinions, rules },
+    verdict,
+    violations,
+  };
+}
 
 let tmpDir: string;
 

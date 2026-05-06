@@ -2,7 +2,6 @@ import {
   batchLogSteps,
   finalizeWorkspace,
   logStep,
-  verifyCompletion,
 } from "@features/orchestration/tools/orchestration-journal.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { z } from "zod";
@@ -105,23 +104,8 @@ function registerFinalizeWorkspace(): void {
   );
 }
 
-function registerVerifyCompletion(): void {
-  server.registerTool(
-    "verify_completion",
-    {
-      description:
-        "[Deprecated — use finalize_workspace] Verify flow completion by checking the orchestration journal. Returns steps logged, missing steps, missing artifacts, and aggregated quality signals.",
-      inputSchema: {
-        workspace: z.string().describe("Workspace directory path"),
-      },
-    },
-    wrapHandler(async (input) => verifyCompletion(input)),
-  );
-}
-
 export function registerJournalTools(): void {
   registerLogStep();
   registerBatchLogSteps();
   registerFinalizeWorkspace();
-  registerVerifyCompletion();
 }

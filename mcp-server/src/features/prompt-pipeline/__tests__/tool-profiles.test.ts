@@ -58,9 +58,8 @@ describe("AGENT_TOOL_PROFILES", () => {
     expect(AGENT_TOOL_PROFILES.chat.allowed).not.toContain("Bash");
   });
 
-  it("architect profile includes write_plan_index and update_board MCP tools", () => {
+  it("architect profile includes write_plan_index MCP tool", () => {
     expect(AGENT_TOOL_PROFILES.architect.allowed).toContain("write_plan_index");
-    expect(AGENT_TOOL_PROFILES.architect.allowed).toContain("update_board");
   });
 
   it("engineer profile includes graph_query, semantic_search, get_file_context MCP tools", () => {

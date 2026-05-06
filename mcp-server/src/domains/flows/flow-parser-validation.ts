@@ -38,7 +38,7 @@ export const RUNTIME_VARIABLES = new Set([
   "task_id",
   "base_commit",
   "CLAUDE_PLUGIN_ROOT",
-  // Session branch variables (injected by enterAndPrepareState from execution row)
+  // Session branch variables (injected from execution row)
   "branch",
   "worktree_branch",
   "worktree_path",

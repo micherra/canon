@@ -23,7 +23,7 @@ export type SpawnPromptEntry = {
   tools?: string[];
   disallowed_tools?: string[];
   permission_mode?: "auto" | "prompt" | "deny_unknown";
-  /** ADR-014: structured audit warnings from resolveToolProfile — forwarded to event log by drive-flow. */
+  /** ADR-014: structured audit warnings from resolveToolProfile. */
   tool_scope_warnings?: import("./tool-profiles.ts").ToolScopeWarning[];
 };
 
@@ -60,7 +60,7 @@ export type SpawnPromptInput = {
   consultation_outputs?: Record<string, { section?: string; summary: string }>;
   /**
    * Pre-read board — if provided, skips the internal readBoard call.
-   * Use this when the caller has already read the board (e.g., enterAndPrepareState)
+   * Use this when the caller has already read the board
    * to avoid a redundant round-trip.
    */
   _board?: Board;

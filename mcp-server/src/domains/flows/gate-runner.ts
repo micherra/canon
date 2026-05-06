@@ -136,7 +136,7 @@ export function normalizeGates(
   }
 
   // Tier 3: Discovered gates are stored on board state as metadata but NOT executed.
-  // Agent-discovered gates provide useful context (recorded by report_result) but only
+  // Agent-discovered gates provide useful context but only
   // YAML-defined gates (tiers 1 and 2) are executed — this prevents agent-injected
   // arbitrary commands from running via the gate runner.
   // (boardState?.discovered_gates are intentionally ignored here)

@@ -4,22 +4,15 @@
  * These tests verify cross-task contracts and coverage gaps:
  *   1. Schema split: flow-schema.ts is deleted; no importer references it
  *   2. Interface import paths: all 3 repository interfaces live in domains/ layer
- *   3. IDriftStore injection: effects.ts honours the optional driftStore override path
- *   4. Bounded context directories: all 9 READMEs exist (dc-06)
- *   5. Boundary enforcement: npm run lint:deps exits 0 (dc-04)
- *
- * These are integration-level tests that exercise cross-module contracts,
- * not the unit behaviour of individual schemas or stores (covered by implementors).
+ *   3. Bounded context directories: all 9 READMEs exist (dc-06)
+ *   4. Boundary enforcement: npm run lint:deps exits 0 (dc-04)
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-
-import { executeEffects } from "../engine/effects.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -119,11 +112,6 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
     expect(content).toMatch(/export (?:interface|type) IKgQuery/);
   });
 
-  it("effects.ts imports IDriftStore from @domains/drift/ (not directly from @platform/)", () => {
-    const content = readFileSync(resolve(SRC, "features/orchestration/engine/effects.ts"), "utf-8");
-    expect(content).toMatch(/from ["']@domains\/drift\/drift-store\.interface/);
-  });
-
   it("kg-context-formatter.ts imports IKgStore/IKgQuery from @domains/knowledge-graph/", () => {
     // Since inject-context.ts now delegates to the shared kg-context-formatter module,
     // the DDD boundary is enforced in that module instead.
@@ -149,121 +137,7 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. IDriftStore injection — effects.ts optional driftStore override path
-//    Declared Known Gap in ddd-03: "the new driftStore?: IDriftStore path is
-//    not exercised by existing tests"
-// ---------------------------------------------------------------------------
-
-describe("IDriftStore injection — effects.ts optional driftStore override (ddd-03 known gap)", () => {
-  it("executeEffects short-circuits with no effects and does not call the injected store", async () => {
-    const calls: string[] = [];
-    const mockStore = {
-      appendReview: async () => {
-        calls.push("appendReview");
-      },
-      getComplianceTrend: async () => [],
-      getLastReviewForBranch: async () => null,
-      getLastReviewForPr: async () => null,
-      getReviews: async () => [],
-      getReviewsForFiles: async () => [],
-    };
-
-    const stateDef = {
-      agent: "canon:implementor",
-      effects: undefined,
-      type: "single" as const,
-    };
-
-    const result = await executeEffects(stateDef as never, {
-      artifacts: [],
-      driftStore: mockStore,
-      projectDir: "/nonexistent",
-      workspace: "/nonexistent",
-    });
-
-    // No effects declared → empty array returned; injected store never called
-    expect(result).toEqual([]);
-    expect(calls).toHaveLength(0);
-  });
-
-  it("executeEffects uses the injected driftStore.appendReview when persist_review effect is declared", async () => {
-    const appendedReviews: unknown[] = [];
-    const mockStore = {
-      appendReview: async (entry: unknown) => {
-        appendedReviews.push(entry);
-      },
-      getComplianceTrend: async () => [],
-      getLastReviewForBranch: async () => null,
-      getLastReviewForPr: async () => null,
-      getReviews: async () => [],
-      getReviewsForFiles: async () => [],
-    };
-
-    const tmpDir = mkdtempSync(`${tmpdir()}/effects-test-`);
-    const reviewMeta = {
-      _type: "review",
-      _version: 1,
-      verdict: "CLEAN",
-      violations: [],
-    };
-    writeFileSync(`${tmpDir}/REVIEW.meta.json`, JSON.stringify(reviewMeta));
-
-    try {
-      const stateDef = {
-        agent: "canon:reviewer",
-        effects: [{ type: "persist_review" }],
-        type: "single" as const,
-      };
-
-      await executeEffects(stateDef as never, {
-        artifacts: [`${tmpDir}/REVIEW.meta.json`],
-        driftStore: mockStore,
-        projectDir: tmpDir,
-        workspace: tmpDir,
-      });
-
-      // The injected mockStore.appendReview must have been called — not the real DriftStore
-      expect(appendedReviews.length).toBeGreaterThan(0);
-      const review = appendedReviews[0] as Record<string, unknown>;
-      expect(review.verdict).toBe("CLEAN");
-    } finally {
-      rmSync(tmpDir, { force: true, recursive: true });
-    }
-  });
-
-  it("executeEffects empty-effects array also short-circuits without calling the store", async () => {
-    const calls: string[] = [];
-    const mockStore = {
-      appendReview: async () => {
-        calls.push("appendReview");
-      },
-      getComplianceTrend: async () => [],
-      getLastReviewForBranch: async () => null,
-      getLastReviewForPr: async () => null,
-      getReviews: async () => [],
-      getReviewsForFiles: async () => [],
-    };
-
-    const stateDef = {
-      agent: "canon:implementor",
-      effects: [],
-      type: "single" as const,
-    };
-
-    const result = await executeEffects(stateDef as never, {
-      artifacts: [],
-      driftStore: mockStore,
-      projectDir: "/nonexistent",
-      workspace: "/nonexistent",
-    });
-
-    expect(result).toEqual([]);
-    expect(calls).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. Bounded context directory structure — all 9 READMEs exist (dc-06)
+// 3. Bounded context directory structure — all 9 READMEs exist (dc-06)
 // ---------------------------------------------------------------------------
 
 describe("bounded context directories — README.md files (dc-06)", () => {
@@ -298,7 +172,7 @@ describe("bounded context directories — README.md files (dc-06)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. Boundary enforcement — dependency-cruiser (dc-04)
+// 4. Boundary enforcement — dependency-cruiser (dc-04)
 // ---------------------------------------------------------------------------
 
 describe("boundary enforcement — dependency-cruiser (dc-04)", () => {

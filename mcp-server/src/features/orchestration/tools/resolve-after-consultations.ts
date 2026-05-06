@@ -6,7 +6,7 @@
  * no convergence check. It runs at the post-completion lifecycle breakpoint.
  *
  * Per decision after-tool-shape-01: standalone tool keeps the "after"
- * lifecycle phase cleanly separated from enterAndPrepareState (pre-spawn).
+ * lifecycle phase cleanly separated from state preparation (pre-spawn).
  */
 
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";

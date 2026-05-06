@@ -55,7 +55,7 @@ export async function injectWaveEvent(input: InjectWaveEventInput): Promise<Inje
   // Count pending events
   const pending = store.getWaveEvents({ status: "pending" });
 
-  // Emit wave_event_injected (best-effort — same pattern as update-board.ts)
+  // Emit wave_event_injected (best-effort)
   const onWaveEventInjected = (
     e: import("@domains/messages/events.js").FlowEventMap["wave_event_injected"],
   ) => {

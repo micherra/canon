@@ -5,8 +5,6 @@
  *
  * 1. ProcessResult shape contract: all 5 fields present across both adapters
  * 2. Security boundary: gitExec never has shell, runShell always has shell
- * 3. Contract-checker adapter routing: file_changed uses gitExec (no shell),
- *    bash_check uses runShell (shell: true) — unit-level mock verification
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -200,100 +198,5 @@ describe("Security boundary — process adapter always uses shell", () => {
   it("runShell passes shell:true even with custom timeout", () => {
     runShell("npm test", "/project", 300_000);
     expect(lastSpawnSyncOpts.shell).toBe(true);
-  });
-});
-
-// 3. Contract-checker adapter routing
-// Declared Known Gap in adr002-02: "contract-checker.ts adapter routing is
-// verified via integration tests only (no unit-level mock verifying gitExec
-// vs runShell routing)".
-//
-// We use a fresh vi.doMock approach here to isolate the module under test.
-
-describe("Contract-checker adapter routing — gitExec used for file_changed (not runShell)", () => {
-  it("file_changed assertion calls gitExec (array args) — no shell injection possible", async () => {
-    // We verify that the gitExec mock is called (not runShell) for file_changed.
-    // This test uses vitest's module isolation: import fresh copies with doMock.
-    const gitExecCalls: { args: string[]; cwd: string }[] = [];
-    const runShellCalls: { cmd: string; cwd: string }[] = [];
-
-    vi.doMock("@platform/adapters/git-adapter.ts", () => ({
-      gitDiff: vi.fn(),
-      gitExec: (args: string[], cwd: string) => {
-        gitExecCalls.push({ args, cwd });
-        // Simulate 'file changed' — non-empty stdout means changed
-        return { exitCode: 0, ok: true, stderr: "", stdout: "initial.ts\n", timedOut: false };
-      },
-      gitStatus: vi.fn(),
-    }));
-
-    vi.doMock("@platform/adapters/process-adapter.ts", () => ({
-      runShell: (cmd: string, cwd: string) => {
-        runShellCalls.push({ cmd, cwd });
-        return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
-      },
-    }));
-
-    vi.resetModules();
-    const { evaluatePostconditions } = await import("../services/contract-checker.ts");
-
-    const results = evaluatePostconditions(
-      [{ target: "initial.ts", type: "file_changed" }],
-      "/project",
-      "abc1234",
-    );
-
-    expect(results).toHaveLength(1);
-    expect(results[0].passed).toBe(true);
-    // gitExec was called (array args routing — no shell)
-    expect(gitExecCalls).toHaveLength(1);
-    expect(Array.isArray(gitExecCalls[0].args)).toBe(true);
-    expect(gitExecCalls[0].args).toContain("diff");
-    expect(gitExecCalls[0].args).toContain("initial.ts");
-    // runShell was NOT called for file_changed
-    expect(runShellCalls).toHaveLength(0);
-
-    vi.doUnmock("../../../platform/adapters/git-adapter.ts");
-    vi.doUnmock("../../../platform/adapters/process-adapter.ts");
-  });
-
-  it("bash_check assertion calls runShell (shell: true) — not gitExec", async () => {
-    const gitExecCalls: string[][] = [];
-    const runShellCalls: string[] = [];
-
-    vi.doMock("@platform/adapters/git-adapter.ts", () => ({
-      gitDiff: vi.fn(),
-      gitExec: (args: string[]) => {
-        gitExecCalls.push(args);
-        return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
-      },
-      gitStatus: vi.fn(),
-    }));
-
-    vi.doMock("@platform/adapters/process-adapter.ts", () => ({
-      runShell: (cmd: string) => {
-        runShellCalls.push(cmd);
-        return { exitCode: 0, ok: true, stderr: "", stdout: "test passed", timedOut: false };
-      },
-    }));
-
-    vi.resetModules();
-    const { evaluatePostconditions } = await import("../services/contract-checker.ts");
-
-    const results = evaluatePostconditions(
-      [{ command: "echo ok", type: "bash_check" }],
-      "/project",
-    );
-
-    expect(results).toHaveLength(1);
-    expect(results[0].passed).toBe(true);
-    // runShell was called for bash_check
-    expect(runShellCalls).toHaveLength(1);
-    expect(runShellCalls[0]).toBe("echo ok");
-    // gitExec was NOT called for bash_check
-    expect(gitExecCalls).toHaveLength(0);
-
-    vi.doUnmock("../../../platform/adapters/git-adapter.ts");
-    vi.doUnmock("../../../platform/adapters/process-adapter.ts");
   });
 });

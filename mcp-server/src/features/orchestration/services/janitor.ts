@@ -6,7 +6,7 @@
  *   - prune_worktrees: remove orphaned agent isolation worktrees from .claude/worktrees/
  *   - prune_workspaces: remove abandoned workspace slugs by age (all branches)
  *
- * Completed workspaces are archived and deleted immediately by verify_completion.
+ * Completed workspaces are archived and deleted immediately by finalize_workspace.
  * The janitor only handles abandoned workspaces (no .lock file, older than
  * max_abandoned_workspace_age_hours). When max_abandoned_workspace_age_hours is null,
  * the prune_workspaces task is skipped entirely.
@@ -214,7 +214,7 @@ function pruneWorktreesTask(projectDir: string): JanitorTaskResult {
 /**
  * Prune abandoned workspace slug directories across ALL branch directories (including `main`).
  *
- * Completed workspaces are archived and deleted immediately by verify_completion —
+ * Completed workspaces are archived and deleted immediately by finalize_workspace —
  * the janitor only handles abandoned workspaces (no .lock file).
  *
  * A workspace slug is pruned when:

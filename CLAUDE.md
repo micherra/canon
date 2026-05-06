@@ -328,7 +328,7 @@ Write the consolidated review using the `write_review` MCP tool.
 
 - Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
 - After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
-- The journal is your checklist. The completion hook (`verify_completion`) verifies it.
+- The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
 - When a tail step (context-sync, learn) is skipped, the journal entry MUST include a `skip_reason` field explaining why (e.g., `"markdown-only change, no context drift"`, `"session timeout"`, `"no new patterns observed"`). Omitting a tail step without a `skip_reason` is not permitted — the completion hook treats a missing reason as a journal defect.
 - When a WARNING verdict is resolved by the orchestrator inline (no fix agent spawned), log a synthetic step entry with `step_id: inline-fix`, `status: completed`, and the resolution details in `outcome`.
 
@@ -390,7 +390,7 @@ ALL three must pass for the verify step to succeed. If any gate fails, the engin
 
 ### Completion Checklist
 
-1. Call `verify_completion({ workspace })` — if steps or artifacts missing, resolve before proceeding.
+1. Call `finalize_workspace({ workspace })` — if steps or artifacts missing, resolve before proceeding.
 2. Run context-sync: spawn the scribe agent. The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md on the build branch. Context-sync runs before ship so that doc updates are committed to the build branch and included in the PR — after ship the worktree is removed and the scribe would have no branch to commit to.
 3. Ship the build:
    - **Default**: spawn the shipper agent. The shipper pushes the worktree branch to origin and creates a PR to main. After PR creation, the shipper removes the worktree (`git worktree remove {worktree_path}`) but does NOT delete the build branch — it is needed for the PR.

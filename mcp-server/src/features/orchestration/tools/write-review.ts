@@ -44,8 +44,7 @@ export const VERDICT_MAP: Record<WriteReviewInput["verdict"], "BLOCKING" | "WARN
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 /**
- * Generate normalized REVIEW.md content that is parseable by the existing
- * parseReviewArtifact function in features/orchestration/engine/effects.ts.
+ * Generate normalized REVIEW.md content.
  *
  * Format:
  * - YAML frontmatter with mapped verdict
@@ -60,19 +59,17 @@ function generateMarkdown(
 ): string {
   const lines: string[] = [];
 
-  // YAML frontmatter — parseReviewArtifact matches /verdict:\s*"?(BLOCKING|WARNING|CLEAN)"?/i
+  // YAML frontmatter
   lines.push("---");
   lines.push(`verdict: ${mappedVerdict}`);
   lines.push("---");
   lines.push("");
 
-  // Heading — parseReviewArtifact matches /## Canon Review — Verdict:\s*(BLOCKING|WARNING|CLEAN)/i
+  // Heading
   lines.push(`## Canon Review — Verdict: ${mappedVerdict}`);
   lines.push("");
 
-  // Violations section — parseReviewArtifact regex:
-  // /#### Violations\s*\n(?:<!--.*?-->\s*\n)?\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/
-  // Cells parsed: [0]=principle_id, [1]=severity, [2]=file_path (before colon, backticks stripped)
+  // Violations section
   lines.push("#### Violations");
   lines.push("");
   lines.push("| Principle | Severity | Location |");
@@ -85,9 +82,7 @@ function generateMarkdown(
   }
   lines.push("");
 
-  // Honored section — parseReviewArtifact regex:
-  // /#### Honored\s*\n(?:<!--.*?-->\s*\n)?((?:- \*\*.*\n)*)/
-  // Extracts: /- \*\*([^*]+)\*\*/
+  // Honored section
   lines.push("#### Honored");
   lines.push("");
   for (const id of input.honored) {
@@ -95,10 +90,7 @@ function generateMarkdown(
   }
   lines.push("");
 
-  // Score section — parseReviewArtifact regex:
-  // /#### Score\s*\n\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/
-  // Cells: [0]=layer, [1]=rules "P / T", [2]=opinions "P / T", [3]=conventions "P / T"
-  // Scores are aggregated across all rows
+  // Score section
   lines.push("#### Score");
   lines.push("");
   lines.push("| Layer | Rules | Opinions | Conventions |");

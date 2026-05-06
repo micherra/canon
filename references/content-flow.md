@@ -116,6 +116,6 @@ When routing a `principle`, `learn` (application), or `docs` intent under `CANON
 4. Spawn the `research` step if the intent is non-trivial.
 5. Spawn the `implement` step with the appropriate agent (writer or learner).
 6. Run the mandatory tail: `context-sync`, then `learn`.
-7. Call `verify_completion` and `update_board`.
+7. Call `finalize_workspace`.
 
 The MCP tool composition table in CLAUDE.md applies to each step type (e.g., call `get_principles` before the `implement` spawn).

@@ -223,7 +223,7 @@ export const BaseStateFields = {
   agents: z.array(z.string()).optional(),
   // Approval gate fields (ADR-017)
   // Note: approval_gate on a terminal state is semantically nonsensical — terminal states
-  // short-circuit in drive-flow before any gate check, so no runtime error occurs.
+  // short-circuit before any gate check, so no runtime error occurs.
   approval_gate: z.boolean().optional(),
   cluster_by: z.enum(["directory", "layer"]).optional(),
   compete: CompeteConfigSchema.optional(),

@@ -3,7 +3,7 @@
  *
  * Agents and external tooling can post structured events to the "flow-events"
  * channel on a workspace's ExecutionStore. The orchestrator calls drainFlowEvents
- * once per drive-flow cycle to pick up any pending directives and convert them into
+ * once per orchestration cycle to pick up any pending directives and convert them into
  * an actionable effect (insert, skip, escalate) or a no-op (none).
  *
  * ADR-012 / fe-02
