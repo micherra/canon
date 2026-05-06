@@ -30,7 +30,7 @@ vi.mock("@graph/kg-query.ts", () => ({
       getCallees: vi.fn().mockReturnValue([{ entity_id: 3, kind: "function", name: "callee" }]),
       getCallers: vi.fn().mockReturnValue([{ entity_id: 2, kind: "function", name: "caller" }]),
       getFileTagsByFileId: vi.fn().mockReturnValue([]),
-        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()),
+      getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()),
       search: vi.fn().mockReturnValue([]),
     };
   }),
