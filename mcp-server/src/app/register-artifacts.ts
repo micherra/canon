@@ -11,7 +11,7 @@ function registerPlanTools(): void {
     "write_plan_index",
     {
       description:
-        "Write a structured plan index (INDEX.md) for wave execution. Accepts typed task entries and produces normalized markdown that parseTaskIdsForWave can reliably parse.",
+        "Write a structured plan index (INDEX.md) for wave execution. Accepts typed task entries and produces normalized markdown for reliable downstream parsing.",
       inputSchema: {
         slug: z.string(),
         tasks: z.array(

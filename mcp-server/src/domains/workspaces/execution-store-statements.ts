@@ -26,11 +26,6 @@ export type ExecutionStoreStatements = {
   stmtGetMessagesSince: Database.Statement;
   stmtGetMessagesSinceId: Database.Statement;
   stmtHasMessages: Database.Statement;
-  // Wave events
-  stmtPostWaveEvent: Database.Statement;
-  stmtGetWaveEvents: Database.Statement;
-  stmtGetWaveEventsByStatus: Database.Statement;
-  stmtUpdateWaveEvent: Database.Statement;
   // Events
   stmtAppendEvent: Database.Statement;
   stmtGetEventsByCorrelation: Database.Statement;
@@ -158,23 +153,6 @@ function prepareMessageAndEventStmts(db: Database.Database) {
   );
   const stmtHasMessages = db.prepare(`SELECT 1 FROM messages WHERE channel = ? LIMIT 1`);
 
-  const stmtPostWaveEvent = db.prepare(`
-    INSERT INTO wave_events (id, type, payload, timestamp, status)
-    VALUES (@id, @type, @payload, @timestamp, @status)
-  `);
-  const stmtGetWaveEvents = db.prepare(`SELECT * FROM wave_events ORDER BY timestamp ASC`);
-  const stmtGetWaveEventsByStatus = db.prepare(
-    `SELECT * FROM wave_events WHERE status = ? ORDER BY timestamp ASC`,
-  );
-  const stmtUpdateWaveEvent = db.prepare(`
-    UPDATE wave_events
-    SET status           = COALESCE(@status, status),
-        applied_at       = COALESCE(@applied_at, applied_at),
-        resolution       = COALESCE(@resolution, resolution),
-        rejection_reason = COALESCE(@rejection_reason, rejection_reason)
-    WHERE id = @id AND status = 'pending'
-  `);
-
   const stmtAppendEvent = db.prepare(`
     INSERT INTO events (type, payload, correlation_id, timestamp)
     VALUES (@type, @payload, @correlation_id, @timestamp)
@@ -194,11 +172,7 @@ function prepareMessageAndEventStmts(db: Database.Database) {
     stmtGetMessages,
     stmtGetMessagesSince,
     stmtGetMessagesSinceId,
-    stmtGetWaveEvents,
-    stmtGetWaveEventsByStatus,
     stmtHasMessages,
-    stmtPostWaveEvent,
-    stmtUpdateWaveEvent,
   };
 }
 
