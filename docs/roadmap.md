@@ -10,7 +10,7 @@ Forward-looking planning document. "What's Shipped" is a brief summary of comple
 
 - **0.1 Agent teams migration** — `drive_flow`, `load_flow`, `simulate_flow` deleted. All 28 flow YAML files deleted. `CANON_AGENT_TEAMS_MODE=on` active, 20/20 soak gate passed.
 - **0.2 Unified work tracking** — Shipped differently from plan. PR #160 deleted `board.json`, `board-sync.ts`, `update-board.ts`, `report-result.ts` (-10,316 lines). Journal is now the single tracking substrate; DAG execution uses native `TaskCreate` for parallel work.
-- **0.3 Runbooks replace flow YAML** — Planner synthesizes runbooks via `canon:synthesize` skill. `init_workspace` accepts `runbook_content`/`brief_content` and validates mandatory tail.
+- **0.3 Runbooks replace flow YAML** — Planner synthesizes runbooks via `canon:synthesize` skill. `init_workspace` accepts `runbook_content`/`brief_content` and persists them to `plans/{slug}/runbook.md` and `plans/{slug}/planning-brief.md`.
 
 **Tier 1**
 
@@ -18,7 +18,7 @@ Forward-looking planning document. "What's Shipped" is a brief summary of comple
 
 **Tier 2**
 
-- **10 Durable agent metrics** — Shipped differently. `record_agent_metrics` + `finalize_workspace` aggregates into `FlowRunEntry` in DriftStore. `get_build_history` + `get_cross_run_analysis` provide query surface. (Roadmap said "rollup + query tool" — this is that, via different mechanism.)
+- **10 Durable agent metrics** — Partial. `record_agent_metrics` records per-agent performance counters (tool calls, turns) into execution state metrics. `finalize_workspace` appends a minimal `FlowRunEntry` to DriftStore (timing and iteration data; domain skills and test pass rate are not persisted). `get_build_history` + `get_cross_run_analysis` provide query surface over the stored runs.
 - **11 Architectural boundary cleanup** — Done. `.dependency-cruiser.cjs` tracks 5 justified exceptions.
 
 **Tier 4**

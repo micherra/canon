@@ -14,7 +14,7 @@ Covers MCP tool improvements, knowledge graph intelligence, self-improving skill
 
 **P1 — Prepare tools for the new model**
 
-- `init_workspace` journal initialization — Done.
+- `init_workspace` journal initialization — Done (attribution correction: `journal.json` is created lazily by `log_step` on first call, not by `init_workspace`).
 - `report_result` simplification — Exceeded scope. Fully deleted in PR #160, not just simplified.
 
 **P2 — Consolidation and cleanup**
@@ -32,7 +32,7 @@ Covers MCP tool improvements, knowledge graph intelligence, self-improving skill
 
 **P4 — Self-improving skills**
 
-- Flow outcome tracking — Done. `JournalOutcome` records domain skills loaded, tool call counts, quality signals (review verdict, test pass rate, fix iterations), and flow duration.
+- Flow outcome tracking — Partial. `JournalOutcome` records quality signals (`fix_iterations`, `review_verdict`, `test_pass_rate`). Domain skills loaded is a separate `JournalStep` field. `finalizeWorkspace` computes wall-clock duration and aggregates domain skills across steps, but the persisted `FlowRunEntry` does not include test pass rate or tool call counts.
 
 ---
 
@@ -44,7 +44,7 @@ Covers MCP tool improvements, knowledge graph intelligence, self-improving skill
 
 ### P2 — Consolidation (remaining)
 
-**`write_*` → `write_artifact`** — 5 individual write tools (`write_plan_index`, `write_test_report`, `write_review`, `write_implementation_summary`, `write_research_synthesis`) still individually registered. Consolidating into one `write_artifact({ type, workspace, data })` would reduce MCP surface and make discovery easier for agents. (`write_design_brief` was the 6th in the original plan — confirm its status before consolidating.)
+**`write_*` → `write_artifact`** — 5 individual write tools (`write_plan_index`, `write_test_report`, `write_review`, `write_implementation_summary`, `write_design_brief`) still individually registered. Consolidating into one `write_artifact({ type, workspace, data })` would reduce MCP surface and make discovery easier for agents. (`write_research_synthesis` from the original plan is not registered and does not exist.)
 
 ### P3 — KG intelligence (remaining)
 
@@ -52,7 +52,7 @@ Covers MCP tool improvements, knowledge graph intelligence, self-improving skill
 
 ### P4 — Self-improving skills (remaining)
 
-**Skill effectiveness tracking** — The learner analyzes journal outcome data across flows to recommend: domain skills that should load more often, skills that need updating, new skills that should be created, and `maxTurns` adjustments.
+**Skill effectiveness tracking** — The learner analyzes journal outcome data across flows to recommend: domain skills that should load more often, skills that need updating, new skills that should be created, and `maxTurns` adjustments. (Requires extending `JournalOutcome` — currently only `fix_iterations`, `review_verdict`, and `test_pass_rate` are recorded; domain skill counts and tool call counts are not yet persisted to `FlowRunEntry`.)
 
 **Graph-structured agent memory** — Agents currently write freeform `MEMORY.md`. Structured memory as KG nodes would enable queryability via `graph_query`, cross-agent sharing, and weighting/pruning. Deferred until after memory architecture (P5) is in place.
 
@@ -75,11 +75,11 @@ Covers MCP tool improvements, knowledge graph intelligence, self-improving skill
 
 **Parallel multi-perspective review** — Shipped partially as file-partition dispatch (not perspective-based). The planned perspective-based split — principle compliance, bug detection, security scan, history context — is not yet built.
 
-**Inline diff view** — New `DiffView.svelte` component in the MCP app showing violations pinned to line numbers with Shiki syntax highlighting. Not for editing — visualization only.
+**Inline diff view** — NOT STARTED. Planned: new `DiffView.svelte` component in the MCP app showing violations pinned to line numbers with Shiki syntax highlighting. Not for editing — visualization only.
 
-**Outdated violation detection** — Track which diff lines each violation was pinned to. On re-review, violations on unchanged lines persist; violations on changed lines are marked "outdated" (potentially resolved).
+**Outdated violation detection** — NOT STARTED. Planned: track which diff lines each violation was pinned to. On re-review, violations on unchanged lines persist; violations on changed lines are marked "outdated" (potentially resolved).
 
-**GitHub-linkable output** — Review output includes clickable GitHub line links (`/blob/[full-sha]/path#L42-L48`) for use when posting PR comments.
+**GitHub-linkable output** — NOT STARTED. Planned: review output includes clickable GitHub line links (`/blob/[full-sha]/path#L42-L48`) for use when posting PR comments.
 
 ---
 

@@ -60,5 +60,5 @@ These are behavioral improvements that run in parallel with the data-layer work 
 
 - **CLAUDE.md auto-generation** — Dynamic injection via ADR-008 replaces static file stuffing; auto-generation would be high-risk (formatter bug degrades every agent).
 - **Ownership intelligence** — `git blame` is expensive, low signal for AI agents, and useless in single-developer projects.
-- **Decision records / `get_why()`** — Absorbed into journal `JournalOutcome` and `FlowRunEntry` in DriftStore.
+- **Decision records / `get_why()`** — Implemented as `DecisionEntry` rows in DriftStore (drift.db `decisions` table). Queried via `get_history`, which enriches each `FlowRunEntry` with its associated decisions via `getDecisionsByRun()`.
 - **Composite context tool** — Shipped as `get_context` (see MCP & Intelligence Roadmap).
