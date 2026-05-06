@@ -1,5 +1,6 @@
 import {
   batchLogSteps,
+  finalizeWorkspace,
   logStep,
   verifyCompletion,
 } from "@features/orchestration/tools/orchestration-journal.ts";
@@ -90,12 +91,26 @@ function registerBatchLogSteps(): void {
   );
 }
 
+function registerFinalizeWorkspace(): void {
+  server.registerTool(
+    "finalize_workspace",
+    {
+      description:
+        "Finalize a completed workflow: verify all steps are done, all artifacts are present, release file claims, record analytics, and archive the workspace. Returns steps logged, missing steps, missing artifacts, aggregated quality signals, and post-completion cleanup results.",
+      inputSchema: {
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    wrapHandler(async (input) => finalizeWorkspace(input)),
+  );
+}
+
 function registerVerifyCompletion(): void {
   server.registerTool(
     "verify_completion",
     {
       description:
-        "Verify flow completion by checking the orchestration journal. Returns steps logged, missing steps, missing artifacts, and aggregated quality signals.",
+        "[Deprecated — use finalize_workspace] Verify flow completion by checking the orchestration journal. Returns steps logged, missing steps, missing artifacts, and aggregated quality signals.",
       inputSchema: {
         workspace: z.string().describe("Workspace directory path"),
       },
@@ -107,5 +122,6 @@ function registerVerifyCompletion(): void {
 export function registerJournalTools(): void {
   registerLogStep();
   registerBatchLogSteps();
+  registerFinalizeWorkspace();
   registerVerifyCompletion();
 }
