@@ -311,6 +311,30 @@ function findPruneCandidates(
 }
 
 /**
+ * Deregister a git worktree before deleting its directory.
+ * Non-blocking: logs at WARN level on failure but never throws.
+ */
+function removeWorktreeRegistration(worktreeSubPath: string, candidate: PruneCandidate): void {
+  try {
+    const result = gitExec(
+      ["worktree", "remove", "--force", worktreeSubPath],
+      candidate.projectDir,
+    );
+    if (!result.ok) {
+      console.warn(
+        `[canon] janitor: git worktree remove failed for ${candidate.slug}:`,
+        result.stderr.trim(),
+      );
+    }
+  } catch (err: unknown) {
+    console.warn(
+      `[canon] janitor: git worktree remove threw for ${candidate.slug}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
  * Archive a workspace slug (best-effort) and then remove it.
  * Returns true when the slug directory was successfully deleted.
  */
@@ -333,11 +357,7 @@ async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[])
   // any remaining metadata.
   const worktreeSubPath = join(slugPath, "worktree");
   if (existsSync(worktreeSubPath)) {
-    try {
-      gitExec(["worktree", "remove", "--force", worktreeSubPath], projectDir);
-    } catch {
-      // Non-blocking — proceed to rmSync regardless
-    }
+    removeWorktreeRegistration(worktreeSubPath, candidate);
   }
 
   try {
