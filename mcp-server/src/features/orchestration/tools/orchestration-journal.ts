@@ -37,8 +37,7 @@ import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analyt
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import { releaseClaims } from "@shared/lib/file-claims.ts";
 import { generateId } from "@shared/lib/id.ts";
-import type { ToolResult } from "@shared/lib/tool-result.ts";
-import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { projectDir } from "../../../app/server-state.ts";
 import { captureTranscript } from "./capture-transcript.ts";
 
@@ -518,6 +517,16 @@ function computeFlowOutcome(
   };
 }
 
+/** Best-effort branch delete after worktree removal. Never throws. */
+function tryDeleteBranch(slug: string): void {
+  try {
+    const r = gitExec(["branch", "-D", `canon/${slug}`], projectDir);
+    if (!r.ok) console.warn(`[canon] branch -D failed for ${slug}:`, r.stderr.trim());
+  } catch (err: unknown) {
+    console.warn(`[canon] branch -D threw for ${slug}:`, err instanceof Error ? err.message : err);
+  }
+}
+
 /**
  * Deregister the worktree at `{workspace}/worktree` from git before deletion.
  * Best-effort — never throws. Warns on failure so the caller can still proceed.
@@ -533,20 +542,7 @@ function tryDeregisterWorktree(workspace: string, slug: string): void {
         result.stderr.trim(),
       );
     } else {
-      try {
-        const branchResult = gitExec(["branch", "-D", `canon/${slug}`], projectDir);
-        if (!branchResult.ok) {
-          console.warn(
-            `[canon] archiveAndDeleteWorkspace: git branch -D failed for ${slug}:`,
-            branchResult.stderr.trim(),
-          );
-        }
-      } catch (err: unknown) {
-        console.warn(
-          `[canon] archiveAndDeleteWorkspace: git branch -D threw for ${slug}:`,
-          err instanceof Error ? err.message : err,
-        );
-      }
+      tryDeleteBranch(slug);
     }
   } catch (err: unknown) {
     console.warn(
