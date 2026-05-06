@@ -93,8 +93,11 @@ function dispatchSearch(
   const minConfidence = options.min_confidence as number | undefined;
   const rawResults = kq.search(t, limit);
 
+  const fileIds = rawResults.map((r) => r.file_id);
+  const tagsByFileId = kq.getFileTagsByFileIds(fileIds);
+
   const results = rawResults.map((r) => {
-    const tags = kq.getFileTagsByFileId(r.file_id);
+    const tags = tagsByFileId.get(r.file_id) ?? [];
     const filtered =
       minConfidence != null
         ? tags.filter((tag: FileTagRow) => tag.confidence >= minConfidence)

@@ -39,8 +39,8 @@ src/
 **Key subsystems:**
 - **Drift tracking** (`platform/storage/drift/`) — JSONL-backed store for reviews with auto-rotation
 - **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs; `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01)
-- **Community detection** (`features/knowledge-graph/kg-community.ts`) — Louvain algorithm assigns `community_id` to each file in the KG; added 2026-05-02
-- **Tag propagation** (`features/knowledge-graph/kg-tags.ts`) — 4-signal pipeline (directory, imports, community, cross-ref) writes computed tags to `file_tags` table; used by `get-principles` and `get-file-context`; added 2026-05-02
+- **Community detection** (`graph/kg-community.ts`) — Louvain algorithm assigns `community_id` to each file in the KG; added 2026-05-02
+- **Tag propagation** (`graph/kg-tags.ts`) — 4-signal pipeline (directory, imports, community, cross-ref) writes computed tags to `file_tags` table; used by `get-principles` and `get-file-context`; added 2026-05-02
 - **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity; OR semantics: matches if layers OR scope.tags intersect (updated 2026-05-02)
 - **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
@@ -282,7 +282,7 @@ src/
 
 **`get_context` tool** (`src/app/register-knowledge.ts`) — added 2026-04-30; relocated from `register-composite.ts` 2026-05-05:
 - Input: `file_paths: string[]` (required), `include?: Array<"principles"|"file_context"|"drift"|"graph">` (defaults to all 4 sections)
-- Returns `{ ok: true, file_paths, principles?, file_context?, drift?, graph? }` — sections present only when included
+- Returns `{ file_paths, include, principles?, file_context?, drift?, graph? }` — sections present only when included
 - `file_context` errors propagated (fail-closed); graph query failures skipped gracefully (KG may not be indexed)
 - `GetContextOutput` type exported for test assertions
 

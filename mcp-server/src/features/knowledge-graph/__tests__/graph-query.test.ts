@@ -30,6 +30,7 @@ vi.mock("@graph/kg-query.ts", () => ({
       getCallees: vi.fn().mockReturnValue([{ entity_id: 3, kind: "function", name: "callee" }]),
       getCallers: vi.fn().mockReturnValue([{ entity_id: 2, kind: "function", name: "caller" }]),
       getFileTagsByFileId: vi.fn().mockReturnValue([]),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()),
       search: vi.fn().mockReturnValue([]),
     };
   }),
@@ -152,6 +153,7 @@ describe("graphQuery — success cases", () => {
         getCallees: vi.fn().mockReturnValue([]),
         getCallers: vi.fn().mockReturnValue([]),
         getFileTagsByFileId: vi.fn().mockReturnValue([]),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()),
         search: vi
           .fn()
           .mockReturnValue([{ entity_id: 1, file_id: 10, kind: "function", name: "myFunc" }]),
@@ -177,6 +179,7 @@ describe("graphQuery — success cases", () => {
         getCallees: vi.fn().mockReturnValue([]),
         getCallers: vi.fn().mockReturnValue([]),
         getFileTagsByFileId: vi.fn().mockReturnValue([]),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()),
         search: vi.fn().mockReturnValue([]), // no entity found
       };
     } as any);
@@ -198,7 +201,11 @@ describe("graphQuery — computed_tags on search results", () => {
     await writeFile(join(tmpDir, ".canon", "knowledge-graph.db"), "");
   });
 
-  it("search results include computed_tags array from getFileTagsByFileId", () => {
+  it("search results include computed_tags array from getFileTagsByFileIds", () => {
+    const tags = [
+      { confidence: 0.9, file_id: 10, source: "louvain", tag: "orchestration" },
+      { confidence: 0.7, file_id: 10, source: "infer-domains", tag: "flow-engine" },
+    ];
     vi.mocked(KgQuery).mockImplementationOnce(function () {
       return {
         findDeadCode: vi.fn().mockReturnValue([]),
@@ -206,10 +213,8 @@ describe("graphQuery — computed_tags on search results", () => {
         getBlastRadius: vi.fn().mockReturnValue([]),
         getCallees: vi.fn().mockReturnValue([]),
         getCallers: vi.fn().mockReturnValue([]),
-        getFileTagsByFileId: vi.fn().mockReturnValue([
-          { confidence: 0.9, file_id: 10, source: "louvain", tag: "orchestration" },
-          { confidence: 0.7, file_id: 10, source: "infer-domains", tag: "flow-engine" },
-        ]),
+        getFileTagsByFileId: vi.fn().mockReturnValue(tags),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map([[10, tags]])),
         search: vi
           .fn()
           .mockReturnValue([{ entity_id: 1, file_id: 10, kind: "function", name: "driveFlow" }]),
@@ -226,6 +231,10 @@ describe("graphQuery — computed_tags on search results", () => {
   });
 
   it("min_confidence filters tags below the threshold", () => {
+    const tags = [
+      { confidence: 0.9, file_id: 10, source: "louvain", tag: "orchestration" },
+      { confidence: 0.4, file_id: 10, source: "infer-domains", tag: "low-confidence-tag" },
+    ];
     vi.mocked(KgQuery).mockImplementationOnce(function () {
       return {
         findDeadCode: vi.fn().mockReturnValue([]),
@@ -233,10 +242,8 @@ describe("graphQuery — computed_tags on search results", () => {
         getBlastRadius: vi.fn().mockReturnValue([]),
         getCallees: vi.fn().mockReturnValue([]),
         getCallers: vi.fn().mockReturnValue([]),
-        getFileTagsByFileId: vi.fn().mockReturnValue([
-          { confidence: 0.9, file_id: 10, source: "louvain", tag: "orchestration" },
-          { confidence: 0.4, file_id: 10, source: "infer-domains", tag: "low-confidence-tag" },
-        ]),
+        getFileTagsByFileId: vi.fn().mockReturnValue(tags),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map([[10, tags]])),
         search: vi
           .fn()
           .mockReturnValue([{ entity_id: 1, file_id: 10, kind: "function", name: "driveFlow" }]),
@@ -264,7 +271,8 @@ describe("graphQuery — computed_tags on search results", () => {
         getBlastRadius: vi.fn().mockReturnValue([]),
         getCallees: vi.fn().mockReturnValue([]),
         getCallers: vi.fn().mockReturnValue([]),
-        getFileTagsByFileId: vi.fn().mockReturnValue([]), // no tags for this file
+        getFileTagsByFileId: vi.fn().mockReturnValue([]),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()), // no tags for this file
         search: vi
           .fn()
           .mockReturnValue([{ entity_id: 2, file_id: 20, kind: "class", name: "SomeClass" }]),
