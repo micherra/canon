@@ -55,6 +55,7 @@ export type JournalStep = {
   completed_at?: string;
   domain_skills_loaded?: string[];
   outcome?: JournalOutcome;
+  skip_reason?: string;
   started_at?: string;
   status: JournalStepStatus;
   step_id: string;
@@ -74,6 +75,7 @@ export type LogStepInput = {
   artifacts_expected?: string[];
   domain_skills_loaded?: string[];
   outcome?: JournalOutcome;
+  skip_reason?: string;
   status: JournalStepStatus;
   step_id: string;
   workspace: string;
@@ -215,6 +217,7 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
     step.domain_skills_loaded = input.domain_skills_loaded;
   }
   if (input.outcome !== undefined) step.outcome = input.outcome;
+  if (input.skip_reason !== undefined) step.skip_reason = input.skip_reason;
 }
 
 function enforceArtifacts(

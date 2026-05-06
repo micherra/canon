@@ -38,6 +38,10 @@ const stepEntrySchema = z.object({
     .describe("Expected artifact paths relative to workspace"),
   domain_skills_loaded: z.array(z.string()).optional(),
   outcome: stepOutcomeSchema,
+  skip_reason: z
+    .string()
+    .optional()
+    .describe("Reason a tail step was skipped — required when status is skipped for tail steps"),
   status: stepStatusSchema,
   step_id: z.string().describe("Step ID from the runbook"),
 });
@@ -66,6 +70,12 @@ function registerLogStep(): void {
           .describe("Expected artifact paths relative to workspace"),
         domain_skills_loaded: z.array(z.string()).optional(),
         outcome: stepOutcomeSchema,
+        skip_reason: z
+          .string()
+          .optional()
+          .describe(
+            "Reason a tail step was skipped — required when status is skipped for tail steps",
+          ),
         status: stepStatusSchema,
         step_id: z.string().describe("Step ID from the runbook"),
         workspace: z.string().describe("Workspace directory path"),
