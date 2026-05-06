@@ -212,8 +212,9 @@ After ALL team tasks complete (monitor via `TaskList` — when empty, all done):
 
 After all DAG tasks complete, execute the remaining runbook steps sequentially:
 - Review step (if present)
-- Context-sync step (if present)
-- Learn step (if present)
+- Context-sync step — runs before ship so scribe commits land on the build branch and are included in the PR
+- Ship step
+- Learn step
 
 These are NOT nodes in the DAG — they always run sequentially after all implementation tasks.
 
@@ -390,18 +391,19 @@ ALL three must pass for the verify step to succeed. If any gate fails, the engin
 ### Completion Checklist
 
 1. Call `verify_completion({ workspace })` — if steps or artifacts missing, resolve before proceeding.
-2. Ship the build:
+2. Run context-sync: spawn the scribe agent. The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md on the build branch. Context-sync runs before ship so that doc updates are committed to the build branch and included in the PR — after ship the worktree is removed and the scribe would have no branch to commit to.
+3. Ship the build:
    - **Default**: spawn the shipper agent. The shipper pushes the worktree branch to origin and creates a PR to main. After PR creation, the shipper removes the worktree (`git worktree remove {worktree_path}`) but does NOT delete the build branch — it is needed for the PR.
    - **Fallback (direct merge)** — only when the user explicitly requests it (e.g., "merge it", "skip PR"):
      - `git checkout main`
      - `git merge canon/{slug} --no-edit`
      - If merge conflicts: present conflicting files to user as HITL — do NOT force-push or use `--theirs`.
-     - If clean merge: proceed to step 3.
+     - If clean merge: proceed to step 4.
      - After successful merge: `git worktree remove {worktree_path}` and `git branch -d canon/{slug}`.
-3. Call `update_board({ workspace, operation: "complete_flow" })`.
-4. Verify file claims released.
-5. Evaluate learn gate: run `.canon/learn.sh` if it exists.
-6. Record final flow metrics.
+4. Call `update_board({ workspace, operation: "complete_flow" })`.
+5. Verify file claims released.
+6. Evaluate learn gate: run `.canon/learn.sh` if it exists.
+7. Record final flow metrics.
 
 ### Commit Provenance
 

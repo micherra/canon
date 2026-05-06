@@ -316,7 +316,7 @@ When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, verify the bui
 
 Acceptance criteria failures are **BLOCKING** severity. If the acceptance criteria don't pass, the build should not ship without explicit human acknowledgment. BLOCKING severity means failures enter the existing review-fix iteration loop (up to 3 fix attempts). If the fix loop cannot resolve them, the failure escalates to the user via HITL -- the user can acknowledge or defer.
 
-**Exception**: Skipped criteria (non-automatable ACs) do not contribute BLOCKING findings.
+**Exception**: If a test cannot be written for an AC (requires mocking, external services, or manual verification), mark it as SKIP -- skipped criteria do not contribute BLOCKING findings.
 
 ## Verdict
 

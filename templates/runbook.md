@@ -116,7 +116,28 @@ skip_when: ~
 
 The following three steps close every build runbook. They are always present — not skippable, not reorderable.
 
-### Step {N}: ship
+### Step {N}: context-sync
+
+```yaml
+id: context-sync
+agent: scribe
+dispatch: subagent
+skills: []
+cause: ~
+mcp_tools: []
+artifacts:
+  - ${WORKSPACE}/context-sync-report.md
+hitl: none
+skip_when: ~
+```
+
+**Intent:** The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md to reflect any contract-level changes that occurred during this flow. Keeps project documentation current so the next flow starts with accurate context. Runs before `ship` so that doc updates are committed to the build branch and included in the PR — after ship, the worktree is removed and the scribe would have no branch to commit to.
+
+**Coordination notes:** Runs after all functional steps complete. Produces `context-sync-report.md`. The `ship` step follows immediately.
+
+---
+
+### Step {N+1}: ship
 
 ```yaml
 id: ship
@@ -133,28 +154,7 @@ skip_when: ~
 
 **Intent:** The shipper creates a PR from the worktree branch (`canon/{slug}`) to main. Direct merge is the fallback mode — used only when the user explicitly requests it (e.g., "merge it", "skip PR").
 
-**Coordination notes:** Runs after all functional steps complete. On PR creation, the shipper removes the worktree but keeps the build branch (needed for the PR). On conflict (fallback merge path only), blocks until the user resolves. The `context-sync` step follows immediately after a successful ship.
-
----
-
-### Step {N+1}: context-sync
-
-```yaml
-id: context-sync
-agent: scribe
-dispatch: subagent
-skills: []
-cause: ~
-mcp_tools: []
-artifacts:
-  - ${WORKSPACE}/context-sync-report.md
-hitl: none
-skip_when: ~
-```
-
-**Intent:** The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md to reflect any contract-level changes that occurred during this flow. Keeps project documentation current so the next flow starts with accurate context.
-
-**Coordination notes:** Runs after all functional steps complete. Produces `context-sync-report.md`. The `learn` step follows immediately.
+**Coordination notes:** Runs after `context-sync` so that documentation updates land on the build branch before the PR is created. On PR creation, the shipper removes the worktree but keeps the build branch (needed for the PR). On conflict (fallback merge path only), blocks until the user resolves. The `learn` step follows immediately.
 
 ---
 
