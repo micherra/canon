@@ -17,8 +17,8 @@ agent: reviewer
 timestamp: "{ISO-8601}"
 files-reviewed: {N}
 principles-checked: {N}
-e2e-criteria-tested: {N}
-e2e-criteria-passed: {N}
+ac-criteria-verified: {N}
+ac-criteria-passed: {N}
 ---
 
 ## Canon Review — Verdict: {verdict}
@@ -100,19 +100,13 @@ e2e-criteria-passed: {N}
 
 <!-- If no drift: "No drift detected — all changed files match the plan file scope." -->
 
-### E2E Acceptance Test
+### Acceptance Criteria Verification
 <!-- Only during build pipelines when a runbook exists. Otherwise note "Stage 5 skipped -- no runbook available." -->
+<!-- Evidence comes from MCP tool calls, Bash, Grep, Read — not from a test file. -->
 
-**Test file**: `__tests__/canon-e2e-ac.test.ts`
-
-| # | Acceptance Criterion | Result | Detail |
-|---|---------------------|--------|--------|
-| 1 | {criterion from runbook} | {PASS/FAIL/SKIP} | {assertion detail or skip rationale} |
-
-**Test output**:
-```
-{vitest stdout — truncated to last 50 lines if verbose}
-```
+| # | Acceptance Criterion | Method | Result | Evidence |
+|---|---------------------|--------|--------|---------|
+| 1 | {criterion from runbook} | {e.g., "graph_query search" / "Grep for pattern" / "Read file"} | {PASS/FAIL/SKIP} | {relevant excerpt from tool response or command output, or skip rationale} |
 
 <!-- If all pass: "All acceptance criteria verified." -->
 <!-- If any fail: "N of M acceptance criteria failed — see details above." -->
