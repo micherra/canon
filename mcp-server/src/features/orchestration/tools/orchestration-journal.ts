@@ -270,6 +270,7 @@ export type BatchLogStepsInput = {
     artifacts_expected?: string[];
     domain_skills_loaded?: string[];
     outcome?: JournalOutcome;
+    skip_reason?: string;
     agent_id?: string;
   }>;
 };
@@ -314,6 +315,7 @@ export async function batchLogSteps(
       artifacts_expected: entry.artifacts_expected,
       domain_skills_loaded: entry.domain_skills_loaded,
       outcome: entry.outcome,
+      skip_reason: entry.skip_reason,
       status: entry.status,
       step_id: entry.step_id,
       workspace: input.workspace,
