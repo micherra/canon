@@ -1,5 +1,5 @@
 ---
-id: context-budget-dispatch
+id: agent-context-budget-dispatch
 title: Planner Must Estimate Input Complexity for Dispatch Decisions
 severity: rule
 scope:
