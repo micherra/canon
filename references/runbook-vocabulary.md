@@ -59,8 +59,8 @@ The planner MUST NOT remove baseline HITL from step defaults. The runbook's decl
 
 Every build runbook MUST end with the three mandatory tail steps in order:
 
-1. `context-sync` — scribe updates CLAUDE.md, context.md, and CONVENTIONS.md when contract-level changes occurred during the flow. Runs before ship so that doc updates are committed to the build branch and included in the PR.
-2. `ship` — shipper creates a PR from the worktree branch to main; direct merge when explicitly requested. Runs after context-sync because ship may remove the worktree; the scribe needs the worktree available to commit doc updates.
+1. `context-sync` — scribe updates CLAUDE.md, context.md, and CONVENTIONS.md when contract-level changes occurred during the flow. Runs before ship so that doc updates are committed to the build branch and included in the PR — `finalize_workspace` needs the worktree for artifact verification, so nothing removes it until after finalization completes.
+2. `ship` — shipper creates a PR from the worktree branch to main; direct merge when explicitly requested. Runs after context-sync because the scribe needs the worktree available to commit doc updates before the PR is created.
 3. `learn` — learner analyzes the completed flow for patterns and suggests principle improvements. Writes to `.canon/` only and does not require the worktree.
 
 The planner MUST NOT skip these steps regardless of flow size, user preference, or confidence signal. They are the mechanism by which Canon ships work and keeps its documentation and principles current.
