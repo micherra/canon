@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-05-02 (unified graph intelligence: kg-community.ts + kg-tags.ts added; register-composite.ts, get-file-context-batch.ts, workspace-structure.ts, runbook-tail-validator.ts, principle-reranker.ts removed) -->
+<!-- last-updated: 2026-05-05 (unified graph intelligence: kg-community.ts + kg-tags.ts added; register-composite.ts, get-file-context-batch.ts, workspace-structure.ts, runbook-tail-validator.ts, principle-reranker.ts removed; get_context relocated to register-knowledge.ts; computed_tags + min_confidence added to graph_query) -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -213,8 +213,7 @@ src/
 - `getPrinciplesBatch(input: GetPrinciplesBatchInput, projectDir, pluginDir)` → `Promise<GetPrinciplesBatchOutput>` — deduplicates principles by ID across files; opens KG DB once; `graph_context_by_file` keyed by file path
 - Existing `getPrinciples` function unchanged
 
-**File Context — Batch** (`src/features/file-context/tools/get-file-context-batch.ts`) — added 2026-04-30; ~~REMOVED 2026-05-02~~:
-- ~~`getFileContextBatch(input: { file_paths: string[] }, projectDir: string)` → `Promise<ToolResult<{ results: FileContextOutput[] }>>` — removed 2026-05-02~~
+**File Context — Batch** — `get-file-context-batch.ts` removed 2026-05-05; batch logic inlined into `get_context` handler in `register-knowledge.ts`
 
 **File Context** (`src/features/file-context/tools/get-file-context.ts`):
 - `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`, `hotspot_score?: HotspotScoreOutput`, `co_change_partners?: Array<CoChangePartner>` — git-intel fields added 2026-04-08
@@ -279,14 +278,13 @@ src/
 
 | Tool | Purpose |
 |------|---------|
-| `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContextBatch`, `getDriftReport`, `graphQuery` in a single call; `include` param gates sections (default: all) |
+| `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContext` (per-file), `getDriftReport`, `graphQuery` in a single call; `include` param gates sections (default: all) |
 
-**`get_context` tool** (`src/app/register-composite.ts`) — added 2026-04-30; ~~`register-composite.ts` removed 2026-05-02~~:
+**`get_context` tool** (`src/app/register-knowledge.ts`) — added 2026-04-30; relocated from `register-composite.ts` 2026-05-05:
 - Input: `file_paths: string[]` (required), `include?: Array<"principles"|"file_context"|"drift"|"graph">` (defaults to all 4 sections)
 - Returns `{ ok: true, file_paths, principles?, file_context?, drift?, graph? }` — sections present only when included
 - `file_context` errors propagated (fail-closed); graph query failures skipped gracefully (KG may not be indexed)
 - `GetContextOutput` type exported for test assertions
-- Note: `getFileContextBatch` helper (previously in `get-file-context-batch.ts`) removed 2026-05-02
 
 **Text-only principle/review tools:**
 
