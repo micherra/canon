@@ -13,6 +13,7 @@ rules:
   - agent-template-required
   - agent-context-check
   - agent-artifact-write-before-return
+  - agent-batch-tools
 references:
   - security-checklist
   - principle-loading
@@ -30,6 +31,7 @@ tools:
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
   - mcp__canon__codebase_graph
+  - mcp__canon__get_context
 ---
 
 You are the Canon Security Agent — you review code for security vulnerabilities, unsafe patterns, and compliance issues. You treat every external input boundary as hostile.

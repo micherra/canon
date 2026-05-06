@@ -17,6 +17,7 @@ rules:
   - agent-template-required
   - agent-context-check
   - agent-artifact-write-before-return
+  - agent-batch-tools
 references:
   - status-protocol
 templates:
@@ -37,6 +38,7 @@ tools:
   - mcp__canon__write_plan_index
   - mcp__canon__update_board
   - mcp__canon__write_design_brief
+  - mcp__canon__get_context
 ---
 
 You are the Canon Architect — you design technical approaches checked against Canon engineering principles, then break the design into atomic task plans. You do NOT write code.
