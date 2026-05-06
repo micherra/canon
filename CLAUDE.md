@@ -61,9 +61,9 @@ This list serves two roles: (1) verbosity control — it limits how much the orc
 
 Do not narrate individual tool calls. One line between state transitions is correct.
 
-## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off)
+## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off) <!-- last-updated: 2026-05-02 -->
 
-_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off._
+_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off. The `load_flow`, `drive_flow`, and `simulate_flow` MCP tools have been removed._
 
 Full protocol: `references/canon-orchestrator.md`. Key loop:
 
@@ -145,11 +145,15 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 
 1. Spawn `canon:planner` with the build request. The planner produces a planning brief and runbook.
 2. Check the planning brief's Requirement Coverage Map for **completeness and dispositions**. First, compare the map's rows against the original request — identify any requirements from the request that are missing from the map entirely. Treat missing requirements as `descoped` with rationale "omitted by planner." Then check dispositions: if any requirements are `descoped`, `partial`, or were missing from the map, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
-3. Present the runbook to the user for approval. Iterate if the user requests changes.
-4. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` comes from the approved runbook's frontmatter, `tier` comes from the runbook frontmatter (optional — defaults to `"medium"` when omitted), and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
-5. Persist planner research notes. If the planner's output contains a `## Research Notes` section, extract it and write to `${WORKSPACE}/plans/${slug}/research-notes.md` using `Write`.
-6. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
-7. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
+3. **Validate planner output** (steps 2–3 form a validation loop). Check for research notes presence. Determine whether the build is trivial using the same criteria as the planner: NONE of the planner's trigger conditions match AND ALL of the following are true — single-file scoped fix with no architectural questions, exactly 1 implement step in the runbook, no design step in the runbook. Then:
+   - If the planner's output contains a `## Research Notes` section: proceed silently.
+   - If research notes are absent AND the build is non-trivial: surface to user — "The planner did not produce research notes for this build. Re-running planner to produce research context for the architect." Then re-spawn the planner with the original request and explicit instruction: "Your previous output did not include a `## Research Notes` section. This build is non-trivial and requires research notes. Please produce the full planning brief, research notes, and runbook." After re-spawn, re-run steps 2–3 on the new output (the re-spawned planner may have changed the Requirement Coverage Map or other sections).
+   - If research notes are absent AND the build IS trivial: proceed silently (legitimate skip).
+4. Present the runbook to the user for approval. Iterate if the user requests changes.
+5. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` comes from the approved runbook's frontmatter, `tier` comes from the runbook frontmatter (optional — defaults to `"medium"` when omitted), and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
+6. Extract the `## Research Notes` section and write to `${WORKSPACE}/plans/${slug}/research-notes.md` using `Write`. (Step 3 already confirmed presence for non-trivial builds; skip this write for trivial builds where no section exists.)
+7. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
+8. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -186,19 +190,7 @@ If no `task-dag.yaml` exists, fall back to sequential step execution (existing b
 
 2. **Worker count**: Spawn as many workers as there are root tasks (tasks with empty `depends_on`), capped at 5.
 
-3. **Worker prompt** (the spawn prompt for each worker): A generic pull-loop prompt:
-   ```
-   You are a Canon build worker. Your loop:
-   1. Call TaskList to find available (unblocked, unclaimed) tasks
-   2. If no tasks available, wait and retry
-   3. Claim a task: TaskUpdate({ task_id, owner: your_name, status: "in_progress" })
-   4. Read the task description — it contains your full instructions, principles, and file context
-   5. Create your worktree: run createWaveWorktrees for this single task_id
-   6. Work in the worktree. Follow the task plan. Commit with Canon provenance trailers.
-   7. Mark complete: TaskUpdate({ task_id, status: "completed" })
-   8. Loop back to step 1
-   9. If TaskList returns empty (all tasks completed), you are done
-   ```
+3. **Worker prompt** (the spawn prompt for each worker): Use `templates/worker-prompt.md` — fill in `${TEAM_NAME}`, `${WORKER_NAME}`, `${PROJECT_DIR}`, `${WORKSPACE}`, `${SLUG}` variables before injecting into the Agent spawn prompt.
 
 4. **Worktree creation by workers**: Each worker creates its own worktree after claiming a task:
    - Worktree path: `{projectDir}/.canon/worktrees/{task_id}`
@@ -474,13 +466,12 @@ Detect and retry transient failures:
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
 
-## Project Structure
+## Project Structure <!-- last-updated: 2026-05-02 -->
 
 ```
 canon/
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
-├── flows/                # Flow state machine definitions
-│   └── fragments/        # Reusable state groups included by flows
+├── flows/                # REMOVED 2026-05-02 — all 28 flow YAML files deleted; legacy flows gated behind CANON_AGENT_TEAMS_MODE=off
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/
@@ -505,7 +496,7 @@ canon/
 ├── skills/canon/         # Claude Code skill definition — entry point for Canon activation
 │   ├── commands/         # Slash command definitions (/canon:init, /canon:check, etc.)
 │   └── evals/            # Eval suite for intent classification
-├── templates/            # Artifact templates agents must follow
+├── templates/            # Artifact templates agents must follow (includes worker-prompt.md for DAG worker spawn)
 └── .canon/               # Runtime data (workspaces, principles, config, JSONL drift store, SQLite DBs)
     └── workspaces/       # Per-branch/task build state
 ```

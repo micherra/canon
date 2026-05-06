@@ -98,7 +98,12 @@ function makeConsultationFlow(): ResolvedFlow {
 }
 
 function makeBoard(): Board {
-  return initBoard(makeFlow(), "IWC integration task", "abc123");
+  const board = initBoard("integration-flow", "IWC integration task", "abc123");
+  board.states.implement = { entries: 0, status: "pending" };
+  board.states.ship = { entries: 0, status: "pending" };
+  board.entry = "implement";
+  board.current_state = "implement";
+  return board;
 }
 
 beforeEach(() => {

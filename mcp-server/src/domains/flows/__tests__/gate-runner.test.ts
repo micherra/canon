@@ -246,19 +246,6 @@ describe("runGate — runShell timeout and cwd configuration", () => {
 
     expect(lastRunShellArgs!.cwd).toBe("/my/project");
   });
-
-  it("uses process-adapter (runShell) not child_process directly", () => {
-    // runShellImpl being called confirms gate-runner uses the adapter
-    let adapterCalled = false;
-    runShellImpl = () => {
-      adapterCalled = true;
-      return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
-    };
-    const flow = makeFlow({ lint: "eslint ." });
-    runGate("lint", flow, "/project");
-
-    expect(adapterCalled).toBe(true);
-  });
 });
 
 // normalizeGates — 3-tier resolution

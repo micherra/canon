@@ -1,5 +1,5 @@
+import { parseTimeout } from "@features/prompt-pipeline/tools/fanout.ts";
 import { describe, expect, it } from "vitest";
-import { parseTimeout } from "../tools/get-spawn-prompt.ts";
 
 describe("parseTimeout", () => {
   it("parses minutes", () => {

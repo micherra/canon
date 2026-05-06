@@ -3,10 +3,9 @@ id: wrap-external-exceptions
 title: Wrap External Exceptions at the Boundary
 severity: strong-opinion
 scope:
-  layers:
-    - domain
-    - data
-    - shared
+  layers: []
+  tags:
+    - error-handling
 tags:
   - error-handling
   - encapsulation

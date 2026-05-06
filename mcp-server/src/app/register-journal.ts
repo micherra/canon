@@ -105,7 +105,6 @@ function registerVerifyCompletion(): void {
 }
 
 export function registerJournalTools(): void {
-  if (process.env.CANON_AGENT_TEAMS_MODE !== "on") return;
   registerLogStep();
   registerBatchLogSteps();
   registerVerifyCompletion();

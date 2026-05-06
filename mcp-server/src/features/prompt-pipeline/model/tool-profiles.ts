@@ -119,22 +119,6 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     // Post-hoc validation enforced by validateLearnerOutput in learn-gate.ts.
     write_scope: [".canon/proposed-learnings/"],
   },
-  researcher: {
-    allowed: [
-      "Read",
-      "Grep",
-      "Glob",
-      "Bash",
-      "WebFetch",
-      "graph_query",
-      "get_file_context",
-      "semantic_search",
-      "codebase_graph",
-      "write_research_synthesis",
-      "post_event",
-    ],
-    disallowed: ["Edit", "Write", "NotebookEdit"],
-  },
   reviewer: {
     allowed: [
       "Read",

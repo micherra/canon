@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 
-// Agent-teams mode: set before any registrations read the env var.
-// Remove this line once the plugin launcher reliably passes .mcp.json env vars.
-process.env.CANON_AGENT_TEAMS_MODE ??= "on";
-
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { getJobManager } from "@platform/jobs/job-manager.ts";
 import { registerArtifactTools } from "./register-artifacts.ts";

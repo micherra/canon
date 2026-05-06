@@ -8,7 +8,16 @@ Use the `get_principles` MCP tool with the file paths you'll read or modify. Thi
 
 - Use `summary_only: true` when you need the constraint statement but not the full rationale (implementation, testing, refactoring)
 - Use full body (no `summary_only`) when you need examples and exceptions (design, review, security scanning)
-- If the tool returns too many, cap at **10 principles** per agent spawn. Priority: rules > strong-opinions > conventions.
+
+## Prioritizing Returned Principles
+
+`get_principles` returns principles structurally matched to your files via tags, layers, and file patterns. The set is already scoped — you don't need to filter it further in most cases.
+
+When the returned set is large (15+ principles) and you need to focus: read the titles and summaries, then prioritize by relevance to your specific task. A principle about error handling matters more when you're writing error-handling code than when you're writing a schema migration.
+
+Rules always apply — never deprioritize a rule. Strong-opinions and conventions can be weighted by task relevance.
+
+Don't discard principles silently. If you deprioritize a principle, you're choosing not to focus on it — but if you violate it, the reviewer will still flag it. Deprioritization is about attention allocation, not exemption.
 
 ## Full Index (for agents scanning broadly)
 

@@ -11,7 +11,6 @@ import type {
   ConcernEntry,
   ConsultationResult,
 } from "@domains/flows/board-state-schemas.ts";
-import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 
 /**
  * Discriminated union result type for Board operations with preconditions.
@@ -20,49 +19,23 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 export type BoardResult = { ok: true; board: Board } | { ok: false; reason: string };
 
 /**
- * Create a new Board from a resolved flow.
+ * Create a Board for a workspace. States and iterations start empty;
+ * the orchestrator manages step progression via the journal, not the board state machine.
  */
-export function initBoard(flow: ResolvedFlow, task: string, baseCommit: string): Board {
+export function initBoard(flowName: string, task: string, baseCommit: string): Board {
   const now = new Date().toISOString();
-
-  const states: Board["states"] = {};
-  const iterations: Board["iterations"] = {};
-
-  for (const [key, stateDef] of Object.entries(flow.states)) {
-    states[key] = { entries: 0, status: "pending" };
-
-    // max_revisions (ADR-017) takes precedence over max_iterations for revision budget
-    const maxIter = stateDef.max_revisions ?? stateDef.max_iterations;
-    if (maxIter !== undefined) {
-      iterations[key] = {
-        cannot_fix: [],
-        count: 0,
-        history: [],
-        max: maxIter,
-      };
-    } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
-      // Default revision budget for explicitly gated states without explicit limit
-      iterations[key] = {
-        cannot_fix: [],
-        count: 0,
-        history: [],
-        max: 3,
-      };
-    }
-  }
-
   return {
     base_commit: baseCommit,
     blocked: null,
     concerns: [],
-    current_state: flow.entry,
-    entry: flow.entry,
-    flow: flow.name,
-    iterations,
+    current_state: "init",
+    entry: "init",
+    flow: flowName,
+    iterations: {},
     last_updated: now,
     skipped: [],
     started: now,
-    states,
+    states: {},
     task,
   };
 }

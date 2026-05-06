@@ -185,34 +185,6 @@ describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
   });
 });
 
-// 6. loadFlow ToolResult contract (cross-module: tool → wrapHandler chain)
-
-describe("loadFlow ToolResult — ok:false error paths", () => {
-  it("returns FLOW_NOT_FOUND when flow does not exist (not a throw)", async () => {
-    const { loadFlow } = await import("../tools/load-flow.ts");
-    const result = await loadFlow({ flow_name: "flow-that-does-not-exist-xyz" }, "/nonexistent");
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      // FLOW_NOT_FOUND or FLOW_PARSE_ERROR are both acceptable for a missing flow
-      expect(["FLOW_NOT_FOUND", "FLOW_PARSE_ERROR"]).toContain(result.error_code);
-      expect(typeof result.message).toBe("string");
-      expect(typeof result.recoverable).toBe("boolean");
-    }
-  });
-
-  it("loadFlow error result passes through wrapHandler as valid JSON with ok:false", async () => {
-    const { loadFlow } = await import("../tools/load-flow.ts");
-    const handler = wrapHandler(async (input: { flow_name: string }) =>
-      loadFlow(input, "/nonexistent"),
-    );
-    const response = await handler({ flow_name: "no-such-flow" });
-    const parsed = JSON.parse(response.content[0].text);
-    expect(parsed.ok).toBe(false);
-    expect(["FLOW_NOT_FOUND", "FLOW_PARSE_ERROR"]).toContain(parsed.error_code);
-    expect(isToolError(parsed)).toBe(true);
-  });
-});
-
 // 7. Timeout propagation through adapter chain
 
 describe("Timeout propagation — default 30s on all adapters", () => {

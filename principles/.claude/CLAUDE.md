@@ -28,19 +28,20 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | `convention` | `conventions/` | Suggested — deviations noted but not blocking |
 
 ## Contracts
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-05-02 (scope.tags matching + no-llm-calls-in-mcp-tools rule) -->
 
 - Principles are loaded by the MCP server via `get_principles` and `review_code` tools
-- `matcher.ts` in mcp-server filters principles by layer, file pattern, tags, and severity
-- `parser.ts` in mcp-server extracts frontmatter metadata from principle files
+- `matcher.ts` in mcp-server filters principles by layer, file pattern, tags, and severity; uses OR semantics — a principle matches if its layers OR its `scope.tags` intersect the file's KG-computed tags (updated 2026-05-02)
+- `parser.ts` in mcp-server extracts frontmatter metadata from principle files; `PrincipleScope` type now includes optional `tags?: string[]` field (updated 2026-05-02)
 - The `learner` agent proposes new principles; the `reviewer` checks against them
+- Principles may declare `scope.tags` in frontmatter for tag-based matching; OR semantics with `layers` (added 2026-05-02)
 
 ## Conventions
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-05-02 (no-llm-calls-in-mcp-tools rule added) -->
 
 - Each principle has a unique `id` used for compliance tracking
 - Principles should be specific and actionable — not aspirational
-- Rules: `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`
+- Rules: `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `no-llm-calls-in-mcp-tools` (added 2026-05-02 — MCP tools must not make LLM API calls)
 - Strong opinions cover architecture, testing, error handling, data flow
 - Conventions cover naming, file organization, test structure
 
