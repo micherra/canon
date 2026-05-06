@@ -6,13 +6,11 @@ import { registerJanitorTool } from "./register-janitor.ts";
 import { registerJournalTools } from "./register-journal.ts";
 import { registerMessagingTools } from "./register-messaging.ts";
 import { registerReportTools } from "./register-report.ts";
-import { registerUpdateBoardTool } from "./register-update-board.ts";
 import { registerWaveEventTools } from "./register-wave-events.ts";
 
 export function registerOrchestrationTools(): void {
   registerInitWorkspaceTool();
   registerReportTools();
-  registerUpdateBoardTool();
   registerWaveEventTools();
   registerMessagingTools();
   registerCategorizeTool();

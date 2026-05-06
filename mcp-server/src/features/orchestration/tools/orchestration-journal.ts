@@ -481,7 +481,9 @@ function computeTotalDurationMs(steps: readonly JournalStep[]): number | null {
   return maxEnd - minStart;
 }
 
-function computeFlowOutcome(steps: readonly JournalStep[]): FinalizeWorkspaceResult["flow_outcome"] {
+function computeFlowOutcome(
+  steps: readonly JournalStep[],
+): FinalizeWorkspaceResult["flow_outcome"] {
   const domain_skills_used = Array.from(
     new Set(steps.flatMap((s) => s.domain_skills_loaded ?? [])),
   ).sort();
@@ -557,7 +559,10 @@ async function tryReleaseClaims(workspace: string): Promise<boolean> {
  * Build a minimal FlowRunEntry from journal step timestamps and append to drift analytics.
  * Best-effort — never throws. Returns true when analytics were recorded, false otherwise.
  */
-async function tryAppendAnalytics(workspace: string, steps: readonly JournalStep[]): Promise<boolean> {
+async function tryAppendAnalytics(
+  workspace: string,
+  steps: readonly JournalStep[],
+): Promise<boolean> {
   try {
     const session = getExecutionStore(workspace).getSession();
     const now = new Date().toISOString();

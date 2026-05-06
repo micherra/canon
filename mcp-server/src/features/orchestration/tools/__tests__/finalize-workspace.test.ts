@@ -9,18 +9,17 @@
  *  - FinalizeWorkspaceInput/FinalizeWorkspaceResult are exported types
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { assertOk, isToolError } from "../../../../shared/lib/tool-result.ts";
-import { logStep } from "../orchestration-journal.ts";
 import {
-  finalizeWorkspace,
-  verifyCompletion,
   type FinalizeWorkspaceInput,
   type FinalizeWorkspaceResult,
+  finalizeWorkspace,
+  logStep,
+  verifyCompletion,
 } from "../orchestration-journal.ts";
 
 let workspace: string;
@@ -53,7 +52,12 @@ describe("finalizeWorkspace — rename and backward compat", () => {
 
 describe("finalizeWorkspace — core completion logic (preserved from verifyCompletion)", () => {
   test("returns complete: true when all steps completed", async () => {
-    await logStep({ agent_id: "test-agent-fw1", status: "completed", step_id: "step-a", workspace });
+    await logStep({
+      agent_id: "test-agent-fw1",
+      status: "completed",
+      step_id: "step-a",
+      workspace,
+    });
     const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
@@ -89,7 +93,12 @@ describe("finalizeWorkspace — core completion logic (preserved from verifyComp
 
 describe("finalizeWorkspace — absorbed claims_released field", () => {
   test("result includes claims_released field when complete is true", async () => {
-    await logStep({ agent_id: "test-agent-cr1", status: "completed", step_id: "step-a", workspace });
+    await logStep({
+      agent_id: "test-agent-cr1",
+      status: "completed",
+      step_id: "step-a",
+      workspace,
+    });
     const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
@@ -99,7 +108,12 @@ describe("finalizeWorkspace — absorbed claims_released field", () => {
   });
 
   test("claims_released is false (no session) when complete is true and no execution store", async () => {
-    await logStep({ agent_id: "test-agent-cr2", status: "completed", step_id: "step-b", workspace });
+    await logStep({
+      agent_id: "test-agent-cr2",
+      status: "completed",
+      step_id: "step-b",
+      workspace,
+    });
     const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     // Without a real execution store session, releaseClaims is best-effort
@@ -120,7 +134,12 @@ describe("finalizeWorkspace — absorbed claims_released field", () => {
 
 describe("finalizeWorkspace — absorbed analytics_recorded field", () => {
   test("result includes analytics_recorded field when complete is true", async () => {
-    await logStep({ agent_id: "test-agent-ar1", status: "completed", step_id: "step-a", workspace });
+    await logStep({
+      agent_id: "test-agent-ar1",
+      status: "completed",
+      step_id: "step-a",
+      workspace,
+    });
     const result = await finalizeWorkspace({ workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
