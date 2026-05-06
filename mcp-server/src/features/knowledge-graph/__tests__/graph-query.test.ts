@@ -29,6 +29,8 @@ vi.mock("@graph/kg-query.ts", () => ({
       getBlastRadius: vi.fn().mockReturnValue([{ depth: 1, entity_id: 4, name: "dep" }]),
       getCallees: vi.fn().mockReturnValue([{ entity_id: 3, kind: "function", name: "callee" }]),
       getCallers: vi.fn().mockReturnValue([{ entity_id: 2, kind: "function", name: "caller" }]),
+      getFileTagsByFileId: vi.fn().mockReturnValue([]),
+      getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()),
       search: vi.fn().mockReturnValue([]),
     };
   }),
@@ -150,7 +152,11 @@ describe("graphQuery — success cases", () => {
         getBlastRadius: vi.fn().mockReturnValue([]),
         getCallees: vi.fn().mockReturnValue([]),
         getCallers: vi.fn().mockReturnValue([]),
-        search: vi.fn().mockReturnValue([{ entity_id: 1, kind: "function", name: "myFunc" }]),
+        getFileTagsByFileId: vi.fn().mockReturnValue([]),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()),
+        search: vi
+          .fn()
+          .mockReturnValue([{ entity_id: 1, file_id: 10, kind: "function", name: "myFunc" }]),
       };
     } as any);
 
@@ -172,6 +178,8 @@ describe("graphQuery — success cases", () => {
         getBlastRadius: vi.fn().mockReturnValue([]),
         getCallees: vi.fn().mockReturnValue([]),
         getCallers: vi.fn().mockReturnValue([]),
+        getFileTagsByFileId: vi.fn().mockReturnValue([]),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()),
         search: vi.fn().mockReturnValue([]), // no entity found
       };
     } as any);
@@ -183,5 +191,99 @@ describe("graphQuery — success cases", () => {
     expect(result.query_type).toBe("callers");
     expect(result.results).toEqual([]);
     expect(result.count).toBe(0);
+  });
+});
+
+// computed_tags on search results
+
+describe("graphQuery — computed_tags on search results", () => {
+  beforeEach(async () => {
+    await writeFile(join(tmpDir, ".canon", "knowledge-graph.db"), "");
+  });
+
+  it("search results include computed_tags array from getFileTagsByFileIds", () => {
+    const tags = [
+      { confidence: 0.9, file_id: 10, source: "louvain", tag: "orchestration" },
+      { confidence: 0.7, file_id: 10, source: "infer-domains", tag: "flow-engine" },
+    ];
+    vi.mocked(KgQuery).mockImplementationOnce(function () {
+      return {
+        findDeadCode: vi.fn().mockReturnValue([]),
+        getAncestors: vi.fn().mockReturnValue([]),
+        getBlastRadius: vi.fn().mockReturnValue([]),
+        getCallees: vi.fn().mockReturnValue([]),
+        getCallers: vi.fn().mockReturnValue([]),
+        getFileTagsByFileId: vi.fn().mockReturnValue(tags),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map([[10, tags]])),
+        search: vi
+          .fn()
+          .mockReturnValue([{ entity_id: 1, file_id: 10, kind: "function", name: "driveFlow" }]),
+      };
+    } as any);
+
+    const result = graphQuery({ query_type: "search", target: "driveFlow" }, tmpDir);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.count).toBe(1);
+    const firstResult = result.results[0] as Record<string, unknown>;
+    expect(firstResult.computed_tags).toEqual(["orchestration", "flow-engine"]);
+  });
+
+  it("min_confidence filters tags below the threshold", () => {
+    const tags = [
+      { confidence: 0.9, file_id: 10, source: "louvain", tag: "orchestration" },
+      { confidence: 0.4, file_id: 10, source: "infer-domains", tag: "low-confidence-tag" },
+    ];
+    vi.mocked(KgQuery).mockImplementationOnce(function () {
+      return {
+        findDeadCode: vi.fn().mockReturnValue([]),
+        getAncestors: vi.fn().mockReturnValue([]),
+        getBlastRadius: vi.fn().mockReturnValue([]),
+        getCallees: vi.fn().mockReturnValue([]),
+        getCallers: vi.fn().mockReturnValue([]),
+        getFileTagsByFileId: vi.fn().mockReturnValue(tags),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map([[10, tags]])),
+        search: vi
+          .fn()
+          .mockReturnValue([{ entity_id: 1, file_id: 10, kind: "function", name: "driveFlow" }]),
+      };
+    } as any);
+
+    const result = graphQuery(
+      { options: { min_confidence: 0.5 }, query_type: "search", target: "driveFlow" },
+      tmpDir,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const firstResult = result.results[0] as Record<string, unknown>;
+    // Only tags with confidence >= 0.5 should appear
+    expect(firstResult.computed_tags).toEqual(["orchestration"]);
+    expect(firstResult.computed_tags).not.toContain("low-confidence-tag");
+  });
+
+  it("results with no tags return empty computed_tags array", () => {
+    vi.mocked(KgQuery).mockImplementationOnce(function () {
+      return {
+        findDeadCode: vi.fn().mockReturnValue([]),
+        getAncestors: vi.fn().mockReturnValue([]),
+        getBlastRadius: vi.fn().mockReturnValue([]),
+        getCallees: vi.fn().mockReturnValue([]),
+        getCallers: vi.fn().mockReturnValue([]),
+        getFileTagsByFileId: vi.fn().mockReturnValue([]),
+        getFileTagsByFileIds: vi.fn().mockReturnValue(new Map()), // no tags for this file
+        search: vi
+          .fn()
+          .mockReturnValue([{ entity_id: 2, file_id: 20, kind: "class", name: "SomeClass" }]),
+      };
+    } as any);
+
+    const result = graphQuery({ query_type: "search", target: "SomeClass" }, tmpDir);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const firstResult = result.results[0] as Record<string, unknown>;
+    expect(firstResult.computed_tags).toEqual([]);
   });
 });

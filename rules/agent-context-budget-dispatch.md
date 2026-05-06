@@ -63,14 +63,14 @@ dispatch: subagent  # Sequential: merge main into PR branch (expensive shared se
 
 id: fix-tag-bypass
 agent: engineer
-dispatch: subagent  # Parallel: only needs matcher.ts context
+dispatch: team  # Parallel: only needs matcher.ts context
 
 id: fix-hub-cutoff
 agent: engineer
-dispatch: subagent  # Parallel: only needs kg-tags.ts context
+dispatch: team  # Parallel: only needs kg-tags.ts context
 ```
 
-The setup step resolves the expensive shared work (merge). Each fix step operates on a focused slice of the codebase and runs in parallel, keeping per-agent input well within budget.
+The setup step resolves the expensive shared work (merge) as a sequential subagent. The fix steps use `dispatch: team` to execute in parallel, each operating on a focused slice of the codebase with per-agent input well within budget.
 
 ## Exceptions
 

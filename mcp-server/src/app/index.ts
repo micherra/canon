@@ -3,7 +3,6 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { getJobManager } from "@platform/jobs/job-manager.ts";
 import { registerArtifactTools } from "./register-artifacts.ts";
-import { registerCompositeTools } from "./register-composite.ts";
 import { registerKnowledgeTools } from "./register-knowledge.ts";
 import { registerOrchestrationTools } from "./register-orchestration.ts";
 import { registerPrincipleTools } from "./register-principles.ts";
@@ -15,7 +14,6 @@ registerOrchestrationTools();
 registerKnowledgeTools();
 registerArtifactTools();
 registerPrincipleTools();
-registerCompositeTools();
 
 // --- Signal handlers for child process cleanup ---
 

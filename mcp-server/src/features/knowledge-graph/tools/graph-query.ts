@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
-import type { SearchResult } from "@graph/kg-types.ts";
+import type { FileTagRow, SearchResult } from "@graph/kg-types.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
@@ -20,6 +20,7 @@ export type GraphQueryOptions = {
   max_depth?: number;
   limit?: number;
   include_tests?: boolean;
+  min_confidence?: number;
 };
 
 export type GraphQueryInput = {
@@ -89,7 +90,24 @@ function dispatchSearch(
   const t = requireTarget("search", target);
   if (typeof t !== "string") return t;
   const limit = (options.limit as number | undefined) ?? 50;
-  const results = kq.search(t, limit);
+  const minConfidence = options.min_confidence as number | undefined;
+  const rawResults = kq.search(t, limit);
+
+  const fileIds = rawResults.map((r) => r.file_id);
+  const tagsByFileId = kq.getFileTagsByFileIds(fileIds);
+
+  const results = rawResults.map((r) => {
+    const tags = tagsByFileId.get(r.file_id) ?? [];
+    const filtered =
+      minConfidence != null
+        ? tags.filter((tag: FileTagRow) => tag.confidence >= minConfidence)
+        : tags;
+    return {
+      ...r,
+      computed_tags: filtered.map((tag: FileTagRow) => tag.tag),
+    };
+  });
+
   return toolOk({ count: results.length, query_type: "search", results, target });
 }
 
