@@ -18,6 +18,7 @@ rules:
   - agent-informed-questions
   - agent-context-check
   - agent-template-required
+  - agent-context-budget-dispatch
 references:
   - status-protocol
 templates:
