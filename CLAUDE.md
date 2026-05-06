@@ -309,7 +309,7 @@ Spawn N reviewers in parallel via `Agent()`, each with:
 
 - The standard preloaded context from `resolve_agent_skills`
 - `WORKSPACE={workspace_path}` (workspace root, not worktree)
-- `BASE_COMMIT={base_commit}` (diff from this commit, not main HEAD)
+- An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
 - Their assigned file list
 - Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
 - `isolation: "none"` (shared workspace)
