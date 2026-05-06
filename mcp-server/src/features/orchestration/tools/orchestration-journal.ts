@@ -32,7 +32,10 @@ import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { archiveWorkspace } from "@features/history/services/archive-service.ts";
+import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
+import { releaseClaims } from "@shared/lib/file-claims.ts";
+import { generateId } from "@shared/lib/id.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { projectDir } from "../../../app/server-state.ts";
@@ -93,11 +96,14 @@ export type LogStepResult = {
   transcript_warning?: string;
 };
 
-export type VerifyCompletionInput = {
+export type FinalizeWorkspaceInput = {
   workspace: string;
 };
 
-export type VerifyCompletionResult = {
+/** @deprecated Use FinalizeWorkspaceInput */
+export type VerifyCompletionInput = FinalizeWorkspaceInput;
+
+export type FinalizeWorkspaceResult = {
   artifacts_expected: string[];
   artifacts_missing: string[];
   /**
@@ -151,7 +157,14 @@ export type VerifyCompletionResult = {
   workspace_archived?: boolean;
   /** Present only when complete is true. True when workspace directory was deleted. */
   workspace_deleted?: boolean;
+  /** Present only when complete is true. True when file claims were released successfully. */
+  claims_released?: boolean;
+  /** Present only when complete is true. True when flow analytics were recorded successfully. */
+  analytics_recorded?: boolean;
 };
+
+/** @deprecated Use FinalizeWorkspaceResult */
+export type VerifyCompletionResult = FinalizeWorkspaceResult;
 
 function journalPath(workspace: string): string {
   return join(workspace, "journal.json");
@@ -468,7 +481,9 @@ function computeTotalDurationMs(steps: readonly JournalStep[]): number | null {
   return maxEnd - minStart;
 }
 
-function computeFlowOutcome(steps: readonly JournalStep[]): VerifyCompletionResult["flow_outcome"] {
+function computeFlowOutcome(
+  steps: readonly JournalStep[],
+): FinalizeWorkspaceResult["flow_outcome"] {
   const domain_skills_used = Array.from(
     new Set(steps.flatMap((s) => s.domain_skills_loaded ?? [])),
   ).sort();
@@ -521,9 +536,79 @@ async function archiveAndDeleteWorkspace(
   return { archived, deleted };
 }
 
-export async function verifyCompletion(
-  input: VerifyCompletionInput,
-): Promise<ToolResult<VerifyCompletionResult>> {
+/**
+ * Release file claims for this workspace's slug. Best-effort — never throws.
+ * Returns true when claims were released successfully, false when skipped or failed.
+ */
+async function tryReleaseClaims(workspace: string): Promise<boolean> {
+  try {
+    const session = getExecutionStore(workspace).getSession();
+    if (!session) return false;
+    releaseClaims(projectDir, session.slug);
+    return true;
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] finalizeWorkspace: failed to release file claims:",
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
+}
+
+/**
+ * Build a minimal FlowRunEntry from journal step timestamps and append to drift analytics.
+ * Best-effort — never throws. Returns true when analytics were recorded, false otherwise.
+ */
+async function tryAppendAnalytics(
+  workspace: string,
+  steps: readonly JournalStep[],
+): Promise<boolean> {
+  try {
+    const session = getExecutionStore(workspace).getSession();
+    const now = new Date().toISOString();
+    const flowOutcome = computeFlowOutcome(steps);
+    const flowRun: FlowRunEntry = {
+      completed: now,
+      flow: session?.slug ?? basename(workspace),
+      run_id: generateId("run"),
+      skipped_states: steps.filter((s) => s.status === "skipped").map((s) => s.step_id),
+      started: steps.find((s) => s.started_at)?.started_at ?? now,
+      state_durations: {},
+      state_iterations: {},
+      task: session?.slug ?? basename(workspace),
+      tier: "unknown",
+      total_duration_ms: flowOutcome.total_duration_ms ?? 0,
+      total_spawns: 0,
+    };
+    await appendFlowRun(projectDir, flowRun);
+    return true;
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] finalizeWorkspace: failed to append flow analytics:",
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
+}
+
+/**
+ * Run the janitor for background housekeeping. Best-effort — never throws.
+ */
+async function tryRunJanitor(): Promise<void> {
+  try {
+    const { runJanitor } = await import("../services/janitor.ts");
+    await runJanitor(projectDir);
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] finalizeWorkspace: janitor run failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+export async function finalizeWorkspace(
+  input: FinalizeWorkspaceInput,
+): Promise<ToolResult<FinalizeWorkspaceResult>> {
   const { workspace } = input;
 
   if (!workspace) {
@@ -548,6 +633,15 @@ export async function verifyCompletion(
 
   const cleanup = complete ? await archiveAndDeleteWorkspace(workspace) : undefined;
 
+  // When complete, absorb side effects from the former board subsystem (best-effort).
+  let claims_released: boolean | undefined;
+  let analytics_recorded: boolean | undefined;
+  if (complete) {
+    claims_released = await tryReleaseClaims(workspace);
+    analytics_recorded = await tryAppendAnalytics(workspace, steps);
+    await tryRunJanitor();
+  }
+
   return toolOk({
     artifacts_expected: artifacts.expected,
     artifacts_missing: artifacts.missing,
@@ -561,8 +655,12 @@ export async function verifyCompletion(
     ...(cleanup
       ? { workspace_archived: cleanup.archived, workspace_deleted: cleanup.deleted }
       : {}),
+    ...(complete ? { analytics_recorded, claims_released } : {}),
   });
 }
+
+/** @deprecated Use finalizeWorkspace */
+export const verifyCompletion = finalizeWorkspace;
 
 // Re-export for registration layer.
 export const journalFilename = "journal.json";
