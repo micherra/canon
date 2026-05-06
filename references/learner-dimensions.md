@@ -294,7 +294,7 @@ Artifact: {rules/{agent_type}.md | principles/{severity}/{slug}.md | .canon/CONV
 - Read workspace journals (`journal.json`) to discover steps with `transcript_path` entries
 - Call `get_transcript` MCP tool with `{workspace, state_id}` for each step
 - Use `summary` mode first for pattern scanning, `full` mode for detailed analysis of flagged steps
-- The `get_transcript` tool returns `TranscriptEntry[]` with fields: `role` ("system"|"user"|"assistant"|"tool_use"|"tool_result"), `content`, `tool_name?`, `tokens?`, `cumulative_tokens?`, `turn_number`
+- The `get_transcript` tool returns `TranscriptEntry[]` with fields: `role` ("system"|"user"|"assistant"|"tool_use"|"tool_result"), `content`, `tool_name?`, `tokens?`, `cumulative_tokens?`, `turn_number`, `timestamp`
 
 **Minimum threshold**: 3 completed flows with transcripts required. Below → note "Skipped: agent-effectiveness — requires 3 flows with transcripts, have {current}."
 
