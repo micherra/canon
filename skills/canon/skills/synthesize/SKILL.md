@@ -51,7 +51,7 @@ Every synthesized step carries these first-class fields (per v2.1 §5.2):
 
 Apply every rule below on every build runbook synthesis:
 
-1. **Include the mandatory tail.** Every build runbook ends with `context-sync` followed by `ship` followed by `learn`, in that order. These three steps are the mandatory tail. No exceptions — not for small flows, not for doc-only changes, not on user request. `context-sync` runs before `ship` so that documentation updates are committed to the build branch and included in the PR — after ship the worktree is removed. `learn` is always last because it writes to `.canon/` only and does not require the worktree.
+1. **Include the mandatory tail.** Every build runbook ends with `context-sync` followed by `ship` followed by `learn`, in that order. These three steps are the mandatory tail. No exceptions — not for small flows, not for doc-only changes, not on user request. `context-sync` runs before `ship` so that documentation updates are committed to the build branch and included in the PR — `finalize_workspace` needs the worktree for artifact verification, so the shipper must not remove it. `learn` is always last because it writes to `.canon/` only and does not require the worktree.
 
 2. **Use canonical step IDs only.** Every `id` field must appear in `references/runbook-vocabulary.md`. Reject and report unknown IDs at synthesis time; do not emit them.
 
