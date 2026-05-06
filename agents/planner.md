@@ -93,14 +93,25 @@ Before issuing `graph_query` or `semantic_search` calls:
 
 2. **Produce the planning brief.** Apply the `canon:plan` skill contract. Emit the planning brief content in your output text. The orchestrator captures this and persists it to `${WORKSPACE}/plans/${slug}/planning-brief.md` via `init_workspace({ brief_content })`. The brief must include all eight required sections (depth-calibrated to request complexity), the ASSUMPTIONS block, and a Handoff section. The outcome field must be one of: `GREENLIGHT`, `REDIRECT`, or `OPEN_QUESTIONS`.
 
-3. **Produce research notes (non-trivial requests).** For any request that is not a scoped one-file fix or a documentation-only change, include a `## Research Notes` section in your output. The orchestrator captures this section and persists it as `${WORKSPACE}/plans/${slug}/research-notes.md` post-init. The section must summarize:
+3. **Produce research notes (required by default).** Include a `## Research Notes` section in your output whenever ANY of the following is true:
+
+   - The runbook contains 2+ implement steps
+   - The runbook contains a design step
+   - The build touches 3+ files
+   - The request is a spike or investigation
+   - The request involves integration tests or server-side validation
+   - The request involves protocol or architecture changes
+
+   **Precedence**: If ANY trigger above matches, research notes are required — the omission path below does not apply. Research notes may be omitted ONLY when NONE of the triggers above match AND ALL of the following are true: the request is a single-file scoped fix with no architectural questions, the runbook has exactly 1 implement step, and the runbook has no design step.
+
+   The orchestrator captures this section and persists it as `${WORKSPACE}/plans/${slug}/research-notes.md` post-init. The section must summarize:
    - Relevant files and modules discovered via `get_file_context`, `graph_query`, or `semantic_search`
    - Applicable Canon principles (IDs + one-line rationale each)
    - Key patterns in the codebase that the architect should build on
    - External references (library docs, API behavior, known issues) gathered via `WebFetch`
    - Assumptions and open questions surfaced during investigation
 
-   The architect reads this as its primary research context. Omit the section for trivial requests (single-file scoped changes with no architectural questions).
+   The architect reads this as its primary research context.
 
 4. **Produce the runbook.** Apply the `canon:synthesize` skill contract. Emit the runbook content in your output text. The orchestrator captures this and persists it to `${WORKSPACE}/plans/${slug}/runbook.md` via `init_workspace({ runbook_content })`. The runbook must:
    - Use only canonical step IDs from `references/runbook-vocabulary.md`

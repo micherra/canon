@@ -15,23 +15,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-// Mock loadAndResolveFlow to avoid needing real flow files
-vi.mock("@domains/flows/flow-parser.ts", () => ({
-  loadAndResolveFlow: vi.fn().mockResolvedValue({
-    description: "test",
-    entry: "build",
-    name: "fast-path",
-    spawn_instructions: {},
-    states: {
-      build: { transitions: { done: "done" }, type: "single" },
-      done: { type: "terminal" },
-    },
-  }),
-}));
-
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import { afterEach, describe, expect, it } from "vitest";
 import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];

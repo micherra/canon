@@ -66,63 +66,82 @@ export function getProjectDir(workspace: string): string {
   return workspace;
 }
 
-// createWaveWorktrees
+// createWorktree / createWorktrees / createWaveWorktrees
 
-/**
- * Create a git worktree for each task in the wave.
- *
- * Worktree path: `{projectDir}/.canon/worktrees/{task_id}`
- * Branch name:   `canon-wave/{task_id}`
- *
- * Throws on git failure so the caller can surface the error immediately.
- */
 /**
  * Sanitize a task_id for safe use in filesystem paths and git branch names.
- * Strips path separators (/ \), null bytes, and other shell metacharacters
- * that could enable path traversal or command injection.
+ * Uses an allowlist: only alphanumeric, hyphens, underscores, and dots pass through.
+ * Everything else (including characters invalid per git-check-ref-format like
+ * colons, tildes, carets, and control chars) is replaced with a dash.
+ * Also handles git-ref-format rules: no ".." sequences, no trailing dot/".lock".
+ * Rejects dot-only segments (".", "..") to prevent path traversal.
  */
 function sanitizeTaskId(taskId: string): string {
-  // Replace path separators, null bytes, and shell metacharacters with dashes.
-  // Allowed characters: alphanumeric, hyphens, underscores, and dots (safe in
-  // both filesystem paths and git branch names).
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally stripping null bytes for security
-  return taskId.replace(/[/\\\x00$`&|;(){}<>!?*[\]"' \t\n\r]/g, "-");
+  let sanitized = taskId
+    .replace(/[^A-Za-z0-9._-]/g, "-")
+    .replace(/\.\./g, "-")
+    .replace(/\.lock$/i, "-lock")
+    .replace(/\.$/, "-");
+  if (sanitized === "" || sanitized === ".") {
+    sanitized = "task-unnamed";
+  }
+  return sanitized;
 }
 
-export async function createWaveWorktrees(
+/**
+ * Create a git worktree for a single task.
+ * Worktree path: `{projectDir}/.canon/worktrees/{task_id}`
+ * Branch name:   `canon-wave/{task_id}`
+ * Throws on git failure.
+ */
+export async function createWorktree(
+  task: WaveTask,
+  projectDir: string,
+  baseCwd?: string,
+): Promise<WaveWorktreeResult> {
+  const safeTaskId = sanitizeTaskId(task.task_id);
+  const worktreePath = join(projectDir, ".canon", "worktrees", safeTaskId);
+  const branchName = `canon-wave/${safeTaskId}`;
+  const gitBaseCwd = baseCwd ?? projectDir;
+
+  const result = await gitExecAsync(
+    ["worktree", "add", worktreePath, "-b", branchName, "HEAD"],
+    gitBaseCwd,
+  );
+
+  if (!result.ok) {
+    throw new Error(
+      `Failed to create worktree for task ${task.task_id}: ${result.stderr || result.stdout}`,
+    );
+  }
+
+  return {
+    branch: branchName,
+    task_id: task.task_id,
+    worktree_path: worktreePath,
+  };
+}
+
+/**
+ * Create worktrees for multiple tasks sequentially.
+ * Kept for merge protocol (mergeWaveResults needs all results).
+ * @deprecated Prefer createWorktree for single-task DAG worker dispatch.
+ */
+export async function createWorktrees(
   tasks: WaveTask[],
   projectDir: string,
   baseCwd?: string,
 ): Promise<WaveWorktreeResult[]> {
   const results: WaveWorktreeResult[] = [];
-  const gitBaseCwd = baseCwd ?? projectDir;
-
   for (const task of tasks) {
-    const safeTaskId = sanitizeTaskId(task.task_id);
-    const worktreePath = join(projectDir, ".canon", "worktrees", safeTaskId);
-    const branchName = `canon-wave/${safeTaskId}`;
-
-    // biome-ignore lint/performance/noAwaitInLoops: worktrees must be created sequentially; each creates a new git branch from HEAD which is updated by previous iterations
-    const result = await gitExecAsync(
-      ["worktree", "add", worktreePath, "-b", branchName, "HEAD"],
-      gitBaseCwd,
-    );
-
-    if (!result.ok) {
-      throw new Error(
-        `Failed to create worktree for task ${task.task_id}: ${result.stderr || result.stdout}`,
-      );
-    }
-
-    results.push({
-      branch: branchName,
-      task_id: task.task_id,
-      worktree_path: worktreePath,
-    });
+    // biome-ignore lint/performance/noAwaitInLoops: worktrees must be created sequentially
+    results.push(await createWorktree(task, projectDir, baseCwd));
   }
-
   return results;
 }
+
+/** @deprecated Use createWorktree (singular) or createWorktrees (batch). */
+export const createWaveWorktrees = createWorktrees;
 
 // mergeWaveResults
 

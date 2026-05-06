@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from "vitest";
 import { AGENT_TOOL_PROFILES, EMPTY_PROFILE, resolveToolProfile } from "../model/tool-profiles.ts";
 
 const ALL_AGENTS = [
-  "researcher",
   "architect",
   "engineer",
   "tester",
@@ -20,11 +19,11 @@ const ALL_AGENTS = [
 ] as const;
 
 describe("AGENT_TOOL_PROFILES", () => {
-  it("has entries for all 11 agent types", () => {
+  it("has entries for all 10 agent types", () => {
     for (const agent of ALL_AGENTS) {
       expect(AGENT_TOOL_PROFILES).toHaveProperty(agent);
     }
-    expect(Object.keys(AGENT_TOOL_PROFILES)).toHaveLength(11);
+    expect(Object.keys(AGENT_TOOL_PROFILES)).toHaveLength(10);
   });
 
   it("each profile has at least one entry (allowed or disallowed)", () => {
@@ -38,10 +37,6 @@ describe("AGENT_TOOL_PROFILES", () => {
   it("EMPTY_PROFILE has empty allowed array and denies dangerous tools", () => {
     expect(EMPTY_PROFILE.allowed).toEqual([]);
     expect(EMPTY_PROFILE.disallowed).toEqual(["Edit", "Write", "Bash", "NotebookEdit"]);
-  });
-
-  it("researcher profile includes codebase_graph MCP tool", () => {
-    expect(AGENT_TOOL_PROFILES.researcher.allowed).toContain("codebase_graph");
   });
 
   it("engineer profile includes post_message MCP tool", () => {
@@ -114,15 +109,15 @@ describe("resolveToolProfile", () => {
   });
 
   it("returns base profile tools for known agent without overrides", () => {
-    const result = resolveToolProfile("researcher");
-    const base = AGENT_TOOL_PROFILES.researcher;
+    const result = resolveToolProfile("reviewer");
+    const base = AGENT_TOOL_PROFILES.reviewer;
     expect(result.tools).toEqual(base.allowed.filter((t) => !base.disallowed.includes(t)));
     expect(result.disallowed_tools).toEqual(base.disallowed);
   });
 
   it("with allow override adds tools to base allowed", () => {
-    const result = resolveToolProfile("researcher", { overrides: { allow: ["ExtraToolA"] } });
-    const base = AGENT_TOOL_PROFILES.researcher;
+    const result = resolveToolProfile("reviewer", { overrides: { allow: ["ExtraToolA"] } });
+    const base = AGENT_TOOL_PROFILES.reviewer;
     expect(result.tools).toContain("ExtraToolA");
     for (const t of base.allowed) {
       if (!base.disallowed.includes(t)) {
@@ -132,14 +127,14 @@ describe("resolveToolProfile", () => {
   });
 
   it("with deny override removes tools from allowed", () => {
-    // researcher has Read in allowed — deny it
-    const result = resolveToolProfile("researcher", { overrides: { deny: ["Read"] } });
+    // reviewer has Read in allowed — deny it
+    const result = resolveToolProfile("reviewer", { overrides: { deny: ["Read"] } });
     expect(result.tools).not.toContain("Read");
     expect(result.disallowed_tools).toContain("Read");
   });
 
   it("with replace override replaces entire allowed list", () => {
-    const result = resolveToolProfile("researcher", {
+    const result = resolveToolProfile("reviewer", {
       overrides: { replace: ["ToolX", "ToolY"] },
     });
     expect(result.tools).toEqual(["ToolX", "ToolY"]);
@@ -147,7 +142,7 @@ describe("resolveToolProfile", () => {
 
   it("disallowed wins: tool in both allowed and disallowed ends up only in disallowed", () => {
     // Use allow to add a tool, and deny to block the same tool
-    const result = resolveToolProfile("researcher", {
+    const result = resolveToolProfile("reviewer", {
       overrides: { allow: ["ConflictTool"], deny: ["ConflictTool"] },
     });
     expect(result.tools).not.toContain("ConflictTool");
@@ -194,9 +189,9 @@ describe("resolveToolProfile", () => {
     expect(result.tools).toContain("Write");
   });
 
-  it("namespaced agent ID (canon:researcher) resolves to same profile as unprefixed", () => {
-    const prefixed = resolveToolProfile("canon:researcher");
-    const unprefixed = resolveToolProfile("researcher");
+  it("namespaced agent ID (canon:reviewer) resolves to same profile as unprefixed", () => {
+    const prefixed = resolveToolProfile("canon:reviewer");
+    const unprefixed = resolveToolProfile("reviewer");
     expect(prefixed).toEqual(unprefixed);
   });
 
@@ -206,8 +201,8 @@ describe("resolveToolProfile", () => {
     expect(result.tools).toContain("Write");
   });
 
-  it("researcher has Edit and Write in disallowed", () => {
-    const result = resolveToolProfile("researcher");
+  it("reviewer has Edit and Write in disallowed", () => {
+    const result = resolveToolProfile("reviewer");
     expect(result.disallowed_tools).toContain("Edit");
     expect(result.disallowed_tools).toContain("Write");
     expect(result.tools).not.toContain("Edit");
@@ -215,38 +210,38 @@ describe("resolveToolProfile", () => {
   });
 
   it("no warnings when replace does not grant disallowed tools", () => {
-    const result = resolveToolProfile("researcher", {
+    const result = resolveToolProfile("reviewer", {
       overrides: { replace: ["Read", "Grep"] },
     });
     expect(result.warnings).toBeUndefined();
   });
 
   it("no warnings when using allow override (not replace)", () => {
-    const result = resolveToolProfile("researcher", { overrides: { allow: ["ExtraToolA"] } });
+    const result = resolveToolProfile("reviewer", { overrides: { allow: ["ExtraToolA"] } });
     expect(result.warnings).toBeUndefined();
   });
 
   it("no warnings when no overrides at all", () => {
-    const result = resolveToolProfile("researcher");
+    const result = resolveToolProfile("reviewer");
     expect(result.warnings).toBeUndefined();
   });
 
   it("replace override that grants base-disallowed tools produces a structured warning", () => {
-    // researcher has Edit in disallowed; replace with Edit should warn
-    const result = resolveToolProfile("researcher", {
+    // reviewer has Edit in disallowed; replace with Edit should warn
+    const result = resolveToolProfile("reviewer", {
       overrides: { replace: ["Read", "Edit"] },
     });
     expect(result.warnings).toBeDefined();
     expect(result.warnings).toHaveLength(1);
     const warning = result.warnings![0];
     expect(warning.event).toBe("adr014_replace_override_grants_disallowed");
-    expect(warning.agent).toBe("researcher");
+    expect(warning.agent).toBe("reviewer");
     expect(warning.granted_disallowed).toContain("Edit");
   });
 
   it("warnings capture all granted-disallowed tools in a single entry", () => {
-    // researcher has Edit and Write in disallowed; replace grants both
-    const result = resolveToolProfile("researcher", {
+    // reviewer has Edit and Write in disallowed; replace grants both
+    const result = resolveToolProfile("reviewer", {
       overrides: { replace: ["Read", "Edit", "Write"] },
     });
     expect(result.warnings).toHaveLength(1);
@@ -256,7 +251,7 @@ describe("resolveToolProfile", () => {
 
   it("does not call console.warn — warnings are data, not side effects", () => {
     const spy = vi.spyOn(console, "warn");
-    resolveToolProfile("researcher", { overrides: { replace: ["Read", "Edit"] } });
+    resolveToolProfile("reviewer", { overrides: { replace: ["Read", "Edit"] } });
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
@@ -317,20 +312,15 @@ describe("resolveToolProfile", () => {
 
   // isReadOnly auto-approve tests
 
-  it("read-only agent (researcher) with no worktreePath gets permission_mode 'auto'", () => {
-    // researcher has Write and Edit in disallowed — it's read-only → auto
-    const result = resolveToolProfile("researcher");
+  it("read-only agent (reviewer) with no worktreePath gets permission_mode 'auto'", () => {
+    // reviewer has Write and Edit in disallowed — it's read-only → auto
+    const result = resolveToolProfile("reviewer");
     expect(result.permission_mode).toBe("auto");
   });
 
   it("read-only agent (architect) with no worktreePath gets permission_mode 'auto'", () => {
     // architect has Write, Edit, NotebookEdit in disallowed — it's read-only → auto
     const result = resolveToolProfile("architect");
-    expect(result.permission_mode).toBe("auto");
-  });
-
-  it("read-only agent (reviewer) with no worktreePath gets permission_mode 'auto'", () => {
-    const result = resolveToolProfile("reviewer");
     expect(result.permission_mode).toBe("auto");
   });
 
@@ -352,21 +342,21 @@ describe("resolveToolProfile", () => {
   it("read-only agent with replace override that grants Write does NOT get auto (base.disallowed unchanged)", () => {
     // Even if the flow override grants Write via replace, the base profile still has Write in disallowed.
     // isReadOnly uses base.disallowed as source of truth.
-    const result = resolveToolProfile("researcher", {
+    const result = resolveToolProfile("reviewer", {
       overrides: { replace: ["Read", "Write"] },
     });
     expect(result.permission_mode).toBe("auto");
   });
 
   it("trustPermissionMode takes precedence over isReadOnly fallback", () => {
-    // researcher is read-only, but trustPermissionMode forces 'prompt'
-    const result = resolveToolProfile("researcher", { trustPermissionMode: "prompt" });
+    // reviewer is read-only, but trustPermissionMode forces 'prompt'
+    const result = resolveToolProfile("reviewer", { trustPermissionMode: "prompt" });
     expect(result.permission_mode).toBe("prompt");
   });
 
   it("overrides.permission_mode takes precedence over isReadOnly fallback", () => {
-    // researcher is read-only, but explicit override forces 'deny_unknown'
-    const result = resolveToolProfile("researcher", {
+    // reviewer is read-only, but explicit override forces 'deny_unknown'
+    const result = resolveToolProfile("reviewer", {
       overrides: { permission_mode: "deny_unknown" },
     });
     expect(result.permission_mode).toBe("deny_unknown");

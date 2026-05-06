@@ -1,18 +1,3 @@
-/**
- * Tests for ADR-017 approval gate schema additions.
- *
- * Covers:
- * - approval_gate, max_revisions, rejection_target fields on BaseStateFields
- * - Relaxed variants on FragmentBaseStateFields
- * - STATUS_KEYWORDS additions
- * - ApprovalBreakpoint type structure (compile-time)
- * - DriveFlowAction "approval" variant (compile-time)
- */
-
-import type {
-  ApprovalBreakpoint,
-  DriveFlowAction,
-} from "@features/orchestration/services/drive-flow-types.ts";
 import { describe, expect, it } from "vitest";
 import {
   FragmentStateDefinitionSchema,
@@ -21,49 +6,43 @@ import {
   WaveStateSchema,
 } from "../flow-definition-schemas.ts";
 
-// BaseStateFields — approval_gate / max_revisions / rejection_target
-
 describe("BaseStateFields approval gate fields", () => {
-  it("parses state with approval_gate: true", () => {
-    const result = SingleStateSchema.safeParse({
-      approval_gate: true,
-      type: "single",
-    });
+  it.each([
+    {
+      desc: "approval_gate: true",
+      expected: true,
+      field: "approval_gate",
+      input: { approval_gate: true, type: "single" },
+    },
+    {
+      desc: "approval_gate absent (backward compat)",
+      expected: undefined,
+      field: "approval_gate",
+      input: { type: "single" },
+    },
+    {
+      desc: "max_revisions: 3",
+      expected: 3,
+      field: "max_revisions",
+      input: { max_revisions: 3, type: "single" },
+    },
+    {
+      desc: "max_revisions coerced from string '5'",
+      expected: 5,
+      field: "max_revisions",
+      input: { max_revisions: "5", type: "single" },
+    },
+    {
+      desc: "rejection_target: 'design'",
+      expected: "design",
+      field: "rejection_target",
+      input: { rejection_target: "design", type: "single" },
+    },
+  ])("parses SingleState with $desc", ({ expected, field, input }) => {
+    const result = SingleStateSchema.safeParse(input);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.approval_gate).toBe(true);
-    }
-  });
-
-  it("parses state without approval_gate (backward compat)", () => {
-    const result = SingleStateSchema.safeParse({
-      type: "single",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.approval_gate).toBeUndefined();
-    }
-  });
-
-  it("parses state with max_revisions: 3", () => {
-    const result = SingleStateSchema.safeParse({
-      max_revisions: 3,
-      type: "single",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.max_revisions).toBe(3);
-    }
-  });
-
-  it("parses state with rejection_target: 'design'", () => {
-    const result = SingleStateSchema.safeParse({
-      rejection_target: "design",
-      type: "single",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.rejection_target).toBe("design");
+      expect(result.data[field as keyof typeof result.data]).toBe(expected);
     }
   });
 
@@ -81,139 +60,45 @@ describe("BaseStateFields approval gate fields", () => {
       expect(result.data.rejection_target).toBe("research");
     }
   });
-
-  it("coerces max_revisions from string '5'", () => {
-    const result = SingleStateSchema.safeParse({
-      max_revisions: "5",
-      type: "single",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.max_revisions).toBe(5);
-    }
-  });
 });
-
-// FragmentBaseStateFields — relaxed variants for param placeholders
 
 describe("FragmentBaseStateFields approval gate fields", () => {
-  it("parses fragment state with approval_gate as string placeholder", () => {
-    const result = FragmentStateDefinitionSchema.safeParse({
-      approval_gate: "${enable_approval}",
-      type: "single",
-    });
+  it.each([
+    {
+      desc: "approval_gate as string placeholder",
+      expected: "${enable_approval}",
+      field: "approval_gate",
+      input: { approval_gate: "${enable_approval}", type: "single" },
+    },
+    {
+      desc: "approval_gate: true (boolean still valid)",
+      expected: true,
+      field: "approval_gate",
+      input: { approval_gate: true, type: "single" },
+    },
+    {
+      desc: "max_revisions as string placeholder",
+      expected: "${max_revisions}",
+      field: "max_revisions",
+      input: { max_revisions: "${max_revisions}", type: "single" },
+    },
+    {
+      desc: "rejection_target as string placeholder",
+      expected: "${reject_to}",
+      field: "rejection_target",
+      input: { rejection_target: "${reject_to}", type: "single" },
+    },
+  ])("parses fragment state with $desc", ({ expected, field, input }) => {
+    const result = FragmentStateDefinitionSchema.safeParse(input);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.approval_gate).toBe("${enable_approval}");
-    }
-  });
-
-  it("parses fragment state with approval_gate: true (boolean still valid)", () => {
-    const result = FragmentStateDefinitionSchema.safeParse({
-      approval_gate: true,
-      type: "single",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.approval_gate).toBe(true);
-    }
-  });
-
-  it("parses fragment state with max_revisions as string placeholder", () => {
-    const result = FragmentStateDefinitionSchema.safeParse({
-      max_revisions: "${max_revisions}",
-      type: "single",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.max_revisions).toBe("${max_revisions}");
-    }
-  });
-
-  it("parses fragment state with rejection_target as string", () => {
-    const result = FragmentStateDefinitionSchema.safeParse({
-      rejection_target: "${reject_to}",
-      type: "single",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.rejection_target).toBe("${reject_to}");
+      expect(result.data[field as keyof typeof result.data]).toBe(expected);
     }
   });
 });
-
-// STATUS_KEYWORDS — approved / revise / reject
 
 describe("STATUS_KEYWORDS approval gate keywords", () => {
-  it("includes 'approved'", () => {
-    expect(STATUS_KEYWORDS).toContain("approved");
-  });
-
-  it("includes 'revise'", () => {
-    expect(STATUS_KEYWORDS).toContain("revise");
-  });
-
-  it("includes 'reject'", () => {
-    expect(STATUS_KEYWORDS).toContain("reject");
-  });
-});
-
-// ApprovalBreakpoint type — compile-time structural check
-
-describe("ApprovalBreakpoint interface", () => {
-  it("accepts a structurally correct ApprovalBreakpoint value", () => {
-    // This is a compile-time check — if the type is wrong, TS will error at build time.
-    const breakpoint: ApprovalBreakpoint = {
-      agent_type: "canon:implementor",
-      artifacts: ["/workspace/plans/task-01-SUMMARY.md"],
-      options: ["approved", "revise", "reject"],
-      state_id: "implement",
-      summary: "Implemented approval gate schema fields",
-    };
-    expect(breakpoint.state_id).toBe("implement");
-    expect(breakpoint.options).toEqual(["approved", "revise", "reject"]);
-  });
-});
-
-// DriveFlowAction "approval" variant — compile-time structural check
-
-describe("DriveFlowAction approval variant", () => {
-  it("accepts an 'approval' action with ApprovalBreakpoint", () => {
-    const action: DriveFlowAction = {
-      action: "approval",
-      breakpoint: {
-        agent_type: "canon:architect",
-        artifacts: [],
-        options: ["approved", "revise", "reject"],
-        state_id: "design",
-        summary: "Design complete",
-      },
-    };
-    expect(action.action).toBe("approval");
-  });
-
-  it("existing 'spawn' variant still compiles", () => {
-    const action: DriveFlowAction = {
-      action: "spawn",
-      requests: [],
-    };
-    expect(action.action).toBe("spawn");
-  });
-
-  it("existing 'hitl' variant still compiles", () => {
-    const action: DriveFlowAction = {
-      action: "hitl",
-      breakpoint: { context: "some context", reason: "needs input" },
-    };
-    expect(action.action).toBe("hitl");
-  });
-
-  it("existing 'done' variant still compiles", () => {
-    const action: DriveFlowAction = {
-      action: "done",
-      summary: "All done",
-      terminal_state: "complete",
-    };
-    expect(action.action).toBe("done");
+  it.each(["approved", "revise", "reject"])("includes '%s'", (keyword) => {
+    expect(STATUS_KEYWORDS).toContain(keyword);
   });
 });

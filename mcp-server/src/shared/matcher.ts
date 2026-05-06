@@ -11,6 +11,8 @@ export type MatchFilters = {
   file_path?: string;
   severity_filter?: "rule" | "strong-opinion" | "convention";
   tags?: string[];
+  /** Tags computed from the KG for the target file. Used for tag-based scope matching (OR vs layers). */
+  computed_tags?: string[];
   include_archived?: boolean;
 };
 
@@ -68,20 +70,81 @@ function matchesTags(p: Principle, tags: string[] | undefined): boolean {
   return tags.some((t) => p.tags.includes(t));
 }
 
+/**
+ * Check if a file's computed tags intersect with a principle's scope.tags.
+ *
+ * Returns true when:
+ * - principle has no scope.tags (backward compat — matches all files)
+ * - computed_tags is empty/undefined (no KG data — skip tag filter)
+ * - intersection of scope.tags and computed_tags is non-empty
+ */
+function matchesScopeTags(p: Principle, computedTags: string[] | undefined): boolean {
+  if (!p.scope.tags || p.scope.tags.length === 0) return true;
+  if (!computedTags || computedTags.length === 0) return true;
+  return computedTags.some((t) => p.scope.tags!.includes(t));
+}
+
+/**
+ * Check if a principle passes the layer/scope-tags gate.
+ *
+ * Three cases:
+ * 1. scope.layers non-empty AND scope.tags non-empty (with computed_tags):
+ *    OR semantics — either a layer match or a tag match is sufficient.
+ * 2. scope.layers empty AND scope.tags non-empty (tag-only principle):
+ *    Tag match is REQUIRED — the principle only applies to files with matching
+ *    computed_tags. When no computed_tags are available (KG not indexed), the
+ *    principle is skipped to avoid spurious matches.
+ * 3. scope.tags empty or absent (layer-only or universal principle):
+ *    Layer-only matching (empty scope.layers means universal — matches all).
+ */
+function passesLayerGate(
+  p: Principle,
+  layers: string[],
+  computedTags: string[] | undefined,
+): boolean {
+  const hasScopeLayers = p.scope.layers.length > 0;
+  const hasScopeTags = (p.scope.tags?.length ?? 0) > 0;
+  const hasComputedTags = (computedTags?.length ?? 0) > 0;
+
+  if (hasScopeTags) {
+    if (hasScopeLayers) {
+      // Case 1: Both layers and tags specified — OR semantics.
+      // Layer match is evaluated without the "empty = universal" short-circuit
+      // because we have an explicit tag constraint.
+      const layersMatch = layers.some((l) => p.scope.layers.includes(l));
+      return layersMatch || (hasComputedTags && matchesScopeTags(p, computedTags));
+    }
+    // Case 2: Tag-only principle (no layers) — tag match is controlling.
+    // When KG is unavailable (no computed_tags), skip this principle.
+    return hasComputedTags && matchesScopeTags(p, computedTags);
+  }
+
+  // Case 3: No scope.tags — layer-only (empty scope.layers = universal).
+  return matchesLayers(p, layers);
+}
+
+/**
+ * Check if a principle passes all active filters.
+ * Layers OR scope.tags: principle matches if either signal matches.
+ * When computed_tags are available and scope.tags is set, a tag match
+ * can compensate for a layer mismatch (the whole point of this feature).
+ */
+function principleMatchesFilters(p: Principle, filters: MatchFilters, layers: string[]): boolean {
+  if (p.archived && !filters.include_archived) return false;
+  if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
+  if (!passesLayerGate(p, layers, filters.computed_tags)) return false;
+  if (!matchesFilePattern(p, filters.file_path)) return false;
+  if (!matchesTags(p, filters.tags)) return false;
+  return true;
+}
+
 export function matchPrinciples(principles: Principle[], filters: MatchFilters): Principle[] {
   const layers =
     filters.layers ||
     (filters.file_path ? ([inferLayer(filters.file_path)].filter(Boolean) as string[]) : []);
 
   return principles
-    .filter((p) => {
-      if (p.archived && !filters.include_archived) return false;
-      if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
-      if (!matchesLayers(p, layers)) return false;
-      if (!matchesFilePattern(p, filters.file_path)) return false;
-      if (!matchesTags(p, filters.tags)) return false;
-      return true;
-    })
+    .filter((p) => principleMatchesFilters(p, filters, layers))
     .sort((a, b) => {
       const sevDiff = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
       if (sevDiff !== 0) return sevDiff;

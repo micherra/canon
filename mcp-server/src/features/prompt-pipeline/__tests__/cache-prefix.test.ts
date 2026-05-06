@@ -20,20 +20,7 @@ import { clearStoreCache, getExecutionStore } from "@domains/workspaces/executio
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Mock loadAndResolveFlow + git adapter so initWorkspaceFlow is testable
-
-vi.mock("@domains/flows/flow-parser.ts", () => ({
-  loadAndResolveFlow: vi.fn().mockResolvedValue({
-    description: "A fast single-agent pipeline for small tasks.",
-    entry: "build",
-    name: "fast-path",
-    spawn_instructions: {},
-    states: {
-      build: { transitions: { done: "done" }, type: "single" },
-      done: { type: "terminal" },
-    },
-  }),
-}));
+// Mock git adapter so initWorkspaceFlow is testable without real git
 
 vi.mock("@platform/adapters/git-adapter.ts", () => ({
   gitStatus: vi
@@ -287,16 +274,14 @@ describe("initWorkspaceFlow — cache prefix computation", () => {
     expect(result.cache_prefix_hash).toMatch(/^[0-9a-f]{12}$/);
   });
 
-  it("prefix content includes flow description", async () => {
+  it("prefix content includes flow name", async () => {
     const projectDir = makeTmpProjectDir();
     const result = await initWs(projectDir);
 
-    // Read prefix from store
     const store = getExecutionStore(result.workspace);
     const prefix = store.getCachePrefix();
 
     expect(prefix).toContain("fast-path");
-    expect(prefix).toContain("A fast single-agent pipeline for small tasks.");
   });
 
   it("prefix content includes workspace metadata (task, branch, slug)", async () => {

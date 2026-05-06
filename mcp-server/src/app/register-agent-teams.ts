@@ -4,17 +4,12 @@ import { z } from "zod";
 import { pluginDir, server } from "./server-state.ts";
 
 /**
- * Agent-teams mode tool registrations.
- *
- * All tools here are gated behind CANON_AGENT_TEAMS_MODE=on so the legacy
- * state-machine path stays byte-identical when the flag is off.
+ * Agent-teams tool registrations.
  *
  * Moved out of register-orchestration.ts to keep that file under biome's
  * noExcessiveLinesPerFile ceiling.
  */
 export function registerAgentTeamsTools(): void {
-  if (process.env.CANON_AGENT_TEAMS_MODE !== "on") return;
-
   server.registerTool(
     "resolve_agent_skills",
     {

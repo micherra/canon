@@ -11,9 +11,15 @@
 
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
-import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
 
-export type { ConsultationPromptEntry };
+export type ConsultationPromptEntry = {
+  name: string;
+  agent: string;
+  prompt: string;
+  role: string;
+  timeout?: string;
+  section?: string;
+};
 
 export type ResolveAfterConsultationsInput = {
   workspace: string;
