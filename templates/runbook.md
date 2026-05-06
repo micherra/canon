@@ -154,7 +154,7 @@ skip_when: ~
 
 **Intent:** The shipper creates a PR from the worktree branch (`canon/{slug}`) to main. Direct merge is the fallback mode — used only when the user explicitly requests it (e.g., "merge it", "skip PR").
 
-**Coordination notes:** Runs after `context-sync` so that documentation updates land on the build branch before the PR is created. The shipper does NOT delete the build branch — it is needed for the PR. Worktree cleanup is handled by the janitor after finalization. On conflict (fallback merge path only), blocks until the user resolves. The `learn` step follows immediately.
+**Coordination notes:** Runs after `context-sync` so that documentation updates land on the build branch before the PR is created. The shipper must NOT run `git worktree remove` — `finalize_workspace` needs the worktree for artifact verification. The shipper does NOT delete the build branch — it is needed for the PR. On conflict (fallback merge path only), blocks until the user resolves. The `learn` step follows immediately.
 
 ---
 

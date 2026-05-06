@@ -112,7 +112,7 @@ Before proceeding, verify your own output: if you are reporting `DONE_WITH_CONCE
 2. Push that session branch: `git push -u origin HEAD:${session_branch}`.
 3. Create the PR to `main`: `gh pr create --base main --head ${session_branch} --title "{task description, truncated to 70 chars}" --body "{PR description}"`.
 4. Report the PR URL.
-5. Do NOT delete the build branch — it is needed for the PR. Worktree cleanup is handled by the janitor.
+5. Do NOT run `git worktree remove` — the worktree must remain for `finalize_workspace` artifact verification. Do NOT delete the build branch — it is needed for the PR.
 
 If push/PR creation fails, save the PR description to `${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md`, report `DONE_WITH_CONCERNS`, and include the exact git/gh error.
 
@@ -121,7 +121,7 @@ If push/PR creation fails, save the PR description to `${WORKSPACE}/plans/${slug
 1. `git checkout main`
 2. `git merge canon/{slug} --no-edit`
 3. If merge conflicts: save the PR description to `${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md`, report `DONE_WITH_CONCERNS` with the conflicting files listed.
-4. If clean merge: `git branch -d canon/{slug}`. Worktree cleanup is handled by the janitor.
+4. If clean merge: `git branch -d canon/{slug}`. Do NOT run `git worktree remove` — worktree cleanup is handled after `finalize_workspace` completes.
 5. Report success.
 
 ### Step 5: Log activity
