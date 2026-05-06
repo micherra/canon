@@ -21,7 +21,7 @@ Pre-Research Gate (L1) blocks the orchestrator from using `Read`, `Bash`, `Grep`
 
 Text generation is not interceptable by hooks — Claude Code's PreToolUse hooks fire on tool calls, not on text generation. This means no L4 backstop exists for this failure mode. Enforcement is entirely behavioral. The rule fills that gap by making the self-check explicit.
 
-Without this rule, the orchestrator can silently substitute for a researcher or architect just by typing. The output reaches the user, the specialist agent is never spawned, and the Canon flow is bypassed with no audit trail and no artifact written to the workspace.
+Without this rule, the orchestrator can silently substitute for a planner or architect just by typing. The output reaches the user, the specialist agent is never spawned, and the Canon flow is bypassed with no audit trail and no artifact written to the workspace.
 
 ## Examples
 
