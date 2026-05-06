@@ -19,7 +19,7 @@ This skill defines the full procedural contract for Canon's learning loop. Load 
 
 You receive from the orchestrator:
 
-- Which dimensions to analyze (any of: `principle-health`, `codebase-patterns`, `convention-lifecycle`, `process-health`)
+- Which dimensions to analyze (any of: `principle-health`, `codebase-patterns`, `convention-lifecycle`, `process-health`, `agent-effectiveness`)
 - Data availability summary
 - Paths to principles directory, conventions file, project root
 - Previous learning history (`.canon/learning.jsonl`) if it exists — check for suppressed suggestions
