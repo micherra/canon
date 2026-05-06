@@ -5,6 +5,8 @@ import { PRINCIPLE_SECTIONS } from "./constants.ts";
 export type PrincipleScope = {
   layers: string[];
   file_patterns: string[];
+  /** Optional tags for cross-cutting matching via computed file tags from the KG. */
+  tags?: string[];
 };
 
 export type Principle = {
@@ -131,6 +133,7 @@ export function parsePrinciple(content: string, filePath: string): Principle {
     scope: {
       file_patterns: (scope.file_patterns as string[]) || [],
       layers: (scope.layers as string[]) || [],
+      tags: (scope.tags as string[]) || undefined,
     },
     severity: (frontmatter.severity as Principle["severity"]) || "convention",
     tags: (frontmatter.tags as string[]) || [],

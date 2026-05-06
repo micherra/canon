@@ -3,10 +3,9 @@ id: structured-logging-with-levels
 title: Log Structured Events at the Right Level
 severity: convention
 scope:
-  layers:
-    - api
-    - domain
-    - infra
+  layers: []
+  tags:
+    - observability
 tags:
   - observability
   - debugging

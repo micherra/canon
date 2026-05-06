@@ -52,6 +52,8 @@ export type FileRow = {
   language: string;
   layer: string;
   last_indexed_at: number;
+  /** Community assignment from Louvain detection; null when not yet computed. */
+  community_id?: number | null;
 };
 
 /** Matches the `entities` table. `entity_id` is undefined before DB insert. */
@@ -225,6 +227,20 @@ export type SummaryRow = {
   model: string | null;
   content_hash: string | null;
   updated_at: string;
+};
+
+/**
+ * Matches the `file_tags` table.
+ * Stores computed tags for a file from community detection or other signals.
+ * The primary key is (file_id, tag) — one row per unique tag per file.
+ */
+export type FileTagRow = {
+  file_id: number;
+  tag: string;
+  /** Source of the tag, e.g. "louvain", "manual", "infer-domains" */
+  source: string;
+  /** Confidence score in [0, 1]; 1.0 when certain */
+  confidence: number;
 };
 
 /** Matches the entity_vector_meta / summary_vector_meta tables */
