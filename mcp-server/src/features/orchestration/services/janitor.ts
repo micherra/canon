@@ -326,6 +326,20 @@ async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[])
     );
   }
 
+  // Remove the git worktree registration before deleting the directory.
+  // If the worktree/ subdirectory exists, git tracks it — we must deregister
+  // it first or git's internal metadata becomes stale. Failure is non-blocking:
+  // rmSync will still clean up the files, and `git worktree prune` can clear
+  // any remaining metadata.
+  const worktreeSubPath = join(slugPath, "worktree");
+  if (existsSync(worktreeSubPath)) {
+    try {
+      gitExec(["worktree", "remove", "--force", worktreeSubPath], projectDir);
+    } catch {
+      // Non-blocking — proceed to rmSync regardless
+    }
+  }
+
   try {
     rmSync(slugPath, { force: true, recursive: true });
     return true;
