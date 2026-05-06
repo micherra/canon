@@ -1,6 +1,7 @@
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
+import type { FileContextOutput } from "@features/file-context/tools/get-file-context.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
 import { codebaseGraph, compactGraph } from "@features/knowledge-graph/tools/codebase-graph.ts";
 import { codebaseGraphMaterialize } from "@features/knowledge-graph/tools/codebase-graph-materialize.ts";
@@ -8,6 +9,8 @@ import { codebaseGraphPoll } from "@features/knowledge-graph/tools/codebase-grap
 import { codebaseGraphSubmit } from "@features/knowledge-graph/tools/codebase-graph-submit.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
+import type { GetPrinciplesBatchOutput } from "@features/principles/tools/get-principles.ts";
+import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
 import { z } from "zod";
 import {
   gatedWrapHandler,
@@ -16,6 +19,123 @@ import {
   registerToolWithUi,
   server,
 } from "./server-state.ts";
+
+// --- get_context composite tool ---
+
+type IncludeSection = "principles" | "file_context" | "drift" | "graph";
+
+export type GetContextOutput = {
+  file_paths: string[];
+  include: IncludeSection[];
+  principles?: GetPrinciplesBatchOutput;
+  file_context?: FileContextOutput[];
+  drift?: Awaited<ReturnType<typeof getDriftReport>>;
+  graph?: unknown;
+};
+
+const getContextInputSchema = {
+  file_paths: z.array(z.string()).describe("File paths to get context for"),
+  include: z
+    .array(z.enum(["principles", "file_context", "drift", "graph"]))
+    .optional()
+    .describe("Sections to include (default: all)"),
+};
+
+const ALL_SECTIONS: IncludeSection[] = ["principles", "file_context", "drift", "graph"];
+
+/**
+ * Query blast_radius for each file path and return the aggregate results.
+ * Skips files where KG is not indexed or returns a recoverable error.
+ * Returns undefined when no results could be collected.
+ */
+function queryGraphForFiles(filePaths: string[]): unknown[] | undefined {
+  if (filePaths.length === 0) return undefined;
+  const aggregated: unknown[] = [];
+  for (const target of filePaths) {
+    const result = graphQuery({ query_type: "blast_radius", target }, projectDir);
+    if (result.ok) aggregated.push(result);
+  }
+  return aggregated.length > 0 ? aggregated : undefined;
+}
+
+async function handleGetContext(input: {
+  file_paths: string[];
+  include?: IncludeSection[];
+}): Promise<GetContextOutput> {
+  const sections: IncludeSection[] = input.include ?? ALL_SECTIONS;
+  const output: GetContextOutput = {
+    file_paths: input.file_paths,
+    include: sections,
+  };
+
+  // Collect promises for sections that can run in parallel
+  const tasks: Promise<void>[] = [];
+
+  if (sections.includes("principles")) {
+    tasks.push(
+      getPrinciplesBatch(
+        { file_paths: input.file_paths, summary_only: true },
+        projectDir,
+        pluginDir,
+      ).then((result) => {
+        output.principles = result;
+      }),
+    );
+  }
+
+  if (sections.includes("file_context")) {
+    tasks.push(
+      Promise.all(input.file_paths.map((fp) => getFileContext({ file_path: fp }, projectDir))).then(
+        (settled) => {
+          const results: FileContextOutput[] = [];
+          for (let i = 0; i < settled.length; i++) {
+            const result = settled[i];
+            if (!result.ok) {
+              throw new Error(`file_context error (${result.error_code}): ${result.message}`);
+            }
+            const { ok, ...data } = result;
+            results.push(data as FileContextOutput);
+          }
+          output.file_context = results;
+        },
+      ),
+    );
+  }
+
+  if (sections.includes("drift")) {
+    tasks.push(
+      getDriftReport({}, projectDir, pluginDir).then((result) => {
+        output.drift = result;
+      }),
+    );
+  }
+
+  if (sections.includes("graph")) {
+    // graph section: skip gracefully when KG is not indexed.
+    // Query blast_radius for each file and aggregate the results.
+    tasks.push(
+      Promise.resolve().then(() => {
+        const results = queryGraphForFiles(input.file_paths);
+        if (results !== undefined) output.graph = results;
+      }),
+    );
+  }
+
+  await Promise.all(tasks);
+  return output;
+}
+
+function registerCompositeContextTool(): void {
+  server.registerTool(
+    "get_context",
+    {
+      description:
+        "Composite context tool — fetches principles, file context, drift report, and graph data in one call. Reduces round-trips when agents need full context for a set of files.",
+      inputSchema: getContextInputSchema,
+    },
+    gatedWrapHandler(handleGetContext),
+  );
+}
 
 const codebaseGraphInputSchema = {
   changed_files: z
@@ -157,6 +277,12 @@ function registerGraphQueryTool(): void {
               .max(10)
               .optional()
               .describe("Max depth for blast_radius (default 3)"),
+            min_confidence: z
+              .number()
+              .min(0)
+              .max(1)
+              .optional()
+              .describe("Minimum confidence threshold for computed_tags (0-1)"),
           })
           .optional(),
         query_type: z
@@ -266,4 +392,5 @@ export function registerKnowledgeTools(): void {
   registerGraphQueryTool();
   registerSemanticSearchTool();
   registerGraphJobTools();
+  registerCompositeContextTool();
 }

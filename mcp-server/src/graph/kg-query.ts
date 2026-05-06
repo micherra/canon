@@ -521,6 +521,24 @@ export class KgQuery {
   }
 
   /**
+   * Return tags for multiple file_ids in a single query, grouped by file_id.
+   */
+  getFileTagsByFileIds(fileIds: number[]): Map<number, FileTagRow[]> {
+    const result = new Map<number, FileTagRow[]>();
+    if (fileIds.length === 0) return result;
+    const placeholders = fileIds.map(() => "?").join(",");
+    const rows = this.db
+      .prepare(`SELECT * FROM file_tags WHERE file_id IN (${placeholders})`)
+      .all(...fileIds) as FileTagRow[];
+    for (const row of rows) {
+      const arr = result.get(row.file_id);
+      if (arr) arr.push(row);
+      else result.set(row.file_id, [row]);
+    }
+    return result;
+  }
+
+  /**
    * Return a subgraph containing all files directly connected to the given
    * seed paths, plus the file_edges between them.  Useful for rendering
    * focused dependency views without loading the full graph.

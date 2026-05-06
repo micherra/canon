@@ -18,8 +18,6 @@ import {
 } from "@domains/workspaces/workspace.ts";
 import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
 import { CANON_DIR } from "@shared/constants.ts";
-import { validateRunbookTail } from "../services/runbook-tail-validator.ts";
-import { tryGenerateStructure } from "../services/workspace-structure.ts";
 import { seedFromPriorWorkspace } from "./seed-workspace.ts";
 
 type InitWorkspaceInput = {
@@ -257,9 +255,6 @@ async function buildCachePrefix(
     `## Workspace\n\n- Task: ${input.task}\n- Branch: ${input.branch}\n- Slug: ${slug}\n- Base commit: ${input.base_commit}`,
   );
 
-  const structure = tryGenerateStructure(projectDir);
-  if (structure) prefixParts.push(structure);
-
   const conventions = await tryReadFileContent(
     join(projectDir, CANON_DIR, "CONVENTIONS.md"),
     "conventions",
@@ -459,11 +454,8 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
   const board = initBoard(input.flow_name, input.task, input.base_commit);
 
   await mkdir(join(workspace, "plans", slug), { recursive: true });
-  const tailIssues: string[] = [];
   if (input.runbook_content) {
     await writeFile(join(workspace, "plans", slug, "runbook.md"), input.runbook_content);
-    const tailIssue = validateRunbookTail(input.runbook_content);
-    if (tailIssue) tailIssues.push(tailIssue);
   }
   if (input.brief_content) {
     await writeFile(join(workspace, "plans", slug, "planning-brief.md"), input.brief_content);
@@ -489,9 +481,6 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     slug,
     workspace,
   });
-  if (tailIssues.length > 0) {
-    result.preflight_issues = [...(result.preflight_issues ?? []), ...tailIssues];
-  }
   return result;
 }
 

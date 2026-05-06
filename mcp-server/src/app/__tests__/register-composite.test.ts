@@ -6,6 +6,7 @@ vi.mock("@app/server-state.ts", () => ({
   gatedWrapHandler: (handler: (input: unknown) => unknown) => handler,
   pluginDir: "/mock/plugin",
   projectDir: "/mock/project",
+  registerToolWithUi: vi.fn(),
   server: { registerTool: vi.fn() },
 }));
 
@@ -13,8 +14,8 @@ vi.mock("@features/principles/tools/get-principles.ts", () => ({
   getPrinciplesBatch: vi.fn(),
 }));
 
-vi.mock("@features/file-context/tools/get-file-context-batch.ts", () => ({
-  getFileContextBatch: vi.fn(),
+vi.mock("@features/file-context/tools/get-file-context.ts", () => ({
+  getFileContext: vi.fn(),
 }));
 
 vi.mock("@features/diagnostics/tools/get-drift-report.ts", () => ({
@@ -25,15 +26,31 @@ vi.mock("@features/knowledge-graph/tools/graph-query.ts", () => ({
   graphQuery: vi.fn(),
 }));
 
+// Stub out other register-knowledge.ts dependencies that aren't under test
+vi.mock("@features/diagnostics/tools/get-history.ts", () => ({ getHistory: vi.fn() }));
+vi.mock("@features/diagnostics/tools/store-summaries.ts", () => ({ storeSummaries: vi.fn() }));
+vi.mock("@features/knowledge-graph/tools/codebase-graph.ts", () => ({
+  codebaseGraph: vi.fn(),
+  compactGraph: vi.fn(),
+}));
+vi.mock("@features/knowledge-graph/tools/codebase-graph-materialize.ts", () => ({
+  codebaseGraphMaterialize: vi.fn(),
+}));
+vi.mock("@features/knowledge-graph/tools/codebase-graph-poll.ts", () => ({
+  codebaseGraphPoll: vi.fn(),
+}));
+vi.mock("@features/knowledge-graph/tools/codebase-graph-submit.ts", () => ({
+  codebaseGraphSubmit: vi.fn(),
+}));
+vi.mock("@features/knowledge-graph/tools/semantic-search.ts", () => ({
+  semanticSearch: vi.fn(),
+}));
+
 // Import after mocks are set up
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
-import { getFileContextBatch } from "@features/file-context/tools/get-file-context-batch.ts";
+import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
-
-// Import the module under test — this executes registerCompositeTools() is NOT called automatically;
-// we import the handler factory directly.
-// The handler is extracted by capturing what gatedWrapHandler receives.
 
 const mockPrinciplesResult = {
   graph_context_by_file: {},
@@ -42,28 +59,24 @@ const mockPrinciplesResult = {
   total_matched: 1,
 };
 
-const mockFileContextResult = {
+const mockFileContextOk = {
+  content: "const x = 1;",
+  exports: [],
+  file_path: "src/foo.ts",
+  imported_by: [],
+  imported_by_layer: {},
+  imports: [],
+  imports_by_layer: {},
+  last_verdict: null,
+  layer: "app",
+  layer_stack: [],
   ok: true as const,
-  results: [
-    {
-      content: "const x = 1;",
-      exports: [],
-      file_path: "src/foo.ts",
-      imported_by: [],
-      imported_by_layer: {},
-      imports: [],
-      imports_by_layer: {},
-      last_verdict: null,
-      layer: "app",
-      layer_stack: [],
-      project_max_impact: 0,
-      role: "internal",
-      shape: { description: "Moderate connectivity, typical file.", label: "Internal" },
-      summary: null,
-      violation_count: 0,
-      violations: [],
-    },
-  ],
+  project_max_impact: 0,
+  role: "internal",
+  shape: { description: "Moderate connectivity, typical file.", label: "Internal" },
+  summary: null,
+  violation_count: 0,
+  violations: [],
 };
 
 const mockDriftResult = {
@@ -80,30 +93,30 @@ const mockGraphResult = {
   target: "src/foo.ts",
 };
 
-describe("register-composite handler", () => {
+describe("register-knowledge get_context handler", () => {
   let handler: (input: { file_paths: string[]; include?: string[] }) => Promise<unknown>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
     vi.mocked(getPrinciplesBatch).mockResolvedValue(mockPrinciplesResult);
-    vi.mocked(getFileContextBatch).mockResolvedValue(mockFileContextResult);
+    vi.mocked(getFileContext).mockResolvedValue(mockFileContextOk);
     vi.mocked(getDriftReport).mockResolvedValue(mockDriftResult);
     vi.mocked(graphQuery).mockReturnValue(mockGraphResult);
 
     // Dynamically import after mocks are set up so the module captures our mocks.
-    // Use a cache-busting trick: vitest auto-resets modules when vi.mock is declared,
-    // but we need to re-import on each test run.
-    const mod = await import("../register-composite.ts");
+    const mod = await import("../register-knowledge.ts");
 
-    // Extract the handler by calling registerCompositeTools and capturing what
-    // server.registerTool was given.
+    // Extract the handler by calling registerKnowledgeTools and capturing what
+    // server.registerTool was given for get_context.
     const { server } = await import("@app/server-state.ts");
-    mod.registerCompositeTools();
+    vi.mocked(server.registerTool).mockClear();
+    mod.registerKnowledgeTools();
     const calls = vi.mocked(server.registerTool).mock.calls;
-    // The last call is our get_context registration
-    const lastCall = calls[calls.length - 1];
-    handler = lastCall[2] as typeof handler;
+    // Find the get_context registration
+    const getContextCall = calls.find((c) => c[0] === "get_context");
+    if (!getContextCall) throw new Error("get_context tool not registered");
+    handler = getContextCall[2] as typeof handler;
   });
 
   describe("all sections returned when include is omitted", () => {
@@ -111,12 +124,13 @@ describe("register-composite handler", () => {
       const result = (await handler({ file_paths: ["src/foo.ts"] })) as Record<string, unknown>;
 
       expect(getPrinciplesBatch).toHaveBeenCalledOnce();
-      expect(getFileContextBatch).toHaveBeenCalledOnce();
+      expect(getFileContext).toHaveBeenCalledOnce();
       expect(getDriftReport).toHaveBeenCalledOnce();
       expect(graphQuery).toHaveBeenCalledOnce();
 
       expect(result.principles).toEqual(mockPrinciplesResult);
-      expect(result.file_context).toEqual(mockFileContextResult.results);
+      const { ok: _ok, ...expectedFileContext } = mockFileContextOk;
+      expect(result.file_context).toEqual([expectedFileContext]);
       expect(result.drift).toEqual(mockDriftResult);
       expect(result.graph).toEqual([mockGraphResult]);
     });
@@ -137,7 +151,7 @@ describe("register-composite handler", () => {
       })) as Record<string, unknown>;
 
       expect(getPrinciplesBatch).toHaveBeenCalledOnce();
-      expect(getFileContextBatch).not.toHaveBeenCalled();
+      expect(getFileContext).not.toHaveBeenCalled();
       expect(getDriftReport).not.toHaveBeenCalled();
       expect(graphQuery).not.toHaveBeenCalled();
 
@@ -153,19 +167,20 @@ describe("register-composite handler", () => {
         include: ["file_context", "drift"],
       })) as Record<string, unknown>;
 
-      expect(getFileContextBatch).toHaveBeenCalledOnce();
+      expect(getFileContext).toHaveBeenCalledOnce();
       expect(getDriftReport).toHaveBeenCalledOnce();
       expect(getPrinciplesBatch).not.toHaveBeenCalled();
       expect(graphQuery).not.toHaveBeenCalled();
 
-      expect(result.file_context).toEqual(mockFileContextResult.results);
+      const { ok: _ok, ...expectedFileContext } = mockFileContextOk;
+      expect(result.file_context).toEqual([expectedFileContext]);
       expect(result.drift).toEqual(mockDriftResult);
     });
   });
 
   describe("fail-closed: file_context errors propagate", () => {
-    it("throws when getFileContextBatch returns an error result", async () => {
-      vi.mocked(getFileContextBatch).mockResolvedValue({
+    it("throws when getFileContext returns an error result", async () => {
+      vi.mocked(getFileContext).mockResolvedValue({
         error_code: "INVALID_INPUT",
         message: "File not found: src/missing.ts",
         ok: false,
