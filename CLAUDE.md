@@ -395,16 +395,16 @@ ALL three must pass for the verify step to succeed. If any gate fails, the engin
 
 ### Completion Checklist
 
-1. Call `finalize_workspace({ workspace })` — if steps or artifacts missing, resolve before proceeding.
-2. Run context-sync: spawn the scribe agent. The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md on the build branch. Context-sync runs before ship so that doc updates are committed to the build branch and included in the PR — the scribe needs the worktree available to commit doc updates before the PR is created.
-3. Ship the build:
-   - **Default**: spawn the shipper agent. The shipper pushes the worktree branch to origin and creates a PR to main. The shipper must NOT run `git worktree remove` — `finalize_workspace` needs the worktree for artifact verification. The shipper does NOT delete the build branch — it is needed for the PR.
+1. Run context-sync: spawn the scribe agent. The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md on the build branch. Context-sync runs before ship so that doc updates are committed to the build branch and included in the PR.
+2. Ship the build:
+   - **Default**: spawn the shipper agent. The shipper pushes the worktree branch to origin and creates a PR to main.
    - **Fallback (direct merge)** — only when the user explicitly requests it (e.g., "merge it", "skip PR"):
      - `git checkout main`
      - `git merge canon/{slug} --no-edit`
      - If merge conflicts: present conflicting files to user as HITL — do NOT force-push or use `--theirs`.
-     - If clean merge: proceed to step 4.
-     - After successful merge: `git branch -d canon/{slug}`. Do NOT run `git worktree remove` — worktree cleanup is handled after `finalize_workspace` completes.
+     - If clean merge: proceed to step 3.
+     - After successful merge: `git branch -d canon/{slug}`.
+3. Call `finalize_workspace({ workspace })` — if steps or artifacts missing, resolve before proceeding. Safe to run now that context-sync and ship are complete.
 4. Call `update_board({ workspace, operation: "complete_flow" })`.
 5. Verify file claims released.
 6. Evaluate learn gate: run `.canon/learn.sh` if it exists.

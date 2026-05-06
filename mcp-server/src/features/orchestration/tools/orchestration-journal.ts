@@ -522,7 +522,7 @@ function computeFlowOutcome(
  * Deregister the worktree at `{workspace}/worktree` from git before deletion.
  * Best-effort — never throws. Warns on failure so the caller can still proceed.
  */
-function tryDeregisterWorktree(workspace: string): void {
+function tryDeregisterWorktree(workspace: string, slug: string): void {
   const worktreeSubPath = join(workspace, "worktree");
   if (!existsSync(worktreeSubPath)) return;
   try {
@@ -532,6 +532,21 @@ function tryDeregisterWorktree(workspace: string): void {
         `[canon] archiveAndDeleteWorkspace: git worktree remove failed for ${basename(workspace)}:`,
         result.stderr.trim(),
       );
+    } else {
+      try {
+        const branchResult = gitExec(["branch", "-D", `canon/${slug}`], projectDir);
+        if (!branchResult.ok) {
+          console.warn(
+            `[canon] archiveAndDeleteWorkspace: git branch -D failed for ${slug}:`,
+            branchResult.stderr.trim(),
+          );
+        }
+      } catch (err: unknown) {
+        console.warn(
+          `[canon] archiveAndDeleteWorkspace: git branch -D threw for ${slug}:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
     }
   } catch (err: unknown) {
     console.warn(
@@ -544,11 +559,12 @@ function tryDeregisterWorktree(workspace: string): void {
 async function archiveAndDeleteWorkspace(
   workspace: string,
 ): Promise<{ archived: boolean; deleted: boolean }> {
+  const session = getExecutionStore(workspace).getSession();
+  const slug = session?.slug ?? basename(workspace);
+
   let archived = false;
   try {
-    const session = getExecutionStore(workspace).getSession();
     const branch = session?.branch ?? "unknown";
-    const slug = session?.slug ?? basename(workspace);
     await archiveWorkspace({
       branch,
       projectDir,
@@ -562,7 +578,7 @@ async function archiveAndDeleteWorkspace(
 
   let deleted = false;
   try {
-    tryDeregisterWorktree(workspace);
+    tryDeregisterWorktree(workspace, slug);
     rmSync(workspace, { force: true, recursive: true });
     deleted = true;
   } catch (err: unknown) {

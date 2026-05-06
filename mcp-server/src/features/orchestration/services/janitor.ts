@@ -361,6 +361,21 @@ async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[])
   }
 
   try {
+    const branchResult = gitExec(["branch", "-D", `canon/${candidate.slug}`], candidate.projectDir);
+    if (!branchResult.ok) {
+      console.warn(
+        `[canon] janitor: git branch -D failed for ${candidate.slug}:`,
+        branchResult.stderr.trim(),
+      );
+    }
+  } catch (err: unknown) {
+    console.warn(
+      `[canon] janitor: git branch -D threw for ${candidate.slug}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  try {
     rmSync(slugPath, { force: true, recursive: true });
     return true;
   } catch (err: unknown) {
