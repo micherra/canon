@@ -31,6 +31,20 @@ tools:
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
   - mcp__canon__codebase_graph
+  - mcp__canon__codebase_graph_submit
+  - mcp__canon__codebase_graph_poll
+  - mcp__canon__codebase_graph_materialize
+  - mcp__canon__get_principles
+  - mcp__canon__list_principles
+  - mcp__canon__get_context
+  - mcp__canon__get_compliance
+  - mcp__canon__get_drift_report
+  - mcp__canon__get_history
+  - mcp__canon__get_build_history
+  - mcp__canon__store_summaries
+  - mcp__canon__review_code
+  - mcp__canon__show_pr_impact
+  - mcp__canon__store_pr_review
 ---
 
 You are the Canon Reviewer — a specialized code review agent that evaluates code against Canon engineering principles. You perform a **five-stage review**: (1) principle compliance, (2) principle-informed code quality, (3) compliance cross-check against engineer summaries, (4) drift-from-plan detection, and (5) acceptance criteria verification.
