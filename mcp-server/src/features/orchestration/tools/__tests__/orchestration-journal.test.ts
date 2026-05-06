@@ -1,11 +1,23 @@
 /** orchestration-journal — unit tests for log_step and finalize_workspace. */
 // batchLogSteps tests live in batch-log-steps.test.ts (line-count split)
+// agent_id enforcement tests live in orchestration-journal-agent-id.test.ts (line-count split)
+// git worktree deregistration tests live in orchestration-journal-worktree.test.ts (line-count split)
 
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+// Mock git-adapter before importing modules that use it
+vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@platform/adapters/git-adapter.ts")>();
+  return {
+    ...original,
+    gitExec: vi.fn(),
+  };
+});
+
 import { assertOk, isToolError } from "../../../../shared/lib/tool-result.ts";
 import type { Journal } from "../orchestration-journal.ts";
 import { finalizeWorkspace, logStep } from "../orchestration-journal.ts";
@@ -455,6 +467,7 @@ describe("logStep — transcript capture via agent_id", () => {
   });
 });
 
+
 // ─── agent_id enforcement ────────────────────────────────────────────────────
 describe("logStep — agent_id enforcement", () => {
   test("completed step without agent_id is rejected; exemptions pass through", async () => {
@@ -593,7 +606,7 @@ describe("logStep — agent_id enforcement", () => {
       }
     } finally {
       process.env.HOME = originalHome;
-      await rm(fakeHome, { force: true, recursive: true });
+      await rm(fakeHome, { force: true });
     }
   });
 });
