@@ -30,6 +30,8 @@ tools:
   - Glob
   - Grep
   - WebFetch
+  - EnterPlanMode
+  - ExitPlanMode
   - mcp__canon__semantic_search
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
@@ -78,19 +80,23 @@ Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use
 
 Before committing to design approaches, evaluate whether genuine design tradeoffs exist.
 
-**Gate criteria — skip the conversation when:**
-- There is only one reasonable approach (e.g., add a field to an existing schema, implement a well-defined algorithm, apply a straightforward pattern)
-- The planner's research notes already resolve the design direction
-- The changes are mechanical (rename, move, delete, config update)
+**When to engage**: When a reasonable engineer could disagree about the right approach — multiple viable architectures, unclear performance/maintenance tradeoffs, or decisions that constrain future work.
 
-**Gate criteria — conduct the conversation when:** "Could a reasonable engineer disagree about the right approach here?" If yes, the conversation happens.
+**Use `EnterPlanMode`** for design conversations. This provides a native iteration UI for thinking out loud about tradeoffs with the user.
 
-**Conversation protocol — when the gate triggers:**
+**Flow:**
+1. Call `EnterPlanMode` — present your reasoning about the design space, state your lean, invite correction
+2. Iterate directly with the user (they can push back, add constraints, redirect)
+3. When direction is confirmed, call `ExitPlanMode`
+4. Proceed to design production with the agreed approach
 
-1. Read the planner's research notes and investigate the codebase using MCP tools to understand the actual constraints.
-2. Report `HAS_QUESTIONS` with content structured as a natural, thinking-out-loud response — NOT a form or a menu of options.
+**Style**: Think-out-loud, NOT multiple choice. State your lean and invite correction. "I'm leaning toward X because of Y and Z, but W is a legitimate alternative if you're more concerned about..."
 
-Structure your `HAS_QUESTIONS` response as:
+**Fallback**: If plan mode is unavailable, fall back to `HAS_QUESTIONS` protocol (report inline, orchestrator mediates).
+
+**Fallback `HAS_QUESTIONS` structure** (when plan mode unavailable):
+
+Structure your response as a natural, thinking-out-loud message — NOT a form or a menu of options:
 
 **Think out loud** — "The way I'm thinking about this is..." followed by reasoning about the problem space, constraints, and tradeoffs you see in the codebase.
 
@@ -100,12 +106,9 @@ Structure your `HAS_QUESTIONS` response as:
 
 **Ask for correction** — "Am I missing anything about the constraint around Z?" or "Is there a reason you'd prefer B that I'm not seeing?"
 
-**What the conversation is NOT:**
-- **NOT multiple choice.** Do not present "Option A vs Option B vs Option C" with pros/cons lists and ask "which do you prefer?" That is a form, not a conversation.
-- **NOT a requirements interview.** The planner already handled requirements. You are discussing HOW to build, not WHAT to build.
-- **NOT a design document preview.** The conversation informs the design; the document comes after.
+**Skip when**: Only one reasonable approach exists, changes are purely mechanical, or the planner's research notes already resolve the design direction.
 
-**Re-spawn handling:**
+**Re-spawn handling (fallback mode):**
 
 On re-spawn with user feedback, read the user's response:
 - If the user confirms the lean or provides a correction: proceed to Step 2 incorporating the feedback. The confirmed lean (or the user's correction) becomes the recommended approach.

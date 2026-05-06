@@ -153,7 +153,9 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 5. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` comes from the approved runbook's frontmatter, `tier` comes from the runbook frontmatter (optional — defaults to `"medium"` when omitted), and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
 6. Extract the `## Research Notes` section and write to `${WORKSPACE}/plans/${slug}/research-notes.md` using `Write`. (Step 3 already confirmed presence for non-trivial builds; skip this write for trivial builds where no section exists.)
 7. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
-8. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
+8. Create Claude Code tasks for progress visibility: for each runbook step, call `TaskCreate({ title: step_id, description: step.intent })`. These provide native progress tracking alongside the journal.
+9. Set environment variable before spawning plan-mode-eligible agents: `CANON_CURRENT_AGENT={agent_name}` (read by the plan-mode-guard hook to allow EnterPlanMode).
+10. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -341,7 +343,110 @@ Write the consolidated review using the `write_review` MCP tool.
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
-### HITL Patterns <!-- last-updated: 2026-04-30 -->
+### Native Primitives <!-- last-updated: 2026-05-06 -->
+
+The orchestrator MUST use Claude Code native primitives at interaction boundaries. These provide structured UI instead of free-text back-and-forth.
+
+| Primitive | Owner | Touchpoint | Constraint |
+|-----------|-------|------------|------------|
+| `EnterPlanMode` | planner, architect | Requirements interview, design conversation | Set `CANON_CURRENT_AGENT` env var before spawning |
+| `ExitPlanMode` | planner, architect | Plan approval / direction confirmation | Paired with EnterPlanMode |
+| `AskUserQuestion` | orchestrator | WARNING close-out, review verdict, session checkpoint | 4 options max, 4 questions max per call |
+| `TaskCreate/TaskUpdate` | orchestrator | Runbook step progress tracking | Create at build start, update per step |
+| `PushNotification` | orchestrator | Background agent completion (learner, scribe) | Only for `run_in_background: true` agents |
+| `Monitor` | orchestrator | Verify step output streaming | Stream build/test output live |
+
+#### EnterPlanMode / ExitPlanMode
+
+The planner and architect agents call `EnterPlanMode` directly for iterative conversations with the user. The orchestrator MUST set `CANON_CURRENT_AGENT={agent_name}` as an environment variable before spawning these agents (the plan-mode-guard hook reads this to allow the call).
+
+The orchestrator itself NEVER calls `EnterPlanMode` — it stays a pure dispatcher.
+
+#### AskUserQuestion
+
+The orchestrator MUST use `AskUserQuestion` for closed-choice HITL gates:
+
+**WARNING close-out:**
+```
+AskUserQuestion({
+  questions: [{
+    question: "Review found {N} advisory warnings. How to proceed?",
+    header: "Warnings",
+    options: [
+      { label: "Fix", description: "Spawn fix cycle targeting advisory items" },
+      { label: "Acknowledge", description: "Accept as-is, log in journal" },
+      { label: "Defer", description: "Note as follow-up, proceed to ship" }
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+**Review verdict (BLOCKING):**
+```
+AskUserQuestion({
+  questions: [{
+    question: "Review found BLOCKING violations. Fix automatically or review manually?",
+    header: "Review",
+    options: [
+      { label: "Auto-fix", description: "Spawn engineer in fix mode" },
+      { label: "Show details", description: "Display full violation list before deciding" },
+      { label: "Override", description: "Proceed despite violations (requires justification)" }
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+**Session checkpoint:**
+```
+AskUserQuestion({
+  questions: [{
+    question: "Step {N}/{total} complete ({step_name}). Continue?",
+    header: "Progress",
+    options: [
+      { label: "Continue", description: "Proceed to next step" },
+      { label: "Pause", description: "Save progress — resume later with 'resume'" }
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+#### TaskCreate for Step Visibility
+
+At build start (after `batch_log_steps`), the orchestrator MUST create a Claude Code task for each runbook step:
+
+```
+for each step in runbook:
+  TaskCreate({ title: "{step_id}", description: step.intent })
+```
+
+Update tasks as steps execute:
+- Step starts: `TaskUpdate({ id, status: "in_progress" })`
+- Step completes: `TaskUpdate({ id, status: "completed" })`
+
+The journal remains source of truth. Tasks are a visibility layer — the user sees progress in Claude Code's native task interface.
+
+#### PushNotification
+
+When spawning agents with `run_in_background: true` (learner, scribe in tail steps), the orchestrator SHOULD send a `PushNotification` when the agent completes, so the user is alerted without having to poll.
+
+#### Monitor
+
+During verify steps, the orchestrator MAY use `Monitor` to stream build/test output live instead of running commands silently and reporting pass/fail. This provides real-time visibility into long-running verification.
+
+#### Native Worktree (EnterWorktree/ExitWorktree)
+
+Investigated and NOT adopted. Rationale:
+- Blocked for subagents (only available to main session)
+- Auto-merges back to calling branch on completion — bypasses Canon's controlled merge lifecycle
+- No control over worktree path naming, branch naming, merge order, or cleanup timing
+- Canon's custom worktree management (`git worktree add` via `init_workspace`) provides the lifecycle control needed for multi-step builds
+
+Canon continues to manage worktrees itself. This decision may be revisited if the native primitive gains lifecycle control options.
+
+### HITL Patterns <!-- last-updated: 2026-05-06 -->
 
 - **Requirement coverage check**: After planner returns, check the planning brief's Requirement Coverage Map for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
 - **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
@@ -353,23 +458,23 @@ After each subagent returns, verify expected artifacts exist at the paths listed
   - Iteration pattern: fix → re-review → (if still BLOCKING) → fix → re-review → (if still BLOCKING after 3 iterations) → HITL.
   - When the reviewer flags Stage 3 cross-check discrepancies (tagged `SUMMARY CORRECTION REQUIRED`), the fix spawn prompt MUST include the discrepancy details and instruct the engineer to correct the implementation summary (`*-SUMMARY.md`) in addition to fixing any code violations. The corrected summary replaces the original at the same artifact path.
   - Note: the `SUMMARY CORRECTION REQUIRED` flow is L1-only enforcement — there is no automated check that the orchestrator included discrepancy details in the fix prompt; correct behavior depends on the orchestrator following this rule.
-- **WARNING advisory close-out**: After the review-fix loop resolves BLOCKING items (or if the initial verdict is WARNING with no BLOCKING violations), the orchestrator surfaces WARNING advisory items to the user as a HITL checkpoint before proceeding to ship. Three options:
+- **WARNING advisory close-out**: After the review-fix loop resolves BLOCKING items (or if the initial verdict is WARNING with no BLOCKING violations), the orchestrator surfaces WARNING advisory items to the user as a HITL checkpoint before proceeding to ship (presented via `AskUserQuestion`). Three options:
   - (a) **fix** — spawns another engineer fix cycle targeting the advisory items; build resumes after fix.
   - (b) **acknowledge** — items logged as accepted in the journal via `log_step` outcome, build proceeds (accept as-is — no follow-up planned).
   - (c) **defer** — items noted as follow-up, build proceeds (plan to address later — noted as follow-up).
   - This checkpoint occurs between the review step and the ship step. It does NOT apply if the review verdict is CLEAN.
-- **Build-step checkpoint**: After each major build step completes (design, implement, verify, review), the orchestrator offers a session checkpoint:
+- **Build-step checkpoint**: After each major build step completes (design, implement, verify, review), the orchestrator offers a session checkpoint (presented via `AskUserQuestion`):
   - "Step {N} of {total} complete ({step_name}). Continue, or start a fresh session and say 'resume'?"
   - If the user says "keep going", "continue", or similar affirmative: proceed to the next step.
   - If the user starts a fresh session: Canon's resume protocol picks up from the next unstarted step via journal state.
   - Skip this checkpoint when `CANON_SKIP_SESSION_CHECKPOINTS=1` is set.
   - This checkpoint does NOT apply to tail steps (ship, context-sync, learn) — only to steps of type design, implement, verify, review.
 - **Gate failure**: Present the failure output and ask the user how to proceed.
-- **Planner requirements interview**: For non-trivial requests, the planner conducts a requirements interview before producing the planning brief. The planner investigates the codebase, then reports `HAS_QUESTIONS` with evidence-grounded questions about scope, assumptions, and success criteria. The orchestrator surfaces these to the user. On re-spawn, the planner receives the user's answers and either asks follow-up questions (another `HAS_QUESTIONS` round) or proceeds to produce the brief.
+- **Planner requirements interview**: For non-trivial requests, the planner conducts a requirements interview before producing the planning brief. The planner uses `EnterPlanMode` for direct iteration with the user. Falls back to `HAS_QUESTIONS` in headless/CI contexts. The planner investigates the codebase, then presents evidence-grounded questions about scope, assumptions, and success criteria. The orchestrator surfaces these to the user (in fallback mode). On re-spawn, the planner receives the user's answers and either asks follow-up questions (another `HAS_QUESTIONS` round) or proceeds to produce the brief.
   - Gate: skipped for trivial requests (fully specified, single-step). Conducted for small and complex requests.
   - No round limit. The interview continues until the user indicates requirements are clear. The planner checks in after each round: "Ready for me to produce the planning brief, or is there more to clarify?"
   - Re-spawn: include the user's answers verbatim in the planner's spawn prompt on each re-spawn.
-- **Architect design conversation**: For requests with genuine design tradeoffs, the architect thinks out loud about the problem space before committing to design approaches. The architect reports `HAS_QUESTIONS` with reasoning about tradeoffs, a stated lean, and a request for the user's correction or confirmation. The orchestrator surfaces this to the user. On re-spawn, the architect reads the feedback and continues the conversation or proceeds to design production.
+- **Architect design conversation**: For requests with genuine design tradeoffs, the architect thinks out loud about the problem space before committing to design approaches. The architect uses `EnterPlanMode` for direct iteration with the user. Falls back to `HAS_QUESTIONS` in headless/CI contexts. The architect states a lean and asks for the user's correction or confirmation. The orchestrator surfaces this to the user (in fallback mode). On re-spawn, the architect reads the feedback and continues the conversation or proceeds to design production.
   - Gate: skipped when only one reasonable approach exists or changes are mechanical. Conducted when "a reasonable engineer could disagree about the right approach."
   - No round limit. The conversation continues until the user says to proceed. The architect checks in periodically: "I think we have a direction — ready to move to implementation, or is there more to explore?"
   - Style: think-out-loud, NOT multiple choice. The architect states a lean and invites correction, not options for selection.
