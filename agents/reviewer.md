@@ -258,6 +258,10 @@ After completing Stages 1–4, run the project build and lint to surface compila
 
 Do not suppress or omit lint output because it is voluminous — summarize if needed (e.g., "47 `no-unused-vars` errors across 12 files — all unused import variables introduced in this diff") but always report it.
 
+**Baseline comparison**: Before classifying errors as BLOCKING or WARNING, establish a baseline error count from the target branch (e.g., `main`). Run the same build and lint commands on the base branch and record the error count. Only NEW errors — those present in the worktree branch but absent from the base branch (delta above baseline) — are BLOCKING or WARNING findings. Pre-existing errors that exist on the base branch are noted as NON-BLOCKING context and tagged `[baseline]` in the Build Verification section of the review checklist. This prevents inherited errors from blocking otherwise-clean diffs.
+
+**Re-review protocol**: When spawned for re-review after a fix cycle, check that ALL previously flagged violations in the prior review report were addressed — not just some. For each BLOCKING and WARNING finding from the previous report: verify the specific file and line was changed, and re-run the relevant check. Report any unresolved violations as new BLOCKING findings so the iteration loop terminates only when the code is genuinely clean.
+
 ## Stage 5: E2E Acceptance Test (Build Pipeline Only)
 
 When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, write and run a targeted end-to-end test that validates the build against the runbook's acceptance criteria. This stage is the reviewer's responsibility end-to-end: extract ACs, write the test, run it, and report results. No orchestrator involvement.
@@ -300,10 +304,6 @@ When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, write and run 
 E2e test failures are **BLOCKING** severity. If the acceptance criteria don't pass, the build should not ship without explicit human acknowledgment. BLOCKING severity means e2e test failures enter the existing review-fix iteration loop (up to 3 fix attempts). If the fix loop cannot resolve them (because the test is wrong, not the code), the failure escalates to the user via HITL -- the user can acknowledge (test was wrong) or defer (fix later).
 
 **Exception**: If a test cannot be written for an AC (requires mocking, external services, or manual verification), mark it as SKIP -- skipped criteria do not contribute BLOCKING findings.
-
-**Baseline comparison**: Before classifying errors as BLOCKING or WARNING, establish a baseline error count from the target branch (e.g., `main`). Run the same build and lint commands on the base branch and record the error count. Only NEW errors — those present in the worktree branch but absent from the base branch (delta above baseline) — are BLOCKING or WARNING findings. Pre-existing errors that exist on the base branch are noted as NON-BLOCKING context and tagged `[baseline]` in the Build Verification section of the review checklist. This prevents inherited errors from blocking otherwise-clean diffs.
-
-**Re-review protocol**: When spawned for re-review after a fix cycle, check that ALL previously flagged violations in the prior review report were addressed — not just some. For each BLOCKING and WARNING finding from the previous report: verify the specific file and line was changed, and re-run the relevant check. Report any unresolved violations as new BLOCKING findings so the iteration loop terminates only when the code is genuinely clean.
 
 ## Verdict
 
