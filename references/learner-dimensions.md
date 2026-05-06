@@ -221,7 +221,7 @@ Suggest: {specific action — examine principle X | trim state Y from flow | rev
 - Read workspace journals (`journal.json`) to discover steps with `transcript_path` entries
 - Call `get_transcript` MCP tool with `{workspace, state_id}` for each step
 - Use `summary` mode first for pattern scanning, `full` mode for detailed analysis of flagged steps
-- The `get_transcript` tool returns `TranscriptEntry[]` with fields: `role` ("system"|"user"|"assistant"|"tool_use"|"tool_result"), `content`, `tool_name?`, `tokens?`, `cumulative_tokens?`, `turn_number`
+- The `get_transcript` tool returns `TranscriptEntry[]` with fields: `role` ("system"|"user"|"assistant"|"tool_use"|"tool_result"), `content`, `tool_name?`, `tokens?`, `cumulative_tokens?`, `turn_number`, `timestamp`
 
 **Minimum threshold**: 3 completed flows with transcripts required. Below → note "Skipped: agent-effectiveness — requires 3 flows with transcripts, have {current}."
 
@@ -284,6 +284,16 @@ Generated: {YYYY-MM-DD} | Reviews analyzed: {N} | Source files scanned: {N} | Bu
 ### Process Health (from build history)
 {process-health suggestions, or "No process health issues detected." if none}
 
+### Agent Effectiveness (from agent transcripts)
+{agent-effectiveness suggestions, or "No agent effectiveness issues detected." if none}
+
+Each suggestion follows this format:
+**{agent_type}: {signal name}** ({N} occurrences across {M} flows)
+Evidence: {step_id} in {flow_slug} — {specific metric details}
+Transcript: {workspace}/transcripts/{relevant_file}
+Suggest: {agent rule change: "{exact text}" | principle proposal: "{description}" | convention update: "{text}"}
+Artifact: {rules/{agent_type}.md | principles/{severity}/{slug}.md | .canon/CONVENTIONS.md}
+
 ### Recurring Suggestions
 {Suggestions that appeared in 3+ previous learning runs but were never acted on — flag these prominently}
 
@@ -305,7 +315,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
 {
   "run_id": "learn_{YYYYMMDD}_{random_hex}",
   "timestamp": "{ISO-8601}",
-  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health"],
+  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health", "agent-effectiveness"],
   "data_summary": {
     "reviews_analyzed": 0,
     "source_files_scanned": 0,
@@ -316,7 +326,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
     {
       "id": "sug_{deterministic_hash}",
       "dimension": "principle-health",
-      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend",
+      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-antipattern",
       "target": "principle-id or convention text or state name",
       "summary": "One-line description of what's suggested",
       "confidence": "high|medium",
