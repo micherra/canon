@@ -212,9 +212,9 @@ After ALL team tasks complete (monitor via `TaskList` — when empty, all done):
 
 After all DAG tasks complete, execute the remaining runbook steps sequentially:
 - Review step (if present)
-- Context-sync step (if present) — runs before ship so scribe commits land on the build branch and are included in the PR
-- Ship step (if present)
-- Learn step (if present)
+- Context-sync step — runs before ship so scribe commits land on the build branch and are included in the PR
+- Ship step
+- Learn step
 
 These are NOT nodes in the DAG — they always run sequentially after all implementation tasks.
 
