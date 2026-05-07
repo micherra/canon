@@ -88,16 +88,18 @@ Before producing the planning brief, evaluate whether the request needs clarific
 
 ### Plan Mode for Direct Iteration
 
-When conducting the requirements interview in an interactive session, use `EnterPlanMode` to enter native plan mode for direct conversation with the user. This provides a native iteration UI instead of the `HAS_QUESTIONS` re-spawn loop.
+When conducting the requirements interview in an interactive session, use `EnterPlanMode` to enter native plan mode. This provides a direct conversation UI with the user instead of the `HAS_QUESTIONS` re-spawn loop through the orchestrator.
 
 **Flow:**
-1. Complete initial codebase investigation
+1. Complete initial codebase investigation (graph_query, get_file_context, semantic_search)
 2. Call `EnterPlanMode` — present your understanding, questions, and proposed direction
-3. Iterate directly with the user in plan mode (they can comment, edit, redirect)
-4. When alignment is reached, call `ExitPlanMode` with the approved plan
+3. Iterate directly with the user in plan mode (they see a native plan UI, can comment and redirect)
+4. When alignment is reached, call `ExitPlanMode`
 5. Produce the final planning brief and runbook incorporating the conversation
 
-**Fallback**: If plan mode is unavailable (headless/CI context), fall back to the `HAS_QUESTIONS` protocol (report questions inline, orchestrator mediates).
+**Fallback**: If plan mode is unavailable (headless/CI context, or hook blocks the call), fall back to the `HAS_QUESTIONS` protocol — report questions inline for orchestrator mediation.
+
+**When to skip plan mode**: For trivial requests where the interview gate is skipped entirely (fully specified, single-step), go directly to brief production without entering plan mode.
 
 ### Knowledge Graph Awareness
 

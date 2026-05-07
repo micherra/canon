@@ -154,7 +154,7 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 6. Extract the `## Research Notes` section and write to `${WORKSPACE}/plans/${slug}/research-notes.md` using `Write`. (Step 3 already confirmed presence for non-trivial builds; skip this write for trivial builds where no section exists.)
 7. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
 8. Create Claude Code tasks for progress visibility: for each runbook step, call `TaskCreate({ title: step_id, description: step.intent })`. These provide native progress tracking alongside the journal.
-9. Set environment variable before spawning plan-mode-eligible agents: `CANON_CURRENT_AGENT={agent_name}` (read by the plan-mode-guard hook to allow EnterPlanMode).
+9. Set `CANON_CURRENT_AGENT={agent_name}` environment variable before spawning plan-mode-eligible agents (planner, architect). The plan-mode-guard hook reads this to conditionally allow `EnterPlanMode`.
 10. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
@@ -345,7 +345,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### Native Primitives <!-- last-updated: 2026-05-06 -->
 
-The orchestrator MUST use Claude Code native primitives at interaction boundaries. These provide structured UI instead of free-text back-and-forth.
+The orchestrator MUST use Claude Code native primitives at interaction boundaries for structured UX.
 
 | Primitive | Owner | Touchpoint | Constraint |
 |-----------|-------|------------|------------|
@@ -358,9 +358,9 @@ The orchestrator MUST use Claude Code native primitives at interaction boundarie
 
 #### EnterPlanMode / ExitPlanMode
 
-The planner and architect agents call `EnterPlanMode` directly for iterative conversations with the user. The orchestrator MUST set `CANON_CURRENT_AGENT={agent_name}` as an environment variable before spawning these agents (the plan-mode-guard hook reads this to allow the call).
+The planner and architect agents call `EnterPlanMode` directly for iterative conversations with the user. The orchestrator MUST set `CANON_CURRENT_AGENT={agent_name}` as an environment variable before spawning these agents — the `plan-mode-guard` hook reads this to conditionally allow the call.
 
-The orchestrator itself NEVER calls `EnterPlanMode` — it stays a pure dispatcher.
+The orchestrator itself NEVER calls `EnterPlanMode`. It remains a pure dispatcher.
 
 #### AskUserQuestion
 
@@ -382,11 +382,11 @@ AskUserQuestion({
 })
 ```
 
-**Review verdict (BLOCKING):**
+**Review verdict (BLOCKING)**:
 ```
 AskUserQuestion({
   questions: [{
-    question: "Review found BLOCKING violations. Fix automatically or review manually?",
+    question: "Review found BLOCKING violations. How to proceed?",
     header: "Review",
     options: [
       { label: "Auto-fix", description: "Spawn engineer in fix mode" },
@@ -426,25 +426,25 @@ Update tasks as steps execute:
 - Step starts: `TaskUpdate({ id, status: "in_progress" })`
 - Step completes: `TaskUpdate({ id, status: "completed" })`
 
-The journal remains source of truth. Tasks are a visibility layer — the user sees progress in Claude Code's native task interface.
+The journal remains source of truth for resume protocol and completion verification. Tasks are a visibility layer — the user sees real-time progress in Claude Code's native task interface.
 
 #### PushNotification
 
-When spawning agents with `run_in_background: true` (learner, scribe in tail steps), the orchestrator SHOULD send a `PushNotification` when the agent completes, so the user is alerted without having to poll.
+When spawning agents with `run_in_background: true` (learner, scribe in tail steps), the orchestrator SHOULD send a `PushNotification` when the background agent completes. This alerts the user without requiring them to poll.
 
 #### Monitor
 
-During verify steps, the orchestrator MAY use `Monitor` to stream build/test output live instead of running commands silently and reporting pass/fail. This provides real-time visibility into long-running verification.
+During verify steps, the orchestrator MAY use `Monitor` to stream build/test output live to the user instead of running commands silently and reporting pass/fail after. This provides real-time visibility into long-running verification.
 
-#### Native Worktree (EnterWorktree/ExitWorktree)
+#### Native Worktree (EnterWorktree/ExitWorktree) — NOT ADOPTED
 
-Investigated and NOT adopted. Rationale:
+Investigated and rejected. Rationale:
 - Blocked for subagents (only available to main session)
-- Auto-merges back to calling branch on completion — bypasses Canon's controlled merge lifecycle
+- Auto-merges back to calling branch on agent completion — bypasses Canon's controlled merge lifecycle
 - No control over worktree path naming, branch naming, merge order, or cleanup timing
-- Canon's custom worktree management (`git worktree add` via `init_workspace`) provides the lifecycle control needed for multi-step builds
+- Canon's custom worktree management via `init_workspace` provides the lifecycle control needed
 
-Canon continues to manage worktrees itself. This decision may be revisited if the native primitive gains lifecycle control options.
+This decision may be revisited if the native primitive gains lifecycle configuration options.
 
 ### HITL Patterns <!-- last-updated: 2026-05-06 -->
 
