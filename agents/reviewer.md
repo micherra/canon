@@ -312,6 +312,21 @@ When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, verify the bui
    - FAIL: the tool response or command output contradicts the criterion — include the relevant excerpt
    - SKIP: the criterion cannot be verified with available tools — explain why
 
+#### Cross-Check Against Planner Pre-Classification
+
+When the planning brief includes verification types (mechanical/manual), cross-check your independent classification against the planner's:
+
+1. For each AC, compare your classification (MCP-tool/Structural/Non-automatable) with the planner's type (mechanical/manual)
+2. Flag discrepancies — e.g., planner says "mechanical" but you classify as "Non-automatable"
+3. Report discrepancies in the review output:
+
+```
+| # | Criterion | Planner Type | Reviewer Classification | Discrepancy? |
+|---|-----------|-------------|------------------------|--------------|
+```
+
+Discrepancies are advisory (not blocking) — they surface misalignment between what the planner expected could be tested and what the reviewer found is actually testable given the implementation.
+
 ### Severity
 
 Acceptance criteria failures are **BLOCKING** severity. If the acceptance criteria don't pass, the build should not ship without explicit human acknowledgment. BLOCKING severity means failures enter the existing review-fix iteration loop (up to 3 fix attempts). If the fix loop cannot resolve them, the failure escalates to the user via HITL -- the user can acknowledge or defer.

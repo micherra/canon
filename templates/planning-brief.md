@@ -53,9 +53,13 @@ Who benefits from solving this problem? Who does not? Scope prevents over-buildi
 
 Concrete, observable conditions that must hold when the work is done. Each criterion must be independently verifiable by a reviewer unfamiliar with the request. If the request lacks explicit criteria, propose them here.
 
-- [ ] {criterion 1 — observable and testable; state what to check and how to confirm pass/fail}
-- [ ] {criterion 2}
-- [ ] {criterion 3}
+Each criterion MUST include a verification method and type. Types:
+- **mechanical**: Can be executed by the tester agent (shell command, file check, grep assertion)
+- **manual**: Requires human observation or multi-session verification (surfaced as HITL gate before ship)
+
+| # | Criterion | Verification | Type |
+|---|-----------|-------------|------|
+| 1 | {description of what "done" looks like} | {how to verify — command, structural check, or observation method} | mechanical / manual |
 
 <!--
 Trivial requests: one or two criteria maximum.
