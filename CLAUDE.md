@@ -309,7 +309,7 @@ Spawn N reviewers in parallel via `Agent()`, each with:
 
 - The standard preloaded context from `resolve_agent_skills`
 - `WORKSPACE={workspace_path}` (workspace root, not worktree)
-- `base_commit={base_commit}` (diff from this commit, not main HEAD)
+- An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
 - Their assigned file list
 - Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
 - `isolation: "none"` (shared workspace)
@@ -330,7 +330,7 @@ Write the consolidated review using the `write_review` MCP tool.
 - Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
 - After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
 - The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
-- When a tail step (context-sync, learn) is skipped, the journal entry MUST include a `skip_reason` field explaining why. Omitting a tail step without a `skip_reason` is not permitted. Accepted `skip_reason` values:
+- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD include a `skip_reason` in the `log_step` outcome explaining why. Accepted `skip_reason` values:
   - `"fix-type build, no contract-level changes"` — fix builds that only correct existing code without changing APIs, types, or conventions.
   - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
   - `"session timeout"` — session ending before tail steps could run.

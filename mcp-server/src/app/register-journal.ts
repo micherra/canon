@@ -20,31 +20,38 @@ const stepStatusSchema = z
   .enum(["planned", "started", "completed", "skipped"])
   .describe("Step execution status");
 
-const stepEntrySchema = z.object({
-  agent_id: z
-    .string()
-    .optional()
-    .describe(
-      "Agent ID for transcript capture. When provided on a completed step, triggers best-effort transcript capture.",
-    ),
-  agent_type: z
-    .string()
-    .nullable()
-    .optional()
-    .describe("Agent definition name, null for gate-only steps"),
-  artifacts_expected: z
-    .array(z.string())
-    .optional()
-    .describe("Expected artifact paths relative to workspace"),
-  domain_skills_loaded: z.array(z.string()).optional(),
-  outcome: stepOutcomeSchema,
-  skip_reason: z
-    .string()
-    .optional()
-    .describe("Reason a tail step was skipped — required when status is skipped for tail steps"),
-  status: stepStatusSchema,
-  step_id: z.string().describe("Step ID from the runbook"),
-});
+const stepEntrySchema = z
+  .object({
+    agent_id: z
+      .string()
+      .optional()
+      .describe(
+        "Agent ID for transcript capture. When provided on a completed step, triggers best-effort transcript capture.",
+      ),
+    agent_type: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Agent definition name, null for gate-only steps"),
+    artifacts_expected: z
+      .array(z.string())
+      .optional()
+      .describe("Expected artifact paths relative to workspace"),
+    domain_skills_loaded: z.array(z.string()).optional(),
+    outcome: stepOutcomeSchema,
+    skip_reason: z
+      .string()
+      .optional()
+      .describe("Reason a tail step was skipped"),
+    status: stepStatusSchema,
+    step_id: z.string().describe("Step ID from the runbook"),
+  })
+  .refine(
+    (data) =>
+      data.status !== "skipped" ||
+      (typeof data.skip_reason === "string" && data.skip_reason.length > 0),
+    { message: "skip_reason is required when status is 'skipped'", path: ["skip_reason"] },
+  );
 
 function registerLogStep(): void {
   server.registerTool(
@@ -74,7 +81,7 @@ function registerLogStep(): void {
           .string()
           .optional()
           .describe(
-            "Reason a tail step was skipped — required when status is skipped for tail steps",
+            "Reason a tail step was skipped. Required (non-empty) when status is 'skipped'.",
           ),
         status: stepStatusSchema,
         step_id: z.string().describe("Step ID from the runbook"),

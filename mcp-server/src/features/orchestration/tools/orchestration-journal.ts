@@ -218,6 +218,11 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
   }
   if (input.outcome !== undefined) step.outcome = input.outcome;
   if (input.skip_reason !== undefined) step.skip_reason = input.skip_reason;
+  // Clear skip_reason when transitioning to a non-skipped terminal state.
+  // Prevents stale skip_reason from persisting if the orchestrator later completes a step.
+  if (input.status === "completed") {
+    step.skip_reason = undefined;
+  }
 }
 
 function enforceArtifacts(
@@ -359,6 +364,14 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     return toolError("WORKSPACE_NOT_FOUND", `Workspace does not exist: ${input.workspace}`, false, {
       workspace: input.workspace,
     });
+  }
+
+  if (input.status === "skipped" && !input.skip_reason?.trim()) {
+    return toolError(
+      "INVALID_INPUT",
+      "skip_reason is required when status is 'skipped'",
+      false,
+    );
   }
 
   if (input.status === "completed" && !input.agent_id && input.step_id !== "inline-fix") {
