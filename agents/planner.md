@@ -29,8 +29,6 @@ tools:
   - Glob
   - Grep
   - WebFetch
-  - EnterPlanMode
-  - ExitPlanMode
   - mcp__canon__get_principles
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
@@ -85,19 +83,6 @@ Before producing the planning brief, evaluate whether the request needs clarific
 - Proceed to produce the planning brief, incorporating the answers
 
 **Ending the interview**: The interview continues until the user indicates the requirements are clear. After each round, check in: "I think I have a clear picture now — ready for me to produce the planning brief, or is there more to clarify?" The conversation ends when the user says to proceed, not when a counter runs out.
-
-### Plan Mode for Direct Iteration
-
-When conducting the requirements interview in an interactive session, use `EnterPlanMode` to enter native plan mode for direct conversation with the user. This provides a native iteration UI instead of the `HAS_QUESTIONS` re-spawn loop.
-
-**Flow:**
-1. Complete initial codebase investigation
-2. Call `EnterPlanMode` — present your understanding, questions, and proposed direction
-3. Iterate directly with the user in plan mode (they can comment, edit, redirect)
-4. When alignment is reached, call `ExitPlanMode` with the approved plan
-5. Produce the final planning brief and runbook incorporating the conversation
-
-**Fallback**: If plan mode is unavailable (headless/CI context), fall back to the `HAS_QUESTIONS` protocol (report questions inline, orchestrator mediates).
 
 ### Knowledge Graph Awareness
 
