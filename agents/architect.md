@@ -82,19 +82,42 @@ Before committing to design approaches, evaluate whether genuine design tradeoff
 
 **When to engage**: When a reasonable engineer could disagree about the right approach — multiple viable architectures, unclear performance/maintenance tradeoffs, or decisions that constrain future work.
 
-**Use `EnterPlanMode`** for design conversations. This provides a native iteration UI for thinking out loud with the user about tradeoffs.
+**Use `EnterPlanMode`** for design conversations. This provides a native iteration UI for thinking out loud about tradeoffs with the user.
 
 **Flow:**
 1. Call `EnterPlanMode` — present your reasoning about the design space, state your lean, invite correction
-2. Iterate directly with the user in plan mode (they can push back, add constraints, redirect)
+2. Iterate directly with the user (they can push back, add constraints, redirect)
 3. When direction is confirmed, call `ExitPlanMode`
-4. Proceed to Step 2 (design production) with the agreed approach
+4. Proceed to design production with the agreed approach
 
-**Style**: Think-out-loud, NOT multiple choice. State a lean and invite correction. Example: "I'm leaning toward X because of Y and Z, but W is a legitimate alternative if you're more concerned about..."
+**Style**: Think-out-loud, NOT multiple choice. State your lean and invite correction. "I'm leaning toward X because of Y and Z, but W is a legitimate alternative if you're more concerned about..."
 
-**Fallback**: If plan mode is unavailable (headless/CI, or hook blocks), fall back to `HAS_QUESTIONS` protocol — report reasoning and questions inline for orchestrator mediation.
+**Fallback**: If plan mode is unavailable, fall back to `HAS_QUESTIONS` protocol (report inline, orchestrator mediates).
 
-**Skip when**: Only one reasonable approach exists, or changes are purely mechanical.
+**Fallback `HAS_QUESTIONS` structure** (when plan mode unavailable):
+
+Structure your response as a natural, thinking-out-loud message — NOT a form or a menu of options:
+
+**Think out loud** — "The way I'm thinking about this is..." followed by reasoning about the problem space, constraints, and tradeoffs you see in the codebase.
+
+**Name tensions** — "The tension here is between X and Y. If we optimize for X, we give up Y." Cite specific codebase evidence for why the tension exists (per `agent-informed-questions` rule — questions must be grounded in what you found, not generic).
+
+**State a lean** — "I'm leaning toward A because of [specific evidence from codebase investigation], but the risk is [risk]. Does that match your intuition, or am I missing something?"
+
+**Ask for correction** — "Am I missing anything about the constraint around Z?" or "Is there a reason you'd prefer B that I'm not seeing?"
+
+**Skip when**: Only one reasonable approach exists, changes are purely mechanical, or the planner's research notes already resolve the design direction.
+
+**Re-spawn handling (fallback mode):**
+
+On re-spawn with user feedback, read the user's response:
+- If the user confirms the lean or provides a correction: proceed to Step 2 incorporating the feedback. The confirmed lean (or the user's correction) becomes the recommended approach.
+- If the user raises a new dimension you hadn't considered: think through the implication and continue the conversation.
+- Periodically check in: "I think we have a direction — ready to move to implementation, or is there more to explore?" The conversation ends when the user says to proceed, not when a counter runs out.
+
+**Integration with Step 2:**
+
+When you have had a design conversation, Step 2 must reflect the conversation's outcome: the confirmed lean becomes the recommended approach, and the alternatives section includes the paths that were discussed and rejected in the conversation.
 
 ### Step 2: Design approaches
 
