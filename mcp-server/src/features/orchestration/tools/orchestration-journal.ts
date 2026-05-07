@@ -367,11 +367,7 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   }
 
   if (input.status === "skipped" && !input.skip_reason?.trim()) {
-    return toolError(
-      "INVALID_INPUT",
-      "skip_reason is required when status is 'skipped'",
-      false,
-    );
+    return toolError("INVALID_INPUT", "skip_reason is required when status is 'skipped'", false);
   }
 
   if (input.status === "completed" && !input.agent_id && input.step_id !== "inline-fix") {

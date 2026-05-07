@@ -227,7 +227,12 @@ describe("finalizeWorkspace", () => {
   });
 
   test("handles skipped steps correctly (not counted as missing)", async () => {
-    await logStep({ skip_reason: "fix-type build, no contract-level changes", status: "skipped", step_id: "s1", workspace });
+    await logStep({
+      skip_reason: "fix-type build, no contract-level changes",
+      status: "skipped",
+      step_id: "s1",
+      workspace,
+    });
     await logStep({ agent_id: "test-agent-skip", status: "completed", step_id: "s2", workspace });
 
     const result = await finalizeWorkspace({ workspace });

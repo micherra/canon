@@ -39,10 +39,7 @@ const stepEntrySchema = z
       .describe("Expected artifact paths relative to workspace"),
     domain_skills_loaded: z.array(z.string()).optional(),
     outcome: stepOutcomeSchema,
-    skip_reason: z
-      .string()
-      .optional()
-      .describe("Reason a tail step was skipped"),
+    skip_reason: z.string().optional().describe("Reason a tail step was skipped"),
     status: stepStatusSchema,
     step_id: z.string().describe("Step ID from the runbook"),
   })
