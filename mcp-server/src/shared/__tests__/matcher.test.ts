@@ -600,6 +600,47 @@ Body for alpha.
     expect(alpha).toBeDefined();
     expect(alpha?.severity).toBe("convention");
   });
+
+  it("narrow-scope entry missing applies_to is silently skipped — principle unchanged", async () => {
+    await writeFile(
+      join(projectDir, ".canon", "principles", "conventions", "alpha.md"),
+      principleContent("alpha", "convention", ["api", "ui"]),
+    );
+
+    const overrideYaml = `overrides:
+  - principle_id: alpha
+    action: narrow-scope
+    reason: Missing applies_to field
+`;
+    await writeFile(join(projectDir, ".canon", "principle-overrides.yaml"), overrideYaml);
+
+    const principles = await loadAllPrinciples(projectDir, pluginDir);
+    const alpha = principles.find((p) => p.id === "alpha");
+    expect(alpha).toBeDefined();
+    // Override skipped — scope unchanged
+    expect(alpha?.scope.layers).toEqual(["api", "ui"]);
+  });
+
+  it("override-severity entry with invalid severity value is silently skipped — principle unchanged", async () => {
+    await writeFile(
+      join(projectDir, ".canon", "principles", "strong-opinions", "alpha.md"),
+      principleContent("alpha", "strong-opinion"),
+    );
+
+    const overrideYaml = `overrides:
+  - principle_id: alpha
+    action: override-severity
+    severity: critical
+    reason: Invalid severity value
+`;
+    await writeFile(join(projectDir, ".canon", "principle-overrides.yaml"), overrideYaml);
+
+    const principles = await loadAllPrinciples(projectDir, pluginDir);
+    const alpha = principles.find((p) => p.id === "alpha");
+    expect(alpha).toBeDefined();
+    // Override skipped — severity unchanged
+    expect(alpha?.severity).toBe("strong-opinion");
+  });
 });
 
 describe("parsePrinciple scope.tags", () => {
