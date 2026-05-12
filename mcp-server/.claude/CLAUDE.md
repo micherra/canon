@@ -52,7 +52,7 @@ src/
 - ~~`principle-reranker.ts`~~ — LLM-based reranker removed 2026-05-02; replaced by structural tag matching via `matchesScopeTags`
 
 ## Contracts
-<!-- last-updated: 2026-05-02 (unified graph intelligence: community detection, tag propagation, semantic principle matching, scope.tags OR semantics) -->
+<!-- last-updated: 2026-05-11 (digest-writer: FinalizeWorkspaceResult.digest_written added; digest-writer.ts service added to features/orchestration/services/) -->
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -299,6 +299,17 @@ src/
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result for drift tracking |
+
+**`finalize_workspace` tool — `FinalizeWorkspaceResult`** (`src/features/orchestration/tools/orchestration-journal.ts`) — updated 2026-05-11:
+- `digest_written?: boolean` — new optional field; present only when `complete` is true; true when build digest was written to Claude Code auto-memory directory; false on any write failure (best-effort, never throws); absent when `complete` is false
+
+**`digest-writer` service** (`src/features/orchestration/services/digest-writer.ts`) — added 2026-05-11:
+- `tryWriteBuildDigest(workspace: string): Promise<boolean>` — public entry point; best-effort, never throws; writes `build-digest-{date}-{slug}.md` to `~/.claude/projects/{dashed-project-path}/memory/` and appends an entry to `MEMORY.md`; returns false when auto-memory dir is missing, journal is malformed, or any write fails
+- `resolveAutoMemoryDir(projectPath: string): string | null` — converts absolute project path to Claude Code dashed format; returns `null` when directory does not exist
+- `extractDigestData(workspace: string): DigestData` — reads `journal.json`, `planning-brief.md`, and `reviews/*.md`; returns defaults when files are missing
+- `formatDigestMarkdown(data: DigestData): string` — formats digest as Claude Code auto-memory markdown with YAML frontmatter (`metadata.type: project`)
+- `formatMemoryIndexEntry(data: DigestData): string` — formats one-line MEMORY.md entry; truncates to 150 chars
+- `DigestData` — local type (not in `history-types.ts`); fields: `slug`, `date`, `branch`, `totalDurationMs`, `totalSteps`, `stepsCompleted`, `stepsSkipped`, `fixIterations`, `reviewVerdict`, `violationCount`, `effortEstimate`, `valueEstimate`, `outcome`
 
 **`capture_transcript` tool** (`src/features/orchestration/tools/capture-transcript.ts`) — added 2026-04-26 (NF-12):
 - `CaptureTranscriptInput` — `{ workspace: string; step_id: string; agent_type: string; agent_id: string; session_id?: string; project_id?: string }`
