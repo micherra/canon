@@ -302,6 +302,9 @@ export async function batchLogSteps(
     if (!entry.step_id?.trim()) {
       return toolError("INVALID_INPUT", "Each step entry must have a non-empty step_id", false);
     }
+    if (entry.status === "skipped" && !entry.skip_reason?.trim()) {
+      return toolError("INVALID_INPUT", "skip_reason is required when status is 'skipped'", false);
+    }
   }
 
   // 3. Single journal read.

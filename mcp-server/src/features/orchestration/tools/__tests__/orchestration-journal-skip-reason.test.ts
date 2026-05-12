@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { assertOk, isToolError } from "../../../../shared/lib/tool-result.ts";
 import type { Journal } from "../orchestration-journal.ts";
-import { logStep } from "../orchestration-journal.ts";
+import { batchLogSteps, logStep } from "../orchestration-journal.ts";
 
 let workspace: string;
 
@@ -122,7 +122,7 @@ describe("logStep — skip_reason cleared on non-skipped terminal state (Fix 5)"
     expect(step?.skip_reason).toBeUndefined();
   });
 
-  test("skip_reason is preserved when step remains skipped", async () => {
+  test("skip_reason is preserved when step remains skipped (re-skipped)", async () => {
     const reason = "session timeout";
     await logStep({
       skip_reason: reason,
@@ -142,5 +142,78 @@ describe("logStep — skip_reason cleared on non-skipped terminal state (Fix 5)"
     const journal = await readJournalFile(workspace);
     const step = journal.steps.find((s) => s.step_id === "context-sync");
     expect(step?.skip_reason).toBe(reason);
+  });
+});
+
+describe("batchLogSteps — skip_reason validation (defense-in-depth)", () => {
+  test("batch entry with skipped status and no skip_reason is rejected", async () => {
+    const result = await batchLogSteps({
+      steps: [{ status: "skipped", step_id: "learn" }],
+      workspace,
+    });
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("skip_reason");
+    }
+  });
+
+  test("batch entry with skipped status and empty skip_reason is rejected", async () => {
+    const result = await batchLogSteps({
+      steps: [{ skip_reason: "   ", status: "skipped", step_id: "context-sync" }],
+      workspace,
+    });
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("skip_reason");
+    }
+  });
+
+  test("entire batch is rejected when one entry has skipped status and no skip_reason", async () => {
+    const result = await batchLogSteps({
+      steps: [
+        { status: "planned", step_id: "implement" },
+        { status: "skipped", step_id: "learn" }, // missing skip_reason
+      ],
+      workspace,
+    });
+    expect(isToolError(result)).toBe(true);
+    // The valid step must not have been written either
+    const journalPath = `${workspace}/journal.json`;
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(journalPath)).toBe(false);
+  });
+
+  test("batch entry with skipped status and valid skip_reason succeeds", async () => {
+    const result = await batchLogSteps({
+      steps: [
+        {
+          skip_reason: "fix-type build, no contract-level changes",
+          status: "skipped",
+          step_id: "context-sync",
+        },
+      ],
+      workspace,
+    });
+    assertOk(result);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].step_id).toBe("context-sync");
+
+    const journal = await readJournalFile(workspace);
+    const step = journal.steps.find((s) => s.step_id === "context-sync");
+    expect(step?.skip_reason).toBe("fix-type build, no contract-level changes");
+  });
+
+  test("batch with non-skipped statuses does not require skip_reason", async () => {
+    const result = await batchLogSteps({
+      steps: [
+        { status: "planned", step_id: "ship" },
+        { status: "started", step_id: "implement" },
+      ],
+      workspace,
+    });
+    assertOk(result);
+    expect(result.results).toHaveLength(2);
   });
 });
