@@ -10,7 +10,7 @@ export function registerPresentArtifactTool(): void {
         "Serve an interactive HTML artifact via the Canon HTTP server and block until the user approves or requests changes in the browser. Opens the artifact URL in the default browser. Returns the user's decision and the URL.",
       inputSchema: {
         data: z
-          .unknown()
+          .record(z.string(), z.unknown())
           .describe(
             "Arbitrary data payload serialized as window.__CANON_DATA__ in the browser view",
           ),

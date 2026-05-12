@@ -17,17 +17,16 @@
  * All logging goes to process.stderr — process.stdout is the MCP stdio transport.
  */
 
+import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createDeferredDecision,
   getHttpPort,
-  isHttpServerRunning,
   registerArtifact,
   removeArtifact,
 } from "@app/http-server.ts";
-import { openBrowser } from "@platform/adapters/process-adapter.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 
@@ -54,7 +53,6 @@ export type PresentArtifactResult = {
   decision: {
     action: "approve" | "request_changes";
     annotations: unknown[];
-    feedback?: string;
   };
   url: string;
 };
@@ -63,54 +61,57 @@ export type PresentArtifactResult = {
 // Browser open helpers
 // ---------------------------------------------------------------------------
 
-/** Resolve the dist/src/ui directory relative to this module's location. */
+/** Resolve the dist/src/ui directory relative to this module's compiled location. */
 function resolveUiDistDir(): string {
-  const thisFile = fileURLToPath(import.meta.url);
-  if (thisFile.includes("/src/") && !thisFile.includes("/dist/src/")) {
-    // Running from source via tsx — walk up to mcp-server root, use dist/src/ui
-    let dir = dirname(thisFile);
-    while (dir !== "/" && !dir.endsWith("/mcp-server")) {
-      dir = dirname(dir);
-    }
-    return join(dir, "dist", "src", "ui");
-  }
   // When compiled: dist/src/features/orchestration/tools/present-artifact.js
-  // Walk up 5 levels → dist/, then join dist/src/ui
+  // Walk up 4 levels → dist/, then join dist/src/ui
+  const thisFile = fileURLToPath(import.meta.url);
   const distDir = dirname(dirname(dirname(dirname(dirname(thisFile)))));
   return join(distDir, "src", "ui");
+}
+
+/** Fire-and-forget browser open — platform-aware. */
+function openBrowser(url: string): void {
+  let command: string;
+  if (process.platform === "darwin") {
+    command = `open "${url}"`;
+  } else if (process.platform === "win32") {
+    command = `start "" "${url}"`;
+  } else {
+    command = `xdg-open "${url}"`;
+  }
+
+  exec(command, (err) => {
+    if (err) {
+      process.stderr.write(`[present_artifact] browser open failed: ${err.message}\n`);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Tool handler
 // ---------------------------------------------------------------------------
 
-/** Safe slug pattern: alphanumeric, dots, underscores, hyphens only. */
-const SLUG_PATTERN = /^[A-Za-z0-9._-]+$/;
+export async function presentArtifact(
+  input: PresentArtifactInput,
+): Promise<ToolResult<PresentArtifactResult>> {
+  const { type, slug, data } = input;
 
-type ResolvedArtifact = { html: string; key: string; url: string };
-
-/** Validate input and resolve the artifact HTML. Returns an error result or the resolved artifact. */
-async function resolveArtifact(input: PresentArtifactInput): Promise<ToolResult<ResolvedArtifact>> {
-  const { type, slug } = input;
-
-  if (!SLUG_PATTERN.test(slug)) {
-    return toolError(
-      "INVALID_INPUT",
-      `Invalid slug "${slug}". Slug must match ^[A-Za-z0-9._-]+$ (no slashes, spaces, or special characters).`,
-      false,
-    );
-  }
-
+  // 1. Validate artifact type
   const htmlFileName = VIEW_MAP[type];
   if (!htmlFileName) {
+    const knownTypes = Object.keys(VIEW_MAP).join(", ");
     return toolError(
       "INVALID_INPUT",
-      `Unknown artifact type "${type}". Known types: ${Object.keys(VIEW_MAP).join(", ")}`,
+      `Unknown artifact type "${type}". Known types: ${knownTypes}`,
       false,
     );
   }
 
-  const htmlPath = resolve(resolveUiDistDir(), htmlFileName);
+  // 2. Read compiled HTML
+  const uiDistDir = resolveUiDistDir();
+  const htmlPath = resolve(uiDistDir, htmlFileName);
+
   let html: string;
   try {
     html = await readFile(htmlPath, "utf-8");
@@ -122,33 +123,21 @@ async function resolveArtifact(input: PresentArtifactInput): Promise<ToolResult<
     );
   }
 
-  if (!isHttpServerRunning()) {
-    return toolError(
-      "UNEXPECTED",
-      "Canon HTTP server is not running. The server may have failed to start (e.g., port already in use). Restart the MCP server to resolve.",
-      true,
-    );
-  }
-
+  // 3. Register artifact and create deferred decision
   const key = `${type}/${slug}`;
-  const url = `http://127.0.0.1:${getHttpPort()}/artifact/${key}`;
-  return toolOk({ html, key, url });
-}
+  const port = getHttpPort();
+  const url = `http://127.0.0.1:${port}/artifact/${key}`;
 
-export async function presentArtifact(
-  input: PresentArtifactInput,
-): Promise<ToolResult<PresentArtifactResult>> {
-  const resolved = await resolveArtifact(input);
-  if (!resolved.ok) return resolved;
-
-  const { html, key, url } = resolved;
-  registerArtifact(key, html, input.data);
+  registerArtifact(key, html, data);
   const decisionPromise = createDeferredDecision(key);
 
   process.stderr.write(`[present_artifact] serving artifact at ${url}\n`);
 
   try {
+    // 4. Open browser — fire-and-forget
     openBrowser(url);
+
+    // 5. Block until user submits decision
     const decision = await decisionPromise;
 
     process.stderr.write(
@@ -157,6 +146,7 @@ export async function presentArtifact(
 
     return toolOk({ decision, url });
   } finally {
+    // 6. Clean up artifact regardless of outcome
     removeArtifact(key);
   }
 }
