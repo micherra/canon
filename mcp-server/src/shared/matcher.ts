@@ -220,9 +220,22 @@ async function loadOverrides(projectDir: string): Promise<PrincipleOverride[]> {
     if (!parsed || !Array.isArray(parsed.overrides)) {
       return [];
     }
-    return parsed.overrides.filter(
-      (o) => o && typeof o.principle_id === "string" && typeof o.action === "string",
-    );
+    const VALID_SEVERITIES = new Set(["rule", "strong-opinion", "convention"]);
+    return parsed.overrides.filter((o) => {
+      if (!o || typeof o.principle_id !== "string" || typeof o.action !== "string") return false;
+      if (o.action === "override-severity") {
+        return typeof o.severity === "string" && VALID_SEVERITIES.has(o.severity);
+      }
+      if (o.action === "narrow-scope") {
+        return (
+          o.applies_to != null &&
+          Array.isArray(o.applies_to?.layers) &&
+          Array.isArray(o.applies_to?.file_patterns)
+        );
+      }
+      // "disable" and unknown actions: no additional field requirements
+      return true;
+    });
   } catch {
     return []; /* file missing or unreadable — no overrides */
   }
