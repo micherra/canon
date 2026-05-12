@@ -9,10 +9,10 @@ import { bridge } from "./stores/bridge";
 
 const loader = useDataLoader(async () => {
   await bridge.init();
-  const raw = await bridge.waitForToolResult();
+  const raw = await bridge.loadData<CompactGraphData | GraphData>();
   if (!raw) throw new Error("No data received from tool");
   // Support both compact (index-encoded) and full graph formats
-  if (raw._compact) return decodeCompactGraph(raw as CompactGraphData);
+  if ((raw as CompactGraphData)._compact) return decodeCompactGraph(raw as CompactGraphData);
   return raw as GraphData;
 });
 
