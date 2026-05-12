@@ -358,7 +358,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
   - (b) **acknowledge** — items logged as accepted in the journal via `log_step` outcome, build proceeds (accept as-is — no follow-up planned).
   - (c) **defer** — items noted as follow-up, build proceeds (plan to address later — noted as follow-up).
   - This checkpoint occurs between the review step and the ship step. It does NOT apply if the review verdict is CLEAN.
-- **Manual verification gate**: After the tester reports `manual_verification_needed` items, the orchestrator presents them to the user as a HITL checkpoint before ship (via `AskUserQuestion`). Options:
+- **Manual verification gate**: After the tester reports `manual_verification_needed` items, the orchestrator presents them to the user as a HITL checkpoint before ship (via `AskUserQuestion`). The orchestrator detects manual verification items by checking the tester's test report for a `## Manual Verification Needed` section. If this section is present and contains table rows, present them to the user via `AskUserQuestion`. If the section is absent or empty, skip this gate. Options:
   - (a) **confirmed** — user has verified the items manually, proceed to ship.
   - (b) **not verified** — user cannot confirm; build pauses for investigation.
   - (c) **defer** — accept risk, proceed to ship, note as unverified in PR description.

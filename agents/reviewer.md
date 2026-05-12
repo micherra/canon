@@ -287,7 +287,9 @@ When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, verify the bui
 
 ### Process
 
-1. **Read the runbook** at `${WORKSPACE}/plans/${slug}/runbook.md`. Also read the planning brief at `${WORKSPACE}/plans/${slug}/planning-brief.md` if present. Extract acceptance criteria from the `## Acceptance Criteria` section (checklist items starting with `- [ ]`).
+1. **Read the runbook** at `${WORKSPACE}/plans/${slug}/runbook.md`. Also read the planning brief at `${WORKSPACE}/plans/${slug}/planning-brief.md` if present. Extract acceptance criteria from the `## Acceptance Criteria` section. Accept both formats:
+   - **Table format** (new verification-aware format): `| # | Criterion | Verification | Type |` — extract the Criterion column from each data row.
+   - **Checklist format** (legacy): `- [ ] criterion` — extract each checklist item as a criterion.
 
 2. **Classify each AC** into one of three verification categories:
    - **MCP-tool ACs** — The AC describes behavior of an MCP tool (e.g., "graph_query returns computed_tags", "codebase_graph includes layer data"). Verify by calling that tool directly and inspecting the response.
@@ -315,6 +317,11 @@ When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, verify the bui
 #### Cross-Check Against Planner Pre-Classification
 
 When the planning brief includes verification types (mechanical/manual), cross-check your independent classification against the planner's:
+
+**Taxonomy mapping for cross-check:**
+- Planner "mechanical" maps to reviewer "MCP-tool" or "Structural"
+- Planner "manual" maps to reviewer "Non-automatable"
+- A discrepancy exists when: planner says "mechanical" but reviewer classifies as "Non-automatable", OR planner says "manual" but reviewer classifies as "MCP-tool" or "Structural"
 
 1. For each AC, compare your classification (MCP-tool/Structural/Non-automatable) with the planner's type (mechanical/manual)
 2. Flag discrepancies — e.g., planner says "mechanical" but you classify as "Non-automatable"
