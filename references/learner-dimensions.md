@@ -212,6 +212,41 @@ Suggest: {specific action — examine principle X | trim state Y from flow | rev
 
 ---
 
+## Dimension: agent-effectiveness
+
+**Goal**: Analyze agent transcripts from completed flows to detect behavioral inefficiencies, tool misuse, role violations, and iteration waste — producing actionable suggestions for agent rule changes, principle proposals, and convention updates.
+
+### Data source
+
+- Read workspace journals (`journal.json`) to discover steps with `transcript_path` entries
+- Read transcript JSONL files directly from the `transcript_path` recorded in each journal step entry
+- Each JSONL line is a `TranscriptEntry` with fields: `role` ("system"|"user"|"assistant"|"tool_use"|"tool_result"), `content`, `tool_name?`, `tokens?`, `cumulative_tokens?`, `turn_number`, `timestamp`
+
+**Minimum threshold**: 3 completed flows with transcripts required. Below → note "Skipped: agent-effectiveness — requires 3 flows with transcripts, have {current}."
+
+### Signals to analyze
+
+| Signal | How to detect | Threshold | Suggestion |
+|--------|--------------|-----------|------------|
+| Tool retry churn | Same `tool_name` called 3+ times in sequence with `role: "tool_result"` containing error indicators between calls | >= 3 retries of same tool in a single step, observed in >= 2 flows | Agent rule change: add pre-validation or error-handling guidance for that tool |
+| Excessive iteration | `turn_number` exceeds 2x the median for that `agent_type` across sampled flows | Step `turn_number` max >= 2x median for agent type, in >= 2 flows | Investigate: check if the agent's instructions are unclear or the task plan was underspecified |
+| Role boundary violation | Agent with `role: "assistant"` generating `tool_use` entries for tools outside its declared `tools:` list, OR performing work described in another agent type's definition | >= 1 occurrence in any flow | Agent rule change: add explicit boundary constraint to the violating agent's rules |
+| Unused available tools | Agent's declared `tools:` list includes a tool that would have been appropriate for observed work, but the agent used `Bash` or manual approaches instead | Pattern observed in >= 2 flows for the same agent type | Agent rule change: add tool preference guidance (similar to learner's existing "Tool Preference" section) |
+| Token cost outlier | `cumulative_tokens` for a step exceeds 3x the median for that `agent_type` and step type | Observed in >= 2 flows | Investigate: check if the agent is reading unnecessarily large files or receiving bloated context |
+| Error recovery anti-pattern | Agent encounters an error (`tool_result` with error), then repeats the exact same approach without adapting (same tool, same or similar arguments) | >= 2 identical retry attempts after error, in >= 2 flows | Agent rule change: add error-recovery guidance — "on failure, diagnose before retrying" |
+
+### Output per suggestion
+
+```
+**{agent_type}: {signal name}** ({N} occurrences across {M} flows)
+Evidence: {step_id} in {flow_slug} — {tool_name} retried {count} times / turn_number {actual} vs median {expected} / etc.
+Transcript: {workspace}/transcripts/{relevant_file}
+Suggest: {agent rule change: "{exact text}" | principle proposal: "{description}" | convention update: "{text}"}
+Artifact: {rules/{agent_type}.md | principles/{severity}/{slug}.md | .canon/CONVENTIONS.md}
+```
+
+---
+
 ## Report Template
 
 Combine all suggestions into `.canon/LEARNING-REPORT.md`:
@@ -248,6 +283,16 @@ Generated: {YYYY-MM-DD} | Reviews analyzed: {N} | Source files scanned: {N} | Bu
 ### Process Health (from build history)
 {process-health suggestions, or "No process health issues detected." if none}
 
+### Agent Effectiveness (from agent transcripts)
+{agent-effectiveness suggestions, or "No agent effectiveness issues detected." if none}
+
+Each suggestion follows this format:
+**{agent_type}: {signal name}** ({N} occurrences across {M} flows)
+Evidence: {step_id} in {flow_slug} — {specific metric details}
+Transcript: {workspace}/transcripts/{relevant_file}
+Suggest: {agent rule change: "{exact text}" | principle proposal: "{description}" | convention update: "{text}"}
+Artifact: {rules/{agent_type}.md | principles/{severity}/{slug}.md | .canon/CONVENTIONS.md}
+
 ### Recurring Suggestions
 {Suggestions that appeared in 3+ previous learning runs but were never acted on — flag these prominently}
 
@@ -269,7 +314,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
 {
   "run_id": "learn_{YYYYMMDD}_{random_hex}",
   "timestamp": "{ISO-8601}",
-  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health"],
+  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health", "agent-effectiveness"],
   "data_summary": {
     "reviews_analyzed": 0,
     "source_files_scanned": 0,
@@ -280,7 +325,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
     {
       "id": "sug_{deterministic_hash}",
       "dimension": "principle-health",
-      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend",
+      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-antipattern",
       "target": "principle-id or convention text or state name",
       "summary": "One-line description of what's suggested",
       "confidence": "high|medium",

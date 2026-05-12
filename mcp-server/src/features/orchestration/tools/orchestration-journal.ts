@@ -55,6 +55,7 @@ export type JournalStep = {
   completed_at?: string;
   domain_skills_loaded?: string[];
   outcome?: JournalOutcome;
+  skip_reason?: string;
   started_at?: string;
   status: JournalStepStatus;
   step_id: string;
@@ -74,6 +75,7 @@ export type LogStepInput = {
   artifacts_expected?: string[];
   domain_skills_loaded?: string[];
   outcome?: JournalOutcome;
+  skip_reason?: string;
   status: JournalStepStatus;
   step_id: string;
   workspace: string;
@@ -215,6 +217,12 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
     step.domain_skills_loaded = input.domain_skills_loaded;
   }
   if (input.outcome !== undefined) step.outcome = input.outcome;
+  if (input.skip_reason !== undefined) step.skip_reason = input.skip_reason;
+  // Clear skip_reason when transitioning to a non-skipped terminal state.
+  // Prevents stale skip_reason from persisting if the orchestrator later completes a step.
+  if (input.status === "completed") {
+    step.skip_reason = undefined;
+  }
 }
 
 function enforceArtifacts(
@@ -267,6 +275,7 @@ export type BatchLogStepsInput = {
     artifacts_expected?: string[];
     domain_skills_loaded?: string[];
     outcome?: JournalOutcome;
+    skip_reason?: string;
     agent_id?: string;
   }>;
 };
@@ -293,6 +302,9 @@ export async function batchLogSteps(
     if (!entry.step_id?.trim()) {
       return toolError("INVALID_INPUT", "Each step entry must have a non-empty step_id", false);
     }
+    if (entry.status === "skipped" && !entry.skip_reason?.trim()) {
+      return toolError("INVALID_INPUT", "skip_reason is required when status is 'skipped'", false);
+    }
   }
 
   // 3. Single journal read.
@@ -311,6 +323,7 @@ export async function batchLogSteps(
       artifacts_expected: entry.artifacts_expected,
       domain_skills_loaded: entry.domain_skills_loaded,
       outcome: entry.outcome,
+      skip_reason: entry.skip_reason,
       status: entry.status,
       step_id: entry.step_id,
       workspace: input.workspace,
@@ -354,6 +367,10 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     return toolError("WORKSPACE_NOT_FOUND", `Workspace does not exist: ${input.workspace}`, false, {
       workspace: input.workspace,
     });
+  }
+
+  if (input.status === "skipped" && !input.skip_reason?.trim()) {
+    return toolError("INVALID_INPUT", "skip_reason is required when status is 'skipped'", false);
   }
 
   if (input.status === "completed" && !input.agent_id && input.step_id !== "inline-fix") {

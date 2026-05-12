@@ -309,6 +309,7 @@ Spawn N reviewers in parallel via `Agent()`, each with:
 
 - The standard preloaded context from `resolve_agent_skills`
 - `WORKSPACE={workspace_path}` (workspace root, not worktree)
+- An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
 - Their assigned file list
 - Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
 - `isolation: "none"` (shared workspace)
@@ -329,7 +330,11 @@ Write the consolidated review using the `write_review` MCP tool.
 - Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
 - After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
 - The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
-- When a tail step (context-sync, learn) is skipped, the journal entry MUST include a `skip_reason` field explaining why (e.g., `"markdown-only change, no context drift"`, `"session timeout"`, `"no new patterns observed"`). Omitting a tail step without a `skip_reason` is not permitted — the completion hook treats a missing reason as a journal defect.
+- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD include a `skip_reason` in the `log_step` outcome explaining why. Accepted `skip_reason` values:
+  - `"fix-type build, no contract-level changes"` — fix builds that only correct existing code without changing APIs, types, or conventions.
+  - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
+  - `"session timeout"` — session ending before tail steps could run.
+  - `"no new patterns observed"` — learn step skipped because the build introduced no novel patterns worth mining.
 - When a WARNING verdict is resolved by the orchestrator inline (no fix agent spawned), log a synthetic step entry with `step_id: inline-fix`, `status: completed`, and the resolution details in `outcome`.
 
 ### Post-Subagent Artifact Check
@@ -373,7 +378,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### Post-Step Effects
 
-- After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree.
+- After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` and `base_commit={base_commit}` in the spawn prompt. `WORKSPACE` is the workspace root (not the worktree path) — ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`. `base_commit` is the commit recorded at `init_workspace` — the reviewer diffs from this commit, not from `main` HEAD, to avoid false-positive "Drift from Plan" findings from unrelated accumulated changes.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.
@@ -446,11 +451,13 @@ Do NOT use Claude Code's `isolation: "worktree"` for agent-teams builds. It auto
 Agent({
   subagent_type: "canon:engineer",
   isolation: "none",    // Canon owns the worktree — no Agent tool isolation
-  prompt: "... Working directory: {worktree_path} ..."
+  prompt: "... Working directory: {worktree_path}\nWORKSPACE={workspace_path} ..."
 })
 ```
 
-The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt.
+The agent's spawn prompt MUST include both:
+- `Working directory: {worktree_path}` — where the agent writes code
+- `WORKSPACE={workspace_path}` — where the agent writes artifacts (summaries, reports)
 
 **Exceptions (no worktree needed):**
 - Plan-mode agents (read-only, no file modifications). Currently: planner.
