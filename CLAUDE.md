@@ -451,11 +451,13 @@ Do NOT use Claude Code's `isolation: "worktree"` for agent-teams builds. It auto
 Agent({
   subagent_type: "canon:engineer",
   isolation: "none",    // Canon owns the worktree — no Agent tool isolation
-  prompt: "... Working directory: {worktree_path} ..."
+  prompt: "... Working directory: {worktree_path}\nWORKSPACE={workspace_path} ..."
 })
 ```
 
-The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt.
+The agent's spawn prompt MUST include both:
+- `Working directory: {worktree_path}` — where the agent writes code
+- `WORKSPACE={workspace_path}` — where the agent writes artifacts (summaries, reports)
 
 **Exceptions (no worktree needed):**
 - Plan-mode agents (read-only, no file modifications). Currently: planner.

@@ -20,6 +20,7 @@ Rules are organized into behavioral categories:
 - **Testing rules** — govern test quality (`agent-test-sad-paths`, `agent-test-the-contract`)
 - **Coordination rules** — govern agent collaboration (`agent-fresh-context`, `agent-workspace-scoping`, `agent-conflict-detection`, `agent-context-sync`, `agent-convergence-discipline`, `agent-document-decisions`, `agent-worktree-orientation`)
 - **Dispatch rules** — govern orchestrator dispatch behavior (`agent-dispatch-before-analysis`, `agent-discovery-execution-pairing`)
+- **Efficiency rules** — govern resource and tool usage (`agent-batch-tools`)
 - **Review rules** — govern review behavior (`agent-cold-review`, `agent-assume-hostile-input`)
 
 ## Conventions

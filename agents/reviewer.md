@@ -15,6 +15,7 @@ rules:
   - agent-context-check
   - agent-artifact-write-before-return
   - agent-integration-boundary-check
+  - agent-batch-tools
 references:
   - principle-loading
   - status-protocol

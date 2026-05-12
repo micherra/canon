@@ -227,7 +227,12 @@ describe("finalizeWorkspace", () => {
   });
 
   test("handles skipped steps correctly (not counted as missing)", async () => {
-    await logStep({ status: "skipped", step_id: "s1", workspace });
+    await logStep({
+      skip_reason: "fix-type build, no contract-level changes",
+      status: "skipped",
+      step_id: "s1",
+      workspace,
+    });
     await logStep({ agent_id: "test-agent-skip", status: "completed", step_id: "s2", workspace });
 
     const result = await finalizeWorkspace({ workspace });
@@ -475,8 +480,10 @@ describe("logStep — agent_id enforcement", () => {
       expect(inlineFix.step_id).toBe("inline-fix");
     }
 
-    // Exemption 2: status "skipped" bypasses the guard (skipped steps never have an agent)
+    // Exemption 2: status "skipped" bypasses the agent_id guard (skipped steps never have an agent)
+    // but skip_reason is required for skipped steps.
     const skipped = await logStep({
+      skip_reason: "fix-type build, no contract-level changes",
       status: "skipped",
       step_id: "skipped-step",
       workspace,
