@@ -378,7 +378,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### Post-Step Effects
 
-- After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` and `base_commit={base_commit}` in the spawn prompt. `WORKSPACE` is the workspace root (not the worktree path) — ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`. `base_commit` is the commit recorded at `init_workspace` — the reviewer diffs from this commit, not from `main` HEAD, to avoid false-positive "Drift from Plan" findings from unrelated accumulated changes.
+- After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.

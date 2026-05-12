@@ -219,8 +219,9 @@ Suggest: {specific action — examine principle X | trim state Y from flow | rev
 ### Data source
 
 - Read workspace journals (`journal.json`) to discover steps with `transcript_path` entries
-- Read transcript JSONL files directly from the `transcript_path` recorded in each journal step entry
-- Each JSONL line is a `TranscriptEntry` with fields: `role` ("system"|"user"|"assistant"|"tool_use"|"tool_result"), `content`, `tool_name?`, `tokens?`, `cumulative_tokens?`, `turn_number`, `timestamp`
+- Call `get_transcript` MCP tool with `{workspace, state_id}` for each step
+- Use `summary` mode first for pattern scanning, `full` mode for detailed analysis of flagged steps
+- The `get_transcript` tool returns `TranscriptEntry[]` with fields: `role` ("system"|"user"|"assistant"|"tool_use"|"tool_result"), `content`, `tool_name?`, `tokens?`, `cumulative_tokens?`, `turn_number`, `timestamp`
 
 **Minimum threshold**: 3 completed flows with transcripts required. Below → note "Skipped: agent-effectiveness — requires 3 flows with transcripts, have {current}."
 
