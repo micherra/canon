@@ -2,6 +2,7 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { getJobManager } from "@platform/jobs/job-manager.ts";
+import { startHttpServer } from "./http-server.ts";
 import { registerArtifactTools } from "./register-artifacts.ts";
 import { registerKnowledgeTools } from "./register-knowledge.ts";
 import { registerOrchestrationTools } from "./register-orchestration.ts";
@@ -44,6 +45,11 @@ async function main() {
   );
   setProjectDir(resolvedDir);
   resolveReady();
+
+  // Start the HTTP server for interactive HTML artifact serving.
+  // Binds to 127.0.0.1 (localhost only). On EADDRINUSE, logs a warning
+  // and continues — MCP server operates normally without HTTP artifacts.
+  await startHttpServer();
 
   // Mark any leftover running jobs from a previous crashed session as failed
   try {
