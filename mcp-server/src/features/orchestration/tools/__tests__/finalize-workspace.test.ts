@@ -5,13 +5,20 @@
  *  - finalizeWorkspace is exported and callable
  *  - Absorbed claims: claims_released is true when a session exists
  *  - Absorbed analytics: analytics_recorded is true when the journal has timestamps
+ *  - Digest: digest_written is present (boolean) when complete is true
  *  - FinalizeWorkspaceInput/FinalizeWorkspaceResult are exported types
  */
 
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+// Mock digest-writer so we don't need real auto-memory dir in integration tests
+vi.mock("../../services/digest-writer.ts", () => ({
+  tryWriteBuildDigest: vi.fn().mockResolvedValue(true),
+}));
+
 import { assertOk, isToolError } from "../../../../shared/lib/tool-result.ts";
 import {
   type FinalizeWorkspaceInput,
@@ -147,5 +154,31 @@ describe("finalizeWorkspace — absorbed analytics_recorded field", () => {
     assertOk(result);
     expect(result.complete).toBe(false);
     expect("analytics_recorded" in result).toBe(false);
+  });
+});
+
+describe("finalizeWorkspace — digest_written field", () => {
+  test("result includes digest_written field (boolean) when complete is true", async () => {
+    await logStep({
+      agent_id: "test-agent-dw1",
+      status: "completed",
+      step_id: "step-a",
+      workspace,
+    });
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    expect(result.complete).toBe(true);
+    // digest_written must be present when complete is true
+    expect("digest_written" in result).toBe(true);
+    expect(typeof result.digest_written).toBe("boolean");
+  });
+
+  test("digest_written is absent when complete is false", async () => {
+    await logStep({ status: "started", step_id: "step-incomplete", workspace });
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    expect(result.complete).toBe(false);
+    // digest_written should not be present when incomplete
+    expect("digest_written" in result).toBe(false);
   });
 });

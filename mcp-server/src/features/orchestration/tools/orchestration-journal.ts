@@ -39,6 +39,7 @@ import { generateId } from "@shared/lib/id.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { projectDir } from "../../../app/server-state.ts";
+import { tryWriteBuildDigest } from "../services/digest-writer.ts";
 import { captureTranscript } from "./capture-transcript.ts";
 
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
@@ -160,6 +161,8 @@ export type FinalizeWorkspaceResult = {
   claims_released?: boolean;
   /** Present only when complete is true. True when flow analytics were recorded successfully. */
   analytics_recorded?: boolean;
+  /** Present only when complete is true. True when build digest was written to auto-memory. */
+  digest_written?: boolean;
 };
 
 function journalPath(workspace: string): string {
@@ -647,10 +650,12 @@ export async function finalizeWorkspace(
   // When complete, absorb side effects from the former board subsystem (best-effort).
   let claims_released: boolean | undefined;
   let analytics_recorded: boolean | undefined;
+  let digest_written: boolean | undefined;
   if (complete) {
     claims_released = await tryReleaseClaims(workspace);
     analytics_recorded = await tryAppendAnalytics(workspace, steps);
     await tryRunJanitor();
+    digest_written = await tryWriteBuildDigest(workspace);
   }
 
   return toolOk({
@@ -666,7 +671,7 @@ export async function finalizeWorkspace(
     ...(cleanup
       ? { workspace_archived: cleanup.archived, workspace_deleted: cleanup.deleted }
       : {}),
-    ...(complete ? { analytics_recorded, claims_released } : {}),
+    ...(complete ? { analytics_recorded, claims_released, digest_written } : {}),
   });
 }
 
