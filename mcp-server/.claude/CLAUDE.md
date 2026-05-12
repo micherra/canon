@@ -52,7 +52,7 @@ src/
 - ~~`principle-reranker.ts`~~ — LLM-based reranker removed 2026-05-02; replaced by structural tag matching via `matchesScopeTags`
 
 ## Contracts
-<!-- last-updated: 2026-05-02 (unified graph intelligence: community detection, tag propagation, semantic principle matching, scope.tags OR semantics) -->
+<!-- last-updated: 2026-05-12 (principle overrides: CANON_FILES.PRINCIPLE_OVERRIDES added; loadAllPrinciples now reads .canon/principle-overrides.yaml) -->
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -182,18 +182,22 @@ src/
 - `StoreSummariesOutput.path` — now returns SQLite DB path (was `summaries.json` path)
 - `storeSummaries` — DB-only write; auto-stubs missing file rows via `upsertFile`; inits DB if absent; no JSON fallback
 
-**`CANON_FILES` constants** (`src/shared/constants.ts`) — updated ADR-005 2026-04-01:
+**`CANON_FILES` constants** (`src/shared/constants.ts`) — updated ADR-005 2026-04-01; updated 2026-05-12 (principle overrides):
 - `CANON_FILES.GRAPH_DATA` — REMOVED; `graph-data.json` no longer written
 - `CANON_FILES.REVERSE_DEPS` — REMOVED; `reverse-deps.json` no longer written
 - `CANON_FILES.SUMMARIES` — REMOVED; `summaries.json` no longer written
-- Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
+- Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`, `PRINCIPLE_OVERRIDES`
+- `CANON_FILES.PRINCIPLE_OVERRIDES` — added 2026-05-12; value `"principle-overrides.yaml"`; path relative to `.canon/` in the project root
 
 **Principle parser types** (`src/shared/parser.ts`) — updated 2026-05-02:
 - `PrincipleScope` type gained `tags?: string[]` — optional computed tags field; used for KG-tag-based principle matching
 
-**Principle matcher** (`src/shared/matcher.ts`) — updated 2026-05-02:
+**Principle matcher** (`src/shared/matcher.ts`) — updated 2026-05-02; updated 2026-05-12 (principle overrides):
 - `MatchFilters` type gained `computed_tags?: string[]` — KG-computed tags for the file being matched
 - `matchPrinciples(principles, filters)` — now uses OR semantics: a principle matches if its layers intersect the file's layers OR its `scope.tags` intersect the file's `computed_tags`; previously layers-only
+- `loadAllPrinciples(projectDir, pluginDir)` — behavior updated 2026-05-12: after merging project + plugin principles, reads `.canon/principle-overrides.yaml` (if present) and applies overrides before caching; signature unchanged; cache key now includes override file mtime
+- Override actions supported: `disable` (omits principle entirely), `override-severity` (replaces severity), `narrow-scope` (replaces `scope.applies_to` — `layers` + `file_patterns`); unknown actions pass through unchanged
+- Override file absence or malformed YAML returns empty overrides (no error); structural filter validates `principle_id`, `action`, and action-specific fields before applying
 - `matchesScopeTags(principle, computedTags: string[]): boolean` — new export; returns `true` when principle `scope.tags` and `computedTags` share at least one tag
 
 **`get-principles` tool** (`src/features/principles/tools/get-principles.ts`) — updated 2026-05-02:
@@ -433,7 +437,7 @@ src/
 - `injectSettingsIntoRequests(requests: SpawnRequest[]): Promise<void>` — iterates spawn requests sequentially; calls `injectWorktreeSettings(req.worktree_path, req.tools)` when `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools` are all present; sequential (not `Promise.all`) for error isolation — one failure does not abort others; never throws
 
 ## Invariants
-<!-- last-updated: 2026-04-09 (concurrency invariants added: optimistic locking, SQLITE_BUSY retry, atomic board sync) -->
+<!-- last-updated: 2026-05-12 (principle overrides graceful-degradation invariant added) -->
 
 - **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
@@ -463,6 +467,7 @@ src/
 - **optimistic locking on all board mutations** (2026-04-09): all `update_board` handlers read `version` once at entry via `store.getVersion()` and pass it to `store.updateExecutionVersioned()`; a stale version returns `BOARD_LOCKED` (recoverable: true); do not use `store.updateExecution()` in handler code — use `store.updateExecutionVersioned()` instead
 - **syncBoardToStore is atomic** (2026-04-09): all writes in `syncBoardToStore` are wrapped in a single `store.transaction()`; partial writes cannot land — a version conflict aborts the entire sync and returns `{ ok: false, error: "version_conflict" }`; callers must check `result.ok`
 - **SQLITE_BUSY is transparent to callers** (2026-04-09): `store.transaction()` internally retries via `withRetry`; callers do not need to handle `SQLITE_BUSY` themselves; `withRetry` does not retry other error codes
+- **principle-overrides.yaml is optional and fail-open** (2026-05-12): absence of `.canon/principle-overrides.yaml` is not an error — `loadAllPrinciples` returns the unmodified merged set; malformed YAML and unreadable files also produce empty overrides (no throw); only structurally valid entries (with `principle_id`, `action`, and action-specific fields) are applied
 
 ## Development
 <!-- last-updated: 2026-03-22 -->
