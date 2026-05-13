@@ -30,6 +30,7 @@
 import { existsSync, globSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import {
@@ -259,6 +260,13 @@ async function tryTranscriptCapture(
   if (captureResult.ok && captureResult.transcript_path) {
     step.transcript_path = captureResult.transcript_path;
     result.transcript_path = captureResult.transcript_path;
+    // Persist to ExecutionStore so get_transcript can find the path via getTranscriptPath().
+    try {
+      const store = getExecutionStore(input.workspace);
+      store.setTranscriptPath(input.step_id, captureResult.transcript_path);
+    } catch {
+      // best-effort — transcript capture itself already succeeded; don't fail the step
+    }
   }
   if (captureResult.ok && captureResult.warning) {
     result.transcript_warning = captureResult.warning;

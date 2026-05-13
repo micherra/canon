@@ -472,7 +472,7 @@ export class ExecutionStore {
   // Transcript path (ADR-015)
 
   setTranscriptPath(stateId: string, transcriptPath: string): boolean {
-    const info = this.s.stmtSetTranscriptPath.run(transcriptPath, stateId);
+    const info = this.s.stmtSetTranscriptPath.run(stateId, transcriptPath);
     return info.changes > 0;
   }
 
