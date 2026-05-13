@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+# Consume stdin to prevent pipe buffer deadlock when the JSON payload is large.
+cat > /dev/null
+
 # Allow planner and architect to use plan mode for direct user iteration
 if [[ "${CANON_CURRENT_AGENT:-}" == "planner" || "${CANON_CURRENT_AGENT:-}" == "architect" ]]; then
   exit 0
