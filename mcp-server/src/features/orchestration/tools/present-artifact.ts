@@ -6,8 +6,8 @@
  * request_changes) in the browser.
  *
  * ## Lifecycle
- * 1. Validate artifact type against VIEW_MAP.
- * 2. Read compiled HTML from dist/src/ui/ (built by Vite).
+ * 1. Validate artifact type against VIEW_MAP (or use provided html directly).
+ * 2. Read compiled HTML from dist/src/ui/ (built by Vite) — skipped when html field is provided.
  * 3. Register artifact with HTTP server (registerArtifact).
  * 4. Open browser URL — fire-and-forget (exec).
  * 5. Block on createDeferredDecision until user clicks Approve/Request Changes.
@@ -48,6 +48,7 @@ export type PresentArtifactInput = {
   type: string;
   slug: string;
   data: unknown;
+  html?: string;
 };
 
 export type PresentArtifactResult = {
@@ -59,13 +60,10 @@ export type PresentArtifactResult = {
 };
 
 // ---------------------------------------------------------------------------
-// Browser open helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
-/** Resolve the dist/src/ui directory relative to this module's compiled location. */
 function resolveUiDistDir(): string {
-  // When compiled: dist/src/features/orchestration/tools/present-artifact.js
-  // Walk up 5 levels → dist/, then join dist/src/ui
   const thisFile = fileURLToPath(import.meta.url);
   const distDir = dirname(dirname(dirname(dirname(dirname(thisFile)))));
   return join(distDir, "src", "ui");
@@ -75,14 +73,12 @@ function resolveUiDistDir(): string {
 // Tool handler
 // ---------------------------------------------------------------------------
 
-/** Safe slug pattern: alphanumeric, dots, underscores, hyphens only. */
 const SLUG_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 type ResolvedArtifact = { html: string; key: string; url: string };
 
-/** Validate input and resolve the artifact HTML. Returns an error result or the resolved artifact. */
 async function resolveArtifact(input: PresentArtifactInput): Promise<ToolResult<ResolvedArtifact>> {
-  const { type, slug } = input;
+  const { type, slug, html: providedHtml } = input;
 
   if (!SLUG_PATTERN.test(slug)) {
     return toolError(
@@ -92,25 +88,30 @@ async function resolveArtifact(input: PresentArtifactInput): Promise<ToolResult<
     );
   }
 
-  const htmlFileName = VIEW_MAP[type];
-  if (!htmlFileName) {
-    return toolError(
-      "INVALID_INPUT",
-      `Unknown artifact type "${type}". Known types: ${Object.keys(VIEW_MAP).join(", ")}`,
-      false,
-    );
-  }
-
-  const htmlPath = resolve(resolveUiDistDir(), htmlFileName);
   let html: string;
-  try {
-    html = await readFile(htmlPath, "utf-8");
-  } catch {
-    return toolError(
-      "INVALID_INPUT",
-      `Compiled HTML not found for artifact type "${type}". Expected: ${htmlPath}. Run the UI build first.`,
-      true,
-    );
+
+  if (providedHtml) {
+    html = providedHtml;
+  } else {
+    const htmlFileName = VIEW_MAP[type];
+    if (!htmlFileName) {
+      return toolError(
+        "INVALID_INPUT",
+        `Unknown artifact type "${type}". Known types: ${Object.keys(VIEW_MAP).join(", ")}`,
+        false,
+      );
+    }
+
+    const htmlPath = resolve(resolveUiDistDir(), htmlFileName);
+    try {
+      html = await readFile(htmlPath, "utf-8");
+    } catch {
+      return toolError(
+        "INVALID_INPUT",
+        `Compiled HTML not found for artifact type "${type}". Expected: ${htmlPath}. Run the UI build first.`,
+        true,
+      );
+    }
   }
 
   if (!isHttpServerRunning()) {
