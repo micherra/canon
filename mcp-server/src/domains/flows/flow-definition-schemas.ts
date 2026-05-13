@@ -182,16 +182,6 @@ export const TestResultsSchema = z.object({
   skipped: z.number(),
 });
 
-/** Evidence that test failures pre-date the agent's changes. */
-export const BaselineEvidenceSchema = z.object({
-  baseline_commit: z.string(),
-  baseline_failures: z.array(z.string()), // test names that failed at baseline
-  current_failures: z.array(z.string()), // test names that fail now
-  new_failures: z.array(z.string()), // failures in current but not in baseline
-});
-
-export type BaselineEvidence = z.infer<typeof BaselineEvidenceSchema>;
-
 // Tool overrides schema (ADR-014)
 
 export const ToolOverridesSchema = z
@@ -495,6 +485,3 @@ export type FlowDefinition = z.infer<typeof FlowDefinitionSchema>;
 export type FragmentDefinition = z.infer<typeof FragmentDefinitionSchema>;
 export type ConsultationFragment = z.infer<typeof ConsultationFragmentSchema>;
 export type ResolvedFlow = z.infer<typeof ResolvedFlowSchema>;
-export type CompeteConfigObject = z.infer<typeof CompeteConfigObjectSchema>;
-export type CompeteConfig = z.infer<typeof CompeteConfigSchema>;
-export type DebateConfig = z.infer<typeof DebateConfigSchema>;

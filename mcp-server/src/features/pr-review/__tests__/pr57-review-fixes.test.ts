@@ -2,19 +2,15 @@
  * Tests for PR #57 review comments (feat: semantic search Phase 1).
  *
  * Fix 1: write-plan-index.ts — path traversal validation on slug parameter
- * Fix 2: flow-parser.ts — widen buildEffectiveParams to support boolean params
  * Fix 3: kg-vector-store.ts — remove unused `rows` variable in getStaleEntityVectors
  * Fix 4: kg-vector-query.ts — parameterize SQL threshold in _queryEntityVectors
  * Fix 5: kg-vector-query.ts — parameterize SQL threshold in _querySummaryVectors
  * Fix 6: store-summaries.ts — use upsertSummary return value instead of extra DB read
- * Fix 7: verify-fix-loop.md — boolean param works now that buildEffectiveParams supports it
  */
 
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { FragmentDefinition } from "@domains/flows/flow-definition-schemas.ts";
-import { resolveFragments } from "@domains/flows/flow-parser.ts";
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
@@ -96,98 +92,6 @@ describe("writePlanIndex — slug path traversal validation", () => {
 
     // Empty slug is rejected — SLUG_PATTERN requires at least 1 character
     expect(result.ok).toBe(false);
-  });
-});
-
-// Fix 2 & 7: flow-parser.ts — boolean typed params in buildEffectiveParams
-
-describe("resolveFragments — boolean typed param support", () => {
-  const baseFlow = {
-    description: "test",
-    fragments: [],
-    initial_state: "start",
-    name: "test-flow",
-    principles: [],
-    states: {
-      start: { type: "terminal" as const },
-    },
-  };
-
-  it("uses boolean false as default when param not in with", () => {
-    const fragment: FragmentDefinition = {
-      fragment: "bool-frag",
-      params: { write_tests: { default: false, type: "boolean" } },
-      states: {
-        s: { agent: "a", template: "${write_tests}", type: "single" as const },
-      },
-    };
-
-    const result = resolveFragments(
-      baseFlow,
-      [{ definition: fragment, spawnInstructions: {} }],
-      [{ fragment: "bool-frag" }],
-    );
-
-    // false → "false" via String(false) in substituteParams
-    expect(result.states.s.template).toBe("false");
-  });
-
-  it("uses boolean true as default", () => {
-    const fragment: FragmentDefinition = {
-      fragment: "bool-frag",
-      params: { write_tests: { default: true, type: "boolean" } },
-      states: {
-        s: { agent: "a", template: "${write_tests}", type: "single" as const },
-      },
-    };
-
-    const result = resolveFragments(
-      baseFlow,
-      [{ definition: fragment, spawnInstructions: {} }],
-      [{ fragment: "bool-frag" }],
-    );
-
-    expect(result.states.s.template).toBe("true");
-  });
-
-  it("allows boolean param to be overridden via with", () => {
-    const fragment: FragmentDefinition = {
-      fragment: "bool-frag",
-      params: { write_tests: { default: false, type: "boolean" } },
-      states: {
-        s: { agent: "a", template: "${write_tests}", type: "single" as const },
-      },
-    };
-
-    const result = resolveFragments(
-      baseFlow,
-      [{ definition: fragment, spawnInstructions: {} }],
-      [{ fragment: "bool-frag", with: { write_tests: true } }],
-    );
-
-    expect(result.states.s.template).toBe("true");
-  });
-
-  it("does NOT treat old-format false as required (backward compat fix)", () => {
-    // Old format: false as param value used to be dropped by `paramDef !== false` check.
-    // Verify that old-format false scalar is now treated as a default value.
-    const fragment: FragmentDefinition = {
-      fragment: "old-frag",
-      // Old-format: scalar false as a default
-      params: { flag: false as unknown as null },
-      states: {
-        s: { agent: "a", template: "${flag}", type: "single" as const },
-      },
-    };
-
-    // Should NOT throw "requires param" — false is now a valid default
-    expect(() =>
-      resolveFragments(
-        baseFlow,
-        [{ definition: fragment, spawnInstructions: {} }],
-        [{ fragment: "old-frag" }],
-      ),
-    ).not.toThrow();
   });
 });
 

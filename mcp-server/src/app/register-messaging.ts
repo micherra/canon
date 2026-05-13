@@ -48,7 +48,6 @@ export function registerMessagingTools(): void {
       description: "Read messages from a workspace channel, ordered by sequence number.",
       inputSchema: {
         channel: z.string().describe("Channel name to read from"),
-        include_events: z.boolean().optional().describe("Also return pending wave events"),
         since: z
           .string()
           .optional()

@@ -1,8 +1,8 @@
 /**
- * Zod schemas and TypeScript types for Canon transcript and wave event contracts.
+ * Zod schemas and TypeScript types for Canon transcript contracts.
  *
  * This file contains types belonging to the "events" bounded context:
- * transcript entries (ADR-015) and wave event types used by wave coordination.
+ * transcript entries (ADR-015).
  *
  * Bounded context: Events / Quality Contracts
  * See: decompose-by-domain-not-layer, information-hiding
@@ -23,26 +23,3 @@ export const TranscriptEntrySchema = z.object({
 });
 
 export type TranscriptEntry = z.infer<typeof TranscriptEntrySchema>;
-
-// Wave event types (used by wave-events.ts, inject-wave-event.ts, etc.)
-
-export type WaveEventType =
-  | "add_task"
-  | "skip_task"
-  | "reprioritize"
-  | "inject_context"
-  | "guidance"
-  | "pause";
-
-export type WaveEventResolution = Record<string, unknown>;
-
-export type WaveEvent = {
-  id: string;
-  type: WaveEventType;
-  payload: Record<string, unknown>;
-  timestamp: string;
-  status: "pending" | "applied" | "rejected";
-  applied_at?: string;
-  resolution?: WaveEventResolution;
-  rejection_reason?: string;
-};
