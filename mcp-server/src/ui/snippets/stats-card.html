@@ -1,0 +1,36 @@
+<!--
+  @snippet stats-card
+  @description Single stat card with a large value and label. Used in a flex row for summary metrics.
+  @data { value: string|number, label: string, isDanger?: boolean }
+  @tokens --bg-card, --border, --text, --text-muted, --danger
+  @usage Place multiple cards in a flex container with gap: 12px. Add class "stat-value--danger" to the value span when the metric indicates a problem.
+    Replace {{VALUE}} with the number/text, {{LABEL}} with the metric name.
+-->
+<div class="stat-card">
+  <span class="stat-value">{{VALUE}}</span>
+  <span class="stat-label">{{LABEL}}</span>
+</div>
+<style>
+  .stat-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    background: var(--bg-card, rgba(255, 255, 255, 0.04));
+    border-radius: 6px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.07));
+    min-width: 0;
+  }
+  .stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text, #e0e0e0);
+    line-height: 1;
+  }
+  .stat-value--danger { color: var(--danger, #e74c3c); }
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-muted, #888);
+  }
+</style>
