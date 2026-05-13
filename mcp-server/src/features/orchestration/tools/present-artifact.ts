@@ -47,6 +47,7 @@ export type PresentArtifactInput = {
   type: string;
   slug: string;
   data: unknown;
+  html?: string; // When provided, serves this HTML directly (bypasses VIEW_MAP)
 };
 
 export type PresentArtifactResult = {
@@ -95,32 +96,39 @@ function openBrowser(url: string): void {
 export async function presentArtifact(
   input: PresentArtifactInput,
 ): Promise<ToolResult<PresentArtifactResult>> {
-  const { type, slug, data } = input;
-
-  // 1. Validate artifact type
-  const htmlFileName = VIEW_MAP[type];
-  if (!htmlFileName) {
-    const knownTypes = Object.keys(VIEW_MAP).join(", ");
-    return toolError(
-      "INVALID_INPUT",
-      `Unknown artifact type "${type}". Known types: ${knownTypes}`,
-      false,
-    );
-  }
-
-  // 2. Read compiled HTML
-  const uiDistDir = resolveUiDistDir();
-  const htmlPath = resolve(uiDistDir, htmlFileName);
+  const { type, slug, data, html: providedHtml } = input;
 
   let html: string;
-  try {
-    html = await readFile(htmlPath, "utf-8");
-  } catch {
-    return toolError(
-      "INVALID_INPUT",
-      `Compiled HTML not found for artifact type "${type}". Expected: ${htmlPath}. Run the UI build first.`,
-      true,
-    );
+
+  if (providedHtml) {
+    // Dynamic HTML path — skip VIEW_MAP lookup and file read
+    html = providedHtml;
+  } else {
+    // Compiled HTML path — existing VIEW_MAP logic (unchanged)
+    // 1. Validate artifact type
+    const htmlFileName = VIEW_MAP[type];
+    if (!htmlFileName) {
+      const knownTypes = Object.keys(VIEW_MAP).join(", ");
+      return toolError(
+        "INVALID_INPUT",
+        `Unknown artifact type "${type}". Known types: ${knownTypes}`,
+        false,
+      );
+    }
+
+    // 2. Read compiled HTML
+    const uiDistDir = resolveUiDistDir();
+    const htmlPath = resolve(uiDistDir, htmlFileName);
+
+    try {
+      html = await readFile(htmlPath, "utf-8");
+    } catch {
+      return toolError(
+        "INVALID_INPUT",
+        `Compiled HTML not found for artifact type "${type}". Expected: ${htmlPath}. Run the UI build first.`,
+        true,
+      );
+    }
   }
 
   // 3. Register artifact and create deferred decision
