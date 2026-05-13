@@ -4,13 +4,11 @@ export type GetMessagesInput = {
   workspace: string;
   channel: string;
   since?: string;
-  include_events?: boolean;
 };
 
 export type GetMessagesResult = {
   messages: Message[];
   count: number;
-  events_count?: number;
 };
 
 export async function getMessages(input: GetMessagesInput): Promise<GetMessagesResult> {
