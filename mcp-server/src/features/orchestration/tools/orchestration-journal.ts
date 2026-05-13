@@ -27,18 +27,17 @@
  * See v2 migration plan §2.9 and phase1-06 PLAN for the contract.
  */
 
-import { existsSync, globSync, rmSync } from "node:fs";
+import { existsSync, globSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
-import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import { archiveWorkspace } from "@features/history/services/archive-service.ts";
-import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
+import { join } from "node:path";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
-import { releaseClaims } from "@shared/lib/file-claims.ts";
-import { generateId } from "@shared/lib/id.ts";
-import type { ToolResult } from "@shared/lib/tool-result.ts";
-import { toolError, toolOk } from "@shared/lib/tool-result.ts";
-import { projectDir } from "../../../app/server-state.ts";
+import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import {
+  archiveAndDeleteWorkspace,
+  tryAppendAnalytics,
+  tryReleaseClaims,
+  tryRunJanitor,
+} from "../services/workspace-cleanup.ts";
 import { captureTranscript } from "./capture-transcript.ts";
 
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
@@ -492,7 +491,7 @@ function computeTotalDurationMs(steps: readonly JournalStep[]): number | null {
   return maxEnd - minStart;
 }
 
-function computeFlowOutcome(
+export function computeFlowOutcome(
   steps: readonly JournalStep[],
 ): FinalizeWorkspaceResult["flow_outcome"] {
   const domain_skills_used = Array.from(
@@ -515,106 +514,6 @@ function computeFlowOutcome(
     total_duration_ms: computeTotalDurationMs(steps),
     total_steps: steps.length,
   };
-}
-
-async function archiveAndDeleteWorkspace(
-  workspace: string,
-): Promise<{ archived: boolean; deleted: boolean }> {
-  let archived = false;
-  try {
-    const session = getExecutionStore(workspace).getSession();
-    const branch = session?.branch ?? "unknown";
-    const slug = session?.slug ?? basename(workspace);
-    await archiveWorkspace({
-      branch,
-      projectDir,
-      slug,
-      workspacePath: workspace,
-    });
-    archived = true;
-  } catch (err: unknown) {
-    console.warn("[canon] workspace archive failed:", err instanceof Error ? err.message : err);
-  }
-
-  let deleted = false;
-  try {
-    rmSync(workspace, { force: true, recursive: true });
-    deleted = true;
-  } catch (err: unknown) {
-    console.warn("[canon] workspace deletion failed:", err instanceof Error ? err.message : err);
-  }
-
-  return { archived, deleted };
-}
-
-/**
- * Release file claims for this workspace's slug. Best-effort — never throws.
- * Returns true when claims were released successfully, false when skipped or failed.
- */
-async function tryReleaseClaims(workspace: string): Promise<boolean> {
-  try {
-    const session = getExecutionStore(workspace).getSession();
-    if (!session) return false;
-    releaseClaims(projectDir, session.slug);
-    return true;
-  } catch (err: unknown) {
-    console.warn(
-      "[canon] finalizeWorkspace: failed to release file claims:",
-      err instanceof Error ? err.message : err,
-    );
-    return false;
-  }
-}
-
-/**
- * Build a minimal FlowRunEntry from journal step timestamps and append to drift analytics.
- * Best-effort — never throws. Returns true when analytics were recorded, false otherwise.
- */
-async function tryAppendAnalytics(
-  workspace: string,
-  steps: readonly JournalStep[],
-): Promise<boolean> {
-  try {
-    const session = getExecutionStore(workspace).getSession();
-    const now = new Date().toISOString();
-    const flowOutcome = computeFlowOutcome(steps);
-    const flowRun: FlowRunEntry = {
-      completed: now,
-      flow: session?.slug ?? basename(workspace),
-      run_id: generateId("run"),
-      skipped_states: steps.filter((s) => s.status === "skipped").map((s) => s.step_id),
-      started: steps.find((s) => s.started_at)?.started_at ?? now,
-      state_durations: {},
-      state_iterations: {},
-      task: session?.slug ?? basename(workspace),
-      tier: "unknown",
-      total_duration_ms: flowOutcome.total_duration_ms ?? 0,
-      total_spawns: 0,
-    };
-    await appendFlowRun(projectDir, flowRun);
-    return true;
-  } catch (err: unknown) {
-    console.warn(
-      "[canon] finalizeWorkspace: failed to append flow analytics:",
-      err instanceof Error ? err.message : err,
-    );
-    return false;
-  }
-}
-
-/**
- * Run the janitor for background housekeeping. Best-effort — never throws.
- */
-async function tryRunJanitor(): Promise<void> {
-  try {
-    const { runJanitor } = await import("../services/janitor.ts");
-    await runJanitor(projectDir);
-  } catch (err: unknown) {
-    console.warn(
-      "[canon] finalizeWorkspace: janitor run failed:",
-      err instanceof Error ? err.message : err,
-    );
-  }
 }
 
 export async function finalizeWorkspace(
