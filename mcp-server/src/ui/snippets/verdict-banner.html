@@ -1,0 +1,37 @@
+<!--
+  @snippet verdict-banner
+  @description Full-width colored banner showing a verdict badge and headline text. Matches Canon's VerdictBanner.svelte component.
+  @data { verdict: "BLOCKING"|"WARNING"|"CLEAN", headline: string }
+  @tokens --bg, --text, --border
+  @usage Place at the top of the artifact body. Set the --accent CSS variable to the verdict color before the banner div.
+    Verdict colors: BLOCKING="#e74c3c", WARNING="#f39c12", CLEAN="#27ae60".
+    Replace {{VERDICT}} with the verdict string, {{HEADLINE}} with descriptive text, {{ACCENT_COLOR}} with the hex color.
+-->
+<div class="verdict-banner" style="--accent: {{ACCENT_COLOR}}">
+  <span class="verdict-badge" style="background: {{ACCENT_COLOR}}; color: #fff;">{{VERDICT}}</span>
+  <span class="headline">{{HEADLINE}}</span>
+</div>
+<style>
+  .verdict-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    border-bottom: 1px solid var(--accent);
+    font-size: 13px;
+  }
+  .verdict-badge {
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .headline {
+    color: var(--text, #e0e0e0);
+    flex: 1;
+    line-height: 1.4;
+  }
+</style>
