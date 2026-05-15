@@ -1,4 +1,5 @@
 import { report } from "@features/orchestration/tools/report.ts";
+import { presentReview } from "@features/pr-review/tools/present-review.ts";
 import { reviewCode } from "@features/pr-review/tools/review-code.ts";
 import { showPrImpact } from "@features/pr-review/tools/show-pr-impact.ts";
 import { storePrReview } from "@features/pr-review/tools/store-pr-review.ts";
@@ -202,9 +203,37 @@ function registerStorePrReviewTool(): void {
   );
 }
 
+function registerPresentReviewTool(): void {
+  server.registerTool(
+    "present_review",
+    {
+      description:
+        "Render a stored Canon review as an interactive HTML dashboard, serve it via the Canon HTTP server, and open it in the default browser. Blocks until the user approves or requests changes in the browser. Requires a review already stored via store_pr_review.",
+      inputSchema: {
+        branch: z.string().optional().describe("Filter to reviews for this branch"),
+        pr_number: z.number().optional().describe("Filter to reviews for this PR number"),
+        slug: z.string().describe("Unique identifier for this artifact instance"),
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    gatedWrapHandler(async (input) =>
+      presentReview(
+        {
+          branch: input.branch,
+          pr_number: input.pr_number,
+          slug: input.slug,
+          workspace: input.workspace,
+        },
+        projectDir,
+      ),
+    ),
+  );
+}
+
 export function registerPrincipleTools(): void {
   registerPrImpactTool();
   registerPrincipleQueryTools();
   registerCodeReviewTools();
   registerStorePrReviewTool();
+  registerPresentReviewTool();
 }
