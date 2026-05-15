@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import {
+  formatCorrectionsSection,
+  readCorrections,
+} from "@features/orchestration/services/correction-reader.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import matter from "gray-matter";
 
@@ -109,9 +113,42 @@ function formatPreloadPrompt(skills: ResolvedSkill[]): string {
   ].join("\n");
 }
 
+/** Read corrections and return formatted section string. Fail-open: returns "" on any error. */
+function buildCorrectionsSection(projectDir: string | undefined): string {
+  if (!projectDir) return "";
+  try {
+    return formatCorrectionsSection(readCorrections(projectDir));
+  } catch {
+    // Non-blocking: correction read failures are silently ignored
+    return "";
+  }
+}
+
+/** Resolve skills for an agent from its frontmatter fields. */
+function resolveSkills(
+  data: Record<string, unknown>,
+  pluginDir: string,
+): { skills: ResolvedSkill[]; unresolved: string[] } {
+  const skills: ResolvedSkill[] = [];
+  const unresolved: string[] = [];
+  for (const kind of KIND_ORDER) {
+    const ids = coerceStringList(data[KIND_TO_FIELD[kind]]);
+    for (const id of ids) {
+      const hit = tryReadSkill(pluginDir, kind, id);
+      if (hit) {
+        skills.push({ content: hit.content, id, kind, path: hit.path });
+      } else {
+        unresolved.push(`${kind}:${id}`);
+      }
+    }
+  }
+  return { skills, unresolved };
+}
+
 export function resolveAgentSkills(
   input: ResolveAgentSkillsInput,
   pluginDir: string,
+  projectDir?: string,
 ): ToolResult<ResolveAgentSkillsResult> {
   const agentName = stripCanonPrefix(input.agent_name).trim();
   if (!agentName || !/^[a-zA-Z0-9_-]+$/.test(agentName)) {
@@ -131,22 +168,15 @@ export function resolveAgentSkills(
     );
   }
   const parsed = matter(agentFile);
-  const skills: ResolvedSkill[] = [];
-  const unresolved: string[] = [];
-  for (const kind of KIND_ORDER) {
-    const ids = coerceStringList(parsed.data[KIND_TO_FIELD[kind]]);
-    for (const id of ids) {
-      const hit = tryReadSkill(pluginDir, kind, id);
-      if (hit) {
-        skills.push({ content: hit.content, id, kind, path: hit.path });
-      } else {
-        unresolved.push(`${kind}:${id}`);
-      }
-    }
-  }
+  const { skills, unresolved } = resolveSkills(parsed.data as Record<string, unknown>, pluginDir);
+
+  const basePrompt = formatPreloadPrompt(skills);
+  const correctionsSection = buildCorrectionsSection(projectDir);
+  const preload_prompt = correctionsSection ? `${basePrompt}\n\n${correctionsSection}` : basePrompt;
+
   return toolOk<ResolveAgentSkillsResult>({
     agent_name: agentName,
-    preload_prompt: formatPreloadPrompt(skills),
+    preload_prompt,
     skills,
     unresolved,
   });
