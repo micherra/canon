@@ -164,6 +164,30 @@ Every brief must apply the four checks from `canon:plan` §3 in order:
 
 The brief's outcome communicates the result of this discipline, not just your preference.
 
+## Competition and Debate Steps
+
+These are advanced step types in the canonical vocabulary. Use them sparingly — only when the problem structure genuinely benefits from multi-team divergence or adversarial refinement.
+
+### When to recommend `compete`
+
+- Multiple valid design directions exist and each deserves serious exploration before choosing.
+- A single agent self-editing is likely to converge prematurely on its first instinct.
+- The user explicitly requests alternative approaches or wants to compare options side-by-side.
+- NOT for problems with one clearly correct answer — adds overhead without diversity.
+
+### When to recommend `debate`
+
+- A design decision has genuine tradeoffs that deserve adversarial challenge before commitment.
+- The user wants weaknesses surfaced explicitly, not just considered.
+- The question is contested enough that a single reviewer would struggle to steelman opposing views.
+- NOT for routine implementation decisions or mechanical changes.
+
+### General guidance
+
+- Default to a single `design` step (architect subagent) for design decisions. Escalate to `compete` or `debate` only when divergence or adversarial refinement adds clear value that a single agent cannot provide.
+- Competition is for "explore N directions in parallel"; debate is for "stress-test one direction through structured challenge."
+- Both patterns add multiple agent spawns and a synthesis or summary phase — the planning brief's Value Assessment should reflect this overhead.
+
 ## Non-Responsibilities
 
 Explicit scope boundary — do not perform any of the following:

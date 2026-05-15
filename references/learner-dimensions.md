@@ -185,17 +185,17 @@ Suggest: {update convention to match current practice | remove convention | inve
 
 ### Data source
 
-Call the `get_history` MCP tool to retrieve recent flow runs from the drift database. Each entry includes flow name, completion timestamp, and associated decisions. For state-level iteration data, read workspace journals from `.canon/workspaces/*/journal.json`.
+Call the `get_history` MCP tool to retrieve recent builds from the drift database. Each entry includes flow name, completion timestamp, and associated decisions. For state-level iteration data, read workspace journals from `.canon/workspaces/*/journal.json`.
 
 The `get_build_history` MCP tool provides archived build metadata (branch, flow, archived artifacts). Use it to supplement `get_history` when analyzing trends across many builds.
 
-**Minimum threshold**: 5 flow runs required for any suggestion. Below → note "Skipped: process-health — requires 5 flow runs, have {current}."
+**Minimum threshold**: 5 builds required for any suggestion. Below → note "Skipped: process-health — requires 5 builds, have {current}."
 
 ### Signals to analyze
 
 | Signal | Threshold | Suggestion |
 |--------|-----------|------------|
-| High iteration count on a state | Average iterations >= 3 across >= 5 runs | Review→fix churn — suggest examining the principle or implementor prompt for that state |
+| High iteration count on a state | Average iterations >= 3 across >= 5 runs | Review→fix churn — suggest examining the principle or engineer prompt for that state |
 | Declining pass rates | Gate/postcondition pass rate trending down across recent 5 runs | Principles may be becoming harder to satisfy — review recently changed principles |
 | Duration outlier by tier | A small-tier flow taking as long as a large-tier flow across >= 3 runs | Flow definition may have unnecessary states for this tier |
 | Frequently skipped states | Same state skipped in >= 60% of runs | Flow definition may need trimming — this state adds little value |
@@ -207,7 +207,7 @@ The `get_build_history` MCP tool provides archived build metadata (branch, flow,
 **{state-name or flow-name}** ({signal type})
 Evidence: {specific numbers — average iterations, pass rate trend, duration comparison}
 Runs analyzed: {N}
-Suggest: {specific action — examine principle X | trim state Y from flow | review implementor prompt for state Z}
+Suggest: {specific action — examine principle X | trim state Y from flow | review engineer prompt for state Z}
 ```
 
 ---
