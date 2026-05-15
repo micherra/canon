@@ -81,6 +81,54 @@ function createV1Db(): Database.Database {
   return db;
 }
 
+// Helper: create a v3 database manually (base DDL + migrations v2 + v3, no v4)
+// This simulates an existing v3 drift.db before the v4 migration runs.
+function createV3Db(): Database.Database {
+  const db = createV1Db();
+
+  // Run v2 migration manually
+  db.exec(`CREATE TABLE IF NOT EXISTS decisions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    decision_id TEXT NOT NULL UNIQUE,
+    run_id      TEXT,
+    flow        TEXT,
+    task        TEXT,
+    title       TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    file_path   TEXT,
+    timestamp   TEXT NOT NULL
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_decisions_run ON decisions(run_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_decisions_ts ON decisions(timestamp)`);
+  db.exec(`ALTER TABLE flow_runs ADD COLUMN commits TEXT`);
+  db.exec(`ALTER TABLE flow_runs ADD COLUMN diff_stat TEXT`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_flow_runs_completed ON flow_runs(completed)`);
+  db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
+
+  // Run v3 migration manually
+  db.exec(`CREATE TABLE IF NOT EXISTS build_archives (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    archive_id        TEXT NOT NULL UNIQUE,
+    branch            TEXT NOT NULL,
+    sanitized_branch  TEXT NOT NULL,
+    slug              TEXT NOT NULL,
+    flow              TEXT NOT NULL DEFAULT '',
+    tier              TEXT NOT NULL DEFAULT '',
+    task              TEXT NOT NULL DEFAULT '',
+    archived_at       TEXT NOT NULL,
+    archive_path      TEXT NOT NULL,
+    artifact_types    TEXT NOT NULL DEFAULT '[]',
+    has_run_summary   INTEGER NOT NULL DEFAULT 0,
+    source_run_id     TEXT
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_build_archives_branch ON build_archives(sanitized_branch)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_build_archives_archived_at ON build_archives(archived_at)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_build_archives_flow ON build_archives(flow)`);
+  db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
+
+  return db;
+}
+
 // columnExists
 
 describe("columnExists", () => {
@@ -114,16 +162,16 @@ describe("columnExists", () => {
 // Fresh DB — schema version 2
 
 describe("initDriftDb — fresh database", () => {
-  test("DRIFT_SCHEMA_VERSION is '3'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("3");
+  test("DRIFT_SCHEMA_VERSION is '4'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("4");
   });
 
-  test("meta table has schema_version = '3' after init", () => {
+  test("meta table has schema_version = '4' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("3");
+    expect(row.value).toBe("4");
     db.close();
   });
 
@@ -205,13 +253,13 @@ describe("runDriftMigrations — v1 to v2 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v1 DB to current version: updates schema_version to '3'", () => {
+  test("migrates a v1 DB to current version: updates schema_version to '4'", () => {
     const db = createV1Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("3");
+    expect(row.value).toBe("4");
     db.close();
   });
 
@@ -282,6 +330,178 @@ describe("runDriftMigrations — idempotency", () => {
     db.exec(`ALTER TABLE flow_runs ADD COLUMN commits TEXT`);
     // Now run migrations — columnExists guard should prevent second ALTER TABLE
     expect(() => runDriftMigrations(db)).not.toThrow();
+    db.close();
+  });
+});
+
+// v4 migration — file_violation_history and path_effects tables
+
+describe("initDriftDb — fresh database v4 tables", () => {
+  test("DRIFT_SCHEMA_VERSION is '4'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("4");
+  });
+
+  test("fresh DB has schema_version = '4' after init", () => {
+    const db = initDriftDb(":memory:");
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+      value: string;
+    };
+    expect(row.value).toBe("4");
+    db.close();
+  });
+
+  test("fresh DB creates file_violation_history table with correct columns", () => {
+    const db = initDriftDb(":memory:");
+    const cols = db.prepare(`PRAGMA table_info(file_violation_history)`).all() as Array<{
+      name: string;
+    }>;
+    const colNames = cols.map((c) => c.name);
+    expect(colNames).toContain("id");
+    expect(colNames).toContain("file_path");
+    expect(colNames).toContain("principle_id");
+    expect(colNames).toContain("violation_count");
+    expect(colNames).toContain("last_seen");
+    expect(colNames).toContain("first_seen");
+    db.close();
+  });
+
+  test("fresh DB creates path_effects table with correct columns", () => {
+    const db = initDriftDb(":memory:");
+    const cols = db.prepare(`PRAGMA table_info(path_effects)`).all() as Array<{ name: string }>;
+    const colNames = cols.map((c) => c.name);
+    expect(colNames).toContain("id");
+    expect(colNames).toContain("file_path");
+    expect(colNames).toContain("total_violations");
+    expect(colNames).toContain("total_reviews");
+    expect(colNames).toContain("last_violation_at");
+    expect(colNames).toContain("last_clean_at");
+    expect(colNames).toContain("clean_streak");
+    expect(colNames).toContain("violation_streak");
+    db.close();
+  });
+
+  test("fresh DB has indexes on file_violation_history", () => {
+    const db = initDriftDb(":memory:");
+    const indexes = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='file_violation_history' ORDER BY name`,
+      )
+      .all() as Array<{ name: string }>;
+    const indexNames = indexes.map((i) => i.name);
+    expect(indexNames).toContain("idx_fvh_file");
+    expect(indexNames).toContain("idx_fvh_principle");
+    db.close();
+  });
+
+  test("fresh DB has index on path_effects", () => {
+    const db = initDriftDb(":memory:");
+    const indexes = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='path_effects' ORDER BY name`,
+      )
+      .all() as Array<{ name: string }>;
+    const indexNames = indexes.map((i) => i.name);
+    expect(indexNames).toContain("idx_pe_file");
+    db.close();
+  });
+});
+
+describe("runDriftMigrations — v3 to v4 upgrade", () => {
+  test("migrates a v3 DB to v4: creates file_violation_history table", () => {
+    const db = createV3Db();
+    runDriftMigrations(db);
+
+    const tables = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
+      .all() as Array<{ name: string }>;
+    expect(tables.map((t) => t.name)).toContain("file_violation_history");
+    db.close();
+  });
+
+  test("migrates a v3 DB to v4: creates path_effects table", () => {
+    const db = createV3Db();
+    runDriftMigrations(db);
+
+    const tables = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
+      .all() as Array<{ name: string }>;
+    expect(tables.map((t) => t.name)).toContain("path_effects");
+    db.close();
+  });
+
+  test("migrates a v3 DB to v4: updates schema_version to '4'", () => {
+    const db = createV3Db();
+    runDriftMigrations(db);
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+      value: string;
+    };
+    expect(row.value).toBe("4");
+    db.close();
+  });
+});
+
+describe("runDriftMigrations — v4 idempotency", () => {
+  test("calling runDriftMigrations twice on a v4 DB does not error", () => {
+    const db = initDriftDb(":memory:");
+    expect(() => runDriftMigrations(db)).not.toThrow();
+    db.close();
+  });
+
+  test("calling v4 migration twice from a v3 DB does not error", () => {
+    const db = createV3Db();
+    runDriftMigrations(db);
+    expect(() => runDriftMigrations(db)).not.toThrow();
+    db.close();
+  });
+});
+
+describe("v4 schema — UNIQUE constraints", () => {
+  test("file_violation_history UNIQUE(file_path, principle_id) rejects duplicate", () => {
+    const db = initDriftDb(":memory:");
+    db.exec(`INSERT INTO file_violation_history (file_path, principle_id, violation_count, last_seen, first_seen)
+      VALUES ('src/foo.ts', 'simplicity-first', 1, '2026-01-01', '2026-01-01')`);
+    expect(() =>
+      db.exec(`INSERT INTO file_violation_history (file_path, principle_id, violation_count, last_seen, first_seen)
+        VALUES ('src/foo.ts', 'simplicity-first', 2, '2026-01-02', '2026-01-01')`),
+    ).toThrow(/UNIQUE constraint failed/);
+    db.close();
+  });
+
+  test("file_violation_history allows same file_path with different principle_id", () => {
+    const db = initDriftDb(":memory:");
+    db.exec(`INSERT INTO file_violation_history (file_path, principle_id, violation_count, last_seen, first_seen)
+      VALUES ('src/foo.ts', 'simplicity-first', 1, '2026-01-01', '2026-01-01')`);
+    expect(() =>
+      db.exec(`INSERT INTO file_violation_history (file_path, principle_id, violation_count, last_seen, first_seen)
+        VALUES ('src/foo.ts', 'errors-are-values', 1, '2026-01-01', '2026-01-01')`),
+    ).not.toThrow();
+    db.close();
+  });
+
+  test("path_effects UNIQUE(file_path) rejects duplicate", () => {
+    const db = initDriftDb(":memory:");
+    db.exec(`INSERT INTO path_effects (file_path, total_violations, total_reviews, clean_streak, violation_streak)
+      VALUES ('src/foo.ts', 0, 1, 0, 0)`);
+    expect(() =>
+      db.exec(`INSERT INTO path_effects (file_path, total_violations, total_reviews, clean_streak, violation_streak)
+        VALUES ('src/foo.ts', 1, 2, 0, 0)`),
+    ).toThrow(/UNIQUE constraint failed/);
+    db.close();
+  });
+
+  test("path_effects INSERT OR REPLACE enables upsert pattern", () => {
+    const db = initDriftDb(":memory:");
+    db.exec(`INSERT INTO path_effects (file_path, total_violations, total_reviews, clean_streak, violation_streak)
+      VALUES ('src/foo.ts', 0, 1, 0, 0)`);
+    // INSERT OR REPLACE should succeed where plain INSERT would fail
+    expect(() =>
+      db.exec(`INSERT OR REPLACE INTO path_effects (file_path, total_violations, total_reviews, clean_streak, violation_streak)
+        VALUES ('src/foo.ts', 1, 2, 1, 0)`),
+    ).not.toThrow();
+    const row = db
+      .prepare(`SELECT total_violations FROM path_effects WHERE file_path = 'src/foo.ts'`)
+      .get() as { total_violations: number };
+    expect(row.total_violations).toBe(1);
     db.close();
   });
 });
