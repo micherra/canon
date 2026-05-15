@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 /**
