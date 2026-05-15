@@ -1,23 +1,24 @@
 /**
  * write-review-path-effects.test.ts
  *
- * Tests for updateFileViolationHistory helper and the optional projectDir
+ * Tests for updateFileViolationHistory helper and the optional signals
  * parameter on writeReview.
  *
- * Signal persistence tests use real temp directories with actual drift.db.
- * The non-blocking error test uses vi.spyOn to simulate getDriftDb failure.
+ * Signal persistence tests use real temp directories with actual drift.db
+ * via DriftDbSignals obtained from DriftDb.getSignals().
+ * The non-blocking error test passes a mock SignalWriter that throws.
  */
 
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as driftDbModule from "@platform/storage/drift/drift-db.ts";
 import { DriftDb } from "@platform/storage/drift/drift-db.ts";
 import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  type SignalWriter,
   updateFileViolationHistory,
   type WriteReviewInput,
   writeReview,
@@ -32,22 +33,22 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   await rm(tmpDir, { force: true, recursive: true });
 });
 
 /**
- * Open a DriftDb from a real temp directory.
+ * Open a DriftDb from a real temp directory and return its SignalWriter.
  * Ensures the .canon directory exists before opening the DB.
  * Note: getDriftDb caches by resolved path; we bypass the cache here
  * to read state written by updateFileViolationHistory.
  */
-async function openDriftDbFromDir(dir: string): Promise<DriftDb> {
+async function openSignalsFromDir(dir: string): Promise<{ signals: SignalWriter; db: DriftDb }> {
   const canonDir = join(dir, ".canon");
   await mkdir(canonDir, { recursive: true });
   const dbPath = join(canonDir, "drift.db");
-  const db = initDriftDb(dbPath);
-  return new DriftDb(db);
+  const rawDb = initDriftDb(dbPath);
+  const db = new DriftDb(rawDb);
+  return { db, signals: db.getSignals() };
 }
 
 function makeReviewInput(overrides: Partial<WriteReviewInput> = {}): WriteReviewInput {
@@ -71,50 +72,54 @@ function makeReviewInput(overrides: Partial<WriteReviewInput> = {}): WriteReview
 
 describe("updateFileViolationHistory — file_violation_history", () => {
   it("creates file_violation_history rows for violations with file_path", async () => {
+    const { signals, db } = await openSignalsFromDir(tmpDir);
+
     updateFileViolationHistory(
-      tmpDir,
+      signals,
       ["src/foo.ts"],
       [{ file_path: "src/foo.ts", principle_id: "simplicity-first", severity: "strong-opinion" }],
       "WARNING",
     );
 
-    const driftDb = await openDriftDbFromDir(tmpDir);
-    const rows = driftDb.getSignals().getFileViolationHistory(["src/foo.ts"]);
+    // Re-read signals from the same db instance (same underlying connection)
+    const rows = db.getSignals().getFileViolationHistory(["src/foo.ts"]);
     expect(rows).toHaveLength(1);
     expect(rows[0].principle_id).toBe("simplicity-first");
     expect(rows[0].violation_count).toBe(1);
-    driftDb.close();
+    db.close();
   });
 
   it("skips violations without file_path — no rows written", async () => {
+    const { signals, db } = await openSignalsFromDir(tmpDir);
+
     updateFileViolationHistory(
-      tmpDir,
+      signals,
       ["src/foo.ts"],
       [{ principle_id: "simplicity-first", severity: "strong-opinion" }], // no file_path
       "WARNING",
     );
 
-    const driftDb = await openDriftDbFromDir(tmpDir);
-    const rows = driftDb.getSignals().getFileViolationHistory(["src/foo.ts"]);
+    const rows = db.getSignals().getFileViolationHistory(["src/foo.ts"]);
     expect(rows).toHaveLength(0);
-    driftDb.close();
+    db.close();
   });
 
   it("increments violation_count on repeated calls for same (file, principle)", async () => {
+    const { signals, db } = await openSignalsFromDir(tmpDir);
+
     const violation = {
       file_path: "src/foo.ts",
       principle_id: "errors-are-values",
       severity: "rule",
     };
 
-    updateFileViolationHistory(tmpDir, ["src/foo.ts"], [violation], "BLOCKING");
-    updateFileViolationHistory(tmpDir, ["src/foo.ts"], [violation], "BLOCKING");
+    updateFileViolationHistory(signals, ["src/foo.ts"], [violation], "BLOCKING");
+    updateFileViolationHistory(signals, ["src/foo.ts"], [violation], "BLOCKING");
 
-    const driftDb = await openDriftDbFromDir(tmpDir);
-    const rows = driftDb.getSignals().getFileViolationHistory(["src/foo.ts"]);
+    const rows = db.getSignals().getFileViolationHistory(["src/foo.ts"]);
     expect(rows).toHaveLength(1);
     expect(rows[0].violation_count).toBe(2);
-    driftDb.close();
+    db.close();
   });
 });
 
@@ -122,73 +127,88 @@ describe("updateFileViolationHistory — file_violation_history", () => {
 
 describe("updateFileViolationHistory — path_effects", () => {
   it("creates path_effects rows for all reviewed files", async () => {
-    updateFileViolationHistory(tmpDir, ["src/foo.ts", "src/bar.ts"], [], "CLEAN");
+    const { signals, db } = await openSignalsFromDir(tmpDir);
 
-    const driftDb = await openDriftDbFromDir(tmpDir);
-    const rows = driftDb.getSignals().getPathEffects(["src/foo.ts", "src/bar.ts"]);
+    updateFileViolationHistory(signals, ["src/foo.ts", "src/bar.ts"], [], "CLEAN");
+
+    const rows = db.getSignals().getPathEffects(["src/foo.ts", "src/bar.ts"]);
     expect(rows).toHaveLength(2);
     const paths = rows.map((r) => r.file_path);
     expect(paths).toContain("src/foo.ts");
     expect(paths).toContain("src/bar.ts");
-    driftDb.close();
+    db.close();
   });
 
   it("increments total_reviews on each call", async () => {
-    updateFileViolationHistory(tmpDir, ["src/foo.ts"], [], "CLEAN");
-    updateFileViolationHistory(tmpDir, ["src/foo.ts"], [], "CLEAN");
+    const { signals, db } = await openSignalsFromDir(tmpDir);
 
-    const driftDb = await openDriftDbFromDir(tmpDir);
-    const rows = driftDb.getSignals().getPathEffects(["src/foo.ts"]);
+    updateFileViolationHistory(signals, ["src/foo.ts"], [], "CLEAN");
+    updateFileViolationHistory(signals, ["src/foo.ts"], [], "CLEAN");
+
+    const rows = db.getSignals().getPathEffects(["src/foo.ts"]);
     expect(rows[0].total_reviews).toBe(2);
-    driftDb.close();
+    db.close();
   });
 
   it("sets clean_streak to 0 when file has violations", async () => {
+    const { signals, db } = await openSignalsFromDir(tmpDir);
+
     // Establish a clean streak first
-    updateFileViolationHistory(tmpDir, ["src/foo.ts"], [], "CLEAN");
-    updateFileViolationHistory(tmpDir, ["src/foo.ts"], [], "CLEAN");
+    updateFileViolationHistory(signals, ["src/foo.ts"], [], "CLEAN");
+    updateFileViolationHistory(signals, ["src/foo.ts"], [], "CLEAN");
 
     // Then review with a violation
     updateFileViolationHistory(
-      tmpDir,
+      signals,
       ["src/foo.ts"],
       [{ file_path: "src/foo.ts", principle_id: "p1", severity: "rule" }],
       "BLOCKING",
     );
 
-    const driftDb = await openDriftDbFromDir(tmpDir);
-    const rows = driftDb.getSignals().getPathEffects(["src/foo.ts"]);
+    const rows = db.getSignals().getPathEffects(["src/foo.ts"]);
     expect(rows[0].clean_streak).toBe(0);
     expect(rows[0].violation_streak).toBe(1);
-    driftDb.close();
+    db.close();
   });
 
   it("increments clean_streak when file has no violations", async () => {
-    updateFileViolationHistory(tmpDir, ["src/foo.ts"], [], "CLEAN");
-    updateFileViolationHistory(tmpDir, ["src/foo.ts"], [], "CLEAN");
-    updateFileViolationHistory(tmpDir, ["src/foo.ts"], [], "CLEAN");
+    const { signals, db } = await openSignalsFromDir(tmpDir);
 
-    const driftDb = await openDriftDbFromDir(tmpDir);
-    const rows = driftDb.getSignals().getPathEffects(["src/foo.ts"]);
+    updateFileViolationHistory(signals, ["src/foo.ts"], [], "CLEAN");
+    updateFileViolationHistory(signals, ["src/foo.ts"], [], "CLEAN");
+    updateFileViolationHistory(signals, ["src/foo.ts"], [], "CLEAN");
+
+    const rows = db.getSignals().getPathEffects(["src/foo.ts"]);
     expect(rows[0].clean_streak).toBe(3);
     expect(rows[0].violation_streak).toBe(0);
-    driftDb.close();
+    db.close();
   });
 });
 
 // ---- updateFileViolationHistory — non-blocking guarantee ----
 
 describe("updateFileViolationHistory — non-blocking error guarantee", () => {
-  it("does not throw when getDriftDb throws internally", () => {
-    // Spy on getDriftDb and make it throw
-    vi.spyOn(driftDbModule, "getDriftDb").mockImplementation(() => {
-      throw new Error("Simulated DB failure");
-    });
+  it("does not throw when the signals instance throws internally", () => {
+    // Pass a mock SignalWriter that always throws
+    const throwingSignals: SignalWriter = {
+      getFileViolationHistory: () => {
+        throw new Error("Simulated DB failure");
+      },
+      getPathEffects: () => {
+        throw new Error("Simulated DB failure");
+      },
+      upsertFileViolation: () => {
+        throw new Error("Simulated DB failure");
+      },
+      upsertPathEffect: () => {
+        throw new Error("Simulated DB failure");
+      },
+    };
 
     // updateFileViolationHistory must swallow the error — must not throw
     expect(() => {
       updateFileViolationHistory(
-        tmpDir,
+        throwingSignals,
         ["src/foo.ts"],
         [{ file_path: "src/foo.ts", principle_id: "p1", severity: "rule" }],
         "BLOCKING",
@@ -199,27 +219,29 @@ describe("updateFileViolationHistory — non-blocking error guarantee", () => {
 
 // ---- writeReview — backward compatibility ----
 
-describe("writeReview — backward compatibility (no projectDir)", () => {
-  it("writeReview without projectDir succeeds and does not create drift.db", async () => {
+describe("writeReview — backward compatibility (no signals)", () => {
+  it("writeReview without signals succeeds and does not create drift.db", async () => {
     const result = await writeReview(makeReviewInput());
     assertOk(result);
     expect(result.verdict).toBe("CLEAN");
     expect(result.violation_count).toBe(0);
 
-    // .canon/drift.db must NOT have been created (no getDriftDb call without projectDir)
+    // .canon/drift.db must NOT have been created (no signals → no DB call)
     const dbPath = join(tmpDir, ".canon", "drift.db");
     expect(existsSync(dbPath)).toBe(false);
   });
 });
 
-// ---- writeReview — with projectDir calls updateFileViolationHistory ----
+// ---- writeReview — with signals calls updateFileViolationHistory ----
 
-describe("writeReview — with projectDir", () => {
-  it("writeReview with projectDir creates drift.db with signal data", async () => {
+describe("writeReview — with signals", () => {
+  it("writeReview with signals creates signal data in drift.db", async () => {
     // Use a separate projectDir to avoid collision with the workspace tmpDir
     const projectTmpDir = await mkdtemp(join(tmpdir(), "write-review-project-"));
 
     try {
+      const { signals, db } = await openSignalsFromDir(projectTmpDir);
+
       const result = await writeReview(
         makeReviewInput({
           files: ["src/foo.ts"],
@@ -232,23 +254,18 @@ describe("writeReview — with projectDir", () => {
             },
           ],
         }),
-        projectTmpDir,
+        signals,
       );
 
       assertOk(result);
       expect(result.verdict).toBe("WARNING");
 
-      // getDriftDb creates .canon/drift.db in the projectDir
-      const dbPath = join(projectTmpDir, ".canon", "drift.db");
-      expect(existsSync(dbPath)).toBe(true);
-
-      // Open a second connection to verify signal data was persisted
-      const driftDb = await openDriftDbFromDir(projectTmpDir);
-      const pathEffects = driftDb.getSignals().getPathEffects(["src/foo.ts"]);
+      // Verify signal data was persisted
+      const pathEffects = db.getSignals().getPathEffects(["src/foo.ts"]);
       expect(pathEffects).toHaveLength(1);
       expect(pathEffects[0].total_reviews).toBe(1);
       expect(pathEffects[0].total_violations).toBe(1);
-      driftDb.close();
+      db.close();
     } finally {
       await rm(projectTmpDir, { force: true, recursive: true });
     }

@@ -1,7 +1,46 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+
+/**
+ * Structural interface for signal persistence — describes only the 4 methods
+ * that updateFileViolationHistory needs. Callers (app layer) provide a
+ * DriftDbSignals instance; write-review never imports from platform/storage/drift.
+ */
+export type SignalWriter = {
+  getFileViolationHistory(filePaths: string[]): Array<{
+    file_path: string;
+    principle_id: string;
+    violation_count: number;
+    first_seen: string;
+    last_seen: string;
+  }>;
+  upsertFileViolation(input: {
+    file_path: string;
+    principle_id: string;
+    violation_count: number;
+    first_seen: string;
+    last_seen: string;
+  }): void;
+  getPathEffects(filePaths: string[]): Array<{
+    file_path: string;
+    total_violations: number;
+    total_reviews: number;
+    last_violation_at: string | null;
+    last_clean_at: string | null;
+    clean_streak: number;
+    violation_streak: number;
+  }>;
+  upsertPathEffect(input: {
+    file_path: string;
+    total_violations: number;
+    total_reviews: number;
+    last_violation_at: string | null;
+    last_clean_at: string | null;
+    clean_streak: number;
+    violation_streak: number;
+  }): void;
+};
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
@@ -130,7 +169,7 @@ function groupViolations(
 
 /** Persist accumulated violation counts to file_violation_history. */
 function persistViolationHistory(
-  signals: import("@platform/storage/drift/drift-db-signals.ts").DriftDbSignals,
+  signals: SignalWriter,
   violationMap: Map<string, { count: number; principle_id: string }>,
   now: string,
 ): void {
@@ -150,7 +189,26 @@ function persistViolationHistory(
   }
 }
 
-import type { PathEffectRow } from "@platform/storage/drift/drift-db-signals.ts";
+/** Payload shape for a path_effects upsert (mirrors UpsertPathEffectInput). */
+type PathEffectPayload = {
+  file_path: string;
+  total_violations: number;
+  total_reviews: number;
+  last_violation_at: string | null;
+  last_clean_at: string | null;
+  clean_streak: number;
+  violation_streak: number;
+};
+
+/** Existing path-effect row shape (subset of PathEffectRow fields we read). */
+type ExistingPathEffect = {
+  clean_streak: number;
+  last_clean_at: string | null;
+  last_violation_at: string | null;
+  total_reviews: number;
+  total_violations: number;
+  violation_streak: number;
+};
 
 /**
  * Build the upsert payload for a single file's path effect.
@@ -159,9 +217,9 @@ import type { PathEffectRow } from "@platform/storage/drift/drift-db-signals.ts"
 function buildPathEffectPayload(
   filePath: string,
   hadViolation: boolean,
-  existing: PathEffectRow | undefined,
+  existing: ExistingPathEffect | undefined,
   now: string,
-): import("@platform/storage/drift/drift-db-signals.ts").UpsertPathEffectInput {
+): PathEffectPayload {
   return {
     clean_streak: hadViolation ? 0 : (existing?.clean_streak ?? 0) + 1,
     file_path: filePath,
@@ -175,7 +233,7 @@ function buildPathEffectPayload(
 
 /** Persist per-file review metadata to path_effects. */
 function persistPathEffects(
-  signals: import("@platform/storage/drift/drift-db-signals.ts").DriftDbSignals,
+  signals: SignalWriter,
   files: string[],
   violatedFiles: Set<string | undefined>,
   now: string,
@@ -193,20 +251,18 @@ function persistPathEffects(
  * Non-blocking: catches all errors internally. Signal persistence
  * failures must never prevent a review from being written.
  *
- * @param projectDir - project root for drift.db lookup
+ * @param signals - SignalWriter instance provided by the caller (app layer)
  * @param files - files that were reviewed
  * @param violations - violations found in the review
  * @param _verdict - review verdict (reserved for future use)
  */
 export function updateFileViolationHistory(
-  projectDir: string,
+  signals: SignalWriter,
   files: string[],
   violations: ViolationEntry[],
   _verdict: "BLOCKING" | "WARNING" | "CLEAN",
 ): void {
   try {
-    const driftDb = getDriftDb(projectDir);
-    const signals = driftDb.getSignals();
     const now = new Date().toISOString();
 
     const violationMap = groupViolations(violations);
@@ -222,7 +278,7 @@ export function updateFileViolationHistory(
 
 export async function writeReview(
   input: WriteReviewInput,
-  projectDir?: string,
+  signals?: SignalWriter,
 ): Promise<ToolResult<WriteReviewResult>> {
   // Validate slug
   if (!SLUG_PATTERN.test(input.slug)) {
@@ -278,8 +334,8 @@ export async function writeReview(
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
 
   // Persist path effects to signal tables (non-blocking)
-  if (projectDir) {
-    updateFileViolationHistory(projectDir, input.files, input.violations, mappedVerdict);
+  if (signals) {
+    updateFileViolationHistory(signals, input.files, input.violations, mappedVerdict);
   }
 
   return toolOk({
