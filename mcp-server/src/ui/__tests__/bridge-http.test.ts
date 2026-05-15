@@ -78,16 +78,11 @@ describe("createHttpBridge()", () => {
     });
 
     it("returns falsy values (null, 0, false) if explicitly set", async () => {
-      // null is a valid data value — only undefined triggers the error
       (globalThis as Record<string, unknown>).__CANON_DATA__ = null;
 
       const bridge = createHttpBridge();
-
-      // null is not undefined, so it should throw since !null is true
-      // Per plan: "if (!data)" check — null would also trigger this
-      await expect(bridge.loadData()).rejects.toThrow(
-        "No embedded data found (window.__CANON_DATA__ is undefined)",
-      );
+      const result = await bridge.loadData();
+      expect(result).toBeNull();
     });
   });
 

@@ -53,6 +53,15 @@ export function getHttpPort(): number {
 }
 
 /**
+ * Returns true when the HTTP server has successfully bound and is currently
+ * listening. Returns false when the server never started (e.g., EADDRINUSE)
+ * or has been stopped.
+ */
+export function isHttpServerRunning(): boolean {
+  return httpServer !== null;
+}
+
+/**
  * Starts the Canon HTTP server and binds it to 127.0.0.1.
  *
  * Port resolution order:
@@ -226,17 +235,24 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
 }
 
 function serveArtifactHtml(res: ServerResponse, key: string, html: string, data: unknown): void {
-  // Inject window globals before </head> (or </body> as fallback)
+  // Escape JSON for safe embedding in a <script> tag.
+  // Replace all '<' with '<' so '</script>' in data cannot break out of the script context.
+  const safeJson = JSON.stringify(data).replace(/</g, "\\u003c");
+
+  // Inject window globals before </head> (or </body> as fallback, or appended at end)
   const dataScript = `<script>
-    window.__CANON_DATA__ = ${JSON.stringify(data)};
+    window.__CANON_DATA__ = ${safeJson};
     window.__CANON_ARTIFACT_URL__ = "http://127.0.0.1:${serverPort}/artifact/${key}";
   </script>`;
 
   let injectedHtml: string;
-  if (html.includes("</head>")) {
-    injectedHtml = html.replace("</head>", `${dataScript}\n</head>`);
+  if (/<\/head>/i.test(html)) {
+    injectedHtml = html.replace(/<\/head>/i, `${dataScript}\n</head>`);
+  } else if (/<\/body>/i.test(html)) {
+    injectedHtml = html.replace(/<\/body>/i, `${dataScript}\n</body>`);
   } else {
-    injectedHtml = html.replace("</body>", `${dataScript}\n</body>`);
+    // Neither </head> nor </body> found — append at end of HTML
+    injectedHtml = html + dataScript;
   }
 
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
