@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-05-05 (unified graph intelligence: kg-community.ts + kg-tags.ts added; register-composite.ts, get-file-context-batch.ts, workspace-structure.ts, runbook-tail-validator.ts, principle-reranker.ts removed; get_context relocated to register-knowledge.ts; computed_tags + min_confidence added to graph_query) -->
+<!-- last-updated: 2026-05-14 (html-poc: ui/snippets/ directory added with 5 HTML component recipes) -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -34,6 +34,7 @@ src/
 ├── shared/               # Shared kernel: constants, parser, matcher, schema, lib/ utilities
 ├── tests/                # Cross-cutting test helpers
 └── ui/                   # Svelte frontend — MCP App (Sigma.js graph, PR review UI)
+    └── snippets/         # HTML/CSS component recipes for agent-composed artifacts (5 files: verdict-banner, stats-card, bar-chart-row, severity-badge, compliance-bars)
 ```
 
 **Key subsystems:**
@@ -52,7 +53,16 @@ src/
 - ~~`principle-reranker.ts`~~ — LLM-based reranker removed 2026-05-02; replaced by structural tag matching via `matchesScopeTags`
 
 ## Contracts
-<!-- last-updated: 2026-05-02 (unified graph intelligence: community detection, tag propagation, semantic principle matching, scope.tags OR semantics) -->
+<!-- last-updated: 2026-05-14 (html-poc: generateReviewHtml added; PresentArtifactInput extended with html?; ui/snippets/ directory added) -->
+
+**`generateReviewHtml` function** (`src/features/pr-review/tools/generate-review-html.ts`) — added 2026-05-14:
+- `generateReviewHtml(data: UnifiedPrOutput): string` — pure function; converts a `UnifiedPrOutput` value to a self-contained HTML snapshot string; no I/O; all user-provided data passes through `escapeHtml` before embedding
+
+**`PresentArtifactInput` type** (`src/features/orchestration/tools/present-artifact.ts`) — extended 2026-05-14:
+- `html?: string` — optional field; when provided, bypasses VIEW_MAP lookup and serves this HTML directly; `type` field is still used as the artifact key prefix (`${type}/${slug}`) in both paths; absent → existing compiled-HTML path (VIEW_MAP lookup) unchanged
+
+**`present_artifact` MCP tool** (`src/app/register-present-artifact.ts`) — extended 2026-05-14:
+- `html` optional input field — `z.string().optional()`; when provided, bypasses VIEW_MAP; `type` description updated to cover both compiled-view and dynamic-HTML cases
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
