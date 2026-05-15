@@ -78,8 +78,22 @@ fi
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 SAFE_TIMESTAMP=$(echo "$TIMESTAMP" | tr ':' '-')
 
+# Escape a string for safe embedding in a JSON value (double-quoted context).
+# Escapes backslashes, double quotes, tabs, and newlines.
+escape_json() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ' | sed 's/ $//'
+}
+
+# Pre-escape variables that may contain special characters.
+SAFE_MSG=$(escape_json "$LAST_MSG")
+SAFE_CMD=$(escape_json "$COMMAND")
+SAFE_AT=$(escape_json "$AGENT_TYPE")
+
 while IFS= read -r FILE_PATH; do
   [[ -z "$FILE_PATH" ]] && continue
+
+  # Escape file path for JSON embedding.
+  SAFE_FP=$(escape_json "$FILE_PATH")
 
   # Sanitize the file path for use in the filename
   SAFE_PATH=$(echo "$FILE_PATH" | tr '/' '_' | tr '.' '_')
@@ -88,11 +102,11 @@ while IFS= read -r FILE_PATH; do
   # Write JSON correction record — best-effort, errors are silently swallowed
   cat > "$CORRECTION_FILE" 2>/dev/null <<ENDJSON || true
 {
-  "file_path": "${FILE_PATH}",
+  "file_path": "${SAFE_FP}",
   "commit_sha": "${LAST_SHA}",
-  "commit_subject": "${LAST_MSG}",
-  "agent_type": "${AGENT_TYPE}",
-  "correction_command": "${COMMAND}",
+  "commit_subject": "${SAFE_MSG}",
+  "agent_type": "${SAFE_AT}",
+  "correction_command": "${SAFE_CMD}",
   "timestamp": "${TIMESTAMP}"
 }
 ENDJSON
