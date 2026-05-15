@@ -25,7 +25,7 @@ src/
 │   ├── file-context/     # get_file_context tool
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
 │   ├── orchestration/    # Flow engine, drive_flow, init_workspace, report_result, all orchestration tools
-│   ├── pr-review/        # show_pr_impact, review_code, store_pr_review
+│   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
 │   └── prompt-pipeline/  # Prompt assembly, context enrichment, consultation pipeline
 ├── graph/                # Legacy graph scanner — import/export parsing (being migrated to features/knowledge-graph)
@@ -53,7 +53,7 @@ src/
 - ~~`principle-reranker.ts`~~ — LLM-based reranker removed 2026-05-02; replaced by structural tag matching via `matchesScopeTags`
 
 ## Contracts
-<!-- last-updated: 2026-05-14 (html-poc: generateReviewHtml added; PresentArtifactInput extended with html?; ui/snippets/ directory added) -->
+<!-- last-updated: 2026-05-15 (present_review tool added) -->
 
 **`generateReviewHtml` function** (`src/features/pr-review/tools/generate-review-html.ts`) — added 2026-05-14:
 - `generateReviewHtml(data: UnifiedPrOutput): string` — pure function; converts a `UnifiedPrOutput` value to a self-contained HTML snapshot string; no I/O; all user-provided data passes through `escapeHtml` before embedding
@@ -63,6 +63,13 @@ src/
 
 **`present_artifact` MCP tool** (`src/app/register-present-artifact.ts`) — extended 2026-05-14:
 - `html` optional input field — `z.string().optional()`; when provided, bypasses VIEW_MAP; `type` description updated to cover both compiled-view and dynamic-HTML cases
+
+**`present_review` MCP tool** (`src/features/pr-review/tools/present-review.ts`) — added 2026-05-15:
+- Input: `{ workspace: string; slug: string; branch?: string; pr_number?: number }`
+- Output: `PresentReviewResult` (alias for `PresentArtifactResult`) — `{ decision: { action, annotations }, url }`
+- Thin composition: `showPrImpact` → `generateReviewHtml` → `presentArtifact`; requires a stored review in DriftStore (via `store_pr_review`) before calling
+- Returns `INVALID_INPUT` (recoverable: true) when `showPrImpact` returns `has_review === false`
+- Registered in `register-principles.ts` alongside other PR review tools; opens browser, blocks until user decision
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -283,6 +290,7 @@ src/
 | `show_pr_impact` | `ui://canon/pr-review` | PR Review — change analysis (always), blast radius, hotspots, violations, subgraph (when stored review exists) |
 | `codebase_graph` | `ui://canon/codebase-graph` | Interactive dependency graph with compliance overlay |
 | `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
+| `present_review` | `ui://canon/pr-review` | Render stored Canon review as interactive HTML dashboard; open in browser; block until user decision |
 
 **Composite context tool:**
 
