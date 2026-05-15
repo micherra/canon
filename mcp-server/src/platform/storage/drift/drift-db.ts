@@ -26,6 +26,7 @@ import {
   computeFlowAnalytics,
   rowToFlowRunEntry,
 } from "./drift-db-queries.ts";
+import { DriftDbSignals } from "./drift-db-signals.ts";
 import { initDriftDb } from "./drift-schema.ts";
 
 // Re-export WeeklyTrendPoint so callers can import from drift-db
@@ -213,6 +214,9 @@ export class DriftDb {
   private readonly stmtInsertArchive: Database.Statement;
   private readonly stmtGetArchiveById: Database.Statement;
   private readonly stmtCountArchives: Database.Statement;
+
+  // ---- Signal DAO (lazy) ----
+  private _signals: DriftDbSignals | null = null;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -673,6 +677,20 @@ export class DriftDb {
   countArchives(): number {
     const row = this.stmtCountArchives.get() as { count: number } | undefined;
     return row?.count ?? 0;
+  }
+
+  // Signals
+
+  /**
+   * Lazy accessor for signal-related DAO methods.
+   * The DriftDbSignals class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getSignals(): DriftDbSignals {
+    if (this._signals === null) {
+      this._signals = new DriftDbSignals(this.db);
+    }
+    return this._signals;
   }
 
   // Lifecycle
