@@ -17,13 +17,14 @@
  * All logging goes to process.stderr — process.stdout is the MCP stdio transport.
  */
 
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createDeferredDecision,
   getHttpPort,
+  isHttpServerRunning,
   registerArtifact,
   removeArtifact,
 } from "@app/http-server.ts";
@@ -64,24 +65,28 @@ export type PresentArtifactResult = {
 /** Resolve the dist/src/ui directory relative to this module's compiled location. */
 function resolveUiDistDir(): string {
   // When compiled: dist/src/features/orchestration/tools/present-artifact.js
-  // Walk up 4 levels → dist/, then join dist/src/ui
+  // Walk up 5 levels → dist/, then join dist/src/ui
   const thisFile = fileURLToPath(import.meta.url);
   const distDir = dirname(dirname(dirname(dirname(dirname(thisFile)))));
   return join(distDir, "src", "ui");
 }
 
-/** Fire-and-forget browser open — platform-aware. */
+/** Fire-and-forget browser open — platform-aware. Uses execFile with args array to prevent command injection. */
 function openBrowser(url: string): void {
-  let command: string;
+  let file: string;
+  let args: string[];
   if (process.platform === "darwin") {
-    command = `open "${url}"`;
+    file = "open";
+    args = [url];
   } else if (process.platform === "win32") {
-    command = `start "" "${url}"`;
+    file = "cmd";
+    args = ["/c", "start", "", url];
   } else {
-    command = `xdg-open "${url}"`;
+    file = "xdg-open";
+    args = [url];
   }
 
-  exec(command, (err) => {
+  execFile(file, args, (err) => {
     if (err) {
       process.stderr.write(`[present_artifact] browser open failed: ${err.message}\n`);
     }
@@ -92,26 +97,33 @@ function openBrowser(url: string): void {
 // Tool handler
 // ---------------------------------------------------------------------------
 
-export async function presentArtifact(
-  input: PresentArtifactInput,
-): Promise<ToolResult<PresentArtifactResult>> {
-  const { type, slug, data } = input;
+/** Safe slug pattern: alphanumeric, dots, underscores, hyphens only. */
+const SLUG_PATTERN = /^[A-Za-z0-9._-]+$/;
 
-  // 1. Validate artifact type
-  const htmlFileName = VIEW_MAP[type];
-  if (!htmlFileName) {
-    const knownTypes = Object.keys(VIEW_MAP).join(", ");
+type ResolvedArtifact = { html: string; key: string; url: string };
+
+/** Validate input and resolve the artifact HTML. Returns an error result or the resolved artifact. */
+async function resolveArtifact(input: PresentArtifactInput): Promise<ToolResult<ResolvedArtifact>> {
+  const { type, slug } = input;
+
+  if (!SLUG_PATTERN.test(slug)) {
     return toolError(
       "INVALID_INPUT",
-      `Unknown artifact type "${type}". Known types: ${knownTypes}`,
+      `Invalid slug "${slug}". Slug must match ^[A-Za-z0-9._-]+$ (no slashes, spaces, or special characters).`,
       false,
     );
   }
 
-  // 2. Read compiled HTML
-  const uiDistDir = resolveUiDistDir();
-  const htmlPath = resolve(uiDistDir, htmlFileName);
+  const htmlFileName = VIEW_MAP[type];
+  if (!htmlFileName) {
+    return toolError(
+      "INVALID_INPUT",
+      `Unknown artifact type "${type}". Known types: ${Object.keys(VIEW_MAP).join(", ")}`,
+      false,
+    );
+  }
 
+  const htmlPath = resolve(resolveUiDistDir(), htmlFileName);
   let html: string;
   try {
     html = await readFile(htmlPath, "utf-8");
@@ -123,21 +135,33 @@ export async function presentArtifact(
     );
   }
 
-  // 3. Register artifact and create deferred decision
-  const key = `${type}/${slug}`;
-  const port = getHttpPort();
-  const url = `http://127.0.0.1:${port}/artifact/${key}`;
+  if (!isHttpServerRunning()) {
+    return toolError(
+      "UNEXPECTED",
+      "Canon HTTP server is not running. The server may have failed to start (e.g., port already in use). Restart the MCP server to resolve.",
+      true,
+    );
+  }
 
-  registerArtifact(key, html, data);
+  const key = `${type}/${slug}`;
+  const url = `http://127.0.0.1:${getHttpPort()}/artifact/${key}`;
+  return toolOk({ html, key, url });
+}
+
+export async function presentArtifact(
+  input: PresentArtifactInput,
+): Promise<ToolResult<PresentArtifactResult>> {
+  const resolved = await resolveArtifact(input);
+  if (!resolved.ok) return resolved;
+
+  const { html, key, url } = resolved;
+  registerArtifact(key, html, input.data);
   const decisionPromise = createDeferredDecision(key);
 
   process.stderr.write(`[present_artifact] serving artifact at ${url}\n`);
 
   try {
-    // 4. Open browser — fire-and-forget
     openBrowser(url);
-
-    // 5. Block until user submits decision
     const decision = await decisionPromise;
 
     process.stderr.write(
@@ -146,7 +170,6 @@ export async function presentArtifact(
 
     return toolOk({ decision, url });
   } finally {
-    // 6. Clean up artifact regardless of outcome
     removeArtifact(key);
   }
 }
