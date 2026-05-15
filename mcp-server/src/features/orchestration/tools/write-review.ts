@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
@@ -103,7 +104,126 @@ function generateMarkdown(
   return lines.join("\n");
 }
 
-export async function writeReview(input: WriteReviewInput): Promise<ToolResult<WriteReviewResult>> {
+// Internal violation type used by signal persistence helpers
+type ViolationEntry = { principle_id: string; severity: string; file_path?: string };
+
+/**
+ * Group violations by (file_path::principle_id) key, accumulating counts.
+ * Violations without file_path are skipped (validate-at-trust-boundaries).
+ */
+function groupViolations(
+  violations: ViolationEntry[],
+): Map<string, { count: number; principle_id: string }> {
+  const violationMap = new Map<string, { count: number; principle_id: string }>();
+  for (const v of violations) {
+    if (!v.file_path) continue;
+    const key = `${v.file_path}::${v.principle_id}`;
+    const existing = violationMap.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      violationMap.set(key, { count: 1, principle_id: v.principle_id });
+    }
+  }
+  return violationMap;
+}
+
+/** Persist accumulated violation counts to file_violation_history. */
+function persistViolationHistory(
+  signals: import("@platform/storage/drift/drift-db-signals.ts").DriftDbSignals,
+  violationMap: Map<string, { count: number; principle_id: string }>,
+  now: string,
+): void {
+  for (const [key, data] of violationMap) {
+    const filePath = key.split("::")[0];
+    const existing = signals
+      .getFileViolationHistory([filePath])
+      .find((r) => r.principle_id === data.principle_id);
+
+    signals.upsertFileViolation({
+      file_path: filePath,
+      first_seen: existing?.first_seen ?? now,
+      last_seen: now,
+      principle_id: data.principle_id,
+      violation_count: (existing?.violation_count ?? 0) + data.count,
+    });
+  }
+}
+
+import type { PathEffectRow } from "@platform/storage/drift/drift-db-signals.ts";
+
+/**
+ * Build the upsert payload for a single file's path effect.
+ * Encapsulates the streak and timestamp logic for readability.
+ */
+function buildPathEffectPayload(
+  filePath: string,
+  hadViolation: boolean,
+  existing: PathEffectRow | undefined,
+  now: string,
+): import("@platform/storage/drift/drift-db-signals.ts").UpsertPathEffectInput {
+  return {
+    clean_streak: hadViolation ? 0 : (existing?.clean_streak ?? 0) + 1,
+    file_path: filePath,
+    last_clean_at: hadViolation ? (existing?.last_clean_at ?? null) : now,
+    last_violation_at: hadViolation ? now : (existing?.last_violation_at ?? null),
+    total_reviews: (existing?.total_reviews ?? 0) + 1,
+    total_violations: (existing?.total_violations ?? 0) + (hadViolation ? 1 : 0),
+    violation_streak: hadViolation ? (existing?.violation_streak ?? 0) + 1 : 0,
+  };
+}
+
+/** Persist per-file review metadata to path_effects. */
+function persistPathEffects(
+  signals: import("@platform/storage/drift/drift-db-signals.ts").DriftDbSignals,
+  files: string[],
+  violatedFiles: Set<string | undefined>,
+  now: string,
+): void {
+  for (const filePath of files) {
+    const existing = signals.getPathEffects([filePath])[0];
+    const hadViolation = violatedFiles.has(filePath);
+    signals.upsertPathEffect(buildPathEffectPayload(filePath, hadViolation, existing, now));
+  }
+}
+
+/**
+ * Update file_violation_history and path_effects tables after a review.
+ *
+ * Non-blocking: catches all errors internally. Signal persistence
+ * failures must never prevent a review from being written.
+ *
+ * @param projectDir - project root for drift.db lookup
+ * @param files - files that were reviewed
+ * @param violations - violations found in the review
+ * @param _verdict - review verdict (reserved for future use)
+ */
+export function updateFileViolationHistory(
+  projectDir: string,
+  files: string[],
+  violations: ViolationEntry[],
+  _verdict: "BLOCKING" | "WARNING" | "CLEAN",
+): void {
+  try {
+    const driftDb = getDriftDb(projectDir);
+    const signals = driftDb.getSignals();
+    const now = new Date().toISOString();
+
+    const violationMap = groupViolations(violations);
+    persistViolationHistory(signals, violationMap, now);
+
+    const violatedFiles = new Set(violations.map((v) => v.file_path));
+    persistPathEffects(signals, files, violatedFiles, now);
+  } catch {
+    // Non-blocking: signal persistence failures are silently swallowed.
+    // The review itself was already written successfully.
+  }
+}
+
+export async function writeReview(
+  input: WriteReviewInput,
+  projectDir?: string,
+): Promise<ToolResult<WriteReviewResult>> {
   // Validate slug
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
@@ -156,6 +276,11 @@ export async function writeReview(input: WriteReviewInput): Promise<ToolResult<W
     violations: input.violations,
   };
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+
+  // Persist path effects to signal tables (non-blocking)
+  if (projectDir) {
+    updateFileViolationHistory(projectDir, input.files, input.violations, mappedVerdict);
+  }
 
   return toolOk({
     meta_path: metaPath,

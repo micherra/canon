@@ -4,7 +4,7 @@ import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.t
 import { writeReview } from "@features/orchestration/tools/write-review.ts";
 import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler, projectDir, server } from "./server-state.ts";
 
 function registerPlanTools(): void {
   server.registerTool(
@@ -90,7 +90,7 @@ function registerReviewArtifactTools(): void {
         workspace: z.string(),
       },
     },
-    gatedWrapHandler(async (input) => writeReview(input)),
+    gatedWrapHandler(async (input) => writeReview(input, projectDir)),
   );
 
   server.registerTool(
