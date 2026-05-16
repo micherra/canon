@@ -74,6 +74,8 @@ When the task plan or acceptance criteria include a user-observable outcome (HTT
 
 This smoke test is distinct from unit/integration tests that verify components in isolation. It answers: "If a user triggers this feature, does the observable thing actually happen?"
 
+**Exceptions**: Pure utility functions with no user-facing entry point, type-only exports, and internal refactors that do not change an observable contract boundary. If in doubt whether an AC is "user-observable," check: does a human trigger an action and see/receive a result? If no, this mandate does not apply.
+
 ## What You Test (and What You Don't)
 
 **Implementors already write:**

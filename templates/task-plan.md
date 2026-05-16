@@ -67,4 +67,4 @@ domains:
 - Include tests the implementor writes alongside the code
 - Have concrete verification steps
 - Be independently committable
-- **Integration task required for user-observable ACs**: When the feature has user-observable acceptance criteria (HTTP endpoint, browser response, CLI output, API response), the task DAG MUST include an explicit integration task that wires all component outputs together and verifies the observable behavior end-to-end. The integration task `depends_on` all component tasks it composes and its acceptance criteria verify the user-observable behavior directly — not just that the components exist.
+- **Integration task required for user-observable ACs**: When ACs include user-observable outcomes (HTTP endpoint, browser response, CLI output), the DAG MUST include an integration task that wires components together. It `depends_on` all component tasks and its ACs verify the observable behavior directly.
