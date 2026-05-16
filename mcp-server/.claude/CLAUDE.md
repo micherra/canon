@@ -53,10 +53,7 @@ src/
 - ~~`principle-reranker.ts`~~ — LLM-based reranker removed 2026-05-02; replaced by structural tag matching via `matchesScopeTags`
 
 ## Contracts
-<!-- last-updated: 2026-05-15 (present_review tool added) -->
-
-**`generateReviewHtml` function** (`src/features/pr-review/tools/generate-review-html.ts`) — added 2026-05-14:
-- `generateReviewHtml(data: UnifiedPrOutput): string` — pure function; converts a `UnifiedPrOutput` value to a self-contained HTML snapshot string; no I/O; all user-provided data passes through `escapeHtml` before embedding
+<!-- last-updated: 2026-05-16 (generateReviewHtml removed; present_review simplified to read agent HTML) -->
 
 **`PresentArtifactInput` type** (`src/features/orchestration/tools/present-artifact.ts`) — extended 2026-05-14:
 - `html?: string` — optional field; when provided, bypasses VIEW_MAP lookup and serves this HTML directly; `type` field is still used as the artifact key prefix (`${type}/${slug}`) in both paths; absent → existing compiled-HTML path (VIEW_MAP lookup) unchanged
@@ -64,11 +61,11 @@ src/
 **`present_artifact` MCP tool** (`src/app/register-present-artifact.ts`) — extended 2026-05-14:
 - `html` optional input field — `z.string().optional()`; when provided, bypasses VIEW_MAP; `type` description updated to cover both compiled-view and dynamic-HTML cases
 
-**`present_review` MCP tool** (`src/features/pr-review/tools/present-review.ts`) — added 2026-05-15:
+**`present_review` MCP tool** (`src/features/pr-review/tools/present-review.ts`) — updated 2026-05-16:
 - Input: `{ workspace: string; slug: string; branch?: string; pr_number?: number }`
 - Output: `PresentReviewResult` (alias for `PresentArtifactResult`) — `{ decision: { action, annotations }, url }`
-- Thin composition: `showPrImpact` → `generateReviewHtml` → `presentArtifact`; requires a stored review in DriftStore (via `store_pr_review`) before calling
-- Returns `INVALID_INPUT` (recoverable: true) when `showPrImpact` returns `has_review === false`
+- Reads agent-generated HTML from `${workspace}/artifacts/review.html`; calls `showPrImpact` for data enrichment; passes both to `presentArtifact`
+- Returns `INVALID_INPUT` (recoverable: true) when `review.html` does not exist
 - Registered in `register-principles.ts` alongside other PR review tools; opens browser, blocks until user decision
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):

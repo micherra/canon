@@ -1,27 +1,23 @@
 /**
  * present_review — MCP tool handler
  *
- * Composes three existing functions into an end-to-end flow:
- *   1. showPrImpact     — reads stored review from DriftStore, enriches with KG data
- *   2. generateReviewHtml — renders UnifiedPrOutput as a self-contained HTML string
+ * Reads agent-generated review HTML from disk and presents it in the browser:
+ *   1. Read ${workspace}/artifacts/review.html (written by the reviewer agent)
+ *   2. showPrImpact — reads stored review from DriftStore, enriches with KG data (window.__CANON_DATA__)
  *   3. presentArtifact  — serves HTML via HTTP server, opens browser, blocks until decision
  *
- * The review must already be stored in DriftStore (via store_pr_review) before calling
- * this tool. showPrImpact reads from DriftStore to get review-enriched data.
- *
  * Canon principles:
- *   - functions-do-one-thing: thin composition layer — no HTML logic, no data transformation
- *   - deep-modules: four-param interface hiding multi-step data assembly
- *   - no-hidden-side-effects: opens a browser and blocks — documented in tool description
- *   - validate-at-trust-boundaries: validates input params; composed functions handle internals
- *   - consistent-abstraction-levels: three calls at the same level — no low-level details
+ *   - functions-do-one-thing: reads agent HTML and presents it — no HTML generation
+ *   - validate-at-trust-boundaries: validates inputs and checks review.html exists before reading
+ *   - simplicity-first: 936-line server-side HTML generator replaced by a file read
  */
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { PresentArtifactResult } from "@features/orchestration/tools/present-artifact.ts";
 import { presentArtifact } from "@features/orchestration/tools/present-artifact.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";
-import { generateReviewHtml } from "./generate-review-html.ts";
 import { showPrImpact } from "./show-pr-impact.ts";
 
 export type PresentReviewInput = {
@@ -34,9 +30,9 @@ export type PresentReviewInput = {
 export type PresentReviewResult = PresentArtifactResult;
 
 /**
- * Wire showPrImpact → generateReviewHtml → presentArtifact into a single MCP tool call.
+ * Wire file read → showPrImpact (data enrichment) → presentArtifact into a single MCP tool call.
  *
- * Requires a stored review in DriftStore (via store_pr_review) before calling.
+ * Requires the reviewer agent to have written review.html to ${workspace}/artifacts/review.html.
  * Opens the browser and blocks until the user submits a decision.
  */
 export async function presentReview(
@@ -51,23 +47,22 @@ export async function presentReview(
     return toolError("INVALID_INPUT", "slug is required and must be a string", false);
   }
 
-  // 1. Get unified review data from DriftStore + KG enrichment
+  // 1. Read agent-generated review HTML
+  const htmlPath = join(input.workspace, "artifacts", "review.html");
+  if (!existsSync(htmlPath)) {
+    return toolError(
+      "INVALID_INPUT",
+      "No review HTML found at ${workspace}/artifacts/review.html. The reviewer agent must produce this artifact.",
+      true,
+    );
+  }
+  const html = readFileSync(htmlPath, "utf-8");
+
+  // 2. Get data enrichment for window.__CANON_DATA__
   const prImpact = await showPrImpact(projectDir, {
     branch: input.branch,
     pr_number: input.pr_number,
   });
-
-  // Check if a stored Canon review exists — showPrImpact degrades gracefully when no review
-  if (!prImpact.has_review) {
-    return toolError(
-      "INVALID_INPUT",
-      "No stored review found. Run store_pr_review before present_review.",
-      true,
-    );
-  }
-
-  // 2. Generate HTML from unified review data
-  const html = generateReviewHtml(prImpact);
 
   // 3. Present in browser and block until decision
   return presentArtifact({
