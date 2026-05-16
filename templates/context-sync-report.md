@@ -10,6 +10,7 @@ fields:
   status: "UPDATED | NO_UPDATES"
   agent: scribe
   timestamp: ISO-8601
+  context-budget: "per-file budget status for CLAUDE.md files touched"
 ---
 
 ```markdown
@@ -33,6 +34,14 @@ timestamp: "{ISO-8601}"
 - **CONVENTIONS.md**: {what added, or "No updates needed"}
 - **README.md**: {sections updated, or "No updates needed" or "Skipped — no structure changes"}
 
+### Context Budget
+| File | Status | Action Taken |
+|------|--------|--------------|
+| `path/to/CLAUDE.md` | Over budget (NN,NNN chars) | Trimmed: {category, ~N lines} |
+| `path/to/other/CLAUDE.md` | Within budget | — |
+
+_If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync." If all files were within budget, write "All files within budget."_
+
 ### Freshness
 | Document | Section | Last Updated |
 |----------|---------|--------------|
@@ -46,3 +55,4 @@ timestamp: "{ISO-8601}"
 3. **Doc Updated column**: If the file's category triggered a doc update, name the document and section. Otherwise `—`.
 4. **Documents Updated section**: List every managed document with what changed. If nothing changed, say "No updates needed" — never omit the line.
 5. **Freshness table**: Only include documents/sections that were actually updated in this sync. Omit the table entirely if status is NO_UPDATES.
+6. **Context Budget table**: Always include this section when any CLAUDE.md file was touched. One row per file touched. If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync." If a file is over budget after all trimming options are exhausted, mark status as "Over budget (unreducible)" — this is a warning, not a failure.
