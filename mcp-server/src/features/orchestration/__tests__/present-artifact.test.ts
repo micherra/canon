@@ -29,9 +29,9 @@ vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
   return {
     ...actual,
-    exec: vi.fn((_cmd: string, cb?: (err: Error | null) => void) => {
+    execFile: vi.fn((_file: string, _args: string[], cb?: (err: Error | null) => void) => {
       if (cb) cb(null);
-      return {} as ReturnType<typeof actual.exec>;
+      return {} as ReturnType<typeof actual.execFile>;
     }),
   };
 });
