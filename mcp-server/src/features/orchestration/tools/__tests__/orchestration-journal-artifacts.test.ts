@@ -265,9 +265,10 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
   });
 
   test("does not apply artifact enforcement for non-completed statuses", async () => {
-    const statuses = ["planned", "started", "skipped"] as const;
-    const results = await Promise.all(
-      statuses.map((status) =>
+    // planned and started do not enforce artifact existence
+    const nonSkippedStatuses = ["planned", "started"] as const;
+    const nonSkippedResults = await Promise.all(
+      nonSkippedStatuses.map((status) =>
         logStep({
           artifacts_expected: ["plans/DESIGN.md"],
           status,
@@ -276,10 +277,21 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
         }),
       ),
     );
-    for (const result of results) {
+    for (const result of nonSkippedResults) {
       assertOk(result);
       expect(result.artifacts_missing).toBeUndefined();
     }
+
+    // skipped also does not enforce artifact existence, but requires skip_reason
+    const skippedResult = await logStep({
+      artifacts_expected: ["plans/DESIGN.md"],
+      skip_reason: "fix-type build, no contract-level changes",
+      status: "skipped",
+      step_id: "step-skipped",
+      workspace,
+    });
+    assertOk(skippedResult);
+    expect(skippedResult.artifacts_missing).toBeUndefined();
   });
 
   test("logStep finds artifacts in workspace root (reviews, plans)", async () => {

@@ -10,7 +10,7 @@ user-invocable: false
 
 # Synthesis Contract
 
-You are performing mechanical runbook synthesis. Given a planning brief, compose a structured runbook using only the 15 canonical step IDs from `references/runbook-vocabulary.md`. This skill defines the full contract: what you MUST do, what you MAY do, and what you MUST NOT do.
+You are performing mechanical runbook synthesis. Given a planning brief, compose a structured runbook using only the 17 canonical step IDs from `references/runbook-vocabulary.md`. This skill defines the full contract: what you MUST do, what you MAY do, and what you MUST NOT do.
 
 **Vocabulary source of truth:** `references/runbook-vocabulary.md`. Every `id` field in every synthesized runbook step MUST appear in that file's Step Vocabulary table. IDs not listed there are synthesis errors — halt and report the unknown ID rather than emit an invalid runbook.
 

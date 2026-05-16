@@ -13,17 +13,14 @@ import type {
   IterationEntry,
   Session,
 } from "@domains/flows/board-state-schemas.ts";
-import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
 import type {
   EventOutput,
   GetEventsOptions,
   GetMessagesOptions,
-  GetWaveEventsOptions,
   InitExecutionParams,
   MessageOutput,
   UpdateExecutionFields,
-  UpdateWaveEventFields,
 } from "./execution-store-types.ts";
 export type IExecutionStore = {
   // Event log
@@ -63,20 +60,10 @@ export type IExecutionStore = {
   getSession(): Session | null;
   getState(stateId: string): BoardStateEntry | null;
   getTranscriptPath(stateId: string): string | null;
-  getWaveEvents(options?: GetWaveEventsOptions): WaveEvent[];
   hasMessages(channel: string): boolean;
   // Execution (board + session singleton)
   initExecution(params: InitExecutionParams): void;
   isStuck(stateId: string, stuckWhen: StuckWhen): boolean;
-
-  // Wave events
-  postWaveEvent(event: {
-    id: string;
-    type: string;
-    payload: Record<string, unknown>;
-    timestamp: string;
-    status: string;
-  }): void;
 
   // Iteration results (SQL-based stuck detection)
   recordIterationResult(
@@ -97,7 +84,6 @@ export type IExecutionStore = {
 
   // Metrics
   updateStateMetrics(stateId: string, metrics: Record<string, number | string>): boolean;
-  updateWaveEvent(id: string, fields: UpdateWaveEventFields): void;
 
   // Iterations
   upsertIteration(

@@ -1,14 +1,21 @@
 /**
  * bridge-pr-impact.test.ts
  *
- * Tests that bridge.callTool() correctly routes to MCP server tools.
+ * Tests that bridge.loadData() correctly returns the tool result pushed via
+ * ontoolresult, covering the MCP App transport path.
+ *
+ * Note: bridge.callTool() was removed when bridge was refactored to the
+ * BridgeAdapter factory pattern (html-types-and-bridge task). Views that
+ * previously called callTool() now use bridge.sendMessage() instead.
+ * See PrReview.svelte for the canonical pattern.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockCallServerTool = vi.fn();
+let mockOntoolresult: ((params: unknown) => void) | null = null;
 const mockConnect = vi.fn().mockResolvedValue(undefined);
 const mockGetHostContext = vi.fn().mockReturnValue(null);
+const mockSendMessage = vi.fn().mockResolvedValue(undefined);
 
 class MockApp {
   constructor(
@@ -18,9 +25,12 @@ class MockApp {
   ) {}
   connect = mockConnect;
   getHostContext = mockGetHostContext;
-  callServerTool = mockCallServerTool;
+  sendMessage = mockSendMessage;
   set onhostcontextchanged(_cb: unknown) {
     /* no-op */
+  }
+  set ontoolresult(cb: (params: unknown) => void) {
+    mockOntoolresult = cb;
   }
   set onerror(_cb: unknown) {
     /* no-op */
@@ -40,19 +50,20 @@ const { bridge } = await import("../stores/bridge.js");
 function makeToolResult(json: unknown) {
   return {
     content: [{ text: JSON.stringify(json), type: "text" as const }],
+    isError: false,
   };
 }
 
-describe("bridge.callTool()", () => {
+describe("bridge.loadData() — MCP App transport", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockOntoolresult = null;
     mockConnect.mockResolvedValue(undefined);
     mockGetHostContext.mockReturnValue(null);
     await bridge.init();
   });
 
-  it("calls show_pr_impact with no arguments", async () => {
-    // UnifiedPrOutput: status always "ok", prep always present, has_review boolean
+  it("returns the tool result pushed via ontoolresult", async () => {
     const payload = {
       has_review: false,
       hotspots: [],
@@ -69,57 +80,46 @@ describe("bridge.callTool()", () => {
         total_violations: 0,
       },
       status: "ok",
-      subgraph: { edges: [], layers: [], nodes: [] },
     };
-    mockCallServerTool.mockResolvedValue(makeToolResult(payload));
 
-    const result = await bridge.callTool("show_pr_impact");
+    // Trigger the tool result after loadData is called
+    const loadPromise = bridge.loadData();
+    mockOntoolresult?.(makeToolResult(payload));
 
-    expect(mockCallServerTool).toHaveBeenCalledWith({
-      arguments: {},
-      name: "show_pr_impact",
-    });
+    const result = await loadPromise;
     expect(result).toEqual(payload);
   });
 
-  it("returns parsed JSON with prep field when no stored review", async () => {
-    // status is always "ok" in UnifiedPrOutput — has_review: false signals no stored review
-    const payload = {
-      empty_state: "No stored review — run the Canon reviewer first",
-      has_review: false,
-      hotspots: [],
-      prep: {
-        blast_radius: [],
-        diff_command: "git diff main",
-        files: [{ layer: "tools", path: "src/a.ts", status: "modified" }],
-        impact_files: [],
-        incremental: false,
-        layers: [{ file_count: 1, name: "tools" }],
-        narrative: "1 file changed.",
-        net_new_files: 0,
-        total_files: 1,
-        total_violations: 0,
-      },
-      status: "ok",
-      subgraph: { edges: [], layers: [], nodes: [] },
-    };
-    mockCallServerTool.mockResolvedValue(makeToolResult(payload));
+  it("buffers early tool result when loadData is called after ontoolresult", async () => {
+    const payload = { early: true, value: 42 };
 
-    const result = await bridge.callTool("show_pr_impact");
-    expect(result.status).toBe("ok");
-    expect(result.has_review).toBe(false);
-    expect(result.prep.total_files).toBe(1);
-    expect(result.empty_state).toBe("No stored review — run the Canon reviewer first");
+    // Push the result BEFORE calling loadData
+    mockOntoolresult?.(makeToolResult(payload));
+
+    // loadData should return the buffered result immediately
+    const result = await bridge.loadData();
+    expect(result).toEqual(payload);
   });
 
-  it("passes arguments to the tool call", async () => {
-    mockCallServerTool.mockResolvedValue(makeToolResult({ found: true }));
+  it("returns the nested prep field correctly", async () => {
+    const payload = {
+      has_review: false,
+      prep: {
+        files: [
+          { layer: "tools", path: "src/a.ts", status: "modified" },
+          { layer: "tools", path: "src/b.ts", status: "added" },
+          { layer: "ui", path: "src/ui/c.svelte", status: "modified" },
+        ],
+        narrative: "3 files changed.",
+        total_files: 3,
+      },
+    };
 
-    await bridge.callTool("get_compliance", { principle_id: "deep-modules" });
+    const loadPromise = bridge.loadData();
+    mockOntoolresult?.(makeToolResult(payload));
 
-    expect(mockCallServerTool).toHaveBeenCalledWith({
-      arguments: { principle_id: "deep-modules" },
-      name: "get_compliance",
-    });
+    const result = await loadPromise;
+    expect((result as typeof payload).prep.total_files).toBe(3);
+    expect((result as typeof payload).prep.files).toHaveLength(3);
   });
 });

@@ -29,20 +29,20 @@ export const BoardStateStatusSchema = z.enum([
   "blocked",
 ]);
 
-export const ConsultationResultSchema = z.object({
+const ConsultationResultSchema = z.object({
   artifact: z.string().optional(),
   status: z.string(),
   summary: z.string().nullable().optional(),
 });
 
-export const WorktreeEntrySchema = z.object({
+const WorktreeEntrySchema = z.object({
   branch: z.string(),
   status: z.enum(["active", "merged", "failed"]).default("active"),
   task_id: z.string(),
   worktree_path: z.string(),
 });
 
-export const WaveResultSchema = z.object({
+const WaveResultSchema = z.object({
   consultations: z
     .object({
       after: z.record(z.string(), ConsultationResultSchema).optional(),
@@ -232,8 +232,6 @@ export const SessionSchema = z.object({
 // Inferred TypeScript types
 
 export type BoardStateStatus = z.infer<typeof BoardStateStatusSchema>;
-export type ConsultationResult = z.infer<typeof ConsultationResultSchema>;
-export type WorktreeEntry = z.infer<typeof WorktreeEntrySchema>;
 export type WaveResult = z.infer<typeof WaveResultSchema>;
 export type StateMetrics = z.infer<typeof StateMetricsSchema>;
 export type BoardStateEntry = z.infer<typeof BoardStateEntrySchema>;

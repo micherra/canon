@@ -24,7 +24,7 @@ import type { UnifiedPrOutput } from "./stores/pr-review";
 
 const loader = useDataLoader(async () => {
   await bridge.init();
-  const result = (await bridge.waitForToolResult()) as UnifiedPrOutput;
+  const result = await bridge.loadData<UnifiedPrOutput>();
   if (!result) throw new Error("No data received from tool");
   return result;
 });

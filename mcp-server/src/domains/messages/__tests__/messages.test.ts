@@ -203,30 +203,6 @@ describe("getMessages tool (store-backed)", () => {
     expect(result.messages[0].content).toBe("New");
     expect(result.count).toBe(1);
   });
-
-  it("include_events returns pending wave events from store", async () => {
-    const store = getExecutionStore(workspace);
-    store.postWaveEvent({
-      id: "evt-1",
-      payload: { context: "some guidance" },
-      status: "pending",
-      timestamp: new Date().toISOString(),
-      type: "guidance",
-    });
-
-    const result = await getMessages({ channel: "wave-000", include_events: true, workspace });
-    expect(result.events).toBeDefined();
-    expect(result.events).toHaveLength(1);
-    expect(result.events![0].id).toBe("evt-1");
-    expect(result.events![0].status).toBe("pending");
-    expect(result.events_count).toBe(1);
-  });
-
-  it("include_events returns empty array when no pending events", async () => {
-    const result = await getMessages({ channel: "wave-000", include_events: true, workspace });
-    expect(result.events).toEqual([]);
-    expect(result.events_count).toBe(0);
-  });
 });
 
 // readChannelAsContext (reads from store)

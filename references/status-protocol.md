@@ -24,16 +24,16 @@ Report exactly ONE of these in ALL CAPS as the last substantive line of your out
 | **BLOCKING** | reviewer | At least one rule-severity violation | `blocking` |
 | **ALL_PASSING** | tester | All tests pass, no implementation issues | `all_passing` |
 | **IMPLEMENTATION_ISSUE** | tester | Tests fail due to implementation bugs | `implementation_issue` |
-| **FIXED** | fixer | Violation fully resolved and committed | `done` (alias) |
-| **PARTIAL_FIX** | fixer | Some violations fixed, others remain for next iteration | `done` (alias) |
-| **CANNOT_FIX** | fixer | Cannot resolve automatically — needs human or architectural change | `cannot_fix` |
+| **FIXED** | engineer (fix mode) | Violation fully resolved and committed | `done` (alias) |
+| **PARTIAL_FIX** | engineer (fix mode) | Some violations fixed, others remain for next iteration | `done` (alias) |
+| **CANNOT_FIX** | engineer (fix mode) | Cannot resolve automatically — needs human or architectural change | `cannot_fix` |
 | **FINDINGS** | security | Non-critical findings exist but nothing blocks the pipeline | `done` (alias) |
 | **CRITICAL** | security | At least one critical finding — blocks the pipeline | `critical` |
 | **UPDATED** | scribe | At least one document was modified | `updated` |
 | **NO_UPDATES** | scribe | All changes were internal/test-only, no doc updates needed | `no_updates` |
-| **HAS_QUESTIONS** | architect, guide (checkpoint) | Unresolved questions requiring user input before design can proceed | `has_questions` |
-| **APPROVED** | guide (checkpoint) | User approved the plan, proceed to implementation | `approved` |
-| **REVISE** | guide (checkpoint) | User requested changes, save feedback and re-analyze | `revise` |
+| **HAS_QUESTIONS** | planner/architect (headless fallback) | Unresolved questions requiring user input before proceeding | `has_questions` |
+| **APPROVED** | planner/architect (headless fallback) | User approved the plan, proceed to implementation | `approved` |
+| **REVISE** | planner/architect (headless fallback) | User requested changes, save feedback and re-analyze | `revise` |
 
 ## Decision Guide
 
@@ -41,7 +41,7 @@ When unsure which status to report:
 
 - **BLOCKED vs DONE_WITH_CONCERNS**: BLOCKED = you cannot produce working output. DONE_WITH_CONCERNS = output is complete and usable, but you're flagging something.
 - **BLOCKED vs NEEDS_CONTEXT**: BLOCKED = you understand the task but hit an obstacle. NEEDS_CONTEXT = you don't have enough information to even start meaningfully.
-- **FIXED vs PARTIAL_FIX**: FIXED = all violations in your assignment are resolved. PARTIAL_FIX = some are resolved, others remain (they'll be retried in the next iteration).
+- **FIXED vs PARTIAL_FIX**: FIXED = all violations in your assignment are resolved. PARTIAL_FIX = some are resolved, others remain (they'll be retried in the next iteration). Both are used by engineer in fix mode.
 - **CANNOT_FIX vs BLOCKED**: CANNOT_FIX = you understand the violation but it requires changes beyond your scope (architectural redesign, user decision). BLOCKED = something unexpected prevents you from working.
 
 ## Format

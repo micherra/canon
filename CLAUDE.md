@@ -110,8 +110,8 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 5. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` comes from the approved runbook's frontmatter, `tier` comes from the runbook frontmatter (optional — defaults to `"medium"` when omitted), and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
 6. Extract the `## Research Notes` section and write to `${WORKSPACE}/plans/${slug}/research-notes.md` using `Write`. (Step 3 already confirmed presence for non-trivial builds; skip this write for trivial builds where no section exists.)
 7. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
-8. Create Claude Code tasks for progress visibility: `TaskCreate({ title: step_id, description: step.intent })` for each step.
-9. Set `CANON_CURRENT_AGENT={agent_name}` before spawning plan-mode-eligible agents (planner, architect). The plan-mode-guard hook reads this to conditionally allow `EnterPlanMode`.
+8. Create Claude Code tasks for progress visibility: for each runbook step, call `TaskCreate({ title: step_id, description: step.intent })`. These provide native progress tracking alongside the journal.
+9. Set `CANON_CURRENT_AGENT={agent_name}` environment variable before spawning plan-mode-eligible agents (planner, architect). The plan-mode-guard hook reads this to conditionally allow `EnterPlanMode`.
 10. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
@@ -285,14 +285,31 @@ Write the consolidated review using the `write_review` MCP tool.
 
 ### Competition and Debate Protocols
 
-When the runbook contains a `compete` or `debate` step, the orchestrator drives the pattern directly. Full protocol: `references/competition-debate.md`.
+When the runbook contains a `compete` or `debate` step, the orchestrator drives the pattern directly (not via agent delegation). Full protocol: `references/competition-debate.md`.
+
+#### Competition
+
+1. Spawn N agents (max 5) as parallel teams. Each receives the task brief plus a framing instruction (lens-based or generic — see spec § Spawn Framing).
+2. Collect all N outputs.
+3. Spawn a synthesizer agent with the original brief + all team outputs. Strategy: `synthesize` (combine best ideas, default) or `select` (pick winner).
+4. Present the synthesized result to the user (HITL checkpoint).
+
+#### Debate
+
+1. Drive debate round-by-round. Each round spawns all teams with round-appropriate framing (Position → Challenge → Response → Narrow — see spec § Round Types).
+2. Teams communicate via `post_message` on channel `debate-round-{N}`.
+3. After each qualifying round (round ≥ max(`min_rounds`, `convergence_check_after`)), check convergence per spec § Convergence Detection.
+4. Stop when converged or `max_rounds` (default 5) reached.
+5. Present debate summary and each team's final position to the user (HITL checkpoint).
+
+Both patterns use native agent team dispatch. The orchestrator manages the lifecycle — no engine code is involved.
 
 ### Journal Protocol
 
 - Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
 - After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
 - The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
-- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD include a `skip_reason` in the `log_step` outcome explaining why. Accepted `skip_reason` values:
+- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD pass a `skip_reason` parameter directly to `log_step` (not inside the `outcome` object) explaining why. Accepted `skip_reason` values:
   - `"fix-type build, no contract-level changes"` — fix builds that only correct existing code without changing APIs, types, or conventions.
   - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
   - `"session timeout"` — session ending before tail steps could run.
@@ -303,7 +320,110 @@ When the runbook contains a `compete` or `debate` step, the orchestrator drives 
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
-### HITL Patterns <!-- last-updated: 2026-04-30 -->
+### Native Primitives <!-- last-updated: 2026-05-06 -->
+
+The orchestrator MUST use Claude Code native primitives at interaction boundaries for structured UX.
+
+| Primitive | Owner | Touchpoint | Constraint |
+|-----------|-------|------------|------------|
+| `EnterPlanMode` | planner, architect | Requirements interview, design conversation | Set `CANON_CURRENT_AGENT` env var before spawning |
+| `ExitPlanMode` | planner, architect | Plan approval / direction confirmation | Paired with EnterPlanMode |
+| `AskUserQuestion` | orchestrator | WARNING close-out, review verdict, session checkpoint | 4 options max, 4 questions max per call |
+| `TaskCreate/TaskUpdate` | orchestrator | Runbook step progress tracking | Create at build start, update per step |
+| `PushNotification` | orchestrator | Background agent completion (learner, scribe) | Only for `run_in_background: true` agents |
+| `Monitor` | orchestrator | Verify step output streaming | Stream build/test output live |
+
+#### EnterPlanMode / ExitPlanMode
+
+The planner and architect agents call `EnterPlanMode` directly for iterative conversations with the user. The orchestrator MUST set `CANON_CURRENT_AGENT={agent_name}` as an environment variable before spawning these agents — the `plan-mode-guard` hook reads this to conditionally allow the call.
+
+The orchestrator itself NEVER calls `EnterPlanMode`. It remains a pure dispatcher.
+
+#### AskUserQuestion
+
+The orchestrator MUST use `AskUserQuestion` for closed-choice HITL gates:
+
+**WARNING close-out:**
+```
+AskUserQuestion({
+  questions: [{
+    question: "Review found {N} advisory warnings. How to proceed?",
+    header: "Warnings",
+    options: [
+      { label: "Fix", description: "Spawn fix cycle targeting advisory items" },
+      { label: "Acknowledge", description: "Accept as-is, log in journal" },
+      { label: "Defer", description: "Note as follow-up, proceed to ship" }
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+**Review verdict (BLOCKING)**:
+```
+AskUserQuestion({
+  questions: [{
+    question: "Review found BLOCKING violations. How to proceed?",
+    header: "Review",
+    options: [
+      { label: "Auto-fix", description: "Spawn engineer in fix mode" },
+      { label: "Show details", description: "Display full violation list before deciding" },
+      { label: "Override", description: "Proceed despite violations (requires justification)" }
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+**Session checkpoint:**
+```
+AskUserQuestion({
+  questions: [{
+    question: "Step {N}/{total} complete ({step_name}). Continue?",
+    header: "Progress",
+    options: [
+      { label: "Continue", description: "Proceed to next step" },
+      { label: "Pause", description: "Save progress — resume later with 'resume'" }
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+#### TaskCreate for Step Visibility
+
+At build start (after `batch_log_steps`), the orchestrator MUST create a Claude Code task for each runbook step:
+
+```
+for each step in runbook:
+  TaskCreate({ title: "{step_id}", description: step.intent })
+```
+
+Update tasks as steps execute:
+- Step starts: `TaskUpdate({ id, status: "in_progress" })`
+- Step completes: `TaskUpdate({ id, status: "completed" })`
+
+The journal remains source of truth for resume protocol and completion verification. Tasks are a visibility layer — the user sees real-time progress in Claude Code's native task interface.
+
+#### PushNotification
+
+When spawning agents with `run_in_background: true` (learner, scribe in tail steps), the orchestrator SHOULD send a `PushNotification` when the background agent completes. This alerts the user without requiring them to poll.
+
+#### Monitor
+
+During verify steps, the orchestrator MAY use `Monitor` to stream build/test output live to the user instead of running commands silently and reporting pass/fail after. This provides real-time visibility into long-running verification.
+
+#### Native Worktree (EnterWorktree/ExitWorktree) — NOT ADOPTED
+
+Investigated and rejected. Rationale:
+- Blocked for subagents (only available to main session)
+- Auto-merges back to calling branch on agent completion — bypasses Canon's controlled merge lifecycle
+- No control over worktree path naming, branch naming, merge order, or cleanup timing
+- Canon's custom worktree management via `init_workspace` provides the lifecycle control needed
+
+This decision may be revisited if the native primitive gains lifecycle configuration options.
+
+### HITL Patterns <!-- last-updated: 2026-05-06 -->
 
 - **Requirement coverage check**: After planner returns, check the planning brief's Requirement Coverage Map for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
 - **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
@@ -320,6 +440,11 @@ After each subagent returns, verify expected artifacts exist at the paths listed
   - (b) **acknowledge** — items logged as accepted in the journal via `log_step` outcome, build proceeds (accept as-is — no follow-up planned).
   - (c) **defer** — items noted as follow-up, build proceeds (plan to address later — noted as follow-up).
   - This checkpoint occurs between the review step and the ship step. It does NOT apply if the review verdict is CLEAN.
+- **Manual verification gate**: After the tester reports `manual_verification_needed` items, the orchestrator presents them to the user as a HITL checkpoint before ship (via `AskUserQuestion`). The orchestrator detects manual verification items by checking the tester's test report for a `## Manual Verification Needed` section. If this section is present and contains table rows, present them to the user via `AskUserQuestion`. If the section is absent or empty, skip this gate. Options:
+  - (a) **confirmed** — user has verified the items manually, proceed to ship.
+  - (b) **not verified** — user cannot confirm; build pauses for investigation.
+  - (c) **defer** — accept risk, proceed to ship, note as unverified in PR description.
+  - This checkpoint occurs between the test step and the ship step. It does NOT apply when no manual items are reported.
 - **Build-step checkpoint**: After each major build step completes (design, implement, verify, review), the orchestrator offers a session checkpoint (presented via `AskUserQuestion`):
   - "Step {N} of {total} complete ({step_name}). Continue, or start a fresh session and say 'resume'?"
   - If the user says "keep going", "continue", or similar affirmative: proceed to the next step.
@@ -343,7 +468,18 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
-- When the review step completes and a tester step follows: extract the Stage 5 "Acceptance Criteria Verification" section from `${WORKSPACE}/reviews/REVIEW.md` and include it in the tester's spawn prompt alongside the planning brief's AC table. The tester step MUST run after review when the runbook includes verification-aware acceptance criteria.
+
+### Post-Review Tester Enrichment
+
+When the review step completes and a tester step follows:
+1. Read `${WORKSPACE}/reviews/REVIEW.md`
+2. Extract the Stage 5 "Acceptance Criteria Verification" section
+3. Include the extracted content in the tester's spawn prompt alongside the standard context
+4. Also include the planning brief's Acceptance Criteria table (from `${WORKSPACE}/plans/${slug}/planning-brief.md`)
+
+This ensures the tester receives both the planner's original verification specs AND the reviewer's independent classification for cross-reference.
+
+When the runbook includes verification-aware acceptance criteria (ACs with verification method and type columns), the tester step MUST run after the review step. The tester consumes the reviewer's Stage 5 output, which only exists after review completes.
 
 ### Step Enforcement Contracts
 

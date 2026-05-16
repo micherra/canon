@@ -65,7 +65,8 @@ Each criterion MUST include a verification method and type. Types:
 Trivial requests: one or two criteria maximum.
 Small features: explicit criteria covering happy path and key error cases.
 Complex epics: include a North-Star criterion (system-wide observable outcome) plus decomposed sub-criteria per wave or subsystem.
-If a criterion cannot be verified without user input, tag it in Open Questions instead.
+manual criteria STAY in this table — they are surfaced as HITL gates before ship. Do NOT move them to Open Questions.
+Open Questions is for unresolved requirements that need user input before planning can proceed (e.g., unclear scope, missing constraints). Verification-typed criteria are distinct: they are confirmed requirements whose verification method requires human observation, not unresolved requirements.
 -->
 
 ## Requirement Coverage Map
