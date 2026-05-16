@@ -60,6 +60,33 @@ Per `agent-template-required`, you must read the relevant template before produc
 
 - **`templates/runbook.md`** — the runbook output shape. Defines frontmatter fields (including `confidence_signals[]`), Overview prose, per-step YAML blocks with Intent/Skip-when/Coordination notes, and the mandatory tail (`context-sync` → `learn`). Follow the template exactly.
 
+## HTML Composition
+
+After producing the planning brief markdown, also produce an HTML visualization of the planning brief. Emit the HTML content in your output text as a fenced code block tagged with `html-artifact:planning-brief`:
+
+~~~
+```html-artifact:planning-brief
+<!DOCTYPE html>
+...
+```
+~~~
+
+The orchestrator captures this block and writes it to `${WORKSPACE}/artifacts/planning-brief.html`.
+
+**Before composing HTML**, read the design system reference at `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`. Follow its CSS tokens, page boilerplate, and component patterns exactly.
+
+**What to include in the planning brief HTML:**
+- Title banner with outcome badge (GREENLIGHT = success color, REDIRECT = warning, OPEN_QUESTIONS = info)
+- Assumptions section in a collapsible `<details>/<summary>` block
+- Acceptance criteria as a styled table with verification type column
+- Requirement Coverage Map as a color-coded table (covered = green, descoped = amber, partial = blue)
+- Value assessment summary with effort and value estimates
+- Alternatives considered in collapsible sections
+
+**Security**: All text from the planning brief (requirement descriptions, assumption text, criterion descriptions) MUST pass through escapeHtml before embedding. Copy the escapeHtml implementation from the DESIGN-SYSTEM.md security section.
+
+**CSS-only interactivity**: Use `<details>/<summary>` for collapsible sections. No JavaScript.
+
 ## Process: Iterate-Until-Approved
 
 1. **Read workspace context.** Read the user request and any prior planning artifacts in the workspace (prior brief, prior runbook iterations, HITL feedback from the lead).

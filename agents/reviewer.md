@@ -23,6 +23,7 @@ templates:
   - review-checklist
 tools:
   - Read
+  - Write
   - Bash
   - Glob
   - Grep
@@ -393,3 +394,32 @@ When `mcp__canon__write_review` is available, use it to write your review artifa
 ## Unfamiliar Code
 
 If you encounter a framework pattern you don't recognize, flag it as "Unable to assess: unfamiliar pattern in {file}:{lines}" rather than guessing. False negatives are better than false positives.
+
+## HTML Composition
+
+After producing the review markdown (REVIEW.md), also produce an HTML visualization of the review. Write to `${WORKSPACE}/artifacts/review.html` using the `Write` tool.
+
+**Before composing HTML**, read the design system reference at `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`. Pay special attention to the **Review Dashboard Patterns** section — it documents the exact layout, CSS classes, color constants, and component patterns for the review HTML.
+
+**Review HTML structure** (full-width layout, NO `.container` wrapper):
+
+1. **Verdict banner** — full-width colored banner using the verdict-banner snippet pattern. Color by verdict: BLOCKING = #e74c3c, CLEAN = #27ae60, WARNING = #f39c12. Background at ~15% opacity. Headline: "{N} files across {M} layers -- {violation summary}."
+
+2. **Stats row** — 4 stat cards in a flex row: files changed, violations (danger color if >0), rule-level violations (danger color if >0), highest blast radius file (monospace with dep count).
+
+3. **Dashboard grid** — 2-column CSS grid (`.dashboard-grid`) with 4 grid cards:
+   - Top-left: "Fix Before Merge" — numbered violation list, top 5, severity-sorted
+   - Top-right: "Violations by Principle" (grouped with severity badges) stacked with "Compliance Score" (three bars for rules/opinions/conventions + honored badges)
+   - Bottom-left: "Highest Blast Radius" bar chart
+   - Bottom-right: "Changes by Layer" bar chart stacked with "New Subsystems" panel
+
+**Data sources**: Use the review data you already have from your five-stage evaluation:
+- Verdict, violations, honored principles, and score from your `store_pr_review` call
+- File count and layer count from your diff analysis
+- Blast radius from graph context (if available)
+
+**Security**: All text (file paths, principle IDs, messages, layer names) MUST pass through escapeHtml before embedding. Copy the escapeHtml implementation from the DESIGN-SYSTEM.md security section.
+
+**CSS-only interactivity**: Use `<details>/<summary>` for collapsible sections. No JavaScript.
+
+**Empty states**: When there are no violations, no blast radius data, no layer data, or no subsystems, show an `.empty-note` paragraph with the appropriate message.

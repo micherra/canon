@@ -27,6 +27,7 @@ templates:
   - session-context
 tools:
   - Read
+  - Write
   - Bash
   - Glob
   - Grep
@@ -154,6 +155,39 @@ Rules for task conventions:
 - **Do NOT duplicate** what's already in the project-level `.canon/CONVENTIONS.md`
 
 Read `.canon/CONVENTIONS.md` first (if it exists) to avoid repeating project-level conventions. Only include conventions that are new or specific to this task.
+
+## HTML Composition
+
+After producing the design document (DESIGN.md) and task plan index (INDEX.md), also produce HTML visualizations of both artifacts.
+
+**Before composing HTML**, read the design system reference at `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`. Follow its CSS tokens, page boilerplate, and component patterns exactly. You may also read individual snippet files from `mcp-server/src/ui/snippets/` for reusable components.
+
+### Design Document HTML
+
+Write to `${WORKSPACE}/artifacts/design.html` using the `Write` tool.
+
+**What to include:**
+- Title with task description
+- North Star section with vision and done criteria as a checklist
+- Approach description in a section card
+- Canon alignment as a list with principle IDs linked to their disposition (honored/tensioned)
+- File structure as a styled table with file paths, purposes, and actions (create/modify)
+- Decisions made as collapsible sections, each with context and rationale
+- Open questions highlighted in a distinct card
+
+### Task Plan Index HTML
+
+Write to `${WORKSPACE}/artifacts/task-index.html` using the `Write` tool.
+
+**What to include:**
+- Header with total task count and wave count
+- Per-wave sections with task cards showing: task ID, description, file list, dependency arrows
+- Status badges for each task (pending/in-progress/complete -- all start as pending)
+- File ownership table: which tasks touch which files
+
+**Security**: All text from design documents and task plans (file paths, descriptions, principle IDs) MUST pass through escapeHtml before embedding. Copy the escapeHtml implementation from the DESIGN-SYSTEM.md security section.
+
+**CSS-only interactivity**: Use `<details>/<summary>` for collapsible sections. No JavaScript.
 
 ### Step 7: Break into atomic task plans
 
