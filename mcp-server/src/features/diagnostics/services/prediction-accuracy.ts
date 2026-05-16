@@ -181,12 +181,13 @@ function applyPairToTally(tallies: Map<string, AccuracyTally>, pair: PairOutcome
     });
   }
   const tally = tallies.get(pair.principle_id)!;
-  tally.sample_size += 1;
 
   if (pair.predicted && pair.actual) {
     tally.true_positives += 1;
+    tally.sample_size += 1;
   } else if (pair.predicted && !pair.actual) {
     tally.false_positives += 1;
+    tally.sample_size += 1;
   } else if (!pair.predicted && pair.actual) {
     tally.false_negatives += 1;
   } else {
@@ -208,10 +209,12 @@ function applyPairToTally(tallies: Map<string, AccuracyTally>, pair: PairOutcome
 export function computeAccuracy(reader: PredictionReader, principleIds?: string[]): AccuracyMap {
   const predictions = reader.getResolvedPredictions(principleIds);
   const tallies = new Map<string, AccuracyTally>();
+  const filterSet = principleIds ? new Set(principleIds) : undefined;
 
   for (const prediction of predictions) {
     const pairs = parseOutcome(prediction.outcome);
     for (const pair of pairs) {
+      if (filterSet && !filterSet.has(pair.principle_id)) continue;
       applyPairToTally(tallies, pair);
     }
   }
