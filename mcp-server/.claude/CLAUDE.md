@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-05-14 (html-poc: ui/snippets/ directory added with 5 HTML component recipes) -->
+<!-- last-updated: 2026-05-16 (post_message + get_messages MCP tools removed; messages.ts deleted) -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -18,7 +18,7 @@ src/
 │   ├── drift/            # Drift/review type definitions
 │   ├── flows/            # Flow and board-state type definitions, schemas
 │   ├── knowledge-graph/  # KG type definitions (FileMetrics, LayerViolation)
-│   ├── messages/         # Message persistence for agent collaboration
+│   ├── messages/         # Flow lifecycle events, event bus, variable substitution (message persistence removed 2026-05-16)
 │   └── workspaces/       # Workspace and execution store (SQLite persistence)
 ├── features/             # Tool implementations grouped by bounded context
 │   ├── diagnostics/      # Drift reports, agent metrics, summary storage
@@ -43,7 +43,12 @@ src/
 - **Community detection** (`graph/kg-community.ts`) — Louvain algorithm assigns `community_id` to each file in the KG; added 2026-05-02
 - **Tag propagation** (`graph/kg-tags.ts`) — 4-signal pipeline (directory, imports, community, cross-ref) writes computed tags to `file_tags` table; used by `get-principles` and `get-file-context`; added 2026-05-02
 - **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity; OR semantics: matches if layers OR scope.tags intersect (updated 2026-05-02)
-- **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
+- **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
+
+**Removed modules** (2026-05-16):
+- ~~`src/features/orchestration/tools/post-message.ts`~~ — `post_message` MCP tool removed 2026-05-16; was dead infrastructure
+- ~~`src/features/orchestration/tools/get-messages.ts`~~ — `get_messages` MCP tool removed 2026-05-16; was dead infrastructure
+- ~~`src/domains/messages/messages.ts`~~ — `Message` type and channel persistence removed 2026-05-16; `messages/` domain retains `events.ts` and `variables.ts`
 
 **Removed modules** (2026-05-02):
 - ~~`src/app/register-composite.ts`~~ — composite tool registration removed 2026-05-02 (get_context inlined or restructured)
