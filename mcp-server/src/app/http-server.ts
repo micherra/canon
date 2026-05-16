@@ -53,6 +53,15 @@ export function getHttpPort(): number {
 }
 
 /**
+ * Returns true when the HTTP server is currently listening (bound to a port).
+ * Returns false when the server failed to start (e.g., EADDRINUSE) or has not
+ * been started yet.
+ */
+export function isHttpServerRunning(): boolean {
+  return httpServer !== null;
+}
+
+/**
  * Starts the Canon HTTP server and binds it to 127.0.0.1.
  *
  * Port resolution order:
@@ -230,8 +239,9 @@ function serveArtifactHtml(res: ServerResponse, key: string, html: string, data:
   const safeData = JSON.stringify(data)
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
-    .replace(/ /g, "\\u2028")
-    .replace(/ /g, "\\u2029");
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
   const dataScript = `<script>
     window.__CANON_DATA__ = ${safeData};
     window.__CANON_ARTIFACT_URL__ = "http://127.0.0.1:${serverPort}/artifact/${key}";
