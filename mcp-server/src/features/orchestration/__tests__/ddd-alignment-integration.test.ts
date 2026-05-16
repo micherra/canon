@@ -130,7 +130,7 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
     // Must reference the split files
     expect(content).toMatch(/@domains\/flows\/board-state-schemas/);
     expect(content).toMatch(/@domains\/flows\/flow-definition-schemas/);
-    expect(content).toMatch(/@domains\/flows\/transcript-schemas/);
+    // transcript-schemas import removed: wave event types no longer in interface
     // Must NOT reference the deleted monolithic file
     expect(content).not.toMatch(/flow-schema['"]/);
   });
