@@ -120,6 +120,14 @@ describe("initWorkspaceFlow — SQLite creation", () => {
       ),
     );
   });
+
+  it("creates artifacts/ subdirectory in new workspace", async () => {
+    const projectDir = makeTmpProjectDir();
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    const artifactsDir = join(result.workspace, "artifacts");
+    expect(existsSync(artifactsDir)).toBe(true);
+  });
 });
 
 // initWorkspaceFlow — resume detection
