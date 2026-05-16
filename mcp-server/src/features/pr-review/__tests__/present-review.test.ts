@@ -169,10 +169,7 @@ describe("presentReview", () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
       vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
 
-      const result = await presentReview(
-        { slug: "slug", workspace: "/workspace/main" },
-        "/proj",
-      );
+      const result = await presentReview({ slug: "slug", workspace: "/workspace/main" }, "/proj");
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
