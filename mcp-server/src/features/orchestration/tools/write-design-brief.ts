@@ -95,6 +95,13 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
 export async function writeDesignBrief(
   input: WriteDesignBriefInput,
 ): Promise<ToolResult<WriteDesignBriefResult>> {
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
+  }
+
   const arrayCheck = WriteDesignBriefArraySchema.safeParse(input);
   if (!arrayCheck.success) {
     const field = arrayCheck.error.issues[0]?.path[0] ?? "array field";

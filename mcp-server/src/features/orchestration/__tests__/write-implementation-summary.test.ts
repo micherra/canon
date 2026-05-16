@@ -227,6 +227,23 @@ describe("writeImplementationSummary — valid input", () => {
   });
 });
 
+describe("writeImplementationSummary — relative workspace rejection", () => {
+  it("returns INVALID_INPUT when workspace is a relative path", async () => {
+    const result = await writeImplementationSummary({
+      files_changed: [],
+      slug: "my-epic",
+      task_id: "task-01",
+      workspace: "relative/path",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("absolute");
+    }
+  });
+});
+
 describe("writeImplementationSummary — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));

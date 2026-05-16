@@ -115,6 +115,12 @@ function buildSummaryMeta(input: WriteImplementationSummaryInput): Record<string
 export async function writeImplementationSummary(
   input: WriteImplementationSummaryInput,
 ): Promise<ToolResult<WriteImplementationSummaryResult>> {
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
+  }
   const validationError = validateSlugAndTaskId(input);
   if (validationError) return validationError;
 

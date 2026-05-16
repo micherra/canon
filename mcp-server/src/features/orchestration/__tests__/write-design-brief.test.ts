@@ -415,6 +415,25 @@ describe("writeDesignBrief — array .max() constraints", () => {
   });
 });
 
+describe("writeDesignBrief — relative workspace rejection", () => {
+  it("returns INVALID_INPUT when workspace is a relative path", async () => {
+    const result = await writeDesignBrief({
+      constraints: [],
+      file_targets: [],
+      slug: "my-epic",
+      task_id: "task-01",
+      test_expectations: [],
+      workspace: "relative/path",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("absolute");
+    }
+  });
+});
+
 describe("writeDesignBrief — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));

@@ -280,6 +280,14 @@ export async function writeReview(
   input: WriteReviewInput,
   signals?: SignalWriter,
 ): Promise<ToolResult<WriteReviewResult>> {
+  // Validate workspace is absolute
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
+  }
+
   // Validate slug
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(

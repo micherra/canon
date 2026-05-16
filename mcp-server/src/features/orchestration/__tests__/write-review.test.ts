@@ -364,6 +364,30 @@ describe("writeReview — return value", () => {
   });
 });
 
+describe("writeReview — relative workspace rejection", () => {
+  it("returns INVALID_INPUT when workspace is a relative path", async () => {
+    const result = await writeReview({
+      files: [],
+      honored: [],
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
+      slug: "my-epic",
+      verdict: "approved",
+      violations: [],
+      workspace: "relative/path",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("absolute");
+    }
+  });
+});
+
 describe("writeReview — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));

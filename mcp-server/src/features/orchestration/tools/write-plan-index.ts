@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 export type WritePlanIndexInput = {
@@ -25,6 +25,14 @@ const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 export async function writePlanIndex(
   input: WritePlanIndexInput,
 ): Promise<ToolResult<WritePlanIndexResult>> {
+  // Validate workspace is absolute
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
+  }
+
   // Validate slug
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
