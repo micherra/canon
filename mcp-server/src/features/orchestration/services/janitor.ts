@@ -311,6 +311,30 @@ function findPruneCandidates(
 }
 
 /**
+ * Deregister a git worktree before deleting its directory.
+ * Non-blocking: logs at WARN level on failure but never throws.
+ */
+function removeWorktreeRegistration(worktreeSubPath: string, candidate: PruneCandidate): void {
+  try {
+    const result = gitExec(
+      ["worktree", "remove", "--force", worktreeSubPath],
+      candidate.projectDir,
+    );
+    if (!result.ok) {
+      console.warn(
+        `[canon] janitor: git worktree remove failed for ${candidate.slug}:`,
+        result.stderr.trim(),
+      );
+    }
+  } catch (err: unknown) {
+    console.warn(
+      `[canon] janitor: git worktree remove threw for ${candidate.slug}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
  * Archive a workspace slug (best-effort) and then remove it.
  * Returns true when the slug directory was successfully deleted.
  */
@@ -322,6 +346,31 @@ async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[])
   } catch (err: unknown) {
     console.warn(
       `[canon] janitor: archive failed for ${candidate.slug}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // Remove the git worktree registration before deleting the directory.
+  // If the worktree/ subdirectory exists, git tracks it — we must deregister
+  // it first or git's internal metadata becomes stale. Failure is non-blocking:
+  // rmSync will still clean up the files, and `git worktree prune` can clear
+  // any remaining metadata.
+  const worktreeSubPath = join(slugPath, "worktree");
+  if (existsSync(worktreeSubPath)) {
+    removeWorktreeRegistration(worktreeSubPath, candidate);
+  }
+
+  try {
+    const branchResult = gitExec(["branch", "-D", `canon/${candidate.slug}`], candidate.projectDir);
+    if (!branchResult.ok) {
+      console.warn(
+        `[canon] janitor: git branch -D failed for ${candidate.slug}:`,
+        branchResult.stderr.trim(),
+      );
+    }
+  } catch (err: unknown) {
+    console.warn(
+      `[canon] janitor: git branch -D threw for ${candidate.slug}:`,
       err instanceof Error ? err.message : err,
     );
   }

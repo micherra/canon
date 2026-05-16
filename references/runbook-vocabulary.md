@@ -4,7 +4,7 @@ The canonical set of step IDs Canon knows. Every synthesized runbook uses only t
 
 This file is the single source of truth. The synthesis skill (`references/runbook-synthesis.md`) validates every generated runbook against this vocabulary at synthesis time. Unresolvable step IDs are synthesis errors.
 
-**Version: 1.0**
+**Version: 1.1**
 
 ---
 
@@ -27,8 +27,10 @@ This file is the single source of truth. The synthesis skill (`references/runboo
 | `context-sync` | scribe | subagent | none | Doc sync — **mandatory tail** |
 | `ship` | shipper | subagent | on_failure | Create PR from worktree branch to main; direct merge when explicitly requested — **mandatory tail** |
 | `learn` | learner | subagent | none | Pattern analysis — **mandatory tail** |
+| `compete` | orchestrator | team | checkpoint | Divergent-then-converge exploration — N teams produce independent solutions, synthesizer combines |
+| `debate` | orchestrator | team | checkpoint | Adversarial refinement — multi-team structured deliberation with convergence detection |
 
-**Total: 15 entries** (12 functional + 3 mandatory tail).
+**Total: 17 entries** (14 functional + 3 mandatory tail).
 
 ---
 
@@ -138,6 +140,22 @@ artifacts:
 
 Team dispatch: orchestrator partitions files by blast radius, spawns N reviewers with scoped file lists, consolidates into single REVIEW.md. See CLAUDE.md Team Dispatch Protocol.
 
+### `compete`
+
+- Orchestrator spawns N teams (max 5) as parallel agents with competing instructions.
+- Each team receives either a lens-based or generic framing per `references/competition-debate.md` § Spawn Framing.
+- After all teams return, orchestrator spawns a synthesizer with all outputs + original brief.
+- Synthesis strategy: `synthesize` (default — combine best ideas) or `select` (pick winner). Runbook specifies `synthesize` unless the brief explicitly calls for a winner.
+- Full protocol details: `references/competition-debate.md` § Competition Protocol.
+
+### `debate`
+
+- Orchestrator drives round-by-round: Position → Challenge → Response → Narrow.
+- Teams communicate via `post_message` / `get_messages` on channel `debate-round-{N}`.
+- Convergence checked after qualifying rounds per algorithm in `references/competition-debate.md` § Convergence Detection.
+- Hard stop at `max_rounds` (default 5); HITL checkpoint after completion.
+- Full protocol details: `references/competition-debate.md` § Debate Protocol.
+
 ---
 
 ## Versioning Policy
@@ -164,6 +182,7 @@ Breaking changes require a deprecation cycle: at least one minor version where t
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.1 | 2026-05-15 | Added `compete` and `debate` step IDs — 17 total |
 | 1.0 | 2026-04-22 | Initial vocabulary — 15 step IDs |
 
 ---
