@@ -58,6 +58,38 @@ export type ReconcilePredictionsInput = {
   violations: Array<{ file_path?: string; principle_id: string }>;
 };
 
+// ---- Internal helpers ----
+
+/**
+ * Extract principle IDs from violation_history signals for a single file.
+ * Returns deduplicated IDs, or an empty array when none are found.
+ */
+function extractPrincipleIds(fs: FileSignals): string[] {
+  const ids: string[] = [];
+  for (const signal of fs.signals) {
+    if (signal.type === "violation_history") {
+      const match = signal.text.match(/^Principle "([^"]+)"/);
+      if (match) ids.push(match[1]);
+    }
+  }
+  return [...new Set(ids)];
+}
+
+/**
+ * Build per-file principle map from compiled signals.
+ * Only includes files that have violation_history signals with extractable principle IDs.
+ */
+function buildPerFilePrinciples(signalsWithData: FileSignals[]): Map<string, string[]> {
+  const perFilePrinciples = new Map<string, string[]>();
+  for (const fs of signalsWithData) {
+    const ids = extractPrincipleIds(fs);
+    if (ids.length > 0) {
+      perFilePrinciples.set(fs.file_path, ids);
+    }
+  }
+  return perFilePrinciples;
+}
+
 // ---- Public API ----
 
 /**
@@ -85,21 +117,7 @@ export function recordPrediction(
     const signalsWithData = input.compiledSignals.filter((fs) => fs.signals.length > 0);
     if (signalsWithData.length === 0) return undefined;
 
-    // Build per-file principle map — only files that have violation_history signals
-    const perFilePrinciples = new Map<string, string[]>();
-    for (const fs of signalsWithData) {
-      const ids: string[] = [];
-      for (const signal of fs.signals) {
-        if (signal.type === "violation_history") {
-          const match = signal.text.match(/^Principle "([^"]+)"/);
-          if (match) ids.push(match[1]);
-        }
-      }
-      if (ids.length > 0) {
-        perFilePrinciples.set(fs.file_path, [...new Set(ids)]);
-      }
-    }
-
+    const perFilePrinciples = buildPerFilePrinciples(signalsWithData);
     if (perFilePrinciples.size === 0) return undefined;
 
     // Store only files that had violation_history signals

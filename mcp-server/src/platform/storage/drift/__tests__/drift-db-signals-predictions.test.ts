@@ -14,8 +14,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { DriftDbSignals } from "../drift-db-signals.ts";
 import type { InsertPredictionInput, ResolvePredictionInput } from "../drift-db-signals.ts";
+import { DriftDbSignals } from "../drift-db-signals.ts";
 import { DRIFT_SCHEMA_VERSION, initDriftDb, runDriftMigrations } from "../drift-schema.ts";
 
 // Helper: create a fresh in-memory database with full schema applied
@@ -26,15 +26,17 @@ function makeDb(): { db: ReturnType<typeof initDriftDb>; signals: DriftDbSignals
 }
 
 // Helper: build a minimal InsertPredictionInput
-function makePredictionInput(overrides: Partial<InsertPredictionInput> = {}): InsertPredictionInput {
+function makePredictionInput(
+  overrides: Partial<InsertPredictionInput> = {},
+): InsertPredictionInput {
   return {
-    prediction_id: `pred_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    workspace: "test-workspace",
-    flow_id: "flow-abc",
     file_paths: JSON.stringify(["src/foo.ts", "src/bar.ts"]),
+    flow_id: "flow-abc",
+    prediction_id: `pred_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     principle_ids: JSON.stringify(["deep-modules", "thin-handlers"]),
     signals_json: JSON.stringify({ score: 0.8, signals: [] }),
     timestamp: new Date().toISOString(),
+    workspace: "test-workspace",
     ...overrides,
   };
 }
@@ -163,9 +165,9 @@ describe("insertPrediction and getPredictionById", () => {
 
   test("round-trips a prediction with null workspace and flow_id", () => {
     const input = makePredictionInput({
+      flow_id: null,
       prediction_id: "pred_002",
       workspace: null,
-      flow_id: null,
     });
     signals.insertPrediction(input);
 
@@ -247,9 +249,9 @@ describe("getUnresolvedPredictions", () => {
 
     // Resolve pred_resolved
     signals.resolvePrediction({
+      outcome: JSON.stringify({ result: "pass" }),
       prediction_id: "pred_resolved",
       resolved_at: "2026-01-03T00:00:00Z",
-      outcome: JSON.stringify({ result: "pass" }),
     });
 
     const results = signals.getUnresolvedPredictions();
@@ -285,9 +287,7 @@ describe("getUnresolvedPredictions", () => {
   });
 
   test("returns all rows as PredictionRow type with correct shape", () => {
-    signals.insertPrediction(
-      makePredictionInput({ prediction_id: "pred_shape_test" }),
-    );
+    signals.insertPrediction(makePredictionInput({ prediction_id: "pred_shape_test" }));
 
     const results = signals.getUnresolvedPredictions();
     expect(results).toHaveLength(1);
@@ -318,9 +318,9 @@ describe("resolvePrediction", () => {
     signals.insertPrediction(makePredictionInput({ prediction_id: "pred_to_resolve" }));
 
     const resolveInput: ResolvePredictionInput = {
+      outcome: JSON.stringify({ per_pair: [{ principle: "deep-modules", verdict: "pass" }] }),
       prediction_id: "pred_to_resolve",
       resolved_at: "2026-02-01T12:00:00Z",
-      outcome: JSON.stringify({ per_pair: [{ principle: "deep-modules", verdict: "pass" }] }),
     };
     signals.resolvePrediction(resolveInput);
 
@@ -334,9 +334,9 @@ describe("resolvePrediction", () => {
   test("resolved prediction no longer appears in getUnresolvedPredictions", () => {
     signals.insertPrediction(makePredictionInput({ prediction_id: "pred_resolve_test" }));
     signals.resolvePrediction({
+      outcome: JSON.stringify({}),
       prediction_id: "pred_resolve_test",
       resolved_at: "2026-02-01T00:00:00Z",
-      outcome: JSON.stringify({}),
     });
 
     const unresolved = signals.getUnresolvedPredictions();
@@ -347,9 +347,9 @@ describe("resolvePrediction", () => {
     // Should not throw
     expect(() => {
       signals.resolvePrediction({
+        outcome: JSON.stringify({}),
         prediction_id: "no_such_prediction",
         resolved_at: "2026-02-01T00:00:00Z",
-        outcome: JSON.stringify({}),
       });
     }).not.toThrow();
   });
@@ -360,9 +360,9 @@ describe("resolvePrediction", () => {
     signals.insertPrediction(makePredictionInput({ prediction_id: "pred_z" }));
 
     signals.resolvePrediction({
+      outcome: JSON.stringify({ verdict: "x_pass" }),
       prediction_id: "pred_x",
       resolved_at: "2026-02-01T00:00:00Z",
-      outcome: JSON.stringify({ verdict: "x_pass" }),
     });
 
     const unresolved = signals.getUnresolvedPredictions();

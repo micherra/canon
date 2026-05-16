@@ -245,13 +245,9 @@ const MIGRATIONS: Migration[] = [
         resolved_at     TEXT,
         outcome         TEXT              -- JSON: per-pair reconciliation result
       )`);
-      db.exec(
-        `CREATE INDEX IF NOT EXISTS idx_predictions_resolved ON predictions(resolved)`,
-      );
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_predictions_resolved ON predictions(resolved)`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_predictions_ts ON predictions(timestamp)`);
-      db.exec(
-        `CREATE INDEX IF NOT EXISTS idx_predictions_pid ON predictions(prediction_id)`,
-      );
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_predictions_pid ON predictions(prediction_id)`);
       db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
     },
     version: "5",
