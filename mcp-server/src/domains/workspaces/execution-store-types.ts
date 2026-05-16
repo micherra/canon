@@ -84,17 +84,6 @@ export type MessageRow = {
   timestamp: string;
 };
 
-export type WaveEventRow = {
-  id: string;
-  type: string;
-  payload: string; // JSON
-  timestamp: string;
-  status: string;
-  applied_at: string | null;
-  resolution: string | null; // JSON | null
-  rejection_reason: string | null;
-};
-
 // Parameter types for public API
 
 export type InitExecutionParams = {
@@ -146,17 +135,6 @@ export type MessageOutput = {
 
 export type GetMessagesOptions = {
   since?: string;
-};
-
-export type GetWaveEventsOptions = {
-  status?: string;
-};
-
-export type UpdateWaveEventFields = {
-  status?: string;
-  applied_at?: string;
-  resolution?: Record<string, unknown>;
-  rejection_reason?: string;
 };
 
 export type GetEventsOptions = {

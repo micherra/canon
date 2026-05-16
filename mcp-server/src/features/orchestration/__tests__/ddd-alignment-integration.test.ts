@@ -38,7 +38,7 @@ describe("schema split — flow-schema.ts deletion (dc-02)", () => {
     const required = [
       "flow-definition-schemas.ts",
       "board-state-schemas.ts",
-      "event-schemas.ts",
+      "transcript-schemas.ts",
     ] as const;
     for (const file of required) {
       const filePath = resolve(SRC, "domains/flows", file);

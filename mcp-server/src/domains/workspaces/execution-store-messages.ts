@@ -1,5 +1,5 @@
 /**
- * Message, wave-event, and event-log operations for ExecutionStore.
+ * Message and event-log operations for ExecutionStore.
  * Extracted from execution-store.ts to keep each file under 600 lines.
  *
  * All functions take a `db` parameter (better-sqlite3 Database) so they can be

@@ -1,9 +1,10 @@
 /**
- * Wave variable utilities for inter-wave communication.
+ * Task variable utilities for inter-task communication.
  *
  * Exports:
  * - escapeDollarBrace: trust-boundary sanitizer for agent-sourced text
- * - parseTaskIdsForWave: parse task IDs for a given wave from INDEX.md content
+ * - parseTaskIds: parse task IDs for a given wave from INDEX.md content
+ * - extractFilePaths: extract file paths from summary/artifact text
  *
  * Note: resolveWaveVariables was removed — wave summaries now flow through
  * inject_context events rather than being read and injected here.
@@ -29,7 +30,7 @@ export function escapeDollarBrace(text: string): string {
  * Callers should validate that the returned array is non-empty when tasks
  * are expected — this function returns [] on parse failure without warning.
  */
-export function parseTaskIdsForWave(indexContent: string, wave: number): string[] {
+export function parseTaskIds(indexContent: string, wave: number): string[] {
   const taskIds: string[] = [];
   const lines = indexContent.split("\n");
 
@@ -51,4 +52,41 @@ export function parseTaskIdsForWave(indexContent: string, wave: number): string[
   }
 
   return taskIds;
+}
+
+/**
+ * Extract file paths from summary content.
+ * Looks for backtick-quoted paths and lines that look like file paths.
+ */
+export function extractFilePaths(content: string): string[] {
+  const paths = new Set<string>();
+
+  // Match backtick-quoted paths: `src/foo/bar.ts`
+  const backtickPattern = /`([a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10})`/g;
+  let m = backtickPattern.exec(content);
+  while (m !== null) {
+    const candidate = m[1];
+    if (looksLikeFilePath(candidate)) {
+      paths.add(candidate);
+    }
+    m = backtickPattern.exec(content);
+  }
+
+  // Match lines that start with a path-like token (e.g., in "| `path` | created |" table rows)
+  const linePattern = /\|\s*`?([a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10})`?\s*\|/g;
+  let m2 = linePattern.exec(content);
+  while (m2 !== null) {
+    const candidate = m2[1].trim();
+    if (looksLikeFilePath(candidate)) {
+      paths.add(candidate);
+    }
+    m2 = linePattern.exec(content);
+  }
+
+  return Array.from(paths);
+}
+
+function looksLikeFilePath(s: string): boolean {
+  // Must contain a slash or look like a relative path with an extension
+  return (s.includes("/") || s.includes("\\")) && s.includes(".");
 }

@@ -20,8 +20,6 @@ import {
   BoardStateEntrySchema,
   SessionSchema,
 } from "../board-state-schemas.ts";
-// --- event-schemas.ts imports --------------------------------------------------
-import { TranscriptEntrySchema } from "../event-schemas.ts";
 // --- flow-definition-schemas.ts imports ----------------------------------------
 import {
   BaseStateFields,
@@ -34,6 +32,8 @@ import {
   STATUS_ALIASES,
   STATUS_KEYWORDS,
 } from "../flow-definition-schemas.ts";
+// --- transcript-schemas.ts imports --------------------------------------------------
+import { TranscriptEntrySchema } from "../transcript-schemas.ts";
 
 // =============================================================================
 // flow-definition-schemas.ts
@@ -380,10 +380,10 @@ describe("board-state-schemas.ts — BoardSchema", () => {
 });
 
 // =============================================================================
-// event-schemas.ts — TranscriptEntrySchema
+// transcript-schemas.ts — TranscriptEntrySchema
 // =============================================================================
 
-describe("event-schemas.ts — TranscriptEntrySchema", () => {
+describe("transcript-schemas.ts — TranscriptEntrySchema", () => {
   it("accepts a minimal transcript entry", () => {
     const result = TranscriptEntrySchema.parse({
       content: "Hello",

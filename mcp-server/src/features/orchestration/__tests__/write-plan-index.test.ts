@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
+import { parseTaskIds } from "@domains/workspaces/task-variables.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
@@ -202,10 +202,10 @@ describe("writePlanIndex — validation errors", () => {
   });
 });
 
-// Round-trip test: writePlanIndex output parsed by parseTaskIdsForWave
+// Round-trip test: writePlanIndex output parsed by parseTaskIds
 
-describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
-  it("written INDEX.md can be parsed back by parseTaskIdsForWave for wave 1", async () => {
+describe("writePlanIndex — round-trip with parseTaskIds", () => {
+  it("written INDEX.md can be parsed back by parseTaskIds for wave 1", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
@@ -222,8 +222,8 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
     assertOk(result);
     const content = await readFile(result.path, "utf-8");
 
-    const wave1Ids = parseTaskIdsForWave(content, 1);
-    const wave2Ids = parseTaskIdsForWave(content, 2);
+    const wave1Ids = parseTaskIds(content, 1);
+    const wave2Ids = parseTaskIds(content, 2);
 
     expect(wave1Ids).toEqual(["adr004-01", "adr004-02"]);
     expect(wave2Ids).toEqual(["adr004-03", "adr004-04"]);
@@ -250,9 +250,9 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
     const content = await readFile(result.path, "utf-8");
 
     const allParsed = [
-      ...parseTaskIdsForWave(content, 1),
-      ...parseTaskIdsForWave(content, 2),
-      ...parseTaskIdsForWave(content, 3),
+      ...parseTaskIds(content, 1),
+      ...parseTaskIds(content, 2),
+      ...parseTaskIds(content, 3),
     ];
 
     const expectedIds = tasks.map((t) => t.task_id);
@@ -275,15 +275,15 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
     assertOk(result);
     const content = await readFile(result.path, "utf-8");
 
-    expect(parseTaskIdsForWave(content, 1)).toEqual(["my-task_01", "CamelCase-01"]);
-    expect(parseTaskIdsForWave(content, 2)).toEqual(["ALL_CAPS_ID"]);
+    expect(parseTaskIds(content, 1)).toEqual(["my-task_01", "CamelCase-01"]);
+    expect(parseTaskIds(content, 2)).toEqual(["ALL_CAPS_ID"]);
   });
 });
 
-// ADR-004 acceptance: write_plan_index + parseTaskIdsForWave (dc-05, dc-06)
+// ADR-004 acceptance: write_plan_index + parseTaskIds (dc-05, dc-06)
 
 describe("ADR-004 acceptance: write_plan_index round-trip (dc-05)", () => {
-  it("produces INDEX.md that parseTaskIdsForWave can parse for multi-wave plans", async () => {
+  it("produces INDEX.md that parseTaskIds can parse for multi-wave plans", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
 
     const result = await writePlanIndex({
@@ -299,25 +299,25 @@ describe("ADR-004 acceptance: write_plan_index round-trip (dc-05)", () => {
     assertOk(result);
     const content = await readFile(result.path, "utf-8");
 
-    const wave1 = parseTaskIdsForWave(content, 1);
-    const wave2 = parseTaskIdsForWave(content, 2);
+    const wave1 = parseTaskIds(content, 1);
+    const wave2 = parseTaskIds(content, 2);
 
     expect(wave1).toEqual(["t-01", "t-02"]);
     expect(wave2).toEqual(["t-03"]);
   });
 });
 
-describe("ADR-004 acceptance: parseTaskIdsForWave zero-task guard (dc-06)", () => {
+describe("ADR-004 acceptance: parseTaskIds zero-task guard (dc-06)", () => {
   it("returns empty array when INDEX.md has no tasks for the requested wave (zero-task guard)", () => {
-    // The zero-task guard: parseTaskIdsForWave returns [] when the requested wave
+    // The zero-task guard: parseTaskIds returns [] when the requested wave
     // has no entries — callers must handle this to avoid spawning zero agents.
     const content = `## Plan Index: test\n\n| Task | Wave |\n|------|------|\n| t-01 | 1 |\n`;
-    expect(parseTaskIdsForWave(content, 2)).toEqual([]);
-    expect(parseTaskIdsForWave(content, 99)).toEqual([]);
+    expect(parseTaskIds(content, 2)).toEqual([]);
+    expect(parseTaskIds(content, 99)).toEqual([]);
   });
 
   it("returns empty array for completely empty INDEX.md content", () => {
-    expect(parseTaskIdsForWave("", 1)).toEqual([]);
+    expect(parseTaskIds("", 1)).toEqual([]);
   });
 
   it("writePlanIndex with empty tasks array produces parseable INDEX.md with wave_count 0", async () => {
@@ -335,6 +335,6 @@ describe("ADR-004 acceptance: parseTaskIdsForWave zero-task guard (dc-06)", () =
 
     const content = await readFile(result.path, "utf-8");
     // No tasks in any wave
-    expect(parseTaskIdsForWave(content, 1)).toEqual([]);
+    expect(parseTaskIds(content, 1)).toEqual([]);
   });
 });

@@ -15,7 +15,7 @@ This file is the single source of truth. The synthesis skill (`references/runboo
 | `research` | planner | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift) |
 | `design` | architect | subagent or team | approval | Plan index + design decisions |
 | `spike` | engineer | subagent | none | Time-boxed exploratory prototype; produces findings, not shipped code |
-| `implement` | engineer | subagent or team | none | Build code with TDD/BDD; `team` when wave-parallel |
+| `implement` | engineer | subagent or team | none | Build code with TDD/BDD; `team` when DAG parallel |
 | `migrate` | engineer | subagent | none | Schema/data migration execution (pairs with rollback artifact) |
 | `verify` | engineer | subagent | on_failure | Run existing tests/gates post-change |
 | `test` | tester | subagent or team | none | Net-new integration tests; coverage-gap fills |
@@ -42,7 +42,7 @@ This file is the single source of truth. The synthesis skill (`references/runboo
 
 **Dispatch** — how the step is executed:
 - `subagent` — single agent spawn. The lead waits for completion before proceeding.
-- `team` — wave-parallel agent team. Engineer teams use isolated worktrees; other teams (design, review, test, security) share the workspace directory with ID-tagged output files.
+- `team` — DAG parallel agent team. Engineer teams use isolated worktrees; other teams (design, review, test, security) share the workspace directory with ID-tagged output files.
 - `n/a` — no agent dispatch; the lead handles the step directly.
 
 **Default HITL** — when the orchestrator presents results to the user:
@@ -104,7 +104,7 @@ The `cause` field serves two purposes: analytic lineage (which upstream step tri
 
 ### `implement`
 
-When dispatched as `team`, the planner decomposes the implementation into wave-parallel tasks. Each task gets an isolated worktree. The orchestrator manages worktree creation, merge, and cleanup.
+When dispatched as `team`, the planner decomposes the implementation into DAG parallel tasks. Each task gets an isolated worktree. The orchestrator manages worktree creation, merge, and cleanup.
 
 When dispatching two or more parallel engineers to the same worktree, the runbook should designate one as the committer responsible for verifying and committing after parallel completion, or include an explicit consolidation step. Without this, neither engineer commits, forcing the orchestrator to spawn a third agent for consolidation.
 
