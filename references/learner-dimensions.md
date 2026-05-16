@@ -185,17 +185,17 @@ Suggest: {update convention to match current practice | remove convention | inve
 
 ### Data source
 
-Call the `get_history` MCP tool to retrieve recent flow runs from the drift database. Each entry includes flow name, completion timestamp, and associated decisions. For state-level iteration data, read workspace journals from `.canon/workspaces/*/journal.json`.
+Call the `get_history` MCP tool to retrieve recent builds from the drift database. Each entry includes flow name, completion timestamp, and associated decisions. For state-level iteration data, read workspace journals from `.canon/workspaces/*/journal.json`.
 
 The `get_build_history` MCP tool provides archived build metadata (branch, flow, archived artifacts). Use it to supplement `get_history` when analyzing trends across many builds.
 
-**Minimum threshold**: 5 flow runs required for any suggestion. Below → note "Skipped: process-health — requires 5 flow runs, have {current}."
+**Minimum threshold**: 5 builds required for any suggestion. Below → note "Skipped: process-health — requires 5 builds, have {current}."
 
 ### Signals to analyze
 
 | Signal | Threshold | Suggestion |
 |--------|-----------|------------|
-| High iteration count on a state | Average iterations >= 3 across >= 5 runs | Review→fix churn — suggest examining the principle or implementor prompt for that state |
+| High iteration count on a state | Average iterations >= 3 across >= 5 runs | Review→fix churn — suggest examining the principle or engineer prompt for that state |
 | Declining pass rates | Gate/postcondition pass rate trending down across recent 5 runs | Principles may be becoming harder to satisfy — review recently changed principles |
 | Duration outlier by tier | A small-tier flow taking as long as a large-tier flow across >= 3 runs | Flow definition may have unnecessary states for this tier |
 | Frequently skipped states | Same state skipped in >= 60% of runs | Flow definition may need trimming — this state adds little value |
@@ -207,7 +207,43 @@ The `get_build_history` MCP tool provides archived build metadata (branch, flow,
 **{state-name or flow-name}** ({signal type})
 Evidence: {specific numbers — average iterations, pass rate trend, duration comparison}
 Runs analyzed: {N}
-Suggest: {specific action — examine principle X | trim state Y from flow | review implementor prompt for state Z}
+Suggest: {specific action — examine principle X | trim state Y from flow | review engineer prompt for state Z}
+```
+
+---
+
+## Dimension: agent-effectiveness
+
+**Goal**: Analyze agent transcripts from completed flows to detect behavioral inefficiencies, tool misuse, role violations, and iteration waste — producing actionable suggestions for agent rule changes, principle proposals, and convention updates.
+
+### Data source
+
+- Read workspace journals (`journal.json`) to discover steps with `transcript_path` entries
+- Call `get_transcript` MCP tool with `{workspace, state_id}` for each step
+- Use `summary` mode first for pattern scanning, `full` mode for detailed analysis of flagged steps
+- The `get_transcript` tool returns `TranscriptEntry[]` with fields: `role` ("system"|"user"|"assistant"|"tool_use"|"tool_result"), `content`, `tool_name?`, `tokens?`, `cumulative_tokens?`, `turn_number`, `timestamp`
+
+**Minimum threshold**: 3 completed flows with transcripts required. Below → note "Skipped: agent-effectiveness — requires 3 flows with transcripts, have {current}."
+
+### Signals to analyze
+
+| Signal | How to detect | Threshold | Suggestion |
+|--------|--------------|-----------|------------|
+| Tool retry churn | Same `tool_name` called 3+ times in sequence with `role: "tool_result"` containing error indicators between calls | >= 3 retries of same tool in a single step, observed in >= 2 flows | Agent rule change: add pre-validation or error-handling guidance for that tool |
+| Excessive iteration | `turn_number` exceeds 2x the median for that `agent_type` across sampled flows | Step `turn_number` max >= 2x median for agent type, in >= 2 flows | Investigate: check if the agent's instructions are unclear or the task plan was underspecified |
+| Role boundary violation | Entries with `role: "tool_use"` whose `tool_name` is not in the agent's declared `tools:` list, OR assistant entries performing work described in another agent type's definition | >= 1 occurrence in any flow | Agent rule change: add explicit boundary constraint to the violating agent's rules |
+| Unused available tools | Agent's declared `tools:` list includes a tool that would have been appropriate for observed work, but the agent used `Bash` or manual approaches instead | Pattern observed in >= 2 flows for the same agent type | Agent rule change: add tool preference guidance (similar to learner's existing "Tool Preference" section) |
+| Token cost outlier | `cumulative_tokens` for a step exceeds 3x the median for that `agent_type` and step type | Observed in >= 2 flows | Investigate: check if the agent is reading unnecessarily large files or receiving bloated context |
+| Error recovery anti-pattern | Agent encounters an error (`tool_result` with error), then repeats the exact same approach without adapting (same tool, same or similar arguments) | >= 2 identical retry attempts after error, in >= 2 flows | Agent rule change: add error-recovery guidance — "on failure, diagnose before retrying" |
+
+### Output per suggestion
+
+```
+**{agent_type}: {signal name}** ({N} occurrences across {M} flows)
+Evidence: {step_id} in {flow_slug} — {tool_name} retried {count} times / turn_number {actual} vs median {expected} / etc.
+Transcript: {workspace}/transcripts/{relevant_file}
+Suggest: {agent rule change: "{exact text}" | principle proposal: "{description}" | convention update: "{text}"}
+Artifact: {rules/{agent_type}.md | principles/{severity}/{slug}.md | .canon/CONVENTIONS.md}
 ```
 
 ---

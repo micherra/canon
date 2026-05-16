@@ -15,25 +15,24 @@ Claude Code skill definition that activates Canon when installed. This directory
 - `references/` — Reference fragments injected into agent context at runtime; covers orchestrator protocol, principle loading, workspace logging, status protocol, and other cross-cutting concerns
 
 ## Routing Contract
-<!-- last-updated: 2026-04-26 -->
+<!-- last-updated: 2026-05-15 -->
 
-SKILL.md intent routing (authoritative; aligned to root CLAUDE.md as of 2026-04-26):
+SKILL.md intent routing (authoritative; aligned to root CLAUDE.md as of 2026-05-15):
 
 | Intent | Action |
 |--------|--------|
-| build/fix/change | Drive flow state machine |
-| explore | Load `explore` flow → drive state machine |
-| test | Load `test-gap` flow |
-| review | Load `review-only` flow |
-| security | Load `security-audit` flow |
-| question | Respond directly |
-| chat / brainstorm | Respond directly |
-| greeting | Respond directly |
-| principle | Spawn `canon:writer` |
-| learn | Spawn `canon:learner` |
-| resume | Read `board.json` → resume state machine |
+| Build, fix, change, improve | Spawn `planner` |
+| Review PR or branch | Spawn `reviewer` |
+| Security audit | Spawn `security`, then `reviewer` |
+| Investigate / "how does X work" | Spawn `planner` |
+| Create/edit principle | Spawn `canon:writer` |
+| Analyze patterns / learn | Spawn `canon:learner` |
+| Question | Respond directly |
+| Chat / brainstorm | Respond directly |
+| Resume | Read journal → resume |
+| Greeting | Respond directly |
 
-**Removed agents (no longer referenced in SKILL.md):** `canon:chat`, `canon:guide`, `canon:implementor`, `canon:fixer`. **Removed escape hatch:** "Inline Mode" (Principle Loading outside a pipeline) was deleted.
+**Removed agents (no longer referenced in SKILL.md):** `canon:chat`, `canon:guide`, `canon:fixer`. **Removed escape hatch:** "Inline Mode" (Principle Loading outside a pipeline) was deleted.
 
 ## Conventions
 <!-- last-updated: 2026-04-09 -->

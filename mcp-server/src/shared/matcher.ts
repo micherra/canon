@@ -1,6 +1,7 @@
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { CANON_DIR } from "./constants.ts";
+import { parse as parseYaml } from "yaml";
+import { CANON_DIR, CANON_FILES } from "./constants.ts";
 import { buildLayerInferrer, DEFAULT_LAYER_MAPPINGS } from "./lib/config.ts";
 import { loadPrincipleFile, type Principle } from "./parser.ts";
 
@@ -180,6 +181,109 @@ type PrincipleCache = {
 
 let principleCache: PrincipleCache | null = null;
 
+// --- Principle overrides: project-level disable / severity / scope overrides ---
+
+type DisableOverride = {
+  principle_id: string;
+  action: "disable";
+  reason: string;
+};
+
+type SeverityOverride = {
+  principle_id: string;
+  action: "override-severity";
+  severity: "rule" | "strong-opinion" | "convention";
+  reason: string;
+};
+
+type ScopeOverride = {
+  principle_id: string;
+  action: "narrow-scope";
+  applies_to: {
+    layers: string[];
+    file_patterns: string[];
+  };
+  reason: string;
+};
+
+type PrincipleOverride = DisableOverride | SeverityOverride | ScopeOverride;
+
+type PrincipleOverridesFile = {
+  overrides: PrincipleOverride[];
+};
+
+async function loadOverrides(projectDir: string): Promise<PrincipleOverride[]> {
+  const overridePath = join(projectDir, CANON_DIR, CANON_FILES.PRINCIPLE_OVERRIDES);
+  try {
+    const content = await readFile(overridePath, "utf-8");
+    const parsed = parseYaml(content) as PrincipleOverridesFile | null;
+    if (!parsed || !Array.isArray(parsed.overrides)) {
+      return [];
+    }
+    const VALID_SEVERITIES = new Set(["rule", "strong-opinion", "convention"]);
+    return parsed.overrides.filter((o) => {
+      if (!o || typeof o.principle_id !== "string" || typeof o.action !== "string") return false;
+      if (o.action === "override-severity") {
+        return typeof o.severity === "string" && VALID_SEVERITIES.has(o.severity);
+      }
+      if (o.action === "narrow-scope") {
+        return (
+          o.applies_to != null &&
+          Array.isArray(o.applies_to?.layers) &&
+          (o.applies_to.layers as unknown[]).every((el: unknown) => typeof el === "string") &&
+          Array.isArray(o.applies_to?.file_patterns) &&
+          (o.applies_to.file_patterns as unknown[]).every((el: unknown) => typeof el === "string")
+        );
+      }
+      // "disable" and unknown actions: no additional field requirements
+      return true;
+    });
+  } catch {
+    return []; /* file missing or unreadable — no overrides */
+  }
+}
+
+function applyOverrides(principles: Principle[], overrides: PrincipleOverride[]): Principle[] {
+  if (overrides.length === 0) return principles;
+
+  const overrideMap = new Map<string, PrincipleOverride>();
+  for (const o of overrides) {
+    overrideMap.set(o.principle_id, o);
+  }
+
+  const result: Principle[] = [];
+  for (const p of principles) {
+    const override = overrideMap.get(p.id);
+    if (!override) {
+      result.push(p);
+      continue;
+    }
+
+    switch (override.action) {
+      case "disable":
+        // Skip — principle removed from output entirely
+        break;
+      case "override-severity":
+        result.push({ ...p, severity: override.severity });
+        break;
+      case "narrow-scope":
+        result.push({
+          ...p,
+          scope: {
+            file_patterns: override.applies_to.file_patterns,
+            layers: override.applies_to.layers,
+          },
+        });
+        break;
+      default:
+        // Unknown action — silently skip override, keep principle unchanged
+        result.push(p);
+    }
+  }
+
+  return result;
+}
+
 async function getFileMtimes(dir: string): Promise<string[]> {
   try {
     const files = await readdir(dir);
@@ -206,7 +310,16 @@ async function computeMtimeKey(projectDir: string, pluginDir: string): Promise<s
     join(pluginDir, "principles", sub),
   ]);
   const allMtimes = await Promise.all(dirs.map(getFileMtimes));
-  return allMtimes.flat().join(",");
+  const baseKey = allMtimes.flat().join(",");
+
+  // Include override file mtime in cache key
+  const overridePath = join(projectDir, CANON_DIR, CANON_FILES.PRINCIPLE_OVERRIDES);
+  try {
+    const s = await stat(overridePath);
+    return `${baseKey},overrides:${s.mtimeMs}`;
+  } catch {
+    return baseKey; /* no override file — key unchanged */
+  }
 }
 
 export async function loadAllPrinciples(
@@ -226,13 +339,17 @@ export async function loadAllPrinciples(
   const seenIds = new Set(projectPrinciples.map((p) => p.id));
   const merged = [...projectPrinciples, ...pluginPrinciples.filter((p) => !seenIds.has(p.id))];
 
+  // Apply project-level overrides (disable, severity change, scope narrowing)
+  const overrides = await loadOverrides(projectDir);
+  const effective = applyOverrides(merged, overrides);
+
   // Pre-compile all glob regexes while we're loading
-  for (const p of merged) {
+  for (const p of effective) {
     for (const pattern of p.scope.file_patterns) {
       globToRegex(pattern);
     }
   }
 
-  principleCache = { mtimeKey, principles: merged };
-  return merged;
+  principleCache = { mtimeKey, principles: effective };
+  return effective;
 }

@@ -73,7 +73,7 @@ The markdown body after frontmatter follows this fixed structure:
 
 ## Scope Guidance (Important)
 
-**Empty scope = matches every file.** An unconstrained principle adds noise to every code review, every post-write check, and every implementor's context. Before leaving scope empty, ask: "Does this principle genuinely apply to a React component, a Terraform module, a database migration, AND an API handler equally?"
+**Empty scope = matches every file.** An unconstrained principle adds noise to every code review, every post-write check, and every engineer's context. Before leaving scope empty, ask: "Does this principle genuinely apply to a React component, a Terraform module, a database migration, AND an API handler equally?"
 
 **Add `layers` when the principle targets specific code:**
 - DDD principles → `layers: [domain]`

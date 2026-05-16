@@ -17,8 +17,6 @@ export type FlowEventType =
   | "flow_started"
   | "flow_completed"
   | "board_updated"
-  | "wave_event_injected"
-  | "wave_event_resolved"
   | "stuck_detected"
   | "tool_scope_audit"
   | "agent_activity";
@@ -92,21 +90,6 @@ export type FlowEventMap = {
   board_updated: {
     action: string;
     stateId?: string;
-    timestamp: string;
-    correlation_id?: string;
-  };
-  wave_event_injected: {
-    eventId: string;
-    eventType: string;
-    workspace: string;
-    timestamp: string;
-    correlation_id?: string;
-  };
-  wave_event_resolved: {
-    eventId: string;
-    eventType: string;
-    action: "apply" | "reject";
-    workspace: string;
     timestamp: string;
     correlation_id?: string;
   };
@@ -254,23 +237,6 @@ export const EventPayloadSchemas = {
     stateId: z.string(),
     statusKeyword: z.string(),
     timestamp: z.string(),
-  }),
-
-  wave_event_injected: z.object({
-    correlation_id: correlationId,
-    eventId: z.string(),
-    eventType: z.string(),
-    timestamp: z.string(),
-    workspace: z.string(),
-  }),
-
-  wave_event_resolved: z.object({
-    action: z.enum(["apply", "reject"]),
-    correlation_id: correlationId,
-    eventId: z.string(),
-    eventType: z.string(),
-    timestamp: z.string(),
-    workspace: z.string(),
   }),
 } satisfies Record<FlowEventType, z.ZodTypeAny>;
 

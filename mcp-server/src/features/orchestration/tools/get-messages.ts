@@ -1,18 +1,14 @@
-import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import type { Message } from "@domains/messages/messages.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 export type GetMessagesInput = {
   workspace: string;
   channel: string;
   since?: string;
-  include_events?: boolean;
 };
 
 export type GetMessagesResult = {
   messages: Message[];
   count: number;
-  events?: WaveEvent[];
-  events_count?: number;
 };
 
 export async function getMessages(input: GetMessagesInput): Promise<GetMessagesResult> {
@@ -25,12 +21,6 @@ export async function getMessages(input: GetMessagesInput): Promise<GetMessagesR
   }));
 
   const result: GetMessagesResult = { count: messages.length, messages };
-
-  if (input.include_events) {
-    const events = store.getWaveEvents({ status: "pending" });
-    result.events = events;
-    result.events_count = events.length;
-  }
 
   return result;
 }

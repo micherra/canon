@@ -81,7 +81,7 @@ interface FileContextOutput {
 
 const loader = useDataLoader(async () => {
   await bridge.init();
-  const result = (await bridge.waitForToolResult()) as FileContextOutput;
+  const result = await bridge.loadData<FileContextOutput>();
   if (!result) throw new Error("No data received from tool");
   return result;
 });
