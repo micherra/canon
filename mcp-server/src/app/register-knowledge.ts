@@ -1,3 +1,4 @@
+import { recordPrediction } from "@features/diagnostics/services/prediction-tracker.ts";
 import type { FileSignals } from "@features/diagnostics/services/signal-compiler.ts";
 import { compileSignals } from "@features/diagnostics/services/signal-compiler.ts";
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
@@ -72,7 +73,13 @@ function resolveSignals(filePaths: string[], output: GetContextOutput): void {
     const driftDb = getDriftDb(projectDir);
     const driftDbSignals = driftDb.getSignals();
     const signals = compileSignals(filePaths, driftDbSignals);
-    if (signals.length > 0) output.signals = signals;
+    if (signals.length > 0) {
+      output.signals = signals;
+
+      // Record prediction — fail-open, separate from signal compilation.
+      // If recordPrediction fails, signals are still returned.
+      recordPrediction({ compiledSignals: signals, filePaths }, driftDbSignals);
+    }
   } catch {
     // Fail-open: signals section is optional enrichment.
   }

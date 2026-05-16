@@ -1,3 +1,4 @@
+import { reconcilePredictions } from "@features/diagnostics/services/prediction-tracker.ts";
 import { writeDesignBrief } from "@features/orchestration/tools/write-design-brief.ts";
 import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
@@ -102,7 +103,12 @@ function registerReviewArtifactTools(): void {
     },
     gatedWrapHandler(async (input) => {
       const signals = projectDir ? getDriftDb(projectDir).getSignals() : undefined;
-      return writeReview(input, signals);
+      const result = await writeReview(input, signals);
+      // Reconcile predictions after review is persisted (non-blocking; app layer owns this)
+      if (result.ok && signals) {
+        reconcilePredictions({ reviewedFiles: input.files, violations: input.violations }, signals);
+      }
+      return result;
     }),
   );
 

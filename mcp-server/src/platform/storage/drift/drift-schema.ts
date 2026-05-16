@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "4";
+export const DRIFT_SCHEMA_VERSION = "5";
 
 // DDL statements — v1 base tables
 //
@@ -228,6 +228,29 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
     },
     version: "4",
+  },
+  {
+    up: (db) => {
+      // predictions — stores recordPrediction snapshots for reconciliation
+      db.exec(`CREATE TABLE IF NOT EXISTS predictions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        prediction_id   TEXT NOT NULL UNIQUE,
+        workspace       TEXT,
+        flow_id         TEXT,
+        file_paths      TEXT NOT NULL,    -- JSON array of string
+        principle_ids   TEXT NOT NULL,    -- JSON array of string
+        signals_json    TEXT NOT NULL,    -- JSON: full compiled signals snapshot
+        timestamp       TEXT NOT NULL,
+        resolved        INTEGER NOT NULL DEFAULT 0,
+        resolved_at     TEXT,
+        outcome         TEXT              -- JSON: per-pair reconciliation result
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_predictions_resolved ON predictions(resolved)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_predictions_ts ON predictions(timestamp)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_predictions_pid ON predictions(prediction_id)`);
+      db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
+    },
+    version: "5",
   },
 ];
 
