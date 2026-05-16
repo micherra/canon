@@ -89,6 +89,23 @@ src/
 - `SyncResult` — `{ ok: true; newVersion: number } | { ok: false; error: "version_conflict" }`
 - `syncBoardToStore(store, board, expectedVersion?)` — all writes in single `store.transaction()`; uses `updateExecutionVersioned`; callers must check `result.ok`
 
+**Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — updated 2026-05-15 (v4 migration):
+<!-- last-updated: 2026-05-15 (drift schema v4: file_violation_history + path_effects tables) -->
+- `DRIFT_SCHEMA_VERSION = "4"` — bumped from `"3"`; migration v4 adds `file_violation_history` and `path_effects` tables
+- `file_violation_history` table — columns: `file_path TEXT`, `principle_id TEXT`, `violation_count INTEGER`, `first_seen TEXT`, `last_seen TEXT`, `fixed INTEGER DEFAULT 0`; PK `(file_path, principle_id)`
+- `path_effects` table — columns: `file_path TEXT PRIMARY KEY`, `violation_streak INTEGER`, `total_violations INTEGER`, `last_violation TEXT NULL`, `last_fix TEXT NULL`
+- Migration uses `columnExists()` guards and `CREATE TABLE IF NOT EXISTS` — idempotent
+
+**DriftDbSignals DAO** (`src/platform/storage/drift/drift-db-signals.ts`) — added 2026-05-15:
+<!-- last-updated: 2026-05-15 (new DriftDbSignals DAO and DriftDb.getSignals() accessor) -->
+- `DriftDbSignals` class — takes `Database.Database` in constructor; prepares statements once; all methods are sync
+- `getFileViolationHistory(filePaths: string[])` — returns violation history rows for the given file paths; empty input returns `[]`
+- `upsertFileViolation(filePath, principleId, now?)` — insert-or-update; preserves `first_seen` on update; increments `violation_count`
+- `markFixed(filePath, principleId)` — sets `fixed = 1` on the matching row; no-op if row absent
+- `getPathEffects(filePaths: string[])` — returns path_effects rows; empty input returns `[]`
+- `upsertPathEffect(filePath, fields)` — insert-or-update path_effects row; `fields` supports `violation_streak`, `total_violations`, `last_violation`, `last_fix`
+- `DriftDb.getSignals()` — lazy accessor; creates and caches a `DriftDbSignals` instance on first call; subsequent calls return the same instance
+
 **Drift Store** (`src/platform/storage/drift/store.ts`):
 - `ReviewEntry` — unified type for all reviews; optional PR fields: `pr_number?`, `branch?`, `last_reviewed_sha?`, `file_priorities?`
 - `DriftStore.getReviews(options?)`, `getLastReviewForPr(prNumber)`, `getLastReviewForBranch(branch)` — AND-filtered query methods
@@ -120,7 +137,21 @@ src/
 
 **`store-summaries.ts`** — DB-only write since ADR-005 2026-04-01; `loadSummariesFile` and `flattenSummaries` removed; `inferLanguageFromExtension` exported
 
-**`CANON_FILES` constants** (`src/shared/constants.ts`) — `GRAPH_DATA`, `REVERSE_DEPS`, `SUMMARIES` removed (ADR-005 2026-04-01); remaining: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
+**Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — added 2026-05-15:
+<!-- last-updated: 2026-05-15 (new signal compiler service) -->
+- `Signal` type — `{ type: "violation_history" | "path_effect" | "correction"; priority: number; text: string }`
+- `FileSignals` type — `{ file_path: string; signals: Signal[] }`
+- `CompileSignalsOptions` — `{ tokenBudgetPerFile?: number }` (default 500 tokens per file)
+- `compileSignals(filePaths: string[], driftDbSignals: DriftDbSignals, options?: CompileSignalsOptions): FileSignals[]` — reads from `file_violation_history` and `path_effects` via DAO; scores signals by priority; fits within per-file token budget via `fitWithinBudget`; read-only (no writes); empty input returns `[]`
+- `scoreViolationHistory(row)` — exported; `min(violation_count, 10) + 3 when last_seen within 7 days`
+- `scorePathEffect(row)` — exported; `streak * 2 + min(total_violations, 5)`
+
+**`store-summaries.ts`** (`src/features/diagnostics/tools/store-summaries.ts`) — updated ADR-005 2026-04-01:
+- `inferLanguageFromExtension(filePath)` → `string` — new export; maps `.ts`/`.tsx` → `"typescript"`, `.js`/`.jsx` → `"javascript"`, `.py` → `"python"`, `.md` → `"markdown"`, default `"unknown"`
+- `loadSummariesFile` — REMOVED 2026-04-01 (ADR-005); DB is sole summary read path
+- `flattenSummaries` — REMOVED 2026-04-01 (ADR-005); no longer needed
+- `StoreSummariesOutput.path` — now returns SQLite DB path (was `summaries.json` path)
+- `storeSummaries` — DB-only write; auto-stubs missing file rows via `upsertFile`; inits DB if absent; no JSON fallback
 
 **`CANON_FILES` constants** (`src/shared/constants.ts`) — updated ADR-005 2026-04-01; updated 2026-05-12 (principle overrides):
 - `CANON_FILES.GRAPH_DATA` — REMOVED; `graph-data.json` no longer written
@@ -141,7 +172,82 @@ src/
 
 **`graph_query` tool** — entity results now include `computed_tags?`; new optional `min_confidence?` param; updated 2026-05-02
 
-**Principles — Batch** (`get-principles.ts`) — `getPrinciplesBatch(input, projectDir, pluginDir)` deduplicates across files; returns `GetPrinciplesBatchOutput` with `principles[]`, `total_matched`, `total_in_canon`, `graph_context_by_file` — added 2026-04-30
+**`get-file-context` tool** (`src/features/file-context/tools/get-file-context.ts`) — updated 2026-05-02:
+- `FileContextOutput` now surfaces `computed_tags?: string[]` — KG-propagated tags for the file
+
+**`graph_query` tool** (`src/features/knowledge-graph/`) — updated 2026-05-02:
+- Entity results now include `computed_tags?: string[]` — tags propagated via 4-signal pipeline
+- New optional input param `min_confidence?: number` — filters tag results by confidence threshold
+
+**Principles — Batch** (`src/features/principles/tools/get-principles.ts`) — added 2026-04-30:
+- `PrinciplesGraphContext` — exported type; `{ in_degree, out_degree, is_hub, in_cycle, impact_score }` (no `layer` field)
+- `GetPrinciplesBatchInput` — `{ file_paths: string[]; layers?: string[]; task_description?: string; summary_only?: boolean; sections?: string[] }`
+- `GetPrinciplesBatchOutput` — `{ principles: Array<{ id, title, severity, body }>; total_matched: number; total_in_canon: number; graph_context_by_file: Record<string, PrinciplesGraphContext | undefined> }`
+- `getPrinciplesBatch(input: GetPrinciplesBatchInput, projectDir, pluginDir)` → `Promise<GetPrinciplesBatchOutput>` — deduplicates principles by ID across files; opens KG DB once; `graph_context_by_file` keyed by file path
+- Existing `getPrinciples` function unchanged
+
+**File Context — Batch** — `get-file-context-batch.ts` removed 2026-05-05; batch logic inlined into `get_context` handler in `register-knowledge.ts`
+
+**File Context** (`src/features/file-context/tools/get-file-context.ts`):
+- `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`, `hotspot_score?: HotspotScoreOutput`, `co_change_partners?: Array<CoChangePartner>` — git-intel fields added 2026-04-08
+- `loadKgData(dbPath, filePath, projectDir?)` — exported for testing; third `projectDir` param triggers `ensureGitIntelFresh` and populates `hotspot_score` and `co_change_partners`; co-change query uses UNION across both edge directions
+- `imported_by_layer: Record<string, string[]>` — mirrors `imports_by_layer`; groups reverse-dependency paths by their inferred layer
+- `shape: { label: string; description: string }` — derived by `deriveShape(metrics)`: Sink (`in_degree>8, out_degree<4`), High fan-out hub (`in_degree<3, out_degree>8`), Central hub (`in_degree>5, out_degree>5`), Leaf (`in_degree===0`), Internal (default); label prefixed with `"Cycle member — "` when `in_cycle` is true
+- `project_max_impact: number` — max `computeImpactScore()` across all graph nodes; `0` when no cached graph
+- `FileBlastRadiusEntry` interface — fields: `name`, `qualified_name`, `kind`, `depth`, `file_path` (path of the file containing the entity; `""` if lookup fails)
+
+**PR Review Data** (`src/features/pr-review/tools/pr-review-data.ts`) — pure function module; `get_pr_review_data` MCP tool removed 2026-03-25 (absorbed into `show_pr_impact`); `getPrReviewData` function called internally by `showPrImpact`; `PrReviewDataOutput` gained `hotspot_files?: string[]` (git-intel, 2026-04-08):
+- `PrViolation` interface — `{ principle_id: string; severity: "rule"|"strong-opinion"|"convention"; message?: string }`
+- `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`, `violations?: PrViolation[]`
+- `PrFileSummary` interface — `{ path: string; layer: string; status: "added"|"modified"|"deleted"|"renamed" }` — lightweight entry for clustering
+- `PrReviewDataOutput` interface — fields: `files: PrFileSummary[]` (lightweight), `impact_files: PrFileInfo[]` (needs-attention OR priority_score >= 15 OR has violations), `layers`, `total_files`, `total_violations`, `net_new_files`, `incremental`, `last_reviewed_sha?`, `diff_command`, `kg_freshness_ms?` (was `graph_data_age_ms?`, renamed ADR-005 2026-04-01), `error?`, `narrative: string`, `blast_radius: BlastRadiusEntry[]`
+- `BlastRadiusEntry` interface — `{ file: string; affected: Array<{ path: string; depth: number }> }`
+- `classifyFile(file: Omit<PrFileInfo, "bucket"|"reason">)` — pure function; returns `{ bucket, reason }`; thresholds: needs-attention = `violation_count > 0` OR (`in_degree >= 5` AND `is_changed`); worth-a-look = `priority_score >= 5`; low-risk = else
+- `generateNarrative(files, layers)` — pure function; returns human-readable summary string
+- `buildFileViolationMap(reviews: ReviewEntry[]): Map<string, PrViolation[]>` — pure function; maps per-file violation lists from drift store reviews; no I/O
+
+**UI clustering** (`src/ui/lib/clustering.ts`):
+- `ClusterInput` type — `{ path: string; status: "added"|"modified"|"deleted"|"renamed"; layer?: string }`
+- `Cluster` type — `{ id: string; title: string; description: string; type: "new-feature"|"removal"|"prefix-group"|"layer-group"|"other"; files: ClusterInput[] }`
+- `clusterFiles(files: ClusterInput[]): Cluster[]` — pure function; groups files into <= 30-file clusters via 6-step algorithm (new-feature, removal, prefix, layer, merge-small, split-large); no cluster exceeds 30 files
+- `findCommonPrefix(names: string[]): string | null` — pure; detects shared prefix up to `-`, `_`, or `.` boundary
+- `synthesizeDescription(cluster: Cluster): string` — pure; returns human-readable cluster description
+- `clusterIcon(type: Cluster["type"]): string` — returns emoji icon for cluster type
+
+**UI bridge** (`src/ui/stores/bridge.ts`):
+- `bridge.sendMessage(text: string): Promise<void>` — sends a user-role message via `app.sendMessage()`; throws if bridge not initialized; added 2026-03-25
+
+**UI components** (`src/ui/components/`):
+- `NarrativeSummary.svelte` — props: `narrative`, `totalFiles`, `layerCount`, `netNewFiles`, `violationCount`; pure display, no interactivity
+- `ImpactRow.svelte` — props: `file` (PrFileInfo), `maxScore`, `onPrompt`; click fires `"Show me {filePath} and explain what changed"`
+- `ViolationCard.svelte` — props: `file` (path), `violation` (PrViolation), `onPrompt`; severity pill colors from `SEVERITY_COLORS` in `constants.ts`; click fires `"Explain the {principleId} violation in {filePath} and how to fix it"`
+- `DepRow.svelte` — props: `dep` (path), `relationship`, `riskAnnotation?`, `onPrompt`; click fires `"What breaks if {filePath} regresses? Show me the dependents"`
+- `ChangeStoryGrid.svelte` — props: `files` (ClusterInput[]), `onPrompt`; computes `clusterFiles()` via `$derived`; renders 2-col card grid
+- `ImpactTabs.svelte` — props: `files` (PrFileInfo[]), `blastRadius` (BlastRadiusEntry[]), `onPrompt`; three tabs: High Impact (`priority_score >= 15`), Violations (sorted rule > strong-opinion > convention), Critical Deps (files not in diff appearing in blast radius)
+
+**PrReview.svelte** (`src/ui/PrReview.svelte`) — added 2026-03-25; replaces deleted `PrReviewPrep.svelte` and `PrImpact.svelte`:
+- Unified progressive container; no props — all data from `bridge.waitForToolResult()` (via `useDataLoader`)
+- Prep-only mode (`has_review === false`): run-review banner + header bar + `NarrativeSummary`, `ChangeStoryGrid`, staleness warning (when stale), `ImpactTabs`
+- Review mode (`has_review === true`): `VerdictBanner`, `StatsRow`, then a 2-column grid dashboard — Row 1: `FixBeforeMerge` (left), `ViolationsByPrinciple` + `ComplianceScore` stacked (right); Row 2: `BlastRadiusChart` (left), `LayerChart` + `SubsystemsPanel` stacked (right)
+- When no stored review: shows "Run Review" button that calls `bridge.sendMessage("Run a Canon review on this PR")`
+- Staleness warning banner shown when `kg_freshness_ms > 3_600_000` (field renamed from `graph_data_age_ms` ADR-005 2026-04-01)
+- `PrReviewPrep.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
+- `PrImpact.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
+
+**Token budget utility** (`src/shared/lib/token-budget.ts`) — added 2026-05-15:
+<!-- last-updated: 2026-05-15 (new token-budget utility) -->
+- `estimateTokens(text: string): number` — `Math.ceil(words * 1.3)` heuristic; 0 for empty/whitespace-only input; no external tokenizer dependency
+- `fitWithinBudget<T extends { text: string; priority: number }>(items: T[], budget: number, getSize?: (item: T) => number, getContent?: (item: T) => string): T[]` — greedy selection sorted by `priority DESC`; skips items that exceed remaining budget; returns `[]` when budget ≤ 0 or items is empty; stable JS sort preserves insertion order for equal-priority items; generic — caller fields are preserved in results
+
+**Violation patterns** (`src/shared/lib/violation-patterns.ts`) — added 2026-05-15 (extracted from `cross-run-analyzer.ts`):
+<!-- last-updated: 2026-05-15 (new violation-patterns shared lib) -->
+- 8 pure functions extracted from `features/history/services/cross-run-analyzer.ts`: `groupViolationsByFile`, `groupViolationsByPrinciple`, `computeViolationTrend`, `computeStreaks`, `computeHotspots`, `formatViolationSummary`, `computeComplianceRate`, `rankViolators`
+- `cross-run-analyzer.ts` now imports these from `@shared/lib/violation-patterns.ts`
+
+**Config utilities** (`src/shared/lib/config.ts`):
+- `buildLayerInferrer(mappings)` — now supports glob patterns (`*`, `**`, `?`) in addition to plain directory name segments; globs are anchored to path start
+- `loadLayerMappingsStrict(projectDir)` — throws if no layer mappings configured in `.canon/config.json` (strict variant of `loadLayerMappings`)
+- `loadGraphCompositionConfig(projectDir)` — reads `config.graph.composition` block; returns typed `GraphCompositionConfig` with defaults (`enabled: false`, `min_confidence: 0.5`, `max_refs_per_file: 50`)
 
 **Tools with MCP App UIs** (each has its own `ui://canon/*` resource):
 
@@ -155,9 +261,16 @@ src/
 
 | Tool | Purpose |
 |------|---------|
-| `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContext` (per-file), `getDriftReport`, `graphQuery` in a single call; `include` param gates sections (default: all) |
+| `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContext` (per-file), `getDriftReport`, `graphQuery`, `compileSignals` in a single call; `include` param gates sections (default: all 5) |
 
-**`get_context` tool** (`src/app/register-knowledge.ts`) — input: `file_paths: string[]`, `include?: Array<"principles"|"file_context"|"drift"|"graph">`; returns sections keyed by include param; `file_context` errors propagated fail-closed; graph query failures skipped gracefully — added 2026-04-30
+**`get_context` tool** (`src/app/register-knowledge.ts`) — added 2026-04-30; updated 2026-05-15 (signals section):
+<!-- last-updated: 2026-05-15 (signals section added to get_context) -->
+- Input: `file_paths: string[]` (required), `include?: Array<"principles"|"file_context"|"drift"|"graph"|"signals">` (defaults to all 5 sections)
+- Returns `{ file_paths, include, principles?, file_context?, drift?, graph?, signals? }` — sections present only when included
+- `signals` section: calls `compileSignals(filePaths, driftDb.getSignals())`; fails open (errors skipped, matching graph section behavior); returns `FileSignals[]`
+- `IncludeSection` type union now includes `"signals"`; `ALL_SECTIONS` constant updated
+- `file_context` errors propagated (fail-closed); graph/signals query failures skipped gracefully
+- `GetContextOutput` type exported for test assertions
 
 **Text-only principle/review tools:**
 

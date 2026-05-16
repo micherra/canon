@@ -78,10 +78,17 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 function getExpectedHtmlPath(artifactType: string): string {
   const toolFile = _fileURLToPath(new URL("../tools/present-artifact.ts", import.meta.url));
-  const distDir = _dirname(_dirname(_dirname(_dirname(_dirname(toolFile)))));
   const VIEW_MAP: Record<string, string> = { "planning-brief": "planning-brief.html" };
-  const htmlFileName = VIEW_MAP[artifactType];
-  return join(distDir, "src", "ui", htmlFileName ?? "unknown.html");
+  const htmlFileName = VIEW_MAP[artifactType] ?? "unknown.html";
+  if (toolFile.includes("/src/") && !toolFile.includes("/dist/src/")) {
+    let dir = _dirname(toolFile);
+    while (dir !== "/" && !dir.endsWith("/mcp-server")) {
+      dir = _dirname(dir);
+    }
+    return join(dir, "dist", "src", "ui", htmlFileName);
+  }
+  const distDir = _dirname(_dirname(_dirname(_dirname(_dirname(toolFile)))));
+  return join(distDir, "src", "ui", htmlFileName);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,5 @@
+import type { FileSignals } from "@features/diagnostics/services/signal-compiler.ts";
+import { compileSignals } from "@features/diagnostics/services/signal-compiler.ts";
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
@@ -11,6 +13,7 @@ import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
 import type { GetPrinciplesBatchOutput } from "@features/principles/tools/get-principles.ts";
 import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { z } from "zod";
 import {
   gatedWrapHandler,
@@ -22,7 +25,7 @@ import {
 
 // --- get_context composite tool ---
 
-type IncludeSection = "principles" | "file_context" | "drift" | "graph";
+type IncludeSection = "principles" | "file_context" | "drift" | "graph" | "signals";
 
 export type GetContextOutput = {
   file_paths: string[];
@@ -31,17 +34,18 @@ export type GetContextOutput = {
   file_context?: FileContextOutput[];
   drift?: Awaited<ReturnType<typeof getDriftReport>>;
   graph?: unknown;
+  signals?: FileSignals[];
 };
 
 const getContextInputSchema = {
   file_paths: z.array(z.string()).describe("File paths to get context for"),
   include: z
-    .array(z.enum(["principles", "file_context", "drift", "graph"]))
+    .array(z.enum(["principles", "file_context", "drift", "graph", "signals"]))
     .optional()
     .describe("Sections to include (default: all)"),
 };
 
-const ALL_SECTIONS: IncludeSection[] = ["principles", "file_context", "drift", "graph"];
+const ALL_SECTIONS: IncludeSection[] = ["principles", "file_context", "drift", "graph", "signals"];
 
 /**
  * Query blast_radius for each file path and return the aggregate results.
@@ -56,6 +60,22 @@ function queryGraphForFiles(filePaths: string[]): unknown[] | undefined {
     if (result.ok) aggregated.push(result);
   }
   return aggregated.length > 0 ? aggregated : undefined;
+}
+
+/**
+ * Populate output.signals for the signals section.
+ * Fail-open: any error (missing drift.db, missing tables) is silently ignored.
+ * Signals are optional enrichment — their absence must not prevent get_context from returning.
+ */
+function resolveSignals(filePaths: string[], output: GetContextOutput): void {
+  try {
+    const driftDb = getDriftDb(projectDir);
+    const driftDbSignals = driftDb.getSignals();
+    const signals = compileSignals(filePaths, driftDbSignals);
+    if (signals.length > 0) output.signals = signals;
+  } catch {
+    // Fail-open: signals section is optional enrichment.
+  }
 }
 
 async function handleGetContext(input: {
@@ -121,9 +141,15 @@ async function handleGetContext(input: {
     );
   }
 
+  if (sections.includes("signals")) {
+    tasks.push(Promise.resolve().then(() => resolveSignals(input.file_paths, output)));
+  }
+
   await Promise.all(tasks);
   return output;
 }
+
+export { handleGetContext };
 
 function registerCompositeContextTool(): void {
   server.registerTool(

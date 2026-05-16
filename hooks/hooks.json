@@ -91,6 +91,11 @@
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/post-commit-trailers.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/correction-capture.sh",
+            "timeout": 10
           }
         ]
       }
