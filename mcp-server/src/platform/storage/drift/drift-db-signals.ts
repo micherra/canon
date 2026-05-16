@@ -174,6 +174,7 @@ export class DriftDbSignals {
       FROM predictions
       WHERE resolved = 0
       ORDER BY timestamp DESC
+      LIMIT 200
     `);
 
     this.stmtResolvePrediction = db.prepare(`

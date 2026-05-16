@@ -75,6 +75,7 @@ function extractPrincipleIds(compiledSignals: FileSignals[]): string[] {
   for (const fs of compiledSignals) {
     for (const signal of fs.signals) {
       if (signal.type === "violation_history") {
+        // Format coupling: must match the text format produced by scoreViolationHistory() in signal-compiler.ts
         // Extract from format: 'Principle "principle-id" has been violated...'
         const match = signal.text.match(/^Principle "([^"]+)"/);
         if (match) ids.add(match[1]);
@@ -138,6 +139,39 @@ export function recordPrediction(
 
 // ---- reconcilePredictions ----
 
+/** Parse a prediction's JSON columns. Returns null when either column is corrupt. */
+function parsePredictionColumns(
+  prediction: PredictionRow,
+): { filePaths: string[]; principleIds: string[] } | null {
+  try {
+    const filePaths = JSON.parse(prediction.file_paths) as string[];
+    const principleIds = JSON.parse(prediction.principle_ids) as string[];
+    return { filePaths, principleIds };
+  } catch {
+    return null;
+  }
+}
+
+/** Build per-pair outcome array for overlapping (file, principle) combinations. */
+function buildPairOutcomes(
+  overlapping: string[],
+  principleIds: string[],
+  actualViolationKeys: Set<string>,
+): PairOutcome[] {
+  const pairs: PairOutcome[] = [];
+  for (const filePath of overlapping) {
+    for (const principleId of principleIds) {
+      pairs.push({
+        actual: actualViolationKeys.has(`${filePath}::${principleId}`),
+        file_path: filePath,
+        predicted: true,
+        principle_id: principleId,
+      });
+    }
+  }
+  return pairs;
+}
+
 /**
  * Reconcile unresolved predictions against actual review violations.
  *
@@ -177,36 +211,13 @@ export function reconcilePredictions(
     const now = new Date().toISOString();
 
     for (const prediction of unresolved) {
-      // Parse prediction's JSON columns — may be corrupt (validate-at-trust-boundaries)
-      let predFilePaths: string[];
-      let predPrincipleIds: string[];
-      try {
-        predFilePaths = JSON.parse(prediction.file_paths) as string[];
-        predPrincipleIds = JSON.parse(prediction.principle_ids) as string[];
-      } catch {
-        // Corrupt JSON — skip this prediction
-        continue;
-      }
+      const parsed = parsePredictionColumns(prediction);
+      if (!parsed) continue; // Corrupt JSON — skip
 
-      // Only reconcile if this prediction's files overlap with the reviewed files
-      const overlapping = predFilePaths.filter((fp) => reviewedFileSet.has(fp));
+      const overlapping = parsed.filePaths.filter((fp) => reviewedFileSet.has(fp));
       if (overlapping.length === 0) continue;
 
-      // Compute per-pair outcomes for each overlapping (file, principle) combination
-      const pairs: PairOutcome[] = [];
-      for (const filePath of overlapping) {
-        for (const principleId of predPrincipleIds) {
-          const key = `${filePath}::${principleId}`;
-          pairs.push({
-            actual: actualViolationKeys.has(key),
-            file_path: filePath,
-            predicted: true,
-            principle_id: principleId,
-          });
-        }
-      }
-
-      // Resolve the prediction with outcome JSON
+      const pairs = buildPairOutcomes(overlapping, parsed.principleIds, actualViolationKeys);
       reconciler.resolvePrediction({
         outcome: JSON.stringify({ pairs }),
         prediction_id: prediction.prediction_id,
