@@ -289,7 +289,7 @@ When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, verify the bui
 ### Process
 
 1. **Read the runbook** at `${WORKSPACE}/plans/${slug}/runbook.md`. Also read the planning brief at `${WORKSPACE}/plans/${slug}/planning-brief.md` if present. Extract acceptance criteria from the `## Acceptance Criteria` section. Accept both formats:
-   - **Table format** (new verification-aware format): `| # | Criterion | Verification | Type |` — extract the Criterion column from each data row.
+   - **Table format** (new verification-aware format): `| # | Criterion | Verification | Type |` — extract the Criterion, Verification, and Type columns from each data row.
    - **Checklist format** (legacy): `- [ ] criterion` — extract each checklist item as a criterion.
 
 2. **Classify each AC** into one of three verification categories:

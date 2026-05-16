@@ -309,7 +309,7 @@ Both patterns use native agent team dispatch. The orchestrator manages the lifec
 - Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
 - After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
 - The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
-- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD include a `skip_reason` in the `log_step` outcome explaining why. Accepted `skip_reason` values:
+- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD pass a `skip_reason` parameter directly to `log_step` (not inside the `outcome` object) explaining why. Accepted `skip_reason` values:
   - `"fix-type build, no contract-level changes"` — fix builds that only correct existing code without changing APIs, types, or conventions.
   - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
   - `"session timeout"` — session ending before tail steps could run.
