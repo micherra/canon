@@ -58,33 +58,6 @@ export type ReconcilePredictionsInput = {
   violations: Array<{ file_path?: string; principle_id: string }>;
 };
 
-// ---- Internal helpers ----
-
-/**
- * Extract unique principle IDs from compiled signals.
- *
- * Parses the signal text for violation_history signals in the format:
- *   Principle "principle-id" has been violated...
- *
- * Returns deduplicated array preserving insertion order.
- * Returns empty array when no violation_history signals exist or none match
- * the expected format.
- */
-function extractPrincipleIds(compiledSignals: FileSignals[]): string[] {
-  const ids = new Set<string>();
-  for (const fs of compiledSignals) {
-    for (const signal of fs.signals) {
-      if (signal.type === "violation_history") {
-        // Format coupling: must match the text format produced by scoreViolationHistory() in signal-compiler.ts
-        // Extract from format: 'Principle "principle-id" has been violated...'
-        const match = signal.text.match(/^Principle "([^"]+)"/);
-        if (match) ids.add(match[1]);
-      }
-    }
-  }
-  return [...ids];
-}
-
 // ---- Public API ----
 
 /**
@@ -112,15 +85,32 @@ export function recordPrediction(
     const signalsWithData = input.compiledSignals.filter((fs) => fs.signals.length > 0);
     if (signalsWithData.length === 0) return undefined;
 
-    // Extract unique principle IDs from violation_history signals
-    const principleIds = extractPrincipleIds(input.compiledSignals);
-    if (principleIds.length === 0) return undefined;
+    // Build per-file principle map — only files that have violation_history signals
+    const perFilePrinciples = new Map<string, string[]>();
+    for (const fs of signalsWithData) {
+      const ids: string[] = [];
+      for (const signal of fs.signals) {
+        if (signal.type === "violation_history") {
+          const match = signal.text.match(/^Principle "([^"]+)"/);
+          if (match) ids.push(match[1]);
+        }
+      }
+      if (ids.length > 0) {
+        perFilePrinciples.set(fs.file_path, [...new Set(ids)]);
+      }
+    }
+
+    if (perFilePrinciples.size === 0) return undefined;
+
+    // Store only files that had violation_history signals
+    const filePaths = [...perFilePrinciples.keys()];
+    const principleIds = [...new Set([...perFilePrinciples.values()].flat())];
 
     const predictionId = randomUUID();
     const now = new Date().toISOString();
 
     driftDbSignals.insertPrediction({
-      file_paths: JSON.stringify(input.filePaths),
+      file_paths: JSON.stringify(filePaths),
       flow_id: input.flowId ?? null,
       prediction_id: predictionId,
       principle_ids: JSON.stringify(principleIds),

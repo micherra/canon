@@ -273,6 +273,98 @@ describe("recordPrediction — fail-open behavior", () => {
   });
 });
 
+describe("recordPrediction — per-file file_paths filtering", () => {
+  let db: ReturnType<typeof initDriftDb>;
+  let driftDbSignals: DriftDbSignals;
+
+  beforeEach(() => {
+    ({ db, driftDbSignals } = makeDb());
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it("only stores file A when compileSignals returns signals for file A but not file B", () => {
+    // File A has violation_history signals; file B has no signals at all
+    const input: RecordPredictionInput = {
+      compiledSignals: [
+        makeFileSignalsWithViolation("src/a.ts", "principle-x"),
+        makeEmptyFileSignals("src/b.ts"), // no signals — should be excluded from file_paths
+      ],
+      filePaths: ["src/a.ts", "src/b.ts"],
+    };
+
+    const predictionId = recordPrediction(input, driftDbSignals);
+    expect(predictionId).toBeDefined();
+
+    const row = driftDbSignals.getPredictionById(predictionId!);
+    const filePaths = JSON.parse(row!.file_paths) as string[];
+
+    // Only src/a.ts has signals — src/b.ts must be excluded
+    expect(filePaths).toContain("src/a.ts");
+    expect(filePaths).not.toContain("src/b.ts");
+    expect(filePaths).toHaveLength(1);
+  });
+
+  it("only stores file A when file B has only path_effect signals (no principle IDs)", () => {
+    // File A has violation_history; file B only has path_effect (no principle to predict)
+    const input: RecordPredictionInput = {
+      compiledSignals: [
+        makeFileSignalsWithViolation("src/a.ts", "simplicity-first"),
+        makeFileSignalsPathEffectOnly("src/b.ts"),
+      ],
+      filePaths: ["src/a.ts", "src/b.ts"],
+    };
+
+    const predictionId = recordPrediction(input, driftDbSignals);
+    expect(predictionId).toBeDefined();
+
+    const row = driftDbSignals.getPredictionById(predictionId!);
+    const filePaths = JSON.parse(row!.file_paths) as string[];
+
+    // src/b.ts has no violation_history signals so has no principle to predict
+    expect(filePaths).toContain("src/a.ts");
+    expect(filePaths).not.toContain("src/b.ts");
+  });
+
+  it("stores both files when both have violation_history signals", () => {
+    const input: RecordPredictionInput = {
+      compiledSignals: [
+        makeFileSignalsWithViolation("src/a.ts", "principle-a"),
+        makeFileSignalsWithViolation("src/b.ts", "principle-b"),
+      ],
+      filePaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
+    };
+
+    const predictionId = recordPrediction(input, driftDbSignals);
+    expect(predictionId).toBeDefined();
+
+    const row = driftDbSignals.getPredictionById(predictionId!);
+    const filePaths = JSON.parse(row!.file_paths) as string[];
+
+    expect(filePaths).toContain("src/a.ts");
+    expect(filePaths).toContain("src/b.ts");
+    // src/c.ts was in filePaths input but had no signals → excluded
+    expect(filePaths).not.toContain("src/c.ts");
+    expect(filePaths).toHaveLength(2);
+  });
+
+  it("returns undefined when all files with signals have only path_effect signals", () => {
+    const input: RecordPredictionInput = {
+      compiledSignals: [
+        makeFileSignalsPathEffectOnly("src/a.ts"),
+        makeFileSignalsPathEffectOnly("src/b.ts"),
+      ],
+      filePaths: ["src/a.ts", "src/b.ts"],
+    };
+
+    const predictionId = recordPrediction(input, driftDbSignals);
+    // No violation_history signals anywhere → no principles to predict → undefined
+    expect(predictionId).toBeUndefined();
+  });
+});
+
 describe("extractPrincipleIds — principle ID parsing", () => {
   // Test the extraction by observing recordPrediction's persisted principle_ids column
 
