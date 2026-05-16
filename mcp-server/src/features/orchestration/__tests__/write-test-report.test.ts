@@ -259,6 +259,166 @@ describe("writeTestReport — valid input", () => {
   });
 });
 
+describe("writeTestReport — manual_verification field", () => {
+  it("renders ## Manual Verification Needed section when items are provided", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
+
+    const result = await writeTestReport({
+      failed: 0,
+      manual_verification: [
+        {
+          criterion: "UI renders correctly in Safari",
+          status: "pending",
+          verification_method: "Open browser and inspect visually",
+        },
+        {
+          criterion: "CSV export downloads file",
+          status: "not started",
+          verification_method: "Click Export button and verify download",
+        },
+      ],
+      passed: 5,
+      skipped: 0,
+      slug: "mv-items-test",
+      summary: "Some manual checks needed.",
+      workspace: tmpDir,
+    });
+
+    assertOk(result);
+    const md = await readFile(result.path, "utf-8");
+
+    expect(md).toContain("## Manual Verification Needed");
+    expect(md).toContain("Criterion");
+    expect(md).toContain("Verification Method");
+    expect(md).toContain("Status");
+    // Row 1
+    expect(md).toContain("UI renders correctly in Safari");
+    expect(md).toContain("Open browser and inspect visually");
+    expect(md).toContain("pending");
+    // Row 2
+    expect(md).toContain("CSV export downloads file");
+    expect(md).toContain("Click Export button and verify download");
+    expect(md).toContain("not started");
+    // Row numbers
+    expect(md).toContain("| 1 |");
+    expect(md).toContain("| 2 |");
+  });
+
+  it("does not render section when manual_verification is an empty array", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
+
+    const result = await writeTestReport({
+      failed: 0,
+      manual_verification: [],
+      passed: 3,
+      skipped: 0,
+      slug: "mv-empty-test",
+      summary: "All automated.",
+      workspace: tmpDir,
+    });
+
+    assertOk(result);
+    const md = await readFile(result.path, "utf-8");
+    expect(md).not.toContain("## Manual Verification Needed");
+  });
+
+  it("does not render section when manual_verification is absent", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
+
+    const result = await writeTestReport({
+      failed: 0,
+      passed: 3,
+      skipped: 0,
+      slug: "mv-absent-test",
+      summary: "No manual_verification field.",
+      workspace: tmpDir,
+    });
+
+    assertOk(result);
+    const md = await readFile(result.path, "utf-8");
+    expect(md).not.toContain("## Manual Verification Needed");
+  });
+
+  it("meta JSON includes manual_verification array when provided", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
+
+    const manualVerification = [
+      {
+        criterion: "Login flow works with SSO",
+        status: "pending",
+        verification_method: "Manually test with SSO provider",
+      },
+    ];
+
+    const result = await writeTestReport({
+      failed: 0,
+      manual_verification: manualVerification,
+      passed: 4,
+      skipped: 0,
+      slug: "mv-meta-test",
+      summary: "One manual check.",
+      workspace: tmpDir,
+    });
+
+    assertOk(result);
+    const metaRaw = await readFile(result.meta_path, "utf-8");
+    const meta = JSON.parse(metaRaw);
+
+    expect(meta.manual_verification).toHaveLength(1);
+    expect(meta.manual_verification[0].criterion).toBe("Login flow works with SSO");
+    expect(meta.manual_verification[0].verification_method).toBe("Manually test with SSO provider");
+    expect(meta.manual_verification[0].status).toBe("pending");
+  });
+
+  it("meta JSON manual_verification defaults to empty array when absent", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
+
+    const result = await writeTestReport({
+      failed: 0,
+      passed: 2,
+      skipped: 0,
+      slug: "mv-meta-absent-test",
+      summary: "No manual checks.",
+      workspace: tmpDir,
+    });
+
+    assertOk(result);
+    const metaRaw = await readFile(result.meta_path, "utf-8");
+    const meta = JSON.parse(metaRaw);
+
+    expect(meta.manual_verification).toEqual([]);
+  });
+
+  it("escapes pipe characters in manual_verification values", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
+
+    const result = await writeTestReport({
+      failed: 0,
+      manual_verification: [
+        {
+          criterion: "Step A | Step B works",
+          status: "pass|fail",
+          verification_method: "Check A|B|C",
+        },
+      ],
+      passed: 1,
+      skipped: 0,
+      slug: "mv-escape-test",
+      summary: "Escape test.",
+      workspace: tmpDir,
+    });
+
+    assertOk(result);
+    const md = await readFile(result.path, "utf-8");
+
+    // Pipe characters must be escaped so they don't break the table
+    expect(md).toContain("&#124;");
+    // The raw unescaped pipe should not appear inside a table cell value
+    // (it can appear as the cell delimiter but the content should be escaped)
+    expect(md).toContain("Step A &#124; Step B works");
+  });
+});
+
 describe("writeTestReport — validation errors", () => {
   it("returns INVALID_INPUT for slug with spaces", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));

@@ -49,6 +49,15 @@ function registerPlanTools(): void {
             }),
           )
           .optional(),
+        manual_verification: z
+          .array(
+            z.object({
+              criterion: z.string().describe("Acceptance criterion requiring manual verification"),
+              status: z.string().describe("Verification status"),
+              verification_method: z.string().describe("How to verify manually"),
+            }),
+          )
+          .optional(),
         passed: z.number().int().min(0),
         skipped: z.number().int().min(0),
         slug: z.string(),

@@ -256,6 +256,8 @@ If engineer tests are coupled to implementation details (testing private methods
 
 When `mcp__canon__write_test_report` is available, use it to write your test report instead of the Write tool. Pass test results (passed, failed, skipped, issues) as structured input. The tool handles markdown generation and produces a machine-readable sidecar file.
 
+When acceptance criteria include manual/non-automatable items, pass them via the `manual_verification` field — an array of `{ criterion, verification_method, status }` objects. This renders the `## Manual Verification Needed` section in the report and enables the orchestrator's HITL gate to detect items requiring human verification.
+
 ## Missing Artifacts
 
 Follow the `agent-missing-artifact` rule. Implementation summaries (`*-SUMMARY.md`) are **required** input for the tester. If an expected summary does not exist, report `BLOCKED` with detail: "Missing implementation summary: {path}". Do not proceed without understanding what was implemented.
