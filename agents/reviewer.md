@@ -230,6 +230,14 @@ When the orchestrator provides engineer summary paths (`${WORKSPACE}/plans/{slug
 
 Stage 3 does NOT change the verdict. Discrepancies are addenda for the next review cycle.
 
+## Early Output Protocol
+
+**Write the review artifact immediately after Stage 3 completes** — do not wait for Stages 4 and 5 to finish. Call `mcp__canon__write_review` with whatever findings are complete so far (Stages 1–3), including partial verdicts and any `SUMMARY CORRECTION REQUIRED` markers. Then continue to Stage 4 and Stage 5.
+
+**Rationale**: Stage 3 contains the most actionable compliance findings. Writing the artifact early ensures the orchestrator always has something to act on, even if the session ends before Stages 4–5 complete.
+
+**Turn-budget self-check**: Before starting Stage 4, check your remaining turn budget. If you have fewer than 5 turns remaining, write a partial review using what you have completed (Stages 1–3) and include a note at the top of the review: `[PARTIAL REVIEW — session budget exhausted before Stages 4–5 could complete]`. Do not attempt Stages 4–5 if you cannot finish them — a partial review at `${WORKSPACE}/reviews/REVIEW.md` is better than no review at all.
+
 ## Discover Lint/Format Gate Commands
 
 While inspecting the codebase for code quality, note any linting or formatting tools that are configured. Report these as discovered gates so the gate runner can use them for automated quality checks. Include in your `report_result` call:

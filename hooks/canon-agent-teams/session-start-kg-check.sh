@@ -12,10 +12,6 @@
 
 set -euo pipefail
 
-if [[ "${CANON_AGENT_TEAMS_MODE:-off}" != "on" ]]; then
-  exit 0
-fi
-
 KG_DB="${CANON_PROJECT_DIR:-.}/.canon/knowledge-graph.db"
 
 if [[ ! -f "$KG_DB" ]]; then

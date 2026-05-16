@@ -13,11 +13,6 @@
 
 set -euo pipefail
 
-# Feature flag gate
-if [[ "${CANON_AGENT_TEAMS_MODE:-off}" != "on" ]]; then
-  exit 0
-fi
-
 INPUT=$(cat)
 
 # Only care about Bash calls

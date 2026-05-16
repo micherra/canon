@@ -15,10 +15,6 @@
 
 set -euo pipefail
 
-if [[ "${CANON_AGENT_TEAMS_MODE:-off}" != "on" ]]; then
-  exit 0
-fi
-
 INPUT=$(cat 2>/dev/null || true)
 
 if [[ -z "$INPUT" ]]; then

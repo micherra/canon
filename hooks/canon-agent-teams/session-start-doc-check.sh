@@ -13,10 +13,6 @@
 
 set -euo pipefail
 
-if [[ "${CANON_AGENT_TEAMS_MODE:-off}" != "on" ]]; then
-  exit 0
-fi
-
 LAST_SCRIBE_FILE="${CANON_PROJECT_DIR:-.}/.canon/last-scribe-commit"
 
 if [[ ! -f "$LAST_SCRIBE_FILE" ]]; then

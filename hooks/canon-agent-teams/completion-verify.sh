@@ -20,10 +20,6 @@
 
 set -euo pipefail
 
-if [[ "${CANON_AGENT_TEAMS_MODE:-off}" != "on" ]]; then
-  exit 0
-fi
-
 WORKSPACE="${CANON_WORKSPACE:-${1:-}}"
 
 if [[ -z "$WORKSPACE" ]]; then

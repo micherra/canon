@@ -8,10 +8,6 @@
 
 set -euo pipefail
 
-if [[ "${CANON_AGENT_TEAMS_MODE:-off}" != "on" ]]; then
-  exit 0
-fi
-
 # Consume stdin (required by Claude Code hook contract)
 INPUT=$(cat)
 

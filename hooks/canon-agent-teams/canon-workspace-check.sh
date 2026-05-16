@@ -6,7 +6,6 @@
 # never blocked by this hook.
 #
 # Decision table:
-#   CANON_AGENT_TEAMS_MODE != "on"  → allow (no-op)
 #   CANON_BYPASS_WORKSPACE_CHECK=1  → allow (explicit escape hatch)
 #   target file is gitignored       → allow (always safe)
 #   Bash with no file targets       → allow (no write detected)
@@ -16,17 +15,12 @@
 
 set -euo pipefail
 
-# ── 1. Flag gate ──────────────────────────────────────────────────────────────
-if [[ "${CANON_AGENT_TEAMS_MODE:-off}" != "on" ]]; then
-  exit 0
-fi
-
-# ── 2. Bypass gate ────────────────────────────────────────────────────────────
+# ── 1. Bypass gate ────────────────────────────────────────────────────────────
 if [[ "${CANON_BYPASS_WORKSPACE_CHECK:-0}" == "1" ]]; then
   exit 0
 fi
 
-# ── 3. Read tool input from stdin ─────────────────────────────────────────────
+# ── 2. Read tool input from stdin ─────────────────────────────────────────────
 TOOL_INPUT_JSON=$(cat)
 
 # Extract field using jq if available, otherwise fall back to grep/sed.
@@ -41,7 +35,7 @@ _jq_field() {
   fi
 }
 
-# ── 4. Resolve target file path(s) ────────────────────────────────────────────
+# ── 3. Resolve target file path(s) ────────────────────────────────────────────
 declare -a TARGETS=()
 
 case "${TOOL_NAME:-}" in
@@ -139,7 +133,7 @@ if [[ "$has_tracked" -eq 0 ]]; then
   exit 0
 fi
 
-# ── 7. Workspace check — find active workspace for current branch ──────────────
+# ── 6. Workspace check — find active workspace for current branch ──────────────
 CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || true)
 
 # Determine all candidate .canon/workspaces/ roots to search.
@@ -197,7 +191,7 @@ if _find_active_workspace "$CURRENT_BRANCH"; then
   exit 0
 fi
 
-# ── 8. Parent-workspace lookup (ISSUE-3) ─────────────────────────────────────
+# ── 7. Parent-workspace lookup (ISSUE-3) ─────────────────────────────────────
 # If in a worktree, check CANON_PARENT_WORKSPACE env var for a parent workspace.
 if [[ "$IN_WORKTREE" -eq 1 && -n "${CANON_PARENT_WORKSPACE:-}" ]]; then
   for search_root in "${SEARCH_ROOTS[@]}"; do
@@ -217,6 +211,6 @@ if [[ "$IN_WORKTREE" -eq 1 && -n "${CANON_PARENT_WORKSPACE:-}" ]]; then
   done
 fi
 
-# ── 9. Block ──────────────────────────────────────────────────────────────────
+# ── 8. Block ──────────────────────────────────────────────────────────────────
 echo "No active Canon workspace for this branch. Route the request through the planner to create a workspace before editing tracked files." >&2
 exit 2

@@ -11,16 +11,12 @@ HOOK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/post-commit-trailers.sh"
 pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
-# 1. Feature-flag off — exit 0 no matter what.
-out=$(CANON_AGENT_TEAMS_MODE=off bash "$HOOK" <<<'{"tool_name":"Bash","tool_input":{"command":"git commit -m boom"}}' 2>&1) || fail "flag off should exit 0"
-pass "flag off is no-op"
-
 # 2. Non-Bash tool — exit 0.
-out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<'{"tool_name":"Edit"}' 2>&1) || fail "non-Bash should exit 0"
+out=$(bash "$HOOK" <<<'{"tool_name":"Edit"}' 2>&1) || fail "non-Bash should exit 0"
 pass "non-Bash tool ignored"
 
 # 3. Bash but not a git commit — exit 0.
-out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<'{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' 2>&1) || fail "non-commit Bash should exit 0"
+out=$(bash "$HOOK" <<<'{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' 2>&1) || fail "non-commit Bash should exit 0"
 pass "non-commit Bash ignored"
 
 # 4. git commit with trailer present — exit 0, no warning on stderr.
@@ -36,7 +32,7 @@ trap 'rm -rf "$SANDBOX"' EXIT
   echo x > a
   git add a
   git commit -q -m "$(printf 'subject\n\nCanon-Workflow: test\n')"
-  out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<'{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"}}' 2>&1) \
+  out=$(bash "$HOOK" <<<'{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"}}' 2>&1) \
     || { echo "hook exited non-zero: $out" >&2; exit 1; }
   if echo "$out" | grep -q 'CANON WARNING'; then
     echo "did not expect warning: $out" >&2; exit 1
@@ -56,7 +52,7 @@ SANDBOX2=$(mktemp -d)
   echo x > a
   git add a
   git commit -q -m "no trailer here"
-  out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<'{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"}}' 2>&1) \
+  out=$(bash "$HOOK" <<<'{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"}}' 2>&1) \
     || { echo "hook exited non-zero: $out" >&2; exit 1; }
   if ! echo "$out" | grep -q 'CANON WARNING'; then
     echo "expected warning but got: $out" >&2; exit 1

@@ -2,22 +2,17 @@
 # post-commit-trailers.sh — PostToolUse (Bash) hook that validates Canon-Workflow
 # trailer presence on git commits made during agent-teams mode.
 #
-# Only active when CANON_AGENT_TEAMS_MODE=on. PostToolUse hooks fire AFTER the
-# commit has already landed, so this hook cannot block retroactively — it warns
-# on stderr. Hard enforcement is provided by completion-verify.sh at flow end
-# plus agent-definition guidance to include trailers in every commit.
+# PostToolUse hooks fire AFTER the commit has already landed, so this hook
+# cannot block retroactively — it warns on stderr. Hard enforcement is provided
+# by completion-verify.sh at flow end plus agent-definition guidance to include
+# trailers in every commit.
 #
 # Input: JSON on stdin (Claude Code PostToolUse hook format, includes tool_name
 #        and the command string).
-# Exit 0: trailer present, mode not active, or non-commit Bash call.
+# Exit 0: trailer present, or non-commit Bash call.
 # Exit 0: trailer missing (warn on stderr only — cannot undo the commit).
 
 set -euo pipefail
-
-# Feature flag gate: legacy mode is a no-op.
-if [[ "${CANON_AGENT_TEAMS_MODE:-off}" != "on" ]]; then
-  exit 0
-fi
 
 INPUT=$(cat)
 
