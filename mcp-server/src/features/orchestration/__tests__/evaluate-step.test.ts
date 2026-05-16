@@ -8,13 +8,11 @@
  * TDD order: all tests written before implementation.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   EvaluateStepInput,
-  EvaluateStepOutput,
-  PatternFinding,
   FileScopeOverlap,
-  DiffStats,
+  PatternFinding,
 } from "../tools/evaluate-step.ts";
 import { evaluateStep } from "../tools/evaluate-step.ts";
 
@@ -26,16 +24,17 @@ vi.mock("@platform/adapters/git-adapter.ts", () => ({
 }));
 
 import { gitDiff } from "@platform/adapters/git-adapter.ts";
+
 const mockGitDiff = vi.mocked(gitDiff);
 
 function makeGitDiffResult(stdout: string, ok = true) {
   return {
-    ok,
-    stdout,
-    stderr: ok ? "" : "fatal: bad revision",
-    exitCode: ok ? 0 : 128,
-    timedOut: false,
     duration_ms: 5,
+    exitCode: ok ? 0 : 128,
+    ok,
+    stderr: ok ? "" : "fatal: bad revision",
+    stdout,
+    timedOut: false,
   };
 }
 
@@ -197,11 +196,11 @@ index 000..111 100644
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const BASE_INPUT: EvaluateStepInput = {
-  workspace: "/tmp/ws",
-  slug: "test-slug",
   base_commit: "abc123",
-  worktree_path: "/tmp/worktree",
   declared_files: ["src/foo.ts"],
+  slug: "test-slug",
+  workspace: "/tmp/ws",
+  worktree_path: "/tmp/worktree",
 };
 
 function makeInput(overrides: Partial<EvaluateStepInput> = {}): EvaluateStepInput {

@@ -58,55 +58,104 @@ type DiffLine = {
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 const PATTERN_CATALOG = [
-  { id: "todo", category: "lazy" as const, regex: /\bTODO\b/i, description: "TODO marker" },
-  { id: "fixme", category: "lazy" as const, regex: /\bFIXME\b/i, description: "FIXME marker" },
-  { id: "hack", category: "lazy" as const, regex: /\bHACK\b/i, description: "HACK marker" },
-  { id: "xxx", category: "lazy" as const, regex: /\bXXX\b/, description: "XXX marker" },
+  { category: "lazy" as const, description: "TODO marker", id: "todo", regex: /\bTODO\b/i },
+  { category: "lazy" as const, description: "FIXME marker", id: "fixme", regex: /\bFIXME\b/i },
+  { category: "lazy" as const, description: "HACK marker", id: "hack", regex: /\bHACK\b/i },
+  { category: "lazy" as const, description: "XXX marker", id: "xxx", regex: /\bXXX\b/ },
   {
-    id: "placeholder",
     category: "lazy" as const,
-    regex: /\bplaceholder\b/i,
     description: "Placeholder text",
+    id: "placeholder",
+    regex: /\bplaceholder\b/i,
   },
   {
-    id: "hardcoded-secret",
     category: "lazy" as const,
-    regex: /(?:password|secret|token|api_key)\s*[:=]\s*["'][^"']{3,}["']/i,
     description: "Hardcoded credential-like string",
+    id: "hardcoded-secret",
+    regex: /(?:password|secret|token|api_key)\s*[:=]\s*["'][^"']{3,}["']/i,
   },
   {
-    id: "as-any",
     category: "hacky" as const,
-    regex: /\bas\s+any\b/,
     description: "TypeScript as any cast",
+    id: "as-any",
+    regex: /\bas\s+any\b/,
   },
   {
-    id: "as-unknown",
     category: "hacky" as const,
-    regex: /\bas\s+unknown\b/,
     description: "TypeScript as unknown cast",
+    id: "as-unknown",
+    regex: /\bas\s+unknown\b/,
   },
   {
-    id: "eslint-disable",
     category: "hacky" as const,
-    regex: /eslint-disable/,
     description: "ESLint suppression",
+    id: "eslint-disable",
+    regex: /eslint-disable/,
   },
   {
-    id: "ts-ignore",
     category: "hacky" as const,
-    regex: /@ts-ignore/,
     description: "TypeScript ignore directive",
+    id: "ts-ignore",
+    regex: /@ts-ignore/,
   },
   {
-    id: "ts-expect-error",
     category: "hacky" as const,
-    regex: /@ts-expect-error/,
     description: "TypeScript expect-error directive",
+    id: "ts-expect-error",
+    regex: /@ts-expect-error/,
   },
 ] as const;
 
 // ─── Diff parser ──────────────────────────────────────────────────────────────
+
+/** Returns true if the line is a diff meta-header to skip entirely. */
+function isDiffMetaHeader(rawLine: string): boolean {
+  return (
+    rawLine.startsWith("--- ") || rawLine.startsWith("diff --git ") || rawLine.startsWith("index ")
+  );
+}
+
+/**
+ * Classify and push a content line (add / remove / context) onto result.
+ * Returns the updated line number.
+ */
+function classifyDiffLine(
+  rawLine: string,
+  currentFile: string,
+  currentLineNumber: number,
+  result: DiffLine[],
+): number {
+  if (rawLine.startsWith("+")) {
+    result.push({
+      content: rawLine.slice(1),
+      file_path: currentFile,
+      line_number: currentLineNumber,
+      type: "add",
+    });
+    return currentLineNumber + 1;
+  }
+  if (rawLine.startsWith("-")) {
+    result.push({
+      content: rawLine.slice(1),
+      file_path: currentFile,
+      line_number: currentLineNumber,
+      type: "remove",
+    });
+    // Removed lines do not advance the post-patch line counter
+    return currentLineNumber;
+  }
+  if (rawLine.startsWith(" ")) {
+    result.push({
+      content: rawLine.slice(1),
+      file_path: currentFile,
+      line_number: currentLineNumber,
+      type: "context",
+    });
+    return currentLineNumber + 1;
+  }
+  // Lines that don't match any prefix (e.g., "\ No newline at end of file") are skipped
+  return currentLineNumber;
+}
 
 /**
  * Parse a unified git diff output into structured DiffLine entries.
@@ -130,10 +179,7 @@ export function parseDiff(diffOutput: string): DiffLine[] {
       continue;
     }
 
-    // Skip --- a/... and diff --git ... lines
-    if (rawLine.startsWith("--- ") || rawLine.startsWith("diff --git ") || rawLine.startsWith("index ")) {
-      continue;
-    }
+    if (isDiffMetaHeader(rawLine)) continue;
 
     // Hunk header: @@ -X,Y +A,B @@
     const hunkMatch = rawLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
@@ -145,32 +191,7 @@ export function parseDiff(diffOutput: string): DiffLine[] {
     // Skip if no file context yet
     if (!currentFile) continue;
 
-    if (rawLine.startsWith("+")) {
-      result.push({
-        file_path: currentFile,
-        line_number: currentLineNumber,
-        content: rawLine.slice(1),
-        type: "add",
-      });
-      currentLineNumber++;
-    } else if (rawLine.startsWith("-")) {
-      result.push({
-        file_path: currentFile,
-        line_number: currentLineNumber,
-        content: rawLine.slice(1),
-        type: "remove",
-      });
-      // Removed lines do not advance the post-patch line counter
-    } else if (rawLine.startsWith(" ")) {
-      result.push({
-        file_path: currentFile,
-        line_number: currentLineNumber,
-        content: rawLine.slice(1),
-        type: "context",
-      });
-      currentLineNumber++;
-    }
-    // Lines that don't match any prefix (e.g., "\ No newline at end of file") are skipped
+    currentLineNumber = classifyDiffLine(rawLine, currentFile, currentLineNumber, result);
   }
 
   return result;
@@ -191,11 +212,11 @@ export function scanPatterns(addedLines: DiffLine[]): PatternFinding[] {
     for (const pattern of PATTERN_CATALOG) {
       if (pattern.regex.test(line.content)) {
         findings.push({
-          pattern_id: pattern.id,
           category: pattern.category,
           file_path: line.file_path,
           line_number: line.line_number,
           matched_text: line.content.trim(),
+          pattern_id: pattern.id,
         });
       }
     }
@@ -208,6 +229,55 @@ export function scanPatterns(addedLines: DiffLine[]): PatternFinding[] {
 
 const CATCH_OPEN_PATTERN = /catch\s*(?:\([^)]*\))?\s*\{/;
 const COMMENT_PATTERN = /\/\/|\/\*/;
+
+/** Count net open braces in a string (positive means more { than }) */
+function countBraceDepth(s: string): number {
+  let depth = 0;
+  for (const ch of s) {
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+  }
+  return depth;
+}
+
+/** Returns true when an added line immediately preceding the catch line has a comment. */
+function hasPrecedingComment(addedLines: DiffLine[], catchIndex: number): boolean {
+  if (catchIndex === 0) return false;
+  const prev = addedLines[catchIndex - 1];
+  return prev.type === "add" && COMMENT_PATTERN.test(prev.content);
+}
+
+type CatchBodyResult = { hasComment: boolean; hasNonEmptyContent: boolean };
+
+/**
+ * Scan the body of a catch block starting at `startIndex`.
+ * Returns whether the block contains a comment or non-empty content.
+ */
+function scanCatchBody(addedLines: DiffLine[], startIndex: number): CatchBodyResult {
+  let depth = 1;
+  let hasComment = false;
+  let hasNonEmptyContent = false;
+
+  for (let j = startIndex; j < addedLines.length && depth > 0; j++) {
+    const bodyLine = addedLines[j];
+    if (bodyLine.type !== "add") continue;
+
+    const trimmed = bodyLine.content.trim();
+
+    if (COMMENT_PATTERN.test(trimmed)) {
+      hasComment = true;
+    }
+
+    depth += countBraceDepth(trimmed);
+
+    // Content inside block (before closing brace at depth 0)
+    if (depth > 0 && trimmed !== "" && trimmed !== "}") {
+      hasNonEmptyContent = true;
+    }
+  }
+
+  return { hasComment, hasNonEmptyContent };
+}
 
 /**
  * Stateful bare-catch detector.
@@ -226,76 +296,31 @@ export function detectBareCatches(addedLines: DiffLine[]): PatternFinding[] {
   for (let i = 0; i < addedLines.length; i++) {
     const line = addedLines[i];
     if (line.type !== "add") continue;
-
     if (!CATCH_OPEN_PATTERN.test(line.content)) continue;
 
-    // Found a catch line. Check for comment on this line.
+    // Skip: comment on the catch line itself
     if (COMMENT_PATTERN.test(line.content)) continue;
 
-    // Check the preceding line for a comment.
-    const prevLine = i > 0 ? addedLines[i - 1] : null;
-    if (prevLine && prevLine.type === "add" && COMMENT_PATTERN.test(prevLine.content)) continue;
+    // Skip: comment on the preceding line
+    if (hasPrecedingComment(addedLines, i)) continue;
 
-    // Now scan the block body between { and matching }.
-    // The catch line always ends with `{` opening the catch block.
+    // Scan the block body for comment or content
     // We start at depth 1 (the catch block is open) regardless of any `}`
     // earlier on the same line (e.g. `} catch (e) {` closes the try block
     // then opens the catch block).
-    let depth = 1;
-    let hasComment = false;
-    let hasNonEmptyContent = false;
-    let j = i + 1;
-
-    while (j < addedLines.length && depth > 0) {
-      const bodyLine = addedLines[j];
-      if (bodyLine.type !== "add") {
-        j++;
-        continue;
-      }
-
-      const trimmed = bodyLine.content.trim();
-
-      if (COMMENT_PATTERN.test(trimmed)) {
-        hasComment = true;
-      }
-
-      // Track brace depth
-      for (const ch of trimmed) {
-        if (ch === "{") depth++;
-        else if (ch === "}") depth--;
-        if (depth === 0) break;
-      }
-
-      // Content inside block (before closing brace at depth 0)
-      if (depth > 0 && trimmed !== "" && trimmed !== "}") {
-        hasNonEmptyContent = true;
-      }
-
-      j++;
-    }
-
+    const { hasComment, hasNonEmptyContent } = scanCatchBody(addedLines, i + 1);
     if (hasComment || hasNonEmptyContent) continue;
 
     findings.push({
-      pattern_id: "bare-catch",
       category: "hacky",
       file_path: line.file_path,
       line_number: line.line_number,
       matched_text: line.content.trim(),
+      pattern_id: "bare-catch",
     });
   }
 
   return findings;
-}
-
-/** Count net open braces in a string (positive means more { than }) */
-function countBraceDepth(s: string): number {
-  let depth = 0;
-  for (const ch of s) {
-    if (ch === "{") depth++;
-    else if (ch === "}") depth--;
-  }
-  return depth;
 }
 
 // ─── File-scope overlap ───────────────────────────────────────────────────────
@@ -303,22 +328,19 @@ function countBraceDepth(s: string): number {
 /**
  * Compare declared files against actually-changed files from the diff.
  */
-export const computeFileScopeOverlap = (
-  declared: string[],
-  actual: string[],
-): FileScopeOverlap => {
+export const computeFileScopeOverlap = (declared: string[], actual: string[]): FileScopeOverlap => {
   const declaredSet = new Set(declared);
   const actualSet = new Set(actual);
   const inScope = actual.filter((f) => declaredSet.has(f));
   const outOfScope = actual.filter((f) => !declaredSet.has(f));
   const missingPlanned = declared.filter((f) => !actualSet.has(f));
   return {
-    declared,
     actual,
+    declared,
     in_scope: inScope.length,
+    missing_planned: missingPlanned,
     out_of_scope: outOfScope.length,
     out_of_scope_files: outOfScope,
-    missing_planned: missingPlanned,
   };
 };
 
@@ -399,12 +421,12 @@ export async function evaluateStep(
   const hackyCount = findings.filter((f) => f.category === "hacky").length;
 
   return toolOk({
-    findings,
-    file_scope: fileScope,
     diff_stats: diffStats,
+    file_scope: fileScope,
     finding_counts: {
-      lazy: lazyCount,
       hacky: hackyCount,
+      lazy: lazyCount,
     },
+    findings,
   });
 }
