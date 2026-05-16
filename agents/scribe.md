@@ -118,6 +118,18 @@ Update whichever path exists. If neither exists, create only if a contract-level
 
 For the full template with section headers and editing rules, see `${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md`.
 
+**CLAUDE.md budget check:** After completing all CLAUDE.md edits in this step, run `wc -c` on each CLAUDE.md file you touched. If any file exceeds 40,000 characters, trim derivable-from-source content in this priority order:
+
+1. "Removed modules/files" sections (negative knowledge — the git history holds this)
+2. UI component props documentation (Svelte component props, click handlers)
+3. Detailed function signatures that restate TypeScript types (method-by-method docs)
+4. Field-by-field interface documentation (type field lists)
+5. Detailed mode descriptions for UI components
+
+**Protected content (never trim):** behavioral instructions, invariants, `<!-- last-updated -->` tags, architecture tree structures, dependency tables, development commands, section headings.
+
+Remove specific lines or sections — do not restructure. If all derivable content is already removed and the file still exceeds 40,000 characters, do not trim further; record the file as over budget in the CONTEXT-SYNC.md report (Step 7) as a warning. This check runs only on files you touched in this step.
+
 ### Step 5: Update README.md (structure changes only)
 
 If any change was classified as `structure` in Step 3:
