@@ -232,6 +232,59 @@ describe("writeReview — backward compatibility (no signals)", () => {
   });
 });
 
+// ---- updateFileViolationHistory — violation count propagation ----
+
+describe("updateFileViolationHistory — violation count propagation", () => {
+  it("increments total_violations by 3 when a file has 3 violations in one review", async () => {
+    const { signals, db } = await openSignalsFromDir(tmpDir);
+
+    // 3 violations for the same file in one review call
+    updateFileViolationHistory(
+      signals,
+      ["src/foo.ts"],
+      [
+        { file_path: "src/foo.ts", principle_id: "p1", severity: "rule" },
+        { file_path: "src/foo.ts", principle_id: "p2", severity: "strong-opinion" },
+        { file_path: "src/foo.ts", principle_id: "p3", severity: "convention" },
+      ],
+      "BLOCKING",
+    );
+
+    const rows = db.getSignals().getPathEffects(["src/foo.ts"]);
+    expect(rows).toHaveLength(1);
+    // total_violations must be 3 (one per violation), not 1 (boolean had/hadn't)
+    expect(rows[0].total_violations).toBe(3);
+    db.close();
+  });
+
+  it("accumulates total_violations correctly across multiple reviews", async () => {
+    const { signals, db } = await openSignalsFromDir(tmpDir);
+
+    // First review: 2 violations
+    updateFileViolationHistory(
+      signals,
+      ["src/foo.ts"],
+      [
+        { file_path: "src/foo.ts", principle_id: "p1", severity: "rule" },
+        { file_path: "src/foo.ts", principle_id: "p2", severity: "strong-opinion" },
+      ],
+      "BLOCKING",
+    );
+
+    // Second review: 1 violation
+    updateFileViolationHistory(
+      signals,
+      ["src/foo.ts"],
+      [{ file_path: "src/foo.ts", principle_id: "p3", severity: "convention" }],
+      "WARNING",
+    );
+
+    const rows = db.getSignals().getPathEffects(["src/foo.ts"]);
+    expect(rows[0].total_violations).toBe(3);
+    db.close();
+  });
+});
+
 // ---- writeReview — with signals calls updateFileViolationHistory ----
 
 describe("writeReview — with signals", () => {

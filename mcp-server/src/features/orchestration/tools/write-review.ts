@@ -216,18 +216,18 @@ type ExistingPathEffect = {
  */
 function buildPathEffectPayload(
   filePath: string,
-  hadViolation: boolean,
+  violationCount: number,
   existing: ExistingPathEffect | undefined,
   now: string,
 ): PathEffectPayload {
   return {
-    clean_streak: hadViolation ? 0 : (existing?.clean_streak ?? 0) + 1,
+    clean_streak: violationCount > 0 ? 0 : (existing?.clean_streak ?? 0) + 1,
     file_path: filePath,
-    last_clean_at: hadViolation ? (existing?.last_clean_at ?? null) : now,
-    last_violation_at: hadViolation ? now : (existing?.last_violation_at ?? null),
+    last_clean_at: violationCount > 0 ? (existing?.last_clean_at ?? null) : now,
+    last_violation_at: violationCount > 0 ? now : (existing?.last_violation_at ?? null),
     total_reviews: (existing?.total_reviews ?? 0) + 1,
-    total_violations: (existing?.total_violations ?? 0) + (hadViolation ? 1 : 0),
-    violation_streak: hadViolation ? (existing?.violation_streak ?? 0) + 1 : 0,
+    total_violations: (existing?.total_violations ?? 0) + violationCount,
+    violation_streak: violationCount > 0 ? (existing?.violation_streak ?? 0) + 1 : 0,
   };
 }
 
@@ -235,13 +235,13 @@ function buildPathEffectPayload(
 function persistPathEffects(
   signals: SignalWriter,
   files: string[],
-  violatedFiles: Set<string | undefined>,
+  violationCountByFile: Map<string, number>,
   now: string,
 ): void {
   for (const filePath of files) {
     const existing = signals.getPathEffects([filePath])[0];
-    const hadViolation = violatedFiles.has(filePath);
-    signals.upsertPathEffect(buildPathEffectPayload(filePath, hadViolation, existing, now));
+    const violationCount = violationCountByFile.get(filePath) ?? 0;
+    signals.upsertPathEffect(buildPathEffectPayload(filePath, violationCount, existing, now));
   }
 }
 
@@ -268,8 +268,13 @@ export function updateFileViolationHistory(
     const violationMap = groupViolations(violations);
     persistViolationHistory(signals, violationMap, now);
 
-    const violatedFiles = new Set(violations.map((v) => v.file_path));
-    persistPathEffects(signals, files, violatedFiles, now);
+    // Compute per-file violation count by summing counts from violationMap
+    const violationCountByFile = new Map<string, number>();
+    for (const [key, data] of violationMap) {
+      const fp = key.split("::")[0];
+      violationCountByFile.set(fp, (violationCountByFile.get(fp) ?? 0) + data.count);
+    }
+    persistPathEffects(signals, files, violationCountByFile, now);
   } catch {
     // Non-blocking: signal persistence failures are silently swallowed.
     // The review itself was already written successfully.
