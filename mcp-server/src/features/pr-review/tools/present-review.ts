@@ -12,7 +12,7 @@
  *   - simplicity-first: 936-line server-side HTML generator replaced by a file read
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { PresentArtifactResult } from "@features/orchestration/tools/present-artifact.ts";
 import { presentArtifact } from "@features/orchestration/tools/present-artifact.ts";
@@ -49,14 +49,16 @@ export async function presentReview(
 
   // 1. Read agent-generated review HTML
   const htmlPath = join(input.workspace, "artifacts", "review.html");
-  if (!existsSync(htmlPath)) {
+  try {
+    await access(htmlPath);
+  } catch {
     return toolError(
       "INVALID_INPUT",
-      "No review HTML found at ${workspace}/artifacts/review.html. The reviewer agent must produce this artifact.",
+      `No review HTML found at ${input.workspace}/artifacts/review.html. The reviewer agent must produce this artifact.`,
       true,
     );
   }
-  const html = readFileSync(htmlPath, "utf-8");
+  const html = await readFile(htmlPath, "utf-8");
 
   // 2. Get data enrichment for window.__CANON_DATA__
   const prImpact = await showPrImpact(projectDir, {
