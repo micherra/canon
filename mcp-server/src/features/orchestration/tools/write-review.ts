@@ -1,6 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import {
+  type PredictionReconciler,
+  reconcilePredictions,
+} from "@features/diagnostics/services/prediction-tracker.ts";
 
 /**
  * Structural interface for signal persistence — describes only the 4 methods
@@ -279,6 +283,7 @@ export function updateFileViolationHistory(
 export async function writeReview(
   input: WriteReviewInput,
   signals?: SignalWriter,
+  reconciler?: PredictionReconciler,
 ): Promise<ToolResult<WriteReviewResult>> {
   // Validate slug
   if (!SLUG_PATTERN.test(input.slug)) {
@@ -336,6 +341,10 @@ export async function writeReview(
   // Persist path effects to signal tables (non-blocking)
   if (signals) {
     updateFileViolationHistory(signals, input.files, input.violations, mappedVerdict);
+  }
+
+  if (reconciler) {
+    reconcilePredictions({ reviewedFiles: input.files, violations: input.violations }, reconciler);
   }
 
   return toolOk({
