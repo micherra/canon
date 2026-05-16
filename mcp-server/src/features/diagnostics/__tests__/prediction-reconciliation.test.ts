@@ -15,13 +15,13 @@ import { DriftDbSignals } from "@platform/storage/drift/drift-db-signals.ts";
 import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { WriteReviewInput } from "../../orchestration/tools/write-review.ts";
+import { writeReview } from "../../orchestration/tools/write-review.ts";
 import {
   type PredictionReconciler,
   type ReconcilePredictionsInput,
   reconcilePredictions,
 } from "../services/prediction-tracker.ts";
-import { writeReview } from "../../orchestration/tools/write-review.ts";
-import type { WriteReviewInput } from "../../orchestration/tools/write-review.ts";
 
 // ---- Helpers ----
 
@@ -43,19 +43,19 @@ function seedPrediction(
 ): string {
   const predictionId = opts.predictionId ?? `pred-${Math.random().toString(36).slice(2)}`;
   signals.insertPrediction({
-    prediction_id: predictionId,
-    workspace: null,
-    flow_id: null,
     file_paths: JSON.stringify(opts.filePaths),
+    flow_id: null,
+    prediction_id: predictionId,
     principle_ids: JSON.stringify(opts.principleIds),
     signals_json: JSON.stringify({}),
     timestamp: new Date().toISOString(),
+    workspace: null,
   });
   if (opts.resolved) {
     signals.resolvePrediction({
+      outcome: JSON.stringify({ pairs: [] }),
       prediction_id: predictionId,
       resolved_at: new Date().toISOString(),
-      outcome: JSON.stringify({ pairs: [] }),
     });
   }
   return predictionId;
@@ -63,17 +63,17 @@ function seedPrediction(
 
 function makeBaseWriteReviewInput(tmpDir: string): WriteReviewInput {
   return {
-    workspace: tmpDir,
+    files: ["src/foo.ts"],
+    honored: ["simplicity-first"],
+    score: {
+      conventions: { passed: 1, total: 1 },
+      opinions: { passed: 1, total: 1 },
+      rules: { passed: 1, total: 1 },
+    },
     slug: "test-slug",
     verdict: "approved",
     violations: [],
-    honored: ["simplicity-first"],
-    score: {
-      rules: { passed: 1, total: 1 },
-      opinions: { passed: 1, total: 1 },
-      conventions: { passed: 1, total: 1 },
-    },
-    files: ["src/foo.ts"],
+    workspace: tmpDir,
   };
 }
 
@@ -109,7 +109,14 @@ describe("reconcilePredictions — happy path", () => {
     expect(row!.resolved).toBe(1);
     expect(row!.resolved_at).not.toBeNull();
 
-    const outcome = JSON.parse(row!.outcome!) as { pairs: Array<{ file_path: string; principle_id: string; predicted: boolean; actual: boolean }> };
+    const outcome = JSON.parse(row!.outcome!) as {
+      pairs: Array<{
+        file_path: string;
+        principle_id: string;
+        predicted: boolean;
+        actual: boolean;
+      }>;
+    };
     expect(outcome.pairs).toHaveLength(1);
     expect(outcome.pairs[0]!.file_path).toBe("src/foo.ts");
     expect(outcome.pairs[0]!.principle_id).toBe("simplicity-first");
@@ -204,7 +211,9 @@ describe("reconcilePredictions — happy path", () => {
     const row = signals.getPredictionById(predictionId);
     expect(row!.resolved).toBe(1);
 
-    const outcome = JSON.parse(row!.outcome!) as { pairs: Array<{ principle_id: string; actual: boolean }> };
+    const outcome = JSON.parse(row!.outcome!) as {
+      pairs: Array<{ principle_id: string; actual: boolean }>;
+    };
     expect(outcome.pairs).toHaveLength(2);
 
     const simplicityPair = outcome.pairs.find((p) => p.principle_id === "simplicity-first");
@@ -261,17 +270,17 @@ describe("reconcilePredictions — fail-open behavior", () => {
     const corruptReconciler: PredictionReconciler = {
       getUnresolvedPredictions: () => [
         {
-          id: 1,
-          prediction_id: "pred-corrupt",
-          workspace: null,
-          flow_id: null,
           file_paths: "NOT VALID JSON",
+          flow_id: null,
+          id: 1,
+          outcome: null,
+          prediction_id: "pred-corrupt",
           principle_ids: JSON.stringify(["simplicity-first"]),
-          signals_json: JSON.stringify({}),
-          timestamp: new Date().toISOString(),
           resolved: 0,
           resolved_at: null,
-          outcome: null,
+          signals_json: JSON.stringify({}),
+          timestamp: new Date().toISOString(),
+          workspace: null,
         },
       ],
       resolvePrediction: vi.fn(),
@@ -295,17 +304,17 @@ describe("reconcilePredictions — fail-open behavior", () => {
     const corruptReconciler: PredictionReconciler = {
       getUnresolvedPredictions: () => [
         {
-          id: 1,
-          prediction_id: "pred-corrupt2",
-          workspace: null,
-          flow_id: null,
           file_paths: JSON.stringify(["src/foo.ts"]),
+          flow_id: null,
+          id: 1,
+          outcome: null,
+          prediction_id: "pred-corrupt2",
           principle_ids: "ALSO NOT VALID JSON",
-          signals_json: JSON.stringify({}),
-          timestamp: new Date().toISOString(),
           resolved: 0,
           resolved_at: null,
-          outcome: null,
+          signals_json: JSON.stringify({}),
+          timestamp: new Date().toISOString(),
+          workspace: null,
         },
       ],
       resolvePrediction: vi.fn(),
@@ -326,7 +335,7 @@ describe("reconcilePredictions — fail-open behavior", () => {
 
   it("catches and silently ignores errors thrown by resolvePrediction", () => {
     const { db, signals } = makeDb();
-    const predictionId = seedPrediction(signals, {
+    const _predictionId = seedPrediction(signals, {
       filePaths: ["src/foo.ts"],
       principleIds: ["simplicity-first"],
     });
@@ -364,10 +373,10 @@ describe("writeReview + reconcilePredictions integration", () => {
 
   afterEach(async () => {
     db.close();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
-  it("calls reconcilePredictions after review is persisted when reconciler is provided", async () => {
+  it("reconcilePredictions resolves predictions when called after writeReview", async () => {
     const predictionId = seedPrediction(signals, {
       filePaths: ["src/foo.ts"],
       principleIds: ["simplicity-first"],
@@ -375,13 +384,13 @@ describe("writeReview + reconcilePredictions integration", () => {
 
     const input: WriteReviewInput = {
       ...makeBaseWriteReviewInput(tmpDir),
-      violations: [
-        { file_path: "src/foo.ts", principle_id: "simplicity-first", severity: "rule" },
-      ],
+      violations: [{ file_path: "src/foo.ts", principle_id: "simplicity-first", severity: "rule" }],
     };
 
-    const result = await writeReview(input, signals, signals);
+    // App layer pattern: writeReview then reconcilePredictions
+    const result = await writeReview(input, signals);
     assertOk(result);
+    reconcilePredictions({ reviewedFiles: input.files, violations: input.violations }, signals);
 
     // Prediction should have been reconciled
     const row = signals.getPredictionById(predictionId);
@@ -391,28 +400,25 @@ describe("writeReview + reconcilePredictions integration", () => {
     expect(outcome.pairs[0]!.actual).toBe(true);
   });
 
-  it("still writes the review successfully when reconciler is provided but no predictions exist", async () => {
+  it("writeReview succeeds when no predictions exist (reconciler called separately)", async () => {
     // No predictions seeded
-    const result = await writeReview(makeBaseWriteReviewInput(tmpDir), signals, signals);
+    const input = makeBaseWriteReviewInput(tmpDir);
+    const result = await writeReview(input, signals);
     assertOk(result);
+    // App layer reconciliation — no-op when no unresolved predictions
+    reconcilePredictions({ reviewedFiles: input.files, violations: [] }, signals);
     expect(result.verdict).toBe("CLEAN");
   });
 
-  it("remains backward-compatible: writeReview without reconciler still works", async () => {
-    // No reconciler argument — original behavior
-    const result = await writeReview(makeBaseWriteReviewInput(tmpDir), signals);
-    assertOk(result);
-    expect(result.verdict).toBe("CLEAN");
-  });
-
-  it("remains backward-compatible: writeReview without signals or reconciler still works", async () => {
+  it("remains backward-compatible: writeReview without signals still works", async () => {
+    // No signals argument — original behavior
     const result = await writeReview(makeBaseWriteReviewInput(tmpDir));
     assertOk(result);
     expect(result.verdict).toBe("CLEAN");
   });
 
   it("review write succeeds even if reconciliation would throw", async () => {
-    // Use a reconciler whose getUnresolvedPredictions throws
+    // App layer calls reconcilePredictions after writeReview; fail-open in reconcilePredictions
     const errorReconciler: PredictionReconciler = {
       getUnresolvedPredictions: () => {
         throw new Error("Simulated DB failure");
@@ -420,9 +426,14 @@ describe("writeReview + reconcilePredictions integration", () => {
       resolvePrediction: vi.fn(),
     };
 
-    const result = await writeReview(makeBaseWriteReviewInput(tmpDir), signals, errorReconciler);
-    // Review should succeed despite reconciler error
+    const result = await writeReview(makeBaseWriteReviewInput(tmpDir), signals);
+    // Review should succeed
     assertOk(result);
     expect(result.verdict).toBe("CLEAN");
+
+    // reconcilePredictions is fail-open — should not throw even with error reconciler
+    expect(() => {
+      reconcilePredictions({ reviewedFiles: ["src/foo.ts"], violations: [] }, errorReconciler);
+    }).not.toThrow();
   });
 });

@@ -117,7 +117,7 @@ export class DriftDbSignals {
 
   // Prepared statements — predictions table (v5)
   private readonly stmtInsertPrediction: Database.Statement;
-  private readonly stmtGetUnresolvedByFiles: Database.Statement;
+  private readonly stmtGetUnresolved: Database.Statement;
   private readonly stmtResolvePrediction: Database.Statement;
   private readonly stmtGetPredictionById: Database.Statement;
 
@@ -169,7 +169,7 @@ export class DriftDbSignals {
       VALUES (@prediction_id, @workspace, @flow_id, @file_paths, @principle_ids, @signals_json, @timestamp, 0)
     `);
 
-    this.stmtGetUnresolvedByFiles = db.prepare(`
+    this.stmtGetUnresolved = db.prepare(`
       SELECT id, prediction_id, workspace, flow_id, file_paths, principle_ids, signals_json, timestamp, resolved, resolved_at, outcome
       FROM predictions
       WHERE resolved = 0
@@ -262,7 +262,7 @@ export class DriftDbSignals {
    * (define-errors-out-of-existence).
    */
   getUnresolvedPredictions(): PredictionRow[] {
-    return this.stmtGetUnresolvedByFiles.all() as PredictionRow[];
+    return this.stmtGetUnresolved.all() as PredictionRow[];
   }
 
   /**
