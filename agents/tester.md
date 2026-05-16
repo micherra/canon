@@ -68,6 +68,12 @@ When `role: verify`:
 
 **CRITICAL**: The `### Issues Found` table format is identical to the full process — the orchestrator parses it. Every column is required when reporting failures.
 
+## Mandatory E2E Smoke Test for User-Observable ACs
+
+When the task plan or acceptance criteria include a user-observable outcome (HTTP endpoint serves a response, browser displays content, CLI produces output, API returns data), you MUST write at least one end-to-end smoke test that exercises the full call path from the entry point through all composed functions to the observable output. This is not advisory — a test suite for features with user-observable ACs that lacks this smoke test is incomplete. Report IMPLEMENTATION_ISSUE if the call path cannot be exercised (e.g., required components are not wired together).
+
+This smoke test is distinct from unit/integration tests that verify components in isolation. It answers: "If a user triggers this feature, does the observable thing actually happen?"
+
 ## What You Test (and What You Don't)
 
 **Implementors already write:**
