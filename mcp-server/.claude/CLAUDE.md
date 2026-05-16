@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-05-05 (unified graph intelligence: kg-community.ts + kg-tags.ts added; register-composite.ts, get-file-context-batch.ts, workspace-structure.ts, runbook-tail-validator.ts, principle-reranker.ts removed; get_context relocated to register-knowledge.ts; computed_tags + min_confidence added to graph_query) -->
+<!-- last-updated: 2026-05-16 (build approval dashboard view added: BuildDashboard.svelte, DagGraph.svelte, TaskPlanCard.svelte, DecisionCard.svelte, build-dashboard.html, build-dashboard.ts, build-dashboard-types.ts, dag-layout.ts) -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -32,7 +32,7 @@ src/
 ├── platform/             # Infrastructure: adapters (git, process), job manager, workers, storage
 ├── shared/               # Shared kernel: constants, parser, matcher, schema, lib/ utilities
 ├── tests/                # Cross-cutting test helpers
-└── ui/                   # Svelte frontend — MCP App (Sigma.js graph, PR review UI)
+└── ui/                   # Svelte frontend — MCP App (Sigma.js graph, PR review UI, build approval dashboard)
 ```
 
 **Key subsystems:**
@@ -44,7 +44,7 @@ src/
 - **Orchestration** (`orchestration/`, `features/orchestration/`) — Workspace lifecycle, board persistence, unified messaging, transcript capture, artifact writing tools
 
 ## Contracts
-<!-- last-updated: 2026-05-12 (principle overrides: CANON_FILES.PRINCIPLE_OVERRIDES added; loadAllPrinciples now reads .canon/principle-overrides.yaml; digest-writer: FinalizeWorkspaceResult.digest_written added; digest-writer.ts service added to features/orchestration/services/) -->
+<!-- last-updated: 2026-05-16 (build-dashboard view: BuildDashboardData type + computeDagLayout added; VIEW_MAP extended; present_artifact type param updated) -->
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -150,6 +150,24 @@ src/
 | `show_pr_impact` | `ui://canon/pr-review` | PR Review — change analysis (always), blast radius, hotspots, violations, subgraph (when stored review exists) |
 | `codebase_graph` | `ui://canon/codebase-graph` | Interactive dependency graph with compliance overlay |
 | `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
+| `present_artifact` (build-dashboard) | `ui://canon/build-dashboard` | Build approval dashboard — brief summary, acceptance criteria, runbook, task DAG, task plans, design decisions, research notes; orchestrator passes `BuildDashboardData` payload |
+
+**Build dashboard types** (`src/ui/stores/build-dashboard-types.ts`) — added 2026-05-16:
+- `BuildDashboardData` — top-level payload delivered via `BridgeAdapter.loadData<BuildDashboardData>()`; fields: `brief: BriefSummary`, `acceptance_criteria: DashboardCriterion[]`, `runbook_steps: RunbookStep[]`, `dag: { nodes: DagNode[]; edges: DagEdge[] }`, `task_plans: TaskPlanEntry[]`, `design_decisions: DesignDecisionEntry[]`, `research_notes?: string`
+- `BriefSummary` — `{ title: string; outcome: "GREENLIGHT" | "CAUTION" | "STOP"; effort: string; value: string }`
+- `DashboardCriterion` — `{ index: number; text: string; type: "mechanical" | "manual" }`
+- `DagNode` — `{ id: string; wave: number; files: string[]; depends_on: string[] }`
+- `DagEdge` — `{ source: string; target: string }` (derived from `depends_on`)
+- `TaskPlanEntry` — `{ task_id: string; wave: number; title: string; body: string; files: string[]; principles: string[] }`
+- `DesignDecisionEntry` — `{ decision_id: string; title: string; status: string; body: string }`
+- Imports `RunbookStep` from `planning-brief-types.ts` (no duplication)
+
+**`computeDagLayout`** (`src/ui/lib/dag-layout.ts`) — added 2026-05-16:
+- `computeDagLayout(nodes, options?): Map<string, { x: number; y: number }>` — pure function; Kahn's topological-layer algorithm; assigns Y by layer depth, X by even spacing within layer; `options: { layerSpacing?, nodeSpacing? }` (both default 100); unknown `depends_on` IDs are ignored (node treated as root); returns empty `Map` for empty input
+
+**`present_artifact` VIEW_MAP** (`src/features/orchestration/tools/present-artifact.ts`) — updated 2026-05-16:
+- `VIEW_MAP` now includes `"build-dashboard": "build-dashboard.html"` (in addition to `"planning-brief"`)
+- `type` parameter description updated to enumerate both supported compiled view values
 
 **Composite context tool:**
 
