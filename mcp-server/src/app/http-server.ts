@@ -33,8 +33,6 @@ export type Decision = {
   action: "approve" | "request_changes";
   /** Inline annotations attached to sections of the artifact. May be empty. */
   annotations: unknown[];
-  /** Free-text explanation when action is request_changes. */
-  feedback?: string;
 };
 
 /** Stored artifact data keyed by `"${type}/${slug}"`. */
@@ -55,12 +53,12 @@ export function getHttpPort(): number {
 }
 
 /**
- * Returns true when the HTTP server has successfully bound and is currently
- * listening. Returns false when the server never started (e.g., EADDRINUSE)
- * or has been stopped.
+ * Returns true when the HTTP server is currently listening (bound to a port).
+ * Returns false when the server failed to start (e.g., EADDRINUSE) or has not
+ * been started yet.
  */
 export function isHttpServerRunning(): boolean {
-  return httpServer?.listening === true;
+  return httpServer !== null;
 }
 
 /**
@@ -237,24 +235,23 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
 }
 
 function serveArtifactHtml(res: ServerResponse, key: string, html: string, data: unknown): void {
-  // Escape JSON for safe embedding in a <script> tag.
-  // Replace all '<' with '<' so '</script>' in data cannot break out of the script context.
-  const safeJson = JSON.stringify(data).replace(/</g, "\\u003c");
-
-  // Inject window globals before </head> (or </body> as fallback, or appended at end)
+  // Inject window globals before </head> (or </body> as fallback)
+  const safeData = JSON.stringify(data)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
   const dataScript = `<script>
-    window.__CANON_DATA__ = ${safeJson};
+    window.__CANON_DATA__ = ${safeData};
     window.__CANON_ARTIFACT_URL__ = "http://127.0.0.1:${serverPort}/artifact/${key}";
   </script>`;
 
   let injectedHtml: string;
-  if (/<\/head>/i.test(html)) {
-    injectedHtml = html.replace(/<\/head>/i, `${dataScript}\n</head>`);
-  } else if (/<\/body>/i.test(html)) {
-    injectedHtml = html.replace(/<\/body>/i, `${dataScript}\n</body>`);
+  if (html.includes("</head>")) {
+    injectedHtml = html.replace("</head>", `${dataScript}\n</head>`);
   } else {
-    // Neither </head> nor </body> found — append at end of HTML
-    injectedHtml = html + dataScript;
+    injectedHtml = html.replace("</body>", `${dataScript}\n</body>`);
   }
 
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -307,11 +304,10 @@ function handleDecisionPost(req: IncomingMessage, res: ServerResponse, key: stri
       return;
     }
 
-    const raw = parsed as { action: string; annotations?: unknown[]; feedback?: unknown };
+    const raw = parsed as { action: string; annotations?: unknown[] };
     const decision: Decision = {
       action: raw.action as Decision["action"],
       annotations: Array.isArray(raw.annotations) ? raw.annotations : [],
-      ...(typeof raw.feedback === "string" && raw.feedback ? { feedback: raw.feedback } : {}),
     };
 
     pending.resolve(decision);

@@ -48,6 +48,8 @@ export type PresentArtifactInput = {
   type: string;
   slug: string;
   data: unknown;
+  /** When provided, serves this HTML directly and bypasses VIEW_MAP lookup. */
+  html?: string;
 };
 
 export type PresentArtifactResult = {
@@ -101,25 +103,32 @@ async function resolveArtifact(input: PresentArtifactInput): Promise<ToolResult<
     );
   }
 
-  const htmlFileName = VIEW_MAP[type];
-  if (!htmlFileName) {
-    return toolError(
-      "INVALID_INPUT",
-      `Unknown artifact type "${type}". Known types: ${Object.keys(VIEW_MAP).join(", ")}`,
-      false,
-    );
-  }
-
-  const htmlPath = resolve(resolveUiDistDir(), htmlFileName);
   let html: string;
-  try {
-    html = await readFile(htmlPath, "utf-8");
-  } catch {
-    return toolError(
-      "INVALID_INPUT",
-      `Compiled HTML not found for artifact type "${type}". Expected: ${htmlPath}. Run the UI build first.`,
-      true,
-    );
+
+  if (input.html !== undefined) {
+    // Dynamic HTML path: bypass VIEW_MAP and use the provided HTML directly.
+    html = input.html;
+  } else {
+    // Compiled-view path: look up HTML file via VIEW_MAP.
+    const htmlFileName = VIEW_MAP[type];
+    if (!htmlFileName) {
+      return toolError(
+        "INVALID_INPUT",
+        `Unknown artifact type "${type}". Known types: ${Object.keys(VIEW_MAP).join(", ")}`,
+        false,
+      );
+    }
+
+    const htmlPath = resolve(resolveUiDistDir(), htmlFileName);
+    try {
+      html = await readFile(htmlPath, "utf-8");
+    } catch {
+      return toolError(
+        "INVALID_INPUT",
+        `Compiled HTML not found for artifact type "${type}". Expected: ${htmlPath}. Run the UI build first.`,
+        true,
+      );
+    }
   }
 
   if (!isHttpServerRunning()) {

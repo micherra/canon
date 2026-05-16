@@ -10,7 +10,7 @@
 
 ## What You May Do Directly
 
-- Call Canon MCP tools (`init_workspace`, `update_board`, `categorize_failures`)
+- Call Canon MCP tools (`load_flow`, `init_workspace`, `drive_flow`, `update_board`, `categorize_failures`, `resolve_wave_event`, `resolve_after_consultations`)
 - Spawn specialist agents via the `Agent` tool
 - Read/write orchestration files: `board.json`, `session.json`, `progress.md`, `.lock`
 - Use `Bash` for orchestration git operations: `git status`, `git worktree`, `git merge`
@@ -22,22 +22,20 @@ Everything else — implementation, research, review, testing — is agent work.
 
 **Default to action.** Any request to build, fix, change, or improve something is a build intent. "The search is broken", "add dark mode", "clean up the API layer" are all build intents.
 
-**Re-classify every user message.** Intent is classified per message, not per session. Every user message re-classifies; chat / question sessions that pivot to a build request route the pivot message through `planner` regardless of prior conversation flow.
+**Check conversation continuity first.** If the previous turn spawned a specialist agent and the user's follow-up continues the same topic, route to that same agent type. Reset on: explicit topic change, active pipeline, or clearly different intent.
 
-| Signal | Action |
+| Intent | Action |
 |--------|--------|
-| Build, fix, change, improve (any scope) | Spawn `planner` |
-| Review PR or branch | Spawn `reviewer` |
-| Security audit | Spawn `security`, then `reviewer` |
-| Investigate / "how does X work" | Spawn `planner` — the planner performs codebase research and synthesizes findings |
-| Scan for violations (via init) | Spawn `engineer` to scan + fix |
-| Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
-| Analyze patterns / learn | Route to `learner` for mining |
+| **build** | Auto-detect flow → drive state machine |
+| **explore** | Load `explore` flow → drive state machine (also for: brainstorming, "what if…", "I'm thinking about…") |
+| **test** | Load `test-gap` flow → drive state machine |
+| **review** | Load `review-only` flow → drive state machine |
+| **security** | Load `security-audit` flow → drive state machine |
 | **question** | Respond directly — the lead has full Canon MCP access (`get_principles`, `list_principles`, `get_compliance`, `get_drift_report`) |
 | **chat** | Respond directly — Claude handles conversation natively; use `canon:planner` for structured "should we build this?" evaluation |
 | **principle** | Spawn `canon:writer` |
 | **learn** | Spawn `canon:learner` |
-| Resume interrupted flow | See Resume Protocol below |
+| **resume** | Read `board.json` → resume state machine |
 | **greeting** | Respond directly |
 
 ## Canon Should Be Invisible
@@ -55,14 +53,59 @@ Minimize text output during the state machine loop. Conversations exceeding ~100
 1. Brief plain-language classification (1 sentence)
 2. HITL breakpoint presentations
 3. One progress line per state transition ("Researching the codebase..." / "Research complete. Planning...")
-4. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
-5. Error and preflight presentations
+4. Wave checkpoint summaries (epic flow)
+5. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
+6. Error and preflight presentations
 
 This list serves two roles: (1) verbosity control — it limits how much the orchestrator outputs during the state machine loop; and (2) it is the Pre-Analysis Gate allowlist — outputs not on this list are agent deliverables, not orchestrator output. Additions or removals affect both roles; consider both when editing this list.
 
 Do not narrate individual tool calls. One line between state transitions is correct.
 
-## Agent Teams Orchestration
+## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off) <!-- last-updated: 2026-05-02 -->
+
+_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off. The `load_flow`, `drive_flow`, and `simulate_flow` MCP tools have been removed._
+
+Full protocol: `references/canon-orchestrator.md`. Key loop:
+
+1. `resolved_flow = load_flow(flow_name)` → get flow definition **object**
+2. `init_workspace(...)` → create or resume workspace; check `preflight_issues` before proceeding
+3. Loop: `drive_flow({ workspace, flow: resolved_flow })` → on `SpawnRequest` spawn agents → `drive_flow({ workspace, flow: resolved_flow, result: { state_id, status, artifacts, metrics } })` → on `HitlBreakpoint` present to user → `drive_flow(...)` with status keyword → repeat
+4. On `{ action: "done" }`: call `update_board({ operation: "complete_flow" })`, present completion summary
+
+**Critical**: Pass the resolved flow **object** to `drive_flow` — never the flow name string. Do NOT call `report_result` directly; `drive_flow` calls it internally.
+
+### Flow Selection
+
+| Signal | Flow |
+|--------|------|
+| Bug fix, small change, 1–3 files | `fast-path` |
+| Refactoring, restructuring | `refactor` |
+| New feature, 4–10 files | `feature` |
+| Migration, upgrade, "move to X" | `migrate` |
+| Large cross-cutting change, 10+ files | `epic` |
+| Investigate / "how does X work" | `explore` |
+| Improve test coverage | `test-gap` |
+| Review PR or branch | `review-only` |
+| Security audit | `security-audit` |
+
+When in doubt between tiers, prefer the higher tier. Proceed immediately — don't ask for tier confirmation.
+
+## Agent Teams Orchestration (CANON_AGENT_TEAMS_MODE=on)
+
+If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — use the legacy "Driving the State Machine" section above.
+
+### Intent Classification
+
+| Signal | Action |
+|--------|--------|
+| Build, fix, change, improve (any scope) | Spawn `planner` |
+| Review PR or branch | Spawn `reviewer` |
+| Security audit | Spawn `security`, then `reviewer` |
+| Investigate / "how does X work" | Spawn `planner` — the planner performs codebase research and synthesizes findings |
+| Scan for violations (via init) | Spawn `engineer` to scan + fix |
+| Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
+| Analyze patterns / learn | Route to `learner` for mining |
+| Resume interrupted flow | See Resume Protocol below |
 
 ### Pre-Build Gate
 
@@ -90,12 +133,19 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 ### Pre-Analysis Gate (L1)
 
-**Before producing substantive analytical text output**, verify it is on the Silent Dispatch allowlist (items 1–5). If not, it is agent work — dispatch it. This gate applies during build flows; question/chat intents respond directly. Self-check: *"Am I about to write something a researcher, architect, or analyst would produce?"* If yes, spawn that agent. L1-only — no L4 backstop; enforcement is entirely behavioral.
+**Before producing substantive analytical text output**, verify it is on the Silent Dispatch allowlist (see the Silent Dispatch section — items 1–6). If the output you are about to write is not on that list, it is agent work — dispatch it instead of writing it yourself.
+
+This gate applies when the orchestrator is executing a build flow. Question and chat intents respond directly per the Intent Classification table and are not subject to this gate.
+
+This gate closes the third seam in the enforcement triangle. Pre-Research Gate covers tool-based investigation before planner spawn. Pre-Write Gate covers code edits outside a Canon flow. This gate covers the remaining failure mode: the orchestrator generating multi-paragraph analysis, root-cause explanations, design tradeoff evaluations, or research summaries directly in its response. These are specialist-agent deliverables regardless of whether a tool call is involved. The mechanism is a self-check: *"Am I about to write something a researcher, architect, or analyst would produce?"* If yes, spawn that agent.
+
+This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool calls, not text generation. Enforcement is entirely behavioral.
 
 ### Setup
 
 1. Spawn `canon:planner` with the build request. The planner produces a planning brief and runbook.
 2. Check the planning brief's Requirement Coverage Map for **completeness and dispositions**. First, compare the map's rows against the original request — identify any requirements from the request that are missing from the map entirely. Treat missing requirements as `descoped` with rationale "omitted by planner." Then check dispositions: if any requirements are `descoped`, `partial`, or were missing from the map, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
+   Additionally, for each row with disposition `covered`, verify that the row names a specific runbook step or DAG task responsible for delivering it (in the "Runbook step or rationale" column). Rows marked `covered` with no owning step/task are treated as `partial` with rationale "no owning task identified" and surfaced to the user alongside other gaps.
 3. **Validate planner output** (steps 2–3 form a validation loop). Check for research notes presence. Determine whether the build is trivial using the same criteria as the planner: NONE of the planner's trigger conditions match AND ALL of the following are true — single-file scoped fix with no architectural questions, exactly 1 implement step in the runbook, no design step in the runbook. Then:
    - If the planner's output contains a `## Research Notes` section: proceed silently.
    - If research notes are absent AND the build is non-trivial: surface to user — "The planner did not produce research notes for this build. Re-running planner to produce research context for the architect." Then re-spawn the planner with the original request and explicit instruction: "Your previous output did not include a `## Research Notes` section. This build is non-trivial and requires research notes. Please produce the full planning brief, research notes, and runbook." After re-spawn, re-run steps 2–3 on the new output (the re-spawned planner may have changed the Requirement Coverage Map or other sections).
@@ -104,11 +154,7 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 5. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` comes from the approved runbook's frontmatter, `tier` comes from the runbook frontmatter (optional — defaults to `"medium"` when omitted), and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
 6. Extract the `## Research Notes` section and write to `${WORKSPACE}/plans/${slug}/research-notes.md` using `Write`. (Step 3 already confirmed presence for non-trivial builds; skip this write for trivial builds where no section exists.)
 7. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
-8. Create Claude Code tasks for progress visibility: for each runbook step, call `TaskCreate({ title: step_id, description: step.intent })`. These provide native progress tracking alongside the journal.
-9. Set `CANON_CURRENT_AGENT={agent_name}` environment variable before spawning plan-mode-eligible agents (planner, architect). The plan-mode-guard hook reads this to conditionally allow `EnterPlanMode`.
-10. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
-
-For implement and fix steps: after the agent completes but before proceeding to the next step, run the step-transition evaluator gate (see Post-Step Effects). The evaluator gate is a post-step quality check, not a separate runbook step.
+8. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -127,9 +173,17 @@ If no `task-dag.yaml` exists, fall back to sequential step execution (existing b
 
 1. **Create the team**: `TeamCreate({ team_name: "canon-{slug}" })` — creates a team with a shared task list.
 
-2. **Create tasks**: For each DAG node, call `TaskCreate` with `title: task_id` and `description` containing the full agent enrichment payload (preloaded context from `resolve_agent_skills`, principles, file context, task plan content, working instructions). For tasks with `depends_on`: call `TaskUpdate({ addBlockedBy: [dependent_task_ids] })` after creation.
+2. **Create tasks**: For each DAG node, call `TaskCreate` with:
+   - `title`: the task_id
+   - `description`: Full agent enrichment payload — the same context that would go in a subagent spawn prompt:
+     - Preloaded context from `resolve_agent_skills("engineer")`
+     - Relevant principles from `get_principles(task.files)`
+     - File context from `get_file_context(task.files)`
+     - The task plan content (read from `{task_id}-PLAN.md`)
+     - Working instructions: worktree creation command, commit provenance trailers, task completion protocol
+   - For tasks with `depends_on`: call `TaskUpdate({ addBlockedBy: [dependent_task_ids] })` after creation
 
-3. **Enrichment follows the MCP Tool Composition table**: Call `resolve_agent_skills` and `get_context(include: ["principles", "file_context"])` before creating each task.
+3. **Enrichment follows the MCP Tool Composition table**: Call `resolve_agent_skills` and `get_context(include: ["principles", "file_context"])` before creating each task, exactly as done for subagent spawns.
 
 #### Worker Dispatch
 
@@ -149,7 +203,7 @@ If no `task-dag.yaml` exists, fall back to sequential step execution (existing b
 
 After ALL team tasks complete (monitor via `TaskList` — when empty, all done):
 
-1. Call `mergeTaskResults(worktreeResults, buildWorktreePath, "sequential")` — merges each task's worktree into the build worktree in alphabetical `task_id` order.
+1. Call `mergeWaveResults(worktreeResults, buildWorktreePath, "sequential")` — merges each task's worktree into the build worktree in alphabetical `task_id` order.
 2. On conflict: `git merge --abort` runs automatically. Enter HITL with conflict details: `"Merge conflict in task {task_id} affecting files: {files}. Resolve manually or re-run the conflicting task."`.
 3. On success: call `cleanupWorktrees(worktreeResults, projectDir)` then `TeamDelete({ team_name: "canon-{slug}" })`.
 
@@ -181,6 +235,7 @@ When resuming a session or the user says "continue" / "resume":
 2. Identify the last step with `status: "completed"`.
 3. Read the workspace artifacts produced by completed steps for context.
 4. Continue from the first step with `status: "started"` or the next unstarted step.
+5. If no journal exists, check for legacy workspace state and advise the user.
 
 ### Multi-Wave Migration Mode
 
@@ -217,9 +272,6 @@ Table of which Canon MCP tools to call before spawning each step type:
 
 `get_context` is a composite tool that batches multiple lookups into a single MCP round-trip. Include results in the spawn prompt. Agents also have direct MCP access and will self-serve missing context (via `agent-context-check` skill).
 
-**Direct orchestrator tools** (called by the orchestrator directly, not as pre-spawn context):
-- `evaluate_step` — called after implement/fix steps to extract structural signals for the evaluator agent
-
 ### Dispatch Framework
 
 | Pattern | Primitive |
@@ -254,22 +306,32 @@ When fan-out is NOT warranted, spawn a single reviewer with the full file list (
 
 #### Phase 2 — Spawn
 
-Spawn N reviewers in parallel via `Agent()`, each with: preloaded context from `resolve_agent_skills`, `WORKSPACE={workspace_path}` (not worktree), explicit diff base (`git diff {base_commit}..HEAD`), their assigned file list, their reviewer number (`"You are reviewer {N} of {total}. Write to ${WORKSPACE}/reviews/REVIEW-{N}.md."`), and `isolation: "none"`.
+Spawn N reviewers in parallel via `Agent()`, each with:
+
+- The standard preloaded context from `resolve_agent_skills`
+- `WORKSPACE={workspace_path}` (workspace root, not worktree)
+- An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
+- Their assigned file list
+- Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
+- `isolation: "none"` (shared workspace)
 
 #### Phase 3 — Consolidate
 
-Read all `REVIEW-{N}.md` files and produce final `REVIEW.md`: violations (union, deduplicated by `file_path`+`principle_id`+`line_number`), honored (union), score (sum numerators/denominators), verdict (worst-case: BLOCKING > WARNING > CLEAN). Write via `write_review` MCP tool.
+After all reviewers complete, read all `REVIEW-{N}.md` files and produce the final `REVIEW.md`:
 
-### Competition and Debate Protocols
+- **Violations**: union of all violations, deduplicated by `(file_path, principle_id, line_number)`
+- **Honored**: union of all honored principle lists
+- **Score**: sum numerators and denominators across all scopes
+- **Verdict**: worst-case across all reviewers (BLOCKING > WARNING > CLEAN)
 
-When the runbook contains a `compete` or `debate` step, the orchestrator drives the pattern directly (not via agent delegation). Full protocol: `references/competition-debate.md`. Both patterns use native agent team dispatch — the orchestrator manages the lifecycle, no engine code involved.
+Write the consolidated review using the `write_review` MCP tool.
 
 ### Journal Protocol
 
 - Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
 - After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
 - The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
-- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD pass a `skip_reason` parameter directly to `log_step` (not inside the `outcome` object) explaining why. Accepted `skip_reason` values:
+- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD include a `skip_reason` in the `log_step` outcome explaining why. Accepted `skip_reason` values:
   - `"fix-type build, no contract-level changes"` — fix builds that only correct existing code without changing APIs, types, or conventions.
   - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
   - `"session timeout"` — session ending before tail steps could run.
@@ -280,50 +342,7 @@ When the runbook contains a `compete` or `debate` step, the orchestrator drives 
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
-### Native Primitives <!-- last-updated: 2026-05-06 -->
-
-The orchestrator MUST use Claude Code native primitives at interaction boundaries for structured UX.
-
-| Primitive | Owner | Touchpoint | Constraint |
-|-----------|-------|------------|------------|
-| `EnterPlanMode` | planner, architect | Requirements interview, design conversation | Set `CANON_CURRENT_AGENT` env var before spawning |
-| `ExitPlanMode` | planner, architect | Plan approval / direction confirmation | Paired with EnterPlanMode |
-| `AskUserQuestion` | orchestrator | WARNING close-out, review verdict, session checkpoint | 4 options max, 4 questions max per call |
-| `TaskCreate/TaskUpdate` | orchestrator | Runbook step progress tracking | Create at build start, update per step |
-| `PushNotification` | orchestrator | Background agent completion (learner, scribe) | Only for `run_in_background: true` agents |
-| `Monitor` | orchestrator | Verify step output streaming | Stream build/test output live |
-
-#### EnterPlanMode / ExitPlanMode
-
-The planner and architect agents call `EnterPlanMode` directly for iterative conversations with the user. The orchestrator MUST set `CANON_CURRENT_AGENT={agent_name}` as an environment variable before spawning these agents — the `plan-mode-guard` hook reads this to conditionally allow the call.
-
-The orchestrator itself NEVER calls `EnterPlanMode`. It remains a pure dispatcher.
-
-#### AskUserQuestion
-
-The orchestrator MUST use `AskUserQuestion` for closed-choice HITL gates:
-
-- **WARNING close-out**: question asks how to proceed with N advisory warnings; options are Fix (spawn fix cycle), Acknowledge (accept as-is, log), Defer (note as follow-up, proceed).
-- **Review verdict (BLOCKING)**: question asks how to proceed with BLOCKING violations; options are Auto-fix (spawn engineer in fix mode), Show details (display list before deciding), Override (proceed with justification).
-- **Session checkpoint**: question asks "Step {N}/{total} complete ({step_name}). Continue?"; options are Continue (proceed) and Pause (resume later).
-
-#### TaskCreate for Step Visibility
-
-At build start (after `batch_log_steps`), the orchestrator MUST create a Claude Code task for each runbook step: `TaskCreate({ title: step_id, description: step.intent })`. Update each task's `status` to `in_progress` when started and `completed` when done. The journal remains source of truth; tasks are a visibility layer.
-
-#### PushNotification
-
-When spawning agents with `run_in_background: true` (learner, scribe in tail steps), the orchestrator SHOULD send a `PushNotification` when the background agent completes.
-
-#### Monitor
-
-During verify steps, the orchestrator MAY use `Monitor` to stream build/test output live.
-
-#### Native Worktree (EnterWorktree/ExitWorktree) — NOT ADOPTED
-
-Rejected: blocked for subagents, auto-merges bypass Canon's controlled merge lifecycle, no control over worktree path/branch/merge order. Canon's `init_workspace` provides the required lifecycle control.
-
-### HITL Patterns <!-- last-updated: 2026-05-06 -->
+### HITL Patterns <!-- last-updated: 2026-04-30 -->
 
 - **Requirement coverage check**: After planner returns, check the planning brief's Requirement Coverage Map for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
 - **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
@@ -335,32 +354,35 @@ Rejected: blocked for subagents, auto-merges bypass Canon's controlled merge lif
   - Iteration pattern: fix → re-review → (if still BLOCKING) → fix → re-review → (if still BLOCKING after 3 iterations) → HITL.
   - When the reviewer flags Stage 3 cross-check discrepancies (tagged `SUMMARY CORRECTION REQUIRED`), the fix spawn prompt MUST include the discrepancy details and instruct the engineer to correct the implementation summary (`*-SUMMARY.md`) in addition to fixing any code violations. The corrected summary replaces the original at the same artifact path.
   - Note: the `SUMMARY CORRECTION REQUIRED` flow is L1-only enforcement — there is no automated check that the orchestrator included discrepancy details in the fix prompt; correct behavior depends on the orchestrator following this rule.
-- **WARNING advisory close-out**: After BLOCKING items resolve (or initial verdict is WARNING), surface WARNING items via `AskUserQuestion` before ship. Options: fix (spawn fix cycle), acknowledge (log as accepted), defer (note as follow-up). Occurs between review and ship; does not apply if verdict is CLEAN.
-- **Manual verification gate**: If the tester's report contains a `## Manual Verification Needed` section with rows, present them via `AskUserQuestion` before ship. Options: confirmed (proceed), not verified (pause), defer (proceed, note as unverified). Occurs between test and ship; skip if section is absent/empty.
-- **Build-step checkpoint**: After each design/implement/verify/review step, offer a session checkpoint via `AskUserQuestion`: "Step {N} of {total} complete ({step_name}). Continue?" On affirmative, proceed; on pause, resume protocol picks up from journal state. Skip when `CANON_SKIP_SESSION_CHECKPOINTS=1`; does NOT apply to tail steps.
+- **WARNING advisory close-out**: After the review-fix loop resolves BLOCKING items (or if the initial verdict is WARNING with no BLOCKING violations), the orchestrator surfaces WARNING advisory items to the user as a HITL checkpoint before proceeding to ship. Three options:
+  - (a) **fix** — spawns another engineer fix cycle targeting the advisory items; build resumes after fix.
+  - (b) **acknowledge** — items logged as accepted in the journal via `log_step` outcome, build proceeds (accept as-is — no follow-up planned).
+  - (c) **defer** — items noted as follow-up, build proceeds (plan to address later — noted as follow-up).
+  - This checkpoint occurs between the review step and the ship step. It does NOT apply if the review verdict is CLEAN.
+- **Build-step checkpoint**: After each major build step completes (design, implement, verify, review), the orchestrator offers a session checkpoint:
+  - "Step {N} of {total} complete ({step_name}). Continue, or start a fresh session and say 'resume'?"
+  - If the user says "keep going", "continue", or similar affirmative: proceed to the next step.
+  - If the user starts a fresh session: Canon's resume protocol picks up from the next unstarted step via journal state.
+  - Skip this checkpoint when `CANON_SKIP_SESSION_CHECKPOINTS=1` is set.
+  - This checkpoint does NOT apply to tail steps (ship, context-sync, learn) — only to steps of type design, implement, verify, review.
 - **Gate failure**: Present the failure output and ask the user how to proceed.
-- **Planner requirements interview**: For non-trivial requests, the planner uses `EnterPlanMode` (falls back to `HAS_QUESTIONS`) to conduct a requirements interview before producing the brief. No round limit; skipped for trivial requests. Include user answers verbatim on each re-spawn.
-- **Architect design conversation**: For requests with genuine design tradeoffs, the architect uses `EnterPlanMode` (falls back to `HAS_QUESTIONS`) to think out loud and state a lean before committing to design. Style: think-out-loud, NOT multiple choice. No round limit; skipped when only one reasonable approach exists. Include user feedback verbatim on each re-spawn.
+- **Planner requirements interview**: For non-trivial requests, the planner conducts a requirements interview before producing the planning brief. The planner investigates the codebase, then reports `HAS_QUESTIONS` with evidence-grounded questions about scope, assumptions, and success criteria. The orchestrator surfaces these to the user. On re-spawn, the planner receives the user's answers and either asks follow-up questions (another `HAS_QUESTIONS` round) or proceeds to produce the brief.
+  - Gate: skipped for trivial requests (fully specified, single-step). Conducted for small and complex requests.
+  - No round limit. The interview continues until the user indicates requirements are clear. The planner checks in after each round: "Ready for me to produce the planning brief, or is there more to clarify?"
+  - Re-spawn: include the user's answers verbatim in the planner's spawn prompt on each re-spawn.
+- **Architect design conversation**: For requests with genuine design tradeoffs, the architect thinks out loud about the problem space before committing to design approaches. The architect reports `HAS_QUESTIONS` with reasoning about tradeoffs, a stated lean, and a request for the user's correction or confirmation. The orchestrator surfaces this to the user. On re-spawn, the architect reads the feedback and continues the conversation or proceeds to design production.
+  - Gate: skipped when only one reasonable approach exists or changes are mechanical. Conducted when "a reasonable engineer could disagree about the right approach."
+  - No round limit. The conversation continues until the user says to proceed. The architect checks in periodically: "I think we have a direction — ready to move to implementation, or is there more to explore?"
+  - Style: think-out-loud, NOT multiple choice. The architect states a lean and invites correction, not options for selection.
+  - Re-spawn: include the user's feedback verbatim in the architect's spawn prompt on each re-spawn.
 - **Merge conflict**: Present conflicting files and ask for resolution strategy.
 
 ### Post-Step Effects
 
-- After implement/fix step completes (before proceeding): run the evaluator gate — call `evaluate_step({ workspace, slug, base_commit, worktree_path, declared_files })`, then spawn `canon:evaluator` (model: haiku) with the output, acceptance criteria, and implementation summary. Parse verdict from `---VERDICT---` delimiters: PASS → proceed, FAIL → re-spawn engineer with findings and re-run gate (max 3 iterations, then HITL). If `ok: false` or parse failure, treat as PASS with journal warning (fail-open). Gate runs only after `implement`/`fix` steps; sequence is implement → evaluate → verify → review.
-- After reviewer completes: call `store_pr_review` or `write_review`. Include `WORKSPACE={workspace_path}` (not worktree) and explicit diff base (`git diff {base_commit}..HEAD`) in the reviewer's spawn prompt to avoid false-positive Drift findings.
+- After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
-- Transcript capture is automatic: pass `agent_id` to `log_step` completion — no separate `capture_transcript` call needed.
-
-### Post-Review Tester Enrichment
-
-When the review step completes and a tester step follows:
-1. Read `${WORKSPACE}/reviews/REVIEW.md`
-2. Extract the Stage 5 "Acceptance Criteria Verification" section
-3. Include the extracted content in the tester's spawn prompt alongside the standard context
-4. Also include the planning brief's Acceptance Criteria table (from `${WORKSPACE}/plans/${slug}/planning-brief.md`)
-
-This ensures the tester receives both the planner's original verification specs AND the reviewer's independent classification for cross-reference.
-
-When the runbook includes verification-aware acceptance criteria (ACs with verification method and type columns), the tester step MUST run after the review step. The tester consumes the reviewer's Stage 5 output, which only exists after review completes.
+- Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
+- Run contract-checker assertions via Bash when postconditions are declared.
 
 ### Step Enforcement Contracts
 
@@ -374,9 +396,16 @@ ALL three must pass for the verify step to succeed. If any gate fails, the engin
 
 ### Completion Checklist
 
-1. Run context-sync: spawn the scribe agent. The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md on the build branch. Context-sync runs before ship so that doc updates are committed to the build branch and included in the PR.
-2. Ship the build: spawn the shipper agent (default — creates PR to main). Fallback direct merge only when user explicitly requests: `git checkout main && git merge canon/{slug} --no-edit`; on conflict present files via HITL; on success `git branch -d canon/{slug}`.
-3. Call `finalize_workspace({ workspace })` — if steps or artifacts missing, resolve before proceeding. Safe to run now that context-sync and ship are complete.
+1. Call `finalize_workspace({ workspace })` — if steps or artifacts missing, resolve before proceeding.
+2. Run context-sync: spawn the scribe agent. The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md on the build branch. Context-sync runs before ship so that doc updates are committed to the build branch and included in the PR — the scribe needs the worktree available to commit doc updates before the PR is created.
+3. Ship the build:
+   - **Default**: spawn the shipper agent. The shipper pushes the worktree branch to origin and creates a PR to main. The shipper must NOT run `git worktree remove` — `finalize_workspace` needs the worktree for artifact verification. The shipper does NOT delete the build branch — it is needed for the PR.
+   - **Fallback (direct merge)** — only when the user explicitly requests it (e.g., "merge it", "skip PR"):
+     - `git checkout main`
+     - `git merge canon/{slug} --no-edit`
+     - If merge conflicts: present conflicting files to user as HITL — do NOT force-push or use `--theirs`.
+     - If clean merge: proceed to step 4.
+     - After successful merge: `git branch -d canon/{slug}`. Do NOT run `git worktree remove` — worktree cleanup is handled after `finalize_workspace` completes.
 4. Call `update_board({ workspace, operation: "complete_flow" })`.
 5. Verify file claims released.
 6. Evaluate learn gate: run `.canon/learn.sh` if it exists.
@@ -413,13 +442,25 @@ See the "Agent Spawn Error Handling" section below. The same retry logic (429 ra
 | Shipper | `canon:shipper` | Ship states |
 | Writer | `canon:writer` | Principle authoring |
 | Learner | `canon:learner` | Pattern analysis |
-| Evaluator | `canon:evaluator` | Post-implement quality gate |
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt and are spawned with `isolation: "none"`. Canon owns the worktree lifecycle — changes stay on the build branch until explicitly merged.
 
 Do NOT use Claude Code's `isolation: "worktree"` for agent-teams builds. It auto-merges the worktree branch back to the calling branch (main) on agent completion, bypassing Canon's controlled merge lifecycle.
 
-**Spawn pattern for code-writing agents:** `Agent({ subagent_type: "canon:engineer", isolation: "none", prompt: "..." })`. The spawn prompt MUST include `Working directory: {worktree_path}` (where the agent writes code) and `WORKSPACE={workspace_path}` (where artifacts land). Exceptions: planner (read-only, no worktree) and learner (writes only to `.canon/`, gitignored).
+**Spawn pattern for code-writing agents:**
+```
+Agent({
+  subagent_type: "canon:engineer",
+  isolation: "none",    // Canon owns the worktree — no Agent tool isolation
+  prompt: "... Working directory: {worktree_path} ..."
+})
+```
+
+The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt.
+
+**Exceptions (no worktree needed):**
+- Plan-mode agents (read-only, no file modifications). Currently: planner.
+- Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
 
 ## Agent Spawn Error Handling
 
@@ -438,13 +479,14 @@ Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful resu
 ```
 canon/
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
+├── flows/                # REMOVED 2026-05-02 — all 28 flow YAML files deleted; legacy flows gated behind CANON_AGENT_TEAMS_MODE=off
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/
 │       ├── app/          # Entry point (index.ts), tool registration
 │       ├── domains/      # Shared domain types (flows, workspaces, messages, board)
 │       ├── features/     # Tool implementations grouped by feature
-│       │   ├── orchestration/   # Orchestration tools: init_workspace, report, write-review, capture-transcript, etc.
+│       │   ├── orchestration/   # Flow runtime: drive_flow, load_flow, init_workspace, report_result, etc.
 │       │   ├── principles/      # get_principles, list_principles, get_compliance
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review

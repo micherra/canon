@@ -25,6 +25,7 @@ import type { Annotation, Decision } from "./stores/bridge-types";
 import EmptyState from "./components/EmptyState.svelte";
 import Badge from "./components/Badge.svelte";
 import SectionHeader from "./components/SectionHeader.svelte";
+import AnnotationPopover from "./components/AnnotationPopover.svelte";
 import AssumptionRow from "./components/AssumptionRow.svelte";
 import CriterionRow from "./components/CriterionRow.svelte";
 import FilterableTable from "./components/FilterableTable.svelte";

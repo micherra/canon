@@ -22,14 +22,17 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { presentArtifact } from "../tools/present-artifact.ts";
 
 // ---------------------------------------------------------------------------
-// Mock openBrowser so no real browser is launched during tests
+// Mock child_process exec so no real browser is launched during tests
 // ---------------------------------------------------------------------------
 
-vi.mock("@platform/adapters/process-adapter.ts", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@platform/adapters/process-adapter.ts")>();
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
   return {
     ...actual,
-    openBrowser: vi.fn(),
+    exec: vi.fn((_cmd: string, cb?: (err: Error | null) => void) => {
+      if (cb) cb(null);
+      return {} as ReturnType<typeof actual.exec>;
+    }),
   };
 });
 
@@ -78,17 +81,13 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 function getExpectedHtmlPath(artifactType: string): string {
   const toolFile = _fileURLToPath(new URL("../tools/present-artifact.ts", import.meta.url));
-  const VIEW_MAP: Record<string, string> = { "planning-brief": "planning-brief.html" };
-  const htmlFileName = VIEW_MAP[artifactType] ?? "unknown.html";
-  if (toolFile.includes("/src/") && !toolFile.includes("/dist/src/")) {
-    let dir = _dirname(toolFile);
-    while (dir !== "/" && !dir.endsWith("/mcp-server")) {
-      dir = _dirname(dir);
-    }
-    return join(dir, "dist", "src", "ui", htmlFileName);
+  let dir = _dirname(toolFile);
+  while (dir !== "/" && !dir.endsWith("/mcp-server")) {
+    dir = _dirname(dir);
   }
-  const distDir = _dirname(_dirname(_dirname(_dirname(_dirname(toolFile)))));
-  return join(distDir, "src", "ui", htmlFileName);
+  const VIEW_MAP: Record<string, string> = { "planning-brief": "planning-brief.html" };
+  const htmlFileName = VIEW_MAP[artifactType];
+  return join(dir, "dist", "src", "ui", htmlFileName ?? "unknown.html");
 }
 
 // ---------------------------------------------------------------------------
@@ -263,6 +262,121 @@ describe("presentArtifact — register artifact and create deferred decision", (
     assertOk(result);
     expect(result.decision.action).toBe("request_changes");
     expect(result.decision.annotations).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dynamic HTML path (html field provided)
+// ---------------------------------------------------------------------------
+
+describe("presentArtifact — dynamic HTML (html field provided)", () => {
+  it("serves the provided HTML directly and resolves on decision POST", async () => {
+    const slug = "test-dynamic";
+    const type = "review-result";
+    const providedHtml = "<html><head></head><body>Dynamic</body></html>";
+
+    // Start presentArtifact in background — it blocks until decision arrives
+    const artifactPromise = presentArtifact({
+      data: { review: "data" },
+      html: providedHtml,
+      slug,
+      type,
+      workspace: "/tmp/ws",
+    });
+
+    // Give the server a moment to register the artifact before we POST
+    await new Promise<void>((r) => setTimeout(r, 50));
+
+    // Confirm artifact is accessible (GET returns 200)
+    const getRes = await new Promise<{ status: number }>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          hostname: "127.0.0.1",
+          method: "GET",
+          path: `/artifact/${type}/${slug}`,
+          port: TEST_PORT,
+        },
+        (res) => {
+          res.resume();
+          res.on("end", () => resolve({ status: res.statusCode ?? 0 }));
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+    expect(getRes.status).toBe(200);
+
+    // POST a decision to unblock presentArtifact
+    const postRes = await postDecision(type, slug, "approve", []);
+    expect(postRes.status).toBe(200);
+
+    // presentArtifact should now resolve with the decision
+    const result = await artifactPromise;
+    assertOk(result);
+    expect(result.decision.action).toBe("approve");
+    expect(result.url).toContain(`/artifact/${type}/${slug}`);
+  });
+
+  it("succeeds with an unknown type when html field is provided (no INVALID_INPUT error)", async () => {
+    const slug = "custom-type-test";
+    const type = "custom-type";
+    const providedHtml = "<html><head></head><body>Custom</body></html>";
+
+    const artifactPromise = presentArtifact({
+      data: {},
+      html: providedHtml,
+      slug,
+      type,
+      workspace: "/tmp/ws",
+    });
+
+    await new Promise<void>((r) => setTimeout(r, 50));
+
+    // POST decision to verify it resolves (not an INVALID_INPUT error)
+    await postDecision(type, slug, "approve");
+    const result = await artifactPromise;
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("cleans up dynamic HTML artifact after decision (404 on subsequent GET)", async () => {
+    const slug = "dynamic-cleanup-test";
+    const type = "review-result";
+    const providedHtml = "<html><head></head><body>Cleanup Test</body></html>";
+
+    const artifactPromise = presentArtifact({
+      data: {},
+      html: providedHtml,
+      slug,
+      type,
+      workspace: "/tmp/ws",
+    });
+
+    await new Promise<void>((r) => setTimeout(r, 50));
+
+    // POST decision and wait for resolution
+    await postDecision(type, slug, "approve");
+    await artifactPromise;
+
+    // Artifact should be gone after cleanup
+    const res = await new Promise<{ status: number }>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          hostname: "127.0.0.1",
+          method: "GET",
+          path: `/artifact/${type}/${slug}`,
+          port: TEST_PORT,
+        },
+        (r) => {
+          r.resume();
+          r.on("end", () => resolve({ status: r.statusCode ?? 0 }));
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+
+    expect(res.status).toBe(404);
   });
 });
 
