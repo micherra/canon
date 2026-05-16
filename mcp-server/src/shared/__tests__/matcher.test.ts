@@ -6,8 +6,6 @@ import { inferLayer, matchPrinciples } from "../matcher.ts";
 import type { Principle } from "../parser.ts";
 import { parsePrinciple } from "../parser.ts";
 
-// Extended overrides tests (with reason validation) are in matcher-overrides.test.ts
-
 function makePrinciple(overrides: Partial<Principle> = {}): Principle {
   return {
     archived: false,
