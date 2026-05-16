@@ -1,3 +1,8 @@
+import type { AccuracyMap } from "@features/diagnostics/services/prediction-accuracy.ts";
+import {
+  buildAccuracySummary,
+  computeAccuracy,
+} from "@features/diagnostics/services/prediction-accuracy.ts";
 import { recordPrediction } from "@features/diagnostics/services/prediction-tracker.ts";
 import type { FileSignals } from "@features/diagnostics/services/signal-compiler.ts";
 import { compileSignals } from "@features/diagnostics/services/signal-compiler.ts";
@@ -36,6 +41,8 @@ export type GetContextOutput = {
   drift?: Awaited<ReturnType<typeof getDriftReport>>;
   graph?: unknown;
   signals?: FileSignals[];
+  /** Wave 3: Per-principle accuracy summary for learner agent consumption. */
+  accuracy_summary?: string;
 };
 
 const getContextInputSchema = {
@@ -64,21 +71,45 @@ function queryGraphForFiles(filePaths: string[]): unknown[] | undefined {
 }
 
 /**
- * Populate output.signals for the signals section.
+ * Populate output.signals and output.accuracy_summary for the signals section.
  * Fail-open: any error (missing drift.db, missing tables) is silently ignored.
  * Signals are optional enrichment — their absence must not prevent get_context from returning.
+ *
+ * Wave 3: Computes per-principle accuracy data (fail-open) and passes it to
+ * compileSignals for weight tuning. Also populates accuracy_summary when data exists.
  */
 function resolveSignals(filePaths: string[], output: GetContextOutput): void {
   try {
     const driftDb = getDriftDb(projectDir);
     const driftDbSignals = driftDb.getSignals();
-    const signals = compileSignals(filePaths, driftDbSignals);
+
+    // Wave 3: Compute accuracy data (fail-open — errors silently ignored)
+    let accuracyData: AccuracyMap | undefined;
+    try {
+      accuracyData = computeAccuracy(driftDbSignals);
+    } catch {
+      // Fail-open: accuracy computation failure = no tuning
+    }
+
+    const signals = compileSignals(filePaths, driftDbSignals, { accuracyData });
     if (signals.length > 0) {
       output.signals = signals;
 
       // Record prediction — fail-open, separate from signal compilation.
       // If recordPrediction fails, signals are still returned.
       recordPrediction({ compiledSignals: signals, filePaths }, driftDbSignals);
+    }
+
+    // Wave 3: Include accuracy summary for learner context
+    if (accuracyData && accuracyData.size > 0) {
+      try {
+        const summary = buildAccuracySummary(accuracyData);
+        if (summary) {
+          output.accuracy_summary = summary;
+        }
+      } catch {
+        // Fail-open: summary generation failure is non-critical
+      }
     }
   } catch {
     // Fail-open: signals section is optional enrichment.

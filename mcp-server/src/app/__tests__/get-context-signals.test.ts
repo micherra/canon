@@ -35,6 +35,11 @@ vi.mock("@features/diagnostics/services/prediction-tracker.ts", () => ({
   recordPrediction: vi.fn(),
 }));
 
+vi.mock("@features/diagnostics/services/prediction-accuracy.ts", () => ({
+  buildAccuracySummary: vi.fn().mockReturnValue(undefined),
+  computeAccuracy: vi.fn().mockReturnValue(new Map()),
+}));
+
 vi.mock("@platform/storage/drift/drift-db.ts", () => ({
   getDriftDb: vi.fn(),
 }));
@@ -161,7 +166,12 @@ describe("get_context signals section", () => {
 
     expect(getDriftDb).toHaveBeenCalledWith("/mock/project");
     expect(mockDriftDb.getSignals).toHaveBeenCalledOnce();
-    expect(compileSignals).toHaveBeenCalledWith(["src/foo.ts"], mockDriftDbSignals);
+    // Wave 3: compileSignals now receives a third options arg with accuracyData
+    expect(compileSignals).toHaveBeenCalledWith(
+      ["src/foo.ts"],
+      mockDriftDbSignals,
+      expect.objectContaining({ accuracyData: expect.any(Map) }),
+    );
     expect(result.signals).toEqual([mockSignalsForFoo]);
   });
 
