@@ -227,8 +227,13 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
 
 function serveArtifactHtml(res: ServerResponse, key: string, html: string, data: unknown): void {
   // Inject window globals before </head> (or </body> as fallback)
+  const safeData = JSON.stringify(data)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/ /g, "\\u2028")
+    .replace(/ /g, "\\u2029");
   const dataScript = `<script>
-    window.__CANON_DATA__ = ${JSON.stringify(data)};
+    window.__CANON_DATA__ = ${safeData};
     window.__CANON_ARTIFACT_URL__ = "http://127.0.0.1:${serverPort}/artifact/${key}";
   </script>`;
 
