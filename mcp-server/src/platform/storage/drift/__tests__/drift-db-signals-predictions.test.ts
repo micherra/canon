@@ -377,3 +377,173 @@ describe("resolvePrediction", () => {
     expect(rowZ!.resolved).toBe(0);
   });
 });
+
+// getResolvedPredictions
+
+describe("getResolvedPredictions", () => {
+  let db: ReturnType<typeof initDriftDb>;
+  let signals: DriftDbSignals;
+
+  beforeEach(() => {
+    ({ db, signals } = makeDb());
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  /** Helper: insert and resolve a prediction with given principle_ids, file_paths, and resolved_at */
+  function insertResolved(opts: {
+    prediction_id: string;
+    principle_ids: string[];
+    file_paths?: string[];
+    resolved_at: string;
+    outcome?: string;
+  }): void {
+    signals.insertPrediction(
+      makePredictionInput({
+        file_paths: JSON.stringify(opts.file_paths ?? ["src/foo.ts"]),
+        prediction_id: opts.prediction_id,
+        principle_ids: JSON.stringify(opts.principle_ids),
+      }),
+    );
+    signals.resolvePrediction({
+      outcome: opts.outcome ?? JSON.stringify({ pairs: [] }),
+      prediction_id: opts.prediction_id,
+      resolved_at: opts.resolved_at,
+    });
+  }
+
+  test("returns empty array when no resolved predictions exist", () => {
+    const results = signals.getResolvedPredictions();
+    expect(results).toEqual([]);
+  });
+
+  test("returns empty array for empty principleIds array", () => {
+    insertResolved({
+      prediction_id: "pred_r1",
+      principle_ids: ["deep-modules"],
+      resolved_at: "2026-03-01T00:00:00Z",
+    });
+    const results = signals.getResolvedPredictions([]);
+    expect(results).toEqual([]);
+  });
+
+  test("returns all resolved predictions when no principleIds filter", () => {
+    insertResolved({
+      prediction_id: "pred_r1",
+      principle_ids: ["deep-modules"],
+      resolved_at: "2026-03-01T00:00:00Z",
+    });
+    insertResolved({
+      prediction_id: "pred_r2",
+      principle_ids: ["thin-handlers"],
+      resolved_at: "2026-03-02T00:00:00Z",
+    });
+    const results = signals.getResolvedPredictions();
+    expect(results).toHaveLength(2);
+    const ids = results.map((r) => r.prediction_id);
+    expect(ids).toContain("pred_r1");
+    expect(ids).toContain("pred_r2");
+  });
+
+  test("filters by principle ID correctly using json_each", () => {
+    insertResolved({
+      prediction_id: "pred_match",
+      principle_ids: ["deep-modules", "thin-handlers"],
+      resolved_at: "2026-03-01T00:00:00Z",
+    });
+    insertResolved({
+      prediction_id: "pred_no_match",
+      principle_ids: ["some-other-principle"],
+      resolved_at: "2026-03-02T00:00:00Z",
+    });
+
+    const results = signals.getResolvedPredictions(["deep-modules"]);
+    expect(results).toHaveLength(1);
+    expect(results[0].prediction_id).toBe("pred_match");
+  });
+
+  test("deduplicates when a prediction matches multiple requested principle IDs", () => {
+    insertResolved({
+      prediction_id: "pred_multi",
+      principle_ids: ["deep-modules", "thin-handlers"],
+      resolved_at: "2026-03-01T00:00:00Z",
+    });
+
+    // Request both principles that match the same prediction
+    const results = signals.getResolvedPredictions(["deep-modules", "thin-handlers"]);
+    expect(results).toHaveLength(1);
+    expect(results[0].prediction_id).toBe("pred_multi");
+  });
+
+  test("does not return unresolved predictions (resolved=0)", () => {
+    // Insert a resolved one
+    insertResolved({
+      prediction_id: "pred_resolved",
+      principle_ids: ["deep-modules"],
+      resolved_at: "2026-03-01T00:00:00Z",
+    });
+    // Insert an unresolved one with same principle
+    signals.insertPrediction(
+      makePredictionInput({
+        prediction_id: "pred_unresolved",
+        principle_ids: JSON.stringify(["deep-modules"]),
+      }),
+    );
+
+    const results = signals.getResolvedPredictions();
+    expect(results).toHaveLength(1);
+    expect(results[0].prediction_id).toBe("pred_resolved");
+  });
+
+  test("does not return resolved predictions without outcome (outcome IS NULL)", () => {
+    // Manually insert a resolved prediction with NULL outcome via raw SQL
+    db.prepare(
+      `INSERT INTO predictions (prediction_id, file_paths, principle_ids, signals_json, timestamp, resolved, resolved_at, outcome)
+       VALUES (?, ?, ?, ?, ?, 1, ?, NULL)`,
+    ).run(
+      "pred_null_outcome",
+      JSON.stringify(["src/bar.ts"]),
+      JSON.stringify(["deep-modules"]),
+      JSON.stringify({ score: 0.5 }),
+      new Date().toISOString(),
+      "2026-03-01T00:00:00Z",
+    );
+
+    // Insert a valid resolved prediction
+    insertResolved({
+      prediction_id: "pred_with_outcome",
+      principle_ids: ["deep-modules"],
+      resolved_at: "2026-03-02T00:00:00Z",
+    });
+
+    const results = signals.getResolvedPredictions();
+    expect(results).toHaveLength(1);
+    expect(results[0].prediction_id).toBe("pred_with_outcome");
+  });
+
+  test("orders by resolved_at DESC", () => {
+    insertResolved({
+      prediction_id: "pred_early",
+      principle_ids: ["deep-modules"],
+      resolved_at: "2026-01-01T00:00:00Z",
+    });
+    insertResolved({
+      prediction_id: "pred_late",
+      principle_ids: ["deep-modules"],
+      resolved_at: "2026-03-01T00:00:00Z",
+    });
+    insertResolved({
+      prediction_id: "pred_mid",
+      principle_ids: ["deep-modules"],
+      resolved_at: "2026-02-01T00:00:00Z",
+    });
+
+    const results = signals.getResolvedPredictions();
+    expect(results).toHaveLength(3);
+    expect(results[0].prediction_id).toBe("pred_late");
+    expect(results[1].prediction_id).toBe("pred_mid");
+    expect(results[2].prediction_id).toBe("pred_early");
+  });
+});
