@@ -38,7 +38,7 @@ describe("schema split — flow-schema.ts deletion (dc-02)", () => {
     const required = [
       "flow-definition-schemas.ts",
       "board-state-schemas.ts",
-      "event-schemas.ts",
+      "transcript-schemas.ts",
     ] as const;
     for (const file of required) {
       const filePath = resolve(SRC, "domains/flows", file);
@@ -130,7 +130,7 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
     // Must reference the split files
     expect(content).toMatch(/@domains\/flows\/board-state-schemas/);
     expect(content).toMatch(/@domains\/flows\/flow-definition-schemas/);
-    expect(content).toMatch(/@domains\/flows\/event-schemas/);
+    expect(content).toMatch(/@domains\/flows\/transcript-schemas/);
     // Must NOT reference the deleted monolithic file
     expect(content).not.toMatch(/flow-schema['"]/);
   });

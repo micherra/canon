@@ -235,7 +235,7 @@ describe("writePlanIndex — additional edge cases", () => {
       expect(content).toContain("src/b.ts");
       expect(content).toContain("src/c.ts");
       // parseTaskIds should still work on this content
-      const { parseTaskIds } = await import("@domains/workspaces/wave-variables.ts");
+      const { parseTaskIds } = await import("@domains/workspaces/task-variables.ts");
       const wave1Ids = parseTaskIds(content, 1);
       expect(wave1Ids).toEqual(["t-01"]);
     } finally {

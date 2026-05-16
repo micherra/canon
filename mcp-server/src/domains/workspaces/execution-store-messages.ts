@@ -1,23 +1,19 @@
 /**
- * Message, wave-event, and event-log operations for ExecutionStore.
+ * Message and event-log operations for ExecutionStore.
  * Extracted from execution-store.ts to keep each file under 600 lines.
  *
  * All functions take a `db` parameter (better-sqlite3 Database) so they can be
  * called from ExecutionStore methods without circular imports.
  */
 
-import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import { validateEventPayload } from "@domains/messages/events.ts";
 import type Database from "better-sqlite3";
 import type {
   EventOutput,
   GetEventsOptions,
   GetMessagesOptions,
-  GetWaveEventsOptions,
   MessageOutput,
   MessageRow,
-  UpdateWaveEventFields,
-  WaveEventRow,
 } from "./execution-store-types.ts";
 
 // ---- Message operations ----
@@ -82,58 +78,6 @@ export function getMessagesSinceId(
 /** Returns true when at least one message exists in the channel, without loading all messages. */
 export function hasMessages(stmtHasMessages: Database.Statement, channel: string): boolean {
   return stmtHasMessages.get(channel) !== undefined;
-}
-
-// ---- Wave event operations ----
-
-export function postWaveEvent(
-  stmtPostWaveEvent: Database.Statement,
-  event: {
-    id: string;
-    type: string;
-    payload: Record<string, unknown>;
-    timestamp: string;
-    status: string;
-  },
-): void {
-  stmtPostWaveEvent.run({
-    id: event.id,
-    payload: JSON.stringify(event.payload),
-    status: event.status,
-    timestamp: event.timestamp,
-    type: event.type,
-  });
-}
-
-export function getWaveEvents(
-  stmtGetWaveEvents: Database.Statement,
-  stmtGetWaveEventsByStatus: Database.Statement,
-  options?: GetWaveEventsOptions,
-): WaveEvent[] {
-  let rows: WaveEventRow[];
-  if (options?.status !== undefined) {
-    rows = stmtGetWaveEventsByStatus.all(options.status) as WaveEventRow[];
-  } else {
-    rows = stmtGetWaveEvents.all() as WaveEventRow[];
-  }
-  return rows.map((r) => deserializeWaveEventRow(r));
-}
-
-export function updateWaveEvent(
-  stmtUpdateWaveEvent: Database.Statement,
-  id: string,
-  fields: UpdateWaveEventFields,
-): void {
-  const result = stmtUpdateWaveEvent.run({
-    applied_at: fields.applied_at ?? null,
-    id,
-    rejection_reason: fields.rejection_reason ?? null,
-    resolution: fields.resolution !== undefined ? JSON.stringify(fields.resolution) : null,
-    status: fields.status ?? null,
-  });
-  if (result.changes === 0) {
-    throw new Error(`Event ${id} is already not pending — CAS update rejected (no rows changed)`);
-  }
 }
 
 // ---- Event log operations ----
@@ -265,15 +209,3 @@ function buildEventQuery(
   }>;
 }
 
-function deserializeWaveEventRow(row: WaveEventRow): WaveEvent {
-  return {
-    applied_at: row.applied_at ?? undefined,
-    id: row.id,
-    payload: JSON.parse(row.payload),
-    rejection_reason: row.rejection_reason ?? undefined,
-    resolution: row.resolution !== null ? JSON.parse(row.resolution) : undefined,
-    status: row.status as WaveEvent["status"],
-    timestamp: row.timestamp,
-    type: row.type as WaveEvent["type"],
-  };
-}

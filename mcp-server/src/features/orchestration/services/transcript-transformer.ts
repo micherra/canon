@@ -14,7 +14,7 @@
  * - validate-at-trust-boundaries: validates with ClaudeCodeEntrySchema before transforming
  */
 
-import type { TranscriptEntry } from "@domains/flows/event-schemas.ts";
+import type { TranscriptEntry } from "@domains/flows/transcript-schemas.ts";
 import { z } from "zod";
 
 // ----- Claude Code JSONL entry schema (external source — validate at trust boundary) -----
