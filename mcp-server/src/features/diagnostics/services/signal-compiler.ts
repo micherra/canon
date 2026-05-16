@@ -1,9 +1,14 @@
 /**
- * Signal Compiler — Wave 1 read-only implementation.
+ * Signal Compiler — Wave 1 read-only implementation with Wave 3 accuracy tuning.
  *
  * Reads aggregated signal data from drift.db via DriftDbSignals,
  * scores each signal by priority, and fits the results within a
  * per-file token budget.
+ *
+ * Wave 3: Optionally accepts AccuracyMap to apply priority multipliers and
+ * prune violation_history signals for principles with very low accuracy.
+ * Path effect signals are never pruned or tuned — they are file-level, not
+ * principle-level.
  *
  * Pure computation — no writes to any table, no LLM calls.
  * One function, one responsibility (simplicity-first).
@@ -15,6 +20,8 @@ import type {
   PathEffectRow,
 } from "@platform/storage/drift/drift-db-signals.ts";
 import { fitWithinBudget } from "@shared/lib/token-budget.ts";
+import type { AccuracyMap } from "./prediction-accuracy.ts";
+import { getPriorityMultiplier, shouldPrune } from "./prediction-accuracy.ts";
 
 // ---- Types ----
 
@@ -38,6 +45,8 @@ export type FileSignals = {
 export type CompileSignalsOptions = {
   /** Max tokens per file for signal text (default: 500). */
   tokenBudgetPerFile?: number;
+  /** Per-principle accuracy data for weight tuning and pruning. */
+  accuracyData?: AccuracyMap;
 };
 
 // ---- Priority scoring ----
@@ -92,6 +101,27 @@ function formatPathEffectSignal(row: PathEffectRow): string {
   return parts.join(" ");
 }
 
+// ---- Signal collection helpers ----
+
+/**
+ * Compute the accuracy-adjusted priority for a violation history row.
+ * Returns null when the signal should be pruned (skipped entirely).
+ */
+function computeViolationPriority(
+  row: FileViolationHistoryRow,
+  accuracyData: AccuracyMap | undefined,
+): number | null {
+  const accuracy = accuracyData?.get(row.principle_id);
+  if (accuracy && shouldPrune(accuracy)) {
+    return null;
+  }
+  const base = scoreViolationHistory(row);
+  if (accuracy) {
+    return Math.round(base * getPriorityMultiplier(accuracy));
+  }
+  return base;
+}
+
 // ---- Main compiler function ----
 
 /**
@@ -121,11 +151,13 @@ export function compileSignals(
   for (const filePath of filePaths) {
     const candidates: Signal[] = [];
 
-    // Collect violation history signals
+    // Collect violation history signals (with optional accuracy-based tuning/pruning)
     const violationRows = driftDbSignals.getFileViolationHistory([filePath]);
     for (const row of violationRows) {
+      const priority = computeViolationPriority(row, options?.accuracyData);
+      if (priority === null) continue; // Pruned: skip this principle
       candidates.push({
-        priority: scoreViolationHistory(row),
+        priority,
         text: formatViolationHistorySignal(row),
         type: "violation_history",
       });
