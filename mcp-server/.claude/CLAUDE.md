@@ -60,9 +60,6 @@ src/
 ## Contracts
 <!-- last-updated: 2026-05-15 (present_review tool added) -->
 
-**`generateReviewHtml` function** (`src/features/pr-review/tools/generate-review-html.ts`) — added 2026-05-14:
-- `generateReviewHtml(data: UnifiedPrOutput): string` — pure function; converts a `UnifiedPrOutput` value to a self-contained HTML snapshot string; no I/O; all user-provided data passes through `escapeHtml` before embedding
-
 **`PresentArtifactInput` type** (`src/features/orchestration/tools/present-artifact.ts`) — extended 2026-05-14:
 - `html?: string` — optional field; when provided, bypasses VIEW_MAP lookup and serves this HTML directly; `type` field is still used as the artifact key prefix (`${type}/${slug}`) in both paths; absent → existing compiled-HTML path (VIEW_MAP lookup) unchanged
 
@@ -72,7 +69,7 @@ src/
 **`present_review` MCP tool** (`src/features/pr-review/tools/present-review.ts`) — added 2026-05-15:
 - Input: `{ workspace: string; slug: string; branch?: string; pr_number?: number }`
 - Output: `PresentReviewResult` (alias for `PresentArtifactResult`) — `{ decision: { action, annotations }, url }`
-- Thin composition: `showPrImpact` → `generateReviewHtml` → `presentArtifact`; requires a stored review in DriftStore (via `store_pr_review`) before calling
+- Thin composition: `showPrImpact` → read pre-rendered HTML from `${workspace}/artifacts/review.html` → `presentArtifact`; requires a stored review in DriftStore (via `store_pr_review`) before calling; returns `INVALID_INPUT` (recoverable: true) when `review.html` is missing
 - Returns `INVALID_INPUT` (recoverable: true) when `showPrImpact` returns `has_review === false`
 - Registered in `register-principles.ts` alongside other PR review tools; opens browser, blocks until user decision
 

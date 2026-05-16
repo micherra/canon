@@ -1,7 +1,7 @@
 /**
  * Tests for present-review.ts
  *
- * Verifies the composition: showPrImpact → generateReviewHtml → presentArtifact
+ * Verifies the composition: showPrImpact → readFile (pre-rendered HTML) → presentArtifact
  * All I/O-dependent collaborators are mocked with vi.mock.
  */
 
@@ -15,11 +15,11 @@ import type { UnifiedPrOutput } from "../tools/show-pr-impact.ts";
 // ---------------------------------------------------------------------------
 
 vi.mock("../tools/show-pr-impact.ts");
-vi.mock("../tools/generate-review-html.ts");
+vi.mock("node:fs/promises");
 vi.mock("@features/orchestration/tools/present-artifact.ts");
 
+import { readFile } from "node:fs/promises";
 import { presentArtifact } from "@features/orchestration/tools/present-artifact.ts";
-import { generateReviewHtml } from "../tools/generate-review-html.ts";
 import { presentReview } from "../tools/present-review.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 
@@ -71,10 +71,10 @@ describe("presentReview", () => {
     vi.resetAllMocks();
   });
 
-  describe("happy path — review exists", () => {
-    it("calls showPrImpact, generateReviewHtml, and presentArtifact in order", async () => {
+  describe("happy path — review HTML exists", () => {
+    it("calls showPrImpact, reads HTML from disk, and calls presentArtifact in order", async () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
-      vi.mocked(generateReviewHtml).mockReturnValue(MOCK_HTML);
+      vi.mocked(readFile).mockResolvedValue(MOCK_HTML as never);
       vi.mocked(presentArtifact).mockResolvedValue(MOCK_ARTIFACT_RESULT);
 
       const result = await presentReview(
@@ -86,13 +86,13 @@ describe("presentReview", () => {
 
       // Verify call order via mock call sequence
       expect(showPrImpact).toHaveBeenCalledOnce();
-      expect(generateReviewHtml).toHaveBeenCalledOnce();
+      expect(readFile).toHaveBeenCalledOnce();
       expect(presentArtifact).toHaveBeenCalledOnce();
     });
 
     it("passes projectDir and options to showPrImpact", async () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
-      vi.mocked(generateReviewHtml).mockReturnValue(MOCK_HTML);
+      vi.mocked(readFile).mockResolvedValue(MOCK_HTML as never);
       vi.mocked(presentArtifact).mockResolvedValue(MOCK_ARTIFACT_RESULT);
 
       await presentReview(
@@ -106,19 +106,19 @@ describe("presentReview", () => {
       });
     });
 
-    it("passes the UnifiedPrOutput to generateReviewHtml", async () => {
+    it("reads HTML from the correct path: ${workspace}/artifacts/review.html", async () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
-      vi.mocked(generateReviewHtml).mockReturnValue(MOCK_HTML);
+      vi.mocked(readFile).mockResolvedValue(MOCK_HTML as never);
       vi.mocked(presentArtifact).mockResolvedValue(MOCK_ARTIFACT_RESULT);
 
-      await presentReview({ slug: "slug", workspace: "/ws" }, "/proj");
+      await presentReview({ slug: "slug", workspace: "/workspace/main" }, "/proj");
 
-      expect(generateReviewHtml).toHaveBeenCalledWith(MOCK_UNIFIED_OUTPUT);
+      expect(readFile).toHaveBeenCalledWith("/workspace/main/artifacts/review.html", "utf-8");
     });
 
-    it("passes the generated HTML and unified output to presentArtifact", async () => {
+    it("passes the file HTML and unified output to presentArtifact", async () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
-      vi.mocked(generateReviewHtml).mockReturnValue(MOCK_HTML);
+      vi.mocked(readFile).mockResolvedValue(MOCK_HTML as never);
       vi.mocked(presentArtifact).mockResolvedValue(MOCK_ARTIFACT_RESULT);
 
       await presentReview({ slug: "my-slug", workspace: "/ws" }, "/proj");
@@ -134,7 +134,7 @@ describe("presentReview", () => {
 
     it("returns the decision and url from presentArtifact", async () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
-      vi.mocked(generateReviewHtml).mockReturnValue(MOCK_HTML);
+      vi.mocked(readFile).mockResolvedValue(MOCK_HTML as never);
       vi.mocked(presentArtifact).mockResolvedValue(MOCK_ARTIFACT_RESULT);
 
       const result = await presentReview({ slug: "slug", workspace: "/ws" }, "/proj");
@@ -144,6 +144,49 @@ describe("presentReview", () => {
         ok: true,
         url: expect.stringContaining("review-result"),
       });
+    });
+  });
+
+  describe("error: missing HTML file", () => {
+    it("returns INVALID_INPUT when review.html does not exist (ENOENT)", async () => {
+      vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
+      const enoentError = Object.assign(new Error("ENOENT: no such file or directory"), {
+        code: "ENOENT",
+      });
+      vi.mocked(readFile).mockRejectedValue(enoentError);
+
+      const result = await presentReview({ slug: "slug", workspace: "/ws" }, "/proj");
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error_code).toBe("INVALID_INPUT");
+        expect(result.message).toMatch(/review\.html/);
+        expect(result.recoverable).toBe(true);
+      }
+    });
+
+    it("includes the full HTML path in the error message", async () => {
+      vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
+      vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
+
+      const result = await presentReview(
+        { slug: "slug", workspace: "/workspace/main" },
+        "/proj",
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.message).toContain("/workspace/main/artifacts/review.html");
+      }
+    });
+
+    it("does not call presentArtifact when HTML file is missing", async () => {
+      vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
+      vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
+
+      await presentReview({ slug: "slug", workspace: "/ws" }, "/proj");
+
+      expect(presentArtifact).not.toHaveBeenCalled();
     });
   });
 
@@ -161,12 +204,12 @@ describe("presentReview", () => {
       }
     });
 
-    it("does not call generateReviewHtml or presentArtifact when no review exists", async () => {
+    it("does not call readFile or presentArtifact when no review exists", async () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_NO_REVIEW);
 
       await presentReview({ slug: "slug", workspace: "/ws" }, "/proj");
 
-      expect(generateReviewHtml).not.toHaveBeenCalled();
+      expect(readFile).not.toHaveBeenCalled();
       expect(presentArtifact).not.toHaveBeenCalled();
     });
   });
@@ -174,7 +217,7 @@ describe("presentReview", () => {
   describe("error propagation from presentArtifact", () => {
     it("propagates errors returned by presentArtifact", async () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
-      vi.mocked(generateReviewHtml).mockReturnValue(MOCK_HTML);
+      vi.mocked(readFile).mockResolvedValue(MOCK_HTML as never);
       const artifactError: ToolResult<PresentArtifactResult> = {
         error_code: "UNEXPECTED",
         message: "HTTP server not running",
@@ -224,7 +267,7 @@ describe("presentReview", () => {
   describe("optional parameters", () => {
     it("passes undefined branch and pr_number when not provided", async () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
-      vi.mocked(generateReviewHtml).mockReturnValue(MOCK_HTML);
+      vi.mocked(readFile).mockResolvedValue(MOCK_HTML as never);
       vi.mocked(presentArtifact).mockResolvedValue(MOCK_ARTIFACT_RESULT);
 
       await presentReview({ slug: "slug", workspace: "/ws" }, "/proj");

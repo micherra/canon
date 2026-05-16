@@ -103,6 +103,11 @@ describe("initWorkspace", () => {
     );
   });
 
+  it("creates the artifacts/ subdirectory", async () => {
+    const ws = await initWorkspace(tmpDir, "my-branch-artifacts");
+    await expect(access(path.join(ws, "artifacts")).then(() => true)).resolves.toBe(true);
+  });
+
   it("does not create a notes/ directory", async () => {
     const ws = await initWorkspace(tmpDir, "my-branch-no-notes");
     await expect(access(path.join(ws, "notes")).then(() => true)).rejects.toThrow();
