@@ -43,13 +43,6 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity; OR semantics: matches if layers OR scope.tags intersect (updated 2026-05-02)
 - **Orchestration** (`orchestration/`, `features/orchestration/`) — Workspace lifecycle, board persistence, unified messaging, transcript capture, artifact writing tools
 
-**Removed modules** (2026-05-02):
-- ~~`src/app/register-composite.ts`~~ — composite tool registration removed 2026-05-02 (get_context inlined or restructured)
-- ~~`src/features/file-context/tools/get-file-context-batch.ts`~~ — batch file context helper removed 2026-05-02
-- ~~`workspace-structure.ts`~~ — workspace structure service removed 2026-05-02
-- ~~`runbook-tail-validator.ts`~~ — tail validator removed 2026-05-02
-- ~~`principle-reranker.ts`~~ — LLM-based reranker removed 2026-05-02; replaced by structural tag matching via `matchesScopeTags`
-
 ## Contracts
 <!-- last-updated: 2026-05-12 (principle overrides: CANON_FILES.PRINCIPLE_OVERRIDES added; loadAllPrinciples now reads .canon/principle-overrides.yaml; digest-writer: FinalizeWorkspaceResult.digest_written added; digest-writer.ts service added to features/orchestration/services/) -->
 
@@ -57,111 +50,77 @@ src/
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
 - `CanonToolError` — `{ ok: false; error_code: CanonErrorCode; message: string; recoverable: boolean; context?: Record<string, unknown> }`
 - `ToolResult<T>` — discriminated union `({ ok: true } & T) | CanonToolError`; all tool functions now return this type instead of throwing for expected errors
-- `ProcessResult` — shared subprocess result: `{ ok: boolean; stdout: string; stderr: string; exitCode: number; timedOut: boolean }`
-- `toolError(code, message, recoverable?, context?)` — constructs `CanonToolError`
-- `toolOk<T>(data)` — constructs `{ ok: true } & T`; fields spread flat (no nested `data` wrapper)
-- `isToolError(result)` — type guard; returns `true` when `ok === false` and `error_code` present
-- `assertOk<T>(result)` — asserts `result is { ok: true } & T`; throws if error; intended for tests and callers that know the call must succeed
+- `toolError(code, message, recoverable?, context?)` / `toolOk<T>(data)` / `isToolError(result)` / `assertOk<T>(result)` — construction and guard helpers in `tool-result.ts`
 
-**Top-level MCP catch-all** (`src/shared/lib/wrap-handler.ts`) — added 2026-03-31 (ADR-002):
-- `wrapHandler<T>(handler)` — wraps any tool handler; catches unexpected throws and returns them as typed `UNEXPECTED` `CanonToolError`; all tool registrations in `index.ts` use this wrapper
+**Top-level MCP catch-all** (`src/shared/lib/wrap-handler.ts`) — `wrapHandler<T>(handler)` wraps any tool handler; catches unexpected throws and returns them as typed `UNEXPECTED` `CanonToolError`; all tool registrations in `index.ts` use this wrapper — added 2026-03-31 (ADR-002)
 
 **Subprocess adapters** (`src/platform/adapters/`) — added 2026-03-31 (ADR-002); only files in this directory may import `node:child_process`:
-- `git-adapter.ts`: `gitExec(args, cwd, timeout?)` → `ProcessResult` (sync, `shell` never `true`); `gitDiff(args, cwd, timeout?)` → `ProcessResult`; `gitStatus(cwd, timeout?)` → `ProcessResult`; default 30s timeout
-- `git-adapter-async.ts`: `gitExecAsync(args, cwd, timeout?)` → `Promise<ProcessResult>`; never rejects; default 30s timeout
-- `process-adapter.ts`: `runShell(command, cwd, timeout?)` → `ProcessResult` (sync, `shell: true`); 512KB maxBuffer; default 30s timeout
+- `git-adapter.ts`: `gitExec` / `gitDiff` / `gitStatus` → `ProcessResult` (sync, `shell` never `true`); default 30s timeout
+- `git-adapter-async.ts`: `gitExecAsync` → `Promise<ProcessResult>`; never rejects; default 30s timeout
+- `process-adapter.ts`: `runShell` → `ProcessResult` (sync, `shell: true`); 512KB maxBuffer; default 30s timeout
 
 **Tool return types updated to `ToolResult<T>`** (ADR-002, 2026-03-31; ADR-004 updates 2026-04-01):
 - `graphQuery(input)` → `ToolResult<GraphQueryOutput>` (was `GraphQueryOutput`; `KG_NOT_INDEXED` is `recoverable: true`)
 - `getFileContext(input)` → `Promise<ToolResult<FileContextOutput>>` (was `Promise<FileContextOutput>`)
 
-**Execution store** (`src/domains/workspaces/execution-store.ts`) — updated 2026-04-01 (ADR-004); updated 2026-04-01 (ADR-003a); updated 2026-04-09 (concurrency: optimistic locking + retry):
+**Execution store** (`src/domains/workspaces/execution-store.ts`) — updated through 2026-04-09:
 <!-- last-updated: 2026-04-09 (concurrency: SCHEMA_VERSION 11, withRetry, updateExecutionVersioned, getVersion) -->
-- `ExecutionStore.recordIterationResult(stateId, iteration, status, data)` — new method; records raw iteration result in `iteration_results` table; `INSERT OR REPLACE` on `(state_id, iteration)` unique key
-- `ExecutionStore.isStuck(stateId, stuckWhen: StuckWhen): boolean` — new method; SQL-based stuck detection; reads last two rows from `iteration_results`; returns `false` when fewer than 2 results exist; mirrors `stuck_when` logic for all 5 strategies
-- Pure `isStuck` functions in `transitions.ts` are deprecated; prefer `ExecutionStore.isStuck`
-- `ExecutionStore.updateStateMetrics(stateId, metrics: Record<string, number|string>): boolean` — added 2026-04-01 (ADR-003a); merges provided fields into existing `metrics` JSON via targeted SQL `UPDATE`; preserves orchestrator-written fields (`duration_ms`, `spawns`, `model`); returns `true` when row found and updated, `false` when state not found
-- `ExecutionStore.withRetry<T>(fn: () => T, maxAttempts?): T` — wraps any synchronous DB operation; transparently retries on `SQLITE_BUSY` errors using `Atomics.wait` backoff; default 3 attempts; does not retry other error codes — added 2026-04-09
-- `ExecutionStore.updateExecutionVersioned(fields, expectedVersion): { updated: true; newVersion: number } | { updated: false; currentVersion: number }` — optimistic-locking update; increments `version` column atomically; returns `{ updated: false }` discriminated union on version mismatch (never throws for conflicts) — added 2026-04-09
-- `ExecutionStore.getVersion(): number` — reads current `version` from execution row; returns `1` when no row exists — added 2026-04-09
-- `ExecutionStore.transaction()` — now wraps the callback in `withRetry` internally; callers see transparent SQLITE_BUSY retry — updated 2026-04-09
-- `updateExecution`, `upsertState`, `upsertIteration` — annotated `@internal`; tool handlers should call `updateExecutionVersioned` instead of `updateExecution` directly — updated 2026-04-09
+- `recordIterationResult(stateId, iteration, status, data)` — records raw iteration result; `INSERT OR REPLACE` on unique key
+- `isStuck(stateId, stuckWhen): boolean` — SQL-based stuck detection; `false` when fewer than 2 results exist
+- `updateStateMetrics(stateId, metrics)` — merges fields into existing `metrics` JSON; returns `true` when row found
+- `withRetry<T>(fn, maxAttempts?)` — transparently retries synchronous DB ops on `SQLITE_BUSY`; default 3 attempts
+- `updateExecutionVersioned(fields, expectedVersion)` — optimistic-locking update; returns `{ updated: false; currentVersion }` on mismatch (never throws)
+- `getVersion()` — reads current `version`; returns `1` when no row exists
+- `transaction()` — wraps callback in `withRetry` internally; do not use `updateExecution` directly — use `updateExecutionVersioned`
 
-**KG schema** (`src/graph/kg-schema.ts`) — updated 2026-04-08 (git-intel Phase 1); updated 2026-05-02 (community detection + tag propagation):
-- `SCHEMA_VERSION = "5"` — bumped from `"4"`; migration v5 adds `community_id` column on `files` table and new `file_tags` table
-- `hotspot_scores` table — columns: `file_path TEXT PRIMARY KEY`, `churn_raw`, `churn_percentile`, `complexity_raw`, `complexity_pctile`, `score`, `is_hotspot INTEGER`, `computed_at_commit TEXT`
-- `co_change_edges` table — columns: `file_a TEXT`, `file_b TEXT`, `co_count INTEGER`, `jaccard REAL`, `computed_at_commit TEXT`; indexes on both `file_a` and `file_b`; pair keys normalized alphabetically (`file_a <= file_b`)
-- `file_tags` table (v5) — stores computed tags per file from 4-signal tag propagation pipeline
-- `community_id` column (v5) — `INTEGER NULL` on `files` table; assigned by Louvain community detection
+**KG schema** (`src/graph/kg-schema.ts`) — updated 2026-05-02:
+- `SCHEMA_VERSION = "5"` — migration v5 adds `community_id` column on `files` and new `file_tags` table
+- `hotspot_scores` table — per-file churn/complexity percentiles and hotspot flag
+- `co_change_edges` table — Jaccard-weighted co-change pairs; alphabetically normalized pair keys
+- `file_tags` table (v5) — computed tags per file from 4-signal pipeline
 
-**Execution schema** (`src/domains/workspaces/execution-schema.ts`) — updated 2026-04-01 (ADR-004); updated 2026-04-09 (migration v11):
+**Execution schema** (`src/domains/workspaces/execution-schema.ts`):
 <!-- last-updated: 2026-04-09 (SCHEMA_VERSION bumped to "11"; migration v11 adds version column) -->
-- `SCHEMA_VERSION = '11'` — current DB schema version (was `'3'` per ADR-004; subsequent migrations bumped to `'11'`)
-- `runMigrations(db)` — new export; runs pending migrations against the given database; version-gated; each migration wrapped in a transaction for atomicity; safe to call repeatedly
-- Migration v3 adds `iteration_results` table: `(id, state_id, iteration, status, data TEXT DEFAULT '{}', timestamp)` with `UNIQUE(state_id, iteration)` constraint and index on `state_id`
-- Migration v11 adds `version INTEGER NOT NULL DEFAULT 1` column to `execution` table; guarded by `columnExists` — idempotent — added 2026-04-09
+- `SCHEMA_VERSION = '11'`; `runMigrations(db)` — version-gated; each migration wrapped in transaction; safe to call repeatedly
+- Migration v11 adds `version INTEGER NOT NULL DEFAULT 1` on `execution` table (idempotent)
 
-**Board sync** (`src/domains/board/board-sync.ts`) — updated 2026-04-09 (concurrency: transaction wrapping + optimistic locking):
+**Board sync** (`src/domains/board/board-sync.ts`):
 <!-- last-updated: 2026-04-09 (syncBoardToStore now returns SyncResult; all writes wrapped in single transaction) -->
-- `SyncResult` — discriminated union: `{ ok: true; newVersion: number } | { ok: false; error: "version_conflict" }` — new export 2026-04-09
-- `syncBoardToStore(store, board, expectedVersion?)` — return type changed from `void` to `SyncResult`; now wraps all writes (execution row, state upserts, iteration upserts) in a single `store.transaction()` call; uses `updateExecutionVersioned` for optimistic locking; returns `{ ok: false, error: "version_conflict" }` on stale write — updated 2026-04-09
-- Callers of `syncBoardToStore` must check `result.ok` before proceeding; version conflicts do not throw
+- `SyncResult` — `{ ok: true; newVersion: number } | { ok: false; error: "version_conflict" }`
+- `syncBoardToStore(store, board, expectedVersion?)` — all writes in single `store.transaction()`; uses `updateExecutionVersioned`; callers must check `result.ok`
 
 **Drift Store** (`src/platform/storage/drift/store.ts`):
-- `ReviewEntry` — unified type for all reviews (principle and PR); optional PR fields: `pr_number?: number`, `branch?: string`, `last_reviewed_sha?: string`, `file_priorities?: Array<{ path: string; priority_score: number }>`
-- `PrReviewEntry` — DELETED 2026-03-25; callers use `ReviewEntry` with optional PR fields
-- `DriftStore.getReviews(options?: { principleId?: string; branch?: string; prNumber?: number }): Promise<ReviewEntry[]>` — all options AND-filter; old positional-string signature removed
-- `DriftStore.getLastReviewForPr(prNumber: number): Promise<ReviewEntry | null>` — returns last matching entry or null
-- `DriftStore.getLastReviewForBranch(branch: string): Promise<ReviewEntry | null>` — returns last matching entry or null
-- `PrStore` class — DELETED 2026-03-25; all review persistence unified under `DriftStore` via `reviews.jsonl`
-
-**`store_pr_review` tool** (`src/features/pr-review/tools/store-pr-review.ts`):
-- Output field: `review_id` (was `pr_review_id` until 2026-03-25); ID prefix is `rev_`
+- `ReviewEntry` — unified type for all reviews; optional PR fields: `pr_number?`, `branch?`, `last_reviewed_sha?`, `file_priorities?`
+- `DriftStore.getReviews(options?)`, `getLastReviewForPr(prNumber)`, `getLastReviewForBranch(branch)` — AND-filtered query methods
+- `PrReviewEntry` and `PrStore` — DELETED 2026-03-25; all review persistence unified under `DriftStore`
 
 **`show_pr_impact` tool** (`src/features/pr-review/tools/show-pr-impact.ts`):
 - Unified tool — merges `show_pr_impact` and `get_pr_review_data` (removed 2026-03-25)
-- Accepts optional `options?: { branch?: string; pr_number?: number; diff_base?: string; incremental?: boolean }` — all four exposed as top-level MCP input fields
-- Always calls `getPrReviewData` internally for live diff analysis; optionally overlays stored review impact data when a Canon review exists in DriftStore
-- Returns `UnifiedPrOutput` — `prep: PrReviewDataOutput` (always present), `has_review: boolean` (UI layout signal; `true` when a stored Canon review exists in DriftStore, `false` otherwise), plus `review?`, `blastRadius?`, `hotspots`, `subgraph` (populated when stored review exists), `co_change_warnings: Array<{ file, missing_partner, jaccard }>` (git-intel, 2026-04-08)
-- `computeKgData(db, changedFiles, projectDir)` — exported for testing; `projectDir` param triggers git-intel freshness check and co-change warning computation; warnings sorted by jaccard desc, limited to 10; uses existing `db` handle (no second connection)
-- `status` is always `"ok"` — no more `"no_review"` status; review field being absent signals no stored review
-- Resource URI: `ui://canon/pr-review` (was `ui://canon/pr-impact`); HTML entry: `pr-review.html`
+- Accepts `options?: { branch?, pr_number?, diff_base?, incremental? }` — all exposed as top-level MCP input fields
+- Returns `UnifiedPrOutput` — `prep: PrReviewDataOutput` (always present), `has_review: boolean`, plus `review?`, `blastRadius?`, `hotspots`, `subgraph`, `co_change_warnings` (git-intel, 2026-04-08)
+- `computeKgData(db, changedFiles, projectDir)` — exported for testing
+- Resource URI: `ui://canon/pr-review`
 
-**`get_drift_report` tool** (`src/features/diagnostics/tools/get-drift-report.ts`):
-- Output field `pr_reviews` is `ReviewEntry[]` (was `PrReviewEntry[]` until 2026-03-25); entries are filtered by `pr_number !== undefined || branch !== undefined`
+**PR Review Data** (`src/features/pr-review/tools/pr-review-data.ts`) — `getPrReviewData` called internally by `showPrImpact`; `PrReviewDataOutput` gained `hotspot_files?` (git-intel, 2026-04-08). Interfaces: `PrViolation`, `PrFileInfo`, `PrFileSummary`, `PrReviewDataOutput`, `BlastRadiusEntry` — see source for field lists. Pure functions: `classifyFile`, `generateNarrative`, `buildFileViolationMap`.
 
-**Knowledge Graph types** (`src/graph/kg-types.ts`) — updated ADR-005 2026-04-01; updated 2026-05-02 (community detection):
-- `FileMetrics` interface — `{ in_degree, out_degree, is_hub, in_cycle, cycle_peers: string[], layer, layer_violation_count, layer_violations: LayerViolation[], impact_score }`
-- `LayerViolation` interface — `{ target: string; source_layer: string; target_layer: string }`
-- `FileRow` type gained `community_id?: number | null` (schema v5 migration)
+**Knowledge Graph types** (`src/graph/kg-types.ts`):
+- `FileMetrics` — `{ in_degree, out_degree, is_hub, in_cycle, cycle_peers, layer, layer_violation_count, layer_violations, impact_score }`
+- `FileRow` gained `community_id?: number | null` (schema v5)
 
-**KgQuery** (`src/graph/kg-query.ts`) — updated ADR-005 2026-04-01:
-- `computeImpactScore(inDegree, violationCount, isChanged, layer)` → `number` — re-exported (moved from deleted `query.ts`); uses `LAYER_CENTRALITY` from `constants.ts`
-- `FileInsightMaps` interface — `{ hubPaths: Set<string>; cycleMemberPaths: Map<string, string[]>; layerViolationsByPath: Map<string, LayerViolation[]> }`
-- `computeFileInsightMaps(db)` → `FileInsightMaps` — batch helper; call once per request, pass result to `getFileMetrics()` to avoid N+1 queries
-- `KgQuery.getFileDegrees(fileId)` → `{ in_degree, out_degree }` — per-file degree from `file_edges`
-- `KgQuery.getAllFileDegrees()` → `Map<number, { in_degree, out_degree }>` — all file degrees in one query
-- `KgQuery.getFileAdjacencyList()` → `Map<number, number[]>` — full file-level adjacency list
-- `KgQuery.getFileMetrics(filePath, insightMaps?, changedFiles?)` → `FileMetrics | null` — full structural metrics; `null` when file not in DB
-- `KgQuery.getKgFreshnessMs()` → `number | null` — ms since oldest `last_indexed_at`; `null` when DB empty
-- `KgQuery.getSubgraph(filePaths)` → `{ nodes, edges }` — subgraph for PR impact UI; nodes include `file_id` and `layer`
+**KgQuery** (`src/graph/kg-query.ts`) — key exports: `computeImpactScore`, `computeFileInsightMaps(db)` (batch helper — call once per request), `KgQuery.getFileMetrics`, `KgQuery.getSubgraph`, `KgQuery.getKgFreshnessMs` — updated ADR-005 2026-04-01
 
 **Git Intelligence Layer** (`src/features/knowledge-graph/git-intel/`) — added 2026-04-08 (Phase 1):
 <!-- last-updated: 2026-04-08 (git-intel Phase 1: types, config, parser, scorer, detector, pipeline) -->
+- `git-intel-types.ts` — `GitCommitRecord`, `ChurnEntry`, `CoChangePair`, `HotspotRow`, `CoChangeRow`, `HotspotScoreOutput`, `CoChangePartner`
+- `git-intel-config.ts` — `GitIntelConfig`, `DEFAULT_GIT_INTEL_CONFIG`, `isExcluded(filePath, patterns)`
+- `git-log-parser.ts` — `parseGitLog(stdout): GitCommitRecord[]` — pure, never throws
+- `hotspot-scorer.ts` — `computeChurn`, `computePercentiles`, `buildHotspotRows`, `persistHotspots`, `getComplexityMap`
+- `co-change-detector.ts` — `computeCoChangePairs`, `persistCoChangeEdges`
+- `git-intel-pipeline.ts` — `runGitIntelPipeline` (full orchestration in single `db.transaction()`), `ensureGitIntelFresh` (no-op when fresh), `computeGitIntel` (standalone entry point)
 
-- **`git-intel-types.ts`** — pure type declarations: `GitCommitRecord { hash, timestamp, files }`, `ChurnEntry { filePath, rawChurn }`, `CoChangePair { fileA, fileB, coCount, jaccard }`, `HotspotRow`, `CoChangeRow`, `HotspotScoreOutput { churn_percentile, complexity_pctile, score, is_hotspot }`, `CoChangePartner { filePath, jaccard }`
-- **`git-intel-config.ts`** — `GitIntelConfig { lookbackDays, halfLifeDays, hotspotScoreThreshold, excludePatterns, maxFilesPerCommit }`; `DEFAULT_GIT_INTEL_CONFIG` constant; `isExcluded(filePath, patterns): boolean` — matches glob against basename only (not full path)
-- **`git-log-parser.ts`** — `parseGitLog(stdout: string): GitCommitRecord[]` — pure, never throws; skips malformed/empty commits; parses `COMMIT:<hash> <unix-timestamp>` format with `--name-only` file listing
-- **`hotspot-scorer.ts`** — `computeChurn(commits, config): ChurnEntry[]`; `computePercentiles(entries, getValue): number[]`; `buildHotspotRows(churnEntries, complexityMap, config, commitSha): HotspotRow[]`; `persistHotspots(db, rows): void` (bare DELETE+INSERT, no transaction); `getComplexityMap(db): Map<string, number>` (LEFT JOIN files+entities; 0 for files with no entities)
-- **`co-change-detector.ts`** — `computeCoChangePairs(commits, config): CoChangePair[]` (skips commits > `maxFilesPerCommit` files; Jaccard similarity; pair keys normalized alphabetically); `persistCoChangeEdges(db, pairs): void` (bare DELETE+INSERT, no transaction)
-- **`git-intel-pipeline.ts`** — `getCurrentHead(cwd): string | null`; `isGitIntelStale(db, cwd): boolean` (reads `computed_at_commit` from `hotspot_scores`; true when no rows or SHA mismatch); `runGitIntelPipeline(db, cwd, config?): void` (full orchestration: git log → parse → filter excluded → score → detect → single atomic `db.transaction()` wrapping both persist calls); `ensureGitIntelFresh(db, cwd, config?): void` (no-op when fresh); `computeGitIntel(dbPath, repoRoot, config?): void` (standalone entry point: `initDatabase` → `ensureGitIntelFresh` → `db.close()`)
+**`store-summaries.ts`** — DB-only write since ADR-005 2026-04-01; `loadSummariesFile` and `flattenSummaries` removed; `inferLanguageFromExtension` exported
 
-**`store-summaries.ts`** (`src/features/diagnostics/tools/store-summaries.ts`) — updated ADR-005 2026-04-01:
-- `inferLanguageFromExtension(filePath)` → `string` — new export; maps `.ts`/`.tsx` → `"typescript"`, `.js`/`.jsx` → `"javascript"`, `.py` → `"python"`, `.md` → `"markdown"`, default `"unknown"`
-- `loadSummariesFile` — REMOVED 2026-04-01 (ADR-005); DB is sole summary read path
-- `flattenSummaries` — REMOVED 2026-04-01 (ADR-005); no longer needed
-- `StoreSummariesOutput.path` — now returns SQLite DB path (was `summaries.json` path)
-- `storeSummaries` — DB-only write; auto-stubs missing file rows via `upsertFile`; inits DB if absent; no JSON fallback
+**`CANON_FILES` constants** (`src/shared/constants.ts`) — `GRAPH_DATA`, `REVERSE_DEPS`, `SUMMARIES` removed (ADR-005 2026-04-01); remaining: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 
 **`CANON_FILES` constants** (`src/shared/constants.ts`) — updated ADR-005 2026-04-01; updated 2026-05-12 (principle overrides):
 - `CANON_FILES.GRAPH_DATA` — REMOVED; `graph-data.json` no longer written
@@ -170,8 +129,7 @@ src/
 - Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`, `PRINCIPLE_OVERRIDES`
 - `CANON_FILES.PRINCIPLE_OVERRIDES` — added 2026-05-12; value `"principle-overrides.yaml"`; path relative to `.canon/` in the project root
 
-**Principle parser types** (`src/shared/parser.ts`) — updated 2026-05-02:
-- `PrincipleScope` type gained `tags?: string[]` — optional computed tags field; used for KG-tag-based principle matching
+**`get-principles` tool** — loads KG computed tags via `loadKgFileData` and passes `computed_tags` to `matchPrinciples`; updated 2026-05-02
 
 **Principle matcher** (`src/shared/matcher.ts`) — updated 2026-05-02; updated 2026-05-12 (principle overrides):
 - `MatchFilters` type gained `computed_tags?: string[]` — KG-computed tags for the file being matched
@@ -181,75 +139,9 @@ src/
 - Override file absence or malformed YAML returns empty overrides (no error); structural filter validates `principle_id`, `action`, and action-specific fields before applying
 - `matchesScopeTags(principle, computedTags: string[]): boolean` — new export; returns `true` when principle `scope.tags` and `computedTags` share at least one tag
 
-**`get-principles` tool** (`src/features/principles/tools/get-principles.ts`) — updated 2026-05-02:
-- Now loads KG computed tags via `loadKgFileData` helper and passes `computed_tags` to `matchPrinciples`; tag-based matching active when KG is indexed
+**`graph_query` tool** — entity results now include `computed_tags?`; new optional `min_confidence?` param; updated 2026-05-02
 
-**`get-file-context` tool** (`src/features/file-context/tools/get-file-context.ts`) — updated 2026-05-02:
-- `FileContextOutput` now surfaces `computed_tags?: string[]` — KG-propagated tags for the file
-
-**`graph_query` tool** (`src/features/knowledge-graph/`) — updated 2026-05-02:
-- Entity results now include `computed_tags?: string[]` — tags propagated via 4-signal pipeline
-- New optional input param `min_confidence?: number` — filters tag results by confidence threshold
-
-**Principles — Batch** (`src/features/principles/tools/get-principles.ts`) — added 2026-04-30:
-- `PrinciplesGraphContext` — exported type; `{ in_degree, out_degree, is_hub, in_cycle, impact_score }` (no `layer` field)
-- `GetPrinciplesBatchInput` — `{ file_paths: string[]; layers?: string[]; task_description?: string; summary_only?: boolean; sections?: string[] }`
-- `GetPrinciplesBatchOutput` — `{ principles: Array<{ id, title, severity, body }>; total_matched: number; total_in_canon: number; graph_context_by_file: Record<string, PrinciplesGraphContext | undefined> }`
-- `getPrinciplesBatch(input: GetPrinciplesBatchInput, projectDir, pluginDir)` → `Promise<GetPrinciplesBatchOutput>` — deduplicates principles by ID across files; opens KG DB once; `graph_context_by_file` keyed by file path
-- Existing `getPrinciples` function unchanged
-
-**File Context — Batch** — `get-file-context-batch.ts` removed 2026-05-05; batch logic inlined into `get_context` handler in `register-knowledge.ts`
-
-**File Context** (`src/features/file-context/tools/get-file-context.ts`):
-- `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`, `hotspot_score?: HotspotScoreOutput`, `co_change_partners?: Array<CoChangePartner>` — git-intel fields added 2026-04-08
-- `loadKgData(dbPath, filePath, projectDir?)` — exported for testing; third `projectDir` param triggers `ensureGitIntelFresh` and populates `hotspot_score` and `co_change_partners`; co-change query uses UNION across both edge directions
-- `imported_by_layer: Record<string, string[]>` — mirrors `imports_by_layer`; groups reverse-dependency paths by their inferred layer
-- `shape: { label: string; description: string }` — derived by `deriveShape(metrics)`: Sink (`in_degree>8, out_degree<4`), High fan-out hub (`in_degree<3, out_degree>8`), Central hub (`in_degree>5, out_degree>5`), Leaf (`in_degree===0`), Internal (default); label prefixed with `"Cycle member — "` when `in_cycle` is true
-- `project_max_impact: number` — max `computeImpactScore()` across all graph nodes; `0` when no cached graph
-- `FileBlastRadiusEntry` interface — fields: `name`, `qualified_name`, `kind`, `depth`, `file_path` (path of the file containing the entity; `""` if lookup fails)
-
-**PR Review Data** (`src/features/pr-review/tools/pr-review-data.ts`) — pure function module; `get_pr_review_data` MCP tool removed 2026-03-25 (absorbed into `show_pr_impact`); `getPrReviewData` function called internally by `showPrImpact`; `PrReviewDataOutput` gained `hotspot_files?: string[]` (git-intel, 2026-04-08):
-- `PrViolation` interface — `{ principle_id: string; severity: "rule"|"strong-opinion"|"convention"; message?: string }`
-- `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`, `violations?: PrViolation[]`
-- `PrFileSummary` interface — `{ path: string; layer: string; status: "added"|"modified"|"deleted"|"renamed" }` — lightweight entry for clustering
-- `PrReviewDataOutput` interface — fields: `files: PrFileSummary[]` (lightweight), `impact_files: PrFileInfo[]` (needs-attention OR priority_score >= 15 OR has violations), `layers`, `total_files`, `total_violations`, `net_new_files`, `incremental`, `last_reviewed_sha?`, `diff_command`, `kg_freshness_ms?` (was `graph_data_age_ms?`, renamed ADR-005 2026-04-01), `error?`, `narrative: string`, `blast_radius: BlastRadiusEntry[]`
-- `BlastRadiusEntry` interface — `{ file: string; affected: Array<{ path: string; depth: number }> }`
-- `classifyFile(file: Omit<PrFileInfo, "bucket"|"reason">)` — pure function; returns `{ bucket, reason }`; thresholds: needs-attention = `violation_count > 0` OR (`in_degree >= 5` AND `is_changed`); worth-a-look = `priority_score >= 5`; low-risk = else
-- `generateNarrative(files, layers)` — pure function; returns human-readable summary string
-- `buildFileViolationMap(reviews: ReviewEntry[]): Map<string, PrViolation[]>` — pure function; maps per-file violation lists from drift store reviews; no I/O
-
-**UI clustering** (`src/ui/lib/clustering.ts`):
-- `ClusterInput` type — `{ path: string; status: "added"|"modified"|"deleted"|"renamed"; layer?: string }`
-- `Cluster` type — `{ id: string; title: string; description: string; type: "new-feature"|"removal"|"prefix-group"|"layer-group"|"other"; files: ClusterInput[] }`
-- `clusterFiles(files: ClusterInput[]): Cluster[]` — pure function; groups files into <= 30-file clusters via 6-step algorithm (new-feature, removal, prefix, layer, merge-small, split-large); no cluster exceeds 30 files
-- `findCommonPrefix(names: string[]): string | null` — pure; detects shared prefix up to `-`, `_`, or `.` boundary
-- `synthesizeDescription(cluster: Cluster): string` — pure; returns human-readable cluster description
-- `clusterIcon(type: Cluster["type"]): string` — returns emoji icon for cluster type
-
-**UI bridge** (`src/ui/stores/bridge.ts`):
-- `bridge.sendMessage(text: string): Promise<void>` — sends a user-role message via `app.sendMessage()`; throws if bridge not initialized; added 2026-03-25
-
-**UI components** (`src/ui/components/`):
-- `NarrativeSummary.svelte` — props: `narrative`, `totalFiles`, `layerCount`, `netNewFiles`, `violationCount`; pure display, no interactivity
-- `ImpactRow.svelte` — props: `file` (PrFileInfo), `maxScore`, `onPrompt`; click fires `"Show me {filePath} and explain what changed"`
-- `ViolationCard.svelte` — props: `file` (path), `violation` (PrViolation), `onPrompt`; severity pill colors from `SEVERITY_COLORS` in `constants.ts`; click fires `"Explain the {principleId} violation in {filePath} and how to fix it"`
-- `DepRow.svelte` — props: `dep` (path), `relationship`, `riskAnnotation?`, `onPrompt`; click fires `"What breaks if {filePath} regresses? Show me the dependents"`
-- `ChangeStoryGrid.svelte` — props: `files` (ClusterInput[]), `onPrompt`; computes `clusterFiles()` via `$derived`; renders 2-col card grid
-- `ImpactTabs.svelte` — props: `files` (PrFileInfo[]), `blastRadius` (BlastRadiusEntry[]), `onPrompt`; three tabs: High Impact (`priority_score >= 15`), Violations (sorted rule > strong-opinion > convention), Critical Deps (files not in diff appearing in blast radius)
-
-**PrReview.svelte** (`src/ui/PrReview.svelte`) — added 2026-03-25; replaces deleted `PrReviewPrep.svelte` and `PrImpact.svelte`:
-- Unified progressive container; no props — all data from `bridge.waitForToolResult()` (via `useDataLoader`)
-- Prep-only mode (`has_review === false`): run-review banner + header bar + `NarrativeSummary`, `ChangeStoryGrid`, staleness warning (when stale), `ImpactTabs`
-- Review mode (`has_review === true`): `VerdictBanner`, `StatsRow`, then a 2-column grid dashboard — Row 1: `FixBeforeMerge` (left), `ViolationsByPrinciple` + `ComplianceScore` stacked (right); Row 2: `BlastRadiusChart` (left), `LayerChart` + `SubsystemsPanel` stacked (right)
-- When no stored review: shows "Run Review" button that calls `bridge.sendMessage("Run a Canon review on this PR")`
-- Staleness warning banner shown when `kg_freshness_ms > 3_600_000` (field renamed from `graph_data_age_ms` ADR-005 2026-04-01)
-- `PrReviewPrep.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
-- `PrImpact.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
-
-**Config utilities** (`src/shared/lib/config.ts`):
-- `buildLayerInferrer(mappings)` — now supports glob patterns (`*`, `**`, `?`) in addition to plain directory name segments; globs are anchored to path start
-- `loadLayerMappingsStrict(projectDir)` — throws if no layer mappings configured in `.canon/config.json` (strict variant of `loadLayerMappings`)
-- `loadGraphCompositionConfig(projectDir)` — reads `config.graph.composition` block; returns typed `GraphCompositionConfig` with defaults (`enabled: false`, `min_confidence: 0.5`, `max_refs_per_file: 50`)
+**Principles — Batch** (`get-principles.ts`) — `getPrinciplesBatch(input, projectDir, pluginDir)` deduplicates across files; returns `GetPrinciplesBatchOutput` with `principles[]`, `total_matched`, `total_in_canon`, `graph_context_by_file` — added 2026-04-30
 
 **Tools with MCP App UIs** (each has its own `ui://canon/*` resource):
 
@@ -265,11 +157,7 @@ src/
 |------|---------|
 | `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContext` (per-file), `getDriftReport`, `graphQuery` in a single call; `include` param gates sections (default: all) |
 
-**`get_context` tool** (`src/app/register-knowledge.ts`) — added 2026-04-30; relocated from `register-composite.ts` 2026-05-05:
-- Input: `file_paths: string[]` (required), `include?: Array<"principles"|"file_context"|"drift"|"graph">` (defaults to all 4 sections)
-- Returns `{ file_paths, include, principles?, file_context?, drift?, graph? }` — sections present only when included
-- `file_context` errors propagated (fail-closed); graph query failures skipped gracefully (KG may not be indexed)
-- `GetContextOutput` type exported for test assertions
+**`get_context` tool** (`src/app/register-knowledge.ts`) — input: `file_paths: string[]`, `include?: Array<"principles"|"file_context"|"drift"|"graph">`; returns sections keyed by include param; `file_context` errors propagated fail-closed; graph query failures skipped gracefully — added 2026-04-30
 
 **Text-only principle/review tools:**
 
@@ -279,7 +167,7 @@ src/
 | `list_principles` | Browse principle index (metadata only) |
 | `review_code` | Surface principles for code review + code content |
 | `report` | Log reviews (drift tracking) |
-| `store_summaries` | Persist file summaries to SQLite KG DB (DB-only since ADR-005 2026-04-01; JSON write path removed) |
+| `store_summaries` | Persist file summaries to SQLite KG DB |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
@@ -303,9 +191,7 @@ src/
 - Output path is always inside `{workspace}/transcripts/` (path-traversal guard via `isPathContained`)
 - `project_id` derived from `CANON_PROJECT_DIR` env var when not supplied; `session_id` from `CLAUDE_SESSION_ID`
 
-**`transcript-transformer` service** (`src/features/orchestration/services/transcript-transformer.ts`) — added 2026-04-26 (NF-12):
-- `ClaudeCodeEntry` — Zod-inferred type; `{ agentId?, isSidechain?, message: { role, content, usage? }, parentUuid?, timestamp, type }`
-- `transformClaudeCodeTranscript(entries: ClaudeCodeEntry[])` → `TranscriptEntry[]` — pure, no I/O; malformed entries skipped; string content → 1 Canon entry; array content blocks → 1 entry per block (text/tool_use/tool_result); `turn_number` increments per output entry; `tokens` from `output_tokens`; `cumulative_tokens` tracks running total
+**`resolve_after_consultations` tool** — pure resolution; reads `flow.states[state_id].consultations.after`; returns `ConsultationPromptEntry[]` for orchestrator to spawn; call after last wave before `report_result` — added 2026-03-26
 
 **Analytics** (`src/platform/storage/drift/analytics.ts`) — added 2026-03-26:
 - `FlowAnalytics` interface — `{ avg_gate_pass_rate?, avg_postcondition_pass_rate?, total_runs, runs_with_gate_data }`

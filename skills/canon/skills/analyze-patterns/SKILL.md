@@ -56,7 +56,11 @@ This ensures the file exists even if the agent hits its turn limit during analys
 
 ### Step 2: Run requested dimensions
 
-Run dimensions in order of data availability. **Skip dimensions without sufficient data** and note it in the report. **After completing each dimension's analysis, immediately append its findings section to `.canon/LEARNING-REPORT.md`** before moving to the next dimension. This ensures partial results are persisted if the turn limit is reached mid-analysis. Run `agent-effectiveness` AFTER `process-health` — it benefits from the flow-level patterns already identified by process-health analysis.
+Run dimensions in order of data availability. **Skip dimensions without sufficient data** and note it in the report. **After completing each dimension's analysis, immediately append its findings section to `.canon/LEARNING-REPORT.md`** before moving to the next dimension. This ensures partial results are persisted if the turn limit is reached mid-analysis.
+
+Dimension ordering depends on trigger mode:
+- **Auto-trigger mode** (learner spawned automatically after a build): run `agent-effectiveness` FIRST — it is the primary dimension in this mode. Run `process-health` after, only if sufficient flow history exists (>= 5 flow runs). The flow history needed by process-health may not yet exist for a fresh build.
+- **Manual/explicit mode** (user explicitly requests pattern analysis): run `process-health` before `agent-effectiveness` — agent-effectiveness benefits from the flow-level patterns already identified by process-health analysis.
 
 Data sufficiency thresholds:
 

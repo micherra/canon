@@ -309,7 +309,7 @@ Both patterns use native agent team dispatch. The orchestrator manages the lifec
 - Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
 - After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
 - The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
-- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD include a `skip_reason` in the `log_step` outcome explaining why. Accepted `skip_reason` values:
+- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD pass a `skip_reason` parameter directly to `log_step` (not inside the `outcome` object) explaining why. Accepted `skip_reason` values:
   - `"fix-type build, no contract-level changes"` — fix builds that only correct existing code without changing APIs, types, or conventions.
   - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
   - `"session timeout"` — session ending before tail steps could run.
@@ -440,6 +440,11 @@ This decision may be revisited if the native primitive gains lifecycle configura
   - (b) **acknowledge** — items logged as accepted in the journal via `log_step` outcome, build proceeds (accept as-is — no follow-up planned).
   - (c) **defer** — items noted as follow-up, build proceeds (plan to address later — noted as follow-up).
   - This checkpoint occurs between the review step and the ship step. It does NOT apply if the review verdict is CLEAN.
+- **Manual verification gate**: After the tester reports `manual_verification_needed` items, the orchestrator presents them to the user as a HITL checkpoint before ship (via `AskUserQuestion`). The orchestrator detects manual verification items by checking the tester's test report for a `## Manual Verification Needed` section. If this section is present and contains table rows, present them to the user via `AskUserQuestion`. If the section is absent or empty, skip this gate. Options:
+  - (a) **confirmed** — user has verified the items manually, proceed to ship.
+  - (b) **not verified** — user cannot confirm; build pauses for investigation.
+  - (c) **defer** — accept risk, proceed to ship, note as unverified in PR description.
+  - This checkpoint occurs between the test step and the ship step. It does NOT apply when no manual items are reported.
 - **Build-step checkpoint**: After each major build step completes (design, implement, verify, review), the orchestrator offers a session checkpoint (presented via `AskUserQuestion`):
   - "Step {N} of {total} complete ({step_name}). Continue, or start a fresh session and say 'resume'?"
   - If the user says "keep going", "continue", or similar affirmative: proceed to the next step.
@@ -463,6 +468,18 @@ This decision may be revisited if the native primitive gains lifecycle configura
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
+
+### Post-Review Tester Enrichment
+
+When the review step completes and a tester step follows:
+1. Read `${WORKSPACE}/reviews/REVIEW.md`
+2. Extract the Stage 5 "Acceptance Criteria Verification" section
+3. Include the extracted content in the tester's spawn prompt alongside the standard context
+4. Also include the planning brief's Acceptance Criteria table (from `${WORKSPACE}/plans/${slug}/planning-brief.md`)
+
+This ensures the tester receives both the planner's original verification specs AND the reviewer's independent classification for cross-reference.
+
+When the runbook includes verification-aware acceptance criteria (ACs with verification method and type columns), the tester step MUST run after the review step. The tester consumes the reviewer's Stage 5 output, which only exists after review completes.
 
 ### Step Enforcement Contracts
 
@@ -555,6 +572,21 @@ Detect and retry transient failures:
 | TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache ordering bug |
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
+
+## Native Primitives <!-- last-updated: 2026-05-06 -->
+
+The orchestrator MUST use Claude Code native primitives at interaction boundaries for structured UX.
+
+| Primitive | Owner | Touchpoint | Constraint |
+|-----------|-------|------------|------------|
+| `EnterPlanMode` | planner, architect | Requirements interview, design conversation | Set `CANON_CURRENT_AGENT` env var before spawning |
+| `ExitPlanMode` | planner, architect | Plan approval / direction confirmation | Paired with EnterPlanMode |
+| `AskUserQuestion` | orchestrator | WARNING close-out, review verdict, session checkpoint | 4 options max, 4 questions max per call |
+| `TaskCreate/TaskUpdate` | orchestrator | Runbook step progress tracking | Create at build start, update per step |
+| `PushNotification` | orchestrator | Background agent completion (learner, scribe) | Only for `run_in_background: true` agents |
+| `Monitor` | orchestrator | Verify step output streaming | Stream build/test output live |
+
+The orchestrator itself NEVER calls `EnterPlanMode`. It remains a pure dispatcher.
 
 ## Project Structure <!-- last-updated: 2026-05-02 -->
 

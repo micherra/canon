@@ -222,6 +222,7 @@ Suggest: {specific action — examine principle X | trim state Y from flow | rev
 - Call `get_transcript` MCP tool with `{workspace, state_id}` for each step
 - Use `summary` mode first for pattern scanning, `full` mode for detailed analysis of flagged steps
 - The `get_transcript` tool returns `TranscriptEntry[]` with fields: `role` ("system"|"user"|"assistant"|"tool_use"|"tool_result"), `content`, `tool_name?`, `tokens?`, `cumulative_tokens?`, `turn_number`, `timestamp`
+- Note: `logStep` writes `transcript_path` to both the journal and the execution store, so `get_transcript` will find it. The recommended workflow is: discover steps with transcripts from the journal (where `transcript_path` is recorded), then call `get_transcript` which reads from the execution store (where the path was also persisted).
 
 **Minimum threshold**: 3 completed flows with transcripts required. Below → note "Skipped: agent-effectiveness — requires 3 flows with transcripts, have {current}."
 
@@ -326,7 +327,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
     {
       "id": "sug_{deterministic_hash}",
       "dimension": "principle-health",
-      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-antipattern",
+      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-anti-pattern",
       "target": "principle-id or convention text or state name",
       "summary": "One-line description of what's suggested",
       "confidence": "high|medium",
