@@ -208,4 +208,3 @@ function buildEventQuery(
     timestamp: string;
   }>;
 }
-

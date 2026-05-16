@@ -203,7 +203,6 @@ describe("getMessages tool (store-backed)", () => {
     expect(result.messages[0].content).toBe("New");
     expect(result.count).toBe(1);
   });
-
 });
 
 // readChannelAsContext (reads from store)

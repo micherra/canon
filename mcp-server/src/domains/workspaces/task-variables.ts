@@ -54,7 +54,6 @@ export function parseTaskIds(indexContent: string, wave: number): string[] {
   return taskIds;
 }
 
-
 /**
  * Extract file paths from summary content.
  * Looks for backtick-quoted paths and lines that look like file paths.

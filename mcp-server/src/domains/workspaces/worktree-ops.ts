@@ -201,7 +201,6 @@ export async function mergeTaskResults(
   return { merged_count: mergedCount, ok: true };
 }
 
-
 // cleanupWorktrees
 
 /**

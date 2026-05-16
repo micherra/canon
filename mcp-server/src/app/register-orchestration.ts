@@ -1,5 +1,5 @@
-import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
 import { ResolvedFlowSchema } from "@domains/flows/flow-definition-schemas.ts";
+import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
 import { z } from "zod";
 import { registerAgentTeamsTools } from "./register-agent-teams.ts";
 import { registerCategorizeTool } from "./register-categorize.ts";
@@ -10,8 +10,7 @@ import { registerJournalTools } from "./register-journal.ts";
 import { registerMessagingTools } from "./register-messaging.ts";
 import { registerPresentArtifactTool } from "./register-present-artifact.ts";
 import { registerReportTools } from "./register-report.ts";
-import { gatedWrapHandler } from "./server-state.ts";
-import { server } from "./server-state.ts";
+import { gatedWrapHandler, server } from "./server-state.ts";
 
 export function registerOrchestrationTools(): void {
   registerInitWorkspaceTool();

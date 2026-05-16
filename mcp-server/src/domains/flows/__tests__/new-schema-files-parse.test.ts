@@ -21,8 +21,6 @@ import {
   SessionSchema,
   WorktreeEntrySchema,
 } from "../board-state-schemas.ts";
-// --- transcript-schemas.ts imports --------------------------------------------------
-import { TranscriptEntrySchema } from "../transcript-schemas.ts";
 // --- flow-definition-schemas.ts imports ----------------------------------------
 import {
   BaseStateFields,
@@ -35,6 +33,8 @@ import {
   STATUS_ALIASES,
   STATUS_KEYWORDS,
 } from "../flow-definition-schemas.ts";
+// --- transcript-schemas.ts imports --------------------------------------------------
+import { TranscriptEntrySchema } from "../transcript-schemas.ts";
 
 // =============================================================================
 // flow-definition-schemas.ts
