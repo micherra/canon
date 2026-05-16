@@ -220,6 +220,7 @@ src/
 | `invoke_janitor` | Run Canon janitor — WAL checkpoint, prune detection, lock cleanup |
 | `seed_workspace` | Seed a workspace with initial content |
 | `present_artifact` | Present an artifact to the user via the MCP App UI |
+| `evaluate_step` | Extract structural signals from a git diff for step-transition evaluation — diff stats, pattern findings (lazy/hacky), bare-catch detection, file-scope overlap; pure structural analysis, no LLM calls; returns `EvaluateStepOutput` or `INVALID_INPUT`/`UNEXPECTED` on error — added 2026-05-16 |
 
 ## Dependencies
 <!-- last-updated: 2026-05-02 (@anthropic-ai/sdk removed) -->

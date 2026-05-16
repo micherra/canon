@@ -114,6 +114,8 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 9. Set `CANON_CURRENT_AGENT={agent_name}` environment variable before spawning plan-mode-eligible agents (planner, architect). The plan-mode-guard hook reads this to conditionally allow `EnterPlanMode`.
 10. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
+For implement and fix steps: after the agent completes but before proceeding to the next step, run the step-transition evaluator gate (see Post-Step Effects). The evaluator gate is a post-step quality check, not a separate runbook step.
+
 ### DAG Execution Protocol
 
 When the architect produces a `task-dag.yaml` alongside task plans, the orchestrator uses it for parallel dispatch instead of sequential step execution. The orchestrator delegates scheduling and dependency enforcement to Claude Code's native agent teams API. Canon owns worktree isolation, merge, and quality gates.
@@ -228,6 +230,9 @@ Table of which Canon MCP tools to call before spawning each step type:
 | Security | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 
 `get_context` is a composite tool that batches multiple lookups into a single MCP round-trip. Include results in the spawn prompt. Agents also have direct MCP access and will self-serve missing context (via `agent-context-check` skill).
+
+**Direct orchestrator tools** (called by the orchestrator directly, not as pre-spawn context):
+- `evaluate_step` — called after implement/fix steps to extract structural signals for the evaluator agent
 
 ### Dispatch Framework
 
@@ -465,6 +470,24 @@ This decision may be revisited if the native primitive gains lifecycle configura
 
 ### Post-Step Effects
 
+- After implement/fix step completes (before proceeding to next step): run the step-transition evaluator gate:
+  1. Call `evaluate_step` MCP tool with `{ workspace, slug, base_commit, worktree_path, declared_files }` where `declared_files` comes from the task plan's `files:` frontmatter field.
+  2. If the tool returns `ok: false`, log a warning in the journal and skip the evaluator gate (fail-open — do not block the build on tool failure).
+  3. Spawn `canon:evaluator` agent with:
+     - The `EvaluateStepOutput` JSON from step 1 (serialized in the spawn prompt per decision eval-02)
+     - Acceptance criteria from the runbook's `## Acceptance Criteria` section
+     - Implementation summary from `${WORKSPACE}/plans/${slug}/*-SUMMARY.md` (if available)
+     - `model: "haiku"` in the Agent call
+  4. Parse the evaluator's verdict from the `---VERDICT---` / `---END_VERDICT---` delimiters in its output.
+  5. On `VERDICT: PASS`: proceed to the next runbook step.
+  6. On `VERDICT: FAIL`:
+     - Create a synthetic journal entry: `log_step({ workspace, step_id: "eval-fix-{N}", agent_type: "engineer", status: "started" })`
+     - Re-spawn the engineer with the evaluator's FINDINGS (include each finding's dimension, severity, description, file_path, and line in the spawn prompt)
+     - After the engineer completes, re-run the evaluator gate (step 1)
+     - Maximum 3 eval-fix iterations before HITL escalation (matching the review-fix pattern)
+  7. On parse failure (no `---VERDICT---` delimiters found): treat as PASS with a journal warning — do not block the build on malformed agent output.
+  - This gate runs only after steps of type `implement` or `fix`. It does NOT run after `verify`, `review`, `test`, `context-sync`, `ship`, or `learn` steps.
+  - The evaluator gate runs BEFORE the verify step. The sequence is: implement -> evaluate -> verify -> review.
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
@@ -539,6 +562,7 @@ See the "Agent Spawn Error Handling" section below. The same retry logic (429 ra
 | Shipper | `canon:shipper` | Ship states |
 | Writer | `canon:writer` | Principle authoring |
 | Learner | `canon:learner` | Pattern analysis |
+| Evaluator | `canon:evaluator` | Post-implement quality gate |
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt and are spawned with `isolation: "none"`. Canon owns the worktree lifecycle — changes stay on the build branch until explicitly merged.
 
