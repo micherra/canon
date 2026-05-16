@@ -173,7 +173,9 @@ Before committing, check: if any modified file contains a `<!-- last-updated: ..
 
 ### Step 10: Produce summary [impl]
 
-Write summary to the path specified, using the implementation-log template (agent-template-required). Include: what changed, files modified, tests written, coverage notes, compliance declarations, verification results. The summary MUST include a `### Status` heading with DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT.
+Call `mcp__canon__write_implementation_summary` with your task summary. Do not write summary files manually with the `Write` tool — the MCP tool handles path resolution automatically and produces a machine-readable sidecar alongside the markdown artifact. Writing summary files manually via `Write` leads to incorrect paths (especially with long workspace slugs) and missing sidecars.
+
+The summary must follow the implementation-log template (agent-template-required). Include: what changed, files modified, tests written, coverage notes, compliance declarations, verification results. The summary MUST include a `### Status` heading with DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT.
 
 Populate the `#### Criteria Coverage` table in the Coverage Notes section. Map every acceptance criterion from the task plan's `### Done when` section to what was implemented. Use disposition values `covered`, `descoped`, or `partial` — the same vocabulary as the planning brief. A missing or empty Criteria Coverage table is a summary defect; the reviewer will flag it.
 
@@ -285,7 +287,12 @@ When the orchestrator provides `${WORKSPACE}`:
 
 ### Structured Output
 
-`mcp__canon__write_implementation_summary` is available in implementation mode — use it instead of Write for your summary. It handles markdown generation and produces a machine-readable sidecar.
+**Always use `mcp__canon__write_implementation_summary` for implementation summaries.** Never use the `Write` tool to write summary files manually. The MCP tool:
+- Resolves the correct workspace path automatically (avoids path errors with long workspace slugs)
+- Generates the markdown file at the canonical location
+- Produces a machine-readable `.meta.json` sidecar for downstream pipeline consumption
+
+Calling `Write` on a summary path is a violation of this protocol — the tool cannot reliably resolve workspace paths and will produce artifacts at incorrect or missing locations.
 
 ### Missing Artifacts
 
