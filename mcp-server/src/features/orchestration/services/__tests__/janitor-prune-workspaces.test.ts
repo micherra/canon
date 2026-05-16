@@ -363,4 +363,106 @@ describe("prune_workspaces task", () => {
     expect(result.tasks.prune_workspaces.status).toBe("success");
     expect(existsSync(slugDir)).toBe(false);
   });
+
+  test("runs git worktree remove before rmSync when workspace contains a worktree/ subdirectory", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
+      min_hours_between_runs: 1,
+    });
+
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "worktree-build");
+    const worktreeSubDir = join(slugDir, "worktree");
+    await mkdir(worktreeSubDir, { recursive: true });
+    // No .lock — abandoned workspace
+
+    setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
+
+    const expectedWorktreePath = worktreeSubDir;
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([]);
+      }
+      if (args[0] === "worktree" && args[1] === "remove") {
+        return { duration_ms: 10, exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
+      }
+      return makeGitWorktreeListResult([]);
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    expect(mockGitExec).toHaveBeenCalledWith(
+      ["worktree", "remove", "--force", expectedWorktreePath],
+      tmpDir,
+    );
+    expect(existsSync(slugDir)).toBe(false);
+  });
+
+  test("proceeds with rmSync when git worktree remove fails", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
+      min_hours_between_runs: 1,
+    });
+
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "worktree-fail-build");
+    const worktreeSubDir = join(slugDir, "worktree");
+    await mkdir(worktreeSubDir, { recursive: true });
+    // No .lock — abandoned workspace
+
+    setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
+
+    mockGitExec.mockImplementation((args: string[]) => {
+      if (args[0] === "worktree" && args[1] === "list") {
+        return makeGitWorktreeListResult([]);
+      }
+      if (args[0] === "worktree" && args[1] === "remove") {
+        return {
+          duration_ms: 5,
+          exitCode: 128,
+          ok: false,
+          stderr: "not a worktree",
+          stdout: "",
+          timedOut: false,
+        };
+      }
+      return makeGitWorktreeListResult([]);
+    });
+
+    const result = await runJanitor(tmpDir);
+
+    // rmSync ran despite worktree remove failure
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    expect(existsSync(slugDir)).toBe(false);
+  });
+
+  test("does not call git worktree remove when workspace has no worktree/ subdirectory", async () => {
+    mockLoadJanitorConfig.mockResolvedValue({
+      enabled: true,
+      max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
+      min_hours_between_runs: 1,
+    });
+
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "no-worktree-build");
+    // Create slug dir WITHOUT a worktree/ subdirectory
+    await mkdir(slugDir, { recursive: true });
+    // No .lock — abandoned workspace
+
+    setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    // gitExec should only be called for worktree list (from pruneWorktreesTask), NOT for worktree remove
+    const removeCall = mockGitExec.mock.calls.find(
+      (args: string[][]) => args[0][0] === "worktree" && args[0][1] === "remove",
+    );
+    expect(removeCall).toBeUndefined();
+    expect(existsSync(slugDir)).toBe(false);
+  });
 });

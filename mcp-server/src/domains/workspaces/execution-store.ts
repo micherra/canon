@@ -16,7 +16,6 @@ import type {
   IterationEntry,
   Session,
 } from "@domains/flows/board-state-schemas.ts";
-import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
 import type Database from "better-sqlite3";
 import {
@@ -50,10 +49,7 @@ import {
   getEvents,
   getMessages,
   getMessagesSinceId,
-  getWaveEvents,
   hasMessages,
-  postWaveEvent,
-  updateWaveEvent,
 } from "./execution-store-messages.ts";
 import { prepareAllStatements } from "./execution-store-statements.ts";
 import type {
@@ -62,12 +58,10 @@ import type {
   ExecutionStateRow,
   GetEventsOptions,
   GetMessagesOptions,
-  GetWaveEventsOptions,
   InitExecutionParams,
   MessageOutput,
   ProgressRow,
   UpdateExecutionFields,
-  UpdateWaveEventFields,
 } from "./execution-store-types.ts";
 import {
   updateExecution as _updateExecution,
@@ -266,26 +260,6 @@ export class ExecutionStore {
 
   hasMessages(channel: string): boolean {
     return hasMessages(this.s.stmtHasMessages, channel);
-  }
-
-  // Wave events — delegate to execution-store-messages.ts
-
-  postWaveEvent(event: {
-    id: string;
-    type: string;
-    payload: Record<string, unknown>;
-    timestamp: string;
-    status: string;
-  }): void {
-    postWaveEvent(this.s.stmtPostWaveEvent, event);
-  }
-
-  getWaveEvents(options?: GetWaveEventsOptions): WaveEvent[] {
-    return getWaveEvents(this.s.stmtGetWaveEvents, this.s.stmtGetWaveEventsByStatus, options);
-  }
-
-  updateWaveEvent(id: string, fields: UpdateWaveEventFields): void {
-    updateWaveEvent(this.s.stmtUpdateWaveEvent, id, fields);
   }
 
   // Event log — delegate to execution-store-messages.ts
@@ -498,7 +472,7 @@ export class ExecutionStore {
   // Transcript path (ADR-015)
 
   setTranscriptPath(stateId: string, transcriptPath: string): boolean {
-    const info = this.s.stmtSetTranscriptPath.run(transcriptPath, stateId);
+    const info = this.s.stmtSetTranscriptPath.run(stateId, transcriptPath);
     return info.changes > 0;
   }
 

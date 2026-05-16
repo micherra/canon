@@ -230,10 +230,13 @@ function isValidOverrideEntry(o: Record<string, unknown>): boolean {
   }
   if (o.action === "disable") return hasValidReason(o);
   if (o.action === "narrow-scope") {
+    const appliesTo = o.applies_to as Record<string, unknown> | null | undefined;
     return (
-      o.applies_to != null &&
-      Array.isArray((o.applies_to as Record<string, unknown>)?.layers) &&
-      Array.isArray((o.applies_to as Record<string, unknown>)?.file_patterns)
+      appliesTo != null &&
+      Array.isArray(appliesTo.layers) &&
+      (appliesTo.layers as unknown[]).every((el: unknown) => typeof el === "string") &&
+      Array.isArray(appliesTo.file_patterns) &&
+      (appliesTo.file_patterns as unknown[]).every((el: unknown) => typeof el === "string")
     );
   }
   return true; // Unknown actions pass through unchanged

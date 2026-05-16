@@ -17,7 +17,6 @@
  * All logging goes to process.stderr — process.stdout is the MCP stdio transport.
  */
 
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +27,7 @@ import {
   registerArtifact,
   removeArtifact,
 } from "@app/http-server.ts";
+import { openBrowser } from "@platform/adapters/process-adapter.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 
@@ -69,28 +69,6 @@ function resolveUiDistDir(): string {
   const thisFile = fileURLToPath(import.meta.url);
   const distDir = dirname(dirname(dirname(dirname(dirname(thisFile)))));
   return join(distDir, "src", "ui");
-}
-
-/** Fire-and-forget browser open — platform-aware. Uses execFile with args array to prevent command injection. */
-function openBrowser(url: string): void {
-  let file: string;
-  let args: string[];
-  if (process.platform === "darwin") {
-    file = "open";
-    args = [url];
-  } else if (process.platform === "win32") {
-    file = "cmd";
-    args = ["/c", "start", "", url];
-  } else {
-    file = "xdg-open";
-    args = [url];
-  }
-
-  execFile(file, args, (err) => {
-    if (err) {
-      process.stderr.write(`[present_artifact] browser open failed: ${err.message}\n`);
-    }
-  });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,9 +1,34 @@
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
 
 const DEFAULT_TIMEOUT = 30_000;
 const MAX_OUTPUT_BYTES = 512_000; // 512KB output truncation
+
+/**
+ * Open a URL in the default system browser. Fire-and-forget — platform-aware.
+ * Uses execFile with an args array (no shell) to prevent command injection.
+ */
+export function openBrowser(url: string): void {
+  let file: string;
+  let args: string[];
+  if (process.platform === "darwin") {
+    file = "open";
+    args = [url];
+  } else if (process.platform === "win32") {
+    file = "cmd";
+    args = ["/c", "start", "", url];
+  } else {
+    file = "xdg-open";
+    args = [url];
+  }
+
+  execFile(file, args, (err) => {
+    if (err) {
+      process.stderr.write(`[openBrowser] browser open failed: ${err.message}\n`);
+    }
+  });
+}
 
 /**
  * Execute a shell command synchronously using spawnSync with shell: true.
