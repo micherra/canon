@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-05-05 (unified graph intelligence: kg-community.ts + kg-tags.ts added; register-composite.ts, get-file-context-batch.ts, workspace-structure.ts, runbook-tail-validator.ts, principle-reranker.ts removed; get_context relocated to register-knowledge.ts; computed_tags + min_confidence added to graph_query) -->
+<!-- last-updated: 2026-05-16 (wave legacy cleanup: wave-briefing.ts, inject-wave-event.ts, resolve-wave-event.ts, wave-events.ts, register-wave-events.ts, event-schemas.ts deleted; wave-lifecycle.ts→worktree-ops.ts, wave-variables.ts→task-variables.ts; inject_wave_event and resolve_wave_event tools removed; get_messages include_events param removed) -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -42,7 +42,7 @@ src/
 - **Community detection** (`graph/kg-community.ts`) — Louvain algorithm assigns `community_id` to each file in the KG; added 2026-05-02
 - **Tag propagation** (`graph/kg-tags.ts`) — 4-signal pipeline (directory, imports, community, cross-ref) writes computed tags to `file_tags` table; used by `get-principles` and `get-file-context`; added 2026-05-02
 - **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity; OR semantics: matches if layers OR scope.tags intersect (updated 2026-05-02)
-- **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
+- **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, competitive flows, debate protocol
 
 **Removed modules** (2026-05-02):
 - ~~`src/app/register-composite.ts`~~ — composite tool registration removed 2026-05-02 (get_context inlined or restructured)
@@ -314,22 +314,15 @@ src/
 **`resolve_after_consultations` tool** (`src/features/orchestration/tools/resolve-after-consultations.ts`) — added 2026-03-26:
 - Input: `ResolveAfterConsultationsInput` — `{ workspace: string; state_id: string; flow: ResolvedFlow; variables: Record<string, string> }`
 - Output: `ResolveAfterConsultationsResult` — `{ consultation_prompts: ConsultationPromptEntry[]; warnings: string[] }`
-- Pure resolution function — no board reads, no state entry, no convergence check; runs at the post-wave lifecycle breakpoint
+- Pure resolution function — no board reads, no state entry, no convergence check
 - Reads `flow.states[state_id].consultations.after`; unresolvable names produce warnings (not errors) and are skipped
-- Call after the last wave completes and before `report_result`; orchestrator spawns the returned consultation agents, records results with breakpoint `"after"`, then proceeds to `report_result`
+- Call after the last parallel task completes and before `report_result`; orchestrator spawns the returned consultation agents, records results with breakpoint `"after"`, then proceeds to `report_result`
 - After-consultation summaries are automatically picked up by the next state's `enterAndPrepareState` via the briefing injection pipeline
 
-**`resolve_wave_event` tool** (`src/features/orchestration/tools/resolve-wave-event.ts`) — added 2026-03-26:
-- Input: `ResolveWaveEventInput` — `{ workspace: string; event_id: string; action: "apply"|"reject"; resolution?: Record<string, unknown>; reason?: string }`
-- Output: `ResolveWaveEventResult` — `{ event_id, action, agents: string[], descriptions: Record<string, string>, pending_count: number }`
-- Validates: `action === "reject"` requires `reason`; throws `"Event not found"` if `event_id` absent; throws `"Event {id} is already {status}"` if event is not pending
-- Calls `markEventApplied` (with optional `resolution`) or `markEventRejected` (with `reason`) then `resolveEventAgents(event.type)`
-- Emits `wave_event_resolved` on event bus after mutation; acquires board lock for full duration
-- `resolveEventAgents("guidance")` returns `{ agents: [], descriptions: {} }` — guidance events are mechanical orchestrator operations, no agent spawn needed (changed from `["guide"]` 2026-03-26)
+~~**`resolve_wave_event` tool**~~ — removed 2026-05-16 (wave event infrastructure deleted; `inject_wave_event` and `resolve_wave_event` tools no longer exist)
 
 **Event bus** (`src/orchestration/events.ts`):
-- `FlowEventType` union includes `"wave_event_resolved"` (added 2026-03-26, after `"wave_event_injected"`) and `"agent_activity"` (added 2026-04-07)
-- `FlowEventMap["wave_event_resolved"]` — `{ eventId, eventType, action: "apply"|"reject", workspace, timestamp }`
+- `FlowEventType` union includes `"agent_activity"` (added 2026-04-07)
 
 **Gate runner** (`src/orchestration/gate-runner.ts`):
 - `normalizeGates(stateDef, flow, cwd, boardState?)` — resolves gate commands via 3-tier priority: `stateDef.gates[]` (direct shell commands) > `stateDef.gate` (named reference via `resolveGateCommand()`) > `boardState.discovered_gates[]` (agent-reported); returns `{ commands, source }` where source ∈ `"gates"|"gate"|"discovered"|"none"`
@@ -388,10 +381,8 @@ src/
 | `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress, set_metadata); `set_metadata` with `affected_files` (JSON array string) calls `registerClaims` + stores overlap warnings in board metadata as `claim_warnings`; `complete_flow` releases all file claims for the workflow slug before recording analytics — aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
 | `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
-| `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
-| `inject_wave_event` | Inject user events into running wave execution |
-| `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
-| `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
+| `get_messages` | Read messages from a workspace channel |
+| `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last iteration, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
 | `record_agent_metrics` | Agent-callable tool to record performance counters (`tool_calls`, `orientation_calls`, `turns`) directly into execution state metrics; merges with existing metrics preserving orchestrator fields; returns `INVALID_INPUT` if no fields provided, `WORKSPACE_NOT_FOUND` if state not found — added 2026-04-01 (ADR-003a) |
 | `post_event` | Agent-callable tool for structured activity logging; input: `{ workspace, agent, action: "start"\|"complete", detail, artifacts?: string[] }`; stores `agent_activity` event in execution store's event log via `appendEvent`; returns `{ ok: true; event_type; agent; action; timestamp }` or `WORKSPACE_NOT_FOUND`/`INVALID_INPUT` on error — added 2026-04-07 |
 | `batch_log_steps` | Log multiple steps in a single journal read-modify-write cycle; input: `{ workspace, steps: Array<{ step_id, status, agent_type?, artifacts_expected?, domain_skills_loaded?, outcome?, agent_id? }> }`; validates all entries upfront (fail-closed: entire batch rejected if any `step_id` is empty); runs transcript captures in parallel for completed entries with `agent_id`; returns `{ results: LogStepResult[] }`; registered only when `CANON_AGENT_TEAMS_MODE=on` — added 2026-04-30 |

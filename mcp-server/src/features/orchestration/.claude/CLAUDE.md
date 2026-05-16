@@ -20,53 +20,37 @@ Flow execution engine and all Canon orchestration MCP tools. This bounded contex
 | `consultation-executor.ts` | Consultation execution — runs before/after consultation prompts |
 
 **`tools/`** — MCP tool handlers. All handlers are thin wrappers calling services or engine functions.
-<!-- last-updated: 2026-04-26 -->
+<!-- last-updated: 2026-05-16 (inject-wave-event.ts and resolve-wave-event.ts deleted) -->
 
 | Tool file | MCP tool name |
 |-----------|--------------|
 | `invoke-janitor.ts` | `invoke_janitor` |
-| `drive-flow.ts` | `drive_flow` |
 | `init-workspace.ts` | `init_workspace` |
-| `load-flow.ts` | `load_flow` |
-| `report-result.ts` | `report_result` |
-| `update-board.ts` | `update_board` |
-| `enter-and-prepare-state.ts` | `enter_and_prepare_state` |
 | `report.ts` | `report` |
 | `post-message.ts` | `post_message` |
 | `get-messages.ts` | `get_messages` |
-| `inject-wave-event.ts` | `inject_wave_event` |
-| `resolve-wave-event.ts` | `resolve_wave_event` |
 | `resolve-after-consultations.ts` | `resolve_after_consultations` |
-| `record-agent-metrics.ts` | `record_agent_metrics` |
 | `post-event.ts` | `post_event` |
 | `write-plan-index.ts` | `write_plan_index` |
-| `simulate-flow.ts` | `simulate_flow` |
-| `get-spawn-prompt.ts` | `get_spawn_prompt` |
 | `get-transcript.ts` | `get_transcript` |
 | `capture-transcript.ts` | `capture_transcript` |
 | `write-design-brief.ts` | `write_design_brief` |
 | `write-implementation-summary.ts` | `write_implementation_summary` |
-| `write-research-synthesis.ts` | `write_research_synthesis` |
 | `write-review.ts` | `write_review` |
 | `write-test-report.ts` | `write_test_report` |
 
 **`services/`** — Business logic backing tools and engine.
-<!-- last-updated: 2026-04-26 -->
+<!-- last-updated: 2026-05-16 (wave-briefing.ts deleted) -->
 
 | File | Responsibility |
 |------|---------------|
 | `janitor.ts` | `runJanitor(projectDir)` — gate checks (enabled, time, lock), WAL checkpoint, prune detection; returns `JanitorResult` |
 | `context-budget.ts` | Token budget tracking for agent context windows |
-| `context-enrichment.ts` | Enriches spawn prompts with KG context and file summaries |
-| `contract-checker.ts` | Evaluates postcondition assertions after state completion |
 | `diff-cluster.ts` | Clusters changed files by prefix, layer, and change type |
-| `drive-flow-types.ts` | Shared types for drive_flow inputs and outputs |
 | `inject-context.ts` | Injects context from after-consultation summaries into next state |
 | `kg-context-formatter.ts` | Formats KG data for inclusion in agent prompts |
-| `learn-gate.ts` | Auto-learn gate evaluation at flow completion |
 | `scope-resolver.ts` | Resolves task scope from board state and flow definition |
 | `transcript-transformer.ts` | `transformClaudeCodeTranscript(entries)` — pure; converts CC JSONL entries to Canon `TranscriptEntry[]`; exports `ClaudeCodeEntry` type |
-| `wave-briefing.ts` | Assembles wave briefing payloads for parallel task agents |
 
 ## Contracts
 <!-- last-updated: 2026-04-26 -->
