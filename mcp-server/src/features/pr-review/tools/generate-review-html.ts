@@ -867,7 +867,7 @@ ${rowsHtml}
 function renderLayerChart(
   layers: Array<{ name: string; file_count: number; color?: string }>,
 ): string {
-  if (layers.length === 0) {
+  if (!layers || layers.length === 0) {
     return `<div class="layer-chart">
   <div class="section-title--upper">Changes by Layer</div>
   <div class="empty-note">No layer data</div>
@@ -878,7 +878,7 @@ function renderLayerChart(
   const rowsHtml = layers
     .map((layer) => {
       const width = barWidth(layer.file_count, maxCount);
-      const color = layer.color ?? layerColor(layer.name);
+      const color = layer.color ?? layerColor(layer.name ?? "unknown");
       const name = escapeHtml(layer.name);
       return `<div class="chart-row">
       <span class="layer-name" title="${name}">${name}</span>
