@@ -54,6 +54,7 @@ export type PresentArtifactResult = {
   decision: {
     action: "approve" | "request_changes";
     annotations: unknown[];
+    feedback?: string;
   };
   url: string;
 };
@@ -62,11 +63,19 @@ export type PresentArtifactResult = {
 // Browser open helpers
 // ---------------------------------------------------------------------------
 
-/** Resolve the dist/src/ui directory relative to this module's compiled location. */
+/** Resolve the dist/src/ui directory relative to this module's location. */
 function resolveUiDistDir(): string {
+  const thisFile = fileURLToPath(import.meta.url);
+  if (thisFile.includes("/src/") && !thisFile.includes("/dist/src/")) {
+    // Running from source via tsx — walk up to mcp-server root, use dist/src/ui
+    let dir = dirname(thisFile);
+    while (dir !== "/" && !dir.endsWith("/mcp-server")) {
+      dir = dirname(dir);
+    }
+    return join(dir, "dist", "src", "ui");
+  }
   // When compiled: dist/src/features/orchestration/tools/present-artifact.js
   // Walk up 5 levels → dist/, then join dist/src/ui
-  const thisFile = fileURLToPath(import.meta.url);
   const distDir = dirname(dirname(dirname(dirname(dirname(thisFile)))));
   return join(distDir, "src", "ui");
 }

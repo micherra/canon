@@ -33,6 +33,8 @@ export type Decision = {
   action: "approve" | "request_changes";
   /** Inline annotations attached to sections of the artifact. May be empty. */
   annotations: unknown[];
+  /** Free-text explanation when action is request_changes. */
+  feedback?: string;
 };
 
 /** Stored artifact data keyed by `"${type}/${slug}"`. */
@@ -305,10 +307,11 @@ function handleDecisionPost(req: IncomingMessage, res: ServerResponse, key: stri
       return;
     }
 
-    const raw = parsed as { action: string; annotations?: unknown[] };
+    const raw = parsed as { action: string; annotations?: unknown[]; feedback?: unknown };
     const decision: Decision = {
       action: raw.action as Decision["action"],
       annotations: Array.isArray(raw.annotations) ? raw.annotations : [],
+      ...(typeof raw.feedback === "string" && raw.feedback ? { feedback: raw.feedback } : {}),
     };
 
     pending.resolve(decision);
