@@ -120,6 +120,8 @@ export class DriftDbSignals {
   private readonly stmtGetUnresolved: Database.Statement;
   private readonly stmtResolvePrediction: Database.Statement;
   private readonly stmtGetPredictionById: Database.Statement;
+  private readonly stmtGetResolvedAll: Database.Statement;
+  private readonly stmtGetResolvedByPrinciple: Database.Statement;
 
   constructor(db: Database.Database) {
     this.stmtGetFileViolationHistory = db.prepare(`
@@ -187,6 +189,25 @@ export class DriftDbSignals {
       SELECT id, prediction_id, workspace, flow_id, file_paths, principle_ids, signals_json, timestamp, resolved, resolved_at, outcome
       FROM predictions
       WHERE prediction_id = ?
+    `);
+
+    this.stmtGetResolvedAll = db.prepare(`
+      SELECT id, prediction_id, workspace, flow_id, file_paths, principle_ids, signals_json, timestamp, resolved, resolved_at, outcome
+      FROM predictions
+      WHERE resolved = 1
+        AND outcome IS NOT NULL
+      ORDER BY resolved_at DESC
+      LIMIT 500
+    `);
+
+    this.stmtGetResolvedByPrinciple = db.prepare(`
+      SELECT DISTINCT p.id, p.prediction_id, p.workspace, p.flow_id, p.file_paths, p.principle_ids, p.signals_json, p.timestamp, p.resolved, p.resolved_at, p.outcome
+      FROM predictions p, json_each(p.principle_ids) AS je
+      WHERE p.resolved = 1
+        AND p.outcome IS NOT NULL
+        AND je.value = ?
+      ORDER BY p.resolved_at DESC
+      LIMIT 500
     `);
   }
 
@@ -280,5 +301,38 @@ export class DriftDbSignals {
    */
   getPredictionById(predictionId: string): PredictionRow | undefined {
     return this.stmtGetPredictionById.get(predictionId) as PredictionRow | undefined;
+  }
+
+  /**
+   * Return resolved predictions (resolved=1, outcome IS NOT NULL).
+   *
+   * Without filter: returns all resolved predictions ordered by resolved_at DESC, LIMIT 500.
+   * With filter: iterates principleIds, queries each via json_each(), deduplicates by prediction_id.
+   * Empty principleIds array returns [] immediately (define-errors-out-of-existence / validate-at-trust-boundaries).
+   *
+   * @param principleIds - optional list of principle IDs to filter by; omit for all resolved predictions
+   */
+  getResolvedPredictions(principleIds?: string[]): PredictionRow[] {
+    // validate-at-trust-boundaries: empty array means "no filter requested" — but since
+    // an empty filter cannot match anything, return early rather than silently returning all.
+    if (principleIds !== undefined && principleIds.length === 0) return [];
+
+    if (principleIds === undefined) {
+      return this.stmtGetResolvedAll.all() as PredictionRow[];
+    }
+
+    // Filter by principle IDs: iterate and deduplicate by prediction_id
+    const seen = new Set<string>();
+    const results: PredictionRow[] = [];
+    for (const principleId of principleIds) {
+      const rows = this.stmtGetResolvedByPrinciple.all(principleId) as PredictionRow[];
+      for (const row of rows) {
+        if (!seen.has(row.prediction_id)) {
+          seen.add(row.prediction_id);
+          results.push(row);
+        }
+      }
+    }
+    return results;
   }
 }
