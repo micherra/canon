@@ -215,8 +215,8 @@ function tryResumeWorkspace(
     const store = getExecutionStore(candidateWorkspace);
     const session = store.getSession();
     const board = store.getBoard();
-    if (session && session.status === "active" && board) {
-      if (expectedTask !== undefined && session.task !== expectedTask) return null;
+    const taskMatches = expectedTask === undefined || session?.task === expectedTask;
+    if (session && session.status === "active" && board && taskMatches) {
       const worktreePath = resolveWorktreePath(candidateWorkspace, projectDir, session);
       const worktreeExists = existsSync(worktreePath);
       return {
