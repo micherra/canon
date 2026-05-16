@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { inferLayer, loadAllPrinciples, matchPrinciples } from "../matcher.ts";
 import type { Principle } from "../parser.ts";
 import { parsePrinciple } from "../parser.ts";
@@ -360,12 +360,16 @@ async function createPluginDir(base: string): Promise<string> {
 describe("principle overrides", () => {
   let projectDir: string;
   let pluginDir: string;
+  let loadAllPrinciples: (typeof import("../matcher.ts"))["loadAllPrinciples"];
 
   beforeEach(async () => {
     // Use unique temp dirs per test to avoid cache interference
     projectDir = await mkdtemp(join(tmpdir(), "canon-test-"));
     await createPrincipleDir(projectDir);
     pluginDir = await createPluginDir(projectDir);
+    // Reset module registry so the module-level principleCache is fresh for each test
+    vi.resetModules();
+    ({ loadAllPrinciples } = await import("../matcher.ts"));
   });
 
   afterEach(async () => {

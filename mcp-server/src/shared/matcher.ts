@@ -230,7 +230,9 @@ async function loadOverrides(projectDir: string): Promise<PrincipleOverride[]> {
         return (
           o.applies_to != null &&
           Array.isArray(o.applies_to?.layers) &&
-          Array.isArray(o.applies_to?.file_patterns)
+          (o.applies_to.layers as unknown[]).every((el: unknown) => typeof el === "string") &&
+          Array.isArray(o.applies_to?.file_patterns) &&
+          (o.applies_to.file_patterns as unknown[]).every((el: unknown) => typeof el === "string")
         );
       }
       // "disable" and unknown actions: no additional field requirements

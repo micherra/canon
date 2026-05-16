@@ -177,7 +177,7 @@ src/
 - `MatchFilters` type gained `computed_tags?: string[]` — KG-computed tags for the file being matched
 - `matchPrinciples(principles, filters)` — now uses OR semantics: a principle matches if its layers intersect the file's layers OR its `scope.tags` intersect the file's `computed_tags`; previously layers-only
 - `loadAllPrinciples(projectDir, pluginDir)` — behavior updated 2026-05-12: after merging project + plugin principles, reads `.canon/principle-overrides.yaml` (if present) and applies overrides before caching; signature unchanged; cache key now includes override file mtime
-- Override actions supported: `disable` (omits principle entirely), `override-severity` (replaces severity), `narrow-scope` (replaces `scope.applies_to` — `layers` + `file_patterns`); unknown actions pass through unchanged
+- Override actions supported: `disable` (omits principle entirely), `override-severity` (replaces severity), `narrow-scope` (replaces `principle.scope` — `layers` + `file_patterns`); unknown actions pass through unchanged
 - Override file absence or malformed YAML returns empty overrides (no error); structural filter validates `principle_id`, `action`, and action-specific fields before applying
 - `matchesScopeTags(principle, computedTags: string[]): boolean` — new export; returns `true` when principle `scope.tags` and `computedTags` share at least one tag
 
