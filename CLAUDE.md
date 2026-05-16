@@ -375,7 +375,7 @@ ALL three must pass for the verify step to succeed. If any gate fails, the engin
 ### Completion Checklist
 
 1. Run context-sync: spawn the scribe agent. The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md on the build branch. Context-sync runs before ship so that doc updates are committed to the build branch and included in the PR.
-2. Ship the build: spawn the shipper agent (default — creates PR to main). Fallback direct merge only when user explicitly requests: `git merge canon/{slug} --no-edit`; on conflict present files via HITL; on success `git branch -d canon/{slug}`.
+2. Ship the build: spawn the shipper agent (default — creates PR to main). Fallback direct merge only when user explicitly requests: `git checkout main && git merge canon/{slug} --no-edit`; on conflict present files via HITL; on success `git branch -d canon/{slug}`.
 3. Call `finalize_workspace({ workspace })` — if steps or artifacts missing, resolve before proceeding. Safe to run now that context-sync and ship are complete.
 4. Call `update_board({ workspace, operation: "complete_flow" })`.
 5. Verify file claims released.
