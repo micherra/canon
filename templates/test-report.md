@@ -53,6 +53,14 @@ tests-failed: {N}
 
 <!-- If all architect risks are covered: "All architect-specified risks have test coverage." -->
 
+### Manual Verification Needed
+<!-- Populated from acceptance criteria with type=manual in the planning brief. -->
+<!-- The orchestrator reads this table and presents it as a HITL gate before ship. -->
+<!-- Omit this section (or leave the table empty) when no manual ACs exist. -->
+| # | Criterion | Verification Steps |
+|---|-----------|-------------------|
+| {AC#} | {criterion text from planning brief} | {steps for the human to verify} |
+
 ### Remaining Gaps
 <!-- Gaps the tester could not fill and why. -->
 - {gap}: {reason — e.g., requires manual testing, needs staging environment}
@@ -65,3 +73,4 @@ tests-failed: {N}
 ## Rules
 
 - Issues Found table is mandatory when status is IMPLEMENTATION_ISSUE — the fix-impl state reads it
+- Manual Verification Needed table is populated from planning-brief ACs with `type: manual`. Each row corresponds to one manual AC. The orchestrator detects this section and presents it to the user as a HITL gate before ship. When no manual ACs exist, omit the section entirely.
