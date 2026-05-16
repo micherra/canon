@@ -33,12 +33,10 @@ vi.mock("node:child_process", async (importOriginal) => {
       if (cb) cb(null);
       return {} as ReturnType<typeof actual.exec>;
     }),
-    execFile: vi.fn(
-      (_file: string, _args: unknown, cb?: (err: Error | null) => void) => {
-        if (typeof cb === "function") cb(null);
-        return {} as ReturnType<typeof actual.execFile>;
-      },
-    ),
+    execFile: vi.fn((_file: string, _args: unknown, cb?: (err: Error | null) => void) => {
+      if (typeof cb === "function") cb(null);
+      return {} as ReturnType<typeof actual.execFile>;
+    }),
   };
 });
 
