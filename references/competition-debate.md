@@ -2,7 +2,7 @@
 
 This reference codifies how the orchestrator lead orchestrates competition and debate in agent teams mode. A lead reading only this file should know exactly how to set up either pattern, inject the right framing, and drive the round-by-round or synthesis logic to completion.
 
-These heuristics are derived from the legacy `engine/compete.ts` and `engine/debate.ts` state machine code scheduled for deletion in Phase 3 of the v2.1 migration.
+These heuristics were originally codified in `engine/compete.ts` and `engine/debate.ts`, which have been deleted as part of the v2.1 migration to agent-teams orchestration. The competition and debate patterns themselves remain valid — this document is the authoritative specification for running them via native agent team dispatch.
 
 ---
 

@@ -10,7 +10,7 @@
 
 ## What You May Do Directly
 
-- Call Canon MCP tools (`load_flow`, `init_workspace`, `drive_flow`, `update_board`, `categorize_failures`, `resolve_wave_event`, `resolve_after_consultations`)
+- Call Canon MCP tools (`init_workspace`, `update_board`, `categorize_failures`)
 - Spawn specialist agents via the `Agent` tool
 - Read/write orchestration files: `board.json`, `session.json`, `progress.md`, `.lock`
 - Use `Bash` for orchestration git operations: `git status`, `git worktree`, `git merge`
@@ -22,20 +22,22 @@ Everything else — implementation, research, review, testing — is agent work.
 
 **Default to action.** Any request to build, fix, change, or improve something is a build intent. "The search is broken", "add dark mode", "clean up the API layer" are all build intents.
 
-**Check conversation continuity first.** If the previous turn spawned a specialist agent and the user's follow-up continues the same topic, route to that same agent type. Reset on: explicit topic change, active pipeline, or clearly different intent.
+**Re-classify every user message.** Intent is classified per message, not per session. Every user message re-classifies; chat / question sessions that pivot to a build request route the pivot message through `planner` regardless of prior conversation flow.
 
-| Intent | Action |
+| Signal | Action |
 |--------|--------|
-| **build** | Auto-detect flow → drive state machine |
-| **explore** | Load `explore` flow → drive state machine (also for: brainstorming, "what if…", "I'm thinking about…") |
-| **test** | Load `test-gap` flow → drive state machine |
-| **review** | Load `review-only` flow → drive state machine |
-| **security** | Load `security-audit` flow → drive state machine |
+| Build, fix, change, improve (any scope) | Spawn `planner` |
+| Review PR or branch | Spawn `reviewer` |
+| Security audit | Spawn `security`, then `reviewer` |
+| Investigate / "how does X work" | Spawn `planner` — the planner performs codebase research and synthesizes findings |
+| Scan for violations (via init) | Spawn `engineer` to scan + fix |
+| Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
+| Analyze patterns / learn | Route to `learner` for mining |
 | **question** | Respond directly — the lead has full Canon MCP access (`get_principles`, `list_principles`, `get_compliance`, `get_drift_report`) |
 | **chat** | Respond directly — Claude handles conversation natively; use `canon:planner` for structured "should we build this?" evaluation |
 | **principle** | Spawn `canon:writer` |
 | **learn** | Spawn `canon:learner` |
-| **resume** | Read `board.json` → resume state machine |
+| Resume interrupted flow | See Resume Protocol below |
 | **greeting** | Respond directly |
 
 ## Canon Should Be Invisible
@@ -53,59 +55,14 @@ Minimize text output during the state machine loop. Conversations exceeding ~100
 1. Brief plain-language classification (1 sentence)
 2. HITL breakpoint presentations
 3. One progress line per state transition ("Researching the codebase..." / "Research complete. Planning...")
-4. Wave checkpoint summaries (epic flow)
-5. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
-6. Error and preflight presentations
+4. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
+5. Error and preflight presentations
 
 This list serves two roles: (1) verbosity control — it limits how much the orchestrator outputs during the state machine loop; and (2) it is the Pre-Analysis Gate allowlist — outputs not on this list are agent deliverables, not orchestrator output. Additions or removals affect both roles; consider both when editing this list.
 
 Do not narrate individual tool calls. One line between state transitions is correct.
 
-## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off) <!-- last-updated: 2026-05-02 -->
-
-_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off. The `load_flow`, `drive_flow`, and `simulate_flow` MCP tools have been removed._
-
-Full protocol: `references/canon-orchestrator.md`. Key loop:
-
-1. `resolved_flow = load_flow(flow_name)` → get flow definition **object**
-2. `init_workspace(...)` → create or resume workspace; check `preflight_issues` before proceeding
-3. Loop: `drive_flow({ workspace, flow: resolved_flow })` → on `SpawnRequest` spawn agents → `drive_flow({ workspace, flow: resolved_flow, result: { state_id, status, artifacts, metrics } })` → on `HitlBreakpoint` present to user → `drive_flow(...)` with status keyword → repeat
-4. On `{ action: "done" }`: call `update_board({ operation: "complete_flow" })`, present completion summary
-
-**Critical**: Pass the resolved flow **object** to `drive_flow` — never the flow name string. Do NOT call `report_result` directly; `drive_flow` calls it internally.
-
-### Flow Selection
-
-| Signal | Flow |
-|--------|------|
-| Bug fix, small change, 1–3 files | `fast-path` |
-| Refactoring, restructuring | `refactor` |
-| New feature, 4–10 files | `feature` |
-| Migration, upgrade, "move to X" | `migrate` |
-| Large cross-cutting change, 10+ files | `epic` |
-| Investigate / "how does X work" | `explore` |
-| Improve test coverage | `test-gap` |
-| Review PR or branch | `review-only` |
-| Security audit | `security-audit` |
-
-When in doubt between tiers, prefer the higher tier. Proceed immediately — don't ask for tier confirmation.
-
-## Agent Teams Orchestration (CANON_AGENT_TEAMS_MODE=on)
-
-If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — use the legacy "Driving the State Machine" section above.
-
-### Intent Classification
-
-| Signal | Action |
-|--------|--------|
-| Build, fix, change, improve (any scope) | Spawn `planner` |
-| Review PR or branch | Spawn `reviewer` |
-| Security audit | Spawn `security`, then `reviewer` |
-| Investigate / "how does X work" | Spawn `planner` — the planner performs codebase research and synthesizes findings |
-| Scan for violations (via init) | Spawn `engineer` to scan + fix |
-| Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
-| Analyze patterns / learn | Route to `learner` for mining |
-| Resume interrupted flow | See Resume Protocol below |
+## Agent Teams Orchestration
 
 ### Pre-Build Gate
 
@@ -133,7 +90,7 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 ### Pre-Analysis Gate (L1)
 
-**Before producing substantive analytical text output**, verify it is on the Silent Dispatch allowlist (see the Silent Dispatch section — items 1–6). If the output you are about to write is not on that list, it is agent work — dispatch it instead of writing it yourself.
+**Before producing substantive analytical text output**, verify it is on the Silent Dispatch allowlist (see the Silent Dispatch section — items 1–5). If the output you are about to write is not on that list, it is agent work — dispatch it instead of writing it yourself.
 
 This gate applies when the orchestrator is executing a build flow. Question and chat intents respond directly per the Intent Classification table and are not subject to this gate.
 
@@ -236,7 +193,6 @@ When resuming a session or the user says "continue" / "resume":
 2. Identify the last step with `status: "completed"`.
 3. Read the workspace artifacts produced by completed steps for context.
 4. Continue from the first step with `status: "started"` or the next unstarted step.
-5. If no journal exists, check for legacy workspace state and advise the user.
 
 ### Multi-Wave Migration Mode
 
@@ -326,6 +282,27 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 - **Verdict**: worst-case across all reviewers (BLOCKING > WARNING > CLEAN)
 
 Write the consolidated review using the `write_review` MCP tool.
+
+### Competition and Debate Protocols
+
+When the runbook contains a `compete` or `debate` step, the orchestrator drives the pattern directly (not via agent delegation). Full protocol: `references/competition-debate.md`.
+
+#### Competition
+
+1. Spawn N agents (max 5) as parallel teams. Each receives the task brief plus a framing instruction (lens-based or generic — see spec § Spawn Framing).
+2. Collect all N outputs.
+3. Spawn a synthesizer agent with the original brief + all team outputs. Strategy: `synthesize` (combine best ideas, default) or `select` (pick winner).
+4. Present the synthesized result to the user (HITL checkpoint).
+
+#### Debate
+
+1. Drive debate round-by-round. Each round spawns all teams with round-appropriate framing (Position → Challenge → Response → Narrow — see spec § Round Types).
+2. Teams communicate via `post_message` on channel `debate-round-{N}`.
+3. After each qualifying round (round ≥ max(`min_rounds`, `convergence_check_after`)), check convergence per spec § Convergence Detection.
+4. Stop when converged or `max_rounds` (default 5) reached.
+5. Present debate summary and each team's final position to the user (HITL checkpoint).
+
+Both patterns use native agent team dispatch. The orchestrator manages the lifecycle — no engine code is involved.
 
 ### Journal Protocol
 
@@ -486,7 +463,6 @@ This decision may be revisited if the native primitive gains lifecycle configura
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
-- Run contract-checker assertions via Bash when postconditions are declared.
 
 ### Step Enforcement Contracts
 
@@ -585,14 +561,13 @@ Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful resu
 ```
 canon/
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
-├── flows/                # REMOVED 2026-05-02 — all 28 flow YAML files deleted; legacy flows gated behind CANON_AGENT_TEAMS_MODE=off
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/
 │       ├── app/          # Entry point (index.ts), tool registration
 │       ├── domains/      # Shared domain types (flows, workspaces, messages, board)
 │       ├── features/     # Tool implementations grouped by feature
-│       │   ├── orchestration/   # Flow runtime: drive_flow, load_flow, init_workspace, report_result, etc.
+│       │   ├── orchestration/   # Orchestration tools: init_workspace, report, write-review, capture-transcript, etc.
 │       │   ├── principles/      # get_principles, list_principles, get_compliance
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
