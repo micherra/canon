@@ -5,6 +5,7 @@ import { storePrReview } from "@features/pr-review/tools/store-pr-review.ts";
 import { getCompliance } from "@features/principles/tools/get-compliance.ts";
 import { getPrinciples } from "@features/principles/tools/get-principles.ts";
 import { listPrinciples } from "@features/principles/tools/list-principles.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { z } from "zod";
 import {
@@ -135,7 +136,10 @@ function registerCodeReviewTools(): void {
         "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
       inputSchema: reportInputSchema,
     },
-    gatedWrapHandler(async (input) => report(input, projectDir)),
+    gatedWrapHandler(async (input) => {
+      const signals = projectDir ? getDriftDb(projectDir).getSignals() : undefined;
+      return report(input, projectDir, signals);
+    }),
   );
 }
 

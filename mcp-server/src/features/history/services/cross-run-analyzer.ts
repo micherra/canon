@@ -11,25 +11,16 @@
 
 import type { FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
 import type { DriftDb } from "@platform/storage/drift/drift-db.ts";
+import type { NormalizedViolation } from "@shared/lib/violation-patterns.ts";
+import { findRecurringViolations } from "@shared/lib/violation-patterns.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import type {
   AgentPerformanceTrend,
   CrossRunAnalysisResult,
   FixCyclePattern,
   PlannerPatternAnalysis,
-  RecurringViolation,
   RunSummary,
 } from "../history-types.ts";
-
-// ---- Internal types ----
-
-/** Normalized violation record from any source (summary or drift.db). */
-type NormalizedViolation = {
-  principleId: string;
-  severity: string;
-  filePath: string | null;
-  reviewTimestamp: string;
-};
 
 // ---- Helpers ----
 
@@ -49,25 +40,6 @@ function violationsFromSummaries(summaries: RunSummary[]): NormalizedViolation[]
           severity: violation.severity,
         });
       }
-    }
-  }
-  return result;
-}
-
-/**
- * Collect violations from drift.db ReviewEntry records.
- * Returns a flat list of NormalizedViolation records.
- */
-function violationsFromReviews(reviews: ReviewEntry[]): NormalizedViolation[] {
-  const result: NormalizedViolation[] = [];
-  for (const review of reviews) {
-    for (const violation of review.violations ?? []) {
-      result.push({
-        filePath: violation.file_path ?? null,
-        principleId: violation.principle_id,
-        reviewTimestamp: review.timestamp,
-        severity: violation.severity,
-      });
     }
   }
   return result;
@@ -170,78 +142,6 @@ function computeFixCycleForPrinciple(
     principle_id: principleId,
     recurrence_rate: reappearanceCount / fixCount,
   };
-}
-
-/**
- * Group a flat list of NormalizedViolation records by principleId.
- */
-function groupViolationsByPrinciple(
-  violations: NormalizedViolation[],
-): Map<string, { severity: string; files: Set<string>; timestamps: string[] }> {
-  const byPrinciple = new Map<
-    string,
-    { severity: string; files: Set<string>; timestamps: string[] }
-  >();
-
-  for (const v of violations) {
-    const existing = byPrinciple.get(v.principleId);
-    if (existing === undefined) {
-      const files = new Set<string>();
-      if (v.filePath !== null) files.add(v.filePath);
-      byPrinciple.set(v.principleId, {
-        files,
-        severity: v.severity,
-        timestamps: [v.reviewTimestamp],
-      });
-    } else {
-      if (v.filePath !== null) existing.files.add(v.filePath);
-      existing.timestamps.push(v.reviewTimestamp);
-    }
-  }
-
-  return byPrinciple;
-}
-
-/**
- * Convert grouped violation data into RecurringViolation results,
- * filtering to principles with >= 2 occurrences, sorted by count DESC.
- */
-function buildRecurringViolationResults(
-  byPrinciple: Map<string, { severity: string; files: Set<string>; timestamps: string[] }>,
-): RecurringViolation[] {
-  const result: RecurringViolation[] = [];
-  for (const [principleId, data] of byPrinciple) {
-    if (data.timestamps.length < 2) continue;
-    const sortedTimestamps = [...data.timestamps].sort();
-    result.push({
-      affected_files: [...data.files],
-      first_seen: sortedTimestamps[0],
-      last_seen: sortedTimestamps[sortedTimestamps.length - 1],
-      occurrence_count: data.timestamps.length,
-      principle_id: principleId,
-      severity: data.severity,
-    });
-  }
-  result.sort((a, b) => b.occurrence_count - a.occurrence_count);
-  return result;
-}
-
-// ---- Internal pure functions ----
-
-/**
- * Find violations that recur across multiple runs (occurrence_count >= 2).
- *
- * Combines violations from run summaries and drift.db reviews.
- * Groups by principle_id, counts occurrences, and returns entries sorted
- * by occurrence_count descending.
- */
-function findRecurringViolations(
-  summaryViolations: NormalizedViolation[],
-  driftReviews: ReviewEntry[],
-): RecurringViolation[] {
-  const allViolations = [...summaryViolations, ...violationsFromReviews(driftReviews)];
-  const byPrinciple = groupViolationsByPrinciple(allViolations);
-  return buildRecurringViolationResults(byPrinciple);
 }
 
 /**

@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "3";
+export const DRIFT_SCHEMA_VERSION = "4";
 
 // DDL statements — v1 base tables
 //
@@ -194,6 +194,40 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
     },
     version: "3",
+  },
+  {
+    up: (db) => {
+      // file_violation_history — per-file violation aggregates
+      db.exec(`CREATE TABLE IF NOT EXISTS file_violation_history (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_path       TEXT NOT NULL,
+        principle_id    TEXT NOT NULL,
+        violation_count INTEGER NOT NULL DEFAULT 0,
+        last_seen       TEXT NOT NULL,
+        first_seen      TEXT NOT NULL,
+        UNIQUE(file_path, principle_id)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_fvh_file ON file_violation_history(file_path)`);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_fvh_principle ON file_violation_history(principle_id)`,
+      );
+
+      // path_effects — per-file-path metadata for signal compilation
+      db.exec(`CREATE TABLE IF NOT EXISTS path_effects (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_path         TEXT NOT NULL UNIQUE,
+        total_violations  INTEGER NOT NULL DEFAULT 0,
+        total_reviews     INTEGER NOT NULL DEFAULT 0,
+        last_violation_at TEXT,
+        last_clean_at     TEXT,
+        clean_streak      INTEGER NOT NULL DEFAULT 0,
+        violation_streak  INTEGER NOT NULL DEFAULT 0
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_pe_file ON path_effects(file_path)`);
+
+      db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
+    },
+    version: "4",
   },
 ];
 

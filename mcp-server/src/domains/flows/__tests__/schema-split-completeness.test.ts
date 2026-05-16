@@ -13,9 +13,9 @@
 
 import { describe, expect, it } from "vitest";
 import * as boardStateSchemas from "../board-state-schemas.ts";
-import * as eventSchemas from "../event-schemas.ts";
 // Three new schema files — the canonical source of truth after flow-schema.ts was deleted
 import * as flowDefSchemas from "../flow-definition-schemas.ts";
+import * as eventSchemas from "../transcript-schemas.ts";
 
 // Value-level exports that were in the original flow-schema.ts (schemas, constants — not type-only)
 const EXPECTED_FLOW_DEF_EXPORTS = [
@@ -39,7 +39,6 @@ const EXPECTED_FLOW_DEF_EXPORTS = [
   "PostconditionResultSchema",
   "ViolationSeveritiesSchema",
   "TestResultsSchema",
-  "BaselineEvidenceSchema",
   "ToolOverridesSchema",
   "SingleStateSchema",
   "WavePolicySchema",
@@ -63,9 +62,6 @@ const EXPECTED_FLOW_DEF_EXPORTS = [
 
 const EXPECTED_BOARD_STATE_EXPORTS = [
   "BoardStateStatusSchema",
-  "ConsultationResultSchema",
-  "WorktreeEntrySchema",
-  "WaveResultSchema",
   "StateMetricsSchema",
   "AgentMetricsSchema",
   "ArtifactHistoryEntrySchema",
@@ -105,11 +101,11 @@ describe("schema-split-completeness", () => {
     }
   });
 
-  it("event-schemas.ts exports TranscriptEntrySchema", () => {
+  it("transcript-schemas.ts exports TranscriptEntrySchema", () => {
     for (const name of EXPECTED_EVENT_EXPORTS) {
       expect(
         name in (eventSchemas as Record<string, unknown>),
-        `Expected "${name}" in event-schemas.ts`,
+        `Expected "${name}" in transcript-schemas.ts`,
       ).toBe(true);
     }
   });
@@ -127,8 +123,8 @@ describe("schema-split-completeness", () => {
   it("no export appears in more than one new schema file", () => {
     const newFiles = {
       "board-state-schemas.ts": boardStateSchemas as Record<string, unknown>,
-      "event-schemas.ts": eventSchemas as Record<string, unknown>,
       "flow-definition-schemas.ts": flowDefSchemas as Record<string, unknown>,
+      "transcript-schemas.ts": eventSchemas as Record<string, unknown>,
     };
 
     // Collect all exported names across all 3 new files
@@ -154,8 +150,8 @@ describe("schema-split-completeness", () => {
   it("every expected export from EXPECTED_FLOW_DEF_EXPORTS exists in exactly flow-definition-schemas.ts", () => {
     const allThreeFiles = {
       "board-state-schemas.ts": boardStateSchemas as Record<string, unknown>,
-      "event-schemas.ts": eventSchemas as Record<string, unknown>,
       "flow-definition-schemas.ts": flowDefSchemas as Record<string, unknown>,
+      "transcript-schemas.ts": eventSchemas as Record<string, unknown>,
     };
 
     // Exclude the NEW_ONLY_EXPORTS (BaseStateFields, FragmentBaseStateFields) from "original" checks

@@ -19,11 +19,11 @@ This skill defines the full procedural contract for Canon's learning loop. Load 
 
 You receive from the orchestrator:
 
-- Which dimensions to analyze (any of: `principle-health`, `codebase-patterns`, `convention-lifecycle`, `process-health`)
+- Which dimensions to analyze (any of: `principle-health`, `codebase-patterns`, `convention-lifecycle`, `process-health`, `agent-effectiveness`)
 - Data availability summary
 - Paths to principles directory, conventions file, project root
 - Previous learning history (`.canon/learning.jsonl`) if it exists — check for suppressed suggestions
-- **[Auto-trigger mode]** Recent build transcript paths when spawned after flow completion
+- **[Auto-trigger mode]** Recent build transcript paths when spawned after flow completion — these are the primary input for the `agent-effectiveness` dimension, which is the PRIMARY dimension for auto-trigger mode
 - **[Auto-trigger mode]** Build execution summary from the completed flow (via workspace journal)
 
 ---
@@ -58,12 +58,17 @@ This ensures the file exists even if the agent hits its turn limit during analys
 
 Run dimensions in order of data availability. **Skip dimensions without sufficient data** and note it in the report. **After completing each dimension's analysis, immediately append its findings section to `.canon/LEARNING-REPORT.md`** before moving to the next dimension. This ensures partial results are persisted if the turn limit is reached mid-analysis.
 
+Dimension ordering depends on trigger mode:
+- **Auto-trigger mode** (learner spawned automatically after a build): run `agent-effectiveness` FIRST — it is the primary dimension in this mode. Run `process-health` after, only if sufficient flow history exists (>= 5 flow runs). The flow history needed by process-health may not yet exist for a fresh build.
+- **Manual/explicit mode** (user explicitly requests pattern analysis): run `process-health` before `agent-effectiveness` — agent-effectiveness benefits from the flow-level patterns already identified by process-health analysis.
+
 Data sufficiency thresholds:
 
 - **principle-health** requires >= 10 reviews (from `get_drift_report`)
 - **codebase-patterns** requires >= 5 files with >= 70% consistency per pattern
 - **convention-lifecycle** requires >= 3 builds for promotion sub-analysis; graduation and staleness run regardless
 - **process-health** requires >= 5 flow runs (from `get_history` MCP tool; supplement with `get_build_history` for trend analysis across many builds)
+- **agent-effectiveness** requires >= 3 completed flows with transcript data (read from workspace journals)
 
 For each dimension:
 1. Run the dimension analysis per the specs in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.

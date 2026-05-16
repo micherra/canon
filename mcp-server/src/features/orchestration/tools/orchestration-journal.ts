@@ -27,18 +27,19 @@
  * See v2 migration plan §2.9 and phase1-06 PLAN for the contract.
  */
 
-import { existsSync, globSync, rmSync } from "node:fs";
+import { existsSync, globSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import { archiveWorkspace } from "@features/history/services/archive-service.ts";
-import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
-import { releaseClaims } from "@shared/lib/file-claims.ts";
-import { generateId } from "@shared/lib/id.ts";
-import type { ToolResult } from "@shared/lib/tool-result.ts";
-import { toolError, toolOk } from "@shared/lib/tool-result.ts";
-import { projectDir } from "../../../app/server-state.ts";
+import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { tryWriteBuildDigest } from "../services/digest-writer.ts";
+import {
+  archiveAndDeleteWorkspace,
+  tryAppendAnalytics,
+  tryReleaseClaims,
+  tryRunJanitor,
+} from "../services/workspace-cleanup.ts";
 import { captureTranscript } from "./capture-transcript.ts";
 
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
@@ -55,6 +56,7 @@ export type JournalStep = {
   completed_at?: string;
   domain_skills_loaded?: string[];
   outcome?: JournalOutcome;
+  skip_reason?: string;
   started_at?: string;
   status: JournalStepStatus;
   step_id: string;
@@ -74,6 +76,7 @@ export type LogStepInput = {
   artifacts_expected?: string[];
   domain_skills_loaded?: string[];
   outcome?: JournalOutcome;
+  skip_reason?: string;
   status: JournalStepStatus;
   step_id: string;
   workspace: string;
@@ -158,6 +161,8 @@ export type FinalizeWorkspaceResult = {
   claims_released?: boolean;
   /** Present only when complete is true. True when flow analytics were recorded successfully. */
   analytics_recorded?: boolean;
+  /** Present only when complete is true. True when build digest was written to auto-memory. */
+  digest_written?: boolean;
 };
 
 function journalPath(workspace: string): string {
@@ -215,6 +220,12 @@ function applyMetadata(step: JournalStep, input: LogStepInput): void {
     step.domain_skills_loaded = input.domain_skills_loaded;
   }
   if (input.outcome !== undefined) step.outcome = input.outcome;
+  if (input.skip_reason !== undefined) step.skip_reason = input.skip_reason;
+  // Clear skip_reason when transitioning to a non-skipped terminal state.
+  // Prevents stale skip_reason from persisting if the orchestrator later completes a step.
+  if (input.status === "completed") {
+    step.skip_reason = undefined;
+  }
 }
 
 function enforceArtifacts(
@@ -252,6 +263,13 @@ async function tryTranscriptCapture(
   if (captureResult.ok && captureResult.transcript_path) {
     step.transcript_path = captureResult.transcript_path;
     result.transcript_path = captureResult.transcript_path;
+    // Persist to ExecutionStore so get_transcript can find the path via getTranscriptPath().
+    try {
+      const store = getExecutionStore(input.workspace);
+      store.setTranscriptPath(input.step_id, captureResult.transcript_path);
+    } catch {
+      // best-effort — transcript capture itself already succeeded; don't fail the step
+    }
   }
   if (captureResult.ok && captureResult.warning) {
     result.transcript_warning = captureResult.warning;
@@ -267,6 +285,7 @@ export type BatchLogStepsInput = {
     artifacts_expected?: string[];
     domain_skills_loaded?: string[];
     outcome?: JournalOutcome;
+    skip_reason?: string;
     agent_id?: string;
   }>;
 };
@@ -293,6 +312,9 @@ export async function batchLogSteps(
     if (!entry.step_id?.trim()) {
       return toolError("INVALID_INPUT", "Each step entry must have a non-empty step_id", false);
     }
+    if (entry.status === "skipped" && !entry.skip_reason?.trim()) {
+      return toolError("INVALID_INPUT", "skip_reason is required when status is 'skipped'", false);
+    }
   }
 
   // 3. Single journal read.
@@ -311,6 +333,7 @@ export async function batchLogSteps(
       artifacts_expected: entry.artifacts_expected,
       domain_skills_loaded: entry.domain_skills_loaded,
       outcome: entry.outcome,
+      skip_reason: entry.skip_reason,
       status: entry.status,
       step_id: entry.step_id,
       workspace: input.workspace,
@@ -354,6 +377,10 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
     return toolError("WORKSPACE_NOT_FOUND", `Workspace does not exist: ${input.workspace}`, false, {
       workspace: input.workspace,
     });
+  }
+
+  if (input.status === "skipped" && !input.skip_reason?.trim()) {
+    return toolError("INVALID_INPUT", "skip_reason is required when status is 'skipped'", false);
   }
 
   if (input.status === "completed" && !input.agent_id && input.step_id !== "inline-fix") {
@@ -475,7 +502,7 @@ function computeTotalDurationMs(steps: readonly JournalStep[]): number | null {
   return maxEnd - minStart;
 }
 
-function computeFlowOutcome(
+export function computeFlowOutcome(
   steps: readonly JournalStep[],
 ): FinalizeWorkspaceResult["flow_outcome"] {
   const domain_skills_used = Array.from(
@@ -498,106 +525,6 @@ function computeFlowOutcome(
     total_duration_ms: computeTotalDurationMs(steps),
     total_steps: steps.length,
   };
-}
-
-async function archiveAndDeleteWorkspace(
-  workspace: string,
-): Promise<{ archived: boolean; deleted: boolean }> {
-  let archived = false;
-  try {
-    const session = getExecutionStore(workspace).getSession();
-    const branch = session?.branch ?? "unknown";
-    const slug = session?.slug ?? basename(workspace);
-    await archiveWorkspace({
-      branch,
-      projectDir,
-      slug,
-      workspacePath: workspace,
-    });
-    archived = true;
-  } catch (err: unknown) {
-    console.warn("[canon] workspace archive failed:", err instanceof Error ? err.message : err);
-  }
-
-  let deleted = false;
-  try {
-    rmSync(workspace, { force: true, recursive: true });
-    deleted = true;
-  } catch (err: unknown) {
-    console.warn("[canon] workspace deletion failed:", err instanceof Error ? err.message : err);
-  }
-
-  return { archived, deleted };
-}
-
-/**
- * Release file claims for this workspace's slug. Best-effort — never throws.
- * Returns true when claims were released successfully, false when skipped or failed.
- */
-async function tryReleaseClaims(workspace: string): Promise<boolean> {
-  try {
-    const session = getExecutionStore(workspace).getSession();
-    if (!session) return false;
-    releaseClaims(projectDir, session.slug);
-    return true;
-  } catch (err: unknown) {
-    console.warn(
-      "[canon] finalizeWorkspace: failed to release file claims:",
-      err instanceof Error ? err.message : err,
-    );
-    return false;
-  }
-}
-
-/**
- * Build a minimal FlowRunEntry from journal step timestamps and append to drift analytics.
- * Best-effort — never throws. Returns true when analytics were recorded, false otherwise.
- */
-async function tryAppendAnalytics(
-  workspace: string,
-  steps: readonly JournalStep[],
-): Promise<boolean> {
-  try {
-    const session = getExecutionStore(workspace).getSession();
-    const now = new Date().toISOString();
-    const flowOutcome = computeFlowOutcome(steps);
-    const flowRun: FlowRunEntry = {
-      completed: now,
-      flow: session?.slug ?? basename(workspace),
-      run_id: generateId("run"),
-      skipped_states: steps.filter((s) => s.status === "skipped").map((s) => s.step_id),
-      started: steps.find((s) => s.started_at)?.started_at ?? now,
-      state_durations: {},
-      state_iterations: {},
-      task: session?.slug ?? basename(workspace),
-      tier: "unknown",
-      total_duration_ms: flowOutcome.total_duration_ms ?? 0,
-      total_spawns: 0,
-    };
-    await appendFlowRun(projectDir, flowRun);
-    return true;
-  } catch (err: unknown) {
-    console.warn(
-      "[canon] finalizeWorkspace: failed to append flow analytics:",
-      err instanceof Error ? err.message : err,
-    );
-    return false;
-  }
-}
-
-/**
- * Run the janitor for background housekeeping. Best-effort — never throws.
- */
-async function tryRunJanitor(): Promise<void> {
-  try {
-    const { runJanitor } = await import("../services/janitor.ts");
-    await runJanitor(projectDir);
-  } catch (err: unknown) {
-    console.warn(
-      "[canon] finalizeWorkspace: janitor run failed:",
-      err instanceof Error ? err.message : err,
-    );
-  }
 }
 
 export async function finalizeWorkspace(
@@ -625,16 +552,21 @@ export async function finalizeWorkspace(
   const artifacts = scanArtifacts(workspace, completed);
   const complete = stepsMissing.length === 0 && artifacts.missing.length === 0;
 
-  const cleanup = complete ? await archiveAndDeleteWorkspace(workspace) : undefined;
-
   // When complete, absorb side effects from the former board subsystem (best-effort).
+  // digest_written MUST run before archiveAndDeleteWorkspace — the digest writer reads
+  // journal.json, plans/.../planning-brief.md, and reviews/*.md from the workspace
+  // directory, which archiveAndDeleteWorkspace deletes.
   let claims_released: boolean | undefined;
   let analytics_recorded: boolean | undefined;
+  let digest_written: boolean | undefined;
   if (complete) {
+    digest_written = await tryWriteBuildDigest(workspace);
     claims_released = await tryReleaseClaims(workspace);
     analytics_recorded = await tryAppendAnalytics(workspace, steps);
     await tryRunJanitor();
   }
+
+  const cleanup = complete ? await archiveAndDeleteWorkspace(workspace) : undefined;
 
   return toolOk({
     artifacts_expected: artifacts.expected,
@@ -649,7 +581,7 @@ export async function finalizeWorkspace(
     ...(cleanup
       ? { workspace_archived: cleanup.archived, workspace_deleted: cleanup.deleted }
       : {}),
-    ...(complete ? { analytics_recorded, claims_released } : {}),
+    ...(complete ? { analytics_recorded, claims_released, digest_written } : {}),
   });
 }
 

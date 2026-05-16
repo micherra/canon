@@ -12,7 +12,7 @@ When your spawn prompt includes a `Working directory: {path}` or `worktree_path`
 At spawn start, before reading any files or writing any code:
 
 1. **Verify working directory**: Run `pwd` and confirm it matches the declared working directory. If using Bash, all commands must use absolute paths rooted at the worktree path.
-2. **Verify branch**: Run `git branch --show-current` in the worktree directory and confirm the branch matches the expected pattern (`canon/{slug}` or `canon-wave/{task_id}`).
+2. **Verify branch**: Run `git branch --show-current` in the worktree directory and confirm the branch matches the expected pattern (`canon/{slug}` or `canon-task/{task_id}`).
 3. **If either check fails**: Report `BLOCKED` with detail: "Worktree mismatch: expected {expected}, got {actual}". Do not proceed with work.
 4. **Use absolute paths** for ALL file operations. Never rely on `cwd` implicitly — always specify the full path rooted at the worktree path provided in your spawn prompt.
 

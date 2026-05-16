@@ -1,6 +1,6 @@
 # Tester Reference: Principle-Driven Gap Patterns
 
-Patterns to check when reviewing implementor tests against applied principles.
+Patterns to check when reviewing engineer tests against applied principles.
 
 ---
 

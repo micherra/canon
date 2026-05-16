@@ -96,6 +96,26 @@ If any summary is missing the `### Coverage Notes` section, treat it as a red fl
 
 **Plan risk mitigations**: Read architect plan files at `${WORKSPACE}/plans/${slug}/` — specifically the `### Risk mitigations` sections in task plans and DESIGN.md. Cross-reference the architect's required risk coverage against the engineer's actual coverage notes. If the architect specified a risk mitigation that the engineer didn't mention in their coverage notes (tested or untested), treat it as a gap and write a test for it. Report discrepancies in the `### Architect Risk Coverage` section of your test report. If plan files are not available, include a note in your output: "Architect risk coverage check skipped — no architect plan files in workspace." so the user knows the check exists but wasn't run.
 
+### Acceptance Criteria Verification
+
+When the orchestrator provides acceptance criteria and reviewer Stage 5 output in your spawn prompt:
+
+1. **Read the verification specifications** — each AC has a verification method and type (mechanical/manual)
+2. **Execute mechanical items** — run the specified verification commands/checks. Report PASS/FAIL with evidence for each.
+3. **Report manual items** — list items typed as "manual" (or classified as "Non-automatable" by the reviewer) in a dedicated section:
+
+```markdown
+## Manual Verification Needed
+
+| # | Criterion | Verification Method | Status |
+|---|-----------|-------------------|--------|
+| 1 | {criterion} | {method} | NEEDS_HUMAN_VERIFICATION |
+```
+
+4. **Include in test report** — the acceptance criteria results are a section of the test report, alongside coverage results.
+
+This input is provided by the orchestrator, who extracts it from the reviewer's Stage 5 output after review completes. When this input is absent (e.g., older runbooks without verification types), skip this section and proceed with normal coverage-gap work only.
+
 ### Step 2: Read the implemented code and existing tests
 
 Read the actual files from the filesystem. Also read every test file the engineers wrote. Work from what's actually in the codebase, not what was planned.

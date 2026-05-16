@@ -1,7 +1,7 @@
 import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { z } from "zod";
-import { pluginDir, server } from "./server-state.ts";
+import { pluginDir, projectDir, server } from "./server-state.ts";
 
 /**
  * Agent-teams tool registrations.
@@ -21,6 +21,6 @@ export function registerAgentTeamsTools(): void {
           .describe("Agent name (with or without `canon:` prefix). Matches `agents/<name>.md`."),
       },
     },
-    wrapHandler(async (input) => resolveAgentSkills(input, pluginDir)),
+    wrapHandler(async (input) => resolveAgentSkills(input, pluginDir, projectDir)),
   );
 }

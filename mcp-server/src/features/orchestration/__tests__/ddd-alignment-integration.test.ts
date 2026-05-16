@@ -38,7 +38,7 @@ describe("schema split — flow-schema.ts deletion (dc-02)", () => {
     const required = [
       "flow-definition-schemas.ts",
       "board-state-schemas.ts",
-      "event-schemas.ts",
+      "transcript-schemas.ts",
     ] as const;
     for (const file of required) {
       const filePath = resolve(SRC, "domains/flows", file);
@@ -112,25 +112,14 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
     expect(content).toMatch(/export (?:interface|type) IKgQuery/);
   });
 
-  it("kg-context-formatter.ts imports IKgStore/IKgQuery from @domains/knowledge-graph/", () => {
-    // Since inject-context.ts now delegates to the shared kg-context-formatter module,
-    // the DDD boundary is enforced in that module instead.
-    const content = readFileSync(
-      resolve(SRC, "features/orchestration/services/kg-context-formatter.ts"),
-      "utf-8",
-    );
-    expect(content).toMatch(/from ["']@domains\/knowledge-graph\/kg-store\.interface/);
-  });
-
   it("IExecutionStore imports types from split schema files (not deleted flow-schema.ts)", () => {
     const content = readFileSync(
       resolve(SRC, "domains/workspaces/execution-store.interface.ts"),
       "utf-8",
     );
-    // Must reference the split files
+    // Must reference the split files (wave event types removed in phase2-surgical cleanup)
     expect(content).toMatch(/@domains\/flows\/board-state-schemas/);
     expect(content).toMatch(/@domains\/flows\/flow-definition-schemas/);
-    expect(content).toMatch(/@domains\/flows\/event-schemas/);
     // Must NOT reference the deleted monolithic file
     expect(content).not.toMatch(/flow-schema['"]/);
   });

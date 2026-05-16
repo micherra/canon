@@ -1,6 +1,7 @@
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ReportInput, ReviewEntry } from "@shared/schema.ts";
+import { type SignalWriter, updateFileViolationHistory } from "./write-review.ts";
 
 export type ReportOutput = {
   recorded: boolean;
@@ -8,12 +9,16 @@ export type ReportOutput = {
   note: string;
 };
 
-export async function report(input: ReportInput, projectDir: string): Promise<ReportOutput> {
+export async function report(
+  input: ReportInput,
+  projectDir: string,
+  signals?: SignalWriter,
+): Promise<ReportOutput> {
   const store = new DriftStore(projectDir);
 
   switch (input.type) {
     case "review":
-      return recordReview(input, store);
+      return recordReview(input, store, signals);
     default: {
       const _exhaustive: never = input.type;
       throw new Error(`Unknown report type: ${_exhaustive}`);
@@ -24,6 +29,7 @@ export async function report(input: ReportInput, projectDir: string): Promise<Re
 async function recordReview(
   review: Extract<ReportInput, { type: "review" }>,
   store: DriftStore,
+  signals: SignalWriter | undefined,
 ): Promise<ReportOutput> {
   const violatedIds = new Set(review.violations.map((v) => v.principle_id));
   const cleanHonored = review.honored.filter((id) => !violatedIds.has(id));
@@ -40,6 +46,11 @@ async function recordReview(
   };
 
   await store.appendReview(entry);
+
+  // Persist path effects to signal tables (non-blocking)
+  if (signals) {
+    updateFileViolationHistory(signals, review.files, review.violations, entry.verdict);
+  }
 
   return {
     id,

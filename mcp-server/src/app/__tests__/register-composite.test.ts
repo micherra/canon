@@ -46,6 +46,14 @@ vi.mock("@features/knowledge-graph/tools/semantic-search.ts", () => ({
   semanticSearch: vi.fn(),
 }));
 
+vi.mock("@features/diagnostics/services/signal-compiler.ts", () => ({
+  compileSignals: vi.fn().mockReturnValue([]),
+}));
+
+vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+  getDriftDb: vi.fn().mockReturnValue({ getSignals: vi.fn().mockReturnValue({}) }),
+}));
+
 // Import after mocks are set up
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
@@ -120,7 +128,7 @@ describe("register-knowledge get_context handler", () => {
   });
 
   describe("all sections returned when include is omitted", () => {
-    it("calls all four underlying tools and returns all sections", async () => {
+    it("calls all underlying tools and returns all sections", async () => {
       const result = (await handler({ file_paths: ["src/foo.ts"] })) as Record<string, unknown>;
 
       expect(getPrinciplesBatch).toHaveBeenCalledOnce();
@@ -133,13 +141,15 @@ describe("register-knowledge get_context handler", () => {
       expect(result.file_context).toEqual([expectedFileContext]);
       expect(result.drift).toEqual(mockDriftResult);
       expect(result.graph).toEqual([mockGraphResult]);
+      // signals: compileSignals returns [] so output.signals is not set
+      expect(result.signals).toBeUndefined();
     });
 
     it("includes file_paths and include in response metadata", async () => {
       const result = (await handler({ file_paths: ["src/foo.ts"] })) as Record<string, unknown>;
 
       expect(result.file_paths).toEqual(["src/foo.ts"]);
-      expect(result.include).toEqual(["principles", "file_context", "drift", "graph"]);
+      expect(result.include).toEqual(["principles", "file_context", "drift", "graph", "signals"]);
     });
   });
 

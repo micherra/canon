@@ -3,15 +3,16 @@ import { writeImplementationSummary } from "@features/orchestration/tools/write-
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
 import { writeReview } from "@features/orchestration/tools/write-review.ts";
 import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler, projectDir, server } from "./server-state.ts";
 
 function registerPlanTools(): void {
   server.registerTool(
     "write_plan_index",
     {
       description:
-        "Write a structured plan index (INDEX.md) for wave execution. Accepts typed task entries and produces normalized markdown that parseTaskIdsForWave can reliably parse.",
+        "Write a structured plan index (INDEX.md) for task execution. Accepts typed task entries and produces normalized markdown that parseTaskIds can reliably parse.",
       inputSchema: {
         slug: z.string(),
         tasks: z.array(
@@ -90,7 +91,10 @@ function registerReviewArtifactTools(): void {
         workspace: z.string(),
       },
     },
-    gatedWrapHandler(async (input) => writeReview(input)),
+    gatedWrapHandler(async (input) => {
+      const signals = projectDir ? getDriftDb(projectDir).getSignals() : undefined;
+      return writeReview(input, signals);
+    }),
   );
 
   server.registerTool(
