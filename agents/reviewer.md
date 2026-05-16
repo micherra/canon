@@ -14,6 +14,7 @@ rules:
   - agent-template-required
   - agent-context-check
   - agent-artifact-write-before-return
+  - agent-working-environment
   - agent-integration-boundary-check
   - agent-batch-tools
 references:
