@@ -1,0 +1,94 @@
+<!--
+  @snippet requirement-table
+  @description Compact requirements coverage table with columns: #, Requirement, Disposition, Notes. Disposition values are color-coded.
+  @data { rows: Array<{ number: string|number, requirement: string, disposition: "covered"|"descoped"|"partial", notes: string }> }
+  @tokens --bg-card, --bg-surface, --border, --text, --text-bright, --success, --warning, --info
+  @usage Replace {{TABLE_ROWS}} with <tr> elements. Each disposition cell should use the matching CSS class:
+    "covered" -> <span class="disposition disposition--covered">covered</span> (success color)
+    "descoped" -> <span class="disposition disposition--descoped">descoped</span> (warning color)
+    "partial" -> <span class="disposition disposition--partial">partial</span> (info color)
+    All user-provided text (requirement names, notes) must pass through escapeHtml before insertion.
+    Wrap the table in the .table-scroll-wrapper for horizontal scroll on narrow viewports.
+-->
+<div class="table-scroll-wrapper">
+  <table class="requirement-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Requirement</th>
+        <th>Disposition</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{TABLE_ROWS}}
+    </tbody>
+  </table>
+</div>
+<style>
+  .table-scroll-wrapper {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  }
+  .requirement-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    background: var(--bg-card, rgba(255, 255, 255, 0.06));
+  }
+  .requirement-table th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-bright, #e8eaf0);
+    background: var(--bg-surface, rgba(255, 255, 255, 0.03));
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    white-space: nowrap;
+  }
+  .requirement-table td {
+    padding: 7px 12px;
+    color: var(--text, #b4b8c8);
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    vertical-align: top;
+    line-height: 1.4;
+  }
+  .requirement-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .requirement-table tbody tr:nth-child(even) td {
+    background: var(--bg-surface, rgba(255, 255, 255, 0.03));
+  }
+  .requirement-table th:first-child,
+  .requirement-table td:first-child {
+    width: 32px;
+    text-align: center;
+    font-family: monospace;
+    color: var(--text-bright, #e8eaf0);
+  }
+  .disposition {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+  }
+  .disposition--covered {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--success, #34d399);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+  }
+  .disposition--descoped {
+    background: rgba(251, 191, 36, 0.15);
+    color: var(--warning, #fbbf24);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+  }
+  .disposition--partial {
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--info, #60a5fa);
+    border: 1px solid rgba(96, 165, 250, 0.3);
+  }
+</style>

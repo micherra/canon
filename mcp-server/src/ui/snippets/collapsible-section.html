@@ -1,0 +1,62 @@
+<!--
+  @snippet collapsible-section
+  @description CSS-only collapsible section using <details>/<summary>. Matches Canon's section title styling with an arrow indicator.
+  @data { title: string, content: string }
+  @tokens --bg-card, --border, --text-bright, --text-muted
+  @usage Replace {{TITLE}} with the section heading text and {{CONTENT}} with arbitrary HTML content.
+    The section is collapsed by default. Add the "open" attribute to <details> to start expanded.
+    CSS-only — no JavaScript required. The arrow rotates on open via details[open] selector.
+-->
+<details class="collapsible-section">
+  <summary class="collapsible-summary">
+    <span class="collapsible-arrow">&#9654;</span>
+    <span class="collapsible-title">{{TITLE}}</span>
+  </summary>
+  <div class="collapsible-body">
+    {{CONTENT}}
+  </div>
+</details>
+<style>
+  .collapsible-section {
+    background: var(--bg-card, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .collapsible-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+  .collapsible-summary::-webkit-details-marker {
+    display: none;
+  }
+  .collapsible-arrow {
+    font-size: 9px;
+    color: var(--text-muted, #636a80);
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+  details[open] .collapsible-arrow {
+    transform: rotate(90deg);
+  }
+  .collapsible-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-bright, #e8eaf0);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .collapsible-body {
+    padding: 10px 14px 14px;
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    color: var(--text-muted, #636a80);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+</style>

@@ -1,0 +1,43 @@
+<!--
+  @snippet section-card
+  @description Card container with a section title and body area for arbitrary HTML content.
+  @data { title: string, content: string }
+  @tokens --bg-card, --border, --text-bright, --text, --radius
+  @usage Replace {{TITLE}} with the section heading and {{CONTENT}} with the card body HTML.
+    The title uses .section-title styling: bold, letter-spaced, bright color.
+    The body area accepts any HTML — paragraphs, lists, nested components.
+    All user-provided text must pass through escapeHtml before insertion.
+-->
+<div class="section-card">
+  <div class="section-card-header">
+    <h2 class="section-title">{{TITLE}}</h2>
+  </div>
+  <div class="section-card-body">
+    {{CONTENT}}
+  </div>
+</div>
+<style>
+  .section-card {
+    background: var(--bg-card, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    border-radius: var(--radius, 12px);
+    overflow: hidden;
+  }
+  .section-card-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-bright, #e8eaf0);
+    margin: 0;
+    letter-spacing: 0.02em;
+  }
+  .section-card-body {
+    padding: 14px 16px;
+    color: var(--text, #b4b8c8);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+</style>

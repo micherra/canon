@@ -101,10 +101,10 @@ describe("snippet library — agent composition demo", () => {
   // ── 1. Snippet discovery ─────────────────────────────────────────────────
 
   describe("snippet discovery", () => {
-    it("finds at least 5 HTML snippet files in the snippets directory", () => {
+    it("finds at least 8 HTML snippet files in the snippets directory", () => {
       const entries = readdirSync(SNIPPETS_DIR, { withFileTypes: true });
       const htmlFiles = entries.filter((e) => e.isFile() && e.name.endsWith(".html"));
-      expect(htmlFiles.length).toBeGreaterThanOrEqual(5);
+      expect(htmlFiles.length).toBeGreaterThanOrEqual(8);
     });
   });
 
@@ -117,7 +117,7 @@ describe("snippet library — agent composition demo", () => {
         .filter((e) => e.isFile() && e.name.endsWith(".html"))
         .map((e) => e.name);
 
-      expect(htmlFiles.length).toBeGreaterThanOrEqual(5);
+      expect(htmlFiles.length).toBeGreaterThanOrEqual(8);
 
       for (const filename of htmlFiles) {
         const content = readFileSync(join(SNIPPETS_DIR, filename), "utf8");
@@ -278,6 +278,124 @@ ${extractSnippetHtml(substitutedStats)}
       expect(res.body).toContain("#e74c3c");
 
       removeArtifact("custom/agent-test-2");
+    });
+
+    it("composes collapsible-section snippet into a served HTML artifact (HTTP 200)", async () => {
+      const snippetContent = readFileSync(join(SNIPPETS_DIR, "collapsible-section.html"), "utf8");
+
+      // Substitute placeholders
+      const substituted = substituteSnippet(snippetContent, {
+        TITLE: "Implementation Notes",
+        CONTENT: "<p>Details about the implementation approach.</p>",
+      });
+
+      const styles = extractSnippetStyles(substituted);
+      const markup = extractSnippetHtml(substituted);
+
+      const composedHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Collapsible Section Test</title>
+  <style>
+    :root { --bg: #0c0f1a; --bg-card: rgba(255,255,255,0.06); --border: rgba(255,255,255,0.06); --text: #b4b8c8; --text-bright: #e8eaf0; --text-muted: #636a80; }
+    body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; }
+    ${styles}
+  </style>
+</head>
+<body>
+  ${markup}
+</body>
+</html>`;
+
+      const artifactKey = "custom/collapsible-test";
+      registerArtifact(artifactKey, composedHtml, {});
+
+      const res = await httpGet("/artifact/custom/collapsible-test");
+      expect(res.status).toBe(200);
+
+      // Verify collapsible-specific structure
+      expect(res.body).toContain("<details");
+      expect(res.body).toContain("<summary");
+      expect(res.body).toContain("Implementation Notes");
+      expect(res.body).toContain("Details about the implementation approach.");
+
+      removeArtifact(artifactKey);
+    });
+
+    it("composes requirement-table snippet with color-coded dispositions (HTTP 200)", async () => {
+      const snippetContent = readFileSync(join(SNIPPETS_DIR, "requirement-table.html"), "utf8");
+
+      const sampleRows = `
+        <tr>
+          <td>1</td>
+          <td>Design system tokens extracted</td>
+          <td><span class="disposition disposition--covered">covered</span></td>
+          <td>DESIGN-SYSTEM.md Section A</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Agent composition tests pass</td>
+          <td><span class="disposition disposition--partial">partial</span></td>
+          <td>Missing edge cases</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Dark mode support</td>
+          <td><span class="disposition disposition--descoped">descoped</span></td>
+          <td>Out of scope for this task</td>
+        </tr>
+      `;
+
+      const substituted = substituteSnippet(snippetContent, {
+        TABLE_ROWS: sampleRows,
+      });
+
+      const styles = extractSnippetStyles(substituted);
+      const markup = extractSnippetHtml(substituted);
+
+      const composedHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Requirement Table Test</title>
+  <style>
+    :root {
+      --bg: #0c0f1a; --bg-card: rgba(255,255,255,0.06); --bg-surface: rgba(255,255,255,0.03);
+      --border: rgba(255,255,255,0.06); --text: #b4b8c8; --text-bright: #e8eaf0;
+      --success: #34d399; --warning: #fbbf24; --info: #60a5fa;
+    }
+    body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; }
+    ${styles}
+  </style>
+</head>
+<body>
+  ${markup}
+</body>
+</html>`;
+
+      const artifactKey = "custom/requirement-table-test";
+      registerArtifact(artifactKey, composedHtml, {});
+
+      const res = await httpGet("/artifact/custom/requirement-table-test");
+      expect(res.status).toBe(200);
+
+      // Verify table structure
+      expect(res.body).toContain("<table");
+      expect(res.body).toContain("<th");
+      expect(res.body).toContain("Requirement");
+      expect(res.body).toContain("Disposition");
+
+      // Verify all three disposition classes are represented
+      expect(res.body).toContain("disposition--covered");
+      expect(res.body).toContain("disposition--partial");
+      expect(res.body).toContain("disposition--descoped");
+
+      // Verify row content
+      expect(res.body).toContain("Design system tokens extracted");
+      expect(res.body).toContain("Dark mode support");
+
+      removeArtifact(artifactKey);
     });
   });
 });
