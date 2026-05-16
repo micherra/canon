@@ -13,13 +13,11 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | Tool file | MCP tool name |
 |-----------|--------------|
 | `capture-transcript.ts` | `capture_transcript` |
-| `get-messages.ts` | `get_messages` |
 | `get-transcript.ts` | `get_transcript` |
 | `init-workspace.ts` | `init_workspace` |
 | `invoke-janitor.ts` | `invoke_janitor` |
 | `orchestration-journal.ts` | `log_step` / `batch_log_steps` |
 | `post-event.ts` | `post_event` |
-| `post-message.ts` | `post_message` |
 | `present-artifact.ts` | `present_artifact` |
 | `report.ts` | `report` |
 | `resolve-agent-skills.ts` | `resolve_agent_skills` |
@@ -44,7 +42,6 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 Key tool functions (all return `ToolResult<T>` — see `@shared/lib/tool-result.ts`):
 
 - `initWorkspace(input)` — create or resume workspace; preflight checks when `preflight: true`
-- `postMessage(input)` / `getMessages(input)` — unified workspace channel messaging
 - `captureTranscript(input: CaptureTranscriptInput)` → `Promise<ToolResult<CaptureTranscriptResult>>` — best-effort; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon format, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; returns `warning` (never an error) when source file not found
 - `transformClaudeCodeTranscript(entries: ClaudeCodeEntry[])` → `TranscriptEntry[]` — pure function; maps CC JSONL content blocks to Canon transcript entries; malformed entries skipped silently; exported from `services/transcript-transformer.ts`
 

@@ -206,7 +206,6 @@ When all implementation steps complete:
 | `store_summaries` / `store_pr_review` | scribe, reviewer |
 | `record_agent_metrics` | engineer, tester |
 | `get_transcript` | reviewer |
-| `post_message` / `get_messages` | engineer and all wave agents |
 | `show_pr_impact` / `review_code` / `get_drift_report` | reviewer, security |
 | `present_artifact` | reviewer, architect |
 

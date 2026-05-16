@@ -6,8 +6,6 @@ Part of the **Orchestration Context** (see `docs/bounded-context-map.md`).
 
 ## What This Context Owns
 
-- **Inter-agent messaging** — `Message` type, `writeMessage`, `readMessages`, `readChannelAsContext`: read/write of agent coordination messages stored in the SQLite messages table via `ExecutionStore`.
-- **Wave coordination prompt injection** — `buildMessageInstructions`: builds the `## Wave Coordination` instructions that are injected into wave agent prompts, telling agents how to call `post_message`/`get_messages` to share discoveries and avoid duplicate work.
 - **Flow lifecycle event types and schemas** — `FlowEventType`, `FlowEventMap`, `EventPayloadSchemas`: the full set of named flow lifecycle events (`state_entered`, `state_completed`, `agent_spawned`, `hitl_triggered`, `flow_started`, `flow_completed`, `board_updated`, `wave_event_injected`, `wave_event_resolved`, `stuck_detected`, `tool_scope_audit`) and their Zod validation schemas.
 - **Event bus** — `FlowEventBus` (extends `EventEmitter` with typed `emit`/`on` overloads), `flowEventBus` singleton, `validateEventPayload`, `createMetricsAccumulator`.
 - **Variable substitution** — `substituteVariables`: `${key}` pattern replacement for spawn prompt templates. `buildTemplateInjection`: builds agent template usage instructions.
@@ -24,16 +22,6 @@ Part of the **Orchestration Context** (see `docs/bounded-context-map.md`).
 ---
 
 ## Public Interface
-
-### `messages.ts`
-
-| Export | Kind | Description |
-|--------|------|-------------|
-| `Message` | type | `{ from, timestamp, content }` — a single agent-to-agent message |
-| `writeMessage(workspace, channel, from, content)` | async fn | Persist a message to a channel |
-| `readMessages(workspace, channel, options?)` | async fn | Retrieve messages ordered by insertion; optional `since` filter |
-| `readChannelAsContext(workspace, channel, options?)` | async fn | Render all messages as a single markdown string for prompt injection |
-| `buildMessageInstructions(channel, peerCount, workspace)` | fn | Build wave coordination instructions for agent prompts |
 
 ### `events.ts`
 

@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-05-14 (html-poc: ui/snippets/ directory added with 5 HTML component recipes) -->
+<!-- last-updated: 2026-05-16 (post_message + get_messages MCP tools removed; messages.ts deleted) -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -18,7 +18,7 @@ src/
 │   ├── drift/            # Drift/review type definitions
 │   ├── flows/            # Flow and board-state type definitions, schemas
 │   ├── knowledge-graph/  # KG type definitions (FileMetrics, LayerViolation)
-│   ├── messages/         # Message persistence for agent collaboration
+│   ├── messages/         # Flow lifecycle events, event bus, variable substitution (message persistence removed 2026-05-16)
 │   └── workspaces/       # Workspace and execution store (SQLite persistence)
 ├── features/             # Tool implementations grouped by bounded context
 │   ├── diagnostics/      # Drift reports, agent metrics, summary storage
@@ -43,7 +43,12 @@ src/
 - **Community detection** (`graph/kg-community.ts`) — Louvain algorithm assigns `community_id` to each file in the KG; added 2026-05-02
 - **Tag propagation** (`graph/kg-tags.ts`) — 4-signal pipeline (directory, imports, community, cross-ref) writes computed tags to `file_tags` table; used by `get-principles` and `get-file-context`; added 2026-05-02
 - **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity; OR semantics: matches if layers OR scope.tags intersect (updated 2026-05-02)
-- **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
+- **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
+
+**Removed modules** (2026-05-16):
+- ~~`src/features/orchestration/tools/post-message.ts`~~ — `post_message` MCP tool removed 2026-05-16; was dead infrastructure
+- ~~`src/features/orchestration/tools/get-messages.ts`~~ — `get_messages` MCP tool removed 2026-05-16; was dead infrastructure
+- ~~`src/domains/messages/messages.ts`~~ — `Message` type and channel persistence removed 2026-05-16; `messages/` domain retains `events.ts` and `variables.ts`
 
 **Removed modules** (2026-05-02):
 - ~~`src/app/register-composite.ts`~~ — composite tool registration removed 2026-05-02 (get_context inlined or restructured)
@@ -444,8 +449,6 @@ src/
 | `drive_flow` | Drive the flow state machine for a single state; returns a `SpawnRequest` or `HitlBreakpoint` for the orchestrator to process; `{ action: "done" }` response includes optional `learn_gate_passed?: boolean` (ADR-016, 2026-04-08) — true only when auto-learn gates all pass at flow completion; absent when gate not evaluated or any gate failed |
 | `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress, set_metadata); `set_metadata` with `affected_files` (JSON array string) calls `registerClaims` + stores overlap warnings in board metadata as `claim_warnings`; `complete_flow` releases all file claims for the workflow slug before recording analytics — aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
 | `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
-| `post_message` | Post a message to a workspace channel (unified messaging) |
-| `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
 | `inject_wave_event` | Inject user events into running wave execution |
 | `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
 | `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |

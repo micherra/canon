@@ -41,7 +41,6 @@ tools:
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
   - mcp__canon__codebase_graph
-  - mcp__canon__get_messages
   - mcp__canon__write_implementation_summary
   - mcp__canon__get_context
 ---
@@ -262,19 +261,6 @@ You do NOT receive: research findings, design document, other task plans, other 
 **Conventions loading**: read both project and task CONVENTIONS.md. Task overrides project. Canon principles override both for correctness/safety. Document conflicts as JUSTIFIED_DEVIATION.
 
 **Resuming existing commits**: If your worktree already has commits, `git log --oneline -10` and read `git diff HEAD~N..HEAD` before making changes. Build on existing work. If done criteria already met, produce summary and report DONE.
-
-### Wave Events
-
-When `get_messages` with `include_events: true` surfaces pending events:
-
-| Event type | Action |
-|------------|--------|
-| `skip_task` (targeting your task_id) | Stop immediately. Summary noting "skipped by wave event". Status DONE. No partial commit. |
-| `guidance` | Apply guidance text as a constraint. Note deviation in summary if contradicts plan. |
-| `inject_context` | Incorporate the injected context into current task. |
-| `pause` | No action needed — orchestrator handles at wave boundary. |
-
-Check once at task start. No polling.
 
 ### Workspace Integration
 

@@ -151,7 +151,7 @@ Team dispatch: orchestrator partitions files by blast radius, spawns N reviewers
 ### `debate`
 
 - Orchestrator drives round-by-round: Position → Challenge → Response → Narrow.
-- Teams communicate via `post_message` / `get_messages` on channel `debate-round-{N}`.
+- Teams communicate on channel `debate-round-{N}`.
 - Convergence checked after qualifying rounds per algorithm in `references/competition-debate.md` § Convergence Detection.
 - Hard stop at `max_rounds` (default 5); HITL checkpoint after completion.
 - Full protocol details: `references/competition-debate.md` § Debate Protocol.
