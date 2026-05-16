@@ -22,17 +22,14 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { presentArtifact } from "../tools/present-artifact.ts";
 
 // ---------------------------------------------------------------------------
-// Mock child_process exec so no real browser is launched during tests
+// Mock openBrowser so no real browser is launched during tests
 // ---------------------------------------------------------------------------
 
-vi.mock("node:child_process", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:child_process")>();
+vi.mock("@platform/adapters/process-adapter.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@platform/adapters/process-adapter.ts")>();
   return {
     ...actual,
-    exec: vi.fn((_cmd: string, cb?: (err: Error | null) => void) => {
-      if (cb) cb(null);
-      return {} as ReturnType<typeof actual.exec>;
-    }),
+    openBrowser: vi.fn(),
   };
 });
 
