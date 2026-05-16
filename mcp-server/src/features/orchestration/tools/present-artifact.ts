@@ -36,6 +36,7 @@ import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 // ---------------------------------------------------------------------------
 
 const VIEW_MAP: Record<string, string> = {
+  "build-dashboard": "build-dashboard.html",
   "planning-brief": "planning-brief.html",
 };
 

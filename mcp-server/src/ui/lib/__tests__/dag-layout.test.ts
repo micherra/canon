@@ -15,7 +15,7 @@ describe("computeDagLayout()", () => {
   });
 
   it("places a single node with no edges at position (0, 0)", () => {
-    const result = computeDagLayout([{ id: "A", depends_on: [] }]);
+    const result = computeDagLayout([{ depends_on: [], id: "A" }]);
     expect(result.size).toBe(1);
     const pos = result.get("A");
     expect(pos).toBeDefined();
@@ -25,9 +25,9 @@ describe("computeDagLayout()", () => {
 
   it("linear chain (A→B→C) produces three distinct Y layers", () => {
     const nodes = [
-      { id: "A", depends_on: [] },
-      { id: "B", depends_on: ["A"] },
-      { id: "C", depends_on: ["B"] },
+      { depends_on: [], id: "A" },
+      { depends_on: ["A"], id: "B" },
+      { depends_on: ["B"], id: "C" },
     ];
     const result = computeDagLayout(nodes);
     expect(result.size).toBe(3);
@@ -48,10 +48,10 @@ describe("computeDagLayout()", () => {
 
   it("diamond shape (A→B, A→C, B→D, C→D) produces correct layering", () => {
     const nodes = [
-      { id: "A", depends_on: [] },
-      { id: "B", depends_on: ["A"] },
-      { id: "C", depends_on: ["A"] },
-      { id: "D", depends_on: ["B", "C"] },
+      { depends_on: [], id: "A" },
+      { depends_on: ["A"], id: "B" },
+      { depends_on: ["A"], id: "C" },
+      { depends_on: ["B", "C"], id: "D" },
     ];
     const result = computeDagLayout(nodes);
     expect(result.size).toBe(4);
@@ -73,9 +73,9 @@ describe("computeDagLayout()", () => {
 
   it("disconnected nodes (no depends_on) all appear in layer 0 with the same Y", () => {
     const nodes = [
-      { id: "X", depends_on: [] },
-      { id: "Y", depends_on: [] },
-      { id: "Z", depends_on: [] },
+      { depends_on: [], id: "X" },
+      { depends_on: [], id: "Y" },
+      { depends_on: [], id: "Z" },
     ];
     const result = computeDagLayout(nodes);
     expect(result.size).toBe(3);
@@ -98,8 +98,8 @@ describe("computeDagLayout()", () => {
   it("nodes with depends_on referencing unknown IDs are treated as roots", () => {
     // Node B depends on "missing" which is not in the node list
     const nodes = [
-      { id: "A", depends_on: [] },
-      { id: "B", depends_on: ["missing"] },
+      { depends_on: [], id: "A" },
+      { depends_on: ["missing"], id: "B" },
     ];
     const result = computeDagLayout(nodes);
     // Both A and B are returned
@@ -113,8 +113,8 @@ describe("computeDagLayout()", () => {
 
   it("uses layerSpacing and nodeSpacing parameters", () => {
     const nodes = [
-      { id: "A", depends_on: [] },
-      { id: "B", depends_on: ["A"] },
+      { depends_on: [], id: "A" },
+      { depends_on: ["A"], id: "B" },
     ];
     const result = computeDagLayout(nodes, 300, 400);
 
