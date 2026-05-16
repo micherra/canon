@@ -11,7 +11,7 @@
  */
 
 import { readFile, realpath } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { type TranscriptEntry, TranscriptEntrySchema } from "@domains/flows/transcript-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
@@ -97,6 +97,13 @@ function parseTranscriptLines(raw: string): TranscriptEntry[] {
 export async function getTranscript(
   input: GetTranscriptInput,
 ): Promise<ToolResult<GetTranscriptResult>> {
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
+  }
+
   const store = getExecutionStore(input.workspace);
   const transcriptPath = store.getTranscriptPath(input.state_id);
 

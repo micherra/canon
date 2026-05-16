@@ -210,6 +210,22 @@ describe("postEvent — INVALID_INPUT for empty detail", () => {
   });
 });
 
+describe("postEvent — relative workspace rejection", () => {
+  it("returns INVALID_INPUT when workspace is a relative path", async () => {
+    const result = await postEvent({
+      action: "start",
+      agent: "implementor",
+      detail: "Starting something",
+      workspace: "relative/path",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("absolute");
+    }
+  });
+});
+
 // Schema validation tests
 
 describe("EventPayloadSchemas.agent_activity", () => {

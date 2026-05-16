@@ -28,7 +28,7 @@
 
 import { existsSync, globSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -311,6 +311,13 @@ export type BatchLogStepsResult = {
 export async function batchLogSteps(
   input: BatchLogStepsInput,
 ): Promise<ToolResult<BatchLogStepsResult>> {
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
+  }
+
   // 1. Empty array fast-path — no I/O needed.
   if (input.steps.length === 0) {
     return toolOk({ results: [] });
@@ -381,6 +388,12 @@ export async function batchLogSteps(
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
+  }
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
   }
   if (!input.workspace || !existsSync(input.workspace)) {
     return toolError("WORKSPACE_NOT_FOUND", `Workspace does not exist: ${input.workspace}`, false, {
@@ -552,6 +565,13 @@ export async function finalizeWorkspace(
 
   if (!workspace) {
     return toolError("INVALID_INPUT", "workspace must be a non-empty string", false);
+  }
+
+  if (!isAbsolute(workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${workspace}"`,
+    );
   }
 
   const path = journalPath(workspace);

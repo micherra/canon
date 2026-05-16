@@ -6,6 +6,7 @@
  * cross-build analysis and pattern mining.
  */
 
+import { isAbsolute } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -25,6 +26,14 @@ type PostEventResult = {
 
 export async function postEvent(input: PostEventInput): Promise<ToolResult<PostEventResult>> {
   const { workspace, agent, action, detail, artifacts } = input;
+
+  // Validate workspace is absolute
+  if (!isAbsolute(workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${workspace}"`,
+    );
+  }
 
   // Validate required fields
   if (!agent?.trim()) {
