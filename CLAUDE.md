@@ -359,6 +359,11 @@ After each subagent returns, verify expected artifacts exist at the paths listed
   - (b) **acknowledge** — items logged as accepted in the journal via `log_step` outcome, build proceeds (accept as-is — no follow-up planned).
   - (c) **defer** — items noted as follow-up, build proceeds (plan to address later — noted as follow-up).
   - This checkpoint occurs between the review step and the ship step. It does NOT apply if the review verdict is CLEAN.
+- **Manual verification gate**: After the tester reports `manual_verification_needed` items, the orchestrator presents them to the user as a HITL checkpoint before ship (via `AskUserQuestion`). The orchestrator detects manual verification items by checking the tester's test report for a `## Manual Verification Needed` section. If this section is present and contains table rows, present them to the user via `AskUserQuestion`. If the section is absent or empty, skip this gate. Options:
+  - (a) **confirmed** — user has verified the items manually, proceed to ship.
+  - (b) **not verified** — user cannot confirm; build pauses for investigation.
+  - (c) **defer** — accept risk, proceed to ship, note as unverified in PR description.
+  - This checkpoint occurs between the test step and the ship step. It does NOT apply when no manual items are reported.
 - **Build-step checkpoint**: After each major build step completes (design, implement, verify, review), the orchestrator offers a session checkpoint:
   - "Step {N} of {total} complete ({step_name}). Continue, or start a fresh session and say 'resume'?"
   - If the user says "keep going", "continue", or similar affirmative: proceed to the next step.
@@ -383,6 +388,18 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.
+
+### Post-Review Tester Enrichment
+
+When the review step completes and a tester step follows:
+1. Read `${WORKSPACE}/reviews/REVIEW.md`
+2. Extract the Stage 5 "Acceptance Criteria Verification" section
+3. Include the extracted content in the tester's spawn prompt alongside the standard context
+4. Also include the planning brief's Acceptance Criteria table (from `${WORKSPACE}/plans/${slug}/planning-brief.md`)
+
+This ensures the tester receives both the planner's original verification specs AND the reviewer's independent classification for cross-reference.
+
+When the runbook includes verification-aware acceptance criteria (ACs with verification method and type columns), the tester step MUST run after the review step. The tester consumes the reviewer's Stage 5 output, which only exists after review completes.
 
 ### Step Enforcement Contracts
 

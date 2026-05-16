@@ -324,6 +324,7 @@ When the planning brief includes verification types (mechanical/manual), cross-c
 - Planner "manual" maps to reviewer "Non-automatable"
 - A discrepancy exists when: planner says "mechanical" but reviewer classifies as "Non-automatable", OR planner says "manual" but reviewer classifies as "MCP-tool" or "Structural"
 
+
 1. For each AC, compare your classification (MCP-tool/Structural/Non-automatable) with the planner's type (mechanical/manual)
 2. Flag discrepancies — e.g., planner says "mechanical" but you classify as "Non-automatable"
 3. Report discrepancies in the review output:

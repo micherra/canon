@@ -119,6 +119,22 @@ describe("writePlanIndex — valid input", () => {
   });
 });
 
+describe("writePlanIndex — relative workspace rejection", () => {
+  it("returns INVALID_INPUT when workspace is a relative path", async () => {
+    const result = await writePlanIndex({
+      slug: "my-epic",
+      tasks: [{ task_id: "task-01", wave: 1 }],
+      workspace: "relative/path",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("absolute");
+    }
+  });
+});
+
 describe("writePlanIndex — validation errors", () => {
   it("returns INVALID_INPUT for task_id with spaces", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));

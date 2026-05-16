@@ -82,6 +82,45 @@ export const VERDICT_MAP: Record<WriteReviewInput["verdict"], "BLOCKING" | "WARN
 };
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const PRINCIPLE_ID_PATTERN = /^[a-zA-Z0-9_\-/.]+$/;
+
+/**
+ * Validate write-review inputs. Returns a ToolResult error on the first
+ * validation failure, or null when all inputs are valid.
+ */
+function validateInput(input: WriteReviewInput): { reviewsDir: string } | ToolResult<never> {
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
+  }
+
+  if (!SLUG_PATTERN.test(input.slug)) {
+    return toolError(
+      "INVALID_INPUT",
+      `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]+$/`,
+    );
+  }
+
+  const reviewsDir = resolve(join(input.workspace, "reviews"));
+  const workspaceResolved = resolve(input.workspace);
+  const rel = relative(workspaceResolved, reviewsDir);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    return toolError("INVALID_INPUT", "Workspace resolves outside expected path");
+  }
+
+  for (const id of input.honored) {
+    if (!PRINCIPLE_ID_PATTERN.test(id)) {
+      return toolError(
+        "INVALID_INPUT",
+        `Invalid honored principle ID "${id}": must match /^[a-zA-Z0-9_\\-/.]+$/`,
+      );
+    }
+  }
+
+  return { reviewsDir };
+}
 
 /**
  * Generate normalized REVIEW.md content.
@@ -280,40 +319,13 @@ export async function writeReview(
   input: WriteReviewInput,
   signals?: SignalWriter,
 ): Promise<ToolResult<WriteReviewResult>> {
-  // Validate slug
-  if (!SLUG_PATTERN.test(input.slug)) {
-    return toolError(
-      "INVALID_INPUT",
-      `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]+$/`,
-    );
-  }
+  const validated = validateInput(input);
+  if ("ok" in validated && !validated.ok) return validated;
+  const { reviewsDir } = validated as { reviewsDir: string };
 
-  // Validate path traversal safety
-  const reviewsDir = resolve(join(input.workspace, "reviews"));
-  const workspaceResolved = resolve(input.workspace);
-  const rel = relative(workspaceResolved, reviewsDir);
-  if (rel.startsWith("..") || isAbsolute(rel)) {
-    return toolError("INVALID_INPUT", `Workspace resolves outside expected path`);
-  }
-
-  // Map verdict
   const mappedVerdict = VERDICT_MAP[input.verdict];
-
-  // Validate honored entries — reject IDs that would break markdown pattern
-  const PRINCIPLE_ID_PATTERN = /^[a-zA-Z0-9_\-/.]+$/;
-  for (const id of input.honored) {
-    if (!PRINCIPLE_ID_PATTERN.test(id)) {
-      return toolError(
-        "INVALID_INPUT",
-        `Invalid honored principle ID "${id}": must match /^[a-zA-Z0-9_\\-/.]+$/`,
-      );
-    }
-  }
-
-  // Generate markdown
   const markdown = generateMarkdown(input, mappedVerdict);
 
-  // Write files
   await mkdir(reviewsDir, { recursive: true });
   const reviewPath = join(reviewsDir, "REVIEW.md");
   const metaPath = join(reviewsDir, "REVIEW.meta.json");
@@ -333,7 +345,6 @@ export async function writeReview(
   };
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
 
-  // Persist path effects to signal tables (non-blocking)
   if (signals) {
     updateFileViolationHistory(signals, input.files, input.violations, mappedVerdict);
   }

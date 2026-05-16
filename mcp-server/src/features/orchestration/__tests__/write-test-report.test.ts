@@ -419,6 +419,25 @@ describe("writeTestReport — manual_verification field", () => {
   });
 });
 
+describe("writeTestReport — relative workspace rejection", () => {
+  it("returns INVALID_INPUT when workspace is a relative path", async () => {
+    const result = await writeTestReport({
+      failed: 0,
+      passed: 0,
+      skipped: 0,
+      slug: "my-slug",
+      summary: "test",
+      workspace: "relative/path",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("absolute");
+    }
+  });
+});
+
 describe("writeTestReport — validation errors", () => {
   it("returns INVALID_INPUT for slug with spaces", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));

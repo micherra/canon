@@ -38,6 +38,12 @@ const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 /** Validate input fields and resolve the plans directory. Returns error or plansDir. */
 function validateReportInput(input: WriteTestReportInput): ToolResult<{ plansDir: string }> {
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
+  }
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
       "INVALID_INPUT",
