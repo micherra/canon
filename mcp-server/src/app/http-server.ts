@@ -58,7 +58,7 @@ export function getHttpPort(): number {
  * or has been stopped.
  */
 export function isHttpServerRunning(): boolean {
-  return httpServer !== null;
+  return httpServer?.listening === true;
 }
 
 /**

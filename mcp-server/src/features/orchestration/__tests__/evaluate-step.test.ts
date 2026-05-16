@@ -164,6 +164,39 @@ index 000..111 100644
 +const c = 3;
 `;
 
+/** Diff with a deleted file — git emits +++ /dev/null */
+const DIFF_DELETED_FILE = `diff --git a/src/deleted.ts b/src/deleted.ts
+index abc..def 100644
+--- a/src/deleted.ts
++++ /dev/null
+@@ -1,3 +0,0 @@
+-const old1 = 1;
+-const old2 = 2;
+-const old3 = 3;
+`;
+
+/** Diff with one-line empty catch `} catch (e) {}` */
+const DIFF_ONE_LINE_EMPTY_CATCH = `diff --git a/src/one-line-catch.ts b/src/one-line-catch.ts
+index 000..111 100644
+--- a/src/one-line-catch.ts
++++ b/src/one-line-catch.ts
+@@ -1,0 +1,3 @@
++try {
++  doSomething();
++} catch (e) {}
+`;
+
+/** Diff with one-line catch that has content — should NOT be flagged */
+const DIFF_ONE_LINE_CATCH_WITH_CONTENT = `diff --git a/src/one-line-catch-content.ts b/src/one-line-catch-content.ts
+index 000..111 100644
+--- a/src/one-line-catch-content.ts
++++ b/src/one-line-catch-content.ts
+@@ -1,0 +1,3 @@
++try {
++  doSomething();
++} catch (e) { log(e) }
+`;
+
 /** Empty diff */
 const DIFF_EMPTY = "";
 
@@ -272,6 +305,24 @@ describe("evaluateStep — diff parsing", () => {
     expect(result.diff_stats.lines_added).toBe(3);
     expect(result.diff_stats.lines_removed).toBe(2);
     expect(result.diff_stats.files_changed).toBe(1);
+  });
+
+  it("handles deleted file (+++ /dev/null) — appears in file scope overlap and diff stats", async () => {
+    mockGitDiff.mockReturnValue(makeGitDiffResult(DIFF_DELETED_FILE));
+
+    const result = await evaluateStep(makeInput({ declared_files: ["src/deleted.ts"] }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The deleted file must appear as a changed file
+    expect(result.diff_stats.files_changed).toBe(1);
+    // All three lines are removals
+    expect(result.diff_stats.lines_removed).toBe(3);
+    expect(result.diff_stats.lines_added).toBe(0);
+    // File scope: deleted.ts is declared and touched
+    expect(result.file_scope.actual).toContain("src/deleted.ts");
+    expect(result.file_scope.in_scope).toBe(1);
+    expect(result.file_scope.out_of_scope).toBe(0);
   });
 });
 
@@ -430,6 +481,35 @@ describe("evaluateStep — bare-catch detection", () => {
     mockGitDiff.mockReturnValue(makeGitDiffResult(DIFF_BARE_CATCH_WITH_PRECEDING_COMMENT));
 
     const result = await evaluateStep(makeInput({ declared_files: ["src/catch4.ts"] }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const catchFindings = result.findings.filter(
+      (f: PatternFinding) => f.pattern_id === "bare-catch",
+    );
+    expect(catchFindings.length).toBe(0);
+  });
+
+  it("flags one-line empty catch `} catch (e) {}`", async () => {
+    mockGitDiff.mockReturnValue(makeGitDiffResult(DIFF_ONE_LINE_EMPTY_CATCH));
+
+    const result = await evaluateStep(makeInput({ declared_files: ["src/one-line-catch.ts"] }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const catchFindings = result.findings.filter(
+      (f: PatternFinding) => f.pattern_id === "bare-catch",
+    );
+    expect(catchFindings.length).toBeGreaterThan(0);
+    expect(catchFindings[0].category).toBe("hacky");
+  });
+
+  it("does NOT flag one-line catch with content `} catch (e) { log(e) }`", async () => {
+    mockGitDiff.mockReturnValue(makeGitDiffResult(DIFF_ONE_LINE_CATCH_WITH_CONTENT));
+
+    const result = await evaluateStep(
+      makeInput({ declared_files: ["src/one-line-catch-content.ts"] }),
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

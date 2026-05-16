@@ -157,41 +157,72 @@ function classifyDiffLine(
   return currentLineNumber;
 }
 
+type DiffParserState = {
+  currentFile: string;
+  currentLineNumber: number;
+  pendingDeletedFile: string;
+};
+
+/**
+ * Process a file-header line (`+++ ...` or `--- a/...`) and update parser state.
+ * Returns true when the line was consumed (no further processing needed).
+ */
+function applyFileHeader(rawLine: string, state: DiffParserState): boolean {
+  if (rawLine.startsWith("+++ b/")) {
+    state.currentFile = rawLine.slice(6); // strip "+++ b/"
+    state.pendingDeletedFile = "";
+    state.currentLineNumber = 0;
+    return true;
+  }
+  // Deleted file: git emits `+++ /dev/null` — use path from preceding `--- a/...`
+  if (rawLine === "+++ /dev/null") {
+    state.currentFile = state.pendingDeletedFile;
+    state.pendingDeletedFile = "";
+    state.currentLineNumber = 0;
+    return true;
+  }
+  // Capture path from `--- a/...` for the deleted-file fallback above
+  if (rawLine.startsWith("--- a/")) {
+    state.pendingDeletedFile = rawLine.slice(6); // strip "--- a/"
+    return true;
+  }
+  return false;
+}
+
 /**
  * Parse a unified git diff output into structured DiffLine entries.
  *
  * Tracks the current file via `--- a/` and `+++ b/` lines.
+ * For deleted files, git emits `+++ /dev/null` — in that case we fall back
+ * to the path captured from the preceding `--- a/...` line.
  * Extracts line numbers from `@@ -X,Y +A,B @@` hunk headers.
  * Classifies lines by prefix: `+` = add, `-` = remove, space = context.
  */
 export function parseDiff(diffOutput: string): DiffLine[] {
   const lines = diffOutput.split("\n");
   const result: DiffLine[] = [];
-
-  let currentFile = "";
-  let currentLineNumber = 0;
+  const state: DiffParserState = { currentFile: "", currentLineNumber: 0, pendingDeletedFile: "" };
 
   for (const rawLine of lines) {
-    // File header: `+++ b/path/to/file`
-    if (rawLine.startsWith("+++ b/")) {
-      currentFile = rawLine.slice(6); // strip "+++ b/"
-      currentLineNumber = 0;
-      continue;
-    }
-
+    if (applyFileHeader(rawLine, state)) continue;
     if (isDiffMetaHeader(rawLine)) continue;
 
     // Hunk header: @@ -X,Y +A,B @@
     const hunkMatch = rawLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
     if (hunkMatch) {
-      currentLineNumber = parseInt(hunkMatch[1], 10);
+      state.currentLineNumber = parseInt(hunkMatch[1], 10);
       continue;
     }
 
     // Skip if no file context yet
-    if (!currentFile) continue;
+    if (!state.currentFile) continue;
 
-    currentLineNumber = classifyDiffLine(rawLine, currentFile, currentLineNumber, result);
+    state.currentLineNumber = classifyDiffLine(
+      rawLine,
+      state.currentFile,
+      state.currentLineNumber,
+      result,
+    );
   }
 
   return result;
@@ -279,6 +310,74 @@ function scanCatchBody(addedLines: DiffLine[], startIndex: number): CatchBodyRes
   return { hasComment, hasNonEmptyContent };
 }
 
+type SameLineCatchResult = { closed: false } | { closed: true; isEmpty: boolean };
+
+/**
+ * Determines whether the catch block opened on this line also closes on the
+ * same line, and if so whether the body between `{` and `}` is empty.
+ *
+ * Returns `{ closed: false }` when the closing `}` is not on this line.
+ * Returns `{ closed: true, isEmpty: true }` for `} catch (e) {}`.
+ * Returns `{ closed: true, isEmpty: false }` for `} catch (e) { log(e) }`.
+ */
+function checkSameLineCatch(content: string): SameLineCatchResult {
+  const catchIdx = content.search(/catch\s*(?:\([^)]*\))?\s*\{/);
+  if (catchIdx === -1) return { closed: false };
+
+  const openBrace = content.indexOf("{", catchIdx);
+  if (openBrace === -1) return { closed: false };
+
+  const closeBrace = content.indexOf("}", openBrace + 1);
+  if (closeBrace === -1) return { closed: false };
+
+  const between = content.slice(openBrace + 1, closeBrace);
+  return { closed: true, isEmpty: between.trim() === "" };
+}
+
+/** Build a bare-catch PatternFinding for the given DiffLine. */
+function makeBareCatchFinding(line: DiffLine): PatternFinding {
+  return {
+    category: "hacky",
+    file_path: line.file_path,
+    line_number: line.line_number,
+    matched_text: line.content.trim(),
+    pattern_id: "bare-catch",
+  };
+}
+
+/**
+ * Evaluate a single catch-opening line and return a finding when bare, or null.
+ *
+ * Skips when:
+ * - the catch line itself has a comment
+ * - the preceding line has a comment
+ * - the block body has a comment or non-empty content
+ *
+ * Same-line catch handling: when the block opens and closes on the same line,
+ * flag only if the body is empty. Do NOT scan subsequent lines in this case.
+ */
+function evaluateCatchLine(
+  line: DiffLine,
+  addedLines: DiffLine[],
+  index: number,
+): PatternFinding | null {
+  if (COMMENT_PATTERN.test(line.content)) return null;
+  if (hasPrecedingComment(addedLines, index)) return null;
+
+  // When the catch block closes on the same line, determine bare-ness from the
+  // inline body alone — do NOT fall through to scan subsequent lines.
+  const sameLineResult = checkSameLineCatch(line.content);
+  if (sameLineResult.closed) {
+    return sameLineResult.isEmpty ? makeBareCatchFinding(line) : null;
+  }
+
+  // Scan the block body (depth=1: catch block is open regardless of `}` on catch line)
+  const { hasComment, hasNonEmptyContent } = scanCatchBody(addedLines, index + 1);
+  if (hasComment || hasNonEmptyContent) return null;
+
+  return makeBareCatchFinding(line);
+}
+
 /**
  * Stateful bare-catch detector.
  *
@@ -287,8 +386,8 @@ function scanCatchBody(addedLines: DiffLine[], startIndex: number): CatchBodyRes
  *
  * Logic:
  * 1. Detect catch block opening
- * 2. Look at: the catch line itself, the preceding line, and lines inside the block
- * 3. If no comment found and block body is empty/whitespace-only → flag as bare-catch
+ * 2. Delegate per-line evaluation to evaluateCatchLine
+ * 3. Collect non-null results as findings
  */
 export function detectBareCatches(addedLines: DiffLine[]): PatternFinding[] {
   const findings: PatternFinding[] = [];
@@ -298,26 +397,8 @@ export function detectBareCatches(addedLines: DiffLine[]): PatternFinding[] {
     if (line.type !== "add") continue;
     if (!CATCH_OPEN_PATTERN.test(line.content)) continue;
 
-    // Skip: comment on the catch line itself
-    if (COMMENT_PATTERN.test(line.content)) continue;
-
-    // Skip: comment on the preceding line
-    if (hasPrecedingComment(addedLines, i)) continue;
-
-    // Scan the block body for comment or content
-    // We start at depth 1 (the catch block is open) regardless of any `}`
-    // earlier on the same line (e.g. `} catch (e) {` closes the try block
-    // then opens the catch block).
-    const { hasComment, hasNonEmptyContent } = scanCatchBody(addedLines, i + 1);
-    if (hasComment || hasNonEmptyContent) continue;
-
-    findings.push({
-      category: "hacky",
-      file_path: line.file_path,
-      line_number: line.line_number,
-      matched_text: line.content.trim(),
-      pattern_id: "bare-catch",
-    });
+    const finding = evaluateCatchLine(line, addedLines, i);
+    if (finding) findings.push(finding);
   }
 
   return findings;
