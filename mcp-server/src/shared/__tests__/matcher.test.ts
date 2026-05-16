@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { inferLayer, loadAllPrinciples, matchPrinciples } from "../matcher.ts";
+import { inferLayer, matchPrinciples } from "../matcher.ts";
 import type { Principle } from "../parser.ts";
 import { parsePrinciple } from "../parser.ts";
 
@@ -360,7 +360,7 @@ async function createPluginDir(base: string): Promise<string> {
 describe("principle overrides", () => {
   let projectDir: string;
   let pluginDir: string;
-  let loadAllPrinciples: (typeof import("../matcher.ts"))["loadAllPrinciples"];
+  let loadAllPrinciples: typeof import("../matcher.ts")["loadAllPrinciples"];
 
   beforeEach(async () => {
     // Use unique temp dirs per test to avoid cache interference
