@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import type { PredictionReader, PrincipleAccuracy } from "../services/prediction-accuracy.ts";
 import {
   ACCURACY_THRESHOLDS,
   buildAccuracySummary,
@@ -21,7 +22,6 @@ import {
   getPriorityMultiplier,
   shouldPrune,
 } from "../services/prediction-accuracy.ts";
-import type { PredictionReader, PrincipleAccuracy } from "../services/prediction-accuracy.ts";
 
 // ---- Helpers ----
 
