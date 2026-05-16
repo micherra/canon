@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { inferLayer, loadAllPrinciples, matchPrinciples } from "../matcher.ts";
-import { parsePrinciple } from "../parser.ts";
+import { inferLayer, matchPrinciples } from "../matcher.ts";
 import type { Principle } from "../parser.ts";
+import { parsePrinciple } from "../parser.ts";
 
 // Extended overrides tests (with reason validation) are in matcher-overrides.test.ts
 

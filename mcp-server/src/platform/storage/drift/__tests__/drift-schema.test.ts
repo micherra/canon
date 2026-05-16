@@ -121,8 +121,12 @@ function createV3Db(): Database.Database {
     has_run_summary   INTEGER NOT NULL DEFAULT 0,
     source_run_id     TEXT
   )`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_build_archives_branch ON build_archives(sanitized_branch)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_build_archives_archived_at ON build_archives(archived_at)`);
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_build_archives_branch ON build_archives(sanitized_branch)`,
+  );
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_build_archives_archived_at ON build_archives(archived_at)`,
+  );
   db.exec(`CREATE INDEX IF NOT EXISTS idx_build_archives_flow ON build_archives(flow)`);
   db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
 

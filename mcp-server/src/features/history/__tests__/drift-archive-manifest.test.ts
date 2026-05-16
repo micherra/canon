@@ -85,12 +85,12 @@ describe("build_archives migration", () => {
     db.close();
   });
 
-  test("schema_version is 3 after migration", () => {
+  test("schema_version is 4 after migration", () => {
     const { db } = makeDb();
     const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
       value: string;
     };
-    expect(row.value).toBe("3");
+    expect(row.value).toBe("4");
     db.close();
   });
 });

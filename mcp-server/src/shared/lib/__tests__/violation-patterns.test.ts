@@ -41,10 +41,7 @@ describe("violationsFromReviews", () => {
   });
 
   test("returns empty array when reviews have no violations", () => {
-    const reviews = [
-      makeReviewEntry({ violations: [] }),
-      makeReviewEntry({ violations: [] }),
-    ];
+    const reviews = [makeReviewEntry({ violations: [] }), makeReviewEntry({ violations: [] })];
     expect(violationsFromReviews(reviews)).toEqual([]);
   });
 
@@ -52,7 +49,9 @@ describe("violationsFromReviews", () => {
     const reviews = [
       makeReviewEntry({
         timestamp: "2026-01-15T00:00:00.000Z",
-        violations: [{ file_path: "src/foo.ts", principle_id: "simplicity-first", severity: "rule" }],
+        violations: [
+          { file_path: "src/foo.ts", principle_id: "simplicity-first", severity: "rule" },
+        ],
       }),
     ];
     const result = violationsFromReviews(reviews);
@@ -106,9 +105,7 @@ describe("violationsFromReviews", () => {
 
   test("handles null violations array gracefully (optional field)", () => {
     // ReviewEntry violations is an array, but test the undefined/empty case
-    const reviews = [
-      makeReviewEntry({ violations: [] }),
-    ];
+    const reviews = [makeReviewEntry({ violations: [] })];
     expect(violationsFromReviews(reviews)).toEqual([]);
   });
 });
@@ -122,9 +119,24 @@ describe("groupViolationsByPrinciple", () => {
 
   test("groups violations by principleId", () => {
     const violations = [
-      { filePath: "src/a.ts", principleId: "principle-x", reviewTimestamp: "2026-01-01T00:00:00.000Z", severity: "rule" },
-      { filePath: "src/b.ts", principleId: "principle-x", reviewTimestamp: "2026-01-02T00:00:00.000Z", severity: "rule" },
-      { filePath: "src/c.ts", principleId: "principle-y", reviewTimestamp: "2026-01-03T00:00:00.000Z", severity: "convention" },
+      {
+        filePath: "src/a.ts",
+        principleId: "principle-x",
+        reviewTimestamp: "2026-01-01T00:00:00.000Z",
+        severity: "rule",
+      },
+      {
+        filePath: "src/b.ts",
+        principleId: "principle-x",
+        reviewTimestamp: "2026-01-02T00:00:00.000Z",
+        severity: "rule",
+      },
+      {
+        filePath: "src/c.ts",
+        principleId: "principle-y",
+        reviewTimestamp: "2026-01-03T00:00:00.000Z",
+        severity: "convention",
+      },
     ];
     const result = groupViolationsByPrinciple(violations);
     expect(result.size).toBe(2);
@@ -134,8 +146,18 @@ describe("groupViolationsByPrinciple", () => {
 
   test("deduplicates file paths within the same principleId", () => {
     const violations = [
-      { filePath: "src/foo.ts", principleId: "p", reviewTimestamp: "2026-01-01T00:00:00.000Z", severity: "rule" },
-      { filePath: "src/foo.ts", principleId: "p", reviewTimestamp: "2026-01-02T00:00:00.000Z", severity: "rule" },
+      {
+        filePath: "src/foo.ts",
+        principleId: "p",
+        reviewTimestamp: "2026-01-01T00:00:00.000Z",
+        severity: "rule",
+      },
+      {
+        filePath: "src/foo.ts",
+        principleId: "p",
+        reviewTimestamp: "2026-01-02T00:00:00.000Z",
+        severity: "rule",
+      },
     ];
     const result = groupViolationsByPrinciple(violations);
     const group = result.get("p");
@@ -145,9 +167,24 @@ describe("groupViolationsByPrinciple", () => {
 
   test("collects all timestamps for the same principleId", () => {
     const violations = [
-      { filePath: null, principleId: "p", reviewTimestamp: "2026-01-01T00:00:00.000Z", severity: "rule" },
-      { filePath: null, principleId: "p", reviewTimestamp: "2026-01-02T00:00:00.000Z", severity: "rule" },
-      { filePath: null, principleId: "p", reviewTimestamp: "2026-01-03T00:00:00.000Z", severity: "rule" },
+      {
+        filePath: null,
+        principleId: "p",
+        reviewTimestamp: "2026-01-01T00:00:00.000Z",
+        severity: "rule",
+      },
+      {
+        filePath: null,
+        principleId: "p",
+        reviewTimestamp: "2026-01-02T00:00:00.000Z",
+        severity: "rule",
+      },
+      {
+        filePath: null,
+        principleId: "p",
+        reviewTimestamp: "2026-01-03T00:00:00.000Z",
+        severity: "rule",
+      },
     ];
     const result = groupViolationsByPrinciple(violations);
     expect(result.get("p")?.timestamps).toHaveLength(3);
@@ -155,8 +192,18 @@ describe("groupViolationsByPrinciple", () => {
 
   test("ignores null filePaths (does not add to file set)", () => {
     const violations = [
-      { filePath: null, principleId: "p", reviewTimestamp: "2026-01-01T00:00:00.000Z", severity: "rule" },
-      { filePath: "src/bar.ts", principleId: "p", reviewTimestamp: "2026-01-02T00:00:00.000Z", severity: "rule" },
+      {
+        filePath: null,
+        principleId: "p",
+        reviewTimestamp: "2026-01-01T00:00:00.000Z",
+        severity: "rule",
+      },
+      {
+        filePath: "src/bar.ts",
+        principleId: "p",
+        reviewTimestamp: "2026-01-02T00:00:00.000Z",
+        severity: "rule",
+      },
     ];
     const result = groupViolationsByPrinciple(violations);
     const group = result.get("p");
@@ -174,7 +221,14 @@ describe("buildRecurringViolationResults", () => {
 
   test("filters out principles with fewer than 2 occurrences", () => {
     const byPrinciple = new Map([
-      ["once", { files: new Set(["src/a.ts"]), severity: "rule", timestamps: ["2026-01-01T00:00:00.000Z"] }],
+      [
+        "once",
+        {
+          files: new Set(["src/a.ts"]),
+          severity: "rule",
+          timestamps: ["2026-01-01T00:00:00.000Z"],
+        },
+      ],
     ]);
     expect(buildRecurringViolationResults(byPrinciple)).toEqual([]);
   });
@@ -183,7 +237,11 @@ describe("buildRecurringViolationResults", () => {
     const byPrinciple = new Map([
       [
         "recurring",
-        { files: new Set(["src/a.ts"]), severity: "rule", timestamps: ["2026-01-01T00:00:00.000Z", "2026-01-02T00:00:00.000Z"] },
+        {
+          files: new Set(["src/a.ts"]),
+          severity: "rule",
+          timestamps: ["2026-01-01T00:00:00.000Z", "2026-01-02T00:00:00.000Z"],
+        },
       ],
     ]);
     const result = buildRecurringViolationResults(byPrinciple);
@@ -195,7 +253,10 @@ describe("buildRecurringViolationResults", () => {
   test("sorts results by occurrence_count descending", () => {
     const byPrinciple = new Map([
       ["low", { files: new Set<string>(), severity: "rule", timestamps: ["t1", "t2"] }],
-      ["high", { files: new Set<string>(), severity: "rule", timestamps: ["t1", "t2", "t3", "t4"] }],
+      [
+        "high",
+        { files: new Set<string>(), severity: "rule", timestamps: ["t1", "t2", "t3", "t4"] },
+      ],
       ["mid", { files: new Set<string>(), severity: "rule", timestamps: ["t1", "t2", "t3"] }],
     ]);
     const result = buildRecurringViolationResults(byPrinciple);
@@ -215,7 +276,11 @@ describe("buildRecurringViolationResults", () => {
         {
           files: new Set<string>(),
           severity: "rule",
-          timestamps: ["2026-03-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z", "2026-02-01T00:00:00.000Z"],
+          timestamps: [
+            "2026-03-01T00:00:00.000Z",
+            "2026-01-01T00:00:00.000Z",
+            "2026-02-01T00:00:00.000Z",
+          ],
         },
       ],
     ]);
@@ -250,7 +315,12 @@ describe("findRecurringViolations", () => {
 
   test("combines summary violations and review violations", () => {
     const summaryViolations = [
-      { filePath: null, principleId: "principle-x", reviewTimestamp: "2026-01-01T00:00:00.000Z", severity: "rule" },
+      {
+        filePath: null,
+        principleId: "principle-x",
+        reviewTimestamp: "2026-01-01T00:00:00.000Z",
+        severity: "rule",
+      },
     ];
     const reviews = [
       makeReviewEntry({
@@ -268,7 +338,12 @@ describe("findRecurringViolations", () => {
     // principle-a: 2 occurrences (recurring)
     // principle-b: 1 occurrence (not recurring)
     const summaryViolations = [
-      { filePath: null, principleId: "principle-a", reviewTimestamp: "2026-01-01T00:00:00.000Z", severity: "rule" },
+      {
+        filePath: null,
+        principleId: "principle-a",
+        reviewTimestamp: "2026-01-01T00:00:00.000Z",
+        severity: "rule",
+      },
     ];
     const reviews = [
       makeReviewEntry({
@@ -353,7 +428,12 @@ describe("groupViolationsByFile", () => {
   test("multiple principles per file each get their own entry", () => {
     const violations = [
       { filePath: "src/x.ts", principleId: "rule-a", reviewTimestamp: "t1", severity: "rule" },
-      { filePath: "src/x.ts", principleId: "rule-b", reviewTimestamp: "t1", severity: "strong-opinion" },
+      {
+        filePath: "src/x.ts",
+        principleId: "rule-b",
+        reviewTimestamp: "t1",
+        severity: "strong-opinion",
+      },
     ];
     const result = groupViolationsByFile(violations);
     const entries = result.get("src/x.ts");
