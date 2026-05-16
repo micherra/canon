@@ -20,7 +20,6 @@ import type {
 } from "../model/types.ts";
 import { injectCoordination } from "../services/inject-coordination.ts";
 import { injectTemplates } from "../services/inject-templates.ts";
-import { injectWaveBriefing } from "../services/inject-wave-briefing.ts";
 import { resolveContext } from "../services/resolve-context.ts";
 import { resolveMessages } from "../services/resolve-messages.ts";
 import { resolveProgress } from "../services/resolve-progress.ts";
@@ -39,10 +38,9 @@ const PIPELINE: PromptStage[] = [
   resolveMessages, // 3: ${messages} from channel → mergedVariables
   substituteVariablesStage, // 4: substitute vars → basePrompt (+ cache prefix)
   injectTemplates, // 5: append template instructions → basePrompt
-  injectWaveBriefing, // 6: append wave guidance + briefing → basePrompt
-  fanout, // 7: expand basePrompt → prompts[]
-  injectCoordination, // 8: role sub + messaging + metrics footer → prompts[]
-  validatePrompts, // 9: scan for unresolved ${...} → warnings
+  fanout, // 6: expand basePrompt → prompts[]
+  injectCoordination, // 7: role sub + messaging + metrics footer → prompts[]
+  validatePrompts, // 8: scan for unresolved ${...} → warnings
 ];
 
 /**

@@ -1,6 +1,6 @@
 import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getProjectDir } from "@domains/workspaces/wave-lifecycle.ts";
+import { getProjectDir } from "@domains/workspaces/worktree-ops.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { loadLearnGateConfig } from "@shared/lib/config.ts";

@@ -43,11 +43,6 @@ vi.mock("@features/orchestration/services/inject-context.ts", () => ({
   }),
 }));
 
-vi.mock("@features/orchestration/services/wave-briefing.ts", () => ({
-  assembleWaveBriefing: vi.fn().mockReturnValue(""),
-  readWaveGuidance: vi.fn().mockResolvedValue(""),
-}));
-
 vi.mock("@domains/messages/messages.ts", () => ({
   buildMessageInstructions: vi.fn().mockReturnValue("msg-instr"),
   readChannelAsContext: vi.fn().mockResolvedValue(""),
@@ -71,7 +66,6 @@ import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { readChannelAsContext } from "@domains/messages/messages.ts";
-import { assembleWaveBriefing } from "@features/orchestration/services/wave-briefing.ts";
 import type { SpawnPromptInput } from "../model/types.ts";
 import { assemblePrompt } from "../tools/assemble-prompt.ts";
 
@@ -322,77 +316,6 @@ describe("assemblePrompt — _board optimization", () => {
     await assemblePrompt(input);
 
     expect(mockStore.getBoard).toHaveBeenCalled();
-  });
-});
-
-// Escaping ownership transfer
-
-describe("assemblePrompt — consultation output escaping", () => {
-  it("escapes raw ${var} in consultation summary exactly once", async () => {
-    vi.mocked(assembleWaveBriefing).mockImplementation((opts) => {
-      // Return the escaped summaries so we can verify
-      const outputs = opts.consultationOutputs;
-      if (!outputs) return "";
-      const summaries = Object.values(outputs).map((o) => o.summary);
-      return `Briefing: ${summaries.join(", ")}`;
-    });
-
-    const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
-      states: {
-        build: { agent: "implementor", type: "wave" },
-        done: { type: "terminal" },
-      },
-    });
-    const input = makeInput({
-      consultation_outputs: {
-        research: { summary: "Use ${pattern} here" },
-      },
-      flow,
-      items: ["task-1"],
-      state_id: "build",
-      wave: 1,
-    });
-
-    const result = await assemblePrompt(input);
-
-    // The briefing text should contain escaped ${ (not double-escaped \\${)
-    const allPromptText = result.prompts.map((p) => p.prompt).join("\n");
-    expect(allPromptText).toContain("Use \\${pattern} here");
-    expect(allPromptText).not.toContain("\\\\${pattern}");
-  });
-
-  it("double-escapes pre-escaped consultation summary — documents new contract", async () => {
-    vi.mocked(assembleWaveBriefing).mockImplementation((opts) => {
-      const outputs = opts.consultationOutputs;
-      if (!outputs) return "";
-      const summaries = Object.values(outputs).map((o) => o.summary);
-      return `Briefing: ${summaries.join(", ")}`;
-    });
-
-    const flow = makeFlow({
-      spawn_instructions: { build: "Build ${item}." },
-      states: {
-        build: { agent: "implementor", type: "wave" },
-        done: { type: "terminal" },
-      },
-    });
-    const input = makeInput({
-      consultation_outputs: {
-        // Pre-escaped by caller — this is WRONG under the new contract
-        research: { summary: "Use \\${pattern} here" },
-      },
-      flow,
-      items: ["task-1"],
-      state_id: "build",
-      wave: 1,
-    });
-
-    const result = await assemblePrompt(input);
-
-    // Stage 6 escapes again, producing double-escape — documents that callers must NOT pre-escape
-    const allPromptText = result.prompts.map((p) => p.prompt).join("\n");
-    expect(allPromptText).toContain("\\\\${pattern}");
   });
 });
 

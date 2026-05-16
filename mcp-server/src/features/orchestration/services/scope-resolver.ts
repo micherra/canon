@@ -15,7 +15,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
-import { extractFilePaths } from "@domains/workspaces/wave-variables.ts";
+import { extractFilePaths } from "@domains/workspaces/task-variables.ts";
 
 /** Maximum bytes to read from a single artifact file. */
 const MAX_ARTIFACT_BYTES = 50 * 1024; // 50KB

@@ -1,9 +1,8 @@
 /**
  * Shared KG file context formatter.
  *
- * Two callers — inject-context.ts and inject-wave-briefing.ts — independently
- * implemented KG file context formatting. This module is the single shared
- * implementation.
+ * Extracted from inject-context.ts to share KG file context formatting logic
+ * as a single shared implementation.
  *
  * Canon: deep-modules — one module hides KG formatting complexity behind a
  * clean two-function interface.

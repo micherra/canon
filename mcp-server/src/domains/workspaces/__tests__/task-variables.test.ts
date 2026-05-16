@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeDollarBrace, parseTaskIdsForWave } from "../wave-variables.ts";
+import { escapeDollarBrace, parseTaskIds } from "../task-variables.ts";
 
 // escapeDollarBrace — pure function, no I/O
 
@@ -34,33 +34,33 @@ describe("escapeDollarBrace", () => {
   });
 });
 
-// parseTaskIdsForWave — pure parsing helper
+// parseTaskIds — pure parsing helper
 
-describe("parseTaskIdsForWave", () => {
+describe("parseTaskIds", () => {
   const indexContent = `## Plan Index
 
 | Task | Wave | Depends on | Files | Principles |
 |------|------|------------|-------|------------|
-| iwc-01 | 1 | -- | wave-variables.ts | functions-do-one-thing |
+| iwc-01 | 1 | -- | task-variables.ts | functions-do-one-thing |
 | iwc-02 | 1 | -- | gate-runner.ts | validate-at-trust-boundaries |
 | iwc-03 | 2 | iwc-01 | board.ts | prefer-immutable-data |
 | iwc-04 | 2 | iwc-02 | consultation.ts | handle-partial-failure |
 `;
 
   it("returns task IDs for wave 1", () => {
-    expect(parseTaskIdsForWave(indexContent, 1)).toEqual(["iwc-01", "iwc-02"]);
+    expect(parseTaskIds(indexContent, 1)).toEqual(["iwc-01", "iwc-02"]);
   });
 
   it("returns task IDs for wave 2", () => {
-    expect(parseTaskIdsForWave(indexContent, 2)).toEqual(["iwc-03", "iwc-04"]);
+    expect(parseTaskIds(indexContent, 2)).toEqual(["iwc-03", "iwc-04"]);
   });
 
   it("returns empty array when no tasks for that wave", () => {
-    expect(parseTaskIdsForWave(indexContent, 99)).toEqual([]);
+    expect(parseTaskIds(indexContent, 99)).toEqual([]);
   });
 
   it("skips header rows", () => {
-    const result = parseTaskIdsForWave(indexContent, 1);
+    const result = parseTaskIds(indexContent, 1);
     expect(result).not.toContain("Task");
   });
 
@@ -73,8 +73,8 @@ describe("parseTaskIdsForWave", () => {
 | \`adr004-02\` | 1 | — |  |  |
 | \`adr004-03\` | 2 | adr004-01 |  |  |
 `;
-    expect(parseTaskIdsForWave(backtickContent, 1)).toEqual(["adr004-01", "adr004-02"]);
-    expect(parseTaskIdsForWave(backtickContent, 2)).toEqual(["adr004-03"]);
+    expect(parseTaskIds(backtickContent, 1)).toEqual(["adr004-01", "adr004-02"]);
+    expect(parseTaskIds(backtickContent, 2)).toEqual(["adr004-03"]);
   });
 
   it("handles plain (no-backtick) task IDs as regression test", () => {
@@ -85,8 +85,8 @@ describe("parseTaskIdsForWave", () => {
 | plain-01 | 1 | — |
 | plain-02 | 2 | plain-01 |
 `;
-    expect(parseTaskIdsForWave(plainContent, 1)).toEqual(["plain-01"]);
-    expect(parseTaskIdsForWave(plainContent, 2)).toEqual(["plain-02"]);
+    expect(parseTaskIds(plainContent, 1)).toEqual(["plain-01"]);
+    expect(parseTaskIds(plainContent, 2)).toEqual(["plain-02"]);
   });
 
   it("skips separator row (--- in table)", () => {
@@ -94,7 +94,7 @@ describe("parseTaskIdsForWave", () => {
 |------|------|
 | real-01 | 1 |
 `;
-    const result = parseTaskIdsForWave(contentWithSep, 1);
+    const result = parseTaskIds(contentWithSep, 1);
     expect(result).toEqual(["real-01"]);
     expect(result).not.toContain("---");
   });

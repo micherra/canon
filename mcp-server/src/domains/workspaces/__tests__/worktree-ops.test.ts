@@ -1,12 +1,11 @@
 /**
- * Tests for wave-lifecycle.ts
+ * Tests for worktree-ops.ts
  *
  * Covers:
  * - createWorktree: creates a single worktree and branch for one task
  * - createWorktrees: creates worktrees and branches in a real git repo (batch)
- * - createWaveWorktrees: deprecated alias for createWorktrees — still works
- * - mergeWaveResults: merges non-conflicting branches sequentially
- * - mergeWaveResults: detects conflicts and returns structured error (not silent resolution)
+ * - mergeTaskResults: merges non-conflicting branches sequentially
+ * - mergeTaskResults: detects conflicts and returns structured error (not silent resolution)
  * - cleanupWorktrees: removes worktrees and branches best-effort
  * - getProjectDir: derives project dir from workspace path
  * - Integration: full create → modify files → merge → cleanup cycle
@@ -19,17 +18,16 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanupWorktrees,
-  createWaveWorktrees,
   createWorktree,
   createWorktrees,
   getProjectDir,
-  mergeWaveResults,
-} from "../wave-lifecycle.ts";
+  mergeTaskResults,
+} from "../worktree-ops.ts";
 
 let tmpDirs: string[] = [];
 
 function makeTmpDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "wave-lifecycle-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "worktree-ops-test-"));
   tmpDirs.push(dir);
   return dir;
 }
@@ -91,7 +89,7 @@ describe("createWorktree", () => {
 
     expect(result.task_id).toBe("single-task-01");
     expect(result.worktree_path).toBe(join(projectDir, ".canon", "worktrees", "single-task-01"));
-    expect(result.branch).toBe("canon-wave/single-task-01");
+    expect(result.branch).toBe("canon-task/single-task-01");
   });
 
   it("returns a single WaveWorktreeResult (not an array)", async () => {
@@ -117,7 +115,7 @@ describe("createWorktree", () => {
     const task = { task_id: "task/with/slashes" };
     const result = await createWorktree(task, projectDir);
 
-    expect(result.branch).toBe("canon-wave/task-with-slashes");
+    expect(result.branch).toBe("canon-task/task-with-slashes");
     expect(result.worktree_path).toBe(join(projectDir, ".canon", "worktrees", "task-with-slashes"));
     expect(existsSync(result.worktree_path)).toBe(true);
   });
@@ -129,7 +127,7 @@ describe("createWorktree", () => {
     const task = { task_id: "a..b" };
     const result = await createWorktree(task, projectDir);
 
-    expect(result.branch).toBe("canon-wave/a-b");
+    expect(result.branch).toBe("canon-task/a-b");
     expect(result.worktree_path).toBe(join(projectDir, ".canon", "worktrees", "a-b"));
     expect(existsSync(result.worktree_path)).toBe(true);
   });
@@ -169,7 +167,7 @@ describe("createWorktrees", () => {
 
     expect(results[0].task_id).toBe("task-01");
     expect(results[0].worktree_path).toBe(join(projectDir, ".canon", "worktrees", "task-01"));
-    expect(results[0].branch).toBe("canon-wave/task-01");
+    expect(results[0].branch).toBe("canon-task/task-01");
   });
 
   it("throws when projectDir is not a git repo", async () => {
@@ -203,30 +201,14 @@ describe("createWorktrees", () => {
     const results = await createWorktrees(tasks, projectDir);
 
     const branches = results.map((r) => r.branch);
-    expect(branches[0]).toBe("canon-wave/t1");
-    expect(branches[1]).toBe("canon-wave/t2");
+    expect(branches[0]).toBe("canon-task/t1");
+    expect(branches[1]).toBe("canon-task/t2");
   });
 });
 
-// createWaveWorktrees (deprecated alias)
+// mergeTaskResults — sequential strategy, no conflict
 
-describe("createWaveWorktrees (deprecated alias)", () => {
-  it("createWaveWorktrees still works as a deprecated alias for createWorktrees", async () => {
-    const projectDir = makeTmpDir();
-    initGitRepo(projectDir);
-
-    const tasks = [{ task_id: "alias-task-01" }];
-    const results = await createWaveWorktrees(tasks, projectDir);
-
-    expect(results).toHaveLength(1);
-    expect(results[0].task_id).toBe("alias-task-01");
-    expect(existsSync(results[0].worktree_path)).toBe(true);
-  });
-});
-
-// mergeWaveResults — sequential strategy, no conflict
-
-describe("mergeWaveResults — sequential, no conflict", () => {
+describe("mergeTaskResults — sequential, no conflict", () => {
   it("returns ok:true when all branches merge cleanly", async () => {
     const projectDir = makeTmpDir();
     initGitRepo(projectDir);
@@ -248,7 +230,7 @@ describe("mergeWaveResults — sequential, no conflict", () => {
       cwd: worktrees[1].worktree_path,
     });
 
-    const result = await mergeWaveResults(worktrees, projectDir, "sequential");
+    const result = await mergeTaskResults(worktrees, projectDir, "sequential");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.merged_count).toBe(2);
@@ -268,7 +250,7 @@ describe("mergeWaveResults — sequential, no conflict", () => {
       cwd: worktrees[0].worktree_path,
     });
 
-    const result = await mergeWaveResults(worktrees, projectDir, "sequential");
+    const result = await mergeTaskResults(worktrees, projectDir, "sequential");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.merged_count).toBe(1);
@@ -276,9 +258,9 @@ describe("mergeWaveResults — sequential, no conflict", () => {
   });
 });
 
-// mergeWaveResults — conflict detection
+// mergeTaskResults — conflict detection
 
-describe("mergeWaveResults — conflict detection", () => {
+describe("mergeTaskResults — conflict detection", () => {
   it("returns ok:false with conflict_task when branches conflict", async () => {
     const projectDir = makeTmpDir();
     initGitRepo(projectDir);
@@ -302,7 +284,7 @@ describe("mergeWaveResults — conflict detection", () => {
       cwd: worktrees[1].worktree_path,
     });
 
-    const result = await mergeWaveResults(worktrees, projectDir, "sequential");
+    const result = await mergeTaskResults(worktrees, projectDir, "sequential");
     expect(result.ok).toBe(false);
     if ("conflict_task" in result) {
       expect(result.conflict_task).toBe("conflict-b");
@@ -328,7 +310,7 @@ describe("mergeWaveResults — conflict detection", () => {
     spawnSync("git", ["add", "."], { cwd: worktrees[1].worktree_path });
     spawnSync("git", ["commit", "-m", "c2"], { cwd: worktrees[1].worktree_path });
 
-    const result = await mergeWaveResults(worktrees, projectDir, "sequential");
+    const result = await mergeTaskResults(worktrees, projectDir, "sequential");
     expect(result.ok).toBe(false);
 
     // Verify no merge-in-progress state (MERGE_HEAD should not exist after abort)
@@ -377,7 +359,7 @@ describe("cleanupWorktrees", () => {
     // Pass a fake worktree that was never created
     const fakeTasks = [
       {
-        branch: "canon-wave/nonexistent",
+        branch: "canon-task/nonexistent",
         task_id: "nonexistent",
         worktree_path: join(projectDir, ".canon", "worktrees", "nonexistent"),
       },
@@ -436,7 +418,7 @@ describe("Integration — create, modify, merge, cleanup", () => {
     });
 
     // 3. Merge results
-    const mergeResult = await mergeWaveResults(worktrees, projectDir, "sequential");
+    const mergeResult = await mergeTaskResults(worktrees, projectDir, "sequential");
     expect(mergeResult.ok).toBe(true);
     if (mergeResult.ok) {
       expect(mergeResult.merged_count).toBe(2);
@@ -476,7 +458,7 @@ describe("Integration — create, modify, merge, cleanup", () => {
       });
     }
 
-    const result = await mergeWaveResults(worktrees, projectDir, "sequential");
+    const result = await mergeTaskResults(worktrees, projectDir, "sequential");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.merged_count).toBe(3);

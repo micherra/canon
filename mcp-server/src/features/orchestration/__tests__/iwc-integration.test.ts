@@ -2,16 +2,13 @@
  * Inter-wave communication system — integration tests and coverage gap fills.
  *
  * Covers:
- * 1. Cross-module integration: wave-variables escaping → assembleWaveBriefing
- *    (declared gap in iwc-05 Coverage Notes)
- * 2. Cross-module: consultation-executor → recordConsultationResult round-trip
- * 3. Cross-module: runGate → recordGateResult round-trip on board
- * 4. gate-runner coverage gaps: null status from spawnSync, scripts.test=""
- * 5. board.ts coverage gaps: recordGateResult preserving existing consultations,
+ * 1. Cross-module: consultation-executor → recordConsultationResult round-trip
+ * 2. Cross-module: runGate → recordGateResult round-trip on board
+ * 3. gate-runner coverage gaps: null status from spawnSync, scripts.test=""
+ * 4. board.ts coverage gaps: recordGateResult preserving existing consultations,
  *    recordConsultationResult on a nonexistent state key
- * 6. wave-briefing: line matching multiple classifiers (duplication check),
- *    multiple summaries aggregated correctly
- * 7. consultation-executor: breakpoint field routing (informational metadata flows through)
+ * 5. consultation-executor: breakpoint field routing (informational metadata flows through)
+ * 6. consultation-executor: resolveConsultationPrompt edge cases
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -47,13 +44,11 @@ import { initBoard, recordConsultationResult, recordGateResult } from "@domains/
 import type { Board, ConsultationResult } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { resolveGateCommand, runGate } from "@domains/flows/gate-runner.ts";
-import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import {
   type ConsultationInput,
   executeConsultations,
   resolveConsultationPrompt,
 } from "../engine/consultation-executor.ts";
-import { assembleWaveBriefing } from "../services/wave-briefing.ts";
 
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {
@@ -115,49 +110,7 @@ afterEach(() => {
   // noop
 });
 
-// 1. Cross-module integration: wave-variables escaping → assembleWaveBriefing
-//    Tests that escaped ${...} in consultation outputs passes through unchanged.
-
-describe("integration: wave-variables escapeDollarBrace → assembleWaveBriefing", () => {
-  it("consultation output with escaped ${...} passes through wave-briefing without double-escaping", () => {
-    const rawConsultation = "Security: validate ${user_input} before processing";
-    const escapedConsultation = escapeDollarBrace(rawConsultation);
-
-    const result = assembleWaveBriefing({
-      consultationOutputs: {
-        "sec-review": {
-          section: "Security notes",
-          summary: escapedConsultation,
-        },
-      },
-      wave: 3,
-    });
-
-    expect(result).toContain("\\${user_input}");
-    expect(result).not.toContain("\\\\${user_input}");
-  });
-
-  it("multiple consultation outputs with injection patterns pass through escaped once", () => {
-    const rawOutput1 = escapeDollarBrace("Use ${OLD_VAR} carefully");
-    const rawOutput2 = escapeDollarBrace("Always escape ${env_var} in templates");
-
-    const result = assembleWaveBriefing({
-      consultationOutputs: {
-        c1: { section: "Notes 1", summary: rawOutput1 },
-        c2: { section: "Notes 2", summary: rawOutput2 },
-      },
-      wave: 2,
-    });
-
-    // Each escaped pattern present exactly once (no double-escape from assembleWaveBriefing)
-    expect(result).toContain("\\${OLD_VAR}");
-    expect(result).toContain("\\${env_var}");
-    // No double backslash from assembleWaveBriefing re-processing
-    expect(result.match(/\\\\\$/g)).toBeNull();
-  });
-});
-
-// 2. Cross-module: executeConsultations → recordConsultationResult round-trip
+// 1. Cross-module: consultation-executor → recordConsultationResult round-trip
 //    Tests the full consultation prep → board storage pipeline
 
 describe("integration: executeConsultations result → recordConsultationResult on board", () => {
@@ -265,7 +218,7 @@ describe("integration: executeConsultations result → recordConsultationResult 
   });
 });
 
-// 3. Cross-module: runGate → recordGateResult round-trip on board
+// 2. Cross-module: runGate → recordGateResult round-trip on board
 
 describe("integration: runGate result → recordGateResult on board", () => {
   it("passed gate result can be stored on the board", () => {
@@ -325,7 +278,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
   });
 });
 
-// 4. gate-runner coverage gaps
+// 3. gate-runner coverage gaps
 
 describe("gate-runner — spawnSync null status (timeout/kill)", () => {
   it("treats null exit status as non-zero (passed: false)", () => {
@@ -368,7 +321,7 @@ describe("gate-runner — resolveTestSuiteCommand: scripts.test is empty string"
   });
 });
 
-// 5. board.ts coverage gaps
+// 4. board.ts coverage gaps
 
 describe("board — recordGateResult preserves existing consultations", () => {
   it("recordGateResult does not discard pre-existing consultations on the same wave_result", () => {
@@ -435,43 +388,7 @@ describe("board — recordConsultationResult on a state not in board.states", ()
   });
 });
 
-// 6. wave-briefing: consultation outputs with wave number
-
-describe("wave-briefing — consultation outputs", () => {
-  it("multiple consultation outputs are all included in the briefing", () => {
-    const input = {
-      consultationOutputs: {
-        "perf-review": {
-          section: "Performance notes",
-          summary: "Gate timeout is 300s — acceptable for CI.",
-        },
-        "sec-review": {
-          section: "Security notes",
-          summary: "All inputs must be validated.",
-        },
-      },
-      wave: 3,
-    };
-
-    const result = assembleWaveBriefing(input);
-
-    expect(result).toContain("### Performance notes");
-    expect(result).toContain("Gate timeout is 300s");
-    expect(result).toContain("### Security notes");
-    expect(result).toContain("All inputs must be validated.");
-  });
-
-  it("wave number is correct in briefing header when wave > 1", () => {
-    const result = assembleWaveBriefing({
-      consultationOutputs: {},
-      wave: 5,
-    });
-
-    expect(result).toContain("## Wave Briefing (from wave 5)");
-  });
-});
-
-// 7. Consultation executor — resolveConsultationPrompt with no variables (all unresolved)
+// 6. Consultation executor — resolveConsultationPrompt with no variables (all unresolved)
 
 describe("consultation-executor — resolveConsultationPrompt edge cases", () => {
   it("resolves prompt when consultations map is present but empty for the requested name (returns null)", () => {

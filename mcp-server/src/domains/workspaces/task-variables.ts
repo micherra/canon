@@ -1,9 +1,9 @@
 /**
- * Wave variable utilities for inter-wave communication.
+ * Task variable utilities for inter-task communication.
  *
  * Exports:
  * - escapeDollarBrace: trust-boundary sanitizer for agent-sourced text
- * - parseTaskIdsForWave: parse task IDs for a given wave from INDEX.md content
+ * - parseTaskIds: parse task IDs for a given wave from INDEX.md content
  * - extractFilePaths: extract file paths from summary/artifact text
  *
  * Note: resolveWaveVariables was removed — wave summaries now flow through
@@ -30,7 +30,7 @@ export function escapeDollarBrace(text: string): string {
  * Callers should validate that the returned array is non-empty when tasks
  * are expected — this function returns [] on parse failure without warning.
  */
-export function parseTaskIdsForWave(indexContent: string, wave: number): string[] {
+export function parseTaskIds(indexContent: string, wave: number): string[] {
   const taskIds: string[] = [];
   const lines = indexContent.split("\n");
 
@@ -53,6 +53,7 @@ export function parseTaskIdsForWave(indexContent: string, wave: number): string[
 
   return taskIds;
 }
+
 
 /**
  * Extract file paths from summary content.

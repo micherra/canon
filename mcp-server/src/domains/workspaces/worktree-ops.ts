@@ -1,5 +1,5 @@
 /**
- * Wave lifecycle — worktree creation, sequential merging, and cleanup.
+ * Worktree operations — worktree creation, sequential merging, and cleanup.
  *
  * All git operations go through gitExecAsync from the git-adapter-async adapter.
  * Never import node:child_process directly in this module (subprocess-isolation rule).
@@ -66,7 +66,7 @@ export function getProjectDir(workspace: string): string {
   return workspace;
 }
 
-// createWorktree / createWorktrees / createWaveWorktrees
+// createWorktree / createWorktrees
 
 /**
  * Sanitize a task_id for safe use in filesystem paths and git branch names.
@@ -91,7 +91,7 @@ function sanitizeTaskId(taskId: string): string {
 /**
  * Create a git worktree for a single task.
  * Worktree path: `{projectDir}/.canon/worktrees/{task_id}`
- * Branch name:   `canon-wave/{task_id}`
+ * Branch name:   `canon-task/{task_id}`
  * Throws on git failure.
  */
 export async function createWorktree(
@@ -101,7 +101,7 @@ export async function createWorktree(
 ): Promise<WaveWorktreeResult> {
   const safeTaskId = sanitizeTaskId(task.task_id);
   const worktreePath = join(projectDir, ".canon", "worktrees", safeTaskId);
-  const branchName = `canon-wave/${safeTaskId}`;
+  const branchName = `canon-task/${safeTaskId}`;
   const gitBaseCwd = baseCwd ?? projectDir;
 
   const result = await gitExecAsync(
@@ -124,7 +124,7 @@ export async function createWorktree(
 
 /**
  * Create worktrees for multiple tasks sequentially.
- * Kept for merge protocol (mergeWaveResults needs all results).
+ * Kept for merge protocol (mergeTaskResults needs all results).
  * @deprecated Prefer createWorktree for single-task DAG worker dispatch.
  */
 export async function createWorktrees(
@@ -140,13 +140,10 @@ export async function createWorktrees(
   return results;
 }
 
-/** @deprecated Use createWorktree (singular) or createWorktrees (batch). */
-export const createWaveWorktrees = createWorktrees;
-
-// mergeWaveResults
+// mergeTaskResults
 
 /**
- * Sequentially merge completed wave task branches into the current HEAD.
+ * Sequentially merge completed task branches into the current HEAD.
  *
  * On merge conflict: aborts the merge and returns a structured error.
  * Does NOT silently resolve conflicts.
@@ -164,7 +161,7 @@ function isMergeConflict(result: { stdout: string; stderr: string }): boolean {
   );
 }
 
-export async function mergeWaveResults(
+export async function mergeTaskResults(
   tasks: WaveWorktreeResult[],
   projectDir: string,
   mergeStrategy: MergeStrategy,
@@ -203,6 +200,7 @@ export async function mergeWaveResults(
 
   return { merged_count: mergedCount, ok: true };
 }
+
 
 // cleanupWorktrees
 

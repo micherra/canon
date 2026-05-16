@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import { escapeDollarBrace, parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
+import { escapeDollarBrace, parseTaskIds } from "@domains/workspaces/task-variables.ts";
 import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
@@ -284,7 +284,7 @@ async function resolveWaveSummaryInjection(
 
   const priorWaveTaskIds: string[] = [];
   for (let wave = 1; wave < currentWave; wave++) {
-    priorWaveTaskIds.push(...parseTaskIdsForWave(indexContent, wave));
+    priorWaveTaskIds.push(...parseTaskIds(indexContent, wave));
   }
 
   if (priorWaveTaskIds.length === 0) {

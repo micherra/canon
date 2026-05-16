@@ -9,7 +9,7 @@
  */
 
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
+import { escapeDollarBrace } from "@domains/workspaces/task-variables.ts";
 import type { PromptContext } from "../model/types.ts";
 
 /**

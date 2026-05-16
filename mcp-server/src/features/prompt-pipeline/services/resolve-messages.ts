@@ -11,7 +11,7 @@
  */
 
 import { readChannelAsContext } from "@domains/messages/messages.ts";
-import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
+import { escapeDollarBrace } from "@domains/workspaces/task-variables.ts";
 import type { PromptContext } from "../model/types.ts";
 
 /**
