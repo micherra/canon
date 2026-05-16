@@ -366,9 +366,7 @@ describe("writeTestReport — manual_verification field", () => {
 
     expect(meta.manual_verification).toHaveLength(1);
     expect(meta.manual_verification[0].criterion).toBe("Login flow works with SSO");
-    expect(meta.manual_verification[0].verification_method).toBe(
-      "Manually test with SSO provider",
-    );
+    expect(meta.manual_verification[0].verification_method).toBe("Manually test with SSO provider");
     expect(meta.manual_verification[0].status).toBe("pending");
   });
 
