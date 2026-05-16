@@ -88,7 +88,9 @@ export function startHttpServer(port?: number): Promise<void> {
     httpServer = createServer(handleRequest);
 
     httpServer.listen(serverPort, "127.0.0.1", () => {
-      process.stderr.write(`Canon HTTP server listening on http://127.0.0.1:${serverPort}\n`);
+      if (!process.env.VITEST) {
+        process.stderr.write(`Canon HTTP server listening on http://127.0.0.1:${serverPort}\n`);
+      }
       resolve();
     });
 

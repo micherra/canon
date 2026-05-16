@@ -44,7 +44,7 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 
   The Canon MCP tool `resolve_agent_skills` reads all four fields and returns the concatenated content; the lead injects it into the spawn prompt before calling `Agent`. The native `skills:` field is reserved for real Claude Code native skills (per-directory `SKILL.md` wrappers) and is untouched by Canon's resolver.
 - Agents log activity per `workspace-logging.md` protocol.
-- `engineer` has direct access to `mcp__canon__get_messages` and `mcp__canon__write_implementation_summary` for collaboration during wave execution.
+- `engineer` has direct access to `mcp__canon__write_implementation_summary` for implementation summaries.
 - `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.
 - `engineer` (verify mode): before reporting any build or test failure as BLOCKING, must verify whether the failure exists on the base branch. Pre-existing failures are noted as PRE-EXISTING and do not block.
 - `reviewer` writes its review artifact to `${WORKSPACE}/reviews/REVIEW.md` (exact path). The orchestrator must inject `WORKSPACE={workspace_path}` (workspace root, not worktree path) into the reviewer's spawn prompt to ensure correct artifact placement.
