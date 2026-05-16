@@ -3,8 +3,7 @@
 # timestamp to .canon/.session-start-ts so that the session duration watchdog
 # (session-duration-watchdog.sh) can compute elapsed time on subsequent tool calls.
 #
-# Only active when CANON_AGENT_TEAMS_MODE=on.
-# Never blocks: this is purely informational bookkeeping, exit 0 always.
+# Always active. Never blocks: this is purely informational bookkeeping, exit 0 always.
 
 set -euo pipefail
 

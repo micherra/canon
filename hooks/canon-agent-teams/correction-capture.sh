@@ -2,8 +2,6 @@
 # correction-capture.sh — PostToolUse (Bash) hook that detects user corrections
 # to agent commits (git checkout -- / git restore) and writes correction records.
 #
-# Only active when CANON_AGENT_TEAMS_MODE=on.
-#
 # Detection heuristic: if the Bash command contains `git checkout --` or
 # `git restore`, and the most recent commit was made within the last 60 seconds,
 # this is likely a user correcting an agent's work.

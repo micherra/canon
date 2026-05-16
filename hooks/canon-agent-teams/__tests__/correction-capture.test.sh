@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests for correction-capture.sh.
-# Exercises: feature-flag off, non-Bash input, no git restore/checkout pattern,
+# Exercises: non-Bash input, no git restore/checkout pattern,
 # commit older than 60s, git checkout -- detected, git restore detected,
 # JSON validity, non-blocking when corrections dir cannot be created.
 # All cases must exit 0 (hook is advisory, never blocks).
@@ -115,8 +115,7 @@ REPO7=$(make_repo)
 (
   cd "$REPO7"
   LOCAL_CORRECTIONS="$REPO7/.canon/corrections"
-  CANON_AGENT_TEAMS_MODE=on \
-    bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- src/api/handler.ts")" 2>/dev/null
+  bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- src/api/handler.ts")" 2>/dev/null
   JSON_FILE=$(ls "$LOCAL_CORRECTIONS"/*.json 2>/dev/null | head -1)
   if [[ -z "$JSON_FILE" ]]; then
     fail "no correction JSON file found"
