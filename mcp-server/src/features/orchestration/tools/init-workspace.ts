@@ -499,7 +499,7 @@ export async function initWorkspaceFlow(
   const candidateWorkspace = join(branchDir, baseSlug);
 
   const resumeResult = tryResumeWorkspace(candidateWorkspace, projectDir);
-  if (resumeResult) return resumeResult;
+  if (resumeResult && resumeResult.session.task === input.task) return resumeResult;
 
   const result = await createNewWorkspace({
     baseSlug,
