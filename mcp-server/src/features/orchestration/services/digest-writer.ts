@@ -264,16 +264,22 @@ metadata:
  * Format a one-line MEMORY.md index entry under 150 characters.
  *
  * Format: - [build-digest-{date}-{slug}.md](build-digest-{date}-{slug}.md) -- {slug}: {verdict}, {duration}
+ *
+ * Truncates only the summary tail so the markdown link is never broken.
  */
 export function formatMemoryIndexEntry(data: DigestData): string {
   const duration = formatDuration(data.totalDurationMs);
   const verdict = data.reviewVerdict ?? "none";
   const fileName = `build-digest-${data.date}-${data.slug}.md`;
-  const entry = `- [${fileName}](${fileName}) -- ${data.slug}: ${verdict}, ${duration}`;
+  const link = `- [${fileName}](${fileName})`;
+  const summary = ` -- ${data.slug}: ${verdict}, ${duration}`;
 
-  // Truncate if over 150 chars (very long slug edge case)
+  const entry = link + summary;
   if (entry.length <= 150) return entry;
-  return `${entry.slice(0, 147)}...`;
+
+  // Truncate only the summary portion so the markdown link remains intact.
+  const maxSummaryLen = 150 - link.length - 3; // 3 for "..."
+  return `${link + summary.slice(0, maxSummaryLen)}...`;
 }
 
 // ---- Public entry point ----
@@ -314,12 +320,17 @@ export async function tryWriteBuildDigest(workspace: string): Promise<boolean> {
       memoryContent = readFileSync(memoryMdPath, "utf-8");
     }
 
-    // 5. Append new entry and write MEMORY.md
+    // 5. Append new entry to MEMORY.md (skip if already present — idempotent on re-runs)
     const indexEntry = formatMemoryIndexEntry(data);
-    const updatedContent = memoryContent.endsWith("\n")
-      ? `${memoryContent}${indexEntry}\n`
-      : `${memoryContent}\n${indexEntry}\n`;
-    await atomicWriteFile(memoryMdPath, updatedContent);
+    if (!memoryContent.includes(`(${digestFileName})`)) {
+      const updatedContent = memoryContent.endsWith("\n")
+        ? `${memoryContent}${indexEntry}\n`
+        : `${memoryContent}\n${indexEntry}\n`;
+      await atomicWriteFile(memoryMdPath, updatedContent);
+    } else {
+      // Digest entry already present — overwrite the digest file but skip MEMORY.md append.
+      // This handles same-day re-runs where the slug hasn't changed.
+    }
 
     return true;
   } catch (err: unknown) {

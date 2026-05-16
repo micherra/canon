@@ -401,6 +401,28 @@ describe("formatMemoryIndexEntry", () => {
     const entry = formatMemoryIndexEntry(data);
     expect(entry.length).toBeLessThanOrEqual(150);
   });
+
+  test("truncation preserves the markdown link when slug causes total to exceed 150 chars", () => {
+    // Use a slug long enough that link + summary exceeds 150 but the link alone is <= 150.
+    // A 20-char slug: link is ~88 chars, summary adds ~50 chars → total ~138, still fits.
+    // Use 30-char slug: link is ~108 chars, summary adds ~55 chars → total ~163, triggers truncation.
+    const longSlug = "a".repeat(30);
+    const longData: typeof baseData = {
+      ...baseData,
+      reviewVerdict: "CLEAN",
+      slug: longSlug,
+      totalDurationMs: 60000,
+    };
+    const entry = formatMemoryIndexEntry(longData);
+    expect(entry.length).toBeLessThanOrEqual(150);
+    // The link portion must be intact (the link itself is well under 150 chars)
+    const fileName = `build-digest-${longData.date}-${longSlug}.md`;
+    const link = `- [${fileName}](${fileName})`;
+    expect(link.length).toBeLessThan(150); // assert our test assumption
+    expect(entry.startsWith(link)).toBe(true);
+    // Entry ends with "..." when truncated
+    expect(entry.endsWith("...")).toBe(true);
+  });
 });
 
 // ---- tryWriteBuildDigest ----
@@ -480,6 +502,23 @@ describe("tryWriteBuildDigest", () => {
     expect(content).toContain("build-digest-");
   });
 
+  test("does not duplicate MEMORY.md entry when called twice for the same slug/date", async () => {
+    await writeFile(join(workspace, "journal.json"), FIXTURE_JOURNAL, "utf-8");
+
+    // First call — creates digest and appends entry
+    const result1 = await tryWriteBuildDigest(workspace);
+    expect(result1).toBe(true);
+
+    // Second call — same slug/date, same filename
+    const result2 = await tryWriteBuildDigest(workspace);
+    expect(result2).toBe(true);
+
+    const content = await readFile(join(memoryDir, "MEMORY.md"), "utf-8");
+    // Count occurrences of "my-slug" in MEMORY.md — should appear exactly once
+    const matches = content.match(/build-digest-.*my-slug/g);
+    expect(matches?.length).toBe(1);
+  });
+
   test("returns false gracefully when auto-memory dir does not exist", async () => {
     await writeFile(join(workspace, "journal.json"), FIXTURE_JOURNAL, "utf-8");
 
@@ -502,14 +541,11 @@ describe("tryWriteBuildDigest", () => {
     warnSpy.mockRestore();
   });
 
-  test("returns false gracefully when journal.json does not exist (no journal at all)", async () => {
-    // Empty workspace — no journal.json
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(vi.fn());
+  test("returns true when journal.json does not exist (digest written with zero steps)", async () => {
+    // Empty workspace — no journal.json. readJournalSteps returns [] when file is absent,
+    // so extractDigestData still produces valid DigestData with zero steps.
+    // The function succeeds as long as the auto-memory directory exists.
     const result = await tryWriteBuildDigest(workspace);
-    // Should be false because we can't extract digest data without journal
-    // The function still tries but resolveAutoMemoryDir is checked first
-    // If extractDigestData throws, we catch and return false
-    expect(typeof result).toBe("boolean");
-    warnSpy.mockRestore();
+    expect(result).toBe(true);
   });
 });
