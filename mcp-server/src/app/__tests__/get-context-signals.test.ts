@@ -31,6 +31,10 @@ vi.mock("@features/diagnostics/services/signal-compiler.ts", () => ({
   compileSignals: vi.fn(),
 }));
 
+vi.mock("@features/diagnostics/services/prediction-tracker.ts", () => ({
+  recordPrediction: vi.fn(),
+}));
+
 vi.mock("@platform/storage/drift/drift-db.ts", () => ({
   getDriftDb: vi.fn(),
 }));
@@ -55,6 +59,7 @@ vi.mock("@features/knowledge-graph/tools/semantic-search.ts", () => ({
   semanticSearch: vi.fn(),
 }));
 
+import { recordPrediction } from "@features/diagnostics/services/prediction-tracker.ts";
 // Import after mocks are set up
 import type { FileSignals } from "@features/diagnostics/services/signal-compiler.ts";
 import { compileSignals } from "@features/diagnostics/services/signal-compiler.ts";
@@ -101,6 +106,7 @@ describe("get_context signals section", () => {
     // Set default mock return values for all dependencies
     vi.mocked(getDriftDb).mockReturnValue(mockDriftDb as never);
     vi.mocked(compileSignals).mockReturnValue([mockSignalsForFoo]);
+    vi.mocked(recordPrediction).mockReturnValue(undefined);
     vi.mocked(getPrinciplesBatch).mockResolvedValue({
       graph_context_by_file: {},
       principles: [],
@@ -274,5 +280,33 @@ describe("get_context signals section", () => {
     expect(result.signals).toEqual([mockSignalsForFoo]);
     expect(result.drift).toBeUndefined();
     expect(result.graph).toBeUndefined();
+  });
+
+  // Test 8: resolveSignals() calls recordPrediction after compileSignals returns signals
+  it("calls recordPrediction with compiled signals when signals are present", async () => {
+    vi.mocked(compileSignals).mockReturnValue([mockSignalsForFoo]);
+
+    await handleGetContext({
+      file_paths: ["src/foo.ts"],
+      include: ["signals"],
+    });
+
+    expect(recordPrediction).toHaveBeenCalledOnce();
+    expect(recordPrediction).toHaveBeenCalledWith(
+      { compiledSignals: [mockSignalsForFoo], filePaths: ["src/foo.ts"] },
+      mockDriftDbSignals,
+    );
+  });
+
+  // Test 9: resolveSignals() does NOT call recordPrediction when compileSignals returns empty
+  it("does not call recordPrediction when compileSignals returns empty array", async () => {
+    vi.mocked(compileSignals).mockReturnValue([]);
+
+    await handleGetContext({
+      file_paths: ["src/no-data.ts"],
+      include: ["signals"],
+    });
+
+    expect(recordPrediction).not.toHaveBeenCalled();
   });
 });
