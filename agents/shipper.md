@@ -14,6 +14,7 @@ rules:
   - agent-context-check
   - agent-artifact-write-before-return
   - agent-worktree-orientation
+  - agent-working-environment
 references:
   - status-protocol
 templates:
