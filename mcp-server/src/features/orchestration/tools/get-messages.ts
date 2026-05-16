@@ -20,5 +20,7 @@ export async function getMessages(input: GetMessagesInput): Promise<GetMessagesR
     timestamp: r.timestamp,
   }));
 
-  return { count: messages.length, messages };
+  const result: GetMessagesResult = { count: messages.length, messages };
+
+  return result;
 }

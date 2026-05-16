@@ -41,6 +41,7 @@ module.exports = {
           "\\.test\\.ts$",
           "^src/features/orchestration/tools/report\\.ts$",
           "^src/features/orchestration/tools/orchestration-journal\\.ts$",
+          "^src/features/orchestration/services/workspace-cleanup\\.ts$",
           // ADR-016: learn-gate reads drift DB directly for flow count — deferred DI exception
           "^src/features/orchestration/services/learn-gate\\.ts$",
         ],

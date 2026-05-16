@@ -33,7 +33,11 @@ type ParsedToolResult = { data: unknown } | { error: Error };
 
 function parseToolResultParams(params: CallToolResult): ParsedToolResult {
   try {
-    const parsed = params.isError ? null : extractToolJson(params);
+    if (params.isError) {
+      const errorText = extractToolText(params);
+      return { error: new Error(errorText || "Tool returned an error") };
+    }
+    const parsed = extractToolJson(params);
     return { data: parsed };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)) };

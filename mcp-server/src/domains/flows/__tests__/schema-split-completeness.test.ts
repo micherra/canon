@@ -39,7 +39,6 @@ const EXPECTED_FLOW_DEF_EXPORTS = [
   "PostconditionResultSchema",
   "ViolationSeveritiesSchema",
   "TestResultsSchema",
-  "BaselineEvidenceSchema",
   "ToolOverridesSchema",
   "SingleStateSchema",
   "WavePolicySchema",
@@ -63,9 +62,6 @@ const EXPECTED_FLOW_DEF_EXPORTS = [
 
 const EXPECTED_BOARD_STATE_EXPORTS = [
   "BoardStateStatusSchema",
-  "ConsultationResultSchema",
-  "WorktreeEntrySchema",
-  "WaveResultSchema",
   "StateMetricsSchema",
   "AgentMetricsSchema",
   "ArtifactHistoryEntrySchema",

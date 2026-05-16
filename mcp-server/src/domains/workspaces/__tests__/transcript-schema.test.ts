@@ -4,15 +4,23 @@
  * - ExecutionStore setTranscriptPath / getTranscriptPath methods
  * - TranscriptEntrySchema validation
  * - initWorkspace creates transcripts/ subdirectory
+ * - logStep with agent_id persists transcript_path to ExecutionStore
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TranscriptEntrySchema } from "@domains/flows/transcript-schemas.ts";
 import Database from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Mock git-adapter so captureTranscript's internal git calls don't run
+vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@platform/adapters/git-adapter.ts")>();
+  return { ...original, gitExec: vi.fn() };
+});
+
 import {
   columnExists,
   initExecutionDb,
@@ -20,6 +28,7 @@ import {
   SCHEMA_VERSION,
 } from "../execution-schema.ts";
 import { ExecutionStore } from "../execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "../execution-store-cache.ts";
 import { initWorkspace } from "../workspace.ts";
 
 let tmpDirs: string[] = [];
@@ -155,6 +164,7 @@ function createV3Db(dbPath: string): Database.Database {
 }
 
 afterEach(() => {
+  clearStoreCache();
   for (const dir of tmpDirs) {
     rmSync(dir, { force: true, recursive: true });
   }
@@ -315,14 +325,15 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
     db.close();
   });
 
-  it("setTranscriptPath returns false for non-existent state", () => {
+  it("setTranscriptPath upserts row for non-existent state", () => {
     const dbPath = makeTmpDb();
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
     const result = store.setTranscriptPath("nonexistent", "/some/path.jsonl");
 
-    expect(result).toBe(false);
+    expect(result).toBe(true);
+    expect(store.getTranscriptPath("nonexistent")).toBe("/some/path.jsonl");
 
     db.close();
   });
@@ -482,5 +493,69 @@ describe("initWorkspace — transcripts subdirectory", () => {
     await Promise.all(
       expected.map((dir) => expect(access(join(ws, dir)).then(() => true)).resolves.toBe(true)),
     );
+  });
+});
+
+// 9. logStep with agent_id persists transcript_path to ExecutionStore (Fix PR #168)
+
+/**
+ * Plants a minimal Claude Code agent JSONL file so captureTranscript can find it.
+ * Mirrors the helper in orchestration-journal-agent-id.test.ts.
+ */
+function plantAgentJsonlForStore(fakeHome: string, agentId: string): void {
+  const pid = process.cwd().replace(/\//g, "-");
+  const subagentsDir = join(fakeHome, ".claude", "projects", pid, "session-test", "subagents");
+  mkdirSync(subagentsDir, { recursive: true });
+  const entry = JSON.stringify({
+    agentId,
+    isSidechain: true,
+    message: { content: "Task done.", role: "assistant", usage: { output_tokens: 10 } },
+    parentUuid: "parent-uuid",
+    timestamp: "2026-04-29T00:00:00.000Z",
+    type: "assistant",
+  });
+  writeFileSync(join(subagentsDir, `agent-${agentId}.jsonl`), entry, "utf-8");
+}
+
+describe("logStep — ExecutionStore transcript persistence", () => {
+  it("after logStep completes with agent_id, getTranscriptPath returns the captured path", async () => {
+    const { logStep } = await import("@features/orchestration/tools/orchestration-journal.ts");
+
+    const workspace = makeTmpDir();
+    mkdirSync(join(workspace, "transcripts"), { recursive: true });
+
+    const AGENT_ID = "store-persist-agent-01";
+    const fakeHome = mkdtempSync(join(tmpdir(), "canon-home-store-"));
+    tmpDirs.push(fakeHome);
+    plantAgentJsonlForStore(fakeHome, AGENT_ID);
+
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+
+    try {
+      // Register the step first (completed requires a prior plan/start or inline-fix)
+      await logStep({ status: "planned", step_id: "store-step", workspace });
+
+      const result = await logStep({
+        agent_id: AGENT_ID,
+        status: "completed",
+        step_id: "store-step",
+        workspace,
+      });
+
+      // The result must not be an error and must include a transcript_path
+      expect((result as { ok: boolean }).ok).toBe(true);
+      if (!("ok" in result) || !(result as { ok: boolean }).ok) return;
+      const ok = result as { transcript_path?: string };
+      expect(ok.transcript_path).toBeDefined();
+      expect(ok.transcript_path).not.toBe("");
+
+      // ExecutionStore must have the same path persisted
+      const store = getExecutionStore(workspace);
+      const storedPath = store.getTranscriptPath("store-step");
+      expect(storedPath).toBe(ok.transcript_path);
+    } finally {
+      process.env.HOME = originalHome;
+    }
   });
 });

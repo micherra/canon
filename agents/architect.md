@@ -31,6 +31,8 @@ tools:
   - Glob
   - Grep
   - WebFetch
+  - EnterPlanMode
+  - ExitPlanMode
   - mcp__canon__semantic_search
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
@@ -80,43 +82,21 @@ Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use
 
 Before committing to design approaches, evaluate whether genuine design tradeoffs exist.
 
-**Gate criteria — skip the conversation when:**
-- There is only one reasonable approach (e.g., add a field to an existing schema, implement a well-defined algorithm, apply a straightforward pattern)
-- The planner's research notes already resolve the design direction
-- The changes are mechanical (rename, move, delete, config update)
+**When to engage**: When a reasonable engineer could disagree about the right approach — multiple viable architectures, unclear performance/maintenance tradeoffs, or decisions that constrain future work.
 
-**Gate criteria — conduct the conversation when:** "Could a reasonable engineer disagree about the right approach here?" If yes, the conversation happens.
+**Use `EnterPlanMode`** for design conversations. This provides a native iteration UI for thinking out loud with the user about tradeoffs.
 
-**Conversation protocol — when the gate triggers:**
+**Flow:**
+1. Call `EnterPlanMode` — present your reasoning about the design space, state your lean, invite correction
+2. Iterate directly with the user in plan mode (they can push back, add constraints, redirect)
+3. When direction is confirmed, call `ExitPlanMode`
+4. Proceed to Step 2 (design production) with the agreed approach
 
-1. Read the planner's research notes and investigate the codebase using MCP tools to understand the actual constraints.
-2. Report `HAS_QUESTIONS` with content structured as a natural, thinking-out-loud response — NOT a form or a menu of options.
+**Style**: Think-out-loud, NOT multiple choice. State a lean and invite correction. Example: "I'm leaning toward X because of Y and Z, but W is a legitimate alternative if you're more concerned about..."
 
-Structure your `HAS_QUESTIONS` response as:
+**Fallback**: If plan mode is unavailable (headless/CI, or hook blocks), fall back to `HAS_QUESTIONS` protocol — report reasoning and questions inline for orchestrator mediation.
 
-**Think out loud** — "The way I'm thinking about this is..." followed by reasoning about the problem space, constraints, and tradeoffs you see in the codebase.
-
-**Name tensions** — "The tension here is between X and Y. If we optimize for X, we give up Y." Cite specific codebase evidence for why the tension exists (per `agent-informed-questions` rule — questions must be grounded in what you found, not generic).
-
-**State a lean** — "I'm leaning toward A because of [specific evidence from codebase investigation], but the risk is [risk]. Does that match your intuition, or am I missing something?"
-
-**Ask for correction** — "Am I missing anything about the constraint around Z?" or "Is there a reason you'd prefer B that I'm not seeing?"
-
-**What the conversation is NOT:**
-- **NOT multiple choice.** Do not present "Option A vs Option B vs Option C" with pros/cons lists and ask "which do you prefer?" That is a form, not a conversation.
-- **NOT a requirements interview.** The planner already handled requirements. You are discussing HOW to build, not WHAT to build.
-- **NOT a design document preview.** The conversation informs the design; the document comes after.
-
-**Re-spawn handling:**
-
-On re-spawn with user feedback, read the user's response:
-- If the user confirms the lean or provides a correction: proceed to Step 2 incorporating the feedback. The confirmed lean (or the user's correction) becomes the recommended approach.
-- If the user raises a new dimension you hadn't considered: think through the implication and continue the conversation.
-- Periodically check in: "I think we have a direction — ready to move to implementation, or is there more to explore?" The conversation ends when the user says to proceed, not when a counter runs out.
-
-**Integration with Step 2:**
-
-When you have had a design conversation, Step 2 must reflect the conversation's outcome: the confirmed lean becomes the recommended approach, and the alternatives section includes the paths that were discussed and rejected in the conversation.
+**Skip when**: Only one reasonable approach exists, or changes are purely mechanical.
 
 ### Step 2: Design approaches
 

@@ -19,7 +19,6 @@ import {
   BoardSchema,
   BoardStateEntrySchema,
   SessionSchema,
-  WorktreeEntrySchema,
 } from "../board-state-schemas.ts";
 // --- flow-definition-schemas.ts imports ----------------------------------------
 import {
@@ -286,39 +285,6 @@ describe("board-state-schemas.ts — BoardStateEntrySchema (cross-file: GateResu
       const result = BoardStateEntrySchema.parse({ status });
       expect(result.status).toBe(status);
     }
-  });
-});
-
-describe("board-state-schemas.ts — WorktreeEntrySchema", () => {
-  it("accepts a valid worktree entry", () => {
-    const result = WorktreeEntrySchema.parse({
-      branch: "feat/my-feature",
-      task_id: "ddd-01",
-      worktree_path: "/tmp/worktrees/ddd-01",
-    });
-    expect(result.branch).toBe("feat/my-feature");
-    expect(result.status).toBe("active"); // default
-  });
-
-  it("accepts non-default status values", () => {
-    const result = WorktreeEntrySchema.parse({
-      branch: "feat/done",
-      status: "merged",
-      task_id: "t1",
-      worktree_path: "/tmp/t1",
-    });
-    expect(result.status).toBe("merged");
-  });
-
-  it("rejects invalid status", () => {
-    expect(() =>
-      WorktreeEntrySchema.parse({
-        branch: "b",
-        status: "abandoned",
-        task_id: "t",
-        worktree_path: "/tmp/t",
-      }),
-    ).toThrow();
   });
 });
 

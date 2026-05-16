@@ -38,7 +38,7 @@ export function createHttpBridge(): BridgeAdapter {
 
     async loadData<T>(): Promise<T> {
       const data = g.__CANON_DATA__;
-      if (!data) {
+      if (data === undefined) {
         throw new Error("No embedded data found (window.__CANON_DATA__ is undefined)");
       }
       return data as T;

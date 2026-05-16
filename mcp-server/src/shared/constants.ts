@@ -45,6 +45,7 @@ export const CANON_FILES = {
   JANITOR_LASTRUN: "janitor.lastrun",
   KNOWLEDGE_DB: "knowledge-graph.db",
   ORCHESTRATION_DB: "orchestration.db",
+  PRINCIPLE_OVERRIDES: "principle-overrides.yaml",
 } as const;
 
 /** Maximum lines of file content returned by get_file_context. */

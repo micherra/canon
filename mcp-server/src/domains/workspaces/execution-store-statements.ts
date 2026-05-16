@@ -193,7 +193,9 @@ function prepareMiscStmts(db: Database.Database) {
   const stmtGetCachePrefix = db.prepare(`SELECT cache_prefix FROM execution WHERE id = 1`);
   const stmtSetCachePrefix = db.prepare(`UPDATE execution SET cache_prefix = ? WHERE id = 1`);
   const stmtSetTranscriptPath = db.prepare(
-    `UPDATE execution_states SET transcript_path = ? WHERE state_id = ?`,
+    `INSERT INTO execution_states (state_id, status, entries, transcript_path)
+     VALUES (?, 'pending', 0, ?)
+     ON CONFLICT(state_id) DO UPDATE SET transcript_path = excluded.transcript_path`,
   );
   const stmtGetTranscriptPath = db.prepare(
     `SELECT transcript_path FROM execution_states WHERE state_id = ?`,

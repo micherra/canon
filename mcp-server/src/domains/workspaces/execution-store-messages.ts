@@ -161,8 +161,6 @@ export function getEvents(stmts: EventStmts, options?: GetEventsOptions): EventO
   return events;
 }
 
-// Private helpers
-
 function buildEventQuery(
   db: Database.Database,
   options: GetEventsOptions,
