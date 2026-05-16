@@ -65,6 +65,39 @@ export type UpsertPathEffectInput = {
   violation_streak: number;
 };
 
+/** A row from the predictions table. */
+export type PredictionRow = {
+  id: number;
+  prediction_id: string;
+  workspace: string | null;
+  flow_id: string | null;
+  file_paths: string; // JSON array
+  principle_ids: string; // JSON array
+  signals_json: string; // JSON
+  timestamp: string;
+  resolved: number; // 0 or 1
+  resolved_at: string | null;
+  outcome: string | null; // JSON
+};
+
+/** Input for inserting a prediction record. */
+export type InsertPredictionInput = {
+  prediction_id: string;
+  workspace: string | null;
+  flow_id: string | null;
+  file_paths: string; // Pre-serialized JSON array
+  principle_ids: string; // Pre-serialized JSON array
+  signals_json: string; // Pre-serialized JSON
+  timestamp: string;
+};
+
+/** Input for resolving a prediction. */
+export type ResolvePredictionInput = {
+  prediction_id: string;
+  resolved_at: string;
+  outcome: string; // Pre-serialized JSON
+};
+
 // ---- DAO Class ----
 
 /**
@@ -75,12 +108,18 @@ export type UpsertPathEffectInput = {
  * Obtain via DriftDb.getSignals() in production code.
  */
 export class DriftDbSignals {
-  // Prepared statements
+  // Prepared statements — signal tables (v4)
   private readonly stmtGetFileViolationHistory: Database.Statement;
   private readonly stmtUpsertFileViolation: Database.Statement;
   private readonly stmtMarkFixed: Database.Statement;
   private readonly stmtGetPathEffects: Database.Statement;
   private readonly stmtUpsertPathEffect: Database.Statement;
+
+  // Prepared statements — predictions table (v5)
+  private readonly stmtInsertPrediction: Database.Statement;
+  private readonly stmtGetUnresolvedByFiles: Database.Statement;
+  private readonly stmtResolvePrediction: Database.Statement;
+  private readonly stmtGetPredictionById: Database.Statement;
 
   constructor(db: Database.Database) {
     this.stmtGetFileViolationHistory = db.prepare(`
@@ -122,6 +161,31 @@ export class DriftDbSignals {
         last_clean_at = @last_clean_at,
         clean_streak = @clean_streak,
         violation_streak = @violation_streak
+    `);
+
+    // Predictions (v5)
+    this.stmtInsertPrediction = db.prepare(`
+      INSERT INTO predictions (prediction_id, workspace, flow_id, file_paths, principle_ids, signals_json, timestamp, resolved)
+      VALUES (@prediction_id, @workspace, @flow_id, @file_paths, @principle_ids, @signals_json, @timestamp, 0)
+    `);
+
+    this.stmtGetUnresolvedByFiles = db.prepare(`
+      SELECT id, prediction_id, workspace, flow_id, file_paths, principle_ids, signals_json, timestamp, resolved, resolved_at, outcome
+      FROM predictions
+      WHERE resolved = 0
+      ORDER BY timestamp DESC
+    `);
+
+    this.stmtResolvePrediction = db.prepare(`
+      UPDATE predictions
+      SET resolved = 1, resolved_at = @resolved_at, outcome = @outcome
+      WHERE prediction_id = @prediction_id
+    `);
+
+    this.stmtGetPredictionById = db.prepare(`
+      SELECT id, prediction_id, workspace, flow_id, file_paths, principle_ids, signals_json, timestamp, resolved, resolved_at, outcome
+      FROM predictions
+      WHERE prediction_id = ?
     `);
   }
 
@@ -179,5 +243,41 @@ export class DriftDbSignals {
    */
   upsertPathEffect(input: UpsertPathEffectInput): void {
     this.stmtUpsertPathEffect.run(input);
+  }
+
+  // ---- Predictions (v5) ----
+
+  /**
+   * Insert a prediction record.
+   * Throws on duplicate prediction_id (UNIQUE constraint violation).
+   * JSON columns (file_paths, principle_ids, signals_json) are pre-serialized by the caller.
+   */
+  insertPrediction(input: InsertPredictionInput): void {
+    this.stmtInsertPrediction.run(input);
+  }
+
+  /**
+   * Return all unresolved predictions (resolved = 0), ordered by timestamp DESC.
+   * Returns empty array when no unresolved predictions exist
+   * (define-errors-out-of-existence).
+   */
+  getUnresolvedPredictions(): PredictionRow[] {
+    return this.stmtGetUnresolvedByFiles.all() as PredictionRow[];
+  }
+
+  /**
+   * Mark a prediction as resolved by setting resolved=1, resolved_at, and outcome.
+   * No-op if no matching prediction_id exists (define-errors-out-of-existence).
+   */
+  resolvePrediction(input: ResolvePredictionInput): void {
+    this.stmtResolvePrediction.run(input);
+  }
+
+  /**
+   * Fetch a single prediction by prediction_id.
+   * Returns undefined when not found (define-errors-out-of-existence).
+   */
+  getPredictionById(predictionId: string): PredictionRow | undefined {
+    return this.stmtGetPredictionById.get(predictionId) as PredictionRow | undefined;
   }
 }
