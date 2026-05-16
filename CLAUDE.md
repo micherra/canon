@@ -61,38 +61,7 @@ This list serves two roles: (1) verbosity control — it limits how much the orc
 
 Do not narrate individual tool calls. One line between state transitions is correct.
 
-## Driving the State Machine (CANON_AGENT_TEAMS_MODE=off) <!-- last-updated: 2026-05-02 -->
-
-_This section applies when `CANON_AGENT_TEAMS_MODE` is unset or off. The `load_flow`, `drive_flow`, and `simulate_flow` MCP tools have been removed._
-
-Full protocol: `references/canon-orchestrator.md`. Key loop:
-
-1. `resolved_flow = load_flow(flow_name)` → get flow definition **object**
-2. `init_workspace(...)` → create or resume workspace; check `preflight_issues` before proceeding
-3. Loop: `drive_flow({ workspace, flow: resolved_flow })` → on `SpawnRequest` spawn agents → `drive_flow({ workspace, flow: resolved_flow, result: { state_id, status, artifacts, metrics } })` → on `HitlBreakpoint` present to user → `drive_flow(...)` with status keyword → repeat
-4. On `{ action: "done" }`: call `update_board({ operation: "complete_flow" })`, present completion summary
-
-**Critical**: Pass the resolved flow **object** to `drive_flow` — never the flow name string. Do NOT call `report_result` directly; `drive_flow` calls it internally.
-
-### Flow Selection
-
-| Signal | Flow |
-|--------|------|
-| Bug fix, small change, 1–3 files | `fast-path` |
-| Refactoring, restructuring | `refactor` |
-| New feature, 4–10 files | `feature` |
-| Migration, upgrade, "move to X" | `migrate` |
-| Large cross-cutting change, 10+ files | `epic` |
-| Investigate / "how does X work" | `explore` |
-| Improve test coverage | `test-gap` |
-| Review PR or branch | `review-only` |
-| Security audit | `security-audit` |
-
-When in doubt between tiers, prefer the higher tier. Proceed immediately — don't ask for tier confirmation.
-
-## Agent Teams Orchestration (CANON_AGENT_TEAMS_MODE=on)
-
-If `CANON_AGENT_TEAMS_MODE` is not set to `on`, do not follow this section — use the legacy "Driving the State Machine" section above.
+## Agent Teams Orchestration
 
 ### Intent Classification
 
@@ -342,6 +311,8 @@ Write the consolidated review using the `write_review` MCP tool.
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
+**Reviewer step — mandatory check**: After the reviewer step completes, verify `${WORKSPACE}/reviews/REVIEW.md` exists. If absent, re-spawn the reviewer with explicit instruction: "The review artifact was not written. You MUST call `mcp__canon__write_review` to write your findings to `${WORKSPACE}/reviews/REVIEW.md` before returning." If the second attempt also fails to produce the file, present to the user as HITL: "Reviewer failed to write REVIEW.md after two attempts. Manual review required."
+
 ### HITL Patterns <!-- last-updated: 2026-04-30 -->
 
 - **Requirement coverage check**: After planner returns, check the planning brief's Requirement Coverage Map for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
@@ -496,7 +467,7 @@ Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful resu
 ```
 canon/
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
-├── flows/                # REMOVED 2026-05-02 — all 28 flow YAML files deleted; legacy flows gated behind CANON_AGENT_TEAMS_MODE=off
+├── flows/                # REMOVED 2026-05-02 — all 28 flow YAML files deleted
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/

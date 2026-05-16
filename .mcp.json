@@ -5,8 +5,7 @@
       "args": ["-c", "cd \"$CANON_PLUGIN_DIR/mcp-server\" && npx tsx src/app/index.ts"],
       "env": {
         "CANON_PLUGIN_DIR": "${CLAUDE_PLUGIN_ROOT}",
-        "CANON_PROJECT_DIR": "${CLAUDE_PLUGIN_ROOT}",
-        "CANON_AGENT_TEAMS_MODE": "on"
+        "CANON_PROJECT_DIR": "${CLAUDE_PLUGIN_ROOT}"
       }
     }
   }

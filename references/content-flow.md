@@ -108,7 +108,7 @@ Not yet active. When added, the `implement` step will spawn an engineer with `sk
 
 ## Orchestrator Protocol
 
-When routing a `principle`, `learn` (application), or `docs` intent under `CANON_AGENT_TEAMS_MODE=on`:
+When routing a `principle`, `learn` (application), or `docs` intent:
 
 1. Call `init_workspace({ flow_name: "content-flow", task: "<description>", tier: "fast-path", ... })`.
 2. Determine which variant applies (see table above).
