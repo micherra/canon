@@ -20,6 +20,11 @@ export type WriteTestReportInput = {
     category?: string;
     file?: string;
   }>;
+  manual_verification?: Array<{
+    criterion: string;
+    verification_method: string;
+    status: string;
+  }>;
 };
 
 export type WriteTestReportResult = {
@@ -84,6 +89,17 @@ function generateReportMarkdown(
     });
     content += `\n### Issues\n\n${issuesHeader}\n${issuesSeparator}\n${issueRows.join("\n")}\n`;
   }
+
+  const manualVerification = input.manual_verification ?? [];
+  if (manualVerification.length > 0) {
+    const mvHeader = "| # | Criterion | Verification Method | Status |";
+    const mvSeparator = "|---|-----------|-------------------|--------|";
+    const mvRows = manualVerification.map((item, index) => {
+      return `| ${index + 1} | ${escapeMdCell(item.criterion)} | ${escapeMdCell(item.verification_method)} | ${escapeMdCell(item.status)} |`;
+    });
+    content += `\n## Manual Verification Needed\n\n${mvHeader}\n${mvSeparator}\n${mvRows.join("\n")}\n`;
+  }
+
   return content;
 }
 
@@ -108,6 +124,7 @@ export async function writeTestReport(
     _version: 1,
     failed: input.failed,
     issues: input.issues ?? [],
+    manual_verification: input.manual_verification ?? [],
     pass_rate,
     passed: input.passed,
     skipped: input.skipped,
