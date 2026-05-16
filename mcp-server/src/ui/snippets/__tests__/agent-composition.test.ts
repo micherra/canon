@@ -285,8 +285,8 @@ ${extractSnippetHtml(substitutedStats)}
 
       // Substitute placeholders
       const substituted = substituteSnippet(snippetContent, {
-        TITLE: "Implementation Notes",
         CONTENT: "<p>Details about the implementation approach.</p>",
+        TITLE: "Implementation Notes",
       });
 
       const styles = extractSnippetStyles(substituted);
