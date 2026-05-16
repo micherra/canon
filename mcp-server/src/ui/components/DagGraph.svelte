@@ -79,9 +79,15 @@ $effect(() => {
 <style>
   .dag-container {
     width: 100%;
-    height: 300px;
-    border-radius: var(--radius-sm, 8px);
+    height: 440px;
+    border-radius: var(--radius, 12px);
     background: var(--bg-surface, rgba(255, 255, 255, 0.03));
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition: border-color 0.2s;
+  }
+
+  .dag-container:hover {
+    border-color: rgba(255, 255, 255, 0.12);
   }
 </style>

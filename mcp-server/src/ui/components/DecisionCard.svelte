@@ -70,10 +70,17 @@ let statusStyle = $derived(statusColor(decision.status));
 
 <style>
   .decision-card {
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
-    border-radius: var(--radius-sm, 8px);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius, 12px);
     overflow: hidden;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-card, 0 2px 8px rgba(0, 0, 0, 0.3));
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+
+  .decision-card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: var(--shadow, 0 4px 16px rgba(0, 0, 0, 0.4));
   }
 
   .card-header {
@@ -81,7 +88,7 @@ let statusStyle = $derived(statusColor(decision.status));
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 8px 12px;
+    padding: 14px 16px;
     background: var(--bg-surface, rgba(255, 255, 255, 0.03));
     border: none;
     cursor: pointer;
@@ -89,7 +96,7 @@ let statusStyle = $derived(statusColor(decision.status));
     text-align: left;
     color: var(--text-bright, #e8eaf0);
     transition: background 0.15s;
-    gap: 8px;
+    gap: 12px;
   }
 
   .card-header:hover {
@@ -99,7 +106,7 @@ let statusStyle = $derived(statusColor(decision.status));
   .header-left {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     min-width: 0;
     flex: 1;
   }
@@ -112,7 +119,7 @@ let statusStyle = $derived(statusColor(decision.status));
   }
 
   .decision-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-bright, #e8eaf0);
     min-width: 0;
@@ -122,7 +129,7 @@ let statusStyle = $derived(statusColor(decision.status));
   }
 
   .chevron {
-    font-size: 16px;
+    font-size: 18px;
     color: var(--text-muted, #636a80);
     transition: transform 0.2s;
     transform: rotate(90deg);
@@ -136,14 +143,15 @@ let statusStyle = $derived(statusColor(decision.status));
   }
 
   .card-body {
-    padding: 12px;
+    padding: 16px;
     border-top: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    background: var(--bg-surface, rgba(255, 255, 255, 0.03));
   }
 
   .decision-body {
-    font-size: 11px;
+    font-size: 13px;
     color: var(--text, #b4b8c8);
-    line-height: 1.6;
+    line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-word;
     font-family: inherit;
@@ -151,7 +159,7 @@ let statusStyle = $derived(statusColor(decision.status));
   }
 
   .no-body {
-    font-size: 11px;
+    font-size: 13px;
     color: var(--text-muted, #636a80);
     font-style: italic;
   }

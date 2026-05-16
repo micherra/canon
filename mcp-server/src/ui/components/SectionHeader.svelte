@@ -49,10 +49,16 @@ function toggle() {
 
 <style>
   .section {
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
-    border-radius: var(--radius-sm, 8px);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius, 12px);
     overflow: hidden;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-card, 0 2px 8px rgba(0, 0, 0, 0.3));
+    transition: box-shadow 0.2s;
+  }
+
+  .section:hover {
+    box-shadow: var(--shadow, 0 4px 16px rgba(0, 0, 0, 0.4));
   }
 
   .section-header {
@@ -60,8 +66,12 @@ function toggle() {
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 10px 12px;
-    background: var(--bg-surface, rgba(255, 255, 255, 0.03));
+    padding: 14px 18px;
+    background: linear-gradient(
+      135deg,
+      var(--bg-card, rgba(255, 255, 255, 0.06)) 0%,
+      var(--bg-surface, rgba(255, 255, 255, 0.03)) 100%
+    );
     border: none;
     cursor: pointer;
     font-family: inherit;
@@ -71,29 +81,30 @@ function toggle() {
   }
 
   .section-header:hover {
-    background: var(--bg-card, rgba(255, 255, 255, 0.06));
+    background: var(--bg-card, rgba(255, 255, 255, 0.07));
   }
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     min-width: 0;
   }
 
   .section-title {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-bright, #e8eaf0);
+    letter-spacing: 0.01em;
   }
 
   .section-subtitle {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted, #636a80);
   }
 
   .chevron {
-    font-size: 16px;
+    font-size: 18px;
     color: var(--text-muted, #636a80);
     transition: transform 0.2s;
     transform: rotate(90deg);
@@ -107,7 +118,7 @@ function toggle() {
   }
 
   .section-body {
-    padding: 12px;
+    padding: 16px 18px;
     border-top: 1px solid var(--border, rgba(255, 255, 255, 0.06));
   }
 </style>

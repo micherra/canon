@@ -211,7 +211,7 @@ let criteriaRows = $derived(
   .dashboard-content {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 16px;
+    padding: 20px 24px;
   }
 
   /* ── Brief banner ───────────────────────────────────────────────────── */
@@ -220,32 +220,42 @@ let criteriaRows = $derived(
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    padding: 14px 16px;
-    background: var(--bg-card, rgba(255, 255, 255, 0.06));
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    gap: 16px;
+    padding: 20px 24px;
+    background: linear-gradient(
+      135deg,
+      var(--bg-card, rgba(255, 255, 255, 0.06)) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
     border-left: 4px solid var(--outcome-color, #6c8cff);
-    border-radius: var(--radius-sm, 8px);
-    margin-bottom: 12px;
+    border-radius: var(--radius, 12px);
+    margin-bottom: 20px;
     flex-wrap: wrap;
+    box-shadow: var(--shadow-card, 0 2px 8px rgba(0, 0, 0, 0.35));
+    transition: box-shadow 0.2s;
+  }
+
+  .brief-banner:hover {
+    box-shadow: var(--shadow, 0 4px 16px rgba(0, 0, 0, 0.4));
   }
 
   .brief-left {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
   }
 
   .outcome-label {
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
   }
 
   .brief-title {
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 600;
     color: var(--text-bright, #e8eaf0);
     line-height: 1.3;
@@ -253,7 +263,7 @@ let criteriaRows = $derived(
 
   .brief-badges {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
     flex-shrink: 0;
     flex-wrap: wrap;
@@ -264,14 +274,15 @@ let criteriaRows = $derived(
   .cards-list {
     display: flex;
     flex-direction: column;
+    gap: 2px;
   }
 
   /* ── Research notes ─────────────────────────────────────────────────── */
 
   .research-notes {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text, #b4b8c8);
-    line-height: 1.6;
+    line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-word;
     font-family: inherit;
@@ -281,7 +292,7 @@ let criteriaRows = $derived(
   /* ── Action bar spacer ──────────────────────────────────────────────── */
 
   .action-bar-spacer {
-    height: 64px;
+    height: 72px;
     flex-shrink: 0;
   }
 </style>

@@ -76,10 +76,17 @@ function toggle() {
 
 <style>
   .task-card {
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
-    border-radius: var(--radius-sm, 8px);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius, 12px);
     overflow: hidden;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-card, 0 2px 8px rgba(0, 0, 0, 0.3));
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+
+  .task-card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: var(--shadow, 0 4px 16px rgba(0, 0, 0, 0.4));
   }
 
   .card-header {
@@ -87,7 +94,7 @@ function toggle() {
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 8px 12px;
+    padding: 14px 16px;
     background: var(--bg-surface, rgba(255, 255, 255, 0.03));
     border: none;
     cursor: pointer;
@@ -95,7 +102,7 @@ function toggle() {
     text-align: left;
     color: var(--text-bright, #e8eaf0);
     transition: background 0.15s;
-    gap: 8px;
+    gap: 12px;
   }
 
   .card-header:hover {
@@ -105,7 +112,7 @@ function toggle() {
   .header-left {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     min-width: 0;
     flex: 1;
   }
@@ -118,7 +125,7 @@ function toggle() {
   }
 
   .task-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-bright, #e8eaf0);
     min-width: 0;
@@ -130,17 +137,17 @@ function toggle() {
   .header-right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     flex-shrink: 0;
   }
 
   .file-count {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-muted, #636a80);
   }
 
   .chevron {
-    font-size: 16px;
+    font-size: 18px;
     color: var(--text-muted, #636a80);
     transition: transform 0.2s;
     transform: rotate(90deg);
@@ -153,17 +160,18 @@ function toggle() {
   }
 
   .card-body {
-    padding: 12px;
+    padding: 16px;
     border-top: 1px solid var(--border, rgba(255, 255, 255, 0.06));
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 14px;
+    background: var(--bg-surface, rgba(255, 255, 255, 0.03));
   }
 
   .plan-body {
-    font-size: 11px;
+    font-size: 13px;
     color: var(--text, #b4b8c8);
-    line-height: 1.6;
+    line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-word;
     font-family: inherit;
@@ -174,13 +182,13 @@ function toggle() {
   .principles-section {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
   }
 
   .section-label {
     font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted, #636a80);
   }
@@ -191,14 +199,14 @@ function toggle() {
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
   }
 
   .file-item {
-    font-size: 10px;
+    font-size: 11px;
     font-family: ui-monospace, monospace;
     color: var(--text, #b4b8c8);
-    padding-left: 10px;
+    padding-left: 12px;
     position: relative;
   }
 
@@ -212,6 +220,6 @@ function toggle() {
   .principles-badges {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 6px;
   }
 </style>

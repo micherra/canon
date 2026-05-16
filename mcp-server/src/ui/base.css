@@ -9,17 +9,19 @@
   --accent: #6c8cff;
   --accent-soft: rgba(108, 140, 255, 0.12);
   --accent-glow: rgba(108, 140, 255, 0.25);
-  --border: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.08);
   --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-accent: rgba(108, 140, 255, 0.3);
   --danger: #ff6b6b;
   --warning: #fbbf24;
   --success: #34d399;
   --info: #60a5fa;
   --radius: 12px;
   --radius-lg: 16px;
-  --radius-sm: 8px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --radius-sm: 10px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 * {
   margin: 0;
@@ -32,8 +34,8 @@ body {
   color: var(--text);
   display: flex;
   min-height: 100vh;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 ::-webkit-scrollbar {
@@ -90,9 +92,9 @@ body {
 }
 
 .section-header {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-muted, #636a80);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
 }
