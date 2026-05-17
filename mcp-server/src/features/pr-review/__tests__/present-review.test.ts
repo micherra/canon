@@ -57,7 +57,6 @@ const MOCK_UNIFIED_NO_REVIEW: UnifiedPrOutput = {
 const MOCK_HTML = "<html><body>Review Dashboard</body></html>";
 
 const MOCK_ARTIFACT_RESULT: ToolResult<PresentArtifactResult> = {
-  decision: { action: "approve", annotations: [] },
   ok: true,
   url: "http://127.0.0.1:3457/artifact/review-result/test-slug",
 };
@@ -132,7 +131,7 @@ describe("presentReview", () => {
       });
     });
 
-    it("returns the decision and url from presentArtifact", async () => {
+    it("returns the url from presentArtifact", async () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
       vi.mocked(readFile).mockResolvedValue(MOCK_HTML as never);
       vi.mocked(presentArtifact).mockResolvedValue(MOCK_ARTIFACT_RESULT);
@@ -140,7 +139,6 @@ describe("presentReview", () => {
       const result = await presentReview({ slug: "slug", workspace: "/ws" }, "/proj");
 
       expect(result).toMatchObject({
-        decision: { action: "approve", annotations: [] },
         ok: true,
         url: expect.stringContaining("review-result"),
       });
@@ -216,7 +214,7 @@ describe("presentReview", () => {
       vi.mocked(showPrImpact).mockResolvedValue(MOCK_UNIFIED_OUTPUT);
       vi.mocked(readFile).mockResolvedValue(MOCK_HTML as never);
       const artifactError: ToolResult<PresentArtifactResult> = {
-        error_code: "UNEXPECTED",
+        error_code: "UNEXPECTED" as const,
         message: "HTTP server not running",
         ok: false,
         recoverable: true,

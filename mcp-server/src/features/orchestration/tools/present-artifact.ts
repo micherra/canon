@@ -1,32 +1,25 @@
 /**
  * present_artifact MCP tool.
  *
- * Serves a compiled HTML artifact via the Canon HTTP server, opens it in the
- * default browser, and blocks until the user submits a decision (approve /
- * request_changes) in the browser.
+ * Serves a compiled HTML artifact via the Canon HTTP server and opens it in
+ * the default browser. Returns immediately — the actual approve/reject decision
+ * happens in the terminal; the browser view is display-only.
  *
  * ## Lifecycle
- * 1. Validate artifact type against VIEW_MAP.
- * 2. Read compiled HTML from dist/src/ui/ (built by Vite).
+ * 1. Validate artifact type against VIEW_MAP (or accept inline html).
+ * 2. Read compiled HTML from dist/src/ui/ (built by Vite) when no inline html.
  * 3. Register artifact with HTTP server (registerArtifact).
  * 4. Open browser URL — fire-and-forget (exec).
- * 5. Block on createDeferredDecision until user clicks Approve/Request Changes.
- * 6. Clean up in finally block (removeArtifact).
- * 7. Return { decision, url }.
+ * 5. Return { url } immediately.
  *
+ * The artifact stays registered so the user can refresh the browser tab.
  * All logging goes to process.stderr — process.stdout is the MCP stdio transport.
  */
 
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  createDeferredDecision,
-  getHttpPort,
-  isHttpServerRunning,
-  registerArtifact,
-  removeArtifact,
-} from "@app/http-server.ts";
+import { getHttpPort, isHttpServerRunning, registerArtifact } from "@app/http-server.ts";
 import { openBrowser } from "@platform/adapters/process-adapter.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -53,11 +46,6 @@ export type PresentArtifactInput = {
 };
 
 export type PresentArtifactResult = {
-  decision: {
-    action: "approve" | "request_changes";
-    annotations: unknown[];
-    feedback?: string;
-  };
   url: string;
 };
 
@@ -152,20 +140,10 @@ export async function presentArtifact(
 
   const { html, key, url } = resolved;
   registerArtifact(key, html, input.data);
-  const decisionPromise = createDeferredDecision(key);
 
   process.stderr.write(`[present_artifact] serving artifact at ${url}\n`);
 
-  try {
-    openBrowser(url);
-    const decision = await decisionPromise;
+  openBrowser(url);
 
-    process.stderr.write(
-      `[present_artifact] decision received: ${decision.action} (${decision.annotations.length} annotations)\n`,
-    );
-
-    return toolOk({ decision, url });
-  } finally {
-    removeArtifact(key);
-  }
+  return toolOk({ url });
 }
