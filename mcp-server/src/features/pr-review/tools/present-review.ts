@@ -4,7 +4,7 @@
  * Composes two existing functions + a file read into an end-to-end flow:
  *   1. showPrImpact     — reads stored review from DriftStore, enriches with KG data
  *   2. readFile          — reads agent-generated HTML from ${workspace}/artifacts/review.html
- *   3. presentArtifact  — serves HTML via HTTP server, opens browser, blocks until decision
+ *   3. presentArtifact  — serves HTML via HTTP server, opens browser, returns URL
  *
  * The review must already be stored in DriftStore (via store_pr_review) before calling
  * this tool. showPrImpact reads from DriftStore to get review-enriched data.
@@ -39,7 +39,7 @@ export type PresentReviewResult = PresentArtifactResult;
  *
  * Requires a stored review in DriftStore (via store_pr_review) before calling.
  * Requires pre-rendered HTML at ${workspace}/artifacts/review.html (via the renderer agent).
- * Opens the browser and blocks until the user submits a decision.
+ * Opens the browser — returns immediately with the URL.
  */
 export async function presentReview(
   input: PresentReviewInput,
@@ -81,7 +81,7 @@ export async function presentReview(
     );
   }
 
-  // 3. Present in browser and block until decision
+  // 3. Present in browser (fire-and-forget)
   return presentArtifact({
     data: prImpact,
     html,
