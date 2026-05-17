@@ -49,6 +49,9 @@ src/
 - ~~`src/features/orchestration/tools/post-message.ts`~~ — `post_message` MCP tool removed 2026-05-16; was dead infrastructure
 - ~~`src/features/orchestration/tools/get-messages.ts`~~ — `get_messages` MCP tool removed 2026-05-16; was dead infrastructure
 - ~~`src/domains/messages/messages.ts`~~ — `Message` type and channel persistence removed 2026-05-16; `messages/` domain retains `events.ts` and `variables.ts`
+- ~~`Decision` type~~ (`src/app/http-server.ts`) — removed 2026-05-16; `present_artifact` no longer blocks on browser input
+- ~~`createDeferredDecision(key)`~~ (`src/app/http-server.ts`) — removed 2026-05-16; blocking decision mechanism replaced by fire-and-forget
+- ~~`POST /artifact/:type/:slug/decision`~~ (http-server route) — removed 2026-05-16; browser no longer POSTs decisions back to MCP server
 
 **Removed modules** (2026-05-02):
 - ~~`src/app/register-composite.ts`~~ — composite tool registration removed 2026-05-02 (get_context inlined or restructured)
@@ -58,20 +61,21 @@ src/
 - ~~`principle-reranker.ts`~~ — LLM-based reranker removed 2026-05-02; replaced by structural tag matching via `matchesScopeTags`
 
 ## Contracts
-<!-- last-updated: 2026-05-15 (present_review tool added) -->
+<!-- last-updated: 2026-05-16 (present_artifact + present_review fire-and-forget; Decision type + POST decision route removed) -->
 
 **`PresentArtifactInput` type** (`src/features/orchestration/tools/present-artifact.ts`) — extended 2026-05-14:
 - `html?: string` — optional field; when provided, bypasses VIEW_MAP lookup and serves this HTML directly; `type` field is still used as the artifact key prefix (`${type}/${slug}`) in both paths; absent → existing compiled-HTML path (VIEW_MAP lookup) unchanged
 
-**`present_artifact` MCP tool** (`src/app/register-present-artifact.ts`) — extended 2026-05-14:
+**`present_artifact` MCP tool** (`src/app/register-present-artifact.ts`) — extended 2026-05-14; updated 2026-05-16 (fire-and-forget):
 - `html` optional input field — `z.string().optional()`; when provided, bypasses VIEW_MAP; `type` description updated to cover both compiled-view and dynamic-HTML cases
+- `PresentArtifactResult` — `{ url: string }` (was `{ decision: { action, annotations, feedback? }, url }` before 2026-05-16); tool no longer blocks — serves HTML, opens browser, returns URL immediately; approve/reject happens in the terminal
 
-**`present_review` MCP tool** (`src/features/pr-review/tools/present-review.ts`) — added 2026-05-15:
+**`present_review` MCP tool** (`src/features/pr-review/tools/present-review.ts`) — added 2026-05-15; updated 2026-05-16 (fire-and-forget):
 - Input: `{ workspace: string; slug: string; branch?: string; pr_number?: number }`
-- Output: `PresentReviewResult` (alias for `PresentArtifactResult`) — `{ decision: { action, annotations }, url }`
+- Output: `PresentReviewResult` (alias for `PresentArtifactResult`) — `{ url: string }` (was `{ decision: { action, annotations }, url }` before 2026-05-16)
 - Thin composition: `showPrImpact` → read pre-rendered HTML from `${workspace}/artifacts/review.html` → `presentArtifact`; requires a stored review in DriftStore (via `store_pr_review`) before calling; returns `INVALID_INPUT` (recoverable: true) when `review.html` is missing
 - Returns `INVALID_INPUT` (recoverable: true) when `showPrImpact` returns `has_review === false`
-- Registered in `register-principles.ts` alongside other PR review tools; opens browser, blocks until user decision
+- Opens browser and returns URL immediately; does not block
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -328,7 +332,7 @@ src/
 | `show_pr_impact` | `ui://canon/pr-review` | PR Review — change analysis (always), blast radius, hotspots, violations, subgraph (when stored review exists) |
 | `codebase_graph` | `ui://canon/codebase-graph` | Interactive dependency graph with compliance overlay |
 | `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
-| `present_review` | `ui://canon/pr-review` | Render stored Canon review as interactive HTML dashboard; open in browser; block until user decision |
+| `present_review` | `ui://canon/pr-review` | Render stored Canon review as interactive HTML dashboard; open in browser; return URL immediately (fire-and-forget) |
 
 **Composite context tool:**
 
