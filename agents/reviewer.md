@@ -233,7 +233,14 @@ Stage 3 does NOT change the verdict. Discrepancies are addenda for the next revi
 
 ## Early Output Protocol
 
-**Write the review artifact immediately after Stage 3 completes** — do not wait for Stages 4 and 5 to finish. Call `mcp__canon__write_review` with whatever findings are complete so far (Stages 1–3), including partial verdicts and any `SUMMARY CORRECTION REQUIRED` markers. Then continue to Stage 4 and Stage 5.
+**Write a partial review artifact immediately after Stage 1 completes** — do not wait for later stages. Call `mcp__canon__write_review` with:
+- The review header (file list, principle list, scope summary)
+- Stage 1 results (violations found, principles honored)
+- Placeholder sections for Stages 2–5 marked as `[pending]`
+
+This ensures `REVIEW.md` exists even if context is exhausted before later stages complete. Continue filling in Stages 2–5 as they complete by calling `mcp__canon__write_review` again with updated content.
+
+**Write the review artifact again immediately after Stage 3 completes** — do not wait for Stages 4 and 5 to finish. Call `mcp__canon__write_review` with whatever findings are complete so far (Stages 1–3), including partial verdicts and any `SUMMARY CORRECTION REQUIRED` markers. Then continue to Stage 4 and Stage 5.
 
 **Rationale**: Stage 3 contains the most actionable compliance findings. Writing the artifact early ensures the orchestrator always has something to act on, even if the session ends before Stages 4–5 complete.
 
