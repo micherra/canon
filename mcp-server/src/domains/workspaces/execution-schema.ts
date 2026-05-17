@@ -1,7 +1,7 @@
 /**
  * Execution DB SQLite Schema — orchestration.db
  *
- * One database per workspace directory. Replaces board.json, session.json,
+ * One database per workspace directory. Replaced board.json,
  * progress.md, messages, wave events, and event log.
  *
  * All DDL uses IF NOT EXISTS — idempotent on re-init.
@@ -38,7 +38,7 @@ const DDL_STATEMENTS = [
 
   `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1')`,
 
-  // Execution — singleton row (replaces board.json top-level fields + session.json)
+  // Execution — singleton row for build state
   `CREATE TABLE IF NOT EXISTS execution (
     id              INTEGER PRIMARY KEY CHECK (id = 1),
     flow            TEXT NOT NULL,

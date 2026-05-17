@@ -38,11 +38,11 @@ Canon splits every build into two directories. Orient yourself at spawn time:
 
 | Location | Variable | What lives here |
 |----------|----------|-----------------|
-| Workspace root | `${WORKSPACE}` | Orchestration artifacts — `reviews/REVIEW.md`, `plans/${slug}/`, `session.json`, `board.json`, `context-sync-report.md`, `artifacts/`, transcripts |
+| Workspace root | `${WORKSPACE}` | Orchestration artifacts — `reviews/REVIEW.md`, `plans/${slug}/`, `context-sync-report.md`, `artifacts/`, transcripts |
 | Worktree | working directory | Source code — the git repo, committed changes, branches |
 
 **Key rules:**
-- NEVER look for orchestration artifacts (REVIEW.md, summaries, session.json, board.json) in the worktree. They live at `${WORKSPACE}/`.
+- NEVER look for orchestration artifacts (REVIEW.md, summaries) in the worktree. They live at `${WORKSPACE}/`.
 - NEVER write orchestration artifacts to the worktree. Write them to `${WORKSPACE}/`.
 - When passing `workspace` to MCP tools, use the explicit `WORKSPACE=` value from your spawn prompt — NOT the current working directory.
 
@@ -64,7 +64,7 @@ Read from `${WORKSPACE}`:
 
 | Artifact | Path | Required | What to Extract |
 |----------|------|----------|-----------------|
-| Session | `session.json` | yes | task, tier, flow, slug |
+| Session | `orchestration.db` | yes | task, tier, flow, slug |
 | Board | `board.json` | yes | concerns, skipped states, metrics |
 | Design | `plans/${slug}/DESIGN.md` | no | approach, key decisions |
 | Summaries | `plans/${slug}/*-SUMMARY.md` | yes | what changed, files modified |
@@ -81,7 +81,7 @@ Before generating the PR, verify the build is complete:
 
 | Check | Required | How to verify |
 |-------|----------|---------------|
-| Session metadata | yes | `session.json` loaded in Step 1 |
+| Session metadata | yes | `orchestration.db` loaded in Step 1 |
 | Board state | yes | `board.json` loaded in Step 1 |
 | At least one summary | yes | `*-SUMMARY.md` files found in Step 1 |
 | Test report exists | no | `TEST-REPORT.md` present (warn if missing for non-fast-path flows) |
@@ -149,13 +149,13 @@ Report per `${CLAUDE_PLUGIN_ROOT}/references/status-protocol.md`. Your available
 
 - **DONE** — PR created (or merged directly if explicitly requested)
 - **DONE_WITH_CONCERNS** — Generated, but flagging issues (missing test report, review had concerns, security findings unresolved). **When the review verdict is WARNING or security status is FINDINGS, the PR description MUST prominently surface these** — use the `## Unresolved Concerns` section in the PR description template. Do not bury build-time concerns in artifact summaries.
-- **BLOCKED** — Cannot generate (missing required artifacts like session.json or all summaries)
+- **BLOCKED** — Cannot generate (missing required artifacts like orchestration.db or all summaries)
 
 ## Context Isolation
 
 You receive:
 - Workspace path and slug (~50 tokens)
-- `session.json` (~200 tokens)
+- `orchestration.db` (~200 tokens)
 - `board.json` concerns and metrics (~300 tokens)
 - Build artifact summaries — headers and key sections only (~1500 tokens total)
 - Git log of build commits (~200 tokens)

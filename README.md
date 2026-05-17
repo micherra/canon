@@ -276,7 +276,7 @@ Everything Canon stores lives in `.canon/` in your project root:
 | `knowledge-graph.db` | SQLite knowledge graph (file dependencies, entities, metrics, hotspots, co-change pairs) |
 | `orchestration.db` | SQLite execution state for active build pipelines |
 | `drift.db` | SQLite drift tracking (review results, compliance history) |
-| `workspaces/{branch}/{slug}/` | Per-task build state (journal.json, session.json, plans/, reviews/) |
+| `workspaces/{branch}/{slug}/` | Per-task build state (orchestration.db, journal.json, plans/, reviews/) |
 
 Canon does not collect, transmit, or share any data. No telemetry, no analytics, no background network calls. Everything stays local.
 

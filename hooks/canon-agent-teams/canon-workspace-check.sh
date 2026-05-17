@@ -162,26 +162,20 @@ _find_active_workspace() {
       continue
     fi
 
-    # Scan all session.json files for a matching branch + active status
-    while IFS= read -r session_file; do
-      if [[ ! -f "$session_file" ]]; then
+    # Scan all orchestration.db files for an active execution matching this branch
+    while IFS= read -r db_path; do
+      if [[ ! -f "$db_path" ]]; then
         continue
       fi
 
-      if command -v jq >/dev/null 2>&1; then
-        ws_branch=$(jq -r '.branch // empty' "$session_file" 2>/dev/null || true)
-        ws_status=$(jq -r '.status // empty' "$session_file" 2>/dev/null || true)
-      else
-        ws_branch=$(grep -o '"branch"[[:space:]]*:[[:space:]]*"[^"]*"' "$session_file" \
-          | sed 's/"branch"[[:space:]]*:[[:space:]]*"//;s/"//' | head -1 || true)
-        ws_status=$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$session_file" \
-          | sed 's/"status"[[:space:]]*:[[:space:]]*"//;s/"//' | head -1 || true)
-      fi
+      local db_branch db_status
+      db_branch=$(sqlite3 "$db_path" "SELECT branch FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null || true)
+      db_status=$(sqlite3 "$db_path" "SELECT status FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null || true)
 
-      if [[ "$ws_branch" == "$branch" && "$ws_status" == "active" ]]; then
+      if [[ "$db_branch" == "$branch" && "$db_status" == "active" ]]; then
         return 0
       fi
-    done < <(find "$ws_dir" -name "session.json" -maxdepth 3 2>/dev/null)
+    done < <(find "$ws_dir" -name "orchestration.db" -maxdepth 3 2>/dev/null)
   done
 
   return 1
@@ -195,15 +189,9 @@ fi
 # If in a worktree, check CANON_PARENT_WORKSPACE env var for a parent workspace.
 if [[ "$IN_WORKTREE" -eq 1 && -n "${CANON_PARENT_WORKSPACE:-}" ]]; then
   for search_root in "${SEARCH_ROOTS[@]}"; do
-    parent_session="${search_root}/.canon/workspaces/${CANON_PARENT_WORKSPACE}/session.json"
-    if [[ -f "$parent_session" ]]; then
-      if command -v jq >/dev/null 2>&1; then
-        parent_status=$(jq -r '.status // empty' "$parent_session" 2>/dev/null || true)
-      else
-        parent_status=$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$parent_session" \
-          | sed 's/"status"[[:space:]]*:[[:space:]]*"//;s/"//' | head -1 || true)
-      fi
-
+    parent_db="${search_root}/.canon/workspaces/${CANON_PARENT_WORKSPACE}/orchestration.db"
+    if [[ -f "$parent_db" ]]; then
+      parent_status=$(sqlite3 "$parent_db" "SELECT status FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null || true)
       if [[ "$parent_status" == "active" ]]; then
         exit 0
       fi

@@ -154,12 +154,11 @@ describe("archiveWorkspace — happy path", () => {
     }
   });
 
-  test("does NOT copy orchestration.db, .lock, board.json, session.json", async () => {
+  test("does NOT copy orchestration.db, .lock, board.json", async () => {
     // Add skip-pattern files to workspace
     writeText(join(workspacePath, "orchestration.db"), "db content");
     writeText(join(workspacePath, ".lock"), "lock content");
     writeText(join(workspacePath, "board.json"), "{}");
-    writeText(join(workspacePath, "session.json"), "{}");
 
     const result = await archiveWorkspace({
       branch: "main",
@@ -173,7 +172,6 @@ describe("archiveWorkspace — happy path", () => {
       expect(existsSync(join(result.archive_path, "orchestration.db"))).toBe(false);
       expect(existsSync(join(result.archive_path, ".lock"))).toBe(false);
       expect(existsSync(join(result.archive_path, "board.json"))).toBe(false);
-      expect(existsSync(join(result.archive_path, "session.json"))).toBe(false);
     }
   });
 
