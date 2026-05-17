@@ -3,6 +3,8 @@ id: validate-at-trust-boundaries
 title: Validate Data at Every Trust Boundary
 severity: rule
 scope:
+  file_patterns:
+    - "mcp-server/**"
   layers:
     - api
     - infra

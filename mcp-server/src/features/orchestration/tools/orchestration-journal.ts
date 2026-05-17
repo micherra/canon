@@ -152,6 +152,13 @@ export type FinalizeWorkspaceResult = {
    * complete). A non-empty array blocks `complete: true`.
    */
   steps_missing: Array<{ step_id: string; status: JournalStepStatus }>;
+  /**
+   * Skipped steps that have no `skip_reason`. These represent L4 defense-in-
+   * depth violations — the L1 check in logStep/batchLogSteps should have
+   * rejected these writes, but journals can be corrupted by bugs, manual
+   * edits, or older code paths. A non-empty array blocks `complete: true`.
+   */
+  steps_missing_skip_reason: string[];
   steps_skipped: string[];
   /** Present only when complete is true. True when archive succeeded. */
   workspace_archived?: boolean;
@@ -529,6 +536,15 @@ export function computeFlowOutcome(
   };
 }
 
+/** L4 defense-in-depth: returns step IDs of skipped steps that have no skip_reason.
+ * The L1 check in logStep/batchLogSteps should have blocked these writes,
+ * but journals can be corrupted by bugs, manual edits, or older code paths. */
+function getStepsMissingSkipReason(skipped: readonly JournalStep[]): string[] {
+  return skipped
+    .filter((s) => typeof s.skip_reason !== "string" || !s.skip_reason.trim())
+    .map((s) => s.step_id);
+}
+
 export async function finalizeWorkspace(
   input: FinalizeWorkspaceInput,
 ): Promise<ToolResult<FinalizeWorkspaceResult>> {
@@ -549,10 +565,15 @@ export async function finalizeWorkspace(
   const stepsMissing = steps
     .filter((s) => s.status === "planned" || s.status === "started")
     .map((s) => ({ status: s.status, step_id: s.step_id }));
-  const stepsSkipped = steps.filter((s) => s.status === "skipped").map((s) => s.step_id);
+  const skipped = steps.filter((s) => s.status === "skipped");
+  const stepsSkipped = skipped.map((s) => s.step_id);
+  const stepsMissingSkipReason = getStepsMissingSkipReason(skipped);
 
   const artifacts = scanArtifacts(workspace, completed);
-  const complete = stepsMissing.length === 0 && artifacts.missing.length === 0;
+  const complete =
+    stepsMissing.length === 0 &&
+    stepsMissingSkipReason.length === 0 &&
+    artifacts.missing.length === 0;
 
   // When complete, absorb side effects from the former board subsystem (best-effort).
   // digest_written MUST run before archiveAndDeleteWorkspace — the digest writer reads
@@ -581,6 +602,7 @@ export async function finalizeWorkspace(
     steps_completed: completed.length,
     steps_logged: steps.length,
     steps_missing: stepsMissing,
+    steps_missing_skip_reason: stepsMissingSkipReason,
     steps_skipped: stepsSkipped,
     ...(cleanup
       ? { workspace_archived: cleanup.archived, workspace_deleted: cleanup.deleted }

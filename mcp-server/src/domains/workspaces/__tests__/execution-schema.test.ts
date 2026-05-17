@@ -95,9 +95,6 @@ function buildV5Db(): Database.Database {
     `CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, channel TEXT NOT NULL, sender TEXT NOT NULL, content TEXT NOT NULL, timestamp TEXT NOT NULL)`,
   );
   db.exec(
-    `CREATE TABLE IF NOT EXISTS wave_events (id TEXT PRIMARY KEY, type TEXT NOT NULL, payload TEXT NOT NULL, timestamp TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', applied_at TEXT, resolution TEXT, rejection_reason TEXT)`,
-  );
-  db.exec(
     `CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, payload TEXT NOT NULL, timestamp TEXT NOT NULL)`,
   );
 

@@ -59,7 +59,6 @@ describe("initExecutionDb", () => {
     expect(names).toContain("iterations");
     expect(names).toContain("progress_entries");
     expect(names).toContain("messages");
-    expect(names).toContain("wave_events");
     expect(names).toContain("events");
     db.close();
   });
@@ -72,7 +71,6 @@ describe("initExecutionDb", () => {
     const names = rows.map((r) => r.name);
     expect(names).toContain("idx_messages_channel");
     expect(names).toContain("idx_messages_channel_ts");
-    expect(names).toContain("idx_wave_events_status");
     expect(names).toContain("idx_events_type");
     db.close();
   });
