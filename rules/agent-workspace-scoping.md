@@ -12,7 +12,6 @@ Agents operate within a **branch-scoped workspace** at `.canon/workspaces/{branc
 ```
 .canon/workspaces/{sanitized-branch}/
 ├── .lock                     # Build lock — prevents concurrent builds on same branch
-├── session.json              # Session metadata
 ├── board.json                # Flow execution state (states, transitions, iterations)
 ├── board.json.bak            # Board backup — previous valid state for crash recovery
 ├── progress.md               # Append-only learnings across iterations
@@ -47,10 +46,10 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 
 | Agent | Read | Write |
 |-------|------|-------|
-| **intake** | board.json, session.json (read-only for status) | — (no workspace writes; spawns orchestrator) |
-| **orchestrator** | board.json, session.json, flow templates | board.json, session.json, progress.md |
-| **planner** | templates/, session.json | plans/{slug}/research-notes.md |
-| **architect** | plans/{slug}/research-notes.md, research/ (legacy), templates/, session.json, context.md | decisions/, plans/, context.md |
+| **intake** | board.json (read-only for status) | — (no workspace writes; spawns orchestrator) |
+| **orchestrator** | board.json, flow templates | board.json, progress.md |
+| **planner** | templates/ | plans/{slug}/research-notes.md |
+| **architect** | plans/{slug}/research-notes.md, research/ (legacy), templates/, context.md | decisions/, plans/, context.md |
 | **implementor** | plans/{slug}/{task}-PLAN.md, context.md, decisions/ | plans/{slug}/{task}-SUMMARY.md |
 | **tester** | plans/{slug}/*-SUMMARY.md, context.md | plans/{slug}/TEST-REPORT.md |
 | **security** | plans/{slug}/*-SUMMARY.md | plans/{slug}/SECURITY.md |

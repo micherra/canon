@@ -36,7 +36,7 @@ canon/
 │   └── evals/            # Eval suite for intent classification
 ├── templates/            # Artifact templates agents must follow
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
-    └── workspaces/       # Per-branch/task build state (board.json, session.json, progress.md, plans/, etc.)
+    └── workspaces/       # Per-branch/task build state (orchestration.db, journal.json, plans/, etc.)
 ```
 
 ## Flows
@@ -101,7 +101,7 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | Tool | Purpose |
 |------|---------|
 | `load_flow` | Load and resolve a flow definition (fragments, spawn instructions, state graph) |
-| `init_workspace` | Create or resume a workspace (`board.json`, `session.json`, `progress.md`); seeds `progress.md` with task header on creation; runs file claim overlap preflight check (warns if other workflows target the same files) |
+| `init_workspace` | Create or resume a workspace (SQLite `orchestration.db`, `progress.md`); seeds `progress.md` with task header on creation; runs file claim overlap preflight check (warns if other workflows target the same files) |
 | `drive_flow` | Advance the state machine one step: resolves spawn prompt, checks convergence, enters state; returns `SpawnRequest` or `HitlBreakpoint` |
 | `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress; registers file claims on `set_metadata` with `affected_files`, releases claims on `complete_flow` |
 | `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state`; accepts optional `transcript_path` (best-effort write to execution state) |

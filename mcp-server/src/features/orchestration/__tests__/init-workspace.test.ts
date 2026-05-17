@@ -6,7 +6,7 @@
  * - Resume detection works via store.getExecution()
  * - listBranchWorkspaces returns active workspaces; skips dirs without DB
  * - No .lock file created during init
- * - No board.json or session.json created
+ * - No board.json created
  * - Progress entry exists in DB after init
  * - Workspace is scoped to projectDir, not to the plugin directory
  */
@@ -60,14 +60,6 @@ describe("initWorkspaceFlow — SQLite creation", () => {
 
     const boardPath = join(result.workspace, "board.json");
     expect(existsSync(boardPath)).toBe(false);
-  });
-
-  it("does NOT create session.json", async () => {
-    const projectDir = makeTmpProjectDir();
-    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
-
-    const sessionPath = join(result.workspace, "session.json");
-    expect(existsSync(sessionPath)).toBe(false);
   });
 
   it("does NOT create a .lock file", async () => {

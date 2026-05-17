@@ -5,7 +5,7 @@
  * All statements are prepared once at construction time and reused.
  * The API is fully synchronous (better-sqlite3 is sync).
  *
- * Replaces: board.json, session.json, progress.md, messages, wave events, log.jsonl
+ * Replaced: board.json, progress.md, messages, wave events, log.jsonl
  */
 
 import { randomUUID } from "node:crypto";

@@ -45,7 +45,6 @@ const SKIP_PATTERNS = [
   "orchestration.db-wal",
   ".lock",
   "board.json",
-  "session.json",
 ] as const;
 
 // ---- Public types ----

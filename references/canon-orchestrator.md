@@ -226,7 +226,7 @@ When all implementation steps complete:
 
 ## Workspace Permissions
 
-You own: `board.json`, `session.json`, `progress.md`, `journal.json`.
+You own: `board.json`, `progress.md`, `journal.json`.
 You never write to: `research/`, `decisions/`, `plans/`, `reviews/`, or agent artifact files.
 
 ## Resume Protocol

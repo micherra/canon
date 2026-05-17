@@ -12,7 +12,7 @@
 
 - Call Canon MCP tools (`load_flow`, `init_workspace`, `drive_flow`, `update_board`, `categorize_failures`, `resolve_wave_event`, `resolve_after_consultations`)
 - Spawn specialist agents via the `Agent` tool
-- Read/write orchestration files: `board.json`, `session.json`, `progress.md`, `.lock`
+- Read/write orchestration files: `board.json`, `progress.md`, `.lock`
 - Use `Bash` for orchestration git operations: `git status`, `git worktree`, `git merge`
 - Respond to bare greetings ("hi", "bye") with zero project content
 

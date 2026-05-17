@@ -77,7 +77,7 @@ src/
 | Tool | Description |
 |------|-------------|
 | `load_flow` | Load and resolve a Canon flow definition. Returns the resolved flow with fragment resolution, spawn instructions, and a state adjacency graph. |
-| `init_workspace` | Initialize a Canon workspace for flow execution. Creates workspace directory, `session.json`, `board.json`, and `progress.md`. Resumes from existing board if present. |
+| `init_workspace` | Initialize a Canon workspace for flow execution. Creates workspace directory and SQLite `orchestration.db`. Resumes from existing DB if present. |
 | `update_board` | Perform board state mutations. Supports entering, skipping, blocking, unblocking states, completing flow, and setting wave progress. |
 | `drive_flow` | Drive the flow state machine for a single state. Returns a `SpawnRequest` or `HitlBreakpoint` for the orchestrator to process. |
 | `report_result` | Report an agent's result. Normalizes status, evaluates transitions, updates board state, executes drift effects (persist_review), and checks stuck detection. Returns next state and whether HITL is required. |
@@ -96,7 +96,7 @@ All runtime data lives under `.canon/` in the project root:
 | `reviews.jsonl` | `report` tool, flow effects | Code review results (violations, scores, verdicts) |
 | `knowledge-graph.db` | `codebase_graph`, `store_summaries` tools | SQLite knowledge graph — dependency graph, file summaries, git-intel hotspots |
 | `workspaces/{slug}/board.json` | `init_workspace`, `update_board` | Flow state machine record |
-| `workspaces/{slug}/session.json` | `init_workspace` | Session metadata (flow, branch, tier) |
+| `workspaces/{slug}/orchestration.db` | `init_workspace` | Session metadata, board state, progress (flow, branch, tier) |
 | `workspaces/{slug}/progress.md` | `init_workspace`, orchestrator | Append-only cross-state learnings; injected into spawn prompts via `${progress}` |
 | `workspaces/{slug}/messages/{channel}/*.md` | `post_message` | Inter-agent messages during parallel wave execution |
 

@@ -30,7 +30,7 @@ _setup_repo() {
   git -C "$dir" commit -q -m "init"
 }
 
-# Helper: create an active workspace session.json for a branch.
+# Helper: create an active workspace orchestration.db for a branch.
 # Usage: _create_workspace <repo_dir> <branch> <status>
 _create_workspace() {
   local repo_dir="$1"
@@ -40,15 +40,17 @@ _create_workspace() {
   slug=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
   local ws_dir="$repo_dir/.canon/workspaces/$slug"
   mkdir -p "$ws_dir"
-  cat > "$ws_dir/session.json" <<EOF
-{
-  "branch": "$branch",
-  "sanitized": "$slug",
-  "status": "$status",
-  "flow": "fast-path",
-  "task": "test task"
-}
-EOF
+  sqlite3 "$ws_dir/orchestration.db" <<SQL
+CREATE TABLE IF NOT EXISTS execution (
+  id INTEGER PRIMARY KEY,
+  branch TEXT,
+  status TEXT,
+  flow_name TEXT,
+  task TEXT
+);
+INSERT INTO execution (id, branch, status, flow_name, task)
+VALUES (1, '$branch', '$status', 'fast-path', 'test task');
+SQL
 }
 
 # Helper: invoke the hook with given env vars and stdin.
@@ -104,7 +106,7 @@ _setup_repo "$T4"
 (
   cd "$T4"
   TOOL_NAME=Edit \
-    bash "$HOOK" <<< '{"file_path": ".canon/workspaces/test/session.json"}' \
+    bash "$HOOK" <<< '{"file_path": ".canon/workspaces/test/orchestration.db"}' \
     >/dev/null 2>&1
 ) || fail "4: gitignored file should exit 0"
 pass "4: Edit gitignored file with no workspace → allowed"
