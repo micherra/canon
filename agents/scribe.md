@@ -104,13 +104,22 @@ Read the current CLAUDE.md. It follows a canonical template structure (see below
 
 Update whichever path exists. If neither exists, create only if a contract-level change clearly warrants it.
 
+**Pre-edit budget gate:** BEFORE writing any edits, run `wc -c` on each CLAUDE.md file you plan to touch. If the file is already at or above **38,000 characters**, you MUST trim existing content to create headroom BEFORE adding new entries. Target: keep every CLAUDE.md under 35,000 characters after your edits. This is the single most important rule — a CLAUDE.md that exceeds 40,000 characters degrades agent performance.
+
+**DO NOT document (exclusion list):**
+- "Removed modules/files" — NEVER add `~~strikethrough~~` entries or "Removed (date)" lines. Git history holds deletions; documenting them inflates the file with negative knowledge that never gets cleaned.
+- Field-by-field interface documentation — the TypeScript source is authoritative. One-line behavioral summaries only.
+- Function signatures that restate type definitions — `foo(input: FooInput): Promise<ToolResult<FooOutput>>` is already in the code. Document BEHAVIOR, not shape.
+- UI component props/events — derivable from source.
+- Multi-line descriptions of modes, strategies, or algorithms — one sentence max.
+
 **Rules for editing CLAUDE.md:**
 
 1. **Section-scoped**: Only edit the section relevant to the change. Never touch unrelated sections.
-2. **Append or modify, never remove**: If an API changed, update the entry. If it was removed, mark it as removed with the date. Don't delete the line — staleness is visible.
+2. **One-liner preference**: Each contract item gets ONE line. If your entry exceeds 120 characters, you are writing too much. Exception: tables (one row per item).
 3. **Freshness stamp**: When you modify a section, update its `<!-- last-updated: YYYY-MM-DD -->` comment.
-4. **Concise**: One line per contract item. CLAUDE.md is a quick-reference, not a design doc.
-5. **Factual**: Describe what IS, not what SHOULD BE. "OrderService.create() returns Result<Order, ValidationError>" not "OrderService should return Result types."
+4. **Factual**: Describe what IS, not what SHOULD BE. "OrderService.create() returns Result<Order, ValidationError>" not "OrderService should return Result types."
+5. **No removal markers**: When something is deleted from the codebase, DELETE its CLAUDE.md entry. Do not replace it with a strikethrough or "removed on DATE" note.
 
 **CLAUDE.md Canonical Template:**
 
@@ -118,17 +127,17 @@ Update whichever path exists. If neither exists, create only if a contract-level
 
 For the full template with section headers and editing rules, see `${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md`.
 
-**CLAUDE.md budget check:** After completing all CLAUDE.md edits in this step, run `wc -c` on each CLAUDE.md file you touched. If any file exceeds 40,000 characters, trim derivable-from-source content in this priority order:
+**Post-edit budget check:** After completing all CLAUDE.md edits in this step, run `wc -c` on each CLAUDE.md file you touched. If any file exceeds 38,000 characters, trim derivable-from-source content in this priority order:
 
-1. "Removed modules/files" sections (negative knowledge — the git history holds this)
-2. UI component props documentation (Svelte component props, click handlers)
-3. Detailed function signatures that restate TypeScript types (method-by-method docs)
-4. Field-by-field interface documentation (type field lists)
-5. Detailed mode descriptions for UI components
+1. Detailed function signatures that restate TypeScript types
+2. Field-by-field interface documentation (type field lists)
+3. Multi-line tool/service descriptions (compress to one-liners)
+4. UI component documentation
+5. Any entry older than 60 days that restates information derivable from reading the source file
 
 **Protected content (never trim):** behavioral instructions, invariants, `<!-- last-updated -->` tags, architecture tree structures, dependency tables, development commands, section headings.
 
-Remove specific lines or sections — do not restructure. If all derivable content is already removed and the file still exceeds 40,000 characters, do not trim further; record the file as over budget in the CONTEXT-SYNC.md report (Step 7) as a warning. This check runs only on files you touched in this step.
+Remove specific lines or sections — do not restructure. If all derivable content is already removed and the file still exceeds 40,000 characters, do not trim further; record the file as over budget in the CONTEXT-SYNC.md report (Step 7) as a warning.
 
 ### Step 5: Update README.md (structure changes only)
 
