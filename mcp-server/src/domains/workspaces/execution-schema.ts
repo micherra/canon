@@ -117,20 +117,6 @@ const DDL_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_messages_channel    ON messages(channel)`,
   `CREATE INDEX IF NOT EXISTS idx_messages_channel_ts ON messages(channel, timestamp)`,
 
-  // Wave events (replaces waves/events.jsonl)
-  `CREATE TABLE IF NOT EXISTS wave_events (
-    id               TEXT PRIMARY KEY,
-    type             TEXT NOT NULL,
-    payload          TEXT NOT NULL,
-    timestamp        TEXT NOT NULL,
-    status           TEXT NOT NULL DEFAULT 'pending',
-    applied_at       TEXT,
-    resolution       TEXT,
-    rejection_reason TEXT
-  )`,
-
-  `CREATE INDEX IF NOT EXISTS idx_wave_events_status ON wave_events(status)`,
-
   // Event log (replaces log.jsonl)
   `CREATE TABLE IF NOT EXISTS events (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,

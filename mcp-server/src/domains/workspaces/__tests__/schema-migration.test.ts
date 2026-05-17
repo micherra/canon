@@ -406,8 +406,6 @@ describe("columnExists helper", () => {
     // Valid table names that exist — should work fine
     expect(() => columnExists(db, "execution", "id")).not.toThrow();
     expect(() => columnExists(db, "execution_states", "state_id")).not.toThrow();
-    expect(() => columnExists(db, "wave_events", "id")).not.toThrow();
-
     db.close();
   });
 });
