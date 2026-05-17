@@ -6,9 +6,9 @@ scope:
   layers: []
   file_patterns:
     - "mcp-server/**"
-  tags:
-    - testing
-    - accumulator
+tags:
+  - testing
+  - accumulator
 ---
 
 Accumulator functions — functions that use the `+` operator on an existing field where the added value can be greater than 1 — must have at least one test case that uses an input count greater than 1 and asserts the exact numeric result. Testing accumulators only with single-unit increments (N=1 inputs) cannot distinguish correct accumulation from a lossy boolean coercion.
