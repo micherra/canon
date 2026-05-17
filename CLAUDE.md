@@ -123,7 +123,8 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 5. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })`. Save the returned `worktree_path` — all code-writing agents will work there.
 6. Write the `## Research Notes` section to `${WORKSPACE}/plans/${slug}/research-notes.md`. Skip for trivial builds.
 7. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
-8. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
+8. **Pre-spawn worktree verification**: Before spawning any code-writing agent (engineer, tester, scribe, shipper), verify the worktree path still exists: run `test -d "${worktree_path}"` via Bash. If the worktree is missing, do NOT spawn the agent — report BLOCKED to the user: "Worktree at {path} no longer exists. It may have been cleaned up by a concurrent process. Re-run `init_workspace` to recreate, or investigate." This check is needed because a concurrent cleanup process (janitor, manual `git worktree remove`) could remove the worktree between workspace initialization and agent spawn.
+9. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -443,6 +444,22 @@ Detect and retry transient failures:
 | TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache ordering bug |
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
+
+## Re-spawn Enrichment Protocol
+
+When re-spawning an agent after a failure, fix-after-review cycle, or reviewer re-spawn, the orchestrator MUST include prior progress context in the re-spawn prompt. This prevents the re-spawned agent from duplicating completed work or missing artifacts already produced.
+
+**What to include in every re-spawn prompt:**
+
+1. **Files already completed**: Derive from `git diff --name-only {base_commit}..HEAD` in the worktree, or from the prior agent's implementation summary. Include as an explicit list: "The following files were already successfully modified by a prior attempt and do NOT need re-implementation: [list]. Focus only on the remaining work."
+2. **Step ID and artifacts already produced**: Read from journal state (`journal.json`) — include the `step_id` and all `artifacts_actual` entries from the prior attempt.
+3. **Explicit no-duplicate instruction**: "Do not re-implement files that were already completed. Pick up from where the prior attempt left off."
+
+**Applies to all re-spawn scenarios:**
+
+- **Fix-after-review**: The engineer fix agent receives reviewer findings PLUS a list of files already completed by the prior engineer pass. The engineer focuses only on files flagged by the reviewer, not all changed files.
+- **Failure retry**: The same agent type re-spawned after a transient failure receives the prior partial work list so it doesn't start from scratch.
+- **Reviewer re-spawn**: The reviewer receives prior stage progress (e.g., "Stage 1 and Stage 2 are already written to REVIEW.md — continue from Stage 3") so it doesn't repeat completed stages.
 
 ## Project Structure <!-- last-updated: 2026-05-16 -->
 
