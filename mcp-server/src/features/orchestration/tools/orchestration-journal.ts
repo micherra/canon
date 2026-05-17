@@ -533,6 +533,13 @@ export function computeFlowOutcome(
   };
 }
 
+/** L4 defense-in-depth: returns step IDs of skipped steps that have no skip_reason.
+ * The L1 check in logStep/batchLogSteps should have blocked these writes,
+ * but journals can be corrupted by bugs, manual edits, or older code paths. */
+function getStepsMissingSkipReason(skipped: readonly JournalStep[]): string[] {
+  return skipped.filter((s) => !s.skip_reason?.trim()).map((s) => s.step_id);
+}
+
 export async function finalizeWorkspace(
   input: FinalizeWorkspaceInput,
 ): Promise<ToolResult<FinalizeWorkspaceResult>> {
@@ -555,13 +562,7 @@ export async function finalizeWorkspace(
     .map((s) => ({ status: s.status, step_id: s.step_id }));
   const skipped = steps.filter((s) => s.status === "skipped");
   const stepsSkipped = skipped.map((s) => s.step_id);
-
-  // L4 defense-in-depth: detect skipped steps that have no skip_reason.
-  // The L1 check in logStep/batchLogSteps should have blocked these writes,
-  // but journals can be corrupted by bugs, manual edits, or older code paths.
-  const stepsMissingSkipReason = skipped
-    .filter((s) => !s.skip_reason?.trim())
-    .map((s) => s.step_id);
+  const stepsMissingSkipReason = getStepsMissingSkipReason(skipped);
 
   const artifacts = scanArtifacts(workspace, completed);
   const complete =
