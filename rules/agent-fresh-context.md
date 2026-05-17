@@ -37,4 +37,4 @@ Orchestrator spawns implementor with:
 
 ## Exceptions
 
-If two tasks are so tightly coupled they can't be implemented independently (e.g., both modify the same function), the planner should merge them into one task rather than having two implementors coordinate. Coordination between implementors violates fresh context.
+If two tasks are so tightly coupled they can't be implemented independently (e.g., both modify the same function), the architect should merge them into one task rather than having two implementors coordinate. Coordination between implementors violates fresh context.

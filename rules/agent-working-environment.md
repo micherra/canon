@@ -52,4 +52,4 @@ cd mcp-server && npm run build
 ## Exceptions
 
 - If the spawn prompt does not include a `Working directory:` line, the agent may use `pwd` once to orient.
-- Agents performing codebase exploration (planner, learner) are not subject to this rule — they need to discover structure.
+- Agents performing codebase exploration (architect, learner) are not subject to this rule — they need to discover structure.

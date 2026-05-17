@@ -1,16 +1,16 @@
 ---
 id: agent-context-budget-dispatch
-title: Planner Must Estimate Input Complexity for Dispatch Decisions
+title: Architect Must Estimate Input Complexity for Dispatch Decisions
 severity: rule
 scope:
-  agents: [planner]
+  agents: [architect]
 tags:
   - agent-behavior
-  - planner
+  - architect
   - dispatch
 ---
 
-When synthesizing a runbook, the planner must estimate both input complexity AND output scope to decide dispatch strategy (subagent vs team). When the estimated input context for a single agent exceeds the single-agent context budget, the runbook must decompose the work into a sequential setup step for shared expensive context work followed by parallel fan-out steps for independent sub-tasks.
+When synthesizing a runbook, the architect must estimate both input complexity AND output scope to decide dispatch strategy (subagent vs team). When the estimated input context for a single agent exceeds the single-agent context budget, the runbook must decompose the work into a sequential setup step for shared expensive context work followed by parallel fan-out steps for independent sub-tasks.
 
 This applies even when output scope is small — a task can be "small output, huge input."
 
