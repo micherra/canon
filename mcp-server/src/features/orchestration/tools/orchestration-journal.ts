@@ -32,6 +32,7 @@ import { join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { tryWriteBuildTrendSummary } from "../services/build-trend-summary-writer.ts";
 import { tryWriteBuildDigest } from "../services/digest-writer.ts";
 import {
   archiveAndDeleteWorkspace,
@@ -162,6 +163,8 @@ export type FinalizeWorkspaceResult = {
   analytics_recorded?: boolean;
   /** Present only when complete is true. True when build digest was written to auto-memory. */
   digest_written?: boolean;
+  /** Present only when complete is true. True when build trend summary was written to workspace. */
+  trend_summary_written?: boolean;
 };
 
 function journalPath(workspace: string): string {
@@ -558,8 +561,10 @@ export async function finalizeWorkspace(
   let claims_released: boolean | undefined;
   let analytics_recorded: boolean | undefined;
   let digest_written: boolean | undefined;
+  let trend_summary_written: boolean | undefined;
   if (complete) {
     digest_written = await tryWriteBuildDigest(workspace);
+    trend_summary_written = await tryWriteBuildTrendSummary(workspace);
     claims_released = await tryReleaseClaims(workspace);
     analytics_recorded = await tryAppendAnalytics(workspace, steps);
     await tryRunJanitor();
@@ -580,7 +585,9 @@ export async function finalizeWorkspace(
     ...(cleanup
       ? { workspace_archived: cleanup.archived, workspace_deleted: cleanup.deleted }
       : {}),
-    ...(complete ? { analytics_recorded, claims_released, digest_written } : {}),
+    ...(complete
+      ? { analytics_recorded, claims_released, digest_written, trend_summary_written }
+      : {}),
   });
 }
 
