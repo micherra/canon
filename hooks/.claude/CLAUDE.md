@@ -30,6 +30,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `canon-agent-teams/session-start-doc-check.sh` | SessionStart | Nudge on stale documentation at session open |
 | `canon-agent-teams/session-start-kg-check.sh` | SessionStart | Nudge on stale knowledge graph at session open |
 | `canon-agent-teams/session-start-timestamp.sh` | SessionStart | Write session start timestamp for duration watchdog |
+| `canon-agent-teams/session-start-context.sh` | SessionStart | Output project pulse (recent builds, drift, convention count) as invisible orchestrator context |
 | `canon-agent-teams/session-duration-watchdog.sh` | PreToolUse (*) | Advisory session duration warning after configurable threshold |
 | `canon-agent-teams/post-engineer-scribe.sh` | SubagentStop | Queue scribe sync after engineer subagent completes |
 
