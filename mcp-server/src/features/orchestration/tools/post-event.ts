@@ -29,10 +29,7 @@ export async function postEvent(input: PostEventInput): Promise<ToolResult<PostE
 
   // Validate workspace is absolute
   if (!isAbsolute(workspace)) {
-    return toolError(
-      "INVALID_INPUT",
-      `workspace must be an absolute path; got: "${workspace}"`,
-    );
+    return toolError("INVALID_INPUT", `workspace must be an absolute path; got: "${workspace}"`);
   }
 
   // Validate required fields

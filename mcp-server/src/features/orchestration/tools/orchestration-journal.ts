@@ -568,10 +568,7 @@ export async function finalizeWorkspace(
   }
 
   if (!isAbsolute(workspace)) {
-    return toolError(
-      "INVALID_INPUT",
-      `workspace must be an absolute path; got: "${workspace}"`,
-    );
+    return toolError("INVALID_INPUT", `workspace must be an absolute path; got: "${workspace}"`);
   }
 
   const path = journalPath(workspace);
