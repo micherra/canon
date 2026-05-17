@@ -317,8 +317,9 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 - **Requirement coverage check**: After planner returns, check the planning brief's Requirement Coverage Map for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
 - **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
-- **Architect approval**: Present the plan to the user. For agent teams, use native plan approval mode.
-- **Review verdict**: Present review results. If not clean, spawn engineer in fix mode.
+- **Plan approval HTML**: Before presenting the runbook to the user for approval, check if `${WORKSPACE}/artifacts/planning-brief.html` exists. If it exists, read its content and call `present_artifact({ type: "planning-brief", slug, html: <file content>, data: {}, workspace })` to open it in the browser. The HTML view is supplementary — the text-based approval flow (runbook presentation + user confirmation) is unchanged.
+- **Architect approval**: Present the plan to the user. For agent teams, use native plan approval mode. If `${WORKSPACE}/artifacts/design.html` exists, call `present_artifact({ type: "design", slug, html: <file content>, data: {}, workspace })` before presenting the text plan.
+- **Review verdict**: Present review results. If not clean, spawn engineer in fix mode. If `${WORKSPACE}/artifacts/review.html` exists, call `present_artifact({ type: "review", slug, html: <file content>, data: {}, workspace })` alongside the text verdict presentation.
 - **Review-fix iteration loop**: After the fix agent completes, re-spawn the reviewer to verify ALL previously flagged violations were addressed — not just some.
   - Loop continues until reviewer returns CLEAN or WARNING.
   - Maximum 3 fix→review iterations before escalating to the user via HITL.
@@ -359,6 +360,39 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.
+
+### Renderer Spawn Protocol
+
+After each artifact-producing step completes (design, implement, review), the orchestrator MAY spawn a lightweight renderer subagent to produce an HTML version of the markdown artifact. Spawn the renderer only when you intend to present HTML at the next HITL gate — it is NOT mandatory for every step.
+
+**What the renderer does:**
+- Reads the markdown artifact from the workspace (e.g., `${WORKSPACE}/plans/${slug}/DESIGN.md`, `${WORKSPACE}/reviews/REVIEW.md`)
+- Reads `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` for styling context and composition patterns
+- Produces a self-contained HTML file to `${WORKSPACE}/artifacts/{artifact-name}.html`
+
+**Artifact naming convention:**
+| Artifact | HTML filename |
+|----------|--------------|
+| Planning brief | `planning-brief.html` |
+| Design document | `design.html` |
+| Review dashboard | `review.html` |
+| Task plan index | `task-index.html` |
+
+**Spawn pattern** — the renderer is a generic `Agent()` call with inline instructions, NOT a new agent definition in `agents/`:
+
+```
+Agent({
+  isolation: "none",    // writes to workspace, not worktree
+  prompt: `
+    Read the markdown artifact at ${WORKSPACE}/plans/${slug}/DESIGN.md.
+    Read mcp-server/src/ui/snippets/DESIGN-SYSTEM.md for styling context.
+    Produce a self-contained HTML file at ${WORKSPACE}/artifacts/design.html.
+    The HTML must be fully self-contained (no external CSS/JS dependencies).
+  `
+})
+```
+
+The renderer writes exclusively to `${WORKSPACE}/artifacts/` — it does not modify the worktree or any source files.
 
 ### Post-Review Tester Enrichment
 

@@ -87,7 +87,15 @@ export async function checkSlugCollision(parentDir: string, slug: string): Promi
  */
 export async function initWorkspace(projectDir: string, sanitized: string): Promise<string> {
   const workspace = path.join(projectDir, ".canon", "workspaces", sanitized);
-  const subdirs = ["decisions", "handoffs", "plans", "research", "reviews", "transcripts"];
+  const subdirs = [
+    "artifacts",
+    "decisions",
+    "handoffs",
+    "plans",
+    "research",
+    "reviews",
+    "transcripts",
+  ];
   await Promise.all(subdirs.map((dir) => mkdir(path.join(workspace, dir), { recursive: true })));
   return workspace;
 }
