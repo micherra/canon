@@ -537,7 +537,9 @@ export function computeFlowOutcome(
  * The L1 check in logStep/batchLogSteps should have blocked these writes,
  * but journals can be corrupted by bugs, manual edits, or older code paths. */
 function getStepsMissingSkipReason(skipped: readonly JournalStep[]): string[] {
-  return skipped.filter((s) => !s.skip_reason?.trim()).map((s) => s.step_id);
+  return skipped
+    .filter((s) => typeof s.skip_reason !== "string" || !s.skip_reason.trim())
+    .map((s) => s.step_id);
 }
 
 export async function finalizeWorkspace(
