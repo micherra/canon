@@ -262,6 +262,42 @@ This ensures `REVIEW.md` exists even if context is exhausted before later stages
 
 **Rationale**: Stage 3 contains the most actionable compliance findings. Writing the artifact early ensures the orchestrator always has something to act on, even if the session ends before Stages 4–5 complete.
 
+### `write_review` Field Mapping
+
+When calling `write_review`, populate fields directly from your stage findings:
+
+```
+mcp__canon__write_review({
+  workspace: "${WORKSPACE}",            // ← exact WORKSPACE= value from spawn prompt — NOT cwd
+  slug: "{slug from spawn prompt}",
+  verdict: "approved",                  // ← no violations
+         | "approved_with_concerns",    // ← strong-opinion violations only
+         | "changes_required",          // ← convention violations present
+         | "blocked",                   // ← at least one rule violation
+         | "pending",                   // ← stub before Stage 1 (Early Output)
+  violations: [                         // ← one entry per Stage 1 violation
+    {
+      principle_id: "errors-are-values",
+      severity: "strong-opinion",
+      file_path: "src/services/order.ts",
+      description: "Throws on invalid state instead of returning Result",
+      fix: "Return OrderError variant from validateState()"
+    }
+  ],
+  honored: ["fail-closed-by-default", "validate-at-trust-boundaries"],  // ← Stage 1 passes
+  score: {
+    rules:       { passed: 2, total: 2 },   // ← count from Stage 1
+    opinions:    { passed: 5, total: 6 },
+    conventions: { passed: 3, total: 3 }
+  },
+  files: ["src/services/order.ts", "src/handlers/order-handler.ts"]  // ← files in diff
+})
+```
+
+**Verdict selection**: scan your Stage 1 violations — worst severity wins. One `rule` violation → `"blocked"`. Only `strong-opinion` violations → `"approved_with_concerns"`. Only `convention` violations → `"changes_required"`. None → `"approved"`.
+
+**Score counting**: for each severity tier, count how many matched principles passed vs. total matched. A principle is "passed" if it appears in `honored`, not in `violations`. Unmatched principles are not counted in any tier.
+
 **Turn-budget self-check**: Before starting Stage 4, check your remaining turn budget. If you have fewer than 5 turns remaining, write a partial review using what you have completed (Stages 1–3) and include a note at the top of the review: `[PARTIAL REVIEW — session budget exhausted before Stages 4–5 could complete]`. Do not attempt Stages 4–5 if you cannot finish them — a partial review at `${WORKSPACE}/reviews/REVIEW.md` is better than no review at all.
 
 ## Discover Lint/Format Gate Commands
