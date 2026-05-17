@@ -444,7 +444,7 @@ Detect and retry transient failures:
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
 
-## Project Structure <!-- last-updated: 2026-05-02 -->
+## Project Structure <!-- last-updated: 2026-05-16 -->
 
 ```
 canon/
@@ -464,7 +464,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (54 total: 4 rules, 33 strong-opinions, 17 conventions)
+├── principles/           # Built-in principles (55 total: 4 rules, 33 strong-opinions, 18 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/

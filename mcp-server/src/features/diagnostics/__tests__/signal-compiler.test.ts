@@ -286,6 +286,42 @@ describe("compileSignals", () => {
     expect(pathSignal!.text).toContain("7"); // total_violations
     expect(pathSignal!.text).toContain("3"); // violation_streak
   });
+
+  // Accumulator end-to-end: path_effects with high violation counts flow through
+  // scoring (cap at 5) and budget fitting, producing the correct signal text and priority.
+  // Tests the full pipeline: upsertPathEffect → compileSignals → scorePathEffect → fitWithinBudget
+  it("compiles path_effect signal with high total_violations through scoring and budget fitting", () => {
+    // total_violations: 20 — well above the cap of 5; scorePathEffect returns streak*2 + 5
+    signals.upsertPathEffect({
+      clean_streak: 0,
+      file_path: "src/high-violations.ts",
+      last_clean_at: null,
+      last_violation_at: "2026-05-10T00:00:00.000Z",
+      total_reviews: 15,
+      total_violations: 20,
+      violation_streak: 4,
+    });
+
+    const result = compileSignals(["src/high-violations.ts"], signals, {
+      tokenBudgetPerFile: 10000,
+    });
+    expect(result).toHaveLength(1);
+
+    const fileSignals = result[0]!;
+    expect(fileSignals.file_path).toBe("src/high-violations.ts");
+    expect(fileSignals.signals).toHaveLength(1);
+
+    const pathSignal = fileSignals.signals[0]!;
+    expect(pathSignal.type).toBe("path_effect");
+
+    // Priority: streak*2 + min(total_violations, 5) = 4*2 + min(20, 5) = 8 + 5 = 13
+    expect(pathSignal.priority).toBe(13);
+
+    // Signal text includes actual total_violations value (20), not the capped scoring value
+    expect(pathSignal.text).toContain("20"); // total_violations in signal text
+    expect(pathSignal.text).toContain("15"); // total_reviews
+    expect(pathSignal.text).toContain("4"); // violation_streak
+  });
 });
 
 // ---- Scoring unit tests ----
@@ -326,5 +362,17 @@ describe("scorePathEffect", () => {
     const row5 = makePathEffectRow({ total_violations: 5, violation_streak: 0 });
     const row100 = makePathEffectRow({ total_violations: 100, violation_streak: 0 });
     expect(scorePathEffect(row5)).toBe(scorePathEffect(row100));
+  });
+
+  // Accumulator test coverage: exact numeric assertion for below-cap and above-cap values
+  // Validates the cap boundary at 5 — relative ordering alone cannot confirm the capped value
+  it("returns exact volume score of 3 when total_violations is below cap (3 < 5)", () => {
+    const row = makePathEffectRow({ total_violations: 3, violation_streak: 0 });
+    expect(scorePathEffect(row)).toBe(3); // min(3, 5) = 3; not capped
+  });
+
+  it("returns exact volume score of 5 when total_violations exceeds cap (8 > 5)", () => {
+    const row = makePathEffectRow({ total_violations: 8, violation_streak: 0 });
+    expect(scorePathEffect(row)).toBe(5); // min(8, 5) = 5; capped at 5, not 8
   });
 });
