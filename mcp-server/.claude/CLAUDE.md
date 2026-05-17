@@ -34,7 +34,7 @@ src/
 ├── shared/               # Shared kernel: constants, parser, matcher, schema, lib/ utilities
 ├── tests/                # Cross-cutting test helpers
 └── ui/                   # Svelte frontend — MCP App (Sigma.js graph, PR review UI)
-    └── snippets/         # HTML/CSS component recipes for agent-composed artifacts (5 files: verdict-banner, stats-card, bar-chart-row, severity-badge, compliance-bars)
+    └── snippets/         # HTML/CSS component recipes for agent-composed artifacts (8 files: verdict-banner, stats-card, bar-chart-row, severity-badge, compliance-bars, file-detail-card, file-summary-card, blast-radius-rings); DESIGN-SYSTEM.md is authoritative reference — added 2026-05-16
 ```
 
 **Key subsystems:**
