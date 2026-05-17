@@ -157,8 +157,7 @@ for BRANCH in "${MERGED_BRANCHES[@]}"; do
       STATUS_VAL=""
       CREATED_VAL=""
       if [[ -f "$DB_FILE" ]]; then
-        local db_result
-        db_result=$(sqlite3 "$DB_FILE" "SELECT task, status, created_at FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null || true)
+        db_result=$(sqlite3 "$DB_FILE" "SELECT task, status, created FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null || true)
         TASK_DESC="$(echo "$db_result" | cut -d'|' -f1)"
         STATUS_VAL="$(echo "$db_result" | cut -d'|' -f2)"
         CREATED_VAL="$(echo "$db_result" | cut -d'|' -f3)"
@@ -204,7 +203,6 @@ EOF
         for SLUG in "${TASK_SLUGS[@]}"; do
           DB_FILE="${WORKSPACE_PATH}/${SLUG}/orchestration.db"
           if [[ -f "$DB_FILE" ]]; then
-            local summary_result
             summary_result=$(sqlite3 "$DB_FILE" "SELECT task, status FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null || true)
             TASK_DESC="$(echo "$summary_result" | cut -d'|' -f1)"
             STATUS_VAL="$(echo "$summary_result" | cut -d'|' -f2)"
