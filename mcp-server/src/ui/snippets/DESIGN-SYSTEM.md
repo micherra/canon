@@ -1005,31 +1005,138 @@ function isHighImpact(fileContext: FileContextOutput): boolean {
 
 ### G.4 File Detail Card Recipe
 
-Reference the `file-detail-card.html` snippet. Call `get_file_context` for each changed file. For high-impact files, prepare compound placeholders:
+Reference the `file-detail-card.html` snippet. The card renders the full `FileContext.svelte`
+visual layout: stat row, shape badge, canvas dependency graph, entity table, and blast radius
+panel. Call `get_file_context` for each changed file.
 
-- `IMPORTS_HTML`: render each import as `<li>{escapeHtml(importPath)}</li>`, limit to 10 items, add overflow note if more
-- `IMPORTED_BY_HTML`: same pattern for `imported_by` entries
-- `ENTITIES_HTML`: render each entity as `<tr><td>{escapeHtml(name)}</td><td>{kind}</td></tr>`, limit to 15
-- `LAYER_COLOR`: use `layerColor(layer)` from F.12 helpers
+**Important**: The `<script>` block in `file-detail-card.html` must be included **ONCE** at the
+bottom of the review HTML, not duplicated per card. Each card's `<canvas>` has a unique
+`id="fdc-canvas-{{CARD_ID}}"` and a `data-graph` attribute with its file-specific JSON data.
+The script queries all `canvas[data-graph]` elements on `DOMContentLoaded` and draws each one.
 
-Substitution example:
+**Placeholders — all string values through `escapeHtml` unless noted:**
+
+| Placeholder | Type | Source | Notes |
+|-------------|------|---------|-------|
+| `{{FILE_PATH}}` | string | `file_path` | escape |
+| `{{LAYER}}` | string | `layer` | escape |
+| `{{LAYER_COLOR}}` | CSS color | `layerColor(layer)` from F.12 | no escape |
+| `{{SHAPE_LABEL}}` | string | `shape.label` | escape |
+| `{{SHAPE_DESCRIPTION}}` | string | `shape.description` | escape |
+| `{{IMPORT_COUNT}}` | number | `imports.length` | no escape |
+| `{{IMPORTED_BY_COUNT}}` | number | `imported_by.length` | no escape |
+| `{{IMPORT_LAYER_COUNT}}` | number | `Object.keys(imports_by_layer).length` | no escape |
+| `{{EXPORT_COUNT}}` | number | `exports.length` | no escape |
+| `{{ENTITY_TYPE_COUNT}}` | number | entities where kind=type or interface | no escape |
+| `{{ENTITY_FN_COUNT}}` | number | entities where kind=function | no escape |
+| `{{IMPACT_SCORE}}` | string | `graph_metrics.impact_score` or "—" | no escape |
+| `{{IMPACT_RANK}}` | string | `project_max_impact` or "—" | no escape |
+| `{{VIOLATION_COUNT}}` | number | `violation_count` | no escape |
+| `{{VIOLATION_BADGE_CLASS}}` | string | `"clean"` when 0, `"danger"` when > 0 | no escape |
+| `{{VIOLATION_BADGE_TEXT}}` | string | `"no violations"` or `"N violations"` | no escape |
+| `{{BLAST_RADIUS_SEVERITY}}` | string | `blast_radius.summary.severity` | no escape |
+| `{{BLAST_RADIUS_TOTAL}}` | number | `blast_radius.summary.total_files` | no escape |
+| `{{CARD_ID}}` | string | file path slug (replace `/`, `.` → `-`) | no escape |
+| `{{GRAPH_DATA_JSON}}` | JSON | serialized graph data (see below) | JSON-escape then HTML-attr-escape |
+| `{{ENTITIES_HTML}}` | HTML | pre-rendered `<tr>` rows | escape text inside |
+| `{{BLAST_RADIUS_DEPTH1_HTML}}` | HTML | pre-rendered depth-1 chip spans | escape text inside |
+
+**`{{GRAPH_DATA_JSON}}` — JSON structure:**
 
 ```typescript
+interface GraphData {
+  imports: string[];          // file paths this file imports
+  imported_by: string[];      // file paths that import this file
+  exports: string[];          // exported symbol names
+  fileName: string;           // basename of the file (for center label)
+  layer: string;              // layer name
+  crossLayerImports: string[];   // subset of imports from a different layer
+  crossLayerDependents: string[]; // subset of imported_by from a different layer
+}
+```
+
+Serialize as JSON, then escape for HTML attribute use:
+```typescript
+const json = JSON.stringify(graphData);
+// Escape for use in data-graph="..." attribute:
+const safeJson = json.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+```
+
+**`{{ENTITIES_HTML}}` — row format:**
+
+```typescript
+// Sort: exported first, then by kind order (function, interface, type, class, variable)
+const kindBadgeColor = (kind: string) => {
+  switch (kind) {
+    case "function": return "#7F77DD";
+    case "interface": return "#1D9E75";
+    case "type": return "#6c8cff";
+    case "class": return "#e07060";
+    default: return "#636a80";
+  }
+};
+const row = `<tr>
+  <td class="fdc-entity-name">${escapeHtml(entity.name)}</td>
+  <td><span class="fdc-kind-badge" style="background:${color}22;color:${color};border-color:${color}44;">${escapeHtml(entity.kind)}</span></td>
+  <td class="fdc-entity-exported">${entity.is_exported ? "&#10003;" : "&#8212;"}</td>
+  <td class="fdc-entity-lines">${entity.line_start}&#8211;${entity.line_end}</td>
+</tr>`;
+// Limit to 15 rows
+```
+
+**`{{BLAST_RADIUS_DEPTH1_HTML}}` — chip format:**
+
+```typescript
+// Depth-1 files from blast_radius.by_depth["1"] (or by_depth[1])
+const chip = `<span class="fdc-depth-chip" title="${escapeHtml(file.path)}">${escapeHtml(basename(file.path))}<span class="fdc-chip-rel">${escapeHtml(file.relationship)}</span></span>`;
+// Limit to 8 chips to avoid overflow
+```
+
+**Full substitution example:**
+
+```typescript
+const graphData: GraphData = {
+  imports: fileCtx.imports ?? [],
+  imported_by: fileCtx.imported_by ?? [],
+  exports: fileCtx.exports ?? [],
+  fileName: basename(fileCtx.file_path),
+  layer: fileCtx.layer,
+  crossLayerImports: getCrossLayerImports(fileCtx),
+  crossLayerDependents: getCrossLayerDependents(fileCtx),
+};
+const graphJson = JSON.stringify(graphData)
+  .replace(/&/g, "&amp;")
+  .replace(/"/g, "&quot;");
+
 const cardHtml = substituteSnippet(fileDetailSnippet, {
   FILE_PATH: escapeHtml(filePath),
-  LAYER: escapeHtml(layer),
-  LAYER_COLOR: layerColor(layer),
-  SHAPE_LABEL: escapeHtml(shape.label),
-  SHAPE_DESCRIPTION: escapeHtml(shape.description),
-  IMPORT_COUNT: String(imports.length),
-  IMPORTED_BY_COUNT: String(importedBy.length),
-  ENTITY_COUNT: String(entities.length),
-  BLAST_RADIUS_TOTAL: String(blastRadius?.summary?.total_files ?? 0),
-  IMPORTS_HTML: importsHtml,
-  IMPORTED_BY_HTML: importedByHtml,
+  LAYER: escapeHtml(fileCtx.layer),
+  LAYER_COLOR: layerColor(fileCtx.layer),
+  SHAPE_LABEL: escapeHtml(fileCtx.shape?.label ?? "Standard"),
+  SHAPE_DESCRIPTION: escapeHtml(fileCtx.shape?.description ?? ""),
+  IMPORT_COUNT: String(fileCtx.imports.length),
+  IMPORTED_BY_COUNT: String(fileCtx.imported_by.length),
+  IMPORT_LAYER_COUNT: String(Object.keys(fileCtx.imports_by_layer ?? {}).length),
+  EXPORT_COUNT: String(fileCtx.exports?.length ?? 0),
+  ENTITY_TYPE_COUNT: String(typeCount),
+  ENTITY_FN_COUNT: String(fnCount),
+  IMPACT_SCORE: String(fileCtx.graph_metrics?.impact_score ?? "—"),
+  IMPACT_RANK: String(fileCtx.project_max_impact ?? "—"),
+  VIOLATION_COUNT: String(fileCtx.violation_count ?? 0),
+  VIOLATION_BADGE_CLASS: (fileCtx.violation_count ?? 0) > 0 ? "danger" : "clean",
+  VIOLATION_BADGE_TEXT: (fileCtx.violation_count ?? 0) > 0 ? `${fileCtx.violation_count} violations` : "no violations",
+  BLAST_RADIUS_SEVERITY: fileCtx.blast_radius?.summary?.severity ?? "contained",
+  BLAST_RADIUS_TOTAL: String(fileCtx.blast_radius?.summary?.total_files ?? 0),
+  CARD_ID: filePath.replace(/[^a-zA-Z0-9]/g, "-"),
+  GRAPH_DATA_JSON: graphJson,
   ENTITIES_HTML: entitiesHtml,
+  BLAST_RADIUS_DEPTH1_HTML: depth1Html,
 });
 ```
+
+**Script placement**: Extract the `<script>` block from `file-detail-card.html` and include it
+**once** before `</body>` in the final HTML. Do NOT include it multiple times (once per card).
+The script self-initializes on `DOMContentLoaded` and draws all canvases.
 
 ### G.5 File Summary Card Recipe
 

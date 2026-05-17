@@ -97,10 +97,18 @@ From each result, extract:
 - `shape.description` — shape description
 - `imports` — list of files this file imports
 - `imported_by` — list of files that import this file
+- `imports_by_layer` — map of layer → files imported from that layer
+- `imported_by_layer` — map of layer → files that import from that layer
+- `exports` — list of exported symbol names
 - `in_degree` — number of files that import this file
 - `impact_score` — normalized impact score (0–1)
+- `project_max_impact` — max impact score in the project (for "out of N" display)
+- `graph_metrics` — `{ impact_score, is_hub, in_cycle }`
 - `blast_radius.summary.total_files` — total downstream files affected
+- `blast_radius.summary.severity` — "contained" | "low" | "moderate" | "high" | "critical"
+- `blast_radius.by_depth` — record of depth string → BlastRadiusFile[]
 - `blast_radius.affected` — per-file array of downstream dependents (used for dependency tree roots)
+- `entities` — array of `{ name, kind, is_exported, line_start, line_end }`
 - `computed_tags` — computed tags for this file
 - `violation_count` — number of active violations on this file (if available)
 
@@ -243,9 +251,20 @@ patterns from Section G of DESIGN-SYSTEM.md exactly:
 - Classify each file using Section G.2 — `isHighImpact(fileContext)` → hub shape OR violations > 0 OR blast_radius > 5
 - **High-impact files** get full **detail cards** from the `file-detail-card.html` snippet (Section G.4):
   - Read the snippet from `mcp-server/src/ui/snippets/file-detail-card.html`
-  - Substitute: `{{FILE_PATH}}`, `{{LAYER}}`, `{{LAYER_COLOR}}`, `{{SHAPE_LABEL}}`, `{{SHAPE_DESCRIPTION}}`, `{{IMPORT_COUNT}}`, `{{IMPORTED_BY_COUNT}}`, `{{ENTITY_COUNT}}`, `{{BLAST_RADIUS_TOTAL}}`, `{{IMPORTS_HTML}}`, `{{IMPORTED_BY_HTML}}`, `{{ENTITIES_HTML}}`
-  - All string placeholders through `escapeHtml`; `{{LAYER_COLOR}}` is a CSS color constant — no escaping needed
-  - Extract and include the `<style>` block from the snippet
+  - Substitute all placeholders as documented in Section G.4 of DESIGN-SYSTEM.md:
+    - `{{FILE_PATH}}`, `{{LAYER}}`, `{{SHAPE_LABEL}}`, `{{SHAPE_DESCRIPTION}}` — through `escapeHtml`
+    - `{{LAYER_COLOR}}` — CSS color constant, no escaping
+    - `{{IMPORT_COUNT}}`, `{{IMPORTED_BY_COUNT}}`, `{{IMPORT_LAYER_COUNT}}` — numeric, no escaping
+    - `{{EXPORT_COUNT}}`, `{{ENTITY_TYPE_COUNT}}`, `{{ENTITY_FN_COUNT}}` — numeric, no escaping
+    - `{{IMPACT_SCORE}}`, `{{IMPACT_RANK}}` — string/number, no escaping
+    - `{{VIOLATION_COUNT}}` — numeric; `{{VIOLATION_BADGE_CLASS}}` = "clean" | "danger"; `{{VIOLATION_BADGE_TEXT}}` = "no violations" | "N violations"
+    - `{{BLAST_RADIUS_SEVERITY}}` — severity string, no escaping; `{{BLAST_RADIUS_TOTAL}}` — numeric
+    - `{{CARD_ID}}` — derived from file path (replace non-alphanumeric chars with `-`), no escaping
+    - `{{GRAPH_DATA_JSON}}` — JSON-stringified GraphData object, then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`)
+    - `{{ENTITIES_HTML}}` — pre-rendered `<tr>` rows (see G.4 for format, limit 15 rows)
+    - `{{BLAST_RADIUS_DEPTH1_HTML}}` — pre-rendered depth-chip spans (see G.4 for format, limit 8 chips)
+  - Extract the `<style>` block from the snippet and include it in the page `<style>` tag (once)
+  - Extract the `<script>` block from the snippet and include it **ONCE** before `</body>` (not per card)
 - **Standard files** get compact **summary cards** from the `file-summary-card.html` snippet (Section G.5):
   - Read the snippet from `mcp-server/src/ui/snippets/file-summary-card.html`
   - Substitute: `{{FILE_PATH}}`, `{{LAYER}}`, `{{LAYER_COLOR}}`, `{{SHAPE_LABEL}}`
@@ -259,91 +278,13 @@ Render the blast radius as a **dependency tree/graph view** instead of concentri
 `show_pr_impact blastRadius.affected` array, which lacks source attribution and cannot map
 affected files back to specific changed-file roots.
 
-Place it as a full-width row after the Graph Context section:
+Place it as a full-width row after the Graph Context section. Read the snippet from
+`mcp-server/src/ui/snippets/blast-radius-tree.html` and substitute placeholders:
 
-```html
-<div class="grid-card" style="grid-column: 1 / -1; margin-top: 8px;">
-  <details class="collapsible-section">
-    <summary class="collapsible-summary">
-      <span class="collapsible-arrow">&#9654;</span>
-      <span class="collapsible-title">Blast Radius — Dependency Tree ({totalAffected} affected files)</span>
-    </summary>
-    <div class="collapsible-body">
-      <div class="dep-tree">
-        <!-- For each changed file as a root node: -->
-        <div class="dep-tree-group">
-          <div class="dep-tree-root">{escapeHtml(changedFile)}</div>
-          <div class="dep-tree-edges">
-            <!-- For each depth-1 dependent (from fileContextMap[changedFile].blast_radius.affected): -->
-            <div class="dep-tree-edge">
-              <div class="dep-tree-connector">&#9500;&#9472;&#9472;</div>
-              <div class="dep-tree-node">
-                <span class="dep-tree-name">{escapeHtml(basename(dependent.file_path))}</span>
-                <span class="layer-badge" style="background: {layerColor}22; color: {layerColor}; border-color: {layerColor}44;">{escapeHtml(dependent.layer)}</span>
-              </div>
-            </div>
-            <!-- If depth-2+ dependents exist, summarize: -->
-            <div class="dep-tree-edge">
-              <div class="dep-tree-connector">&#9492;&#9472;&#9472;</div>
-              <div class="dep-tree-node dep-tree-node--summary">+{depth2Count} more at depth 2+</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </details>
-</div>
-```
+- `{{TOTAL_AFFECTED}}` — total count of affected files (number, no escaping needed)
+- `{{TREE_GROUPS_HTML}}` — pre-rendered group HTML (escapeHtml all text content within)
 
-CSS for the dependency tree (add to the `<style>` tag):
-
-```css
-/* Dependency tree */
-.dep-tree { display: flex; flex-direction: column; gap: 16px; }
-.dep-tree-group { display: flex; flex-direction: column; gap: 4px; }
-.dep-tree-root {
-  font-family: monospace;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-bright);
-  padding: 6px 10px;
-  background: var(--accent-soft, rgba(108,140,255,0.12));
-  border: 1px solid var(--accent, #6c8cff);
-  border-radius: 6px;
-  display: inline-block;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dep-tree-edges { display: flex; flex-direction: column; gap: 3px; padding-left: 16px; margin-top: 4px; }
-.dep-tree-edge { display: flex; align-items: center; gap: 6px; }
-.dep-tree-connector { font-family: monospace; font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
-.dep-tree-node {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  padding: 3px 8px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  min-width: 0;
-}
-.dep-tree-name {
-  font-family: monospace;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dep-tree-node--summary {
-  color: var(--text-muted);
-  font-style: italic;
-  background: transparent;
-  border-color: transparent;
-}
-```
+Extract the `<style>` block from the snippet and include it in the page `<style>` tag.
 
 **Data aggregation rules:**
 - Root nodes = the changed files from the diff (from Stage 1 of REVIEW.md)
@@ -365,7 +306,9 @@ Do not abbreviate or omit any CSS rule.
 Also add CSS for:
 - Reviewer narrative panel and collapsible section (from Section C)
 - File detail and summary card styles (extracted from `file-detail-card.html` and `file-summary-card.html` snippet `<style>` blocks)
-- Dependency tree CSS (from the "Blast radius dependency tree" section above)
+- Dependency tree CSS (extracted from `blast-radius-tree.html` snippet `<style>` block)
+
+Include the `<script>` block from `file-detail-card.html` **ONCE** before `</body>` (Canvas graph initialization).
 
 ## Step 7 — Security
 
@@ -406,7 +349,8 @@ Return when the file is written. Do not modify the worktree.
 - The reviewer narrative is NOT optional — the template explicitly marks it as REQUIRED
 - The reviewer narrative appears immediately after the verdict banner (before stats row)
 - Read Sections F and G from DESIGN-SYSTEM.md; do not reconstruct patterns from memory
-- Read `file-detail-card.html` and `file-summary-card.html` for file card HTML/CSS — do NOT write your own card markup
+- Read `file-detail-card.html`, `file-summary-card.html`, and `blast-radius-tree.html` for snippet HTML/CSS — do NOT write your own card markup
+- `file-detail-card.html` uses a Canvas-based dependency graph — include its `<script>` block once before `</body>`
 - The blast radius visualization uses a dependency tree (per-file roots), NOT concentric SVG rings
 - Dependency tree uses per-file `get_file_context().blast_radius` data for source-aware root→dependent mapping
 - Do NOT reference Section H of DESIGN-SYSTEM.md — it describes the old rings pattern which is no longer used
