@@ -151,16 +151,19 @@ for BRANCH in "${MERGED_BRANCHES[@]}"; do
     TASKS_JSON="["
     FIRST=true
     for SLUG in "${TASK_SLUGS[@]}"; do
-      # Read task description from session.json if available
-      SESSION_FILE="${WORKSPACE_PATH}/${SLUG}/session.json"
+      # Read task metadata from orchestration.db if available.
+      DB_FILE="${WORKSPACE_PATH}/${SLUG}/orchestration.db"
       TASK_DESC=""
       STATUS_VAL=""
       CREATED_VAL=""
-      if [[ -f "$SESSION_FILE" ]]; then
-        # Portable extraction without jq dependency
-        TASK_DESC="$(grep -o '"task"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"task"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
-        STATUS_VAL="$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"status"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
-        CREATED_VAL="$(grep -o '"created"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"created"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
+      if [[ -f "$DB_FILE" ]] && command -v sqlite3 >/dev/null 2>&1; then
+        # sqlite3 outputs pipe-separated: "task|status|created"
+        DB_ROW="$(sqlite3 -readonly "$DB_FILE" \
+          "SELECT task, status, created FROM execution WHERE id = 1 LIMIT 1;" \
+          2>/dev/null || true)"
+        TASK_DESC="$(echo "$DB_ROW" | cut -d'|' -f1)"
+        STATUS_VAL="$(echo "$DB_ROW" | cut -d'|' -f2)"
+        CREATED_VAL="$(echo "$DB_ROW" | cut -d'|' -f3)"
       fi
       TASK_DESC="${TASK_DESC:-unknown}"
       STATUS_VAL="${STATUS_VAL:-unknown}"
@@ -201,11 +204,18 @@ EOF
       if [[ ${#TASK_SLUGS[@]} -gt 0 ]]; then
         echo "### Tasks (${#TASK_SLUGS[@]})"
         for SLUG in "${TASK_SLUGS[@]}"; do
-          SESSION_FILE="${WORKSPACE_PATH}/${SLUG}/session.json"
-          if [[ -f "$SESSION_FILE" ]]; then
-            TASK_DESC="$(grep -o '"task"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"task"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
-            STATUS_VAL="$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"status"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
-            echo "- **${SLUG}**: ${TASK_DESC:-unknown} (${STATUS_VAL:-unknown})"
+          DB_FILE="${WORKSPACE_PATH}/${SLUG}/orchestration.db"
+          SUM_TASK_DESC=""
+          SUM_STATUS_VAL=""
+          if [[ -f "$DB_FILE" ]] && command -v sqlite3 >/dev/null 2>&1; then
+            DB_ROW="$(sqlite3 -readonly "$DB_FILE" \
+              "SELECT task, status FROM execution WHERE id = 1 LIMIT 1;" \
+              2>/dev/null || true)"
+            SUM_TASK_DESC="$(echo "$DB_ROW" | cut -d'|' -f1)"
+            SUM_STATUS_VAL="$(echo "$DB_ROW" | cut -d'|' -f2)"
+          fi
+          if [[ -n "$SUM_TASK_DESC" || -n "$SUM_STATUS_VAL" ]]; then
+            echo "- **${SLUG}**: ${SUM_TASK_DESC:-unknown} (${SUM_STATUS_VAL:-unknown})"
           else
             echo "- **${SLUG}**"
           fi

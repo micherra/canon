@@ -28,7 +28,7 @@ Branch name sanitization: lowercase, replace `/` with `--` and spaces with `-`, 
 ### Step 2: Show workspace summary
 
 For each workspace to clean, show the user:
-- Branch name and creation date (from `session.json`)
+- Branch name and creation date (from `orchestration.db`)
 - Number of research docs, decisions, plans, reviews
 - Size of `log.jsonl` (number of entries)
 - Number of transcript files in `transcripts/`
@@ -57,7 +57,7 @@ Create `.canon/history/{sanitized-branch}/` and preserve:
 Note: Transcript files (`transcripts/`) are not archived — they contain ephemeral agent conversation data.
 
 Generate `summary.md` by reading:
-- `session.json` for task description and dates
+- `orchestration.db` for task description and dates
 - `log.jsonl` for agent activity timeline
 - Any review verdicts from `reviews/`
 - Decision titles from `decisions/`
@@ -69,7 +69,7 @@ Format:
 
 **Task**: {description}
 **Period**: {created} to {archived}
-**Status**: {status from session.json}
+**Status**: {status from orchestration.db}
 
 ### Activity
 - {N} research docs produced

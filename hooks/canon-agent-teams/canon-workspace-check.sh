@@ -156,32 +156,38 @@ fi
 _find_active_workspace() {
   local branch="$1"
 
+  # sqlite3 is required to query orchestration.db. If absent, fail open so that
+  # the hook never silently blocks all edits on machines without sqlite3.
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    return 0
+  fi
+
   for search_root in "${SEARCH_ROOTS[@]}"; do
     local ws_dir="${search_root}/.canon/workspaces"
     if [[ ! -d "$ws_dir" ]]; then
       continue
     fi
 
-    # Scan all session.json files for a matching branch + active status
-    while IFS= read -r session_file; do
-      if [[ ! -f "$session_file" ]]; then
+    # Scan all orchestration.db files and query branch + status via sqlite3.
+    while IFS= read -r db_path; do
+      if [[ ! -f "$db_path" ]]; then
         continue
       fi
 
-      if command -v jq >/dev/null 2>&1; then
-        ws_branch=$(jq -r '.branch // empty' "$session_file" 2>/dev/null || true)
-        ws_status=$(jq -r '.status // empty' "$session_file" 2>/dev/null || true)
-      else
-        ws_branch=$(grep -o '"branch"[[:space:]]*:[[:space:]]*"[^"]*"' "$session_file" \
-          | sed 's/"branch"[[:space:]]*:[[:space:]]*"//;s/"//' | head -1 || true)
-        ws_status=$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$session_file" \
-          | sed 's/"status"[[:space:]]*:[[:space:]]*"//;s/"//' | head -1 || true)
-      fi
+      local row
+      row=$(sqlite3 -readonly "$db_path" \
+        "SELECT branch, status FROM execution WHERE id = 1 LIMIT 1;" \
+        2>/dev/null || true)
+
+      # sqlite3 pipe-separated output: "branch|status"
+      local ws_branch ws_status
+      ws_branch="${row%%|*}"
+      ws_status="${row##*|}"
 
       if [[ "$ws_branch" == "$branch" && "$ws_status" == "active" ]]; then
         return 0
       fi
-    done < <(find "$ws_dir" -name "session.json" -maxdepth 3 2>/dev/null)
+    done < <(find "$ws_dir" -name "orchestration.db" -maxdepth 3 2>/dev/null)
   done
 
   return 1
@@ -194,15 +200,18 @@ fi
 # ── 7. Parent-workspace lookup (ISSUE-3) ─────────────────────────────────────
 # If in a worktree, check CANON_PARENT_WORKSPACE env var for a parent workspace.
 if [[ "$IN_WORKTREE" -eq 1 && -n "${CANON_PARENT_WORKSPACE:-}" ]]; then
+  # sqlite3 absent → fail open (allow the operation).
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    exit 0
+  fi
+
   for search_root in "${SEARCH_ROOTS[@]}"; do
-    parent_session="${search_root}/.canon/workspaces/${CANON_PARENT_WORKSPACE}/session.json"
-    if [[ -f "$parent_session" ]]; then
-      if command -v jq >/dev/null 2>&1; then
-        parent_status=$(jq -r '.status // empty' "$parent_session" 2>/dev/null || true)
-      else
-        parent_status=$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$parent_session" \
-          | sed 's/"status"[[:space:]]*:[[:space:]]*"//;s/"//' | head -1 || true)
-      fi
+    parent_db="${search_root}/.canon/workspaces/${CANON_PARENT_WORKSPACE}/orchestration.db"
+    if [[ -f "$parent_db" ]]; then
+      parent_row=$(sqlite3 -readonly "$parent_db" \
+        "SELECT status FROM execution WHERE id = 1 LIMIT 1;" \
+        2>/dev/null || true)
+      parent_status="${parent_row%%|*}"
 
       if [[ "$parent_status" == "active" ]]; then
         exit 0
