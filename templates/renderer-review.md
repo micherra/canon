@@ -37,9 +37,12 @@ Read all sections of DESIGN-SYSTEM.md before composing. You will use:
 - Section A (CSS tokens) — copy verbatim into your <style> tag
 - Section F (Review Dashboard Patterns) — full layout, all subsections F.1–F.14
 - Section G (Graph Context Patterns) — file detail and summary cards
-- Section H (Blast Radius Rings Patterns) — concentric rings visualization
 
-Do NOT duplicate the patterns inline. Read them from DESIGN-SYSTEM.md and apply them.
+Also read these snippet files for file card HTML and CSS:
+- mcp-server/src/ui/snippets/file-detail-card.html — full card HTML + CSS for high-impact files
+- mcp-server/src/ui/snippets/file-summary-card.html — compact card HTML + CSS for standard files
+
+Do NOT duplicate the patterns inline. Read them from DESIGN-SYSTEM.md and the snippet files and apply them.
 
 ## Step 2 — Parse the review markdown
 
@@ -97,6 +100,7 @@ From each result, extract:
 - `in_degree` — number of files that import this file
 - `impact_score` — normalized impact score (0–1)
 - `blast_radius.summary.total_files` — total downstream files affected
+- `blast_radius.affected` — per-file array of downstream dependents (used for dependency tree roots)
 - `computed_tags` — computed tags for this file
 - `violation_count` — number of active violations on this file (if available)
 
@@ -181,8 +185,8 @@ Assemble in this order:
      have depCount === 0)
    - Row 2 right: "Changes by Layer" (Section F.10) — **omit if layerData is empty**;
      "New Subsystems" (Section F.11) stacked below — **omit if subsystemData is empty**
-5. **Graph Context section** (Section G) — full-width collapsible card
-6. **Blast Radius Rings section** (Section H) — **omit entirely if blast radius data is empty**
+5. **Graph Context section** (Section G) — full-width collapsible card with file-detail-card and file-summary-card snippets
+6. **Blast Radius Dependency Tree** — full-width collapsible card (see "Blast radius dependency tree" below) — **omit entirely if blast radius data is empty**
 
 ### Conditional rendering rules
 
@@ -199,8 +203,8 @@ Apply these rules to avoid empty-section clutter:
   Also omit the "Violations by Principle" card (only render "Compliance Score" in that column).
 
 - **Empty blast radius** (blastFiles.length === 0 OR all depCount === 0): Omit both the
-  "Highest Blast Radius" grid card and the entire Blast Radius Rings section. Do not render
-  them at all — not even collapsed.
+  "Highest Blast Radius" grid card and the entire Blast Radius Dependency Tree section. Do not
+  render them at all — not even collapsed.
 
 - **Empty subsystems** (subsystemData is empty or absent): Omit the "New Subsystems" card
   entirely.
@@ -232,80 +236,136 @@ advisory items, gotcha documentation. Do not summarize or truncate.
 
 ### Changed files list
 
-Include the changed files as part of the Graph Context section (Section G). Each file gets a
-`<details>` expandable card. The collapsed (summary) state shows compact info; clicking expands
-to show the full detail view. Use this pattern for EVERY file regardless of impact level:
+Include the changed files as part of the Graph Context section (Section G). Use the Graph Context
+patterns from Section G of DESIGN-SYSTEM.md exactly:
+
+- Wrap the entire section per Section G.3 — `<div class="grid-card" style="grid-column: 1 / -1;">` with a `<details>` collapsible wrapper
+- Classify each file using Section G.2 — `isHighImpact(fileContext)` → hub shape OR violations > 0 OR blast_radius > 5
+- **High-impact files** get full **detail cards** from the `file-detail-card.html` snippet (Section G.4):
+  - Read the snippet from `mcp-server/src/ui/snippets/file-detail-card.html`
+  - Substitute: `{{FILE_PATH}}`, `{{LAYER}}`, `{{LAYER_COLOR}}`, `{{SHAPE_LABEL}}`, `{{SHAPE_DESCRIPTION}}`, `{{IMPORT_COUNT}}`, `{{IMPORTED_BY_COUNT}}`, `{{ENTITY_COUNT}}`, `{{BLAST_RADIUS_TOTAL}}`, `{{IMPORTS_HTML}}`, `{{IMPORTED_BY_HTML}}`, `{{ENTITIES_HTML}}`
+  - All string placeholders through `escapeHtml`; `{{LAYER_COLOR}}` is a CSS color constant — no escaping needed
+  - Extract and include the `<style>` block from the snippet
+- **Standard files** get compact **summary cards** from the `file-summary-card.html` snippet (Section G.5):
+  - Read the snippet from `mcp-server/src/ui/snippets/file-summary-card.html`
+  - Substitute: `{{FILE_PATH}}`, `{{LAYER}}`, `{{LAYER_COLOR}}`, `{{SHAPE_LABEL}}`
+  - Extract and include the `<style>` block from the snippet (deduplicate `.layer-badge` if both snippets used)
+- Both card types are expandable via `<details>` elements wrapping the card body content — high-impact cards should use `<details open>` so they start expanded; summary cards use `<details>` (closed by default)
+
+### Blast radius dependency tree
+
+Render the blast radius as a **dependency tree/graph view** instead of concentric rings. Use
+**per-file blast radius data from `get_file_context`** (Step 3b) — NOT the global
+`show_pr_impact blastRadius.affected` array, which lacks source attribution and cannot map
+affected files back to specific changed-file roots.
+
+Place it as a full-width row after the Graph Context section:
 
 ```html
-<details class="file-card-expandable">
-  <summary class="file-summary-card" style="cursor: pointer; list-style: none; padding: 8px 12px;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-    display: flex; align-items: center; gap: 8px; transition: background 0.15s ease;">
-    <!-- compact info: file path, layer badge, shape label, in_degree, impact_score -->
-    <span class="layer-badge">{escapeHtml(layer)}</span>
-    <span class="file-path" style="font-family: monospace; font-size: 12px;">{escapeHtml(filePath)}</span>
-    <span class="shape-label" style="font-size: 11px; color: var(--text-muted);">{escapeHtml(shape.label)}</span>
-    <span class="impact-score" style="font-size: 11px; color: var(--text-muted);">impact: {Math.round(impactScore * 100)}%</span>
-    <span class="in-degree" style="font-size: 11px; color: var(--text-muted);">in_degree: {inDegree}</span>
-  </summary>
-  <div class="file-detail-expanded" style="padding: 12px; border: 1px solid var(--border);
-    border-top: none; border-radius: 0 0 6px 6px; background: var(--bg);">
-    <!-- expanded info: imports list, imported_by list, blast radius total, computed tags -->
-    <div style="margin-bottom: 8px;">
-      <strong>Imports ({imports.length}):</strong>
-      <ul style="margin: 4px 0 0 16px; font-size: 11px; font-family: monospace;">
-        {imports.map(f => `<li>${escapeHtml(f)}</li>`).join("")}
-      </ul>
+<div class="grid-card" style="grid-column: 1 / -1; margin-top: 8px;">
+  <details class="collapsible-section">
+    <summary class="collapsible-summary">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-title">Blast Radius — Dependency Tree ({totalAffected} affected files)</span>
+    </summary>
+    <div class="collapsible-body">
+      <div class="dep-tree">
+        <!-- For each changed file as a root node: -->
+        <div class="dep-tree-group">
+          <div class="dep-tree-root">{escapeHtml(changedFile)}</div>
+          <div class="dep-tree-edges">
+            <!-- For each depth-1 dependent (from fileContextMap[changedFile].blast_radius.affected): -->
+            <div class="dep-tree-edge">
+              <div class="dep-tree-connector">&#9500;&#9472;&#9472;</div>
+              <div class="dep-tree-node">
+                <span class="dep-tree-name">{escapeHtml(basename(dependent.file_path))}</span>
+                <span class="layer-badge" style="background: {layerColor}22; color: {layerColor}; border-color: {layerColor}44;">{escapeHtml(dependent.layer)}</span>
+              </div>
+            </div>
+            <!-- If depth-2+ dependents exist, summarize: -->
+            <div class="dep-tree-edge">
+              <div class="dep-tree-connector">&#9492;&#9472;&#9472;</div>
+              <div class="dep-tree-node dep-tree-node--summary">+{depth2Count} more at depth 2+</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div style="margin-bottom: 8px;">
-      <strong>Imported by ({importedBy.length}):</strong>
-      <ul style="margin: 4px 0 0 16px; font-size: 11px; font-family: monospace;">
-        {importedBy.map(f => `<li>${escapeHtml(f)}</li>`).join("")}
-      </ul>
-    </div>
-    <div style="margin-bottom: 8px;">
-      <strong>Blast radius:</strong> {blastRadiusTotalFiles} downstream files
-    </div>
-    {computedTags.length > 0 ? `
-    <div>
-      <strong>Tags:</strong>
-      <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(computedTags.join(", "))}</span>
-    </div>` : ""}
-  </div>
-</details>
+  </details>
+</div>
 ```
 
-Add this CSS to the `<style>` block for the expandable file cards:
+CSS for the dependency tree (add to the `<style>` tag):
 
 ```css
-.file-card-expandable { margin-bottom: 6px; }
-.file-card-expandable > summary::-webkit-details-marker { display: none; }
-.file-card-expandable > summary::before {
-  content: "▶";
-  font-size: 10px;
-  margin-right: 6px;
-  transition: transform 0.15s ease;
+/* Dependency tree */
+.dep-tree { display: flex; flex-direction: column; gap: 16px; }
+.dep-tree-group { display: flex; flex-direction: column; gap: 4px; }
+.dep-tree-root {
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-bright);
+  padding: 6px 10px;
+  background: var(--accent-soft, rgba(108,140,255,0.12));
+  border: 1px solid var(--accent, #6c8cff);
+  border-radius: 6px;
   display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.file-card-expandable[open] > summary::before { transform: rotate(90deg); }
-.file-card-expandable > summary:hover { background: var(--surface-hover, #f5f5f5); }
+.dep-tree-edges { display: flex; flex-direction: column; gap: 3px; padding-left: 16px; margin-top: 4px; }
+.dep-tree-edge { display: flex; align-items: center; gap: 6px; }
+.dep-tree-connector { font-family: monospace; font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+.dep-tree-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  min-width: 0;
+}
+.dep-tree-name {
+  font-family: monospace;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dep-tree-node--summary {
+  color: var(--text-muted);
+  font-style: italic;
+  background: transparent;
+  border-color: transparent;
+}
 ```
 
-### Blast radius rings
-
-Render using Section H geometry patterns. Data comes from `show_pr_impact blastRadius.affected`.
-Group by depth (H.2), compute ring positions (H.3), emit SVG (H.4). Apply crowding strategy when
-a ring has >12 files (H.6).
-
-**Only render this section if blast radius data is non-empty** (see conditional rendering rules above).
+**Data aggregation rules:**
+- Root nodes = the changed files from the diff (from Stage 1 of REVIEW.md)
+- Per-root dependents come from `fileContextMap[changedFile].blast_radius.affected` — this is
+  source-aware data that maps each affected file back to its specific changed-file root
+- Depth-1 dependents = entries with `depth === 1` in the per-file blast radius
+- Show up to 8 depth-1 dependents per changed file; if more, show the 8 with highest depth-count, then add "+N more at depth 1"
+- Count depth-2+ files per root and add a single summary row "+N more at depth 2+"
+- The last edge connector in each group uses `└──` (&#9492;&#9472;&#9472;) instead of `├──` (&#9500;&#9472;&#9472;)
+- Use the global `show_pr_impact blastRadius` for aggregate stats only (total affected count in the section title)
+- When a changed file has no blast radius data (leaf node), omit it from the tree entirely
+- When ALL changed files are leaf nodes, omit the entire dependency tree section
 
 ## Step 6 — Apply Section F.14 CSS verbatim
 
 Copy the full CSS from Section F.14 into the `<style>` tag, after the Section A design tokens.
 Do not abbreviate or omit any CSS rule.
 
-Also add CSS for the reviewer narrative panel, collapsible section, rings, and expandable file
-cards (from Sections C and H, plus the `.file-card-expandable` rules above).
+Also add CSS for:
+- Reviewer narrative panel and collapsible section (from Section C)
+- File detail and summary card styles (extracted from `file-detail-card.html` and `file-summary-card.html` snippet `<style>` blocks)
+- Dependency tree CSS (from the "Blast radius dependency tree" section above)
 
 ## Step 7 — Security
 
@@ -345,8 +405,11 @@ Return when the file is written. Do not modify the worktree.
 - This is the ONLY renderer template that requires MCP tool calls (show_pr_impact, get_file_context)
 - The reviewer narrative is NOT optional — the template explicitly marks it as REQUIRED
 - The reviewer narrative appears immediately after the verdict banner (before stats row)
-- Read all of Sections F, G, and H from DESIGN-SYSTEM.md; do not reconstruct patterns from memory
+- Read Sections F and G from DESIGN-SYSTEM.md; do not reconstruct patterns from memory
+- Read `file-detail-card.html` and `file-summary-card.html` for file card HTML/CSS — do NOT write your own card markup
+- The blast radius visualization uses a dependency tree (per-file roots), NOT concentric SVG rings
+- Dependency tree uses per-file `get_file_context().blast_radius` data for source-aware root→dependent mapping
+- Do NOT reference Section H of DESIGN-SYSTEM.md — it describes the old rings pattern which is no longer used
 - The renderer writes exclusively to `${WORKSPACE}/artifacts/` — never to the worktree
 - If REVIEW.md does not exist at `${WORKSPACE}/reviews/REVIEW.md`, report failure and stop
 - Do NOT render empty sections — only render sections that have data to display
-- Every file in Graph Context uses an expandable `<details>` card regardless of impact level
