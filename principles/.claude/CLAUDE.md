@@ -37,13 +37,14 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 - Principles may declare `scope.tags` in frontmatter for tag-based matching; OR semantics with `layers` (added 2026-05-02)
 
 ## Conventions
-<!-- last-updated: 2026-05-02 (no-llm-calls-in-mcp-tools rule added) -->
+<!-- last-updated: 2026-05-16 -->
 
 - Each principle has a unique `id` used for compliance tracking
 - Principles should be specific and actionable — not aspirational
 - Rules: `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `no-llm-calls-in-mcp-tools` (added 2026-05-02 — MCP tools must not make LLM API calls)
 - Strong opinions cover architecture, testing, error handling, data flow
 - Conventions cover naming, file organization, test structure
+- `accumulator-test-coverage` (added 2026-05-16) — accumulator functions in `mcp-server/**` require at least one test case with N>1 input and exact numeric assertion; capped accumulators require below-cap, at-cap, and above-cap cases
 
 ## Anti-Rationalization
 
