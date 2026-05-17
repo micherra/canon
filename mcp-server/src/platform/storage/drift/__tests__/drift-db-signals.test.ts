@@ -280,6 +280,65 @@ describe("DriftDbSignals.getPathEffects", () => {
     expect(result[0].last_clean_at).toBeNull();
     db.close();
   });
+
+  // Accumulator test coverage: multi-call accumulation with increasing total_violations
+  // Each upsertPathEffect call updates in-place; asserts exact stored value after each call.
+  // Validates that the DAO stores the exact numeric value provided, not a boolean coercion.
+  test("accumulates total_violations across multiple upsert calls — exact value stored after each call", () => {
+    const { signals, db } = makeSignalsDb();
+
+    // First upsert: initial state with 5 total_violations
+    signals.upsertPathEffect({
+      clean_streak: 0,
+      file_path: "src/accumulate.ts",
+      last_clean_at: null,
+      last_violation_at: "2026-04-01T00:00:00.000Z",
+      total_reviews: 3,
+      total_violations: 5,
+      violation_streak: 2,
+    });
+
+    const after5 = signals.getPathEffects(["src/accumulate.ts"]);
+    expect(after5).toHaveLength(1);
+    expect(after5[0]!.total_violations).toBe(5);
+    expect(after5[0]!.total_reviews).toBe(3);
+
+    // Second upsert: update to 10 total_violations
+    signals.upsertPathEffect({
+      clean_streak: 0,
+      file_path: "src/accumulate.ts",
+      last_clean_at: null,
+      last_violation_at: "2026-05-01T00:00:00.000Z",
+      total_reviews: 7,
+      total_violations: 10,
+      violation_streak: 4,
+    });
+
+    const after10 = signals.getPathEffects(["src/accumulate.ts"]);
+    expect(after10).toHaveLength(1);
+    expect(after10[0]!.total_violations).toBe(10); // exact value, not boolean or capped
+    expect(after10[0]!.total_reviews).toBe(7);
+    expect(after10[0]!.violation_streak).toBe(4);
+
+    // Third upsert: update to 20 total_violations (well above any scoring cap)
+    signals.upsertPathEffect({
+      clean_streak: 0,
+      file_path: "src/accumulate.ts",
+      last_clean_at: null,
+      last_violation_at: "2026-05-15T00:00:00.000Z",
+      total_reviews: 12,
+      total_violations: 20,
+      violation_streak: 6,
+    });
+
+    const after20 = signals.getPathEffects(["src/accumulate.ts"]);
+    expect(after20).toHaveLength(1);
+    expect(after20[0]!.total_violations).toBe(20); // exact value preserved — not capped to 5
+    expect(after20[0]!.total_reviews).toBe(12);
+    expect(after20[0]!.last_violation_at).toBe("2026-05-15T00:00:00.000Z");
+
+    db.close();
+  });
 });
 
 // ---- DriftDb.getSignals() integration ----
