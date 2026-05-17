@@ -9,9 +9,8 @@
  *     incomplete, which expected artifacts are missing, aggregate
  *     quality signals, release file claims, record analytics, and archive.
  *
- * Both tools are gated behind CANON_AGENT_TEAMS_MODE=on via their
- * registration in register-orchestration.ts; the handlers themselves are
- * pure and safe to call regardless.
+ * Both tools are registered unconditionally in register-orchestration.ts;
+ * the handlers are pure and safe to call regardless of environment.
  *
  * Concurrency contract (single-writer invariant):
  *   logStep() does a read-modify-write on {workspace}/journal.json. The

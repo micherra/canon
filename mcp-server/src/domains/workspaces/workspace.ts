@@ -25,15 +25,28 @@ export function sanitizeBranch(branch: string): string {
 /**
  * Generate a URL-style slug from a task description.
  * Lowercases, replaces spaces with hyphens, strips non-alphanumeric/hyphen chars,
- * collapses multiple hyphens, trims leading/trailing hyphens, truncates to 40 chars.
+ * collapses multiple hyphens, trims leading/trailing hyphens, truncates to 72 chars.
+ * Truncation is word-boundary-aware: backs up to the last hyphen before the limit
+ * when possible, otherwise hard-truncates at 72 characters.
  */
 export function generateSlug(task: string): string {
-  return task
+  const MAX_LENGTH = 72;
+  const sanitized = task
     .toLowerCase()
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9-]/g, "")
     .replace(/-{2,}/g, "-")
     .replace(/^-+|-+$/g, "");
+
+  if (sanitized.length <= MAX_LENGTH) return sanitized;
+
+  // Back up to the last hyphen within the allowed window for a clean word boundary.
+  const window = sanitized.slice(0, MAX_LENGTH);
+  const lastHyphen = window.lastIndexOf("-");
+  const truncated = lastHyphen > 0 ? sanitized.slice(0, lastHyphen) : window;
+
+  // Trim any trailing hyphen that may have been exposed after truncation.
+  return truncated.replace(/-+$/, "");
 }
 
 /**

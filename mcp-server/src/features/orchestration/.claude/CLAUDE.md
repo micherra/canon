@@ -41,7 +41,7 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 <!-- last-updated: 2026-05-16 (present_artifact fire-and-forget; PresentArtifactResult now { url: string } only) -->
 Key tool functions (all return `ToolResult<T>` — see `@shared/lib/tool-result.ts`):
 
-- `initWorkspace(input)` — create or resume workspace; preflight checks when `preflight: true`
+- `initWorkspace(input)` — create or resume workspace; preflight checks when `preflight: true`; `tryResumeWorkspace` accepts optional `expectedTask` to block resume on task-identity mismatch (slug-collision defense)
 - `captureTranscript(input: CaptureTranscriptInput)` → `Promise<ToolResult<CaptureTranscriptResult>>` — best-effort; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon format, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; returns `warning` (never an error) when source file not found
 - `transformClaudeCodeTranscript(entries: ClaudeCodeEntry[])` → `TranscriptEntry[]` — pure function; maps CC JSONL content blocks to Canon transcript entries; malformed entries skipped silently; exported from `services/transcript-transformer.ts`
 

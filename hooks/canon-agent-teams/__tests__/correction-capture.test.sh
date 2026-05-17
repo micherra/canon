@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests for correction-capture.sh.
-# Exercises: feature-flag off, non-Bash input, no git restore/checkout pattern,
+# Exercises: non-Bash input, no git restore/checkout pattern,
 # commit older than 60s, git checkout -- detected, git restore detected,
 # JSON validity, non-blocking when corrections dir cannot be created.
 # All cases must exit 0 (hook is advisory, never blocks).
@@ -38,33 +38,16 @@ make_payload() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Test 1: Feature-flag off → exit 0 (no-op), no file written.
-# ──────────────────────────────────────────────────────────────────────────────
-SANDBOX=$(mktemp -d)
-trap 'rm -rf "$SANDBOX"' EXIT
-
-CORRECTIONS_DIR="$SANDBOX/.canon/corrections"
-out=$(CANON_AGENT_TEAMS_MODE=off \
-      bash "$HOOK" <<<"$(make_payload)" 2>&1) \
-  || fail "flag off should exit 0"
-if ls "$CORRECTIONS_DIR"/*.json 2>/dev/null | grep -q .; then
-  fail "flag off should write no correction files"
-fi
-pass "flag off is no-op, no files written"
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Test 2: Non-Bash tool → exit 0 (no-op).
 # ──────────────────────────────────────────────────────────────────────────────
-out=$(CANON_AGENT_TEAMS_MODE=on \
-      bash "$HOOK" <<<'{"tool_name":"Edit","tool_input":{"command":""}}' 2>&1) \
+out=$(bash "$HOOK" <<<'{"tool_name":"Edit","tool_input":{"command":""}}' 2>&1) \
   || fail "non-Bash tool should exit 0"
 pass "non-Bash tool ignored"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 3: Bash command that does not contain git restore/checkout patterns → exit 0.
 # ──────────────────────────────────────────────────────────────────────────────
-out=$(CANON_AGENT_TEAMS_MODE=on \
-      bash "$HOOK" <<<"$(make_payload "Bash" "npm test")" 2>&1) \
+out=$(bash "$HOOK" <<<"$(make_payload "Bash" "npm test")" 2>&1) \
   || fail "non-restore Bash should exit 0"
 pass "non-restore Bash command ignored"
 
@@ -82,8 +65,7 @@ REPO4=$(make_repo)
   GIT_COMMITTER_DATE="$PAST" git commit -q --amend --no-edit --date="$PAST" 2>/dev/null || true
 
   LOCAL_CORRECTIONS="$REPO4/.canon/corrections"
-  out=$(CANON_AGENT_TEAMS_MODE=on \
-        bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- a.ts")" 2>&1) \
+  out=$(bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- a.ts")" 2>&1) \
     || fail "old commit case should exit 0"
   if ls "$LOCAL_CORRECTIONS"/*.json 2>/dev/null | grep -q .; then
     fail "old commit case should write no correction files"
@@ -99,8 +81,7 @@ REPO5=$(make_repo)
 (
   cd "$REPO5"
   LOCAL_CORRECTIONS="$REPO5/.canon/corrections"
-  out=$(CANON_AGENT_TEAMS_MODE=on \
-        bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- src/services/order.ts")" 2>&1) \
+  out=$(bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- src/services/order.ts")" 2>&1) \
     || fail "git checkout -- case should exit 0"
   COUNT=$(ls "$LOCAL_CORRECTIONS"/*.json 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$COUNT" -lt 1 ]]; then
@@ -117,8 +98,7 @@ REPO6=$(make_repo)
 (
   cd "$REPO6"
   LOCAL_CORRECTIONS="$REPO6/.canon/corrections"
-  out=$(CANON_AGENT_TEAMS_MODE=on \
-        bash "$HOOK" <<<"$(make_payload "Bash" "git restore hooks/hook.sh")" 2>&1) \
+  out=$(bash "$HOOK" <<<"$(make_payload "Bash" "git restore hooks/hook.sh")" 2>&1) \
     || fail "git restore case should exit 0"
   COUNT=$(ls "$LOCAL_CORRECTIONS"/*.json 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$COUNT" -lt 1 ]]; then
@@ -135,8 +115,7 @@ REPO7=$(make_repo)
 (
   cd "$REPO7"
   LOCAL_CORRECTIONS="$REPO7/.canon/corrections"
-  CANON_AGENT_TEAMS_MODE=on \
-    bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- src/api/handler.ts")" 2>/dev/null
+  bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- src/api/handler.ts")" 2>/dev/null
   JSON_FILE=$(ls "$LOCAL_CORRECTIONS"/*.json 2>/dev/null | head -1)
   if [[ -z "$JSON_FILE" ]]; then
     fail "no correction JSON file found"
@@ -167,8 +146,7 @@ REPO8=$(make_repo)
   mkdir -p "$REPO8/.canon"
   chmod 444 "$REPO8/.canon"
 
-  out=$(CANON_AGENT_TEAMS_MODE=on \
-        bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- a.ts")" 2>&1) \
+  out=$(bash "$HOOK" <<<"$(make_payload "Bash" "git checkout -- a.ts")" 2>&1) \
     || fail "unwritable corrections dir case should exit 0"
 
   # Restore permissions for cleanup

@@ -193,16 +193,30 @@ function resolveWorktreePath(
   return newPath;
 }
 
-/** Try to resume an existing workspace. Returns result if resume succeeds, null otherwise. */
+/**
+ * Try to resume an existing workspace. Returns result if resume succeeds, null otherwise.
+ *
+ * Task-identity invariant: when `expectedTask` is provided, the stored session's task
+ * must match exactly. If it does not match, returns `null` (no resume) — this prevents
+ * a truncated slug collision from resuming the wrong workspace. The generateSlug function
+ * truncates long task strings to 72 characters, which can produce identical slugs for
+ * distinct tasks; the guard here is the defense-in-depth layer against that failure mode.
+ *
+ * @param candidateWorkspace - Absolute path to the candidate workspace directory
+ * @param projectDir - Absolute path to the project root
+ * @param expectedTask - When provided, resume is blocked if `session.task !== expectedTask`
+ */
 function tryResumeWorkspace(
   candidateWorkspace: string,
   projectDir: string,
+  expectedTask?: string,
 ): InitWorkspaceResult | null {
   try {
     const store = getExecutionStore(candidateWorkspace);
     const session = store.getSession();
     const board = store.getBoard();
-    if (session && session.status === "active" && board) {
+    const taskMatches = expectedTask === undefined || session?.task === expectedTask;
+    if (session && session.status === "active" && board && taskMatches) {
       const worktreePath = resolveWorktreePath(candidateWorkspace, projectDir, session);
       const worktreeExists = existsSync(worktreePath);
       return {
@@ -498,7 +512,7 @@ export async function initWorkspaceFlow(
   const branchDir = join(projectDir, ".canon", "workspaces", sanitized);
   const candidateWorkspace = join(branchDir, baseSlug);
 
-  const resumeResult = tryResumeWorkspace(candidateWorkspace, projectDir);
+  const resumeResult = tryResumeWorkspace(candidateWorkspace, projectDir, input.task);
   if (resumeResult) return resumeResult;
 
   const result = await createNewWorkspace({

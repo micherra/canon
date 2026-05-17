@@ -65,20 +65,6 @@ MASTER_SANDBOX=$(mktemp -d)
 trap 'rm -rf "$MASTER_SANDBOX"' EXIT
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. CANON_AGENT_TEAMS_MODE=off → ALLOWED (no-op)
-# ─────────────────────────────────────────────────────────────────────────────
-T1="$MASTER_SANDBOX/t1"
-_setup_repo "$T1"
-
-(
-  cd "$T1"
-  CANON_AGENT_TEAMS_MODE=off TOOL_NAME=Edit \
-    bash "$HOOK" <<< '{"file_path": "src/app.ts"}' \
-    >/dev/null 2>&1
-) || fail "1: flag off should exit 0"
-pass "1: CANON_AGENT_TEAMS_MODE=off is no-op"
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 2. CANON_BYPASS_WORKSPACE_CHECK=1 → ALLOWED
 # ─────────────────────────────────────────────────────────────────────────────
 T2="$MASTER_SANDBOX/t2"
@@ -86,7 +72,7 @@ _setup_repo "$T2"
 
 (
   cd "$T2"
-  CANON_AGENT_TEAMS_MODE=on CANON_BYPASS_WORKSPACE_CHECK=1 TOOL_NAME=Edit \
+  CANON_BYPASS_WORKSPACE_CHECK=1 TOOL_NAME=Edit \
     bash "$HOOK" <<< '{"file_path": "src/app.ts"}' \
     >/dev/null 2>&1
 ) || fail "2: bypass gate should exit 0"
@@ -101,7 +87,7 @@ _setup_repo "$T3"
 exit_code=0
 (
   cd "$T3"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Edit \
+  TOOL_NAME=Edit \
     bash "$HOOK" <<< '{"file_path": "src/app.ts"}' \
     >/dev/null 2>&1
 ) || exit_code=$?
@@ -117,7 +103,7 @@ _setup_repo "$T4"
 
 (
   cd "$T4"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Edit \
+  TOOL_NAME=Edit \
     bash "$HOOK" <<< '{"file_path": ".canon/workspaces/test/session.json"}' \
     >/dev/null 2>&1
 ) || fail "4: gitignored file should exit 0"
@@ -132,7 +118,7 @@ _setup_repo "$T5"
 exit_code=0
 (
   cd "$T5"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Write \
+  TOOL_NAME=Write \
     bash "$HOOK" <<< '{"file_path": "src/app.ts"}' \
     >/dev/null 2>&1
 ) || exit_code=$?
@@ -149,7 +135,7 @@ _setup_repo "$T6"
 exit_code=0
 (
   cd "$T6"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Bash \
+  TOOL_NAME=Bash \
     bash "$HOOK" <<< '{"command": "sed -i '\'''\'' '\''s/foo/bar/'\'' README.md"}' \
     >/dev/null 2>&1
 ) || exit_code=$?
@@ -165,7 +151,7 @@ _setup_repo "$T7"
 
 (
   cd "$T7"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Bash \
+  TOOL_NAME=Bash \
     bash "$HOOK" <<< '{"command": "echo test > .canon/test.log"}' \
     >/dev/null 2>&1
 ) || fail "7: gitignored Bash target should exit 0"
@@ -179,7 +165,7 @@ _setup_repo "$T8"
 
 (
   cd "$T8"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Bash \
+  TOOL_NAME=Bash \
     bash "$HOOK" <<< '{"command": "ls -la"}' \
     >/dev/null 2>&1
 ) || fail "8: Bash with no file targets should exit 0"
@@ -197,7 +183,7 @@ _create_workspace "$T9" "$current_branch" "active"
 
 (
   cd "$T9"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Edit \
+  TOOL_NAME=Edit \
     bash "$HOOK" <<< '{"file_path": "src/app.ts"}' \
     >/dev/null 2>&1
 ) || fail "9: active workspace should allow edit, expected exit 0"
@@ -215,7 +201,7 @@ _create_workspace "$T10" "$current_branch" "completed"
 exit_code=0
 (
   cd "$T10"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Edit \
+  TOOL_NAME=Edit \
     bash "$HOOK" <<< '{"file_path": "src/app.ts"}' \
     >/dev/null 2>&1
 ) || exit_code=$?
@@ -232,7 +218,7 @@ _setup_repo "$T11"
 exit_code=0
 (
   cd "$T11"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Bash \
+  TOOL_NAME=Bash \
     bash "$HOOK" <<< '{"command": "echo hello | tee src/app.ts"}' \
     >/dev/null 2>&1
 ) || exit_code=$?
@@ -248,7 +234,7 @@ _setup_repo "$T12"
 
 (
   cd "$T12"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Bash \
+  TOOL_NAME=Bash \
     bash "$HOOK" <<< '{"command": "echo hi >> .canon/log.txt"}' \
     >/dev/null 2>&1
 ) || fail "12: gitignored append target should exit 0"
@@ -273,7 +259,7 @@ git -C "$T13_MAIN" worktree add -q "$T13_WT" "worktree-branch"
 
 (
   cd "$T13_WT"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Edit \
+  TOOL_NAME=Edit \
   CANON_PARENT_WORKSPACE="$parent_slug" \
     bash "$HOOK" <<< '{"file_path": "src/app.ts"}' \
     >/dev/null 2>&1
@@ -292,7 +278,7 @@ _setup_repo "$T15"
 exit_code=0
 (
   cd "$T15"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Bash \
+  TOOL_NAME=Bash \
     bash "$HOOK" <<< '{"command": "echo hi >src/app.ts"}' \
     >/dev/null 2>&1
 ) || exit_code=$?
@@ -309,7 +295,7 @@ _setup_repo "$T16"
 exit_code=0
 (
   cd "$T16"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Bash \
+  TOOL_NAME=Bash \
     bash "$HOOK" <<< '{"command": "echo hi | tee .canon/log.txt src/app.ts"}' \
     >/dev/null 2>&1
 ) || exit_code=$?
@@ -327,7 +313,7 @@ stderr_msg=""
 exit_code=0
 stderr_msg=$(
   cd "$T14"
-  CANON_AGENT_TEAMS_MODE=on TOOL_NAME=Edit \
+  TOOL_NAME=Edit \
     bash "$HOOK" <<< '{"file_path": "src/app.ts"}' \
     2>&1 >/dev/null
 ) || exit_code=$?

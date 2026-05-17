@@ -13,12 +13,8 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 SANDBOX=$(mktemp -d)
 trap 'rm -rf "$SANDBOX"' EXIT
 
-# 1. Feature-flag off — exit 0 even with no args.
-CANON_AGENT_TEAMS_MODE=off bash "$HOOK" >/dev/null 2>&1 || fail "flag off should exit 0"
-pass "flag off is no-op"
-
 # 2. Missing workspace arg — exit 2.
-if CANON_AGENT_TEAMS_MODE=on bash "$HOOK" >/dev/null 2>&1; then
+if bash "$HOOK" >/dev/null 2>&1; then
   fail "missing workspace should exit 2"
 fi
 pass "missing workspace exits 2"
@@ -26,7 +22,7 @@ pass "missing workspace exits 2"
 # 3. Missing journal — exit 2.
 WS="$SANDBOX/no-journal"
 mkdir -p "$WS"
-if CANON_AGENT_TEAMS_MODE=on bash "$HOOK" "$WS" >/dev/null 2>&1; then
+if bash "$HOOK" "$WS" >/dev/null 2>&1; then
   fail "missing journal should exit 2"
 fi
 pass "missing journal exits 2"
@@ -44,7 +40,7 @@ cat > "$WS/journal.json" <<'EOF'
   ]
 }
 EOF
-out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" "$WS" 2>&1) || fail "complete flow should exit 0"
+out=$(bash "$HOOK" "$WS" 2>&1) || fail "complete flow should exit 0"
 echo "$out" | grep -q 'Completion verified' || fail "expected 'Completion verified' output, got: $out"
 pass "complete flow exits 0"
 
@@ -60,7 +56,7 @@ cat > "$WS/journal.json" <<'EOF'
   ]
 }
 EOF
-if out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" "$WS" 2>&1); then
+if out=$(bash "$HOOK" "$WS" 2>&1); then
   fail "started-but-not-completed should exit 2"
 fi
 echo "$out" | grep -q 'Steps not completed: s1 (started)' || fail "expected 's1 (started)' in output: $out"
@@ -79,7 +75,7 @@ cat > "$WS/journal.json" <<'EOF'
   ]
 }
 EOF
-if out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" "$WS" 2>&1); then
+if out=$(bash "$HOOK" "$WS" 2>&1); then
   fail "planned step should exit 2"
 fi
 echo "$out" | grep -q 'Steps not completed: s1 (planned)' || fail "expected 's1 (planned)' in output: $out"
@@ -97,7 +93,7 @@ cat > "$WS/journal.json" <<'EOF'
   ]
 }
 EOF
-if out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" "$WS" 2>&1); then
+if out=$(bash "$HOOK" "$WS" 2>&1); then
   fail "missing artifact should exit 2"
 fi
 echo "$out" | grep -q 'Artifacts missing:' || fail "expected 'Artifacts missing:' in output: $out"
@@ -116,7 +112,7 @@ cat > "$WS/journal.json" <<'EOF'
   ]
 }
 EOF
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" "$WS" >/dev/null 2>&1 || fail "skipped steps should not block completion"
+bash "$HOOK" "$WS" >/dev/null 2>&1 || fail "skipped steps should not block completion"
 pass "skipped steps do not block"
 
 # 8. Glob patterns in artifacts_expected expand against disk (PR #119 P2 fix).
@@ -133,7 +129,7 @@ cat > "$WS/journal.json" <<'EOF'
   ]
 }
 EOF
-out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" "$WS" 2>&1) || fail "glob artifact should match, exit 0. got: $out"
+out=$(bash "$HOOK" "$WS" 2>&1) || fail "glob artifact should match, exit 0. got: $out"
 echo "$out" | grep -q 'Completion verified' || fail "expected 'Completion verified' for matching glob, got: $out"
 pass "glob artifact patterns expand (matching case)"
 
@@ -149,7 +145,7 @@ cat > "$WS/journal.json" <<'EOF'
   ]
 }
 EOF
-if out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" "$WS" 2>&1); then
+if out=$(bash "$HOOK" "$WS" 2>&1); then
   fail "glob with no matches should exit 2"
 fi
 echo "$out" | grep -q 'plans/empty/\*\.md' || fail "expected unmatched glob in output: $out"
@@ -167,7 +163,7 @@ cat > "$WS/journal.json" <<'EOF'
   ]
 }
 EOF
-out=$(CANON_AGENT_TEAMS_MODE=on bash "$HOOK" "$WS" 2>&1) || fail "unresolved \${var} should not block: $out"
+out=$(bash "$HOOK" "$WS" 2>&1) || fail "unresolved \${var} should not block: $out"
 echo "$out" | grep -q 'Completion verified' || fail "expected 'Completion verified' despite unresolved var, got: $out"
 pass "unresolved \${var} does not block completion"
 

@@ -286,6 +286,8 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
+**Reviewer step — mandatory check**: After the reviewer step completes, verify `${WORKSPACE}/reviews/REVIEW.md` exists. If absent, re-spawn the reviewer with explicit instruction: "The review artifact was not written. You MUST call `mcp__canon__write_review` to write your findings to `${WORKSPACE}/reviews/REVIEW.md` before returning." If the second attempt also fails to produce the file, present to the user as HITL: "Reviewer failed to write REVIEW.md after two attempts. Manual review required."
+
 ### HITL Patterns <!-- last-updated: 2026-04-30 -->
 
 - **Requirement coverage check**: After planner returns, check the planning brief's Requirement Coverage Map for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
@@ -447,6 +449,7 @@ Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful resu
 ```
 canon/
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
+├── flows/                # REMOVED 2026-05-02 — all 28 flow YAML files deleted
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/

@@ -50,9 +50,32 @@ describe("generateSlug", () => {
     expect(generateSlug("Fix bug #123!")).toBe("fix-bug-123");
   });
 
-  it("preserves long task names without truncation", () => {
+  it("truncates long task names to at most 72 characters", () => {
     const long = "word ".repeat(20);
-    expect(generateSlug(long)).toBe(`${"word-".repeat(19)}word`);
+    const result = generateSlug(long);
+    expect(result.length).toBeLessThanOrEqual(72);
+  });
+
+  it("truncates at word boundary (last hyphen before limit)", () => {
+    // 15 chars each: "averylongword-" × 5 = 75 chars before truncation
+    const input = "averylongword averylongword averylongword averylongword averylongword";
+    const result = generateSlug(input);
+    expect(result.length).toBeLessThanOrEqual(72);
+    expect(result).not.toMatch(/-$/);
+  });
+
+  it("does not leave a trailing hyphen after truncation", () => {
+    // Construct a string that would produce a hyphen right at position 72
+    const input = "a".repeat(72);
+    const result = generateSlug(input);
+    expect(result).not.toMatch(/-$/);
+  });
+
+  it("falls back to hard truncation when no hyphen in first 72 chars", () => {
+    // 80 lowercase letters with no spaces — no hyphens after sanitization
+    const input = "a".repeat(80);
+    const result = generateSlug(input);
+    expect(result).toBe("a".repeat(72));
   });
 
   it("handles multiple spaces and hyphens", () => {

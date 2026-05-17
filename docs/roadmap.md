@@ -8,7 +8,7 @@ Forward-looking planning document. "What's Shipped" is a brief summary of comple
 
 **Tier 0 — Coordination Layer Migration (complete)**
 
-- **0.1 Agent teams migration** — `drive_flow`, `load_flow`, `simulate_flow` deleted. All 28 flow YAML files deleted. `CANON_AGENT_TEAMS_MODE=on` active, 20/20 soak gate passed.
+- **0.1 Agent teams migration** — `drive_flow`, `load_flow`, `simulate_flow` deleted. All 28 flow YAML files deleted. `CANON_AGENT_TEAMS_MODE` flag removed after 20/20 soak gate passed; agent-teams mode is now the unconditional default.
 - **0.2 Unified work tracking** — Shipped differently from plan. PR #160 deleted `board.json`, `board-sync.ts`, `update-board.ts`, `report-result.ts` (-10,316 lines). Journal is now the single tracking substrate; DAG execution uses native `TaskCreate` for parallel work.
 - **0.3 Runbooks replace flow YAML** — Planner synthesizes runbooks via `canon:synthesize` skill. `init_workspace` accepts `runbook_content`/`brief_content` and persists them to `plans/{slug}/runbook.md` and `plans/{slug}/planning-brief.md`.
 

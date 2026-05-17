@@ -18,6 +18,7 @@ rules:
   - agent-document-decisions
   - agent-artifact-write-before-return
   - agent-worktree-orientation
+  - agent-working-environment
   - agent-batch-tools
 references:
   - workspace-logging
