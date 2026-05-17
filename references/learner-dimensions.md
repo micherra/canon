@@ -201,6 +201,45 @@ The `get_build_history` MCP tool provides archived build metadata (branch, flow,
 | Frequently skipped states | Same state skipped in >= 60% of runs | Flow definition may need trimming — this state adds little value |
 | Rising violation count | Total violations per run trending up across recent 5 runs | Principles may need revision or scope narrowing |
 
+### Cognitive Load Signals
+
+**Goal**: Detect builds showing signs of cognitive overload — excessive retries, duration outliers relative to tier, or high skip rates — that suggest the system is struggling with a specific area.
+
+**Formula**:
+
+```
+overload_score = (checkpoint_iters × 2) + (verify_iters × 3) + (skipped_count) + duration_outlier_factor
+```
+
+Where:
+- `checkpoint_iters`: total retry iterations across all states in the build
+- `verify_iters`: number of verify step re-runs (weighted higher — verify failures indicate deeper issues)
+- `skipped_count`: number of states skipped during execution
+- `duration_outlier_factor`: `max(0, (actual_duration - tier_mean) / tier_stddev - 1)` — only contributes when duration exceeds 1 stddev above tier mean
+
+**Threshold**: builds scoring >= 6 are flagged.
+
+| Score Range | Signal |
+|-------------|--------|
+| 0–2 | Normal — no action |
+| 3–5 | Elevated — note in report, no flag |
+| >= 6 | Investigate: cognitive overload pattern detected |
+
+**Output per flagged build**:
+
+```
+**Cognitive overload detected** (score: {score}, tier: {tier})
+Build: {slug} ({flow_name}, {date})
+Breakdown: checkpoint_iters={N}×2, verify_iters={M}×3, skipped={S}, duration_outlier={D:.1f}
+Primary contributor: {highest scoring component}
+Suggest: Investigate {area} — {specific recommendation based on primary contributor}
+```
+
+**Tier baselines** (update as data accumulates):
+- small: mean=43m, stddev=30m
+- medium: mean=120m, stddev=60m
+- large: mean=300m, stddev=120m
+
 ### Output per suggestion
 
 ```
