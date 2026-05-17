@@ -386,13 +386,15 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 ### Post-Step Effects
 
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
+- After reviewer completes (mandatory): spawn the renderer agent to convert `${WORKSPACE}/reviews/REVIEW.md` to HTML. The renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, calls `get_file_context` and `show_pr_impact` for structural data, and writes `${WORKSPACE}/artifacts/review.html`. Open the HTML in the browser (`open` command) before presenting the review verdict at the HITL checkpoint. This is not optional — every review step produces rendered HTML.
+- After architect completes (mandatory): spawn the renderer agent to convert the design document (`${WORKSPACE}/plans/${slug}/DESIGN.md` or `INDEX.md`) to HTML. The renderer reads the design doc + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` and writes `${WORKSPACE}/artifacts/design.html`. Open the HTML in the browser before presenting the design for user approval at the HITL checkpoint.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.
 
 ### Renderer Spawn Protocol
 
-After each artifact-producing step completes (design, implement, review), the orchestrator MAY spawn a lightweight renderer subagent to produce an HTML version of the markdown artifact. Spawn the renderer only when you intend to present HTML at the next HITL gate — it is NOT mandatory for every step.
+After artifact-producing steps, the orchestrator spawns a lightweight renderer subagent to produce an HTML version of the markdown artifact. **Mandatory** after architect and reviewer steps — these have HITL gates where the user reviews the HTML. Optional after other steps (implement, test).
 
 **What the renderer does:**
 - Reads the markdown artifact from the workspace (e.g., `${WORKSPACE}/plans/${slug}/DESIGN.md`, `${WORKSPACE}/reviews/REVIEW.md`)
