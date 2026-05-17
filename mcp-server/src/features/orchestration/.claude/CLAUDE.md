@@ -18,7 +18,7 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `invoke-janitor.ts` | `invoke_janitor` |
 | `orchestration-journal.ts` | `log_step` / `batch_log_steps` |
 | `post-event.ts` | `post_event` |
-| `present-artifact.ts` | `present_artifact` |
+| `present-artifact.ts` | `present_artifact` — fire-and-forget; serves HTML, opens browser, returns `{ url }` immediately (does not block) |
 | `report.ts` | `report` |
 | `resolve-agent-skills.ts` | `resolve_agent_skills` |
 | `seed-workspace.ts` | `seed_workspace` |
@@ -38,7 +38,7 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `workspace-cleanup.ts` | Workspace cleanup utilities |
 
 ## Contracts
-<!-- last-updated: 2026-05-15 -->
+<!-- last-updated: 2026-05-16 (present_artifact fire-and-forget; PresentArtifactResult now { url: string } only) -->
 Key tool functions (all return `ToolResult<T>` — see `@shared/lib/tool-result.ts`):
 
 - `initWorkspace(input)` — create or resume workspace; preflight checks when `preflight: true`; `tryResumeWorkspace` accepts optional `expectedTask` to block resume on task-identity mismatch (slug-collision defense)

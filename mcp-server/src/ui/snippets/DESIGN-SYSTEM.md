@@ -961,3 +961,212 @@ body {
 .label-removed { background: rgba(255,107,107,0.18); color: var(--danger, #ff6b6b); border: 1px solid rgba(255,107,107,0.35); }
 .subsystem-file-count { flex-shrink: 0; font-size: 11px; color: var(--text-muted, #636a80); white-space: nowrap; }
 ```
+
+---
+
+## Section G: Graph Context Patterns
+
+The Graph Context section shows per-file structural analysis within the review dashboard. It appears as a full-width row below the existing dashboard grid.
+
+### G.1 Overview
+
+Graph Context is added as a `<div class="grid-card" style="grid-column: 1 / -1;">` element after the 2-column dashboard grid. It uses a `<details>/<summary>` collapsible wrapper (see Section C for CSS) so the user can hide it when not needed. Files classified as high-impact get full detail cards; remaining files get compact summary cards.
+
+### G.2 High-Impact File Classification
+
+```typescript
+function isHighImpact(fileContext: FileContextOutput): boolean {
+  const hubShapes = ["Central hub", "High fan-out hub", "Sink"];
+  const isHub = hubShapes.includes(fileContext.shape?.label ?? "");
+  const hasViolations = (fileContext.violation_count ?? 0) > 0;
+  const highBlastRadius = (fileContext.blast_radius?.summary?.total_files ?? 0) > 5;
+  return isHub || hasViolations || highBlastRadius;
+}
+```
+
+### G.3 Graph Context Section Layout
+
+```html
+<div class="grid-card" style="grid-column: 1 / -1;">
+  <details class="collapsible-section" open>
+    <summary class="collapsible-summary">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-title">Graph Context ({highImpactCount} high-impact, {summaryCount} other files)</span>
+    </summary>
+    <div class="collapsible-body">
+      <!-- High-impact file detail cards -->
+      {fileDetailCards}
+      <!-- Summary cards for remaining files -->
+      {fileSummaryCards}
+    </div>
+  </details>
+</div>
+```
+
+### G.4 File Detail Card Recipe
+
+Reference the `file-detail-card.html` snippet. Call `get_file_context` for each changed file. For high-impact files, prepare compound placeholders:
+
+- `IMPORTS_HTML`: render each import as `<li>{escapeHtml(importPath)}</li>`, limit to 10 items, add overflow note if more
+- `IMPORTED_BY_HTML`: same pattern for `imported_by` entries
+- `ENTITIES_HTML`: render each entity as `<tr><td>{escapeHtml(name)}</td><td>{kind}</td></tr>`, limit to 15
+- `LAYER_COLOR`: use `layerColor(layer)` from F.12 helpers
+
+Substitution example:
+
+```typescript
+const cardHtml = substituteSnippet(fileDetailSnippet, {
+  FILE_PATH: escapeHtml(filePath),
+  LAYER: escapeHtml(layer),
+  LAYER_COLOR: layerColor(layer),
+  SHAPE_LABEL: escapeHtml(shape.label),
+  SHAPE_DESCRIPTION: escapeHtml(shape.description),
+  IMPORT_COUNT: String(imports.length),
+  IMPORTED_BY_COUNT: String(importedBy.length),
+  ENTITY_COUNT: String(entities.length),
+  BLAST_RADIUS_TOTAL: String(blastRadius?.summary?.total_files ?? 0),
+  IMPORTS_HTML: importsHtml,
+  IMPORTED_BY_HTML: importedByHtml,
+  ENTITIES_HTML: entitiesHtml,
+});
+```
+
+### G.5 File Summary Card Recipe
+
+Reference the `file-summary-card.html` snippet. Simpler substitution — no lists:
+
+```typescript
+const cardHtml = substituteSnippet(fileSummarySnippet, {
+  FILE_PATH: escapeHtml(filePath),
+  LAYER: escapeHtml(layer),
+  LAYER_COLOR: layerColor(layer),
+  SHAPE_LABEL: escapeHtml(shape.label),
+});
+```
+
+### G.6 Empty State
+
+When no changed files exist or `get_file_context` returns no data:
+
+```html
+<div class="grid-card" style="grid-column: 1 / -1;">
+  <div class="section-card">
+    <div class="section-card-header">
+      <h2 class="section-title">Graph Context</h2>
+    </div>
+    <div class="section-card-body">
+      <p class="empty-note">No graph context available</p>
+    </div>
+  </div>
+</div>
+```
+
+---
+
+## Section H: Blast Radius Rings Patterns
+
+The Blast Radius Rings section renders a CSS/SVG concentric rings visualization of change impact. Changed files appear at the center; affected files are positioned on outer rings by dependency depth. No JavaScript — all positions are computed at composition time.
+
+### H.1 Overview
+
+The rings visualization is placed as a full-width row after the Graph Context section:
+
+```html
+<div class="grid-card" style="grid-column: 1 / -1;">
+  {blast-radius-rings snippet output}
+</div>
+```
+
+Reference the `blast-radius-rings.html` snippet for the full SVG and CSS. The snippet's `<style>` block is self-contained and merged with other styles during composition.
+
+### H.2 Data Source
+
+1. Call `show_pr_impact` to get `UnifiedPrOutput`
+2. Extract `blastRadius.affected: Array<{ entity_name, entity_kind, file_path, depth }>`
+3. Aggregate entities to file-level: group by `file_path`, take the minimum `depth` per file
+4. Extract `blastRadius.by_depth: Record<number, number>` for ring sizing
+
+### H.3 Ring Geometry
+
+```typescript
+const VIEWBOX = 500;
+const CENTER = VIEWBOX / 2;
+const INNER_RADIUS = 40;
+const RING_SPACING = 60;
+const MAX_RINGS = 4; // depth 0-3; deeper files placed on ring 3
+
+function ringRadius(depth: number): number {
+  return INNER_RADIUS + Math.min(depth, MAX_RINGS) * RING_SPACING;
+}
+
+function nodePosition(index: number, total: number, radius: number): { cx: number; cy: number } {
+  const angle = (index / total) * 2 * Math.PI - Math.PI / 2; // start from top
+  return {
+    cx: Math.round(CENTER + radius * Math.cos(angle)),
+    cy: Math.round(CENTER + radius * Math.sin(angle)),
+  };
+}
+```
+
+### H.4 SVG Assembly
+
+Ring outlines:
+
+```typescript
+const ringSvg = depths.map(depth => {
+  const r = ringRadius(depth);
+  return `<circle cx="${CENTER}" cy="${CENTER}" r="${r}" fill="none" stroke="rgba(108,140,255,0.15)" stroke-width="1" stroke-dasharray="4 4" />`;
+}).join("\n");
+```
+
+File nodes:
+
+```typescript
+const nodeColor = (depth: number) =>
+  depth === 0 ? "var(--accent, #6c8cff)" :
+  depth === 1 ? "rgba(108,140,255,0.7)" :
+  "rgba(108,140,255,0.4)";
+
+const nodesSvg = filesByDepth.flatMap((files, depth) =>
+  files.map((file, i) => {
+    const { cx, cy } = nodePosition(i, files.length, ringRadius(depth));
+    const label = escapeHtml(truncate(basename(file.file_path), 20));
+    return `<circle cx="${cx}" cy="${cy}" r="3" fill="${nodeColor(depth)}" />
+<text x="${cx}" y="${cy}" dy="-8" text-anchor="middle" class="ring-node-label">${label}</text>`;
+  })
+).join("\n");
+```
+
+### H.5 Section Layout
+
+Place the rings visualization full-width, below the graph context section:
+
+```html
+<div class="grid-card" style="grid-column: 1 / -1;">
+  {blast-radius-rings snippet output}
+</div>
+```
+
+### H.6 Crowding Strategy
+
+When a ring has more than 12 files:
+
+- Show the first 10 files with labels
+- Add a single summary node: `"+{N} more"` positioned at the bottom of the ring
+- This prevents label overlap while maintaining the visual shape
+
+### H.7 Empty State
+
+When `blastRadius.affected` is empty or `show_pr_impact` returns no blast radius data:
+
+```html
+<p class="empty-note">No blast radius data available</p>
+```
+
+### H.8 CSS for Rings
+
+The ring-specific CSS classes are self-contained in the `blast-radius-rings.html` snippet's `<style>` block. The renderer extracts and merges them with other styles during composition. Key classes:
+
+- `.ring-node-label` — `font-size: 9px; fill: var(--text-muted, #636a80); font-family: monospace`
+- `.rings-svg` — `width: 100%; max-width: 500px; height: auto; display: block; margin: 0 auto`
+- `.rings-title` — section heading for the rings panel

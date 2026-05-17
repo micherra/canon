@@ -101,10 +101,10 @@ describe("snippet library — agent composition demo", () => {
   // ── 1. Snippet discovery ─────────────────────────────────────────────────
 
   describe("snippet discovery", () => {
-    it("finds at least 5 HTML snippet files in the snippets directory", () => {
+    it("finds at least 8 HTML snippet files in the snippets directory", () => {
       const entries = readdirSync(SNIPPETS_DIR, { withFileTypes: true });
       const htmlFiles = entries.filter((e) => e.isFile() && e.name.endsWith(".html"));
-      expect(htmlFiles.length).toBeGreaterThanOrEqual(5);
+      expect(htmlFiles.length).toBeGreaterThanOrEqual(8);
     });
   });
 
@@ -117,7 +117,7 @@ describe("snippet library — agent composition demo", () => {
         .filter((e) => e.isFile() && e.name.endsWith(".html"))
         .map((e) => e.name);
 
-      expect(htmlFiles.length).toBeGreaterThanOrEqual(5);
+      expect(htmlFiles.length).toBeGreaterThanOrEqual(8);
 
       for (const filename of htmlFiles) {
         const content = readFileSync(join(SNIPPETS_DIR, filename), "utf8");

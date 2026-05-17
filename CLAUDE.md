@@ -120,8 +120,8 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
    - If research notes are absent AND the build is non-trivial: surface to user — "The planner did not produce research notes for this build. Re-running planner to produce research context for the architect." Then re-spawn the planner with the original request and explicit instruction: "Your previous output did not include a `## Research Notes` section. This build is non-trivial and requires research notes. Please produce the full planning brief, research notes, and runbook." After re-spawn, re-run steps 2–3 on the new output (the re-spawned planner may have changed the Requirement Coverage Map or other sections).
    - If research notes are absent AND the build IS trivial: proceed silently (legitimate skip).
 4. Present the runbook to the user for approval. Iterate if the user requests changes.
-5. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })` where `flow_name` comes from the approved runbook's frontmatter, `tier` comes from the runbook frontmatter (optional — defaults to `"medium"` when omitted), and `runbook_content` / `brief_content` are the planner's full output text. The MCP tool persists these to `${WORKSPACE}/plans/${slug}/`. Save the returned `worktree_path` — all code-writing agents will work there.
-6. Extract the `## Research Notes` section and write to `${WORKSPACE}/plans/${slug}/research-notes.md` using `Write`. (Step 3 already confirmed presence for non-trivial builds; skip this write for trivial builds where no section exists.)
+5. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })`. Save the returned `worktree_path` — all code-writing agents will work there.
+6. Write the `## Research Notes` section to `${WORKSPACE}/plans/${slug}/research-notes.md`. Skip for trivial builds.
 7. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
 8. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
@@ -142,17 +142,9 @@ If no `task-dag.yaml` exists, fall back to sequential step execution (existing b
 
 1. **Create the team**: `TeamCreate({ team_name: "canon-{slug}" })` — creates a team with a shared task list.
 
-2. **Create tasks**: For each DAG node, call `TaskCreate` with:
-   - `title`: the task_id
-   - `description`: Full agent enrichment payload — the same context that would go in a subagent spawn prompt:
-     - Preloaded context from `resolve_agent_skills("engineer")`
-     - Relevant principles from `get_principles(task.files)`
-     - File context from `get_file_context(task.files)`
-     - The task plan content (read from `{task_id}-PLAN.md`)
-     - Working instructions: worktree creation command, commit provenance trailers, task completion protocol
-   - For tasks with `depends_on`: call `TaskUpdate({ addBlockedBy: [dependent_task_ids] })` after creation
+2. **Create tasks**: For each DAG node, call `TaskCreate` with `title: task_id` and `description`: the full agent enrichment payload (preloaded context from `resolve_agent_skills("engineer")`, principles, file context, task plan content, worktree/provenance instructions). For tasks with `depends_on`: call `TaskUpdate({ addBlockedBy: [dependent_task_ids] })` after creation.
 
-3. **Enrichment follows the MCP Tool Composition table**: Call `resolve_agent_skills` and `get_context(include: ["principles", "file_context"])` before creating each task, exactly as done for subagent spawns.
+3. **Enrichment follows the MCP Tool Composition table**: Call `resolve_agent_skills` and `get_context(include: ["principles", "file_context"])` before creating each task.
 
 #### Worker Dispatch
 
@@ -176,7 +168,7 @@ After ALL team tasks complete (monitor via `TaskList` — when empty, all done):
 2. On conflict: `git merge --abort` runs automatically. Enter HITL with conflict details: `"Merge conflict in task {task_id} affecting files: {files}. Resolve manually or re-run the conflicting task."`.
 3. On success: call `cleanupWorktrees(worktreeResults, projectDir)` then `TeamDelete({ team_name: "canon-{slug}" })`.
 
-**Key asymmetry**: merges target the build worktree path (`buildWorktreePath`), but cleanup uses the project root (`projectDir`). This matches the existing wave infrastructure pattern.
+**Key asymmetry**: merges target `buildWorktreePath`, cleanup uses `projectDir`.
 
 #### Post-DAG Tail
 
@@ -208,23 +200,13 @@ When resuming a session or the user says "continue" / "resume":
 
 ### Multi-Wave Migration Mode
 
-When coordinating a multi-wave migration (epic-scale work spanning multiple execution sessions), load the wave-steward skill before processing wave reports:
-
-1. Read `${CLAUDE_PLUGIN_ROOT}/skills/canon/skills/wave-steward/SKILL.md`.
-2. Have the user fill in `${CLAUDE_PLUGIN_ROOT}/templates/migration-state.md` with the current migration state.
-3. Follow the wave-steward operating loop for each wave report received.
-
-This mode activates explicitly — the user enters it by providing a wave report and migration state. It does not activate automatically for single-session builds.
+When coordinating a multi-wave migration (epic-scale work spanning multiple execution sessions): load `${CLAUDE_PLUGIN_ROOT}/skills/canon/skills/wave-steward/SKILL.md`, have the user fill `${CLAUDE_PLUGIN_ROOT}/templates/migration-state.md`, and follow the wave-steward operating loop. This mode activates explicitly when the user provides a wave report and migration state — not for single-session builds.
 
 ### Skill Preloading + Domain Skill + Template Naming
 
-**Preloaded rules, references, primers, and templates (from agent frontmatter):** Before the `Agent` tool call, invoke `resolve_agent_skills({ agent_name })`. The tool reads four dedicated frontmatter fields — `rules:`, `references:`, `primers:`, `templates:` — loads each listed file from `rules/<name>.md` / `references/<name>.md` / `primers/<name>.md` / `templates/<name>.md`, and returns a `preload_prompt` string. Include that string verbatim at the top of the spawn prompt. The agent receives its governing rules, protocol references, domain primers, and required output templates preloaded — no path-passing, no runtime Reads, no "did they remember to load X" failure mode. Canon uses its own four-field preloader instead of Claude Code's native `skills:` mechanism because Canon stores these as flat `.md` files, not per-skill `SKILL.md` directories. The native `skills:` field remains available for real Claude Code native skills, which it preloads independently.
+**Preloaded rules, references, primers, and templates (from agent frontmatter):** Before the `Agent` tool call, invoke `resolve_agent_skills({ agent_name })`. The tool reads four frontmatter fields — `rules:`, `references:`, `primers:`, `templates:` — and returns a `preload_prompt` string. Include that string verbatim at the top of the spawn prompt.
 
-**On-demand domain primers (from task context):** Some tasks need extra domain context beyond the agent's default preloads. Name those in the spawn prompt body — the agent Reads them per `agent-context-check`:
-
-- Domain primers not already in the agent's `primers:` list: `"Relevant domain primers: authentication-security, backend-api. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
-
-Rule of thumb: the four frontmatter fields (`rules`, `references`, `primers`, `templates`) are preloaded by the resolver — the lead injects the content, no Read call required. Task-specific domain primers the agent does not already declare are named by the lead but Read by the agent.
+**On-demand domain primers (from task context):** Name task-specific domain primers in the spawn prompt body — the agent Reads them per `agent-context-check`: `"Relevant domain primers: authentication-security, backend-api. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
 
 ### MCP Tool Composition
 
@@ -286,14 +268,7 @@ Spawn N reviewers in parallel via `Agent()`, each with:
 
 #### Phase 3 — Consolidate
 
-After all reviewers complete, read all `REVIEW-{N}.md` files and produce the final `REVIEW.md`:
-
-- **Violations**: union of all violations, deduplicated by `(file_path, principle_id, line_number)`
-- **Honored**: union of all honored principle lists
-- **Score**: sum numerators and denominators across all scopes
-- **Verdict**: worst-case across all reviewers (BLOCKING > WARNING > CLEAN)
-
-Write the consolidated review using the `write_review` MCP tool.
+After all reviewers complete, read all `REVIEW-{N}.md` files and produce the final `REVIEW.md`: deduplicate violations by `(file_path, principle_id, line_number)`, union honored lists, sum scores, take worst-case verdict (BLOCKING > WARNING > CLEAN). Write using the `write_review` MCP tool.
 
 ### Journal Protocol
 
@@ -357,18 +332,15 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 ### Post-Step Effects
 
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
+- After reviewer completes (mandatory): spawn the renderer agent to convert `${WORKSPACE}/reviews/REVIEW.md` to HTML. The renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, calls `get_file_context` and `show_pr_impact` for structural data, and writes `${WORKSPACE}/artifacts/review.html`. Open the HTML in the browser (`open` command) before presenting the review verdict at the HITL checkpoint. This is not optional — every review step produces rendered HTML.
+- After architect completes (mandatory): spawn the renderer agent to convert the design document (`${WORKSPACE}/plans/${slug}/DESIGN.md` or `INDEX.md`) to HTML. The renderer reads the design doc + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` and writes `${WORKSPACE}/artifacts/design.html`. Open the HTML in the browser before presenting the design for user approval at the HITL checkpoint.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.
 
 ### Renderer Spawn Protocol
 
-After each artifact-producing step completes (design, implement, review), the orchestrator MAY spawn a lightweight renderer subagent to produce an HTML version of the markdown artifact. Spawn the renderer only when you intend to present HTML at the next HITL gate — it is NOT mandatory for every step.
-
-**What the renderer does:**
-- Reads the markdown artifact from the workspace (e.g., `${WORKSPACE}/plans/${slug}/DESIGN.md`, `${WORKSPACE}/reviews/REVIEW.md`)
-- Reads `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` for styling context and composition patterns
-- Produces a self-contained HTML file to `${WORKSPACE}/artifacts/{artifact-name}.html`
+Spawn a generic `Agent()` (not a named agent definition) that reads the markdown artifact + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, produces a fully self-contained HTML file to `${WORKSPACE}/artifacts/`, and returns. The renderer does NOT modify the worktree.
 
 **Artifact naming convention:**
 | Artifact | HTML filename |
@@ -378,33 +350,9 @@ After each artifact-producing step completes (design, implement, review), the or
 | Review dashboard | `review.html` |
 | Task plan index | `task-index.html` |
 
-**Spawn pattern** — the renderer is a generic `Agent()` call with inline instructions, NOT a new agent definition in `agents/`:
-
-```
-Agent({
-  isolation: "none",    // writes to workspace, not worktree
-  prompt: `
-    Read the markdown artifact at ${WORKSPACE}/plans/${slug}/DESIGN.md.
-    Read mcp-server/src/ui/snippets/DESIGN-SYSTEM.md for styling context.
-    Produce a self-contained HTML file at ${WORKSPACE}/artifacts/design.html.
-    The HTML must be fully self-contained (no external CSS/JS dependencies).
-  `
-})
-```
-
-The renderer writes exclusively to `${WORKSPACE}/artifacts/` — it does not modify the worktree or any source files.
-
 ### Post-Review Tester Enrichment
 
-When the review step completes and a tester step follows:
-1. Read `${WORKSPACE}/reviews/REVIEW.md`
-2. Extract the Stage 5 "Acceptance Criteria Verification" section
-3. Include the extracted content in the tester's spawn prompt alongside the standard context
-4. Also include the planning brief's Acceptance Criteria table (from `${WORKSPACE}/plans/${slug}/planning-brief.md`)
-
-This ensures the tester receives both the planner's original verification specs AND the reviewer's independent classification for cross-reference.
-
-When the runbook includes verification-aware acceptance criteria (ACs with verification method and type columns), the tester step MUST run after the review step. The tester consumes the reviewer's Stage 5 output, which only exists after review completes.
+When the review step completes and a tester step follows: extract Stage 5 "Acceptance Criteria Verification" from `${WORKSPACE}/reviews/REVIEW.md` and include it (plus the planning brief's Acceptance Criteria table) in the tester's spawn prompt. When runbook ACs include verification method/type columns, the tester MUST run after the review step — it consumes the reviewer's Stage 5 output.
 
 ### Step Enforcement Contracts
 

@@ -2,9 +2,8 @@
  * Canon HTTP server module.
  *
  * Runs a local HTTP server alongside the stdio MCP transport to serve
- * interactive HTML artifacts and receive synchronous HITL decisions from
- * the browser. All output goes to process.stderr — process.stdout is
- * reserved for the MCP stdio transport.
+ * interactive HTML artifacts. All output goes to process.stderr —
+ * process.stdout is reserved for the MCP stdio transport.
  *
  * ## Lifecycle
  * Call `startHttpServer()` once from `main()` after `resolveReady()`.
@@ -12,34 +11,17 @@
  * warning is logged but the MCP server continues operating.
  *
  * ## Routes
- * - GET  /health                              — liveness check
- * - GET  /artifact/:type/:slug               — serve registered HTML artifact
- * - POST /artifact/:type/:slug/decision      — receive browser decision (resolves deferred Promise)
- * - OPTIONS *                                — CORS preflight
+ * - GET  /health                — liveness check
+ * - GET  /artifact/:type/:slug — serve registered HTML artifact
+ * - OPTIONS *                  — CORS preflight
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 const DEFAULT_PORT = 3141;
-const BODY_SIZE_LIMIT = 1_048_576; // 1 MB
-
-/**
- * A user decision submitted from the browser after reviewing an artifact.
- * Exported so other modules (e.g., present_artifact tool handler) can type
- * the resolved value of `createDeferredDecision`.
- */
-export type Decision = {
-  /** User action: approve the artifact or request changes. */
-  action: "approve" | "request_changes";
-  /** Inline annotations attached to sections of the artifact. May be empty. */
-  annotations: unknown[];
-};
 
 /** Stored artifact data keyed by `"${type}/${slug}"`. */
 const artifacts = new Map<string, { html: string; data: unknown }>();
-
-/** Pending deferred decisions keyed by `"${type}/${slug}"`. */
-const pendingDecisions = new Map<string, { resolve: (decision: Decision) => void }>();
 
 let httpServer: ReturnType<typeof createServer> | null = null;
 let serverPort = DEFAULT_PORT;
@@ -148,43 +130,23 @@ export function registerArtifact(key: string, html: string, data: unknown): void
 }
 
 /**
- * Removes a registered artifact and any associated pending decision.
- * Call after a decision is received (or when abandoning an artifact).
+ * Removes a registered artifact.
+ * Call when the artifact is no longer needed.
  *
  * @param key - Artifact key in `"${type}/${slug}"` format.
  */
 export function removeArtifact(key: string): void {
   artifacts.delete(key);
-  pendingDecisions.delete(key);
 }
 
 /**
- * Clears all registered artifacts and pending decisions.
+ * Clears all registered artifacts.
  * Intended for test isolation only — do not call in production code.
  *
  * @internal
  */
 export function resetStateForTesting(): void {
   artifacts.clear();
-  pendingDecisions.clear();
-}
-
-/**
- * Creates a deferred Promise that resolves when the browser POSTs a decision
- * to `POST /artifact/${key}/decision`.
- *
- * Caller must also call `registerArtifact` so the artifact is available for
- * the browser to load. The Promise resolves with the validated `Decision`
- * object submitted by the user.
- *
- * @param key - Artifact key in `"${type}/${slug}"` format; must match a registered artifact.
- * @returns A Promise that resolves with the user's `Decision` when the browser
- *   submits a decision POST.
- */
-export function createDeferredDecision(key: string): Promise<Decision> {
-  return new Promise<Decision>((resolve) => {
-    pendingDecisions.set(key, { resolve });
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +158,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
 
   // CORS headers — required for browser fetch from file:// or localhost origins
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
@@ -221,14 +183,6 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
       return;
     }
     serveArtifactHtml(res, key, artifact.html, artifact.data);
-    return;
-  }
-
-  // POST /artifact/:type/:slug/decision
-  const decisionMatch = url.pathname.match(/^\/artifact\/([^/]+)\/([^/]+)\/decision$/);
-  if (req.method === "POST" && decisionMatch) {
-    const key = `${decisionMatch[1]}/${decisionMatch[2]}`;
-    handleDecisionPost(req, res, key);
     return;
   }
 
@@ -258,65 +212,6 @@ function serveArtifactHtml(res: ServerResponse, key: string, html: string, data:
 
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(injectedHtml);
-}
-
-function handleDecisionPost(req: IncomingMessage, res: ServerResponse, key: string): void {
-  const pending = pendingDecisions.get(key);
-  if (!pending) {
-    respondJson(res, 404, {
-      error: "No pending decision for this artifact",
-      key,
-    });
-    return;
-  }
-
-  let body = "";
-  let responded = false;
-
-  req.on("data", (chunk: Buffer) => {
-    body += chunk.toString();
-    if (body.length > BODY_SIZE_LIMIT) {
-      responded = true;
-      respondJson(res, 413, { error: "Request body too large" });
-      req.destroy();
-    }
-  });
-
-  req.on("end", () => {
-    if (responded) return;
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      respondJson(res, 400, { error: "Invalid JSON body" });
-      return;
-    }
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      !("action" in parsed) ||
-      typeof (parsed as { action: unknown }).action !== "string" ||
-      !["approve", "request_changes"].includes((parsed as { action: string }).action)
-    ) {
-      respondJson(res, 400, {
-        error: "Invalid decision: action must be 'approve' or 'request_changes'",
-      });
-      return;
-    }
-
-    const raw = parsed as { action: string; annotations?: unknown[] };
-    const decision: Decision = {
-      action: raw.action as Decision["action"],
-      annotations: Array.isArray(raw.annotations) ? raw.annotations : [],
-    };
-
-    pending.resolve(decision);
-    pendingDecisions.delete(key);
-    artifacts.delete(key);
-    respondJson(res, 200, { action: decision.action, ok: true });
-  });
 }
 
 function respondJson(res: ServerResponse, status: number, data: unknown): void {

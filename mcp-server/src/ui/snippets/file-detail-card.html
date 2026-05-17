@@ -1,0 +1,156 @@
+<!--
+  @snippet file-detail-card
+  @description Expanded card for a high-impact file showing graph context detail: layer, shape, import/export counts, entity list, and blast radius total. Used for files classified as high-impact by the renderer (e.g., impact_score above threshold, or in_degree >= 5).
+  @data { filePath: string, layer: string, shapeLabel: string, shapeDescription: string, importCount: number, importedByCount: number, entityCount: number, blastRadiusTotal: number, imports: string (pre-rendered HTML list items), importedBy: string (pre-rendered HTML list items), entities: string (pre-rendered HTML table rows), layerColor: string }
+  @tokens --bg-card, --border, --border-subtle, --radius-sm, --text, --text-bright, --text-muted
+  @usage Use for files where impact_score warrants expanded detail view. Stack multiple cards in a column container.
+    All string placeholders require escapeHtml before substitution: {{FILE_PATH}}, {{LAYER}}, {{SHAPE_LABEL}}, {{SHAPE_DESCRIPTION}}.
+    Numeric placeholders ({{IMPORT_COUNT}}, {{IMPORTED_BY_COUNT}}, {{ENTITY_COUNT}}, {{BLAST_RADIUS_TOTAL}}) do not require escaping.
+    {{LAYER_COLOR}} is a hex color constant — no escaping needed, but must be a valid CSS color.
+    {{IMPORTS_HTML}}, {{IMPORTED_BY_HTML}}, {{ENTITIES_HTML}} are pre-rendered HTML fragments; the renderer must escapeHtml on all text content (file paths, entity names) within those fragments.
+    When IMPORTS_HTML or IMPORTED_BY_HTML is empty, the list renders with no items — structure remains valid.
+    When ENTITIES_HTML is empty, the table body is empty — no broken HTML.
+-->
+<div class="file-detail-card">
+  <div class="file-detail-header">
+    <span class="file-detail-path">{{FILE_PATH}}</span>
+    <div class="file-detail-badges">
+      <span class="layer-badge" style="background: {{LAYER_COLOR}}22; color: {{LAYER_COLOR}}; border-color: {{LAYER_COLOR}}44;">{{LAYER}}</span>
+      <span class="shape-badge" title="{{SHAPE_DESCRIPTION}}">{{SHAPE_LABEL}}</span>
+    </div>
+  </div>
+  <div class="file-detail-body">
+    <div class="file-detail-stats">
+      <span class="mini-stat">{{IMPORT_COUNT}} imports</span>
+      <span class="mini-stat">{{IMPORTED_BY_COUNT}} dependents</span>
+      <span class="mini-stat">{{ENTITY_COUNT}} entities</span>
+      <span class="mini-stat">{{BLAST_RADIUS_TOTAL}} affected</span>
+    </div>
+    <div class="file-detail-columns">
+      <div class="file-detail-col">
+        <div class="col-title">Imports</div>
+        <ul class="dep-list">{{IMPORTS_HTML}}</ul>
+      </div>
+      <div class="file-detail-col">
+        <div class="col-title">Imported By</div>
+        <ul class="dep-list">{{IMPORTED_BY_HTML}}</ul>
+      </div>
+    </div>
+    <div class="file-detail-entities">
+      <div class="col-title">Entities</div>
+      <table class="entity-table">
+        <thead><tr><th>Name</th><th>Kind</th></tr></thead>
+        <tbody>{{ENTITIES_HTML}}</tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<style>
+  .file-detail-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 8px);
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .file-detail-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+  }
+  .file-detail-path {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--text-bright);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-detail-badges {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .layer-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .shape-badge {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .file-detail-body {
+    padding: 10px 14px;
+  }
+  .file-detail-stats {
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+  .mini-stat {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .file-detail-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .col-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+  .dep-list {
+    list-style: none;
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--text);
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 0;
+    margin: 0;
+  }
+  .dep-list li {
+    padding: 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .file-detail-entities {
+    margin-top: 4px;
+  }
+  .entity-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .entity-table th {
+    text-align: left;
+    padding: 4px 8px;
+    color: var(--text-muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+  }
+  .entity-table td {
+    padding: 3px 8px;
+    color: var(--text);
+    font-family: monospace;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+</style>

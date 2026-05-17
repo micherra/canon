@@ -1,0 +1,113 @@
+<!--
+  @snippet blast-radius-rings
+  @description SVG-based concentric rings visualization showing blast radius depth layers. The center dot represents the changed file; concentric rings represent dependency depths; file nodes are plotted as dots with labels at their depth ring. Includes a legend and a header with total affected count. An empty-state variant renders when no blast radius data is available.
+  @data { viewBoxSize: number, rings: Array<{ radius: number, depth: number }>, nodes: Array<{ cx: number, cy: number, label: string, depth: number }>, centerLabel: string, totalAffected: number }
+  @tokens --bg-card, --border, --accent, --text, --text-bright, --text-muted
+  @usage The renderer pre-computes all coordinates and injects pre-rendered SVG elements into {{RINGS_SVG}} and {{NODES_SVG}}.
+    {{VIEWBOX_SIZE}} is a number (e.g., 400) — no escaping needed.
+    {{CENTER_X}} and {{CENTER_Y}} are numbers (VIEWBOX_SIZE / 2) — no escaping needed.
+    {{TOTAL_AFFECTED}} is a number — no escaping needed.
+    {{CENTER_LABEL}} requires escapeHtml (file name string).
+    {{RINGS_SVG}} is pre-rendered SVG; each ring uses the pattern:
+      <circle cx="{centerX}" cy="{centerY}" r="{radius}" fill="none" stroke="rgba(108,140,255,0.15)" stroke-width="1" stroke-dasharray="4 4" />
+    {{NODES_SVG}} is pre-rendered SVG; each node uses the pattern:
+      <circle cx="{cx}" cy="{cy}" r="3" fill="{nodeColor}" />
+      <text x="{cx}" y="{cy}" dy="-8" text-anchor="middle" class="ring-node-label">{truncatedFileName}</text>
+    Node colors by depth: depth 0 = var(--accent, #6c8cff), depth 1 = rgba(108,140,255,0.7), depth 2+ = rgba(108,140,255,0.4).
+    The renderer must escapeHtml on all text content within NODES_SVG (file names, labels).
+    When no blast radius data exists, render the empty-state variant instead:
+      <div class="blast-radius-rings">
+        <div class="rings-header">
+          <span class="section-title">Blast Radius — Impact Rings</span>
+        </div>
+        <p class="empty-note">No blast radius data available</p>
+      </div>
+-->
+<div class="blast-radius-rings">
+  <div class="rings-header">
+    <span class="section-title">Blast Radius — Impact Rings</span>
+    <span class="rings-summary">{{TOTAL_AFFECTED}} affected files</span>
+  </div>
+  <div class="rings-container">
+    <svg viewBox="0 0 {{VIEWBOX_SIZE}} {{VIEWBOX_SIZE}}" class="rings-svg">
+      <!-- Center dot -->
+      <circle cx="{{CENTER_X}}" cy="{{CENTER_Y}}" r="4" fill="var(--accent, #6c8cff)" />
+      <!-- Concentric ring outlines -->
+      {{RINGS_SVG}}
+      <!-- File nodes with labels -->
+      {{NODES_SVG}}
+      <!-- Center label -->
+      <text x="{{CENTER_X}}" y="{{CENTER_Y}}" dy="-12" text-anchor="middle" class="ring-center-label">{{CENTER_LABEL}}</text>
+    </svg>
+  </div>
+  <div class="rings-legend">
+    <span class="legend-item"><span class="legend-dot" style="background: var(--accent, #6c8cff);"></span> Changed (center)</span>
+    <span class="legend-item"><span class="legend-dot" style="background: rgba(108,140,255,0.5);"></span> Depth 1</span>
+    <span class="legend-item"><span class="legend-dot" style="background: rgba(108,140,255,0.3);"></span> Depth 2+</span>
+  </div>
+</div>
+<style>
+  .blast-radius-rings {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    padding: 14px 16px;
+  }
+  .rings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .rings-summary {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .rings-container {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0;
+  }
+  .rings-svg {
+    width: 100%;
+    max-width: 500px;
+    height: auto;
+  }
+  .ring-center-label {
+    font-size: 10px;
+    fill: var(--text-bright, #e8eaf0);
+    font-weight: 700;
+  }
+  .ring-node-label {
+    font-size: 8px;
+    fill: var(--text, #b4b8c8);
+    font-family: monospace;
+  }
+  .rings-legend {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 8px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .empty-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 16px 0;
+    margin: 0;
+  }
+</style>
