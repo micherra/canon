@@ -232,6 +232,35 @@ describe("writeReview — backward compatibility (no signals)", () => {
   });
 });
 
+// ---- writeReview — pending verdict ----
+
+describe("writeReview — pending verdict produces IN_PROGRESS", () => {
+  it("verdict: 'pending' produces REVIEW.md with verdict: IN_PROGRESS in frontmatter", async () => {
+    const result = await writeReview(
+      makeReviewInput({
+        files: ["src/foo.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 0 },
+        },
+        verdict: "pending",
+        violations: [],
+      }),
+    );
+    assertOk(result);
+    expect(result.verdict).toBe("IN_PROGRESS");
+    expect(result.violation_count).toBe(0);
+
+    // Verify the REVIEW.md frontmatter contains IN_PROGRESS
+    const { readFile } = await import("node:fs/promises");
+    const content = await readFile(result.path, "utf-8");
+    expect(content).toContain("verdict: IN_PROGRESS");
+    expect(content).toContain("## Canon Review — Verdict: IN_PROGRESS");
+  });
+});
+
 // ---- updateFileViolationHistory — violation count propagation ----
 
 describe("updateFileViolationHistory — violation count propagation", () => {

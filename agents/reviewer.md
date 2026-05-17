@@ -247,12 +247,9 @@ Stage 3 does NOT change the verdict. Discrepancies are addenda for the next revi
 
 ## Early Output Protocol
 
-**Write a stub artifact BEFORE beginning Stage 1** — this is the very first action after reading your spawn prompt. Call `mcp__canon__write_review` with a minimal stub containing:
-- The review header (file list, principle count, date)
-- All 5 stages listed with `[PENDING]` markers
-- A `## Verdict: PENDING` line
+**Write a stub artifact BEFORE beginning Stage 1** — this is the very first action after reading your spawn prompt. Call `mcp__canon__write_review` with verdict `"pending"`, empty `violations: []`, empty `honored: []`, zeroed `score: { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } }`, and the `files` list from your diff. This creates a minimal REVIEW.md with `verdict: IN_PROGRESS`.
 
-This guarantees `REVIEW.md` exists regardless of what happens during review execution — context exhaustion, session timeout, or unexpected termination will not leave the orchestrator without an artifact to act on.
+This guarantees `REVIEW.md` exists regardless of what happens during review execution — context exhaustion, session timeout, or unexpected termination will not leave the orchestrator without an artifact to act on. The stub (with `verdict: IN_PROGRESS`) is overwritten by subsequent `mcp__canon__write_review` calls as stages complete.
 
 **Write a partial review artifact immediately after Stage 1 completes** — do not wait for later stages. Call `mcp__canon__write_review` with:
 - The review header (file list, principle list, scope summary)

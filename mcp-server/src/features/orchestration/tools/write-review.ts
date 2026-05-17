@@ -50,7 +50,7 @@ function escapeMdCell(value: string): string {
 export type WriteReviewInput = {
   workspace: string;
   slug: string;
-  verdict: "approved" | "approved_with_concerns" | "changes_required" | "blocked";
+  verdict: "approved" | "approved_with_concerns" | "changes_required" | "blocked" | "pending";
   violations: Array<{
     principle_id: string;
     severity: string;
@@ -70,15 +70,19 @@ export type WriteReviewInput = {
 export type WriteReviewResult = {
   path: string;
   meta_path: string;
-  verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  verdict: "BLOCKING" | "WARNING" | "CLEAN" | "IN_PROGRESS";
   violation_count: number;
 };
 
-export const VERDICT_MAP: Record<WriteReviewInput["verdict"], "BLOCKING" | "WARNING" | "CLEAN"> = {
+export const VERDICT_MAP: Record<
+  WriteReviewInput["verdict"],
+  "BLOCKING" | "WARNING" | "CLEAN" | "IN_PROGRESS"
+> = {
   approved: "CLEAN",
   approved_with_concerns: "WARNING",
   blocked: "BLOCKING",
   changes_required: "WARNING",
+  pending: "IN_PROGRESS",
 };
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -134,7 +138,7 @@ function validateInput(input: WriteReviewInput): { reviewsDir: string } | ToolRe
  */
 function generateMarkdown(
   input: WriteReviewInput,
-  mappedVerdict: "BLOCKING" | "WARNING" | "CLEAN",
+  mappedVerdict: "BLOCKING" | "WARNING" | "CLEAN" | "IN_PROGRESS",
 ): string {
   const lines: string[] = [];
 
@@ -299,7 +303,7 @@ export function updateFileViolationHistory(
   signals: SignalWriter,
   files: string[],
   violations: ViolationEntry[],
-  _verdict: "BLOCKING" | "WARNING" | "CLEAN",
+  _verdict: "BLOCKING" | "WARNING" | "CLEAN" | "IN_PROGRESS",
 ): void {
   try {
     const now = new Date().toISOString();
