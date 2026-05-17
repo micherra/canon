@@ -22,14 +22,12 @@
 
 import { join } from "node:path";
 import { projectDir } from "@app/server-state.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import type { FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
-import type { ReviewEntry } from "@shared/schema.ts";
-import {
-  findRecurringViolations,
-} from "@shared/lib/violation-patterns.ts";
 import type { RecurringViolation } from "@shared/lib/violation-patterns.ts";
+import { findRecurringViolations } from "@shared/lib/violation-patterns.ts";
+import type { ReviewEntry } from "@shared/schema.ts";
 
 // ---- Local types ----
 
@@ -57,20 +55,10 @@ export type TrendData = {
 // Minimum number of flow runs required before writing a summary.
 const MIN_FLOW_RUNS = 5;
 
-// ---- Data extraction ----
+// ---- Data extraction helpers ----
 
-/**
- * Extract TrendData from flow runs and drift reviews.
- * Pure function: no I/O, no side effects.
- */
-export function extractTrendData(
-  flowRuns: FlowRunEntry[],
-  reviews: ReviewEntry[],
-): TrendData {
-  const generatedAt = new Date().toISOString();
-  const lookbackCount = flowRuns.length;
-
-  // Tier distribution
+/** Compute per-tier counts and average durations from flow runs. */
+function computeTierDistribution(flowRuns: FlowRunEntry[]): TierDistribution {
   const tierCounts: Record<string, number> = {};
   const tierDurationSums: Record<string, number> = {};
 
@@ -85,21 +73,23 @@ export function extractTrendData(
     avgDurationMsByTier[tier] = Math.round((tierDurationSums[tier] ?? 0) / count);
   }
 
-  const tierDistribution: TierDistribution = {
+  return {
     avgDurationMsByTier,
-    large: tierCounts["large"] ?? 0,
-    medium: tierCounts["medium"] ?? 0,
-    small: tierCounts["small"] ?? 0,
+    large: tierCounts.large ?? 0,
+    medium: tierCounts.medium ?? 0,
+    small: tierCounts.small ?? 0,
   };
+}
 
-  // Most-retried states: aggregate state_iterations across all flow runs.
-  const stateIterationTotals = new Map<string, { total: number; builds: number }>();
+/** Aggregate state_iterations across all flow runs, sorted by total iterations DESC. */
+function computeMostRetriedStates(flowRuns: FlowRunEntry[]): RetriedState[] {
+  const totals = new Map<string, { total: number; builds: number }>();
 
   for (const run of flowRuns) {
     for (const [state, iters] of Object.entries(run.state_iterations)) {
-      const existing = stateIterationTotals.get(state);
+      const existing = totals.get(state);
       if (existing === undefined) {
-        stateIterationTotals.set(state, { builds: 1, total: iters });
+        totals.set(state, { builds: 1, total: iters });
       } else {
         existing.total += iters;
         existing.builds += 1;
@@ -107,25 +97,30 @@ export function extractTrendData(
     }
   }
 
-  const mostRetriedStates: RetriedState[] = [...stateIterationTotals.entries()]
+  return [...totals.entries()]
     .map(([state, { total, builds }]) => ({
       buildsAffected: builds,
       state,
       totalIterations: total,
     }))
     .sort((a, b) => b.totalIterations - a.totalIterations);
+}
 
-  // Recurring violations: violations that appear in >= 2 reviews.
-  // findRecurringViolations accepts pre-normalized violations + raw review entries;
-  // we pass empty for the first arg since all data is in reviews (no run summaries here).
-  const recurringViolations = findRecurringViolations([], reviews);
+// ---- Data extraction ----
 
+/**
+ * Extract TrendData from flow runs and drift reviews.
+ * Pure function: no I/O, no side effects.
+ */
+export function extractTrendData(flowRuns: FlowRunEntry[], reviews: ReviewEntry[]): TrendData {
   return {
-    generatedAt,
-    lookbackCount,
-    mostRetriedStates,
-    recurringViolations,
-    tierDistribution,
+    generatedAt: new Date().toISOString(),
+    lookbackCount: flowRuns.length,
+    mostRetriedStates: computeMostRetriedStates(flowRuns),
+    // findRecurringViolations accepts pre-normalized violations + raw review entries;
+    // pass empty for the first arg since all data is in reviews (no run summaries here).
+    recurringViolations: findRecurringViolations([], reviews),
+    tierDistribution: computeTierDistribution(flowRuns),
   };
 }
 
@@ -141,18 +136,8 @@ function formatDate(iso: string): string {
   return iso.slice(0, 10);
 }
 
-/**
- * Format TrendData as a markdown artifact under 100 lines.
- */
-export function formatTrendMarkdown(data: TrendData): string {
-  const lines: string[] = [];
-
-  lines.push("# Build Trend Summary");
-  lines.push("");
-  lines.push(`Generated: ${formatDate(data.generatedAt)}`);
-  lines.push(`Lookback: last ${data.lookbackCount} builds`);
-
-  // Recurring Violations section
+/** Append the Recurring Violations section to the output lines. */
+function appendViolationsSection(lines: string[], data: TrendData): void {
   lines.push("");
   lines.push("## Recurring Violations");
   lines.push("");
@@ -165,27 +150,26 @@ export function formatTrendMarkdown(data: TrendData): string {
       lines.push(`| ${v.principle_id} | ${v.occurrence_count} | ${formatDate(v.last_seen)} |`);
     }
   }
+}
 
-  // Tier Distribution section
+/** Append the Tier Distribution section to the output lines. */
+function appendTierSection(lines: string[], data: TrendData): void {
   lines.push("");
   lines.push("## Tier Distribution");
   lines.push("");
   lines.push("| Tier | Count | Avg Duration |");
   lines.push("|------|-------|-------------|");
 
-  const tiers: Array<keyof Pick<TierDistribution, "small" | "medium" | "large">> = [
-    "small",
-    "medium",
-    "large",
-  ];
-  for (const tier of tiers) {
+  for (const tier of ["small", "medium", "large"] as const) {
     const count = data.tierDistribution[tier];
     const avgMs = data.tierDistribution.avgDurationMsByTier[tier] ?? 0;
     const avgFormatted = count > 0 ? formatMinutes(avgMs) : "--";
     lines.push(`| ${tier} | ${count} | ${avgFormatted} |`);
   }
+}
 
-  // Most-Retried States section
+/** Append the Most-Retried States section to the output lines. */
+function appendRetriedStatesSection(lines: string[], data: TrendData): void {
   lines.push("");
   lines.push("## Most-Retried States");
   lines.push("");
@@ -195,11 +179,26 @@ export function formatTrendMarkdown(data: TrendData): string {
     lines.push("| State | Total Iterations | Builds Affected |");
     lines.push("|-------|-----------------|-----------------|");
     // Limit to top 10 to stay under 100 lines
-    const topStates = data.mostRetriedStates.slice(0, 10);
-    for (const s of topStates) {
+    for (const s of data.mostRetriedStates.slice(0, 10)) {
       lines.push(`| ${s.state} | ${s.totalIterations} | ${s.buildsAffected} |`);
     }
   }
+}
+
+/**
+ * Format TrendData as a markdown artifact under 100 lines.
+ */
+export function formatTrendMarkdown(data: TrendData): string {
+  const lines: string[] = [];
+
+  lines.push("# Build Trend Summary");
+  lines.push("");
+  lines.push(`Generated: ${formatDate(data.generatedAt)}`);
+  lines.push(`Lookback: last ${data.lookbackCount} builds`);
+
+  appendViolationsSection(lines, data);
+  appendTierSection(lines, data);
+  appendRetriedStatesSection(lines, data);
 
   lines.push("");
 
@@ -234,13 +233,11 @@ export async function tryWriteBuildTrendSummary(workspace: string): Promise<bool
     // 3. Load reviews for violation analysis
     const reviews = db.getReviews();
 
-    // 4. Extract trend data
-    const trendData = extractTrendData(flowRuns, reviews);
+    // 4. Extract trend data and format
+    const content = formatTrendMarkdown(extractTrendData(flowRuns, reviews));
 
-    // 5. Format and write
-    const content = formatTrendMarkdown(trendData);
-    const outputPath = join(workspace, "build-trend-summary.md");
-    await atomicWriteFile(outputPath, content);
+    // 5. Write to workspace
+    await atomicWriteFile(join(workspace, "build-trend-summary.md"), content);
 
     return true;
   } catch (err: unknown) {

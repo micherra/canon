@@ -44,6 +44,8 @@ module.exports = {
           "^src/features/orchestration/services/workspace-cleanup\\.ts$",
           // ADR-016: learn-gate reads drift DB directly for flow count — deferred DI exception
           "^src/features/orchestration/services/learn-gate\\.ts$",
+          // MP-7: build-trend-summary-writer reads drift DB directly — deferred DI exception
+          "^src/features/orchestration/services/build-trend-summary-writer\\.ts$",
         ],
       },
       to: { path: "^src/platform/storage/drift/" },
