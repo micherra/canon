@@ -31,9 +31,9 @@ Report exactly ONE of these in ALL CAPS as the last substantive line of your out
 | **CRITICAL** | security | At least one critical finding — blocks the pipeline | `critical` |
 | **UPDATED** | scribe | At least one document was modified | `updated` |
 | **NO_UPDATES** | scribe | All changes were internal/test-only, no doc updates needed | `no_updates` |
-| **HAS_QUESTIONS** | planner/architect (headless fallback) | Unresolved questions requiring user input before proceeding | `has_questions` |
-| **APPROVED** | planner/architect (headless fallback) | User approved the plan, proceed to implementation | `approved` |
-| **REVISE** | planner/architect (headless fallback) | User requested changes, save feedback and re-analyze | `revise` |
+| **HAS_QUESTIONS** | architect (headless fallback) | Unresolved questions requiring user input before proceeding | `has_questions` |
+| **APPROVED** | architect (headless fallback) | User approved the plan, proceed to implementation | `approved` |
+| **REVISE** | architect (headless fallback) | User requested changes, save feedback and re-analyze | `revise` |
 
 ## Decision Guide
 
