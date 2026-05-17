@@ -1,9 +1,17 @@
 ---
 template: planning-brief
-description: Structured pre-build evaluation produced by the planner agent. Gates whether work proceeds to architect + engineer.
-used-by: [planner]
+description: >-
+  DEPRECATED (2026-05-17). Was produced by the planner agent. The architect's DESIGN.md
+  now absorbs the gating function (requirements, alternatives, value assessment).
+  Kept for backward compatibility with existing workspace artifacts.
+used-by: [deprecated]
 read-by: [canon-orchestrator, architect, engineer]
 ---
+
+<!-- DEPRECATED: 2026-05-17. Planning brief retired with the planner agent.
+     The architect's DESIGN.md now includes a Requirements section that serves
+     the same gating function. This template is preserved for backward compatibility
+     with existing workspace artifacts only. Do not produce new planning briefs. -->
 
 # Planning Brief: {request-title}
 

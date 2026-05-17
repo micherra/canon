@@ -27,6 +27,8 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `design-document.md` | architect | Technical design with Canon alignment |
 | `task-plan.md` | architect | Atomic task plan for engineers — required `### Brief Coverage` table maps every runbook requirement to a task element with disposition (`covered`, `descoped`, `partial`); missing or empty table is a plan defect that blocks progression |
 | `plan-index.md` | architect | Index of all task plans for a build |
+| `planning-brief.md` | deprecated | DEPRECATED — was pre-build evaluation. Kept for backward compat |
+| `runbook.md` | architect | Runbook step sequence for orchestrator execution |
 | `pr-description.md` | shipper | PR description from build artifacts |
 | `chat-brief.md` | chat | Structured brief for build handoff |
 | `migration-state.md` | orchestrator | Migration state handoff for multi-wave coordination |

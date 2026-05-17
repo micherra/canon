@@ -1,14 +1,14 @@
 ---
 template: runbook
-description: Synthesized runbook produced by the planner agent (canon:synthesize skill). Defines the ordered step sequence that the orchestrator executes.
-used-by: [planner]
+description: Synthesized runbook produced by the architect agent (canon:synthesize skill). Defines the ordered step sequence that the orchestrator executes.
+used-by: [architect]
 read-by: [canon-orchestrator, engineer, reviewer, scribe, learner]
 output-path: ${WORKSPACE}/plans/${slug}/runbook.md
 ---
 
 # Template: Runbook
 
-Use this template when the planner synthesizes a runbook from the planning brief. The runbook defines the ordered sequence of steps the orchestrator executes. Follow the structure exactly — downstream agents and the orchestrator parse this file structurally.
+Use this template when the architect synthesizes a runbook from its design. The architect produces both the design document (DESIGN.md) and the runbook as paired artifacts. The runbook defines the ordered sequence of steps the orchestrator executes. Follow the structure exactly — downstream agents and the orchestrator parse this file structurally.
 
 ```markdown
 ---

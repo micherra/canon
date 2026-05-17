@@ -11,14 +11,13 @@ Agent definitions for Canon's multi-agent build pipeline. Each markdown file def
 
 Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, `maxTurns`, `permissionMode`, `memory`, `skills`, `tools`) followed by markdown instructions. Agents are spawned by the orchestrator during flow execution.
 
-**Agent roster (10):**
+**Agent roster (9):**
 
 | Agent | Role | Model |
 |-------|------|-------|
-| `architect` | Designs solutions; produces design decisions and task decomposition | opus |
+| `architect` | First technical step: researches codebase, assesses triviality, designs solutions, produces runbooks and task plans | opus |
 | `engineer` | Executes code-writing work in implementation mode (per a plan) or fix mode (targeted bug or violation fixes) | sonnet |
 | `learner` | Analyzes patterns; suggests principle improvements | sonnet |
-| `planner` | Evaluates build requests pre-implementation; performs codebase research; produces structured briefs that greenlight, redirect, or ask clarifying questions | opus |
 | `reviewer` | Reviews code for principle compliance | opus |
 | `scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation | sonnet |
 | `security` | Security assessments on implemented code | opus |
@@ -30,7 +29,7 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 <!-- last-updated: 2026-04-29 -->
 
 - Each agent has a declarative `permissionMode` enforced by Claude Code:
-  - **`plan`** — truly read-only. No `Write` / `Edit` / `Bash`-to-modify AND no MCP `write_*` / `update_*` tools. For agents that emit artifacts inline (the lead writes them): `planner`.
+  - **`plan`** — truly read-only. No `Write` / `Edit` / `Bash`-to-modify AND no MCP `write_*` / `update_*` tools. Currently unused (the legacy planner was the only agent on this mode).
   - **`acceptEdits`** — auto-approves file edits and common filesystem commands scoped to the working directory. For agents that produce artifacts via MCP write tools (`architect` → `write_plan_index` / `write_design_brief` / `update_board`; `reviewer` → `write_review`; `tester` → `write_test_report`; `learner` → writes to `.canon/learning.jsonl` and `.canon/proposed-learnings/`; `shipper` → PR description; `writer` → principle files) or that write file artifacts directly (`engineer`, `scribe`, `security`).
   - **Why not all `plan` for read-only roles?** Claude Code's `plan` mode blocks ALL write tools including MCP `write_*` — per [permission-modes](https://code.claude.com/docs/en/permission-modes.md). So the subset that genuinely can't write anything (no MCP write tools) stays on `plan`; everyone else is `acceptEdits`. Each agent's `tools:` list is the real allowlist.
 - Each agent has a `maxTurns` budget appropriate to its role. A turn is one assistant message with tool calls; text-only responses don't consume a turn. Parallel tool calls in one message = 1 turn.
@@ -48,4 +47,4 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 - `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.
 - `engineer` (verify mode): before reporting any build or test failure as BLOCKING, must verify whether the failure exists on the base branch. Pre-existing failures are noted as PRE-EXISTING and do not block.
 - `reviewer` writes its review artifact to `${WORKSPACE}/reviews/REVIEW.md` (exact path). The orchestrator must inject `WORKSPACE={workspace_path}` (workspace root, not worktree path) into the reviewer's spawn prompt to ensure correct artifact placement.
-- Agents with `memory: project` (planner, engineer, architect, scribe, learner, tester) persist agent memory across sessions; others do not.
+- Agents with `memory: project` (engineer, architect, scribe, learner, tester) persist agent memory across sessions; others do not.

@@ -58,7 +58,7 @@ This is an architecture recommendation. It belongs to the architect agent, not t
 User: "The payment flow is failing in prod — can you figure out why?"
 
 Orchestrator: "Investigating the payment failure."
-[spawns canon:planner with the investigation task]
+[spawns canon:architect with the investigation task]
 ```
 
 One classification sentence. Agent spawned. Specialist does the analysis and writes findings to the workspace.
@@ -66,8 +66,8 @@ One classification sentence. Agent spawned. Specialist does the analysis and wri
 **Good — orchestrator presents a HITL checkpoint with specialist findings:**
 
 ```
-Orchestrator: "The planner identified a session token race condition as the root
-cause. Here are the findings: [presents planner artifact]. Proceed with the fix?"
+Orchestrator: "The architect identified a session token race condition as the root
+cause. Here are the findings: [presents architect artifact]. Proceed with the fix?"
 ```
 
 The orchestrator is presenting a specialist's output at a HITL breakpoint — an allowlisted output type. It is not generating the analysis itself.

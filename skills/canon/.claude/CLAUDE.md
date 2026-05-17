@@ -21,10 +21,10 @@ SKILL.md intent routing (authoritative; aligned to root CLAUDE.md as of 2026-05-
 
 | Intent | Action |
 |--------|--------|
-| Build, fix, change, improve | Spawn `planner` |
+| Build, fix, change, improve | PM requirements conversation → spawn `architect` |
 | Review PR or branch | Spawn `reviewer` |
 | Security audit | Spawn `security`, then `reviewer` |
-| Investigate / "how does X work" | Spawn `planner` |
+| Investigate / "how does X work" | Spawn `architect` |
 | Create/edit principle | Spawn `canon:writer` |
 | Analyze patterns / learn | Spawn `canon:learner` |
 | Question | Respond directly |
@@ -32,7 +32,7 @@ SKILL.md intent routing (authoritative; aligned to root CLAUDE.md as of 2026-05-
 | Resume | Read journal → resume |
 | Greeting | Respond directly |
 
-**Removed agents (no longer referenced in SKILL.md):** `canon:chat`, `canon:guide`, `canon:fixer`. **Removed escape hatch:** "Inline Mode" (Principle Loading outside a pipeline) was deleted.
+**Removed agents (no longer referenced in SKILL.md):** `canon:chat`, `canon:guide`, `canon:fixer`, `canon:planner`. **Removed escape hatch:** "Inline Mode" (Principle Loading outside a pipeline) was deleted.
 
 ## Conventions
 <!-- last-updated: 2026-04-09 -->
