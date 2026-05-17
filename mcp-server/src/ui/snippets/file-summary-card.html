@@ -1,0 +1,41 @@
+<!--
+  @snippet file-summary-card
+  @description Compact one-line card for a non-high-impact file showing path, layer badge, and shape label. Used in the graph context panel for files below the high-impact threshold.
+  @data { filePath: string, layer: string, shapeLabel: string, layerColor: string }
+  @tokens --bg-surface, --text, --text-muted
+  @usage Stack multiple cards in a column container with no gap between them (margin-bottom: 4px is built-in).
+    All string placeholders require escapeHtml before substitution: {{FILE_PATH}}, {{LAYER}}, {{SHAPE_LABEL}}.
+    {{LAYER_COLOR}} is a hex color constant — no escaping needed, but must be a valid CSS color.
+    Note: .layer-badge CSS is defined in file-detail-card.html. When composing both snippets in the same artifact, the renderer deduplicates styles — include file-detail-card styles once to cover layer-badge for both components.
+-->
+<div class="file-summary-card">
+  <span class="file-summary-path">{{FILE_PATH}}</span>
+  <span class="layer-badge" style="background: {{LAYER_COLOR}}22; color: {{LAYER_COLOR}}; border-color: {{LAYER_COLOR}}44;">{{LAYER}}</span>
+  <span class="file-summary-shape">{{SHAPE_LABEL}}</span>
+</div>
+<style>
+  .file-summary-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-surface);
+    border-radius: 4px;
+    margin-bottom: 4px;
+  }
+  .file-summary-path {
+    flex: 1;
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-summary-shape {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-style: italic;
+    flex-shrink: 0;
+  }
+</style>
