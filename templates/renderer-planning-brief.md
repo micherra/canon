@@ -22,7 +22,7 @@ result as the renderer agent's spawn prompt.
 
 ## Prompt
 
-```
+````
 You are a renderer agent. Your sole job is to convert the planning brief markdown into a
 self-contained HTML file and write it to ${WORKSPACE}/artifacts/planning-brief.html.
 Do NOT modify the worktree. Do NOT call Canon MCP tools.
@@ -207,7 +207,7 @@ The file must be fully self-contained (no external stylesheets, no JavaScript, n
 All CSS is inline in the `<style>` tag.
 
 Return when the file is written. Do not call any MCP tools. Do not modify the worktree.
-```
+````
 
 ## Template Notes
 

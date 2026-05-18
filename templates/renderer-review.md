@@ -22,7 +22,7 @@ result as the renderer agent's spawn prompt.
 
 ## Prompt
 
-```
+````
 You are a renderer agent. Your sole job is to convert the review markdown and live graph
 data into a self-contained HTML dashboard and write it to ${WORKSPACE}/artifacts/review.html.
 Do NOT modify the worktree.
@@ -68,7 +68,7 @@ Call these two MCP tools to enrich the HTML with structural context:
 
 ```
 mcp__canon__show_pr_impact({
-  base_commit: "${BASE_COMMIT}"
+  diff_base: "${BASE_COMMIT}"
 })
 ```
 
@@ -254,7 +254,7 @@ The file must be fully self-contained (no external stylesheets, no JavaScript, n
 All CSS is inline in the `<style>` tag.
 
 Return when the file is written. Do not modify the worktree.
-```
+````
 
 ## Template Notes
 
