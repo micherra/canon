@@ -602,9 +602,9 @@ export async function finalizeWorkspace(
   let trend_summary_written: boolean | undefined;
   if (complete) {
     digest_written = await tryWriteBuildDigest(workspace);
+    analytics_recorded = await tryAppendAnalytics(workspace, steps);
     trend_summary_written = await tryWriteBuildTrendSummary(workspace);
     claims_released = await tryReleaseClaims(workspace);
-    analytics_recorded = await tryAppendAnalytics(workspace, steps);
     await tryRunJanitor();
   }
 
