@@ -83,15 +83,18 @@ From the result, extract:
 - `subsystems` — new or removed subsystems
 - `pr_metrics` — any PR-level metrics (lines added/removed, etc.)
 
-### 3b. get_file_context (per changed file)
+### 3b. get_context (all changed files, batched)
 
-For each file in the diff (from Stage 1 of REVIEW.md), call:
+Collect the full list of changed files from Stage 1 of REVIEW.md, then make a single batched call:
 
 ```
-mcp__canon__get_file_context({ file_path: "{file}" })
+mcp__canon__get_context({
+  file_paths: ["{file1}", "{file2}", ...],
+  include: ["file_context"]
+})
 ```
 
-From each result, extract:
+The response contains a `file_context` map keyed by file path. For each entry, extract:
 - `layer` — the layer this file belongs to
 - `shape.label` — graph shape (e.g., "Central hub", "High fan-out hub", "Sink", "Standard")
 - `shape.description` — shape description
@@ -112,9 +115,9 @@ From each result, extract:
 - `computed_tags` — computed tags for this file
 - `violation_count` — number of active violations on this file (if available)
 
-Collect results into a map: `fileContextMap[filePath] = fileContextResult`.
+Collect results into a map: `fileContextMap[filePath] = result.file_context[filePath]`.
 
-If `get_file_context` fails for a file, skip it — do not block rendering.
+If a file is absent from the response's `file_context` map, skip it — do not block rendering.
 
 ## Step 4 — Compute derived values
 
@@ -345,7 +348,7 @@ Return when the file is written. Do not modify the worktree.
 ## Template Notes
 
 - Variable substitution is the orchestrator's responsibility before passing to Agent()
-- This is the ONLY renderer template that requires MCP tool calls (show_pr_impact, get_file_context)
+- This is the ONLY renderer template that requires MCP tool calls (show_pr_impact, get_context)
 - The reviewer narrative is NOT optional — the template explicitly marks it as REQUIRED
 - The reviewer narrative appears immediately after the verdict banner (before stats row)
 - Read Sections F and G from DESIGN-SYSTEM.md; do not reconstruct patterns from memory

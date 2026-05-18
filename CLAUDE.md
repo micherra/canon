@@ -373,7 +373,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 ### Post-Step Effects
 
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
-- After reviewer completes (mandatory): spawn the renderer agent to convert `${WORKSPACE}/reviews/REVIEW.md` to HTML. The renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, calls `get_file_context` and `show_pr_impact` for structural data, and writes `${WORKSPACE}/artifacts/review.html`. Open the HTML in the browser (`open` command) before presenting the review verdict at the HITL checkpoint. This is not optional — every review step produces rendered HTML.
+- After reviewer completes (mandatory): spawn the renderer agent to convert `${WORKSPACE}/reviews/REVIEW.md` to HTML. The renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, calls `get_context` and `show_pr_impact` for structural data, and writes `${WORKSPACE}/artifacts/review.html`. Open the HTML in the browser (`open` command) before presenting the review verdict at the HITL checkpoint. This is not optional — every review step produces rendered HTML.
 - After architect completes (mandatory): spawn the renderer agent to convert the design document (`${WORKSPACE}/plans/${slug}/DESIGN.md` or `INDEX.md`) to HTML. The renderer reads the design doc + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` and writes `${WORKSPACE}/artifacts/design.html`. Open the HTML in the browser before presenting the design for user approval at the HITL checkpoint.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself. Agents are required by rule `agent-metrics-before-return` to call this before their terminal status; the orchestrator fallback covers non-compliant agents.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
@@ -381,10 +381,10 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### Renderer Spawn Protocol
 
-Spawn a generic `Agent()` (not a named agent definition) using the structured renderer prompt
-template for the checkpoint type. The renderer reads the markdown artifact (and calls MCP tools
-when the template requires it), produces a fully self-contained HTML file to `${WORKSPACE}/artifacts/`,
-and returns. The renderer does NOT modify the worktree.
+Spawn a generic `Agent()` (not a named agent definition) with `model: "haiku"` using the structured
+renderer prompt template for the checkpoint type. The renderer reads the markdown artifact (and calls
+MCP tools when the template requires it), produces a fully self-contained HTML file to
+`${WORKSPACE}/artifacts/`, and returns. The renderer does NOT modify the worktree.
 
 **Before spawning the renderer**, read the appropriate template from `templates/renderer-*.md`,
 fill in the `## Variables` placeholders, and pass the `## Prompt` section (the content inside
@@ -401,7 +401,7 @@ the fenced code block) as the renderer agent's spawn prompt.
 **MCP tool requirements per template:**
 - `renderer-planning-brief.md` — pure markdown, no MCP tool calls
 - `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML directly)
-- `renderer-review.md` — requires `show_pr_impact` and `get_file_context` calls
+- `renderer-review.md` — requires `show_pr_impact` and `get_context` calls
 
 **Artifact naming convention:**
 | Artifact | HTML filename |
