@@ -163,24 +163,55 @@ if (violationCount === 0) {
 
 Follow the full-width layout from Section F.2 (NOT the `.container` wrapper from Section B).
 
+**General rule: Do NOT render a section if it has no data. Empty cards with "No data" messages
+waste space. Only render sections that have meaningful content to display.**
+
 Assemble in this order:
 
 1. **Verdict banner** (Section F.3) — full-width, no container
-2. **Stats row** (Section F.4) — 4 stat cards
-3. **Dashboard grid** (Section F.5) — 2-column grid, 4 cards:
-   - Row 1 left: "Fix Before Merge" (Section F.6)
-   - Row 1 right: "Violations by Principle" (Section F.7) + "Compliance Score" (Section F.8) stacked
-   - Row 2 left: "Highest Blast Radius" (Section F.9)
-   - Row 2 right: "Changes by Layer" (Section F.10) + "New Subsystems" (Section F.11) stacked
-4. **Reviewer narrative panel** — full-width card below the grid (see below)
+2. **Reviewer narrative panel** — full-width card immediately after the verdict banner (see below)
+3. **Stats row** (Section F.4) — 4 stat cards
+4. **Dashboard grid** (Section F.5) — 2-column grid, conditional cards:
+   - Row 1 left: "Fix Before Merge" (Section F.6) — **omit entirely if 0 violations**; instead
+     render a compact "No violations — looking good." success banner below the stats row
+   - Row 1 right: "Violations by Principle" (Section F.7) + "Compliance Score" (Section F.8)
+     stacked — **omit "Violations by Principle" if 0 violations**
+   - Row 2 left: "Highest Blast Radius" (Section F.9) — **omit entirely if blast radius data
+     is empty** (all files are leaf nodes with 0 downstream deps; `blastFiles` is empty or all
+     have depCount === 0)
+   - Row 2 right: "Changes by Layer" (Section F.10) — **omit if layerData is empty**;
+     "New Subsystems" (Section F.11) stacked below — **omit if subsystemData is empty**
 5. **Graph Context section** (Section G) — full-width collapsible card
-6. **Blast Radius Rings section** (Section H) — full-width card
+6. **Blast Radius Rings section** (Section H) — **omit entirely if blast radius data is empty**
+
+### Conditional rendering rules
+
+Apply these rules to avoid empty-section clutter:
+
+- **0 violations**: Replace the "Fix Before Merge" grid card with a compact success banner:
+  ```html
+  <div class="no-violations-banner" style="grid-column: 1 / -1; padding: 12px 16px;
+    background: #eafaf1; border: 1px solid #27ae60; border-radius: 6px; color: #27ae60;
+    font-weight: 600; margin-bottom: 8px;">
+    No violations — looking good.
+  </div>
+  ```
+  Also omit the "Violations by Principle" card (only render "Compliance Score" in that column).
+
+- **Empty blast radius** (blastFiles.length === 0 OR all depCount === 0): Omit both the
+  "Highest Blast Radius" grid card and the entire Blast Radius Rings section. Do not render
+  them at all — not even collapsed.
+
+- **Empty subsystems** (subsystemData is empty or absent): Omit the "New Subsystems" card
+  entirely.
+
+- **Empty layer data** (layerData is empty): Omit the "Changes by Layer" card entirely.
 
 ### Reviewer narrative panel
 
 This panel is REQUIRED. Do not omit it.
 
-Place it as a full-width row below the dashboard grid:
+Place it as a full-width panel immediately after the verdict banner, before the stats row:
 
 ```html
 <div class="grid-card" style="grid-column: 1 / -1; margin-top: 8px;">
@@ -201,15 +232,64 @@ advisory items, gotcha documentation. Do not summarize or truncate.
 
 ### Changed files list
 
-Include the changed files as part of the Graph Context section (Section G). Each file gets:
-- Layer badge
-- Shape label
-- in_degree count
-- blast_radius total_files count
-- impact_score (rendered as a percentage or 0–100 score)
+Include the changed files as part of the Graph Context section (Section G). Each file gets a
+`<details>` expandable card. The collapsed (summary) state shows compact info; clicking expands
+to show the full detail view. Use this pattern for EVERY file regardless of impact level:
 
-High-impact files (from Section G.2 classification: hub shape OR violations > 0 OR blast_radius > 5)
-get full detail cards (Section G.4). Other files get compact summary cards (Section G.5).
+```html
+<details class="file-card-expandable">
+  <summary class="file-summary-card" style="cursor: pointer; list-style: none; padding: 8px 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    display: flex; align-items: center; gap: 8px; transition: background 0.15s ease;">
+    <!-- compact info: file path, layer badge, shape label, in_degree, impact_score -->
+    <span class="layer-badge">{escapeHtml(layer)}</span>
+    <span class="file-path" style="font-family: monospace; font-size: 12px;">{escapeHtml(filePath)}</span>
+    <span class="shape-label" style="font-size: 11px; color: var(--text-muted);">{escapeHtml(shape.label)}</span>
+    <span class="impact-score" style="font-size: 11px; color: var(--text-muted);">impact: {Math.round(impactScore * 100)}%</span>
+    <span class="in-degree" style="font-size: 11px; color: var(--text-muted);">in_degree: {inDegree}</span>
+  </summary>
+  <div class="file-detail-expanded" style="padding: 12px; border: 1px solid var(--border);
+    border-top: none; border-radius: 0 0 6px 6px; background: var(--bg);">
+    <!-- expanded info: imports list, imported_by list, blast radius total, computed tags -->
+    <div style="margin-bottom: 8px;">
+      <strong>Imports ({imports.length}):</strong>
+      <ul style="margin: 4px 0 0 16px; font-size: 11px; font-family: monospace;">
+        {imports.map(f => `<li>${escapeHtml(f)}</li>`).join("")}
+      </ul>
+    </div>
+    <div style="margin-bottom: 8px;">
+      <strong>Imported by ({importedBy.length}):</strong>
+      <ul style="margin: 4px 0 0 16px; font-size: 11px; font-family: monospace;">
+        {importedBy.map(f => `<li>${escapeHtml(f)}</li>`).join("")}
+      </ul>
+    </div>
+    <div style="margin-bottom: 8px;">
+      <strong>Blast radius:</strong> {blastRadiusTotalFiles} downstream files
+    </div>
+    {computedTags.length > 0 ? `
+    <div>
+      <strong>Tags:</strong>
+      <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(computedTags.join(", "))}</span>
+    </div>` : ""}
+  </div>
+</details>
+```
+
+Add this CSS to the `<style>` block for the expandable file cards:
+
+```css
+.file-card-expandable { margin-bottom: 6px; }
+.file-card-expandable > summary::-webkit-details-marker { display: none; }
+.file-card-expandable > summary::before {
+  content: "▶";
+  font-size: 10px;
+  margin-right: 6px;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+.file-card-expandable[open] > summary::before { transform: rotate(90deg); }
+.file-card-expandable > summary:hover { background: var(--surface-hover, #f5f5f5); }
+```
 
 ### Blast radius rings
 
@@ -217,12 +297,15 @@ Render using Section H geometry patterns. Data comes from `show_pr_impact blastR
 Group by depth (H.2), compute ring positions (H.3), emit SVG (H.4). Apply crowding strategy when
 a ring has >12 files (H.6).
 
+**Only render this section if blast radius data is non-empty** (see conditional rendering rules above).
+
 ## Step 6 — Apply Section F.14 CSS verbatim
 
 Copy the full CSS from Section F.14 into the `<style>` tag, after the Section A design tokens.
 Do not abbreviate or omit any CSS rule.
 
-Also add CSS for the reviewer narrative panel, collapsible section, and rings (from Sections C and H).
+Also add CSS for the reviewer narrative panel, collapsible section, rings, and expandable file
+cards (from Sections C and H, plus the `.file-card-expandable` rules above).
 
 ## Step 7 — Security
 
@@ -261,6 +344,9 @@ Return when the file is written. Do not modify the worktree.
 - Variable substitution is the orchestrator's responsibility before passing to Agent()
 - This is the ONLY renderer template that requires MCP tool calls (show_pr_impact, get_file_context)
 - The reviewer narrative is NOT optional — the template explicitly marks it as REQUIRED
+- The reviewer narrative appears immediately after the verdict banner (before stats row)
 - Read all of Sections F, G, and H from DESIGN-SYSTEM.md; do not reconstruct patterns from memory
 - The renderer writes exclusively to `${WORKSPACE}/artifacts/` — never to the worktree
 - If REVIEW.md does not exist at `${WORKSPACE}/reviews/REVIEW.md`, report failure and stop
+- Do NOT render empty sections — only render sections that have data to display
+- Every file in Graph Context uses an expandable `<details>` card regardless of impact level
