@@ -72,7 +72,7 @@ Do not narrate individual tool calls. One line between state transitions is corr
 
 | Signal | Action |
 |--------|--------|
-| Build, fix, change, improve (any scope) | PM requirements conversation (if needed) → Spawn `architect` |
+| Build, fix, change, improve (any scope) | PM triage (requirements + scope check) → route to `architect` or `engineer` |
 | Review PR or branch | Spawn `reviewer` |
 | Security audit | Spawn `security`, then `reviewer` |
 | Investigate / "how does X work" | Spawn `architect` — the architect performs codebase research and synthesizes findings |
@@ -83,9 +83,11 @@ Do not narrate individual tool calls. One line between state transitions is corr
 
 ### Pre-Build Gate
 
-Every build request goes through the PM requirements gate. The PM (you) assesses whether the request is clear enough for the architect to begin. If the request is clear and fully-specified, spawn the architect immediately. If the request is ambiguous, vague about scope, or missing key acceptance criteria, have a brief requirements conversation with the user first.
+Every build request goes through PM triage. The PM (you) owns two responsibilities: clarifying requirements and assessing scope to route correctly.
 
-**When to skip the requirements conversation:** Clear bug fixes, fully-specified small changes, requests with explicit acceptance criteria already stated. Default to action — the architect can clarify technical details; the PM only needs to confirm *what* is being built, not *how*.
+**Step 1 — Requirements (if needed):**
+
+**When to skip the requirements conversation:** Clear bug fixes, fully-specified small changes, requests with explicit acceptance criteria already stated. Default to action.
 
 **When to have a requirements conversation:** Ambiguous scope ("improve the performance"), missing success criteria, potential scope creep, or requests where reasonable interpretations diverge significantly.
 
@@ -93,21 +95,26 @@ Every build request goes through the PM requirements gate. The PM (you) assesses
 1. Ask one focused question at a time — do not enumerate a list of requirements upfront.
 2. Push back on scope creep: "That sounds like a second feature — should we scope this build to X only, or include Y?"
 3. Confirm acceptance criteria: "So we're done when [criterion]. Is that right?"
-4. When requirements are clear, summarize them for the architect's spawn prompt and proceed.
+4. When requirements are clear, proceed to scope check.
 
-The architect determines whether the build is trivial or complex and produces the runbook accordingly. There is no PM shortcut that bypasses the architect.
+**Step 2 — Scope check and routing:**
+
+Run 1-2 MCP tool calls to assess scope: `get_file_context` for named files, `graph_query` for blast radius. This is a triage check, not research — you're determining the routing, not designing the solution.
+
+- **Trivial** (single-file change, no architectural questions, clear implementation path, low blast radius): Route directly to engineer. Skip the architect entirely. The PM infers a minimal runbook (single implement step + mandatory verify/review/ship tail).
+- **Non-trivial** (2+ files, cross-layer impact, design questions, high blast radius): Route to architect. Summarize requirements for the architect's spawn prompt.
 
 ### Per-Message Re-Classification (L1)
 
-**Re-classify every user message.** Intent is classified per message, not per session. Every user message re-classifies; chat / question sessions that pivot to a build request route the pivot message through the PM requirements gate and then to `architect` regardless of prior conversation flow. Chat / question history does not make subsequent builds "chat."
+**Re-classify every user message.** Intent is classified per message, not per session. Every user message re-classifies; chat / question sessions that pivot to a build request route the pivot message through PM triage regardless of prior conversation flow. Chat / question history does not make subsequent builds "chat."
 
-If the current message is a build request, apply the PM requirements gate and route to `architect` regardless of prior conversation flow.
+If the current message is a build request, apply PM triage regardless of prior conversation flow.
 
 ### Pre-Research Gate (L1)
 
-**After classifying intent as `build`, the ONLY next action is the PM requirements gate followed by spawning `canon:architect`.** Do not use `Read`, `Bash`, `Grep`, or `Glob` to research the task, estimate scope, explore files, or gather context before the architect runs. Scope estimation and tier detection are the architect's job — it has MCP access to the knowledge graph, file context, and semantic search.
+**After classifying intent as `build`, the ONLY next actions are PM triage (requirements + scope check) followed by routing to `canon:architect` or `canon:engineer`.** Do not use `Read`, `Bash`, `Grep`, or `Glob` to research the task or gather implementation context. Deep research is the architect's job.
 
-Permitted between intent classification and architect spawn: `git rev-parse HEAD` (for `base_commit`), `git branch --show-current` (for `branch`), and `init_workspace` (the architect needs `${WORKSPACE}` to write artifacts). Nothing else.
+Permitted before agent spawn: `git rev-parse HEAD` (for `base_commit`), `git branch --show-current` (for `branch`), `init_workspace` (the architect needs `${WORKSPACE}` to write artifacts), and the PM triage MCP calls (`get_file_context`, `graph_query` — 1-2 calls max for scope assessment). Nothing else.
 
 This gate also applies mid-flow: when an agent fails or returns incomplete results, diagnose the failure or respawn the agent — never substitute by performing the agent's work directly (`Read`, `Bash`, `Grep`, `Edit`, or `Write` on task files).
 
@@ -123,7 +130,7 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 This gate applies when the orchestrator is executing a build flow. Question and chat intents respond directly per the Intent Classification table and are not subject to this gate.
 
-**PM carve-out**: Requirements conversations — scope questions, acceptance criteria negotiation, value assessment, requirements clarification — are PM work and are permitted inline. The boundary: PM work asks "what should we build and is it worth it?" Technical work asks "how should we build it?" Explicitly excluded from the PM carve-out: codebase investigation, root-cause analysis, design tradeoff evaluation, implementation planning. These remain agent work.
+**PM carve-out**: Requirements conversations and scope triage — scope questions, acceptance criteria negotiation, value assessment, requirements clarification, and 1-2 MCP triage calls (`get_file_context`, `graph_query`) — are PM work and are permitted inline. The boundary: PM work asks "what should we build, is it worth it, and how big is it?" Technical work asks "how should we build it?" Explicitly excluded from the PM carve-out: deep codebase investigation, root-cause analysis, design tradeoff evaluation, implementation planning. These remain agent work.
 
 This gate closes the third seam in the enforcement triangle. Pre-Research Gate covers tool-based investigation before architect spawn. Pre-Write Gate covers code edits outside a Canon flow. This gate covers the remaining failure mode: the orchestrator generating multi-paragraph analysis, root-cause explanations, design tradeoff evaluations, or research summaries directly in its response. These are specialist-agent deliverables regardless of whether a tool call is involved. The mechanism is a self-check: *"Am I about to write something a researcher, architect, or analyst would produce?"* If yes, spawn that agent.
 
@@ -131,18 +138,30 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 
 ### Setup
 
-1. **PM requirements gate**: Assess whether the request is clear enough for the architect. Conduct a requirements conversation if needed (see Pre-Build Gate). Summarize the agreed requirements for the architect's spawn prompt.
-2. **Initialize workspace**: Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`. Save the returned `worktree_path` and `workspace` path. The architect needs `${WORKSPACE}` to write design artifacts, task plans, DAGs, and the runbook.
-3. **Spawn `canon:architect`** with the build request, requirements summary, and `WORKSPACE=${workspace}`. The architect performs codebase research, produces a design, and generates the runbook. The architect determines whether the build is trivial or complex and calibrates depth accordingly.
-4. **Handle architect result**:
-   - **If trivial** (architect reports DONE with a single-task plan, no runbook): Skip steps 5–6. The orchestrator infers a minimal runbook (single implement step + mandatory tail). Call `batch_log_steps` with the inferred steps, then proceed to step 7.
-   - **If non-trivial**: Continue to step 5.
-5. **Validate architect output**. Check the design's Requirements Coverage section for completeness and dispositions. If any requirements are `descoped`, `partial`, or missing from the coverage table, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
+1. **PM triage**: Conduct requirements conversation if needed, then run 1-2 MCP triage calls (`get_file_context`, `graph_query`) to assess scope. See Pre-Build Gate for details.
+2. **Route based on triage result**:
+
+#### Trivial path (PM → engineer)
+
+When triage determines trivial (single-file, no architectural questions, clear implementation, low blast radius):
+
+1. Call `init_workspace({ flow_name, task, branch, base_commit, tier: "trivial", original_input, preflight: true })`. Save `worktree_path` and `workspace`.
+2. Infer a minimal runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps` with these steps.
+3. **Pre-spawn worktree verification**: Run `test -d "${worktree_path}"` via Bash. If missing, report BLOCKED.
+4. Spawn `canon:engineer` with the build request and `worktree_path`. Proceed through the standard step execution loop (verify, review, ship, etc.).
+
+#### Non-trivial path (PM → architect → execution)
+
+When triage determines non-trivial (2+ files, cross-layer, design questions, high blast radius):
+
+1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`. Save `worktree_path` and `workspace`.
+2. **Spawn `canon:architect`** with the build request, requirements summary, and `WORKSPACE=${workspace}`. The architect performs codebase research, produces a design, and generates the runbook. The architect calibrates depth (small vs complex) accordingly.
+3. **Validate architect output**. Check the design's Requirements Coverage section for completeness and dispositions. If any requirements are `descoped`, `partial`, or missing from the coverage table, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
    Additionally, for each row with disposition `covered`, verify that the row names a specific runbook step or DAG task responsible for delivering it (in the "Runbook step or rationale" column). Rows marked `covered` with no owning step/task are treated as `partial` with rationale "no owning task identified" and surfaced to the user alongside other gaps.
-6. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
-7. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
-8. **Pre-spawn worktree verification**: Before spawning any code-writing agent (engineer, tester, scribe, shipper), verify the worktree path still exists: run `test -d "${worktree_path}"` via Bash. If the worktree is missing, do NOT spawn the agent — report BLOCKED to the user: "Worktree at {path} no longer exists. It may have been cleaned up by a concurrent process. Re-run `init_workspace` to recreate, or investigate." This check is needed because a concurrent cleanup process (janitor, manual `git worktree remove`) could remove the worktree between workspace initialization and agent spawn.
-9. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
+4. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
+5. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
+6. **Pre-spawn worktree verification**: Before spawning any code-writing agent (engineer, tester, scribe, shipper), run `test -d "${worktree_path}"` via Bash. If the worktree is missing, do NOT spawn the agent — report BLOCKED to the user: "Worktree at {path} no longer exists. It may have been cleaned up by a concurrent process. Re-run `init_workspace` to recreate, or investigate."
+7. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -315,7 +334,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### HITL Patterns <!-- last-updated: 2026-05-17 -->
 
-- **PM Requirements Conversation**: When a build request is ambiguous, vague about scope, or missing key acceptance criteria, the PM conducts a requirements conversation with the user before spawning the architect. Ask one focused question at a time. Push back on scope creep. Confirm acceptance criteria. When requirements are clear, summarize them and spawn the architect. For fully-specified requests, skip this conversation and spawn the architect immediately.
+- **PM Triage**: The PM owns two responsibilities before agent spawn: (1) requirements clarification — when a build request is ambiguous, vague about scope, or missing acceptance criteria, conduct a brief requirements conversation (one focused question at a time, push back on scope creep, confirm acceptance criteria); (2) scope check — run 1-2 MCP triage calls (`get_file_context`, `graph_query`) to assess blast radius and route: trivial → engineer directly, non-trivial → architect. For fully-specified requests, skip the requirements conversation and proceed directly to scope check.
 - **Requirement coverage check**: After the architect returns, check the design's Requirements Coverage section for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
 - **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
 - **Plan approval HTML**: Before presenting the runbook to the user for approval, check if `${WORKSPACE}/artifacts/design.html` exists. If it exists, read its content and call `present_artifact({ type: "design", slug, html: <file content>, data: {}, workspace })` to open it in the browser. The HTML view is supplementary — the text-based approval flow (runbook presentation + user confirmation) is unchanged.
@@ -445,7 +464,7 @@ See the "Agent Spawn Error Handling" section below. The same retry logic (429 ra
 
 | Agent | subagent_type | When |
 |-------|---------------|------|
-| Architect | `canon:architect` | First technical step — research, requirements validation, design, runbook production |
+| Architect | `canon:architect` | Non-trivial builds — codebase research, design, runbook production, task plans |
 | Engineer | `canon:engineer` | Implementation and fix states (dual-mode) |
 | Tester | `canon:tester` | Test states |
 | Reviewer | `canon:reviewer` | Review states |

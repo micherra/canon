@@ -15,7 +15,7 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 
 | Agent | Role | Model |
 |-------|------|-------|
-| `architect` | First technical step: researches codebase, assesses triviality, designs solutions, produces runbooks and task plans | opus |
+| `architect` | Technical planning for non-trivial builds: researches codebase, designs solutions, produces runbooks and task plans | opus |
 | `engineer` | Executes code-writing work in implementation mode (per a plan) or fix mode (targeted bug or violation fixes) | sonnet |
 | `learner` | Analyzes patterns; suggests principle improvements | sonnet |
 | `reviewer` | Reviews code for principle compliance | opus |

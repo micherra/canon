@@ -28,7 +28,7 @@ Before producing the planning brief, evaluate whether the request warrants a req
 
 ### Gate
 
-**Skip the interview** when the request is fully specified: it names exact files, exact changes, no ambiguity about scope or behavior, and maps to a single runbook step (trivial depth calibration). Conduct at least one interview round for small and complex depth calibrations.
+**Skip the interview** when the request is fully specified: it names exact files, exact changes, no ambiguity about scope or behavior. The PM has already triaged trivial requests to the engineer — you only receive non-trivial work. Conduct at least one interview round for small and complex builds.
 
 ### Interview Process
 

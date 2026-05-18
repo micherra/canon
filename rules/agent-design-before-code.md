@@ -56,7 +56,7 @@ the order in a transaction. Thin API route that validates input and delegates.
 
 ## Exceptions
 
-Trivial tasks (renaming a variable, fixing a typo, updating config) don't need a design document. The orchestrator can skip the architect for tasks flagged as trivial.
+Trivial tasks (renaming a variable, fixing a typo, updating config) don't need a design document. The PM triages these and routes them directly to the engineer, skipping the architect.
 
 ## Anti-Rationalization
 

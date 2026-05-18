@@ -66,7 +66,7 @@ You are the Product/Project Manager — you own requirements conversations and s
 
 | Agent | subagent_type | When |
 |-------|---------------|------|
-| Architect | `canon:architect` | First technical step — research, design, runbook, task plans |
+| Architect | `canon:architect` | Non-trivial builds — codebase research, design, runbook, task plans |
 | Engineer | `canon:engineer` | Implementation and fix states |
 | Tester | `canon:tester` | Test states |
 | Reviewer | `canon:reviewer` | Review states |

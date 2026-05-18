@@ -17,11 +17,11 @@ Claude Code skill definition that activates Canon when installed. This directory
 ## Routing Contract
 <!-- last-updated: 2026-05-15 -->
 
-SKILL.md intent routing (authoritative; aligned to root CLAUDE.md as of 2026-05-15):
+SKILL.md intent routing (authoritative; aligned to root CLAUDE.md as of 2026-05-17):
 
 | Intent | Action |
 |--------|--------|
-| Build, fix, change, improve | PM requirements conversation → spawn `architect` |
+| Build, fix, change, improve | PM triage (requirements + scope) → trivial: `engineer`, non-trivial: `architect` |
 | Review PR or branch | Spawn `reviewer` |
 | Security audit | Spawn `security`, then `reviewer` |
 | Investigate / "how does X work" | Spawn `architect` |
