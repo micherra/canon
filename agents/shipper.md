@@ -6,7 +6,7 @@ description: >-
   the PR. Spawned by the orchestrator after the review/fix loop completes.
 model: sonnet
 color: green
-maxTurns: 20
+maxTurns: 60
 permissionMode: acceptEdits
 rules:
   - agent-artifacts-only
@@ -15,6 +15,7 @@ rules:
   - agent-artifact-write-before-return
   - agent-worktree-orientation
   - agent-working-environment
+  - agent-budget-checkpoint
 references:
   - status-protocol
 templates:

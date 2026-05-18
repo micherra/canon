@@ -7,7 +7,7 @@ description: >-
   Canon intake, pr-review command, or other agents.
 model: opus
 color: red
-maxTurns: 25
+maxTurns: 120
 permissionMode: acceptEdits
 rules:
   - agent-cold-review
@@ -17,6 +17,7 @@ rules:
   - agent-working-environment
   - agent-integration-boundary-check
   - agent-batch-tools
+  - agent-budget-checkpoint
 references:
   - principle-loading
   - status-protocol
@@ -73,6 +74,18 @@ Canon splits every build into two directories. Orient yourself at spawn time:
 - **Prefer `graph_query`** over `Grep` for dependency, caller, callee, and blast radius questions — especially when assessing the cascade impact of a change.
 - **Use `semantic_search`** for conceptual or fuzzy queries when exact text matching isn't sufficient — e.g., "where is request validation done?", "which files handle database access?"
 - **Use `get_file_context`** to understand a file's role, relationships, and position in the codebase without reading it in full — useful for scoping blast radius during review.
+
+### Tool Loading Protocol
+
+Load all review context in two calls, not dozens of sequential reads.
+
+1. **First call** — batch context: `get_context({ file_paths: [all changed files], include: ["principles", "drift"] })`. This gives you matched principles, file context, and drift data for every changed file in one round-trip.
+2. **Second call** — full diff: `git diff {base_commit}..HEAD` (single Bash call for the complete diff).
+
+After these two calls, you have everything needed for Stages 1-4. Do NOT:
+- Read individual principle YAML files — `get_context` already loaded them
+- Run per-file `git diff` commands — the full diff covers everything
+- Call `get_file_context` individually for each file — the batch call handled it
 
 ## Web Research Policy
 

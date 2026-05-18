@@ -148,6 +148,8 @@ When triage determines trivial (single-file, no architectural questions, clear i
 3. **Pre-spawn worktree verification**: Run `test -d "${worktree_path}"` via Bash. If missing, report BLOCKED.
 4. Spawn `canon:engineer` with the build request and `worktree_path`. Proceed through the standard step execution loop (verify, review, ship, etc.).
 
+**Fast-path context enrichment**: When a trivial-path build involves 4+ files or 2+ distinct workstreams (e.g., "fix the linter config and update the tests"), include minimal context in the engineer's spawn prompt: scope summary (what to change and why), key files (paths and one-line purpose), and gotchas (known edge cases, related files that must not be modified). This prevents the engineer from spending 25+ turns on orientation that the orchestrator could resolve with 1-2 `get_file_context` calls during triage.
+
 #### Non-trivial path (PM → architect → execution)
 
 When triage determines non-trivial (2+ files, cross-layer, design questions, high blast radius):
@@ -422,6 +424,8 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 ALL three must pass for the verify step to succeed. If any gate fails, the engineer reports BLOCKED with the exact failure output and does NOT proceed past the verify step. The orchestrator presents the failure to the user via HITL (`on_failure` handler). The engineer reports DONE only when all three gates exit 0.
 
 **Verify skip for documentation-only diffs**: For builds where `git diff {base_commit} --name-only` contains only `.md` and `.txt` files, the verify step MAY be skipped with `skip_reason: "documentation-only diff, verify produces zero signal"`. The orchestrator checks the diff before spawning the verify engineer. If any non-documentation file is present, the full verify step runs.
+
+**Verify step inline fixes**: Verify step agents may apply minor fixes (lint warnings, missing lint excludes, small type errors) inline rather than reporting BLOCKED. This is expected and reduces round-trips. Report BLOCKED only when fixing would require architectural changes, substantial new code, or modifications to files outside the verify step's scope.
 
 ### Completion Checklist
 
