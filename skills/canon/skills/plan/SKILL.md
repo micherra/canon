@@ -2,20 +2,22 @@
 name: plan
 description: >-
   Strategic analysis and planning brief production. Evaluates build requests,
-  challenges assumptions, considers alternatives, and produces a structured
-  planning brief. Used by the planner agent before any code is written.
+  challenges assumptions, considers alternatives. Used by the architect agent
+  as a requirements interview fallback when PM conversation left gaps.
 user-invocable: false
 ---
 
 # canon:plan — Strategic Analysis Skill
 
-This skill defines the contract for producing a planning brief. Load it when you are the planner agent evaluating a build request before any implementation begins.
+This skill defines the contract for producing a planning brief. Load it when you are the architect agent and discover requirements gaps that need user clarification.
+
+Note: The planning brief template is deprecated. The architect uses this skill's interview protocol for requirements clarification, not for producing standalone planning brief artifacts.
 
 ## Non-Responsibilities
 
 This skill covers strategic analysis only. Do NOT do the following — they belong to other agents:
 
-- **Step-by-step execution plan** — that is the domain of `canon:synthesize`. The brief's Recommended Approach names which runbook steps are needed (using vocabulary from `references/runbook-vocabulary.md`); the synthesis skill translates those into an executable runbook.
+- **Step-by-step execution plan** — that is the domain of `canon:synthesize`. The requirements clarification names which runbook steps are needed (using vocabulary from `references/runbook-vocabulary.md`); the synthesis skill translates those into an executable runbook.
 - **Code-level design decisions** — that is the architect's domain during the `design` step. The brief identifies the problem and recommends an approach; it does not specify how modules are structured, which APIs to call, or how data flows through the system.
 
 ---
@@ -34,11 +36,11 @@ Before producing the planning brief, evaluate whether the request warrants a req
 
 2. **Formulate questions as conversation.** Write natural paragraphs that weave questions into context. Do not produce a numbered list of requirements questions or a form. Good example: "Looking at the codebase, I see that `UserService.getProfile()` has 14 callers across 3 modules. Your request to change its return type would affect all of them. Are you expecting to update all callers in this build, or should the change be backward-compatible? And on the topic of backward compatibility — the current return type is used in 2 API response schemas, so changing it could be a breaking API change. Is that acceptable?" Bad example: "1. What callers should be updated? 2. Is backward compatibility required?"
 
-3. **Report HAS_QUESTIONS.** Include: a restatement of the goal in your own words, implicit assumptions with codebase evidence, scope boundary questions, and success criteria proposals when the request does not specify how to verify.
+3. **Report HAS_QUESTIONS.** This is the architect's fallback when the PM requirements conversation left gaps. Include: a restatement of the goal in your own words, implicit assumptions with codebase evidence, scope boundary questions, and success criteria proposals when the request does not specify how to verify.
 
-4. **Handle re-spawn with answers.** On re-spawn, read the user's answers from the HITL feedback in your spawn prompt. Either ask follow-up questions if answers revealed new ambiguity requiring investigation, or proceed to produce the brief incorporating the answers.
+4. **Handle re-spawn with answers.** On re-spawn, read the user's answers from the HITL feedback in your spawn prompt. Either ask follow-up questions if answers revealed new ambiguity requiring investigation, or proceed to design incorporating the answers.
 
-5. **Check in with the user.** After each round, ask if the requirements are clear enough to proceed: "Ready for me to produce the planning brief, or is there more to clarify?" The interview ends when the user says to proceed, not when a counter runs out.
+5. **Check in with the user.** After each round, ask if the requirements are clear enough to proceed: "Ready for me to proceed with design, or is there more to clarify?" The interview ends when the user says to proceed, not when a counter runs out.
 
 ### What the Interview Is NOT
 
@@ -126,7 +128,7 @@ Every planning brief must include all eight sections below. The output format fo
 
 ### 2.6 Recommended Approach
 
-**Intent**: The planner's single recommended path, grounded in the alternatives analysis.
+**Intent**: The architect's single recommended path, grounded in the alternatives analysis.
 
 **Quality bar**:
 - Names the approach clearly.
@@ -140,7 +142,7 @@ Every planning brief must include all eight sections below. The output format fo
 **Intent**: Surface what cannot be resolved from the request alone — before the architect builds on a wrong assumption.
 
 **Quality bar**:
-- Each question is tagged with a decision-owner: `[user]`, `[planner]`, or `[architect]`.
+- Each question is tagged with a decision-owner: `[user]` or `[architect]`.
 - Each question states why the answer matters — what decision it unblocks.
 - If there are no open questions, say so explicitly: "None — all requirements and constraints are specified."
 - Apply `agent-surface-assumptions`: assumptions that you resolved yourself belong in the ASSUMPTIONS block; unresolvable items belong here.
@@ -203,7 +205,7 @@ A request spanning multiple waves, multiple agents, or architectural change.
 
 ## 4. Constructive Push-Back Discipline
 
-The planner's job is to challenge the request before resources are committed. Apply the following four checks in order before writing the brief body:
+The architect's job is to challenge the request before resources are committed. Apply the following four checks in order before writing the brief body:
 
 1. **Clarify requirements** — Is the problem statement clear? If not, ask one or two targeted questions. Do not enumerate every possible ambiguity — only the ones whose answers change the approach or scope.
 
@@ -213,7 +215,7 @@ The planner's job is to challenge the request before resources are committed. Ap
 
 4. **Assess value relative to effort** — Estimate wave count and agents involved. If the effort exceeds the observable value, REDIRECT or flag in Value Assessment. "We could build this, but X is likely faster and solves the same problem" is a valid finding.
 
-The outcome field (`GREENLIGHT` / `REDIRECT` / `OPEN_QUESTIONS`) communicates the result of this discipline, not just the planner's preference.
+The outcome field (`GREENLIGHT` / `REDIRECT` / `OPEN_QUESTIONS`) communicates the result of this discipline, not just the architect's preference.
 
 ---
 

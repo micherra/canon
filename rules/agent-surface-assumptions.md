@@ -6,7 +6,7 @@ scope:
   layers: []
 tags:
   - agent-behavior
-  - planner
+
   - architect
 ---
 

@@ -8,7 +8,7 @@ scope:
     - ".canon/plans/**/*-PLAN.md"
 tags:
   - agent-behavior
-  - planner
+
 ---
 
 Each task plan must be self-contained and directly executable by an implementor agent with no interpretation required. The plan IS the prompt. It includes exact file paths, specific action instructions, verification steps, done criteria, and which Canon principles to apply.

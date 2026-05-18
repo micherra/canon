@@ -12,7 +12,7 @@ This file is the single source of truth. The synthesis skill (`references/runboo
 
 | Step ID | Default Agent | Dispatch | Default HITL | Purpose |
 |---------|---------------|----------|--------------|---------|
-| `research` | planner | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift) |
+| `research` | architect | subagent | none | Investigation — any scope (codebase, risks, coverage gaps, migration scope, drift) |
 | `design` | architect | subagent or team | approval | Plan index + design decisions |
 | `spike` | engineer | subagent | none | Time-boxed exploratory prototype; produces findings, not shipped code |
 | `implement` | engineer | subagent or team | none | Build code with TDD/BDD; `team` when DAG parallel |
@@ -38,7 +38,7 @@ This file is the single source of truth. The synthesis skill (`references/runboo
 
 **Step ID** — lowercase-kebab identifier. Must be unique within the vocabulary. Used as the `id` field in synthesized runbook steps.
 
-**Default Agent** — the Canon agent type spawned for this step. `null` means no agent is spawned; the lead handles the step directly (e.g., `pre-launch-check` runs gate commands via Bash). The planner may override the default agent with explicit justification in the brief body, but this is rare.
+**Default Agent** — the Canon agent type spawned for this step. `null` means no agent is spawned; the lead handles the step directly (e.g., `pre-launch-check` runs gate commands via Bash). The architect may override the default agent with explicit justification in the brief body, but this is rare.
 
 **Dispatch** — how the step is executed:
 - `subagent` — single agent spawn. The lead waits for completion before proceeding.
@@ -51,9 +51,9 @@ This file is the single source of truth. The synthesis skill (`references/runboo
 - `checkpoint` — results presented for user review; user may intervene but flow continues by default.
 - `on_failure` — results presented only when the step fails or produces concerning output.
 
-The planner MUST NOT remove baseline HITL from step defaults. The runbook's declared `hitl:` posture stays regardless of confidence signal.
+The architect MUST NOT remove baseline HITL from step defaults. The runbook's declared `hitl:` posture stays regardless of confidence signal.
 
-**Purpose** — what the step does. Guides the planner's step-selection logic.
+**Purpose** — what the step does. Guides step-selection logic.
 
 ---
 
@@ -65,7 +65,7 @@ Every build runbook MUST end with the three mandatory tail steps in order:
 2. `ship` — shipper creates a PR from the worktree branch to main; direct merge when explicitly requested. Runs after context-sync because the scribe needs the worktree available to commit doc updates before the PR is created.
 3. `learn` — learner analyzes the completed flow for patterns and suggests principle improvements. Writes to `.canon/` only and does not require the worktree.
 
-The planner MUST NOT skip these steps regardless of flow size, user preference, or confidence signal. They are the mechanism by which Canon ships work and keeps its documentation and principles current.
+The architect MUST NOT skip these steps regardless of flow size, user preference, or confidence signal. They are the mechanism by which Canon ships work and keeps its documentation and principles current.
 
 ---
 
@@ -100,11 +100,11 @@ The `fix` step requires a `cause` field indicating which upstream step triggered
 - `cause: review` — review step found principle violations
 - `cause: verify` — verify step found regressions
 
-The `cause` field serves two purposes: analytic lineage (which upstream step triggered this fix, for outcome correlation) and skill hint (the planner may auto-add a domain primer based on the cause).
+The `cause` field serves two purposes: analytic lineage (which upstream step triggered this fix, for outcome correlation) and skill hint (the architect may auto-add a domain primer based on the cause).
 
 ### `implement`
 
-When dispatched as `team`, the planner decomposes the implementation into DAG parallel tasks. Each task gets an isolated worktree. The orchestrator manages worktree creation, merge, and cleanup.
+When dispatched as `team`, the architect decomposes the implementation into DAG parallel tasks. Each task gets an isolated worktree. The orchestrator manages worktree creation, merge, and cleanup.
 
 When dispatching two or more parallel engineers to the same worktree, the runbook should designate one as the committer responsible for verifying and committing after parallel completion, or include an explicit consolidation step. Without this, neither engineer commits, forcing the orchestrator to spawn a third agent for consolidation.
 
@@ -193,7 +193,7 @@ When a runbook is resumed after a vocabulary version change:
 
 **Minor version change (additive):** locked runbooks continue with the synthesis-time vocabulary. New step IDs are available for new runbooks but do not affect in-progress flows. No regeneration needed.
 
-**Major version change (entry removed):** if a locked runbook references a step ID that was removed in the new major version, the planner regenerates the runbook with full workspace context:
+**Major version change (entry removed):** if a locked runbook references a step ID that was removed in the new major version, the architect regenerates the runbook with full workspace context:
 
 - Original planning brief
 - Prior approved runbook

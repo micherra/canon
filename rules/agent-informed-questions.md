@@ -3,10 +3,10 @@ id: agent-informed-questions
 title: Questions Must Cite Codebase Evidence
 severity: rule
 scope:
-  agents: [planner, architect]
+  agents: [architect]
 tags:
   - agent-behavior
-  - planner
+
   - architect
 ---
 

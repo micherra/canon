@@ -48,5 +48,4 @@ Status: DONE
 
 ## Exceptions
 
-- **Planner agent**: The planner operates in `plan` permissionMode and does not have access to MCP tools that mutate workspace state. The orchestrator records planner metrics on its behalf after capturing the planner's output.
 - **Agents in error state**: If you are reporting BLOCKED or NEEDS_CONTEXT due to a tool failure that prevents MCP calls, you may skip this step. Include a note: "Unable to record metrics — MCP unavailable."

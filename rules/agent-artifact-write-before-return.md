@@ -30,7 +30,7 @@ Together these three rules form a complete artifact lifecycle: check input exist
 
 ## Rationale
 
-Downstream agents depend on upstream artifacts. When the planner omits its research notes, the architect has no research context. When an engineer fails to write its summary, the tester cannot determine what to test. NF-14 showed that agents consistently skip artifact writes when not explicitly instructed, causing cascading pipeline failures.
+Downstream agents depend on upstream artifacts. When the architect omits its research findings, downstream agents have no research context. When an engineer fails to write its summary, the tester cannot determine what to test. NF-14 showed that agents consistently skip artifact writes when not explicitly instructed, causing cascading pipeline failures.
 
 The `logStep` tool now scans for missing artifacts on completion and returns an `artifacts_missing` field — the orchestrator can detect failures earlier, but prevention is better than detection.
 
@@ -64,5 +64,4 @@ Status: DONE
 
 ## Exceptions
 
-- **Planner agent**: The planner operates in `plan` permissionMode whose artifacts are captured inline by the orchestrator (the orchestrator writes them). The planner's output text IS its artifact — no `Write` call needed.
 - **Zero-artifact steps**: This rule does not apply to agents that genuinely produce no file artifacts for a given step. However, if your step was logged with `artifacts_expected`, you always have declared artifacts. If your step produces only a status verdict with no file (e.g., a reviewer reporting CLEAN in early-scan mode), verify with the orchestrator that no artifact path was declared before skipping.

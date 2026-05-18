@@ -3,7 +3,7 @@ id: agent-batch-tools
 severity: strong-opinion
 tags: [agent-behavior, efficiency, mcp]
 scope:
-  agents: [planner, architect, engineer, reviewer, security, learner, scribe]
+  agents: [architect, engineer, reviewer, security, learner, scribe]
 ---
 
 # Prefer Batch MCP Tools for Multi-File Operations

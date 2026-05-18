@@ -57,7 +57,7 @@ Rules are loaded verbatim into agent context at spawn time. Keep them concise an
 
 ## How Rules Are Assigned
 
-The orchestrator and flow definitions determine which rules each agent receives. Not every agent gets every rule — the planner gets the research and evidence rules; an implementor gets the implementation and testing rules. This scoping keeps each agent's context focused on what matters for its role.
+The orchestrator and flow definitions determine which rules each agent receives. Not every agent gets every rule — the architect gets the research and evidence rules; an implementor gets the implementation and testing rules. This scoping keeps each agent's context focused on what matters for its role.
 
 To see which rules apply to a specific agent, look at the flow state that spawns it in `flows/` and trace what context fragments the orchestrator injects.
 

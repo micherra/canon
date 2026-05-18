@@ -48,8 +48,7 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 |-------|------|-------|
 | **intake** | board.json (read-only for status) | — (no workspace writes; spawns orchestrator) |
 | **orchestrator** | board.json, flow templates | board.json, progress.md |
-| **planner** | templates/ | plans/{slug}/research-notes.md |
-| **architect** | plans/{slug}/research-notes.md, research/ (legacy), templates/, context.md | decisions/, plans/, context.md |
+| **architect** | templates/, context.md | decisions/, plans/, context.md |
 | **implementor** | plans/{slug}/{task}-PLAN.md, context.md, decisions/ | plans/{slug}/{task}-SUMMARY.md |
 | **tester** | plans/{slug}/*-SUMMARY.md, context.md | plans/{slug}/TEST-REPORT.md |
 | **security** | plans/{slug}/*-SUMMARY.md | plans/{slug}/SECURITY.md |
