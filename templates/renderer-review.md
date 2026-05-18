@@ -94,7 +94,19 @@ mcp__canon__get_context({
 })
 ```
 
-The response contains a `file_context` map keyed by file path. For each entry, extract:
+The response has the shape:
+```json
+{
+  "file_paths": ["path/to/file.ts", ...],
+  "include": ["file_context"],
+  "file_context": {
+    "path/to/file.ts": { "layer": "...", "shape": { "label": "...", "description": "..." }, "imports": [...], "imported_by": [...], ... },
+    ...
+  }
+}
+```
+
+The `file_context` map is keyed by file path. For each entry, extract:
 - `layer` — the layer this file belongs to
 - `shape.label` — graph shape (e.g., "Central hub", "High fan-out hub", "Sink", "Standard")
 - `shape.description` — shape description
