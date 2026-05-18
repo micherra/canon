@@ -107,7 +107,7 @@ If the current message is a build request, apply the PM requirements gate and ro
 
 **After classifying intent as `build`, the ONLY next action is the PM requirements gate followed by spawning `canon:architect`.** Do not use `Read`, `Bash`, `Grep`, or `Glob` to research the task, estimate scope, explore files, or gather context before the architect runs. Scope estimation and tier detection are the architect's job — it has MCP access to the knowledge graph, file context, and semantic search.
 
-Permitted between intent classification and architect spawn: `git rev-parse HEAD` (for `base_commit`), `git branch --show-current` (for `branch`). Nothing else.
+Permitted between intent classification and architect spawn: `git rev-parse HEAD` (for `base_commit`), `git branch --show-current` (for `branch`), and `init_workspace` (the architect needs `${WORKSPACE}` to write artifacts). Nothing else.
 
 This gate also applies mid-flow: when an agent fails or returns incomplete results, diagnose the failure or respawn the agent — never substitute by performing the agent's work directly (`Read`, `Bash`, `Grep`, `Edit`, or `Write` on task files).
 
@@ -132,13 +132,17 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 ### Setup
 
 1. **PM requirements gate**: Assess whether the request is clear enough for the architect. Conduct a requirements conversation if needed (see Pre-Build Gate). Summarize the agreed requirements for the architect's spawn prompt.
-2. **Spawn `canon:architect`** with the build request and requirements summary. The architect performs codebase research, produces a design, and generates the runbook. The architect determines whether the build is trivial or complex and calibrates depth accordingly.
-3. **Validate architect output**. Check the design's Requirements Coverage section for completeness and dispositions. If any requirements are `descoped`, `partial`, or missing from the coverage table, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
+2. **Initialize workspace**: Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`. Save the returned `worktree_path` and `workspace` path. The architect needs `${WORKSPACE}` to write design artifacts, task plans, DAGs, and the runbook.
+3. **Spawn `canon:architect`** with the build request, requirements summary, and `WORKSPACE=${workspace}`. The architect performs codebase research, produces a design, and generates the runbook. The architect determines whether the build is trivial or complex and calibrates depth accordingly.
+4. **Handle architect result**:
+   - **If trivial** (architect reports DONE with a single-task plan, no runbook): Skip steps 5–6. The orchestrator infers a minimal runbook (single implement step + mandatory tail). Call `batch_log_steps` with the inferred steps, then proceed to step 7.
+   - **If non-trivial**: Continue to step 5.
+5. **Validate architect output**. Check the design's Requirements Coverage section for completeness and dispositions. If any requirements are `descoped`, `partial`, or missing from the coverage table, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
    Additionally, for each row with disposition `covered`, verify that the row names a specific runbook step or DAG task responsible for delivering it (in the "Runbook step or rationale" column). Rows marked `covered` with no owning step/task are treated as `partial` with rationale "no owning task identified" and surfaced to the user alongside other gaps.
-4. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
-5. On approval, call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })`. Save the returned `worktree_path` — all code-writing agents will work there.
-6. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
-7. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
+6. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
+7. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
+8. **Pre-spawn worktree verification**: Before spawning any code-writing agent (engineer, tester, scribe, shipper), verify the worktree path still exists: run `test -d "${worktree_path}"` via Bash. If the worktree is missing, do NOT spawn the agent — report BLOCKED to the user: "Worktree at {path} no longer exists. It may have been cleaned up by a concurrent process. Re-run `init_workspace` to recreate, or investigate." This check is needed because a concurrent cleanup process (janitor, manual `git worktree remove`) could remove the worktree between workspace initialization and agent spawn.
+9. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -358,7 +362,27 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### Renderer Spawn Protocol
 
-Spawn a generic `Agent()` (not a named agent definition) that reads the markdown artifact + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, produces a fully self-contained HTML file to `${WORKSPACE}/artifacts/`, and returns. The renderer does NOT modify the worktree.
+Spawn a generic `Agent()` (not a named agent definition) using the structured renderer prompt
+template for the checkpoint type. The renderer reads the markdown artifact (and calls MCP tools
+when the template requires it), produces a fully self-contained HTML file to `${WORKSPACE}/artifacts/`,
+and returns. The renderer does NOT modify the worktree.
+
+**Before spawning the renderer**, read the appropriate template from `templates/renderer-*.md`,
+fill in the `## Variables` placeholders, and pass the `## Prompt` section (the content inside
+the fenced code block) as the renderer agent's spawn prompt.
+
+**Checkpoint-to-template mapping:**
+
+| Checkpoint | Template | Output |
+|------------|----------|--------|
+| Planning brief | `templates/renderer-planning-brief.md` | `planning-brief.html` |
+| Design document | `templates/renderer-design.md` | `design.html` |
+| Review dashboard | `templates/renderer-review.md` | `review.html` |
+
+**MCP tool requirements per template:**
+- `renderer-planning-brief.md` — pure markdown, no MCP tool calls
+- `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML directly)
+- `renderer-review.md` — requires `show_pr_impact` and `get_file_context` calls
 
 **Artifact naming convention:**
 | Artifact | HTML filename |
@@ -460,6 +484,22 @@ Detect and retry transient failures:
 | TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache ordering bug |
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
+
+## Re-spawn Enrichment Protocol
+
+When re-spawning an agent after a failure, fix-after-review cycle, or reviewer re-spawn, the orchestrator MUST include prior progress context in the re-spawn prompt. This prevents the re-spawned agent from duplicating completed work or missing artifacts already produced.
+
+**What to include in every re-spawn prompt:**
+
+1. **Files already completed**: Derive from `git diff --name-only {base_commit}..HEAD` in the worktree, or from the prior agent's implementation summary. Include as an explicit list: "The following files were already successfully modified by a prior attempt and do NOT need re-implementation: [list]. Focus only on the remaining work."
+2. **Step ID and artifacts already produced**: Read from journal state (`journal.json`) — include the `step_id` and all `artifacts_actual` entries from the prior attempt.
+3. **Explicit no-duplicate instruction**: "Do not re-implement files that were already completed. Pick up from where the prior attempt left off."
+
+**Applies to all re-spawn scenarios:**
+
+- **Fix-after-review**: The engineer fix agent receives reviewer findings PLUS a list of files already completed by the prior engineer pass. The engineer focuses only on files flagged by the reviewer, not all changed files.
+- **Failure retry**: The same agent type re-spawned after a transient failure receives the prior partial work list so it doesn't start from scratch.
+- **Reviewer re-spawn**: The reviewer receives prior stage progress (e.g., "Stage 1 and Stage 2 are already written to REVIEW.md — continue from Stage 3") so it doesn't repeat completed stages.
 
 ## Project Structure <!-- last-updated: 2026-05-16 -->
 

@@ -140,8 +140,8 @@ describe("groupViolationsByPrinciple", () => {
     ];
     const result = groupViolationsByPrinciple(violations);
     expect(result.size).toBe(2);
-    expect(result.get("principle-x")?.timestamps).toHaveLength(2);
-    expect(result.get("principle-y")?.timestamps).toHaveLength(1);
+    expect(result.get("principle-x")?.timestamps.size).toBe(2);
+    expect(result.get("principle-y")?.timestamps.size).toBe(1);
   });
 
   test("deduplicates file paths within the same principleId", () => {
@@ -187,7 +187,7 @@ describe("groupViolationsByPrinciple", () => {
       },
     ];
     const result = groupViolationsByPrinciple(violations);
-    expect(result.get("p")?.timestamps).toHaveLength(3);
+    expect(result.get("p")?.timestamps.size).toBe(3);
   });
 
   test("ignores null filePaths (does not add to file set)", () => {
@@ -226,7 +226,7 @@ describe("buildRecurringViolationResults", () => {
         {
           files: new Set(["src/a.ts"]),
           severity: "rule",
-          timestamps: ["2026-01-01T00:00:00.000Z"],
+          timestamps: new Set(["2026-01-01T00:00:00.000Z"]),
         },
       ],
     ]);
@@ -240,7 +240,7 @@ describe("buildRecurringViolationResults", () => {
         {
           files: new Set(["src/a.ts"]),
           severity: "rule",
-          timestamps: ["2026-01-01T00:00:00.000Z", "2026-01-02T00:00:00.000Z"],
+          timestamps: new Set(["2026-01-01T00:00:00.000Z", "2026-01-02T00:00:00.000Z"]),
         },
       ],
     ]);
@@ -252,12 +252,19 @@ describe("buildRecurringViolationResults", () => {
 
   test("sorts results by occurrence_count descending", () => {
     const byPrinciple = new Map([
-      ["low", { files: new Set<string>(), severity: "rule", timestamps: ["t1", "t2"] }],
+      ["low", { files: new Set<string>(), severity: "rule", timestamps: new Set(["t1", "t2"]) }],
       [
         "high",
-        { files: new Set<string>(), severity: "rule", timestamps: ["t1", "t2", "t3", "t4"] },
+        {
+          files: new Set<string>(),
+          severity: "rule",
+          timestamps: new Set(["t1", "t2", "t3", "t4"]),
+        },
       ],
-      ["mid", { files: new Set<string>(), severity: "rule", timestamps: ["t1", "t2", "t3"] }],
+      [
+        "mid",
+        { files: new Set<string>(), severity: "rule", timestamps: new Set(["t1", "t2", "t3"]) },
+      ],
     ]);
     const result = buildRecurringViolationResults(byPrinciple);
     expect(result).toHaveLength(3);
@@ -276,11 +283,11 @@ describe("buildRecurringViolationResults", () => {
         {
           files: new Set<string>(),
           severity: "rule",
-          timestamps: [
+          timestamps: new Set([
             "2026-03-01T00:00:00.000Z",
             "2026-01-01T00:00:00.000Z",
             "2026-02-01T00:00:00.000Z",
-          ],
+          ]),
         },
       ],
     ]);
@@ -296,7 +303,7 @@ describe("buildRecurringViolationResults", () => {
         {
           files: new Set(["src/a.ts", "src/b.ts"]),
           severity: "convention",
-          timestamps: ["t1", "t2"],
+          timestamps: new Set(["t1", "t2"]),
         },
       ],
     ]);

@@ -116,7 +116,7 @@ Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use
 Before investing in full design, perform the quick scope check from the "Triviality Self-Assessment" section above:
 
 1. Run 1-2 tool calls to check scope: `get_file_context` for named files, or `graph_query` for blast radius
-2. **If trivial**: Produce a minimal one-step task plan, skip design document and runbook, report DONE
+2. **If trivial**: Produce a minimal single-task plan with clear acceptance criteria. Skip the full design document. Report DONE — the orchestrator infers a minimal runbook (single implement step + mandatory tail) from the task plan.
 3. **If non-trivial** (small or complex): Proceed to the Codebase Research and full design flow below
 
 ### Step 1b: Design Conversation
@@ -276,7 +276,7 @@ After task plans and the DAG are produced, synthesize the runbook. Apply the `ca
 
 Save to `${WORKSPACE}/plans/${slug}/runbook.md`.
 
-**Fast-path gate**: If your triviality assessment was "trivial" (one implement step, no design decisions), skip runbook production entirely. The orchestrator infers fast-path execution.
+**Fast-path gate**: If your triviality assessment was "trivial" (one implement step, no design decisions), skip runbook production. The orchestrator infers a minimal runbook from the single-task plan.
 
 ### Step 8: Produce plan index
 
