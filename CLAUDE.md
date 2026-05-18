@@ -340,7 +340,27 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### Renderer Spawn Protocol
 
-Spawn a generic `Agent()` (not a named agent definition) that reads the markdown artifact + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, produces a fully self-contained HTML file to `${WORKSPACE}/artifacts/`, and returns. The renderer does NOT modify the worktree.
+Spawn a generic `Agent()` (not a named agent definition) using the structured renderer prompt
+template for the checkpoint type. The renderer reads the markdown artifact (and calls MCP tools
+when the template requires it), produces a fully self-contained HTML file to `${WORKSPACE}/artifacts/`,
+and returns. The renderer does NOT modify the worktree.
+
+**Before spawning the renderer**, read the appropriate template from `templates/renderer-*.md`,
+fill in the `## Variables` placeholders, and pass the `## Prompt` section (the content inside
+the fenced code block) as the renderer agent's spawn prompt.
+
+**Checkpoint-to-template mapping:**
+
+| Checkpoint | Template | Output |
+|------------|----------|--------|
+| Planning brief | `templates/renderer-planning-brief.md` | `planning-brief.html` |
+| Design document | `templates/renderer-design.md` | `design.html` |
+| Review dashboard | `templates/renderer-review.md` | `review.html` |
+
+**MCP tool requirements per template:**
+- `renderer-planning-brief.md` — pure markdown, no MCP tool calls
+- `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML directly)
+- `renderer-review.md` — requires `show_pr_impact` and `get_file_context` calls
 
 **Artifact naming convention:**
 | Artifact | HTML filename |
