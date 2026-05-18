@@ -1,67 +1,161 @@
 <!--
   @snippet file-detail-card
-  @description Expanded card for a high-impact file showing graph context detail: layer, shape, import/export counts, entity list, and blast radius total. Used for files classified as high-impact by the renderer (e.g., impact_score above threshold, or in_degree >= 5).
-  @data { filePath: string, layer: string, shapeLabel: string, shapeDescription: string, importCount: number, importedByCount: number, entityCount: number, blastRadiusTotal: number, imports: string (pre-rendered HTML list items), importedBy: string (pre-rendered HTML list items), entities: string (pre-rendered HTML table rows), layerColor: string }
-  @tokens --bg-card, --border, --border-subtle, --radius-sm, --text, --text-bright, --text-muted
-  @usage Use for files where impact_score warrants expanded detail view. Stack multiple cards in a column container.
-    All string placeholders require escapeHtml before substitution: {{FILE_PATH}}, {{LAYER}}, {{SHAPE_LABEL}}, {{SHAPE_DESCRIPTION}}.
-    Numeric placeholders ({{IMPORT_COUNT}}, {{IMPORTED_BY_COUNT}}, {{ENTITY_COUNT}}, {{BLAST_RADIUS_TOTAL}}) do not require escaping.
-    {{LAYER_COLOR}} is a hex color constant — no escaping needed, but must be a valid CSS color.
-    {{IMPORTS_HTML}}, {{IMPORTED_BY_HTML}}, {{ENTITIES_HTML}} are pre-rendered HTML fragments; the renderer must escapeHtml on all text content (file paths, entity names) within those fragments.
-    When IMPORTS_HTML or IMPORTED_BY_HTML is empty, the list renders with no items — structure remains valid.
-    When ENTITIES_HTML is empty, the table body is empty — no broken HTML.
+  @description Expanded card for a high-impact file showing graph context detail: layer, shape,
+    stat row (imports / referenced-by / exports / impact score), shape badge, canvas-based
+    dependency graph, entity table, and blast radius panel. Matches the FileContext.svelte UI.
+    Used for files classified as high-impact by the renderer (e.g., impact_score above threshold,
+    in_degree >= 5, hub shape, or violations present).
+  @data {
+    filePath: string,
+    layer: string,
+    layerColor: string,
+    shapeLabel: string,
+    shapeDescription: string,
+    importCount: number,
+    importedByCount: number,
+    importLayerCount: number,
+    exportCount: number,
+    entityTypeCount: number,
+    entityFnCount: number,
+    impactScore: string,
+    impactRank: string,
+    violationCount: number,
+    blastRadiusSeverity: string,
+    blastRadiusTotal: number,
+    cardId: string,
+    graphDataJson: string (JSON-stringified object with imports[], imported_by[], exports[], layer, crossLayerImports[], crossLayerDependents[], fileName),
+    importsHtml: string (pre-rendered <li> items),
+    importedByHtml: string (pre-rendered <li> items),
+    entitiesHtml: string (pre-rendered <tr> rows),
+    blastRadiusDepth1Html: string (pre-rendered <span> depth chips)
+  }
+  @tokens --bg-card, --bg-surface, --border, --border-subtle, --radius-sm, --text, --text-bright, --text-muted, --success, --danger, --warning
+  @usage Use for files where impact_score warrants expanded detail view. Stack multiple cards in
+    a column container. Include the <script> block ONCE at the bottom of the page (not per card).
+    Placeholders requiring escapeHtml: {{FILE_PATH}}, {{LAYER}}, {{SHAPE_LABEL}}, {{SHAPE_DESCRIPTION}}.
+    Safe placeholders (no escaping needed): {{LAYER_COLOR}}, all numeric placeholders, {{BLAST_RADIUS_SEVERITY}}.
+    {{GRAPH_DATA_JSON}} must be JSON-stringified and HTML-attribute-escaped (replace & with &amp; then " with &quot;).
+    {{CARD_ID}} must be a valid HTML id (alphanumeric + hyphens only — derive from file path).
+    {{IMPORTS_HTML}}, {{IMPORTED_BY_HTML}}, {{ENTITIES_HTML}}, {{BLAST_RADIUS_DEPTH1_HTML}} are
+    pre-rendered HTML fragments; caller must escapeHtml all text content within them.
+    Violation badge: {{VIOLATION_COUNT}} > 0 shows danger badge; 0 shows clean badge.
+    Blast severity classes: "contained" | "low" → severity-low, "moderate" → severity-moderate,
+    "high" → severity-high, "critical" → severity-critical.
 -->
-<div class="file-detail-card">
-  <div class="file-detail-header">
-    <span class="file-detail-path">{{FILE_PATH}}</span>
-    <div class="file-detail-badges">
-      <span class="layer-badge" style="background: {{LAYER_COLOR}}22; color: {{LAYER_COLOR}}; border-color: {{LAYER_COLOR}}44;">{{LAYER}}</span>
-      <span class="shape-badge" title="{{SHAPE_DESCRIPTION}}">{{SHAPE_LABEL}}</span>
+<div class="file-detail-card" id="fdc-{{CARD_ID}}">
+  <!-- Header: file path + layer badge + violation badge -->
+  <div class="fdc-header">
+    <span class="fdc-path">{{FILE_PATH}}</span>
+    <div class="fdc-header-badges">
+      <span class="fdc-layer-badge" style="background: {{LAYER_COLOR}}22; color: {{LAYER_COLOR}}; border-color: {{LAYER_COLOR}}44;">{{LAYER}}</span>
+      <span class="fdc-violation-badge fdc-violation-{{VIOLATION_BADGE_CLASS}}">{{VIOLATION_BADGE_TEXT}}</span>
     </div>
   </div>
-  <div class="file-detail-body">
-    <div class="file-detail-stats">
-      <span class="mini-stat">{{IMPORT_COUNT}} imports</span>
-      <span class="mini-stat">{{IMPORTED_BY_COUNT}} dependents</span>
-      <span class="mini-stat">{{ENTITY_COUNT}} entities</span>
-      <span class="mini-stat">{{BLAST_RADIUS_TOTAL}} affected</span>
+
+  <!-- Stat row: 4 metric cards + shape badge -->
+  <div class="fdc-stat-bar">
+    <div class="fdc-metric-card">
+      <span class="fdc-metric-value">{{IMPORT_COUNT}}</span>
+      <span class="fdc-metric-label">Imports</span>
+      <span class="fdc-metric-sub">{{IMPORT_LAYER_COUNT}} layer</span>
     </div>
-    <div class="file-detail-columns">
-      <div class="file-detail-col">
-        <div class="col-title">Imports</div>
-        <ul class="dep-list">{{IMPORTS_HTML}}</ul>
-      </div>
-      <div class="file-detail-col">
-        <div class="col-title">Imported By</div>
-        <ul class="dep-list">{{IMPORTED_BY_HTML}}</ul>
+    <div class="fdc-metric-card">
+      <span class="fdc-metric-value">{{IMPORTED_BY_COUNT}}</span>
+      <span class="fdc-metric-label">Referenced by</span>
+      <span class="fdc-metric-sub">{{IMPORTED_BY_COUNT}} files</span>
+    </div>
+    <div class="fdc-metric-card">
+      <span class="fdc-metric-value">{{EXPORT_COUNT}}</span>
+      <span class="fdc-metric-label">Exports</span>
+      <span class="fdc-metric-sub">{{ENTITY_TYPE_COUNT}}t, {{ENTITY_FN_COUNT}}fns</span>
+    </div>
+    <div class="fdc-metric-card">
+      <span class="fdc-metric-value">{{IMPACT_SCORE}}</span>
+      <span class="fdc-metric-label">Impact score</span>
+      <span class="fdc-metric-sub">out of {{IMPACT_RANK}}</span>
+    </div>
+    <div class="fdc-metric-card fdc-shape-card">
+      <div class="fdc-shape-inner">
+        <span class="fdc-shape-icon">&#10003;</span>
+        <div class="fdc-shape-text">
+          <span class="fdc-shape-label">{{SHAPE_LABEL}}</span>
+          <span class="fdc-shape-desc">{{SHAPE_DESCRIPTION}}</span>
+        </div>
       </div>
     </div>
-    <div class="file-detail-entities">
-      <div class="col-title">Entities</div>
-      <table class="entity-table">
-        <thead><tr><th>Name</th><th>Kind</th></tr></thead>
+  </div>
+
+  <!-- Canvas dependency graph -->
+  <div class="fdc-graph-section">
+    <div class="fdc-graph-legend">
+      <span class="fdc-legend-item"><span class="fdc-legend-dot" style="background:#7F77DD"></span>this file</span>
+      <span class="fdc-legend-item"><span class="fdc-legend-dot" style="background:#888780"></span>depends on</span>
+      <span class="fdc-legend-item"><span class="fdc-legend-dot" style="background:#1D9E75"></span>used by</span>
+      <span class="fdc-legend-item fdc-legend-cross"><span class="fdc-legend-dot" style="background:#EF9F27"></span>cross-layer</span>
+    </div>
+    <div class="fdc-canvas-wrap">
+      <canvas
+        id="fdc-canvas-{{CARD_ID}}"
+        class="fdc-dep-canvas"
+        data-graph="{{GRAPH_DATA_JSON}}"
+      ></canvas>
+    </div>
+  </div>
+
+  <!-- Bottom panels: entities table + blast radius -->
+  <div class="fdc-bottom-grid">
+    <!-- Exports & Entities table -->
+    <div class="fdc-panel">
+      <div class="fdc-panel-header">EXPORTS &amp; ENTITIES</div>
+      <table class="fdc-entity-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Kind</th>
+            <th>Exp</th>
+            <th>Lines</th>
+          </tr>
+        </thead>
         <tbody>{{ENTITIES_HTML}}</tbody>
       </table>
+    </div>
+
+    <!-- Blast radius panel -->
+    <div class="fdc-panel">
+      <div class="fdc-panel-header">BLAST RADIUS</div>
+      <div class="fdc-blast-header">
+        <span class="fdc-severity-badge fdc-severity-{{BLAST_RADIUS_SEVERITY}}">{{BLAST_RADIUS_SEVERITY}}</span>
+      </div>
+      <div class="fdc-depth-group">
+        <span class="fdc-depth-arrow">&#8595;</span>
+        <span class="fdc-depth-label">DEPTH 1</span>
+        <div class="fdc-depth-chips">{{BLAST_RADIUS_DEPTH1_HTML}}</div>
+      </div>
     </div>
   </div>
 </div>
 <style>
+  /* ── File Detail Card ─────────────────────────────────────────────────────── */
+
   .file-detail-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm, 8px);
     overflow: hidden;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
   }
-  .file-detail-header {
+
+  /* ── Header ──────────────────────────────────────────────────────────────── */
+
+  .fdc-header {
     display: flex;
-    flex-direction: row;
     align-items: center;
+    gap: 10px;
     padding: 10px 14px;
     border-bottom: 1px solid var(--border);
-    gap: 8px;
   }
-  .file-detail-path {
+
+  .fdc-path {
     font-family: monospace;
     font-size: 12px;
     color: var(--text-bright);
@@ -70,13 +164,15 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .file-detail-badges {
+
+  .fdc-header-badges {
     display: flex;
-    flex-direction: row;
     gap: 6px;
     flex-shrink: 0;
+    flex-wrap: nowrap;
   }
-  .layer-badge {
+
+  .fdc-layer-badge {
     font-size: 10px;
     font-weight: 600;
     padding: 2px 6px;
@@ -84,73 +180,610 @@
     border: 1px solid transparent;
     white-space: nowrap;
   }
-  .shape-badge {
+
+  .fdc-violation-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+
+  .fdc-violation-clean {
+    background: rgba(52, 211, 153, 0.12);
+    color: var(--success, #34d399);
+    border-color: rgba(52, 211, 153, 0.25);
+  }
+
+  .fdc-violation-danger {
+    background: rgba(255, 107, 107, 0.12);
+    color: var(--danger, #ff6b6b);
+    border-color: rgba(255, 107, 107, 0.25);
+  }
+
+  /* ── Stat bar ─────────────────────────────────────────────────────────────── */
+
+  .fdc-stat-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .fdc-metric-card {
+    background: var(--bg-surface, rgba(255, 255, 255, 0.03));
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 70px;
+  }
+
+  .fdc-metric-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-bright);
+    line-height: 1;
+  }
+
+  .fdc-metric-label {
     font-size: 10px;
     color: var(--text-muted);
-    font-style: italic;
   }
-  .file-detail-body {
-    padding: 10px 14px;
-  }
-  .file-detail-stats {
-    display: flex;
-    flex-direction: row;
-    gap: 16px;
-    margin-bottom: 10px;
-  }
-  .mini-stat {
-    font-size: 11px;
+
+  .fdc-metric-sub {
+    font-size: 9px;
     color: var(--text-muted);
-  }
-  .file-detail-columns {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 10px;
-  }
-  .col-title {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 6px;
-  }
-  .dep-list {
-    list-style: none;
-    font-size: 11px;
-    font-family: monospace;
-    color: var(--text);
-    max-height: 120px;
-    overflow-y: auto;
-    padding: 0;
-    margin: 0;
-  }
-  .dep-list li {
-    padding: 2px 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 120px;
   }
-  .file-detail-entities {
-    margin-top: 4px;
+
+  .fdc-shape-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    flex: 2;
+    min-width: 160px;
   }
-  .entity-table {
+
+  .fdc-shape-inner {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .fdc-shape-icon {
+    font-size: 16px;
+    color: var(--success, #34d399);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .fdc-shape-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .fdc-shape-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+
+  .fdc-shape-desc {
+    font-size: 10px;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  /* ── Graph section ────────────────────────────────────────────────────────── */
+
+  .fdc-graph-section {
+    border-bottom: 1px solid var(--border);
+    padding: 8px 0 0;
+  }
+
+  .fdc-graph-legend {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding: 0 14px 6px;
+    flex-wrap: wrap;
+  }
+
+  .fdc-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .fdc-legend-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .fdc-canvas-wrap {
+    width: 100%;
+    background: var(--bg-surface, rgba(255, 255, 255, 0.03));
+    overflow: hidden;
+  }
+
+  .fdc-dep-canvas {
+    display: block;
+    width: 100%;
+    height: 240px;
+  }
+
+  /* ── Bottom grid ──────────────────────────────────────────────────────────── */
+
+  .fdc-bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+
+  .fdc-panel {
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .fdc-panel:last-child {
+    border-right: none;
+  }
+
+  .fdc-panel-header {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 8px 12px 5px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Entity table ─────────────────────────────────────────────────────────── */
+
+  .fdc-entity-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 11px;
   }
-  .entity-table th {
-    text-align: left;
-    padding: 4px 8px;
-    color: var(--text-muted);
+
+  .fdc-entity-table th {
+    font-size: 9px;
     font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 5px 10px;
+    text-align: left;
     border-bottom: 1px solid var(--border);
   }
-  .entity-table td {
-    padding: 3px 8px;
-    color: var(--text);
+
+  .fdc-entity-table td {
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
+    vertical-align: middle;
+  }
+
+  .fdc-entity-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .fdc-entity-name {
     font-family: monospace;
-    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-bright);
+    font-size: 10px;
+    word-break: break-all;
+  }
+
+  .fdc-entity-exported {
+    text-align: center;
+    color: var(--success, #34d399);
+    font-size: 11px;
+  }
+
+  .fdc-entity-lines {
+    font-family: monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .fdc-kind-badge {
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid;
+  }
+
+  /* ── Blast radius panel ───────────────────────────────────────────────────── */
+
+  .fdc-blast-header {
+    padding: 6px 12px 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .fdc-severity-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .fdc-severity-low,
+  .fdc-severity-contained {
+    background: rgba(52, 211, 153, 0.12);
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.3);
+  }
+
+  .fdc-severity-moderate {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.3);
+  }
+
+  .fdc-severity-high {
+    background: rgba(251, 146, 60, 0.12);
+    color: #fb923c;
+    border-color: rgba(251, 146, 60, 0.3);
+  }
+
+  .fdc-severity-critical {
+    background: rgba(255, 107, 107, 0.12);
+    color: #ff6b6b;
+    border-color: rgba(255, 107, 107, 0.3);
+  }
+
+  .fdc-depth-group {
+    padding: 6px 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .fdc-depth-arrow {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+
+  .fdc-depth-label {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .fdc-depth-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+  }
+
+  .fdc-depth-chip {
+    font-family: monospace;
+    font-size: 9px;
+    padding: 2px 6px 2px 5px;
+    border-radius: 3px;
+    border-left: 3px solid #5F5E5A;
+    background: var(--bg-surface, rgba(255, 255, 255, 0.03));
+    color: var(--text);
+    white-space: nowrap;
+    cursor: default;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .fdc-chip-rel {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 8px;
+    color: var(--text-muted);
+    font-family: monospace;
   }
 </style>
+<script>
+/**
+ * drawFileGraph(canvasId, graphData)
+ *
+ * Reads a data-graph JSON attribute from a <canvas> element and renders the
+ * dependency graph: left column = imports (DEPENDS ON), center = file node,
+ * right column = imported_by (USED BY). Bezier curve edges connect them.
+ *
+ * Adapted from FileContext.svelte canvas drawing logic.
+ * Color scheme:
+ *   #7F77DD — this file (center node)
+ *   #888780 — dependencies / imports
+ *   #1D9E75 — used-by / dependents
+ *   #EF9F27 — cross-layer highlight
+ *   #b4b8c8 — label text
+ */
+(function () {
+  var NODE_R = 5;
+  var LABEL_GAP = 10;
+  var EDGE_PAD = 8;
+  var HEADER_Y = 16;
+
+  function shortName(path) {
+    return path.split("/").pop() || path;
+  }
+
+  function truncateStr(text, maxLen) {
+    return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
+  }
+
+  function computeLayout(ctx, W, imports, dependents) {
+    var maxNodes = Math.max(imports.length, dependents.length, 1);
+    var H = Math.max(280, maxNodes * 28 + 80);
+    var maxLabelChars = 26;
+
+    ctx.font = "10px monospace";
+    var maxLeftLabel = 0;
+    for (var i = 0; i < imports.length; i++) {
+      var w = ctx.measureText(truncateStr(shortName(imports[i]), maxLabelChars)).width;
+      if (w > maxLeftLabel) maxLeftLabel = w;
+    }
+    var maxRightLabel = 0;
+    for (var j = 0; j < dependents.length; j++) {
+      var wr = ctx.measureText(truncateStr(shortName(dependents[j]), maxLabelChars)).width;
+      if (wr > maxRightLabel) maxRightLabel = wr;
+    }
+
+    var LEFT_X = Math.max(EDGE_PAD + maxLeftLabel + LABEL_GAP + NODE_R, 80);
+    var RIGHT_X = Math.min(W - EDGE_PAD - maxRightLabel - LABEL_GAP - NODE_R, W - 80);
+    var graphTop = HEADER_Y + 16;
+    var graphH = H - graphTop - 12;
+
+    return {
+      W: W, H: H,
+      CX: W / 2, CY: H / 2,
+      LEFT_X: LEFT_X, RIGHT_X: RIGHT_X,
+      graphTop: graphTop, graphH: graphH,
+      maxLabelChars: maxLabelChars
+    };
+  }
+
+  function computeNodePositions(items, x, graphTop, graphH) {
+    return items.map(function (path, i) {
+      return {
+        x: x,
+        y: graphTop + (graphH / (items.length + 1)) * (i + 1),
+        path: path
+      };
+    });
+  }
+
+  function drawArrowhead(ctx, x1, y1, x2, y2, cpOffset, color, arrowAtEnd) {
+    var t = arrowAtEnd ? 0.97 : 0.03;
+    var tI = 1 - t;
+    var tx = 3*tI*tI*(x1+cpOffset-x1) + 6*tI*t*(x2-cpOffset-(x1+cpOffset)) + 3*t*t*(x2-(x2-cpOffset));
+    var ty = 6*tI*t*(y2-y1);
+    var angle = arrowAtEnd ? Math.atan2(ty, tx) : Math.atan2(-ty, -tx);
+    var tip = arrowAtEnd ? { x: x2, y: y2 } : { x: x1, y: y1 };
+    var AL = 8;
+    var AW = Math.PI / 6;
+
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(tip.x - AL * Math.cos(angle - AW), tip.y - AL * Math.sin(angle - AW));
+    ctx.lineTo(tip.x - AL * Math.cos(angle + AW), tip.y - AL * Math.sin(angle + AW));
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.8;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCurvedEdge(ctx, x1, y1, x2, y2, color) {
+    var dx = x2 - x1;
+    var cpOffset = Math.min(Math.abs(dx) * 0.4, 60);
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.bezierCurveTo(x1 + cpOffset, y1, x2 - cpOffset, y2, x2, y2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    drawArrowhead(ctx, x1, y1, x2, y2, cpOffset, color, true);
+  }
+
+  function drawColumnHeaders(ctx, layout, hasImports, hasDependents) {
+    ctx.font = "9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#636a80";
+    if (hasImports) ctx.fillText("DEPENDS ON", layout.LEFT_X, HEADER_Y);
+    if (hasDependents) ctx.fillText("USED BY", layout.RIGHT_X, HEADER_Y);
+  }
+
+  function drawCentreNode(ctx, layout, exportCount, hasDependents, fileName) {
+    var CX = layout.CX;
+    var CY = layout.CY;
+
+    ctx.beginPath();
+    ctx.arc(CX, CY, 16, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(127, 119, 221, 0.25)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(CX, CY, 10, 0, Math.PI * 2);
+    ctx.fillStyle = "#7F77DD";
+    ctx.fill();
+
+    ctx.font = "11px monospace";
+    ctx.fillStyle = "#e8eaf0";
+    ctx.textAlign = "center";
+    ctx.fillText(truncateStr(fileName, 28), CX, CY + 28);
+
+    if (exportCount > 0 && hasDependents) {
+      ctx.font = "8px monospace";
+      ctx.fillStyle = "#7F77DD";
+      ctx.globalAlpha = 0.7;
+      ctx.textAlign = "center";
+      ctx.fillText(exportCount + " exports", CX, CY - 22);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawImportNodes(ctx, positions, crossLayerSet, maxLabelChars) {
+    for (var i = 0; i < positions.length; i++) {
+      var pos = positions[i];
+      var isCross = crossLayerSet.indexOf(pos.path) !== -1;
+      var color = isCross ? "#EF9F27" : "#888780";
+
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, NODE_R, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      ctx.font = "10px monospace";
+      ctx.fillStyle = "#b4b8c8";
+      ctx.textAlign = "end";
+      ctx.fillText(truncateStr(shortName(pos.path), maxLabelChars), pos.x - LABEL_GAP, pos.y + 3);
+    }
+  }
+
+  function drawDependentNodes(ctx, positions, crossLayerSet, maxLabelChars) {
+    for (var i = 0; i < positions.length; i++) {
+      var pos = positions[i];
+      var isCross = crossLayerSet.indexOf(pos.path) !== -1;
+      var color = isCross ? "#EF9F27" : "#1D9E75";
+
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, NODE_R, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      ctx.font = "10px monospace";
+      ctx.fillStyle = "#b4b8c8";
+      ctx.textAlign = "start";
+      ctx.fillText(truncateStr(shortName(pos.path), maxLabelChars), pos.x + LABEL_GAP, pos.y + 3);
+    }
+  }
+
+  function drawFileGraph(canvasId, graphData) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    var ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    var imports = graphData.imports || [];
+    var dependents = graphData.imported_by || [];
+    var exports = graphData.exports || [];
+    var crossLayerImports = graphData.crossLayerImports || [];
+    var crossLayerDependents = graphData.crossLayerDependents || [];
+    var fileName = graphData.fileName || "";
+
+    var dpr = window.devicePixelRatio || 1;
+    var W = canvas.offsetWidth;
+    if (W === 0) W = 600; // fallback if not yet laid out
+
+    var layout = computeLayout(ctx, W, imports, dependents);
+
+    canvas.width = W * dpr;
+    canvas.height = layout.H * dpr;
+    canvas.style.height = layout.H + "px";
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, layout.H);
+
+    drawColumnHeaders(ctx, layout, imports.length > 0, dependents.length > 0);
+
+    var importPositions = computeNodePositions(imports, layout.LEFT_X, layout.graphTop, layout.graphH);
+    var dependentPositions = computeNodePositions(dependents, layout.RIGHT_X, layout.graphTop, layout.graphH);
+
+    // Draw edges (imports → center)
+    for (var i = 0; i < importPositions.length; i++) {
+      var pos = importPositions[i];
+      var isCross = crossLayerImports.indexOf(pos.path) !== -1;
+      drawCurvedEdge(ctx, pos.x, pos.y, layout.CX, layout.CY, isCross ? "#EF9F27" : "#888780");
+    }
+    // Draw edges (center → dependents)
+    for (var j = 0; j < dependentPositions.length; j++) {
+      var dpos = dependentPositions[j];
+      var isDCross = crossLayerDependents.indexOf(dpos.path) !== -1;
+      drawCurvedEdge(ctx, layout.CX, layout.CY, dpos.x, dpos.y, isDCross ? "#EF9F27" : "#1D9E75");
+    }
+
+    drawImportNodes(ctx, importPositions, crossLayerImports, layout.maxLabelChars);
+    drawDependentNodes(ctx, dependentPositions, crossLayerDependents, layout.maxLabelChars);
+    drawCentreNode(ctx, layout, exports.length, dependents.length > 0, fileName);
+  }
+
+  function initGraph(canvas) {
+    var raw = canvas.getAttribute("data-graph");
+    if (!raw) return;
+    try {
+      var graphData = JSON.parse(raw);
+      drawFileGraph(canvas.id, graphData);
+    } catch (e) {
+      // skip malformed JSON gracefully
+    }
+  }
+
+  function initAllGraphs() {
+    var canvases = document.querySelectorAll("canvas[data-graph]");
+    for (var i = 0; i < canvases.length; i++) {
+      initGraph(canvases[i]);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAllGraphs);
+  } else {
+    initAllGraphs();
+  }
+
+  // Redraw on resize using ResizeObserver — debounced, per-canvas
+  if (typeof ResizeObserver !== "undefined") {
+    var resizeTimers = {};
+    var ro = new ResizeObserver(function (entries) {
+      for (var e = 0; e < entries.length; e++) {
+        var wrap = entries[e].target;
+        var canvas = wrap.querySelector("canvas");
+        if (!canvas) continue;
+        var id = canvas.id;
+        if (resizeTimers[id]) clearTimeout(resizeTimers[id]);
+        resizeTimers[id] = setTimeout((function (c) {
+          return function () { initGraph(c); };
+        })(canvas), 100);
+      }
+    });
+    function observeWraps() {
+      var wraps = document.querySelectorAll(".fdc-canvas-wrap");
+      for (var i = 0; i < wraps.length; i++) {
+        ro.observe(wraps[i]);
+      }
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", observeWraps);
+    } else {
+      observeWraps();
+    }
+  }
+})();
+</script>
