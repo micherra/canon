@@ -24,7 +24,7 @@ export function registerPresentArtifactTool(): void {
         type: z
           .string()
           .describe(
-            'Artifact view type. For compiled views: "planning-brief". For dynamic HTML: any string used as the artifact key prefix.',
+            'Artifact view type — used as the artifact key prefix (e.g., "design", "review"). When html is provided, bypasses VIEW_MAP lookup.',
           ),
         workspace: z.string().describe("Workspace directory path"),
       },
