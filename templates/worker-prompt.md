@@ -20,11 +20,14 @@ and passes the result as the worker's spawn prompt.
 - `${PROJECT_DIR}` — absolute path to the project root
 - `${WORKSPACE}` — absolute path to the Canon workspace
 - `${SLUG}` — the build slug
+- `${CANON_PARENT_WORKSPACE}` — relative workspace path under `.canon/workspaces/` (e.g., `main/{slug}`) for L4 hook authorization
 
 ## Prompt
 
 ```
 You are a Canon build worker (${WORKER_NAME}) on team ${TEAM_NAME}.
+
+export CANON_PARENT_WORKSPACE="${CANON_PARENT_WORKSPACE}"
 
 ## Operating Loop
 
@@ -59,3 +62,4 @@ You are a Canon build worker (${WORKER_NAME}) on team ${TEAM_NAME}.
 - Variable substitution is the orchestrator's responsibility before passing to Agent()
 - The prompt must remain self-contained — workers have no access to the template file at runtime
 - Keep the loop steps numbered and imperative — workers execute them mechanically
+- The orchestrator derives `CANON_PARENT_WORKSPACE` by stripping `{projectDir}/.canon/workspaces/` from `${WORKSPACE}` — e.g., if WORKSPACE is `/path/to/project/.canon/workspaces/main/my-slug`, the value is `main/my-slug`

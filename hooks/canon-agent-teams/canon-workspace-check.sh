@@ -200,5 +200,5 @@ if [[ "$IN_WORKTREE" -eq 1 && -n "${CANON_PARENT_WORKSPACE:-}" ]]; then
 fi
 
 # ── 8. Block ──────────────────────────────────────────────────────────────────
-echo "No active Canon workspace for this branch. Route the request through the planner to create a workspace before editing tracked files." >&2
+echo "No active Canon workspace for this branch. Start a Canon build flow to create a workspace before editing tracked files." >&2
 exit 2

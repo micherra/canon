@@ -175,11 +175,16 @@ If no `task-dag.yaml` exists, fall back to sequential step execution (existing b
 
 5. **Model selection**: Workers default to Sonnet. For complex tasks, pass `model: "opus"` in the Agent call.
 
+6. **L4 hook authorization**: Derive `CANON_PARENT_WORKSPACE` from the workspace path by stripping `{projectDir}/.canon/workspaces/` to get the relative path (e.g., `main/{slug}`). Include this as a variable when filling the worker prompt template. The L4 hook (`canon-workspace-check.sh`) uses this to authorize DAG workers on `canon-task/` branches that have no direct workspace match.
+
 #### Merge Protocol
 
 After ALL team tasks complete (monitor via `TaskList` — when empty, all done):
 
 1. Call `mergeWaveResults(worktreeResults, buildWorktreePath, "sequential")` — merges each task's worktree into the build worktree in alphabetical `task_id` order.
+
+1b. **Post-merge file verification**: For each merged task, run `git diff {base_commit} -- {file}` for every file in the task's `files:` list from `task-dag.yaml`. If a declared file shows no diff (empty output), the task produced no committed changes for that file — treat the task as failed and re-spawn using the existing retry protocol (one retry, then HITL). This catches workers that complete without committing their edits.
+
 2. On conflict: `git merge --abort` runs automatically. Enter HITL with conflict details: `"Merge conflict in task {task_id} affecting files: {files}. Resolve manually or re-run the conflicting task."`.
 3. On success: call `cleanupWorktrees(worktreeResults, projectDir)` then `TeamDelete({ team_name: "canon-{slug}" })`.
 
@@ -295,6 +300,7 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
   - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
   - `"session timeout"` — session ending before tail steps could run.
   - `"no new patterns observed"` — learn step skipped because the build introduced no novel patterns worth mining.
+  - `"documentation-only diff, verify produces zero signal"` — all changed files are documentation (`.md`, `.txt`); no compiled code to verify.
 - When a WARNING verdict is resolved by the orchestrator inline (no fix agent spawned), log a synthetic step entry with `step_id: inline-fix`, `status: completed`, and the resolution details in `outcome`.
 
 ### Post-Subagent Artifact Check
@@ -374,6 +380,8 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 3. `npm test` — Full test suite. Any failure is a BLOCKING failure.
 
 ALL three must pass for the verify step to succeed. If any gate fails, the engineer reports BLOCKED with the exact failure output and does NOT proceed past the verify step. The orchestrator presents the failure to the user via HITL (`on_failure` handler). The engineer reports DONE only when all three gates exit 0.
+
+**Verify skip for documentation-only diffs**: For builds where `git diff {base_commit} --name-only` contains only `.md` and `.txt` files, the verify step MAY be skipped with `skip_reason: "documentation-only diff, verify produces zero signal"`. The orchestrator checks the diff before spawning the verify engineer. If any non-documentation file is present, the full verify step runs.
 
 ### Completion Checklist
 
