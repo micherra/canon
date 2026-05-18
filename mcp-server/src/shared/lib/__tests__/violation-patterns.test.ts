@@ -255,9 +255,16 @@ describe("buildRecurringViolationResults", () => {
       ["low", { files: new Set<string>(), severity: "rule", timestamps: new Set(["t1", "t2"]) }],
       [
         "high",
-        { files: new Set<string>(), severity: "rule", timestamps: new Set(["t1", "t2", "t3", "t4"]) },
+        {
+          files: new Set<string>(),
+          severity: "rule",
+          timestamps: new Set(["t1", "t2", "t3", "t4"]),
+        },
       ],
-      ["mid", { files: new Set<string>(), severity: "rule", timestamps: new Set(["t1", "t2", "t3"]) }],
+      [
+        "mid",
+        { files: new Set<string>(), severity: "rule", timestamps: new Set(["t1", "t2", "t3"]) },
+      ],
     ]);
     const result = buildRecurringViolationResults(byPrinciple);
     expect(result).toHaveLength(3);

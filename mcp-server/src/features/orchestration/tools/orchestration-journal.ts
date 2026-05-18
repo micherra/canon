@@ -303,6 +303,44 @@ export type BatchLogStepsResult = {
   results: LogStepResult[];
 };
 
+type CaptureTask = { logInput: LogStepInput; result: LogStepResult; step: JournalStep };
+
+function processEntries(
+  journal: Journal,
+  input: BatchLogStepsInput,
+): { results: LogStepResult[]; captureTasks: CaptureTask[] } {
+  const results: LogStepResult[] = [];
+  const captureTasks: CaptureTask[] = [];
+
+  for (const entry of input.steps) {
+    const logInput: LogStepInput = {
+      agent_id: entry.agent_id,
+      agent_type: entry.agent_type,
+      artifacts_expected: entry.artifacts_expected,
+      domain_skills_loaded: entry.domain_skills_loaded,
+      outcome: entry.outcome,
+      skip_reason: entry.skip_reason,
+      status: entry.status,
+      step_id: entry.step_id,
+      workspace: input.workspace,
+    };
+
+    const step = upsertStep(journal, logInput);
+    applyTimestamps(step, entry.status);
+    applyMetadata(step, logInput);
+
+    const result: LogStepResult = { status: entry.status, step_id: entry.step_id };
+
+    if (entry.status === "completed" && entry.agent_id) {
+      captureTasks.push({ logInput, result, step });
+    }
+
+    results.push(result);
+  }
+
+  return { captureTasks, results };
+}
+
 /**
  * Batch version of logStep — logs all entries in a single read-modify-write
  * cycle. Validates all entries upfront (fail-closed). If any entry has an
@@ -336,37 +374,7 @@ export async function batchLogSteps(
   // 3. Single journal read.
   const journal = await readJournal(input.workspace);
 
-  // 4. Process each entry synchronously against the in-memory journal.
-  //    Collect transcript capture work for parallel execution after the write.
-  const results: LogStepResult[] = [];
-  type CaptureTask = { logInput: LogStepInput; result: LogStepResult; step: JournalStep };
-  const captureTasks: CaptureTask[] = [];
-
-  for (const entry of input.steps) {
-    const logInput: LogStepInput = {
-      agent_id: entry.agent_id,
-      agent_type: entry.agent_type,
-      artifacts_expected: entry.artifacts_expected,
-      domain_skills_loaded: entry.domain_skills_loaded,
-      outcome: entry.outcome,
-      skip_reason: entry.skip_reason,
-      status: entry.status,
-      step_id: entry.step_id,
-      workspace: input.workspace,
-    };
-
-    const step = upsertStep(journal, logInput);
-    applyTimestamps(step, entry.status);
-    applyMetadata(step, logInput);
-
-    const result: LogStepResult = { status: entry.status, step_id: entry.step_id };
-
-    if (entry.status === "completed" && entry.agent_id) {
-      captureTasks.push({ logInput, result, step });
-    }
-
-    results.push(result);
-  }
+  const { captureTasks, results } = processEntries(journal, input);
 
   // 5. Single journal write (before transcript capture — captures are best-effort).
   await writeJournal(input.workspace, journal);
@@ -558,6 +566,17 @@ function getStepsMissingSkipReason(skipped: readonly JournalStep[]): string[] {
     .map((s) => s.step_id);
 }
 
+// Best-effort side effects on workspace completion: digest, analytics, trend summary, claims.
+// digest MUST run before archiveAndDeleteWorkspace — it reads workspace files that archive deletes.
+async function runCompletionSideEffects(workspace: string, steps: JournalStep[]) {
+  const digest_written = await tryWriteBuildDigest(workspace);
+  const analytics_recorded = await tryAppendAnalytics(workspace, steps);
+  const trend_summary_written = await tryWriteBuildTrendSummary(workspace);
+  const claims_released = await tryReleaseClaims(workspace);
+  await tryRunJanitor();
+  return { analytics_recorded, claims_released, digest_written, trend_summary_written };
+}
+
 export async function finalizeWorkspace(
   input: FinalizeWorkspaceInput,
 ): Promise<ToolResult<FinalizeWorkspaceResult>> {
@@ -592,22 +611,7 @@ export async function finalizeWorkspace(
     stepsMissingSkipReason.length === 0 &&
     artifacts.missing.length === 0;
 
-  // When complete, absorb side effects from the former board subsystem (best-effort).
-  // digest_written MUST run before archiveAndDeleteWorkspace — the digest writer reads
-  // journal.json, plans/.../planning-brief.md, and reviews/*.md from the workspace
-  // directory, which archiveAndDeleteWorkspace deletes.
-  let claims_released: boolean | undefined;
-  let analytics_recorded: boolean | undefined;
-  let digest_written: boolean | undefined;
-  let trend_summary_written: boolean | undefined;
-  if (complete) {
-    digest_written = await tryWriteBuildDigest(workspace);
-    analytics_recorded = await tryAppendAnalytics(workspace, steps);
-    trend_summary_written = await tryWriteBuildTrendSummary(workspace);
-    claims_released = await tryReleaseClaims(workspace);
-    await tryRunJanitor();
-  }
-
+  const sideEffects = complete ? await runCompletionSideEffects(workspace, steps) : undefined;
   const cleanup = complete ? await archiveAndDeleteWorkspace(workspace) : undefined;
 
   return toolOk({
@@ -624,9 +628,7 @@ export async function finalizeWorkspace(
     ...(cleanup
       ? { workspace_archived: cleanup.archived, workspace_deleted: cleanup.deleted }
       : {}),
-    ...(complete
-      ? { analytics_recorded, claims_released, digest_written, trend_summary_written }
-      : {}),
+    ...(sideEffects ?? {}),
   });
 }
 
