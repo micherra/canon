@@ -60,10 +60,10 @@ export function violationsFromReviews(reviews: ReviewEntry[]): NormalizedViolati
  */
 export function groupViolationsByPrinciple(
   violations: NormalizedViolation[],
-): Map<string, { severity: string; files: Set<string>; timestamps: string[] }> {
+): Map<string, { severity: string; files: Set<string>; timestamps: Set<string> }> {
   const byPrinciple = new Map<
     string,
-    { severity: string; files: Set<string>; timestamps: string[] }
+    { severity: string; files: Set<string>; timestamps: Set<string> }
   >();
 
   for (const v of violations) {
@@ -74,11 +74,11 @@ export function groupViolationsByPrinciple(
       byPrinciple.set(v.principleId, {
         files,
         severity: v.severity,
-        timestamps: [v.reviewTimestamp],
+        timestamps: new Set([v.reviewTimestamp]),
       });
     } else {
       if (v.filePath !== null) existing.files.add(v.filePath);
-      existing.timestamps.push(v.reviewTimestamp);
+      existing.timestamps.add(v.reviewTimestamp);
     }
   }
 
@@ -90,17 +90,17 @@ export function groupViolationsByPrinciple(
  * filtering to principles with >= 2 occurrences, sorted by count DESC.
  */
 export function buildRecurringViolationResults(
-  byPrinciple: Map<string, { severity: string; files: Set<string>; timestamps: string[] }>,
+  byPrinciple: Map<string, { severity: string; files: Set<string>; timestamps: Set<string> }>,
 ): RecurringViolation[] {
   const result: RecurringViolation[] = [];
   for (const [principleId, data] of byPrinciple) {
-    if (data.timestamps.length < 2) continue;
+    if (data.timestamps.size < 2) continue;
     const sortedTimestamps = [...data.timestamps].sort();
     result.push({
       affected_files: [...data.files],
       first_seen: sortedTimestamps[0],
       last_seen: sortedTimestamps[sortedTimestamps.length - 1],
-      occurrence_count: data.timestamps.length,
+      occurrence_count: data.timestamps.size,
       principle_id: principleId,
       severity: data.severity,
     });

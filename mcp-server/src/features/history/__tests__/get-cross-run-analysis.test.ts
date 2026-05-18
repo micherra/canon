@@ -133,6 +133,10 @@ describe("getCrossRunAnalysis", () => {
           ],
         },
       ],
+      run_metadata: {
+        ...makeRunSummary("x").run_metadata,
+        completed_at: "2026-04-24T10:00:00.000Z",
+      },
     });
     const summary2 = makeRunSummary("arch_run-002", {
       review_results: [
@@ -146,6 +150,10 @@ describe("getCrossRunAnalysis", () => {
           ],
         },
       ],
+      run_metadata: {
+        ...makeRunSummary("x").run_metadata,
+        completed_at: "2026-04-25T10:00:00.000Z",
+      },
     });
 
     writeFileSync(join(archivePath1, "run-summary.json"), JSON.stringify(summary1));
