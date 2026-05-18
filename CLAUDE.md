@@ -394,12 +394,10 @@ the fenced code block) as the renderer agent's spawn prompt.
 
 | Checkpoint | Template | Output |
 |------------|----------|--------|
-| Planning brief | `templates/renderer-planning-brief.md` | `planning-brief.html` |
 | Design document | `templates/renderer-design.md` | `design.html` |
 | Review dashboard | `templates/renderer-review.md` | `review.html` |
 
 **MCP tool requirements per template:**
-- `renderer-planning-brief.md` — pure markdown, no MCP tool calls
 - `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML directly)
 - `renderer-review.md` — requires `show_pr_impact` and `get_file_context` calls
 

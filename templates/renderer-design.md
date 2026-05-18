@@ -1,6 +1,6 @@
 ---
 template: renderer-design
-description: Renderer spawn prompt for converting the architect design document + task DAG into design.html
+description: Renderer spawn prompt for converting the PRD + architect design document + task DAG into a unified design.html
 used-by: [orchestrator]
 read-by: [renderer-agent]
 output-path: ${WORKSPACE}/artifacts/design.html
@@ -21,12 +21,14 @@ result as the renderer agent's spawn prompt.
   (typically `${WORKSPACE}/plans/${SLUG}/DESIGN.md` or `${WORKSPACE}/plans/${SLUG}/INDEX.md`)
 - `${DAG_PATH}` — absolute path to the task DAG YAML file
   (typically `${WORKSPACE}/plans/${SLUG}/task-dag.yaml`); leave empty if no DAG exists
+- `${PRD_PATH}` — absolute path to the PRD markdown file
+  (typically `${WORKSPACE}/plans/${SLUG}/prd.md`); leave empty if no PRD exists
 
 ## Prompt
 
 ````
-You are a renderer agent. Your sole job is to convert the architect design document and
-optional task DAG into a self-contained HTML file and write it to
+You are a renderer agent. Your sole job is to convert the architect design document,
+optional task DAG, and optional PRD into a self-contained HTML file and write it to
 ${WORKSPACE}/artifacts/design.html.
 Do NOT modify the worktree. Do NOT call Canon MCP tools.
 
@@ -36,9 +38,13 @@ Read these files:
 1. ${DESIGN_PATH} — the design document markdown (your primary data source)
 2. mcp-server/src/ui/snippets/DESIGN-SYSTEM.md — the design system reference
 3. ${DAG_PATH} — the task DAG YAML (if the path is non-empty and the file exists)
+4. ${PRD_PATH} — the PRD markdown (if the path is non-empty and the file exists)
 
 If ${DAG_PATH} is empty or the file does not exist, treat this as a single-task build
 (no DAG) and skip all DAG-specific rendering.
+
+If ${PRD_PATH} is empty or the file does not exist, treat this as a design-only build
+(no PRD) and skip all PRD-specific rendering.
 
 ## Step 2 — Parse the design document
 
@@ -54,6 +60,29 @@ Extract these sections from the markdown:
 - **Assumptions**: The `## Assumptions` section — list of assumptions made during design.
 - **Brief coverage**: The `### Brief Coverage` table — maps runbook requirements to task elements
   with dispositions (`covered`, `descoped`, `partial`).
+- **Runbook**: The `## Runbook` section — numbered steps with agent type and artifacts.
+
+## Step 2b — Parse the PRD (if present)
+
+If the PRD file was read, extract these fields:
+
+- **Outcome badge**: The value on the `## Outcome` line — `GREENLIGHT`, `CAUTION`, or `NO-GO`.
+  Default to `GREENLIGHT` if absent.
+- **Effort estimate**: The value on the `## Effort Estimate` line — e.g., `small`, `medium`,
+  `large`. Omit if absent.
+- **Value estimate**: The value on the `## Value Estimate` line — e.g., `low`, `medium`, `high`.
+  Extract just the level word before the dash separator. Omit if absent.
+- **Problem statement**: The body of the `## Problem Statement` section, including the
+  `**Evidence:**` sub-field if present.
+- **Acceptance criteria**: The `## Acceptance Criteria` table rows — columns are `#`,
+  `Criterion`, `Verification`, `Type`.
+- **Requirement coverage map**: The `## Requirement Coverage Map` table rows — columns are
+  `#`, `Requirement`, `Disposition`, `Runbook step or rationale`.
+- **Scope & Constraints**: The `## Scope & Constraints` section body — in-scope items, out-of-scope
+  items, and constraints. Omit if absent.
+- **Alternatives considered**: The `## Alternatives Considered` section — may contain multiple
+  `### Alternative:` sub-sections. Omit if absent.
+- **Open questions**: The `## Open Questions` numbered list. Omit if absent or empty.
 
 ## Step 3 — Parse the task DAG (if present)
 
@@ -91,13 +120,20 @@ Use the design system (Section A tokens, Section B page boilerplate, Section C c
 </head>
 <body>
   <div class="container">
-    <!-- Header panel -->
-    <!-- Architecture overview panel -->
+    <!-- Header panel (unified: title + scope + slug badge + outcome badge if PRD present) -->
+    <!-- PRD: Problem Statement panel (if PRD present) -->
+    <!-- PRD: Acceptance Criteria panel (if PRD present) -->
+    <!-- PRD: Requirement Coverage Map panel (if PRD present) -->
+    <!-- PRD: Scope & Constraints panel (if PRD present and non-empty) -->
+    <!-- Architecture overview panel (from design doc) -->
     <!-- Task DAG visualization panel (or single-task summary) -->
     <!-- Per-task cards -->
     <!-- Design decisions panel -->
-    <!-- Tradeoffs panel (collapsible) -->
+    <!-- PRD: Alternatives panel (collapsible, if PRD present and non-empty) -->
+    <!-- Tradeoffs panel (collapsible, from design doc) -->
+    <!-- PRD: Open Questions panel (if PRD present and questions exist) -->
     <!-- Assumptions panel -->
+    <!-- Runbook overview panel -->
   </div>
 </body>
 </html>
@@ -105,10 +141,35 @@ Use the design system (Section A tokens, Section B page boilerplate, Section C c
 
 ### Header panel
 
-Render a `.section-card` at the top showing:
-- Document title as the card title (`font-size: 18px; font-weight: 700`)
-- Scope summary as subtitle (`font-size: 13px; color: var(--text-muted)`)
-- Build slug badge in the header
+**When PRD is present**, render a unified header showing PRD signals alongside design identity:
+
+```html
+<div class="section-card" style="margin-bottom: 16px;">
+  <div class="section-card-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+    <div>
+      <h1 style="font-size: 18px; font-weight: 700; color: var(--text-bright);">{title}</h1>
+      <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">{scope summary}</p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      <span style="background: {badgeColor}22; color: {badgeColor}; border: 1px solid {badgeColor}44; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px; letter-spacing: 0.04em;">{OUTCOME}</span>
+      <span style="font-size: 11px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
+    </div>
+  </div>
+  <div class="section-card-body" style="display: flex; gap: 12px; flex-wrap: wrap; padding-top: 8px;">
+    <span style="font-size: 12px; color: var(--text-muted);">Effort: {effort}</span>
+    <span style="font-size: 12px; color: var(--text-muted);">Value: {value}</span>
+  </div>
+</div>
+```
+
+Outcome badge color mapping:
+- `GREENLIGHT` → `var(--success)` (use `#34d399` for the `{badgeColor}22` / `{badgeColor}44` fill pattern)
+- `CAUTION` → `var(--warning)` (use `#fbbf24`)
+- `NO-GO` → `var(--danger)` (use `#ff6b6b`)
+
+Omit the effort/value row if neither value is present in the PRD.
+
+**When no PRD exists**, render the design-only header (no outcome badge, no effort/value chips):
 
 ```html
 <div class="section-card" style="margin-bottom: 16px;">
@@ -121,6 +182,44 @@ Render a `.section-card` at the top showing:
   </div>
 </div>
 ```
+
+### PRD: Problem Statement panel
+
+**Only render if PRD data exists.**
+
+Use `.section-card` with title "Problem Statement". Render the section body as plain text
+paragraphs inside `.section-card-body`. If an `**Evidence:**` sub-field is present, render
+it as a separate paragraph with `color: var(--text-muted)`. Escape all content through `escapeHtml`.
+
+### PRD: Acceptance Criteria panel
+
+**Only render if PRD data exists.**
+
+Use `.section-card` with title "Acceptance Criteria". Render the table using `.table-scroll-wrapper`
+and `.requirement-table` from Section C. Columns: `#`, `Criterion`, `Verification`, `Type`.
+
+If no table rows exist in the PRD, render an `.empty-note` paragraph: "No acceptance criteria defined."
+
+### PRD: Requirement Coverage Map panel
+
+**Only render if PRD data exists.**
+
+Use `.section-card` with title "Requirement Coverage". Render the table using `.table-scroll-wrapper`
+and `.requirement-table`. Add a Disposition column rendered with `.disposition` badges from Section C:
+- `covered` → `.disposition--covered`
+- `descoped` → `.disposition--descoped`
+- `partial` → `.disposition--partial`
+
+If no table rows exist, render an `.empty-note`: "No requirement coverage map defined."
+
+### PRD: Scope & Constraints panel
+
+**Only render if PRD data exists and the section is non-empty.**
+
+Use `.section-card` with title "Scope & Constraints". Render the in-scope items as a `<ul>` list
+under a sub-label, out-of-scope items under a second sub-label, and constraints under a third.
+Use `font-size: 11px; font-weight: 600; color: var(--text-muted)` for sub-labels. Omit
+sub-sections that have no items. Escape all content.
 
 ### Architecture overview panel
 
@@ -217,20 +316,68 @@ Each entry shows:
 If decisions are in a table, render using `.requirement-table`. If in sub-sections,
 render each `### Decision: …` as a card within the panel.
 
+### PRD: Alternatives panel (collapsible)
+
+**Only render if PRD data exists and the Alternatives Considered section is non-empty.**
+
+Use `<details class="collapsible-section">` from Section C. Title: "Alternatives Considered".
+Start collapsed (`<details>` without `open`). Render each `### Alternative:` sub-section as
+a titled block with its description and "Why not chosen" rationale as paragraphs. Escape all content.
+
 ### Tradeoffs panel (collapsible)
 
 Use `<details class="collapsible-section">`. Title: "Tradeoffs & Alternatives Considered".
-Start collapsed. Render tradeoff content as paragraphs or lists. If absent, omit.
+Start collapsed. Render tradeoff content from the design document as paragraphs or lists.
+If the design document has no tradeoffs section, omit this panel.
+
+### PRD: Open Questions panel
+
+**Only render if PRD data exists and the Open Questions list is non-empty.**
+
+Use `.section-card` with title "Open Questions". Render as a numbered `<ol>` list, one
+question per `<li>`. Escape all content.
 
 ### Assumptions panel
 
 Use `.section-card` with title "Assumptions". Render as a `<ul>` list. If absent, omit.
 
+### Runbook overview panel
+
+Use `.section-card` with title "Runbook". Extract runbook steps from the design document's
+`## Runbook` section (if present). Render each step as a numbered row with:
+- Step number (large, `var(--accent)` colored)
+- Step name / description
+- Agent type as a small badge
+- Expected artifacts (if listed)
+
+```html
+<div class="section-card">
+  <div class="section-card-header"><h2 class="section-title">Runbook</h2></div>
+  <div class="section-card-body">
+    <ol style="list-style: none; display: flex; flex-direction: column; gap: 10px;">
+      <li style="display: flex; gap: 12px; align-items: flex-start;">
+        <span style="font-size: 20px; font-weight: 700; color: var(--accent); min-width: 28px;">{N}</span>
+        <div>
+          <div style="font-weight: 600; color: var(--text-bright); font-size: 13px;">{step name}</div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Agent: {agent type}</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Artifacts: {artifacts}</div>
+        </div>
+      </li>
+    </ol>
+  </div>
+</div>
+```
+
+If the design document has no `## Runbook` section, omit the Runbook panel.
+
 ## Step 5 — Security
 
-Apply `escapeHtml` to ALL content extracted from the design document before embedding in HTML.
+Apply `escapeHtml` to ALL content extracted from source files before embedding in HTML.
 This includes: task IDs, file paths, decision titles, rationale text, assumption text,
-section body content.
+section body content, **criterion text, requirement text, scope items, alternative
+descriptions, question text, outcome text**.
+
+Color constants, CSS property values, and numeric values do not need escaping.
 
 ```javascript
 function escapeHtml(s) {
@@ -258,6 +405,8 @@ Return when the file is written. Do not call any MCP tools. Do not modify the wo
 
 - Variable substitution is the orchestrator's responsibility before passing to Agent()
 - The DAG path variable may be empty — renderer must handle that gracefully
+- The PRD path variable may be empty — renderer must handle that gracefully; all PRD panels
+  are omitted when no PRD file exists
 - Task plan files are read opportunistically — if absent, skip the brief coverage sub-section
 - The renderer writes exclusively to `${WORKSPACE}/artifacts/` — never to the worktree
 - If `${DESIGN_PATH}` does not exist, check for `INDEX.md` in the same directory before

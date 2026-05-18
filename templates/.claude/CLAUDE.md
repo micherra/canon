@@ -32,8 +32,8 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `pr-description.md` | shipper | PR description from build artifacts |
 | `chat-brief.md` | chat | Structured brief for build handoff |
 | `migration-state.md` | orchestrator | Migration state handoff for multi-wave coordination |
-| `renderer-planning-brief.md` | orchestrator | Renderer spawn prompt — converts planning brief markdown to `planning-brief.html`; pure markdown, no MCP calls |
-| `renderer-design.md` | orchestrator | Renderer spawn prompt — converts design document + task DAG YAML to `design.html`; pure markdown, no MCP calls |
+| `prd.md` | orchestrator | Structured PRD template the PM fills before spawning the architect; read by architect and renderer |
+| `renderer-design.md` | orchestrator | Renderer spawn prompt — converts PRD + design document + task DAG YAML to unified `design.html`; pure markdown, no MCP calls |
 | `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_file_context`) |
 
 ## Conventions

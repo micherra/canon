@@ -28,9 +28,7 @@ import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 // View map — artifact type → compiled HTML filename in dist/src/ui/
 // ---------------------------------------------------------------------------
 
-const VIEW_MAP: Record<string, string> = {
-  "planning-brief": "planning-brief.html",
-};
+const VIEW_MAP: Record<string, string> = {};
 
 // ---------------------------------------------------------------------------
 // Types
