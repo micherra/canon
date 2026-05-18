@@ -34,7 +34,7 @@
     a column container. Include the <script> block ONCE at the bottom of the page (not per card).
     Placeholders requiring escapeHtml: {{FILE_PATH}}, {{LAYER}}, {{SHAPE_LABEL}}, {{SHAPE_DESCRIPTION}}.
     Safe placeholders (no escaping needed): {{LAYER_COLOR}}, all numeric placeholders, {{BLAST_RADIUS_SEVERITY}}.
-    {{GRAPH_DATA_JSON}} must be JSON-stringified and HTML-attribute-escaped (replace " with &quot;).
+    {{GRAPH_DATA_JSON}} must be JSON-stringified and HTML-attribute-escaped (replace & with &amp;amp; then " with &amp;quot;).
     {{CARD_ID}} must be a valid HTML id (alphanumeric + hyphens only — derive from file path).
     {{IMPORTS_HTML}}, {{IMPORTED_BY_HTML}}, {{ENTITIES_HTML}}, {{BLAST_RADIUS_DEPTH1_HTML}} are
     pre-rendered HTML fragments; caller must escapeHtml all text content within them.
@@ -536,7 +536,7 @@
 
   function computeLayout(ctx, W, imports, dependents) {
     var maxNodes = Math.max(imports.length, dependents.length, 1);
-    var H = Math.max(240, maxNodes * 28 + 80);
+    var H = Math.max(280, maxNodes * 28 + 80);
     var maxLabelChars = 26;
 
     ctx.font = "10px monospace";
@@ -734,18 +734,21 @@
     drawCentreNode(ctx, layout, exports.length, dependents.length > 0, fileName);
   }
 
+  function initGraph(canvas) {
+    var raw = canvas.getAttribute("data-graph");
+    if (!raw) return;
+    try {
+      var graphData = JSON.parse(raw);
+      drawFileGraph(canvas.id, graphData);
+    } catch (e) {
+      // skip malformed JSON gracefully
+    }
+  }
+
   function initAllGraphs() {
     var canvases = document.querySelectorAll("canvas[data-graph]");
     for (var i = 0; i < canvases.length; i++) {
-      var canvas = canvases[i];
-      var raw = canvas.getAttribute("data-graph");
-      if (!raw) continue;
-      try {
-        var graphData = JSON.parse(raw);
-        drawFileGraph(canvas.id, graphData);
-      } catch (e) {
-        // skip malformed JSON gracefully
-      }
+      initGraph(canvases[i]);
     }
   }
 
@@ -755,10 +758,20 @@
     initAllGraphs();
   }
 
-  // Redraw on resize using ResizeObserver when available
+  // Redraw on resize using ResizeObserver — debounced, per-canvas
   if (typeof ResizeObserver !== "undefined") {
-    var ro = new ResizeObserver(function () {
-      initAllGraphs();
+    var resizeTimers = {};
+    var ro = new ResizeObserver(function (entries) {
+      for (var e = 0; e < entries.length; e++) {
+        var wrap = entries[e].target;
+        var canvas = wrap.querySelector("canvas");
+        if (!canvas) continue;
+        var id = canvas.id;
+        if (resizeTimers[id]) clearTimeout(resizeTimers[id]);
+        resizeTimers[id] = setTimeout((function (c) {
+          return function () { initGraph(c); };
+        })(canvas), 100);
+      }
     });
     document.addEventListener("DOMContentLoaded", function () {
       var wraps = document.querySelectorAll(".fdc-canvas-wrap");

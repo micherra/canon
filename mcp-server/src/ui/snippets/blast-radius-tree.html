@@ -1,0 +1,123 @@
+<!--
+  @snippet blast-radius-tree
+  @description Full-width collapsible dependency tree showing blast radius impact by changed file.
+    Each changed file is a root node; its depth-1 dependents are listed as tree edges with layer
+    badges. Depth-2+ dependents are summarized in a single row per group. Matches the tree view
+    rendered in the review dashboard after the Graph Context section.
+  @data {
+    totalAffected: number,
+    treeGroupsHtml: string (pre-rendered group HTML — one <div class="dep-tree-group"> per changed file)
+  }
+  @tokens --bg-card, --border, --accent, --accent-soft, --text, --text-bright, --text-muted
+  @usage Place as a full-width row after the Graph Context section:
+    <div class="grid-card" style="grid-column: 1 / -1; margin-top: 8px;">
+      {blast-radius-tree snippet output}
+    </div>
+    Substitute {{TOTAL_AFFECTED}} with the total number of affected files (number, no escaping needed).
+    Substitute {{TREE_GROUPS_HTML}} with pre-rendered group HTML (escapeHtml all text content within).
+    When blastRadius.affected is empty, render:
+      <p class="empty-note">No blast radius data available</p>
+    instead of the dep-tree div.
+
+  Sub-fragment: group HTML (one per changed file root node):
+    <div class="dep-tree-group">
+      <div class="dep-tree-root">{{CHANGED_FILE_PATH}}</div>
+      <div class="dep-tree-edges">
+        {{EDGES_HTML}}
+      </div>
+    </div>
+    {{CHANGED_FILE_PATH}}: escapeHtml(changedFile)
+
+  Sub-fragment: edge HTML (one per depth-1 dependent, plus optional summary row):
+    <div class="dep-tree-edge">
+      <div class="dep-tree-connector">{{CONNECTOR}}</div>
+      <div class="dep-tree-node">
+        <span class="dep-tree-name">{{DEP_NAME}}</span>
+        {{LAYER_BADGE_HTML}}
+      </div>
+    </div>
+    {{CONNECTOR}}: &#9500;&#9472;&#9472; (├──) for non-last edges; &#9492;&#9472;&#9472; (└──) for the last edge
+    {{DEP_NAME}}: escapeHtml(basename(dependent.file_path))
+    {{LAYER_BADGE_HTML}}: <span class="layer-badge" style="background: {layerColor}22; color: {layerColor}; border-color: {layerColor}44;">{escapeHtml(dependent.layer)}</span>
+
+  Sub-fragment: depth-2+ summary edge (rendered as last edge when depth-2+ files exist):
+    <div class="dep-tree-edge">
+      <div class="dep-tree-connector">&#9492;&#9472;&#9472;</div>
+      <div class="dep-tree-node dep-tree-node--summary">+{depth2Count} more at depth 2+</div>
+    </div>
+
+  Data aggregation rules:
+    - Group blastRadius.affected by file_path, take the minimum depth per file
+    - Root nodes (depth 0) = the changed files from the diff (not from blast radius data)
+    - Depth-1 dependents = files with depth === 1 in blast radius data
+    - Show up to 8 depth-1 dependents per changed file; if more, show the 8 with highest
+      depth-count, then add "+N more at depth 1" as a summary edge
+    - Count depth-2+ files across all changed files and add a single summary row "+N more at depth 2+"
+    - The last edge connector in each group uses └── (&#9492;&#9472;&#9472;) instead of ├── (&#9500;&#9472;&#9472;)
+-->
+<details class="collapsible-section">
+  <summary class="collapsible-summary">
+    <span class="collapsible-arrow">&#9654;</span>
+    <span class="collapsible-title">Blast Radius — Dependency Tree ({{TOTAL_AFFECTED}} affected files)</span>
+  </summary>
+  <div class="collapsible-body">
+    <div class="dep-tree">
+      {{TREE_GROUPS_HTML}}
+    </div>
+  </div>
+</details>
+<style>
+  /* Dependency tree */
+  .dep-tree { display: flex; flex-direction: column; gap: 16px; }
+  .dep-tree-group { display: flex; flex-direction: column; gap: 4px; }
+  .dep-tree-root {
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-bright);
+    padding: 6px 10px;
+    background: var(--accent-soft, rgba(108,140,255,0.12));
+    border: 1px solid var(--accent, #6c8cff);
+    border-radius: 6px;
+    display: inline-block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dep-tree-edges { display: flex; flex-direction: column; gap: 3px; padding-left: 16px; margin-top: 4px; }
+  .dep-tree-edge { display: flex; align-items: center; gap: 6px; }
+  .dep-tree-connector { font-family: monospace; font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+  .dep-tree-node {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    padding: 3px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    min-width: 0;
+  }
+  .dep-tree-name {
+    font-family: monospace;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dep-tree-node--summary {
+    color: var(--text-muted);
+    font-style: italic;
+    background: transparent;
+    border-color: transparent;
+  }
+  .layer-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+</style>
