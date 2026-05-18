@@ -34,7 +34,7 @@
     a column container. Include the <script> block ONCE at the bottom of the page (not per card).
     Placeholders requiring escapeHtml: {{FILE_PATH}}, {{LAYER}}, {{SHAPE_LABEL}}, {{SHAPE_DESCRIPTION}}.
     Safe placeholders (no escaping needed): {{LAYER_COLOR}}, all numeric placeholders, {{BLAST_RADIUS_SEVERITY}}.
-    {{GRAPH_DATA_JSON}} must be JSON-stringified and HTML-attribute-escaped (replace & with &amp;amp; then " with &amp;quot;).
+    {{GRAPH_DATA_JSON}} must be JSON-stringified and HTML-attribute-escaped (replace & with &amp; then " with &quot;).
     {{CARD_ID}} must be a valid HTML id (alphanumeric + hyphens only — derive from file path).
     {{IMPORTS_HTML}}, {{IMPORTED_BY_HTML}}, {{ENTITIES_HTML}}, {{BLAST_RADIUS_DEPTH1_HTML}} are
     pre-rendered HTML fragments; caller must escapeHtml all text content within them.
@@ -773,12 +773,17 @@
         })(canvas), 100);
       }
     });
-    document.addEventListener("DOMContentLoaded", function () {
+    function observeWraps() {
       var wraps = document.querySelectorAll(".fdc-canvas-wrap");
       for (var i = 0; i < wraps.length; i++) {
         ro.observe(wraps[i]);
       }
-    });
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", observeWraps);
+    } else {
+      observeWraps();
+    }
   }
 })();
 </script>
