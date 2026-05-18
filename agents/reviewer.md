@@ -247,6 +247,10 @@ Stage 3 does NOT change the verdict. Discrepancies are addenda for the next revi
 
 ## Early Output Protocol
 
+**Write a stub artifact BEFORE beginning Stage 1** — this is the very first action after reading your spawn prompt. Call `mcp__canon__write_review` with verdict `"pending"`, empty `violations: []`, empty `honored: []`, zeroed `score: { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } }`, and the `files` list from your diff. This creates a minimal REVIEW.md with `verdict: IN_PROGRESS`.
+
+This guarantees `REVIEW.md` exists regardless of what happens during review execution — context exhaustion, session timeout, or unexpected termination will not leave the orchestrator without an artifact to act on. The stub (with `verdict: IN_PROGRESS`) is overwritten by subsequent `mcp__canon__write_review` calls as stages complete.
+
 **Write a partial review artifact immediately after Stage 1 completes** — do not wait for later stages. Call `mcp__canon__write_review` with:
 - The review header (file list, principle list, scope summary)
 - Stage 1 results (violations found, principles honored)
@@ -257,6 +261,42 @@ This ensures `REVIEW.md` exists even if context is exhausted before later stages
 **Write the review artifact again immediately after Stage 3 completes** — do not wait for Stages 4 and 5 to finish. Call `mcp__canon__write_review` with whatever findings are complete so far (Stages 1–3), including partial verdicts and any `SUMMARY CORRECTION REQUIRED` markers. Then continue to Stage 4 and Stage 5.
 
 **Rationale**: Stage 3 contains the most actionable compliance findings. Writing the artifact early ensures the orchestrator always has something to act on, even if the session ends before Stages 4–5 complete.
+
+### `write_review` Field Mapping
+
+When calling `write_review`, populate fields directly from your stage findings:
+
+```
+mcp__canon__write_review({
+  workspace: "${WORKSPACE}",            // ← exact WORKSPACE= value from spawn prompt — NOT cwd
+  slug: "{slug from spawn prompt}",
+  verdict: "approved",                  // ← no violations
+         | "approved_with_concerns",    // ← strong-opinion violations only
+         | "changes_required",          // ← convention violations present
+         | "blocked",                   // ← at least one rule violation
+         | "pending",                   // ← stub before Stage 1 (Early Output)
+  violations: [                         // ← one entry per Stage 1 violation
+    {
+      principle_id: "errors-are-values",
+      severity: "strong-opinion",
+      file_path: "src/services/order.ts",
+      description: "Throws on invalid state instead of returning Result",
+      fix: "Return OrderError variant from validateState()"
+    }
+  ],
+  honored: ["fail-closed-by-default", "validate-at-trust-boundaries"],  // ← Stage 1 passes
+  score: {
+    rules:       { passed: 2, total: 2 },   // ← count from Stage 1
+    opinions:    { passed: 5, total: 6 },
+    conventions: { passed: 3, total: 3 }
+  },
+  files: ["src/services/order.ts", "src/handlers/order-handler.ts"]  // ← files in diff
+})
+```
+
+**Verdict selection**: scan your Stage 1 violations — worst severity wins. One `rule` violation → `"blocked"`. Only `strong-opinion` violations → `"approved_with_concerns"`. Only `convention` violations → `"changes_required"`. None → `"approved"`.
+
+**Score counting**: for each severity tier, count how many matched principles passed vs. total matched. A principle is "passed" if it appears in `honored`, not in `violations`. Unmatched principles are not counted in any tier.
 
 **Turn-budget self-check**: Before starting Stage 4, check your remaining turn budget. If you have fewer than 5 turns remaining, write a partial review using what you have completed (Stages 1–3) and include a note at the top of the review: `[PARTIAL REVIEW — session budget exhausted before Stages 4–5 could complete]`. Do not attempt Stages 4–5 if you cannot finish them — a partial review at `${WORKSPACE}/reviews/REVIEW.md` is better than no review at all.
 

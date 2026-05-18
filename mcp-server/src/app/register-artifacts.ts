@@ -88,7 +88,13 @@ function registerReviewArtifactTools(): void {
           rules: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
         }),
         slug: z.string(),
-        verdict: z.enum(["approved", "approved_with_concerns", "changes_required", "blocked"]),
+        verdict: z.enum([
+          "approved",
+          "approved_with_concerns",
+          "changes_required",
+          "blocked",
+          "pending",
+        ]),
         violations: z.array(
           z.object({
             description: z.string().optional(),
