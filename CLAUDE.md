@@ -153,7 +153,8 @@ When triage determines trivial (single-file, no architectural questions, clear i
 When triage determines non-trivial (2+ files, cross-layer, design questions, high blast radius):
 
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`. Save `worktree_path` and `workspace`.
-2. **Spawn `canon:architect`** with the build request, requirements summary, and `WORKSPACE=${workspace}`. The architect performs codebase research, produces a design, and generates the runbook. The architect calibrates depth (small vs complex) accordingly.
+1b. **Write PRD**: Fill `templates/prd.md` with the requirements gathered during PM triage. Write the completed PRD to `${WORKSPACE}/plans/${SLUG}/prd.md` (create the `plans/${SLUG}/` directory if needed). This artifact is consumed by both the architect (requirements context) and the renderer (PRD panels in design.html). Save the path as `${PRD_PATH}`.
+2. **Spawn `canon:architect`** with the build request, requirements summary, `PRD_PATH=${PRD_PATH}`, and `WORKSPACE=${workspace}`. The architect performs codebase research, produces a design, and generates the runbook. The architect calibrates depth (small vs complex) accordingly.
 3. **Validate architect output**. Check the design's Requirements Coverage section for completeness and dispositions. If any requirements are `descoped`, `partial`, or missing from the coverage table, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
    Additionally, for each row with disposition `covered`, verify that the row names a specific runbook step or DAG task responsible for delivering it (in the "Runbook step or rationale" column). Rows marked `covered` with no owning step/task are treated as `partial` with rationale "no owning task identified" and surfaced to the user alongside other gaps.
 4. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
@@ -372,7 +373,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
 - After reviewer completes (mandatory): spawn the renderer agent to convert `${WORKSPACE}/reviews/REVIEW.md` to HTML. The renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, calls `get_context` and `show_pr_impact` for structural data, and writes `${WORKSPACE}/artifacts/review.html`. Open the HTML in the browser (`open` command) before presenting the review verdict at the HITL checkpoint. This is not optional — every review step produces rendered HTML.
-- After architect completes (mandatory): spawn the renderer agent to convert the design document (`${WORKSPACE}/plans/${slug}/DESIGN.md` or `INDEX.md`) to HTML. The renderer reads the design doc + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` and writes `${WORKSPACE}/artifacts/design.html`. Open the HTML in the browser before presenting the design for user approval at the HITL checkpoint.
+- After architect completes (mandatory): spawn the renderer agent to convert the design document (`${WORKSPACE}/plans/${slug}/DESIGN.md` or `INDEX.md`) to HTML. Read `templates/renderer-design.md`, fill in all `## Variables` placeholders — `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}` (from `${WORKSPACE}/plans/${SLUG}/task-dag.yaml`, or empty if absent), `${PRD_PATH}` (from `${WORKSPACE}/plans/${SLUG}/prd.md`, or empty if absent), and `${RUNBOOK_PATH}` (from `${WORKSPACE}/plans/${SLUG}/runbook.md`, or empty if absent) — then pass the filled prompt to the renderer. The renderer writes `${WORKSPACE}/artifacts/design.html`. Open the HTML in the browser before presenting the design for user approval at the HITL checkpoint.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself. Agents are required by rule `agent-metrics-before-return` to call this before their terminal status; the orchestrator fallback covers non-compliant agents.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.
@@ -390,13 +391,13 @@ the fenced code block) as the renderer agent's spawn prompt.
 
 **Checkpoint-to-template mapping:**
 
-| Checkpoint | Template | Output |
-|------------|----------|--------|
-| Design document | `templates/renderer-design.md` | `design.html` |
-| Review dashboard | `templates/renderer-review.md` | `review.html` |
+| Checkpoint | Template | Output | Required variables |
+|------------|----------|--------|--------------------|
+| Design document | `templates/renderer-design.md` | `design.html` | `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}`, `${PRD_PATH}`, `${RUNBOOK_PATH}` |
+| Review dashboard | `templates/renderer-review.md` | `review.html` | `${WORKSPACE}`, `${SLUG}` |
 
 **MCP tool requirements per template:**
-- `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML directly)
+- `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML and runbook directly)
 - `renderer-review.md` — requires `show_pr_impact` and `get_context` calls
 
 **Artifact naming convention:**

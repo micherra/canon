@@ -23,6 +23,8 @@ result as the renderer agent's spawn prompt.
   (typically `${WORKSPACE}/plans/${SLUG}/task-dag.yaml`); leave empty if no DAG exists
 - `${PRD_PATH}` — absolute path to the PRD markdown file
   (typically `${WORKSPACE}/plans/${SLUG}/prd.md`); leave empty if no PRD exists
+- `${RUNBOOK_PATH}` — absolute path to the runbook markdown file
+  (typically `${WORKSPACE}/plans/${SLUG}/runbook.md`); leave empty if no runbook exists
 
 ## Prompt
 
@@ -39,6 +41,7 @@ Read these files:
 2. mcp-server/src/ui/snippets/DESIGN-SYSTEM.md — the design system reference
 3. ${DAG_PATH} — the task DAG YAML (if the path is non-empty and the file exists)
 4. ${PRD_PATH} — the PRD markdown (if the path is non-empty and the file exists)
+5. ${RUNBOOK_PATH} — the runbook markdown (if the path is non-empty and the file exists)
 
 If ${DAG_PATH} is empty or the file does not exist, treat this as a single-task build
 (no DAG) and skip all DAG-specific rendering.
@@ -352,8 +355,11 @@ for each assumption item — items may reference code or use emphasis. If absent
 
 ### Runbook overview panel
 
-Use `.section-card` with title "Runbook". Extract runbook steps from the design document's
-`## Runbook` section (if present). Render each step as a numbered row with:
+**Only render if `${RUNBOOK_PATH}` is non-empty and the file exists.**
+
+Use `.section-card` with title "Runbook". Extract runbook steps from the runbook file read in
+Step 1 (`${RUNBOOK_PATH}`). Parse the numbered steps — each step typically has a name, agent
+type, and expected artifacts listed. Render each step as a numbered row with:
 - Step number (large, `var(--accent)` colored)
 - Step name / description
 - Agent type as a small badge
@@ -377,7 +383,7 @@ Use `.section-card` with title "Runbook". Extract runbook steps from the design 
 </div>
 ```
 
-If the design document has no `## Runbook` section, omit the Runbook panel.
+If `${RUNBOOK_PATH}` is empty or the file does not exist, omit the Runbook panel entirely.
 
 ## Step 5 — Security and Markdown Conversion
 
@@ -548,6 +554,8 @@ Return when the file is written. Do not call any MCP tools. Do not modify the wo
 - The DAG path variable may be empty — renderer must handle that gracefully
 - The PRD path variable may be empty — renderer must handle that gracefully; all PRD panels
   are omitted when no PRD file exists
+- The runbook path variable may be empty — renderer must handle that gracefully; the Runbook
+  panel is omitted when `${RUNBOOK_PATH}` is empty or the file does not exist
 - Task plan files are read opportunistically — if absent, skip the brief coverage sub-section
 - The renderer writes exclusively to `${WORKSPACE}/artifacts/` — never to the worktree
 - If `${DESIGN_PATH}` does not exist, check for `INDEX.md` in the same directory before
