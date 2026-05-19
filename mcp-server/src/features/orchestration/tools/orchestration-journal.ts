@@ -250,7 +250,7 @@ function enforceArtifacts(
     return toolError(
       "INVALID_INPUT",
       `Cannot complete step '${stepId}': missing artifacts: ${missing.join(", ")}`,
-      true,
+      false,
       { artifacts_missing: missing },
     );
   }
@@ -308,7 +308,7 @@ type CaptureTask = { logInput: LogStepInput; result: LogStepResult; step: Journa
 function processEntries(
   journal: Journal,
   input: BatchLogStepsInput,
-): { results: LogStepResult[]; captureTasks: CaptureTask[] } {
+): { results: LogStepResult[]; captureTasks: CaptureTask[]; rejection?: ToolResult<null> } {
   const results: LogStepResult[] = [];
   const captureTasks: CaptureTask[] = [];
 
@@ -328,6 +328,16 @@ function processEntries(
     const step = upsertStep(journal, logInput);
     applyTimestamps(step, entry.status);
     applyMetadata(step, logInput);
+
+    if (entry.status === "completed") {
+      const rejection = enforceArtifacts(
+        input.workspace,
+        entry.step_id,
+        journal,
+        entry.artifacts_expected,
+      );
+      if (rejection) return { captureTasks, results, rejection };
+    }
 
     const result: LogStepResult = { status: entry.status, step_id: entry.step_id };
 
@@ -374,7 +384,8 @@ export async function batchLogSteps(
   // 3. Single journal read.
   const journal = await readJournal(input.workspace);
 
-  const { captureTasks, results } = processEntries(journal, input);
+  const { captureTasks, results, rejection } = processEntries(journal, input);
+  if (rejection) return rejection;
 
   // 5. Single journal write (before transcript capture — captures are best-effort).
   await writeJournal(input.workspace, journal);
