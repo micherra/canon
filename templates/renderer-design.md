@@ -187,9 +187,10 @@ Omit the effort/value row if neither value is present in the PRD.
 
 **Only render if PRD data exists.**
 
-Use `.section-card` with title "Problem Statement". Render the section body as plain text
-paragraphs inside `.section-card-body`. If an `**Evidence:**` sub-field is present, render
-it as a separate paragraph with `color: var(--text-muted)`. Escape all content through `escapeHtml`.
+Use `.section-card` with title "Problem Statement". Render the section body using
+`markdownToHtml()` inside `.section-card-body` — the body may contain bold, italic, lists,
+or inline code. If an `**Evidence:**` sub-field is present, render it as a separate block
+with `color: var(--text-muted)`, also processed through `markdownToHtml()`.
 
 ### PRD: Acceptance Criteria panel
 
@@ -219,12 +220,15 @@ If no table rows exist, render an `.empty-note`: "No requirement coverage map de
 Use `.section-card` with title "Scope & Constraints". Render the in-scope items as a `<ul>` list
 under a sub-label, out-of-scope items under a second sub-label, and constraints under a third.
 Use `font-size: 11px; font-weight: 600; color: var(--text-muted)` for sub-labels. Omit
-sub-sections that have no items. Escape all content.
+sub-sections that have no items. Use `markdownToHtml()` for item text (items may contain
+inline code or bold emphasis); use `escapeHtml()` for sub-label text only.
 
 ### Architecture overview panel
 
-Use `.section-card` with title "Architecture Overview". Render the section body as paragraphs
-inside `.section-card-body`. Escape all content. Render any sub-headings as `<h3>` tags.
+Use `.section-card` with title "Architecture Overview". Render the section body using
+`markdownToHtml()` inside `.section-card-body` — this section commonly contains code blocks,
+inline code, bold terms, and sub-headings. `markdownToHtml()` handles heading conversion to
+`<h3>`/`<h4>` tags automatically.
 
 ### Task DAG visualization panel
 
@@ -308,13 +312,14 @@ extract the `### Brief Coverage` table rows and render them with `.disposition` 
 
 Use `.section-card` with title "Design Decisions". Render as a list of decision entries.
 Each entry shows:
-- Decision title (bold)
-- Choice made
-- Rationale (muted text)
-- Tradeoffs / alternatives rejected (muted, smaller)
+- Decision title (bold) — use `escapeHtml()` (atomic value)
+- Choice made — use `escapeHtml()` (short phrase)
+- Rationale (muted text) — use `markdownToHtml()` (may contain inline code, lists, emphasis)
+- Tradeoffs / alternatives rejected (muted, smaller) — use `markdownToHtml()`
 
-If decisions are in a table, render using `.requirement-table`. If in sub-sections,
-render each `### Decision: …` as a card within the panel.
+If decisions are in a table, render using `.requirement-table` with `escapeHtml()` on cell
+values. If in sub-sections, render each `### Decision: …` as a card within the panel,
+applying `markdownToHtml()` to the body text.
 
 ### PRD: Alternatives panel (collapsible)
 
@@ -322,24 +327,28 @@ render each `### Decision: …` as a card within the panel.
 
 Use `<details class="collapsible-section">` from Section C. Title: "Alternatives Considered".
 Start collapsed (`<details>` without `open`). Render each `### Alternative:` sub-section as
-a titled block with its description and "Why not chosen" rationale as paragraphs. Escape all content.
+a titled block (title with `escapeHtml()`) with its description and "Why not chosen" rationale
+rendered using `markdownToHtml()` — these bodies may contain lists, code, and emphasis.
 
 ### Tradeoffs panel (collapsible)
 
 Use `<details class="collapsible-section">`. Title: "Tradeoffs & Alternatives Considered".
-Start collapsed. Render tradeoff content from the design document as paragraphs or lists.
-If the design document has no tradeoffs section, omit this panel.
+Start collapsed. Render tradeoff content from the design document using `markdownToHtml()` —
+this section typically contains lists, inline code, and emphasis. If the design document has
+no tradeoffs section, omit this panel.
 
 ### PRD: Open Questions panel
 
 **Only render if PRD data exists and the Open Questions list is non-empty.**
 
 Use `.section-card` with title "Open Questions". Render as a numbered `<ol>` list, one
-question per `<li>`. Escape all content.
+question per `<li>`. Use `markdownToHtml()` for each question — questions may reference
+inline code or use emphasis.
 
 ### Assumptions panel
 
-Use `.section-card` with title "Assumptions". Render as a `<ul>` list. If absent, omit.
+Use `.section-card` with title "Assumptions". Render as a `<ul>` list. Use `markdownToHtml()`
+for each assumption item — items may reference code or use emphasis. If absent, omit.
 
 ### Runbook overview panel
 
@@ -370,12 +379,15 @@ Use `.section-card` with title "Runbook". Extract runbook steps from the design 
 
 If the design document has no `## Runbook` section, omit the Runbook panel.
 
-## Step 5 — Security
+## Step 5 — Security and Markdown Conversion
 
-Apply `escapeHtml` to ALL content extracted from source files before embedding in HTML.
-This includes: task IDs, file paths, decision titles, rationale text, assumption text,
-section body content, **criterion text, requirement text, scope items, alternative
-descriptions, question text, outcome text**.
+Use the two helper functions below to embed content safely. The key rule:
+
+- **Prose / body content** (sections, rationale, descriptions, assumptions) → `markdownToHtml()`
+- **Atomic values** (slugs, task IDs, file paths, badge text, table cell values, step names, agent types) → `escapeHtml()`
+
+`markdownToHtml` calls `escapeHtml` on text runs internally (escape-first, wrap-second), so
+do NOT pre-escape text before passing it to `markdownToHtml` — that would double-escape.
 
 Color constants, CSS property values, and numeric values do not need escaping.
 
@@ -387,6 +399,135 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * Convert common markdown patterns to HTML.
+ * Calls escapeHtml on text content before wrapping in tags (escape-first, wrap-second).
+ * Do NOT pre-escape input — this function handles escaping internally.
+ */
+function markdownToHtml(md) {
+  if (!md) return "";
+  const lines = String(md).split("\n");
+  const out = [];
+  let inCodeFence = false;
+  let codeFenceLang = "";
+  let codeLines = [];
+  let inUl = false;
+  let inOl = false;
+
+  function closeList() {
+    if (inUl) { out.push("</ul>"); inUl = false; }
+    if (inOl) { out.push("</ol>"); inOl = false; }
+  }
+
+  function inlineFormat(text) {
+    // Escape first, then apply inline patterns
+    let s = escapeHtml(text);
+    // Code spans — backticks are not HTML special chars so they survive escapeHtml unchanged
+    s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+    // Bold (**text** or __text__)
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+    // Italic (*text* or _text_) — must come after bold
+    s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    s = s.replace(/_([^_]+)_/g, "<em>$1</em>");
+    return s;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Code fence open/close
+    if (/^```/.test(line)) {
+      if (!inCodeFence) {
+        closeList();
+        inCodeFence = true;
+        codeFenceLang = line.slice(3).trim();
+        codeLines = [];
+      } else {
+        inCodeFence = false;
+        const langAttr = codeFenceLang ? ` class="language-${escapeHtml(codeFenceLang)}"` : "";
+        out.push(`<pre><code${langAttr}>${codeLines.map(escapeHtml).join("\n")}</code></pre>`);
+        codeLines = [];
+        codeFenceLang = "";
+      }
+      continue;
+    }
+    if (inCodeFence) { codeLines.push(line); continue; }
+
+    // Headings
+    const h4 = line.match(/^#### (.+)/);
+    if (h4) { closeList(); out.push(`<h4>${inlineFormat(h4[1])}</h4>`); continue; }
+    const h3 = line.match(/^### (.+)/);
+    if (h3) { closeList(); out.push(`<h3>${inlineFormat(h3[1])}</h3>`); continue; }
+    const h2 = line.match(/^## (.+)/);
+    if (h2) { closeList(); out.push(`<h2>${inlineFormat(h2[1])}</h2>`); continue; }
+    const h1 = line.match(/^# (.+)/);
+    if (h1) { closeList(); out.push(`<h1>${inlineFormat(h1[1])}</h1>`); continue; }
+
+    // Unordered list items
+    const ul = line.match(/^[-*] (.+)/);
+    if (ul) {
+      if (inOl) { out.push("</ol>"); inOl = false; }
+      if (!inUl) { out.push("<ul>"); inUl = true; }
+      out.push(`<li>${inlineFormat(ul[1])}</li>`);
+      continue;
+    }
+
+    // Ordered list items
+    const ol = line.match(/^\d+\. (.+)/);
+    if (ol) {
+      if (inUl) { out.push("</ul>"); inUl = false; }
+      if (!inOl) { out.push("<ol>"); inOl = true; }
+      out.push(`<li>${inlineFormat(ol[1])}</li>`);
+      continue;
+    }
+
+    // Blank line — close lists and paragraph boundary
+    if (line.trim() === "") {
+      closeList();
+      out.push(""); // paragraph break marker
+      continue;
+    }
+
+    // Regular paragraph line — close any open list first
+    closeList();
+    out.push(inlineFormat(line));
+  }
+
+  // Close any unclosed list
+  closeList();
+
+  // Wrap consecutive non-empty lines into <p> blocks
+  const result = [];
+  let paraLines = [];
+  for (const token of out) {
+    if (token === "") {
+      if (paraLines.length) {
+        // If it's already a block element, emit as-is; otherwise wrap in <p>
+        const joined = paraLines.join(" ");
+        if (/^<(h[1-6]|ul|ol|pre|li)/.test(joined)) {
+          result.push(joined);
+        } else {
+          result.push(`<p>${joined}</p>`);
+        }
+        paraLines = [];
+      }
+    } else {
+      paraLines.push(token);
+    }
+  }
+  if (paraLines.length) {
+    const joined = paraLines.join(" ");
+    if (/^<(h[1-6]|ul|ol|pre|li)/.test(joined)) {
+      result.push(joined);
+    } else {
+      result.push(`<p>${joined}</p>`);
+    }
+  }
+
+  return result.join("\n");
 }
 ```
 
