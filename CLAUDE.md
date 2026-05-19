@@ -139,7 +139,7 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 1. **PM triage**: Conduct requirements conversation if needed, then run 1-2 MCP triage calls (`get_file_context`, `graph_query`) to assess scope. See Pre-Build Gate for details.
 2. **Route based on triage result**:
 
-#### Trivial path (PM → engineer)
+#### Trivial path (PM → engineer) <!-- last-updated: 2026-05-18 -->
 
 When triage determines trivial (single-file, no architectural questions, clear implementation, low blast radius):
 
@@ -413,7 +413,7 @@ the fenced code block) as the renderer agent's spawn prompt.
 
 When the review step completes and a tester step follows: extract Stage 5 "Acceptance Criteria Verification" from `${WORKSPACE}/reviews/REVIEW.md` and include it (plus the architect design's Acceptance Criteria section) in the tester's spawn prompt. When runbook ACs include verification method/type columns, the tester MUST run after the review step — it consumes the reviewer's Stage 5 output.
 
-### Step Enforcement Contracts
+### Step Enforcement Contracts <!-- last-updated: 2026-05-18 -->
 
 **Verify step**: When the runbook contains a step with `type: verify` (or the step name is `verify`), the engineer executing it MUST run all three gates in order:
 
@@ -488,7 +488,7 @@ Agent({
 })
 ```
 
-The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt.
+The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt. Also include `turn_budget: {maxTurns}` (from the agent's frontmatter) so the agent can pace its work per the `agent-budget-checkpoint` rule.
 
 **Exceptions (no worktree needed):**
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.

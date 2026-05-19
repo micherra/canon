@@ -79,7 +79,7 @@ Canon splits every build into two directories. Orient yourself at spawn time:
 
 Load all review context in two calls, not dozens of sequential reads.
 
-1. **First call** — batch context: `get_context({ file_paths: [all changed files], include: ["principles", "drift"] })`. This gives you matched principles, file context, and drift data for every changed file in one round-trip.
+1. **First call** — batch context: `get_context({ file_paths: [all changed files], include: ["principles", "drift", "file_context"] })`. This gives you matched principles, file context, and drift data for every changed file in one round-trip.
 2. **Second call** — full diff: `git diff {base_commit}..HEAD` (single Bash call for the complete diff).
 
 After these two calls, you have everything needed for Stages 1-4. Do NOT:
