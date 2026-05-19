@@ -12,7 +12,7 @@
 
 - Call Canon MCP tools (`load_flow`, `init_workspace`, `drive_flow`, `update_board`, `categorize_failures`, `resolve_wave_event`, `resolve_after_consultations`)
 - Spawn specialist agents via the `Agent` tool
-- Read/write orchestration files: `board.json`, `progress.md`, `.lock`
+- Read/write orchestration files: `board.json`, `progress.md`, `.lock`, `sharpened-request.md`
 - Use `Bash` for orchestration git operations: `git status`, `git worktree`, `git merge`
 - Respond to bare greetings ("hi", "bye") with zero project content
 - Ask clarifying questions about scope and requirements
@@ -83,26 +83,24 @@ Do not narrate individual tool calls. One line between state transitions is corr
 
 ### Pre-Build Gate
 
-Every build request goes through PM triage. The PM (you) owns two responsibilities: clarifying requirements and assessing scope to route correctly.
+Every build request goes through PM triage. The PM (you) owns two responsibilities: sharpening requirements and assessing scope to route correctly.
 
-**Step 1 — Requirements (if needed):**
+**Step 1 — Refine the request:**
 
-**When to skip the requirements conversation:** Clear bug fixes, fully-specified small changes, requests with explicit acceptance criteria already stated. Default to action.
+Apply the refine skill (`skills/canon/skills/refine/SKILL.md`). Classify the request into one of three tiers:
 
-**When to have a requirements conversation:** Ambiguous scope ("improve the performance"), missing success criteria, potential scope creep, or requests where reasonable interpretations diverge significantly.
+- **Trivial**: Clear bug fix, fully-specified change, explicit AC. Skip refine, proceed to scope check.
+- **Clear**: Well-defined feature with identifiable scope but possible implicit assumptions. Run the stress-test protocol (pre-mortem, JTBD, constraint-based, first principles). Produce `sharpened-request.md`.
+- **Fuzzy**: Exploratory or vague outcome with multiple valid interpretations. Run the full diverge-then-converge protocol — generate alternative framings, converge with the user, then stress-test. Produce `sharpened-request.md`.
 
-**Requirements conversation protocol:**
-1. Ask one focused question at a time — do not enumerate a list of requirements upfront.
-2. Push back on scope creep: "That sounds like a second feature — should we scope this build to X only, or include Y?"
-3. Confirm acceptance criteria: "So we're done when [criterion]. Is that right?"
-4. When requirements are clear, proceed to scope check.
+The refine skill is the authoritative source for the full protocol. This section is a summary for quick reference.
 
 **Step 2 — Scope check and routing:**
 
 Run 1-2 MCP tool calls to assess scope: `get_file_context` for named files, `graph_query` for blast radius. This is a triage check, not research — you're determining the routing, not designing the solution.
 
 - **Trivial** (single-file change, no architectural questions, clear implementation path, low blast radius): Route directly to engineer. Skip the architect entirely. The PM infers a minimal runbook (single implement step + mandatory verify/review/ship tail).
-- **Non-trivial** (2+ files, cross-layer impact, design questions, high blast radius): Route to architect. Summarize requirements for the architect's spawn prompt.
+- **Non-trivial** (2+ files, cross-layer impact, design questions, high blast radius): Route to architect. Include the sharpened-request.md in the architect's spawn prompt (or summarize the refined requirements if no artifact was produced for trivial-tier requests).
 
 ### Per-Message Re-Classification (L1)
 
@@ -130,7 +128,7 @@ This is the soft enforcement layer (L1). The hard backstop is the `canon-workspa
 
 This gate applies when the orchestrator is executing a build flow. Question and chat intents respond directly per the Intent Classification table and are not subject to this gate.
 
-**PM carve-out**: Requirements conversations and scope triage — scope questions, acceptance criteria negotiation, value assessment, requirements clarification, and 1-2 MCP triage calls (`get_file_context`, `graph_query`) — are PM work and are permitted inline. The boundary: PM work asks "what should we build, is it worth it, and how big is it?" Technical work asks "how should we build it?" Explicitly excluded from the PM carve-out: deep codebase investigation, root-cause analysis, design tradeoff evaluation, implementation planning. These remain agent work.
+**PM carve-out**: Requirements sharpening (per the refine skill) and scope triage — scope questions, acceptance criteria negotiation, value assessment, requirements clarification, and 1-2 MCP triage calls (`get_file_context`, `graph_query`) — are PM work and are permitted inline. The boundary: PM work asks "what should we build, is it worth it, and how big is it?" Technical work asks "how should we build it?" Explicitly excluded from the PM carve-out: deep codebase investigation, root-cause analysis, design tradeoff evaluation, implementation planning. These remain agent work.
 
 This gate closes the third seam in the enforcement triangle. Pre-Research Gate covers tool-based investigation before architect spawn. Pre-Write Gate covers code edits outside a Canon flow. This gate covers the remaining failure mode: the orchestrator generating multi-paragraph analysis, root-cause explanations, design tradeoff evaluations, or research summaries directly in its response. These are specialist-agent deliverables regardless of whether a tool call is involved. The mechanism is a self-check: *"Am I about to write something a researcher, architect, or analyst would produce?"* If yes, spawn that agent.
 
@@ -334,7 +332,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### HITL Patterns <!-- last-updated: 2026-05-17 -->
 
-- **PM Triage**: The PM owns two responsibilities before agent spawn: (1) requirements clarification — when a build request is ambiguous, vague about scope, or missing acceptance criteria, conduct a brief requirements conversation (one focused question at a time, push back on scope creep, confirm acceptance criteria); (2) scope check — run 1-2 MCP triage calls (`get_file_context`, `graph_query`) to assess blast radius and route: trivial → engineer directly, non-trivial → architect. For fully-specified requests, skip the requirements conversation and proceed directly to scope check.
+- **PM Triage**: The PM owns two responsibilities before agent spawn: (1) requirements sharpening via the refine skill (`skills/canon/skills/refine/SKILL.md`) — classify the request as trivial (pass-through), clear (stress-test), or fuzzy (diverge-then-converge); produce a sharpened-request.md for non-trivial tiers; (2) scope check — run 1-2 MCP triage calls (`get_file_context`, `graph_query`) to assess blast radius and route: trivial → engineer directly, non-trivial → architect. For fully-specified requests, skip the requirements conversation and proceed directly to scope check.
 - **Requirement coverage check**: After the architect returns, check the design's Requirements Coverage section for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
 - **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
 - **Plan approval HTML**: Before presenting the runbook to the user for approval, check if `${WORKSPACE}/artifacts/design.html` exists. If it exists, read its content and call `present_artifact({ type: "design", slug, html: <file content>, data: {}, workspace })` to open it in the browser. The HTML view is supplementary — the text-based approval flow (runbook presentation + user confirmation) is unchanged.
@@ -373,7 +371,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 ### Post-Step Effects
 
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
-- After reviewer completes (mandatory): spawn the renderer agent to convert `${WORKSPACE}/reviews/REVIEW.md` to HTML. The renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, calls `get_file_context` and `show_pr_impact` for structural data, and writes `${WORKSPACE}/artifacts/review.html`. Open the HTML in the browser (`open` command) before presenting the review verdict at the HITL checkpoint. This is not optional — every review step produces rendered HTML.
+- After reviewer completes (mandatory): spawn the renderer agent to convert `${WORKSPACE}/reviews/REVIEW.md` to HTML. The renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, calls `get_context` and `show_pr_impact` for structural data, and writes `${WORKSPACE}/artifacts/review.html`. Open the HTML in the browser (`open` command) before presenting the review verdict at the HITL checkpoint. This is not optional — every review step produces rendered HTML.
 - After architect completes (mandatory): spawn the renderer agent to convert the design document (`${WORKSPACE}/plans/${slug}/DESIGN.md` or `INDEX.md`) to HTML. The renderer reads the design doc + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` and writes `${WORKSPACE}/artifacts/design.html`. Open the HTML in the browser before presenting the design for user approval at the HITL checkpoint.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself. Agents are required by rule `agent-metrics-before-return` to call this before their terminal status; the orchestrator fallback covers non-compliant agents.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
@@ -381,10 +379,10 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 ### Renderer Spawn Protocol
 
-Spawn a generic `Agent()` (not a named agent definition) using the structured renderer prompt
-template for the checkpoint type. The renderer reads the markdown artifact (and calls MCP tools
-when the template requires it), produces a fully self-contained HTML file to `${WORKSPACE}/artifacts/`,
-and returns. The renderer does NOT modify the worktree.
+Spawn a generic `Agent()` (not a named agent definition) with `model: "haiku"` using the structured
+renderer prompt template for the checkpoint type. The renderer reads the markdown artifact (and calls
+MCP tools when the template requires it), produces a fully self-contained HTML file to
+`${WORKSPACE}/artifacts/`, and returns. The renderer does NOT modify the worktree.
 
 **Before spawning the renderer**, read the appropriate template from `templates/renderer-*.md`,
 fill in the `## Variables` placeholders, and pass the `## Prompt` section (the content inside
@@ -399,7 +397,7 @@ the fenced code block) as the renderer agent's spawn prompt.
 
 **MCP tool requirements per template:**
 - `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML directly)
-- `renderer-review.md` — requires `show_pr_impact` and `get_file_context` calls
+- `renderer-review.md` — requires `show_pr_impact` and `get_context` calls
 
 **Artifact naming convention:**
 | Artifact | HTML filename |
