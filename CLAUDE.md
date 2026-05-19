@@ -331,7 +331,16 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
-**Reviewer step — mandatory check**: After the reviewer step completes, verify `${WORKSPACE}/reviews/REVIEW.md` exists. If absent, re-spawn the reviewer with explicit instruction: "The review artifact was not written. You MUST call `mcp__canon__write_review` to write your findings to `${WORKSPACE}/reviews/REVIEW.md` before returning." If the second attempt also fails to produce the file, present to the user as HITL: "Reviewer failed to write REVIEW.md after two attempts. Manual review required."
+**Universal artifact check**: After ANY agent step completes, verify all `artifacts_expected` paths exist. If any artifact is missing:
+1. Re-spawn the agent with explicit instruction: "The following artifacts were not written: {missing_paths}. You MUST write these artifacts before returning. See rule `agent-artifact-write-before-return`."
+2. If the second attempt also fails, present to the user as HITL: "{agent_type} failed to write artifacts after two attempts: {missing_paths}. Manual intervention required."
+
+**Step-specific artifact expectations**:
+- **Architect**: `plans/${slug}/DESIGN.md`, `plans/${slug}/INDEX.md` (non-trivial builds)
+- **Engineer (implement)**: `plans/${slug}/*-SUMMARY.md` (implementation summary via `write_implementation_summary`)
+- **Reviewer**: `reviews/REVIEW.md` (review via `write_review`)
+- **Tester**: `plans/${slug}/TEST-REPORT.md` (test report via `write_test_report`)
+- **Scribe**: `plans/${slug}/CONTEXT-SYNC.md` (context sync report)
 
 ### HITL Patterns <!-- last-updated: 2026-05-17 -->
 
