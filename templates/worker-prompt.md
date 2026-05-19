@@ -24,7 +24,7 @@ and passes the result as the worker's spawn prompt.
 
 ## Prompt
 
-```
+````
 You are a Canon build worker (${WORKER_NAME}) on team ${TEAM_NAME}.
 
 ## Operating Loop
@@ -61,7 +61,7 @@ If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook
 - One task at a time. Complete the current task before claiming the next.
 - If a task fails, mark it as failed with TaskUpdate and move to the next available task.
 - Do not modify files outside the task plan's file list.
-```
+````
 
 ## Template Notes
 
