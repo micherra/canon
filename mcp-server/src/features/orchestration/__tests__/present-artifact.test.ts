@@ -35,8 +35,8 @@ describe("presentArtifact", () => {
     vi.mocked(isHttpServerRunning).mockReturnValue(true);
   });
 
-  describe("html bypass path (primary use case)", () => {
-    it("serves inline html directly without VIEW_MAP lookup", async () => {
+  describe("html path", () => {
+    it("serves inline html and registers artifact", async () => {
       const html = "<html><body>Design</body></html>";
 
       const result = await presentArtifact({
