@@ -414,7 +414,7 @@ Also add CSS for:
 .narrative-content h3 { font-size: 14px; font-weight: 600; margin: 16px 0 8px; color: var(--text); }
 .narrative-content h4 { font-size: 13px; font-weight: 600; margin: 12px 0 6px; color: var(--text-secondary); }
 .narrative-content p { margin: 8px 0; font-size: 12px; line-height: 1.6; color: var(--text); }
-.narrative-content ul { margin: 8px 0; padding-left: 20px; }
+.narrative-content ul, .narrative-content ol { margin: 8px 0; padding-left: 20px; }
 .narrative-content li { font-size: 12px; line-height: 1.6; color: var(--text); margin: 4px 0; }
 .narrative-content code { background: var(--bg-secondary); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
 ```

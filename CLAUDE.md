@@ -162,7 +162,7 @@ When triage determines non-trivial (2+ files, cross-layer, design questions, hig
 5. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
 6. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
 7. **Pre-spawn worktree verification**: Before spawning any code-writing agent (engineer, tester, scribe, shipper), run `test -d "${worktree_path}"` via Bash. If the worktree is missing, do NOT spawn the agent — report BLOCKED to the user: "Worktree at {path} no longer exists. It may have been cleaned up by a concurrent process. Re-run `init_workspace` to recreate, or investigate."
-8. Execute steps in order, spawning the agent specified by each step. Pass `turn_budget: {maxTurns}` in every agent's spawn prompt (all agents scoped by the budget-checkpoint rule). For code-writing agents (engineer, scribe, tester, shipper), also pass `worktree_path` and use `isolation: "none"`. See the isolation model section above.
+8. Execute steps in order, spawning the agent specified by each step. Pass `turn_budget: {maxTurns}` in the spawn prompt of all agents scoped by the budget-checkpoint rule: engineer, reviewer, architect, scribe, shipper, and learner. For code-writing agents (engineer, scribe, tester, shipper), also pass `worktree_path` and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -417,15 +417,13 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 **Verify step**: When the runbook contains a step with `type: verify` (or the step name is `verify`), the engineer executing it MUST run all three gates in order:
 
-1. `npm run build` — TypeScript compilation. Any error is a BLOCKING failure.
-2. `npm run lint` — Biome/ESLint check. Any error is a BLOCKING failure.
-3. `npm test` — Full test suite. Any failure is a BLOCKING failure.
+1. `npm run build` — TypeScript compilation.
+2. `npm run lint` — Biome/ESLint check.
+3. `npm test` — Full test suite.
 
-ALL three must pass for the verify step to succeed. If any gate fails, the engineer reports BLOCKED with the exact failure output and does NOT proceed past the verify step. The orchestrator presents the failure to the user via HITL (`on_failure` handler). The engineer reports DONE only when all three gates exit 0.
+ALL three must pass for the verify step to succeed. When a gate fails, the engineer MAY apply minor inline fixes (lint warnings, missing lint excludes, small type errors) and re-run the gate. This fix-and-rerun loop is expected and reduces round-trips. If fixing would require architectural changes, substantial new code, or modifications to files outside the verify step's scope, the engineer reports BLOCKED with the exact failure output and does NOT proceed. The orchestrator presents BLOCKED failures to the user via HITL (`on_failure` handler). The engineer reports DONE only when all three gates exit 0.
 
 **Verify skip for documentation-only diffs**: For builds where `git diff {base_commit} --name-only` contains only `.md` and `.txt` files, the verify step MAY be skipped with `skip_reason: "documentation-only diff, verify produces zero signal"`. The orchestrator checks the diff before spawning the verify engineer. If any non-documentation file is present, the full verify step runs.
-
-**Verify step inline fixes**: Verify step agents may apply minor fixes (lint warnings, missing lint excludes, small type errors) inline rather than reporting BLOCKED. This is expected and reduces round-trips. Report BLOCKED only when fixing would require architectural changes, substantial new code, or modifications to files outside the verify step's scope.
 
 ### Completion Checklist
 
