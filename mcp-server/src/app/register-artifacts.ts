@@ -122,7 +122,7 @@ function registerReviewArtifactTools(): void {
     "write_implementation_summary",
     {
       description:
-        "Write a structured implementation summary. Accepts typed file changes, decisions applied, deviations, and tests. Produces IMPLEMENTATION-SUMMARY.md + .meta.json sidecar.",
+        "Write a structured implementation summary. Accepts typed file changes, decisions applied, deviations, and tests. Produces {task_id}-SUMMARY.md + .meta.json sidecar.",
       inputSchema: {
         decisions_applied: z.array(z.string()).optional(),
         deviations: z.array(z.object({ decision_id: z.string(), reason: z.string() })).optional(),

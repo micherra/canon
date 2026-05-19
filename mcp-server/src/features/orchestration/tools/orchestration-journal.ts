@@ -336,7 +336,7 @@ function processEntries(
         journal,
         entry.artifacts_expected,
       );
-      if (rejection) return { captureTasks, results, rejection };
+      if (rejection) return { captureTasks, rejection, results };
     }
 
     const result: LogStepResult = { status: entry.status, step_id: entry.step_id };
