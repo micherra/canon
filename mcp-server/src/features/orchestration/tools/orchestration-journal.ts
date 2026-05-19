@@ -250,7 +250,7 @@ function enforceArtifacts(
     return toolError(
       "INVALID_INPUT",
       `Cannot complete step '${stepId}': missing artifacts: ${missing.join(", ")}`,
-      false,
+      true,
       { artifacts_missing: missing },
     );
   }
@@ -325,10 +325,6 @@ function processEntries(
       workspace: input.workspace,
     };
 
-    const step = upsertStep(journal, logInput);
-    applyTimestamps(step, entry.status);
-    applyMetadata(step, logInput);
-
     if (entry.status === "completed") {
       const rejection = enforceArtifacts(
         input.workspace,
@@ -338,6 +334,10 @@ function processEntries(
       );
       if (rejection) return { captureTasks, rejection, results };
     }
+
+    const step = upsertStep(journal, logInput);
+    applyTimestamps(step, entry.status);
+    applyMetadata(step, logInput);
 
     const result: LogStepResult = { status: entry.status, step_id: entry.step_id };
 

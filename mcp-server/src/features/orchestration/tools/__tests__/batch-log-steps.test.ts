@@ -103,7 +103,7 @@ describe("batchLogSteps", () => {
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
       expect(result.error_code).toBe("INVALID_INPUT");
-      expect(result.recoverable).toBe(false);
+      expect(result.recoverable).toBe(true);
       expect(result.message).toContain("plans/DESIGN.md");
       expect(result.context?.artifacts_missing).toEqual(["plans/DESIGN.md"]);
     }
