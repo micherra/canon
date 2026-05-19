@@ -1,5 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -15,18 +15,18 @@ function makeOutput(overrides: Partial<FileContextOutput> = {}): FileContextOutp
     exports: ["foo"],
     file_path: "src/api/handler.ts",
     imported_by: [],
-    imports: [],
-    layer: "api",
-    last_verdict: null,
-    violation_count: 0,
-    violations: [],
-    imports_by_layer: {},
     imported_by_layer: {},
+    imports: [],
+    imports_by_layer: {},
+    last_verdict: null,
+    layer: "api",
     layer_stack: ["api", "shared"],
     project_max_impact: 0,
     role: "internal",
     shape: { description: "Moderate connectivity, typical file.", label: "Internal" },
     summary: null,
+    violation_count: 0,
+    violations: [],
     ...overrides,
   };
 }
@@ -41,8 +41,8 @@ describe("summarizeFileContext", () => {
   it("includes import/export counts", () => {
     const output = makeOutput({
       exports: ["a", "b"],
-      imports: ["x"],
       imported_by: ["y", "z"],
+      imports: ["x"],
     });
     const summary = summarizeFileContext(output);
     expect(summary).toContain("Imports: 1");
@@ -66,13 +66,13 @@ describe("summarizeFileContext", () => {
   it("marks hub files", () => {
     const output = makeOutput({
       graph_metrics: {
-        in_degree: 10,
-        out_degree: 2,
-        is_hub: true,
-        in_cycle: false,
         cycle_peers: [],
-        layer_violation_count: 0,
         impact_score: 0.9,
+        in_cycle: false,
+        in_degree: 10,
+        is_hub: true,
+        layer_violation_count: 0,
+        out_degree: 2,
       },
     });
     const summary = summarizeFileContext(output);
