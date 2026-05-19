@@ -156,6 +156,7 @@ When triage determines non-trivial (2+ files, cross-layer, design questions, hig
 
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`. Save `worktree_path` and `workspace`.
 2. **Write PRD**: Fill `templates/prd.md` with the requirements gathered during PM triage. Write the completed PRD to `${WORKSPACE}/plans/${SLUG}/prd.md` (create the `plans/${SLUG}/` directory if needed). This artifact is consumed by both the architect (requirements context) and the renderer (PRD panels in design.html). Save the path as `${PRD_PATH}`.
+   **Verify**: Before spawning the architect (Step 3), confirm `${WORKSPACE}/plans/${SLUG}/prd.md` exists. If missing, you skipped this step — go back and write it.
 3. **Spawn `canon:architect`** with the build request, requirements summary, `PRD_PATH=${PRD_PATH}`, and `WORKSPACE=${workspace}`. The architect performs codebase research, produces a design, and generates the runbook. The architect calibrates depth (small vs complex) accordingly.
 4. **Validate architect output**. Check the design's Requirements Coverage section for completeness and dispositions. If any requirements are `descoped`, `partial`, or missing from the coverage table, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
    Additionally, for each row with disposition `covered`, verify that the row names a specific runbook step or DAG task responsible for delivering it (in the "Runbook step or rationale" column). Rows marked `covered` with no owning step/task are treated as `partial` with rationale "no owning task identified" and surfaced to the user alongside other gaps.
@@ -427,7 +428,7 @@ ALL three must pass for the verify step to succeed. When a gate fails, the engin
 
 ### Completion Checklist
 
-1. Call `finalize_workspace({ workspace })` — if steps or artifacts missing, resolve before proceeding.
+1. Call `finalize_workspace({ workspace })` — if steps or artifacts missing, resolve before proceeding. For non-trivial builds with a design step, verify `prd.md` exists in `${WORKSPACE}/plans/${SLUG}/`.
 2. Run context-sync: spawn the scribe agent. The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md on the build branch. Context-sync runs before ship so that doc updates are committed to the build branch and included in the PR — the scribe needs the worktree available to commit doc updates before the PR is created.
 3. Ship the build:
    - **Default**: spawn the shipper agent. The shipper pushes the worktree branch to origin and creates a PR to main. The shipper must NOT run `git worktree remove` — `finalize_workspace` needs the worktree for artifact verification. The shipper does NOT delete the build branch — it is needed for the PR.
