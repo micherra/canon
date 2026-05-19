@@ -35,6 +35,7 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `renderer-planning-brief.md` | orchestrator | Renderer spawn prompt — converts planning brief markdown to `planning-brief.html`; pure markdown, no MCP calls |
 | `renderer-design.md` | orchestrator | Renderer spawn prompt — converts design document + task DAG YAML to `design.html`; pure markdown, no MCP calls |
 | `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_context`) |
+| `sharpened-request.md` | pm-orchestrator | PM-to-architect hand-off artifact with Problem, Direction, Scope Boundaries, Acceptance Criteria, and Not Doing sections |
 
 ## Conventions
 <!-- last-updated: 2026-03-22 -->

@@ -10,7 +10,6 @@ maxTurns: 30
 permissionMode: acceptEdits
 memory: project
 skills:
-  - canon:plan
   - canon:synthesize
 rules:
   - agent-design-before-code
