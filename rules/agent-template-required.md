@@ -28,6 +28,7 @@ Each agent's `templates:` frontmatter lists the specific templates it produces. 
 |-------|-----------|
 | architect | design-document, task-plan, design-decision, session-context, runbook |
 | engineer | implementation-log |
+| pm-orchestrator | sharpened-request |
 | reviewer | review-checklist |
 | scribe | claudemd-template, context-sync-report |
 | security | security-assessment |
