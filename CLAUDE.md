@@ -162,7 +162,7 @@ When triage determines non-trivial (2+ files, cross-layer, design questions, hig
 5. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
 6. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
 7. **Pre-spawn worktree verification**: Before spawning any code-writing agent (engineer, tester, scribe, shipper), run `test -d "${worktree_path}"` via Bash. If the worktree is missing, do NOT spawn the agent — report BLOCKED to the user: "Worktree at {path} no longer exists. It may have been cleaned up by a concurrent process. Re-run `init_workspace` to recreate, or investigate."
-8. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
+8. Execute steps in order, spawning the agent specified by each step. Pass `turn_budget: {maxTurns}` in every agent's spawn prompt (all agents scoped by the budget-checkpoint rule). For code-writing agents (engineer, scribe, tester, shipper), also pass `worktree_path` and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -484,7 +484,7 @@ Do NOT use Claude Code's `isolation: "worktree"` for agent-teams builds. It auto
 Agent({
   subagent_type: "canon:engineer",
   isolation: "none",    // Canon owns the worktree — no Agent tool isolation
-  prompt: "... Working directory: {worktree_path} ..."
+  prompt: "... Working directory: {worktree_path}\nturn_budget: {maxTurns} ..."
 })
 ```
 
