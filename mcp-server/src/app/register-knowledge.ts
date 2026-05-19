@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { AccuracyMap } from "@features/diagnostics/services/prediction-accuracy.ts";
 import {
   buildAccuracySummary,
@@ -20,6 +21,8 @@ import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.
 import type { GetPrinciplesBatchOutput } from "@features/principles/tools/get-principles.ts";
 import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { CANON_DIR } from "@shared/constants.ts";
+import { applyDisclosure } from "@shared/lib/progressive-disclosure.ts";
 import { z } from "zod";
 import {
   gatedWrapHandler,
@@ -43,6 +46,10 @@ export type GetContextOutput = {
   signals?: FileSignals[];
   /** Wave 3: Per-principle accuracy summary for learner agent consumption. */
   accuracy_summary?: string;
+  /** When true, response was truncated due to size. Full data at full_data_path. */
+  truncated?: boolean;
+  /** Absolute path to full response JSON when truncated is true. */
+  full_data_path?: string;
 };
 
 const getContextInputSchema = {
@@ -116,6 +123,78 @@ function resolveSignals(filePaths: string[], output: GetContextOutput): void {
   }
 }
 
+/**
+ * Produce a compact summary string for a GetContextOutput for disclosure logging.
+ * Reports section presence and counts without including full payloads.
+ */
+function summarizeContextOutput(data: GetContextOutput): string {
+  const parts: string[] = [
+    `Files: ${data.file_paths.join(", ")}`,
+    `Sections: ${data.include.join(", ")}`,
+  ];
+  if (data.principles) {
+    const count = Array.isArray(data.principles.principles)
+      ? data.principles.principles.length
+      : "batch";
+    parts.push(`Principles: ${count} matched`);
+  }
+  if (data.file_context) parts.push(`File contexts: ${data.file_context.length} files`);
+  if (data.drift) parts.push("Drift: included");
+  if (data.graph) parts.push("Graph: included");
+  if (data.signals) parts.push(`Signals: ${data.signals.length} files`);
+  return parts.join("\n");
+}
+
+/**
+ * Build a slimmed GetContextOutput for truncated responses.
+ * Preserves routing metadata but strips large payloads (bodies, content, dependency lists).
+ */
+function buildSlimmedOutput(output: GetContextOutput, fullDataPath: string): GetContextOutput {
+  const slimmed: GetContextOutput = {
+    file_paths: output.file_paths,
+    full_data_path: fullDataPath,
+    include: output.include,
+    truncated: true,
+  };
+  if (output.principles) {
+    slimmed.principles = {
+      ...output.principles,
+      principles: output.principles.principles.map((p) => ({ ...p, body: "" })),
+    };
+  }
+  if (output.file_context) {
+    slimmed.file_context = output.file_context.map((fc) => ({
+      ...fc,
+      content: "",
+      exports: [],
+      imported_by: [],
+      imports: [],
+    }));
+  }
+  if (output.drift !== undefined) slimmed.drift = output.drift;
+  if (output.graph !== undefined) slimmed.graph = output.graph;
+  if (output.signals !== undefined) slimmed.signals = output.signals;
+  if (output.accuracy_summary !== undefined) slimmed.accuracy_summary = output.accuracy_summary;
+  return slimmed;
+}
+
+/**
+ * Apply progressive disclosure to the assembled GetContextOutput.
+ * Returns the output unchanged when under threshold; returns a slimmed version
+ * with a file pointer when over threshold.
+ */
+function applyContextDisclosure(output: GetContextOutput): GetContextOutput {
+  const disclosure = applyDisclosure(output, {
+    filePrefix: "get-context",
+    outputDir: join(projectDir, CANON_DIR, "artifacts"),
+    summarize: summarizeContextOutput,
+  });
+  if (disclosure.truncated) {
+    return buildSlimmedOutput(output, disclosure.full_data_path);
+  }
+  return output;
+}
+
 async function handleGetContext(input: {
   file_paths: string[];
   include?: IncludeSection[];
@@ -184,7 +263,7 @@ async function handleGetContext(input: {
   }
 
   await Promise.all(tasks);
-  return output;
+  return applyContextDisclosure(output);
 }
 
 export { handleGetContext };
