@@ -263,7 +263,10 @@ below). All user-supplied text content within the converted elements must still 
 security — the conversion function handles this by escaping raw text before inserting it into
 HTML tags.
 
-Implement `markdownToHtml` inline in your rendering script. The function must convert:
+Implement `markdownToHtml` inline in your rendering script. This function handles the reviewer
+narrative section only — headings, lists, paragraphs, and inline formatting. Tables and fenced
+code blocks in other review sections (violation tables, acceptance criteria grids) are rendered
+by their own dedicated section handlers, not by this function. The function must convert:
 
 ```javascript
 function markdownToHtml(md) {
@@ -278,10 +281,9 @@ function markdownToHtml(md) {
   for (const raw of lines) {
     const line = raw;
 
-    // Blank line — close open list, emit paragraph break
+    // Blank line — close open list
     if (line.trim() === "") {
       closeList();
-      output.push(""); // paragraph separator handled below
       continue;
     }
 
@@ -324,14 +326,19 @@ function markdownToHtml(md) {
 
 // Apply inline formatting: **bold**, `code`, and file:line references
 function inlineFormat(text) {
-  // Escape HTML first, then re-apply formatting markers
   let s = escapeHtml(text);
-  // **bold**
+  // Protect code spans first — replace with tokens to prevent bold/file-ref inside them
+  const codeSpans = [];
+  s = s.replace(/`([^`]+)`/g, (_, content) => {
+    codeSpans.push(`<code>${content}</code>`);
+    return `\x00CODE${codeSpans.length - 1}\x00`;
+  });
+  // **bold** — safe now, won't match inside code tokens
   s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  // `code` — already escaped so backtick content won't contain < or >
-  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // file paths with :line (e.g. src/foo.ts:42) — skip if already inside <code>
-  s = s.replace(/(?<!<code>)([\w./\-]+\.(?:ts|js|py|go|rs|md):\d+)(?!<\/code>)/g, "<code>$1</code>");
+  // file paths with :line — safe now, won't match inside code tokens
+  s = s.replace(/([\w./\-]+\.(?:ts|js|py|go|rs|md):\d+)/g, "<code>$1</code>");
+  // Restore code spans
+  s = s.replace(/\x00CODE(\d+)\x00/g, (_, i) => codeSpans[i]);
   return s;
 }
 ```

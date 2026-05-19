@@ -146,7 +146,7 @@ When triage determines trivial (single-file, no architectural questions, clear i
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier: "trivial", original_input, preflight: true })`. Save `worktree_path` and `workspace`.
 2. Infer a minimal runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps` with these steps.
 3. **Pre-spawn worktree verification**: Run `test -d "${worktree_path}"` via Bash. If missing, report BLOCKED.
-4. Spawn `canon:engineer` with the build request and `worktree_path`. Proceed through the standard step execution loop (verify, review, ship, etc.).
+4. Spawn `canon:engineer` with the build request, `worktree_path`, and `turn_budget: {maxTurns}`. Proceed through the standard step execution loop (verify, review, ship, etc.).
 
 **Fast-path context enrichment**: When a trivial-path build involves 4+ files or 2+ distinct workstreams (e.g., "fix the linter config and update the tests"), include minimal context in the engineer's spawn prompt: scope summary (what to change and why), key files (paths and one-line purpose), and gotchas (known edge cases, related files that must not be modified). This prevents the engineer from spending 25+ turns on orientation that the orchestrator could resolve with 1-2 `get_file_context` calls during triage.
 
