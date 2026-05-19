@@ -68,4 +68,4 @@ domains:
 - Have concrete verification steps
 - Be independently committable
 - **Integration task required for user-observable ACs**: When ACs include user-observable outcomes (HTTP endpoint, browser response, CLI output), the DAG MUST include an integration task that wires components together. It `depends_on` all component tasks and its ACs verify the observable behavior directly.
-- **Hotspot extraction planning**: When a task modifies a file with `hotspot_score > 0.80` (from `get_file_context`), the `files:` frontmatter must list expected extraction targets (new files created by decomposition) OR include a comment `# no extraction needed — {N} lines, under limit`. Silence on extraction for hotspot files is an incomplete plan.
+- **Hotspot extraction planning**: When a task modifies a file with `is_hotspot: true` (from `get_file_context`), the `files:` frontmatter must list expected extraction targets (new files created by decomposition) OR include a comment `# no extraction needed — {rationale}`. Silence on extraction for hotspot files is an incomplete plan.
