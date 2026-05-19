@@ -1,36 +1,24 @@
 /**
  * present_artifact MCP tool.
  *
- * Serves a compiled HTML artifact via the Canon HTTP server and opens it in
+ * Serves an HTML artifact via the Canon HTTP server and opens it in
  * the default browser. Returns immediately — the actual approve/reject decision
  * happens in the terminal; the browser view is display-only.
  *
  * ## Lifecycle
- * 1. Validate artifact type against VIEW_MAP (or accept inline html).
- * 2. Read compiled HTML from dist/src/ui/ (built by Vite) when no inline html.
- * 3. Register artifact with HTTP server (registerArtifact).
- * 4. Open browser URL — fire-and-forget (exec).
- * 5. Return { url } immediately.
+ * 1. Validate input (slug format, html present).
+ * 2. Register artifact with HTTP server (registerArtifact).
+ * 3. Open browser URL — fire-and-forget (exec).
+ * 4. Return { url } immediately.
  *
  * The artifact stays registered so the user can refresh the browser tab.
  * All logging goes to process.stderr — process.stdout is the MCP stdio transport.
  */
 
-import { readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { getHttpPort, isHttpServerRunning, registerArtifact } from "@app/http-server.ts";
 import { openBrowser } from "@platform/adapters/process-adapter.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
-
-// ---------------------------------------------------------------------------
-// View map — artifact type → compiled HTML filename in dist/src/ui/
-// ---------------------------------------------------------------------------
-
-const VIEW_MAP: Record<string, string> = {
-  "planning-brief": "planning-brief.html",
-};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,34 +29,13 @@ export type PresentArtifactInput = {
   type: string;
   slug: string;
   data: unknown;
-  /** When provided, serves this HTML directly and bypasses VIEW_MAP lookup. */
+  /** HTML content to serve. Required — the html parameter is the only supported path. */
   html?: string;
 };
 
 export type PresentArtifactResult = {
   url: string;
 };
-
-// ---------------------------------------------------------------------------
-// Browser open helpers
-// ---------------------------------------------------------------------------
-
-/** Resolve the dist/src/ui directory relative to this module's location. */
-function resolveUiDistDir(): string {
-  const thisFile = fileURLToPath(import.meta.url);
-  if (thisFile.includes("/src/") && !thisFile.includes("/dist/src/")) {
-    // Running from source via tsx — walk up to mcp-server root, use dist/src/ui
-    let dir = dirname(thisFile);
-    while (dir !== "/" && !dir.endsWith("/mcp-server")) {
-      dir = dirname(dir);
-    }
-    return join(dir, "dist", "src", "ui");
-  }
-  // When compiled: dist/src/features/orchestration/tools/present-artifact.js
-  // Walk up 5 levels → dist/, then join dist/src/ui
-  const distDir = dirname(dirname(dirname(dirname(dirname(thisFile)))));
-  return join(distDir, "src", "ui");
-}
 
 // ---------------------------------------------------------------------------
 // Tool handler
@@ -91,33 +58,15 @@ async function resolveArtifact(input: PresentArtifactInput): Promise<ToolResult<
     );
   }
 
-  let html: string;
-
-  if (input.html !== undefined) {
-    // Dynamic HTML path: bypass VIEW_MAP and use the provided HTML directly.
-    html = input.html;
-  } else {
-    // Compiled-view path: look up HTML file via VIEW_MAP.
-    const htmlFileName = VIEW_MAP[type];
-    if (!htmlFileName) {
-      return toolError(
-        "INVALID_INPUT",
-        `Unknown artifact type "${type}". Known types: ${Object.keys(VIEW_MAP).join(", ")}`,
-        false,
-      );
-    }
-
-    const htmlPath = resolve(resolveUiDistDir(), htmlFileName);
-    try {
-      html = await readFile(htmlPath, "utf-8");
-    } catch {
-      return toolError(
-        "INVALID_INPUT",
-        `Compiled HTML not found for artifact type "${type}". Expected: ${htmlPath}. Run the UI build first.`,
-        true,
-      );
-    }
+  if (input.html === undefined) {
+    return toolError(
+      "INVALID_INPUT",
+      `No html content provided for artifact type "${type}". Pass the html parameter directly.`,
+      false,
+    );
   }
+
+  const html = input.html;
 
   if (!isHttpServerRunning()) {
     return toolError(
