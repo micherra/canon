@@ -269,52 +269,56 @@ Implement `markdownToHtml` inline in your rendering script. The function must co
 function markdownToHtml(md) {
   const lines = String(md ?? "").split("\n");
   const output = [];
-  let inList = false;
+  let listType = null; // "ul" | "ol" | null
+
+  function closeList() {
+    if (listType) { output.push(`</${listType}>`); listType = null; }
+  }
 
   for (const raw of lines) {
     const line = raw;
 
     // Blank line — close open list, emit paragraph break
     if (line.trim() === "") {
-      if (inList) { output.push("</ul>"); inList = false; }
+      closeList();
       output.push(""); // paragraph separator handled below
       continue;
     }
 
     // ### heading
     if (line.startsWith("### ")) {
-      if (inList) { output.push("</ul>"); inList = false; }
+      closeList();
       output.push(`<h3>${escapeHtml(line.slice(4).trim())}</h3>`);
       continue;
     }
 
     // #### heading
     if (line.startsWith("#### ")) {
-      if (inList) { output.push("</ul>"); inList = false; }
+      closeList();
       output.push(`<h4>${escapeHtml(line.slice(5).trim())}</h4>`);
       continue;
     }
 
     // - list item (unordered)
     if (/^[-*] /.test(line)) {
-      if (!inList) { output.push("<ul>"); inList = true; }
+      if (listType !== "ul") { closeList(); output.push("<ul>"); listType = "ul"; }
       output.push(`<li>${inlineFormat(line.slice(2).trim())}</li>`);
       continue;
     }
 
     // Numbered list item (1. item)
     if (/^\d+\. /.test(line)) {
-      if (!inList) { output.push("<ul>"); inList = true; }
+      if (listType !== "ol") { closeList(); output.push("<ol>"); listType = "ol"; }
       output.push(`<li>${inlineFormat(line.replace(/^\d+\. /, "").trim())}</li>`);
       continue;
     }
 
     // Regular paragraph line
-    if (inList) { output.push("</ul>"); inList = false; }
+    closeList();
     output.push(`<p>${inlineFormat(line.trim())}</p>`);
   }
 
-  if (inList) output.push("</ul>");
+  closeList();
   return output.join("\n");
 }
 
@@ -326,8 +330,8 @@ function inlineFormat(text) {
   s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   // `code` — already escaped so backtick content won't contain < or >
   s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // file paths with :line (e.g. src/foo.ts:42)
-  s = s.replace(/([\w./\-]+\.(?:ts|js|py|go|rs|md):\d+)/g, "<code>$1</code>");
+  // file paths with :line (e.g. src/foo.ts:42) — skip if already inside <code>
+  s = s.replace(/(?<!<code>)([\w./\-]+\.(?:ts|js|py|go|rs|md):\d+)(?!<\/code>)/g, "<code>$1</code>");
   return s;
 }
 ```
@@ -413,8 +417,12 @@ Include the `<script>` block from `file-detail-card.html` **ONCE** before `</bod
 ## Step 7 — Security
 
 Apply `escapeHtml` to ALL content extracted from REVIEW.md or returned by MCP tools before
-embedding in HTML. This includes: file paths, principle IDs, violation messages, narrative text,
-layer names, subsystem directories, and entity names.
+embedding in HTML. This includes: file paths, principle IDs, violation messages, layer names,
+subsystem directories, and entity names.
+
+**Exception**: The reviewer narrative is processed through `markdownToHtml()` (Step 4), which
+escapes raw text internally before wrapping in HTML tags. Do not double-escape by calling
+`escapeHtml()` on the narrative before passing it to `markdownToHtml()`.
 
 Implement inline (do not import):
 

@@ -261,7 +261,7 @@ Table of which Canon MCP tools to call before spawning each step type:
 | Any step before spawn | `resolve_agent_skills` (preloaded rules + references injected into the spawn prompt) |
 | Design | `get_context({ file_paths, include: ["principles", "file_context", "graph"] })` |
 | Implement | `get_context({ file_paths, include: ["principles", "file_context", "drift"] })` |
-| Review | `get_context({ file_paths, include: ["principles", "drift"] })` |
+| Review | `get_context({ file_paths, include: ["principles", "file_context", "drift"] })` |
 | Test | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 | Security | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 

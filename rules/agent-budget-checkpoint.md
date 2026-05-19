@@ -20,7 +20,7 @@ Your spawn prompt includes `turn_budget: N` (the maxTurns value for your role). 
 Write a partial artifact to your declared output path. Include:
 - What is complete so far (files modified, tests written, stages finished)
 - What remains (files not yet touched, stages pending)
-- Current status: `[CHECKPOINT — {N}% complete, {remaining items} remaining]`
+- Current status: `[CHECKPOINT — ~50% complete, {remaining items} remaining]`
 
 This checkpoint ensures re-spawn enrichment has concrete prior-progress data if the session ends unexpectedly.
 
@@ -28,9 +28,9 @@ This checkpoint ensures re-spawn enrichment has concrete prior-progress data if 
 
 Stop starting new workstreams. Focus on:
 1. Complete the current unit of work (finish the file you're editing, close the test you're writing)
-2. Commit what you have (`wip({task-id}): partial progress`)
+2. If you modified worktree files, commit what you have (`wip({task-id}): partial progress`)
 3. Write your summary artifact with honest coverage notes — mark incomplete items explicitly
-4. Report `PARTIAL_FIX` or `DONE_WITH_CONCERNS` with detail on what remains
+4. Report your role's appropriate status with detail on what remains — `DONE_WITH_CONCERNS` for most agents, `PARTIAL_FIX` for engineer in fix mode
 
 A partial artifact with honest coverage is infinitely more useful than no artifact at all.
 
