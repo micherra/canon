@@ -16,7 +16,7 @@ afterEach(async () => {
 // Valid input — happy path
 
 describe("writeImplementationSummary — valid input", () => {
-  it("writes IMPLEMENTATION-SUMMARY.md and .meta.json to correct location", async () => {
+  it("writes {task_id}-SUMMARY.md and .meta.json to correct location", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
@@ -33,9 +33,9 @@ describe("writeImplementationSummary — valid input", () => {
     });
 
     assertOk(result);
-    expect(result.path).toContain("IMPLEMENTATION-SUMMARY.md");
+    expect(result.path).toContain("adr010-03-SUMMARY.md");
     expect(result.path).toContain("my-epic");
-    expect(result.meta_path).toContain("IMPLEMENTATION-SUMMARY.meta.json");
+    expect(result.meta_path).toContain("adr010-03-SUMMARY.meta.json");
     expect(result.meta_path).toContain("my-epic");
     expect(result.files_changed_count).toBe(2);
 
@@ -224,6 +224,35 @@ describe("writeImplementationSummary — valid input", () => {
 
     assertOk(result);
     expect(result.path).toContain("new-slug");
+  });
+
+  it("different task_ids produce different output filenames (DAG collision prevention)", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
+
+    const resultA = await writeImplementationSummary({
+      files_changed: [{ action: "added", path: "src/a.ts" }],
+      slug: "my-epic",
+      task_id: "task-alpha",
+      workspace: tmpDir,
+    });
+
+    const resultB = await writeImplementationSummary({
+      files_changed: [{ action: "added", path: "src/b.ts" }],
+      slug: "my-epic",
+      task_id: "task-beta",
+      workspace: tmpDir,
+    });
+
+    assertOk(resultA);
+    assertOk(resultB);
+
+    // Paths must differ — different task_ids must not collide
+    expect(resultA.path).not.toBe(resultB.path);
+    expect(resultA.meta_path).not.toBe(resultB.meta_path);
+
+    // Each path must contain its own task_id
+    expect(resultA.path).toContain("task-alpha");
+    expect(resultB.path).toContain("task-beta");
   });
 });
 

@@ -129,8 +129,8 @@ export async function writeImplementationSummary(
   const meta = buildSummaryMeta(input);
 
   await mkdir(plansDir, { recursive: true });
-  const summaryPath = join(plansDir, "IMPLEMENTATION-SUMMARY.md");
-  const metaPath = join(plansDir, "IMPLEMENTATION-SUMMARY.meta.json");
+  const summaryPath = join(plansDir, `${input.task_id}-SUMMARY.md`);
+  const metaPath = join(plansDir, `${input.task_id}-SUMMARY.meta.json`);
 
   await writeFile(summaryPath, content, "utf-8");
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
