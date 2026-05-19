@@ -63,7 +63,8 @@ Extract these sections from the markdown:
 - **Assumptions**: The `## Assumptions` section — list of assumptions made during design.
 - **Brief coverage**: The `### Brief Coverage` table — maps runbook requirements to task elements
   with dispositions (`covered`, `descoped`, `partial`).
-- **Runbook**: The `## Runbook` section — numbered steps with agent type and artifacts.
+- **Runbook**: Runbook data is parsed from the runbook file read in Step 1 (`${RUNBOOK_PATH}`),
+  not from the design document. Skip this extraction if no runbook file was loaded.
 
 ## Step 2b — Parse the PRD (if present)
 
