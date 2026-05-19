@@ -30,6 +30,8 @@ import {
 import { isNotFound } from "@shared/lib/errors.ts";
 import { loadPathAliases, toPosix } from "@shared/lib/paths.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { buildFileContextOutput } from "./file-context-assembler.ts";
+import { applyFileContextDisclosure } from "./file-context-disclosure.ts";
 
 export type FileContextInput = {
   file_path: string;
@@ -96,6 +98,10 @@ export type FileContextOutput = {
   co_change_partners?: Array<CoChangePartner>;
   /** Computed tags from community detection and tag propagation pipeline. */
   computed_tags?: string[];
+  /** When true, response was truncated due to size. Full data at full_data_path. */
+  truncated?: boolean;
+  /** Path to the full response JSON when truncated is true. */
+  full_data_path?: string;
 };
 
 // Module-level cache for project_max_impact
@@ -128,49 +134,6 @@ function setCachedMaxImpact(dbPath: string, value: number): void {
   } catch {
     // If stat fails, skip caching — the value will be recomputed next call.
   }
-}
-
-/** Derive a human-readable shape characterization from graph metrics. */
-function deriveShape(metrics: FileGraphMetrics | undefined): {
-  label: string;
-  description: string;
-} {
-  if (!metrics) {
-    return { description: "Moderate connectivity, typical file.", label: "Internal" };
-  }
-
-  const { in_degree, out_degree, in_cycle } = metrics;
-
-  let label = "Internal";
-  let description = "Moderate connectivity, typical file.";
-
-  if (in_degree > 8 && out_degree < 4) {
-    label = "Sink";
-    description = "Many things depend on this, it depends on few. Wide blast radius.";
-  } else if (in_degree < 3 && out_degree > 8) {
-    label = "High fan-out hub";
-    description = "Depends on many, depended on by few. Changes propagate outward.";
-  } else if (in_degree > 5 && out_degree > 5) {
-    label = "Central hub";
-    description = "High connectivity in both directions. Highest-risk change surface.";
-  } else if (in_degree === 0) {
-    label = "Leaf";
-    description = "Nothing depends on this. Safe to change.";
-  }
-
-  return {
-    description,
-    label: in_cycle ? `Cycle member — ${label}` : label,
-  };
-}
-
-function deriveRole(metrics: FileGraphMetrics | undefined): string {
-  if (!metrics) return "internal";
-  if (metrics.is_hub) return "hub";
-  if (metrics.in_cycle) return "cycle member";
-  if (metrics.in_degree === 0) return "entry point";
-  if (metrics.out_degree === 0) return "leaf";
-  return "internal";
 }
 
 /** Read and truncate file content. Returns error result or content string. */
@@ -489,20 +452,6 @@ async function scanImportedByFallback(
   }
 }
 
-/** Group paths by their inferred layer. */
-function groupByLayer(
-  paths: string[],
-  inferLayer: (p: string) => string,
-): Record<string, string[]> {
-  const groups: Record<string, string[]> = {};
-  for (const p of paths) {
-    const layer = inferLayer(p) || "unknown";
-    if (!groups[layer]) groups[layer] = [];
-    groups[layer].push(p);
-  }
-  return groups;
-}
-
 /** Resolve imports and imported_by for a file. */
 async function resolveFileRelationships(
   filePath: string,
@@ -563,11 +512,14 @@ export async function getFileContext(
 
   const contentResult = await readFileContent(absPath, filePath);
   if (typeof contentResult !== "string") return contentResult;
-  const content = contentResult;
 
   const layer = inferLayer(filePath) || "unknown";
-  const exports = extractExports(content, filePath);
-  const { imports, imported_by } = await resolveFileRelationships(filePath, content, projectDir);
+  const exports = extractExports(contentResult, filePath);
+  const { imports, imported_by } = await resolveFileRelationships(
+    filePath,
+    contentResult,
+    projectDir,
+  );
   const compliance = await loadComplianceData(projectDir, filePath);
 
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
@@ -582,28 +534,18 @@ export async function getFileContext(
         summary: null,
       } as ReturnType<typeof loadKgData>);
 
-  return toolOk({
-    content,
+  const output = buildFileContextOutput({
+    compliance,
+    content: contentResult,
     exports,
-    file_path: filePath,
+    filePath,
     imported_by,
     imports,
+    inferLayer,
+    kgData,
     layer,
-    ...compliance,
-    graph_metrics: kgData.graph_metrics,
-    imported_by_layer: groupByLayer(imported_by, inferLayer),
-    imports_by_layer: groupByLayer(imports, inferLayer),
-    layer_stack: Object.keys(layerMappings).sort(),
-    project_max_impact: kgData.project_max_impact,
-    role: deriveRole(kgData.graph_metrics),
-    shape: deriveShape(kgData.graph_metrics),
-    summary: kgData.summary,
-    ...(kgData.entities !== undefined && { entities: kgData.entities }),
-    ...(kgData.blast_radius !== undefined && { blast_radius: kgData.blast_radius }),
-    ...(kgData.hotspot_score !== undefined && { hotspot_score: kgData.hotspot_score }),
-    ...(kgData.co_change_partners !== undefined && {
-      co_change_partners: kgData.co_change_partners,
-    }),
-    ...(kgData.computed_tags !== undefined && { computed_tags: kgData.computed_tags }),
+    layerStack: Object.keys(layerMappings).sort(),
   });
+
+  return toolOk(applyFileContextDisclosure(output, projectDir));
 }
