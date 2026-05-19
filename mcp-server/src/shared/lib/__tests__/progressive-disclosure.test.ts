@@ -14,7 +14,7 @@
  * 10. byte_size matches actual file size on disk
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -67,7 +67,7 @@ describe("applyDisclosure", () => {
     });
 
     it("does not write any file when under threshold", () => {
-      const filesBefore = existsSync(tmpDir) ? require("node:fs").readdirSync(tmpDir) : [];
+      const filesBefore = existsSync(tmpDir) ? readdirSync(tmpDir) : [];
 
       applyDisclosure(
         { tiny: true },
@@ -79,7 +79,7 @@ describe("applyDisclosure", () => {
         },
       );
 
-      const filesAfter = require("node:fs").readdirSync(tmpDir);
+      const filesAfter = readdirSync(tmpDir);
       expect(filesAfter.length).toBe(filesBefore.length);
     });
 

@@ -149,7 +149,10 @@ function summarizeContextOutput(data: GetContextOutput): string {
  * Build a slimmed GetContextOutput for truncated responses.
  * Preserves routing metadata but strips large payloads (bodies, content, dependency lists).
  */
-function buildSlimmedOutput(output: GetContextOutput, fullDataPath: string): GetContextOutput {
+export function buildSlimmedOutput(
+  output: GetContextOutput,
+  fullDataPath: string,
+): GetContextOutput {
   const slimmed: GetContextOutput = {
     file_paths: output.file_paths,
     full_data_path: fullDataPath,
