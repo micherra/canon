@@ -247,8 +247,8 @@ Place it as a full-width panel immediately after the verdict banner, before the 
       <span class="collapsible-arrow">&#9654;</span>
       <span class="collapsible-title">Reviewer Narrative</span>
     </summary>
-    <div class="collapsible-body" style="white-space: pre-wrap; font-size: 12px; color: var(--text); line-height: 1.6;">
-      {escapeHtml(reviewerNarrative)}
+    <div class="collapsible-body narrative-content">
+      {markdownToHtml(reviewerNarrative)}
     </div>
   </details>
 </div>
@@ -256,6 +256,92 @@ Place it as a full-width panel immediately after the verdict banner, before the 
 
 The narrative starts open (`<details open>`). Render ALL narrative text — code quality analysis,
 advisory items, gotcha documentation. Do not summarize or truncate.
+
+**Note**: Do NOT use `escapeHtml()` directly on the narrative or set `white-space: pre-wrap`.
+Instead, convert markdown formatting to proper HTML elements using `markdownToHtml()` (defined
+below). All user-supplied text content within the converted elements must still be escaped for
+security — the conversion function handles this by escaping raw text before inserting it into
+HTML tags.
+
+Implement `markdownToHtml` inline in your rendering script. This function handles the reviewer
+narrative section only — headings, lists, paragraphs, and inline formatting. Tables and fenced
+code blocks in other review sections (violation tables, acceptance criteria grids) are rendered
+by their own dedicated section handlers, not by this function. The function must convert:
+
+```javascript
+function markdownToHtml(md) {
+  const lines = String(md ?? "").split("\n");
+  const output = [];
+  let listType = null; // "ul" | "ol" | null
+
+  function closeList() {
+    if (listType) { output.push(`</${listType}>`); listType = null; }
+  }
+
+  for (const raw of lines) {
+    const line = raw;
+
+    // Blank line — close open list
+    if (line.trim() === "") {
+      closeList();
+      continue;
+    }
+
+    // ### heading
+    if (line.startsWith("### ")) {
+      closeList();
+      output.push(`<h3>${escapeHtml(line.slice(4).trim())}</h3>`);
+      continue;
+    }
+
+    // #### heading
+    if (line.startsWith("#### ")) {
+      closeList();
+      output.push(`<h4>${escapeHtml(line.slice(5).trim())}</h4>`);
+      continue;
+    }
+
+    // - list item (unordered)
+    if (/^[-*] /.test(line)) {
+      if (listType !== "ul") { closeList(); output.push("<ul>"); listType = "ul"; }
+      output.push(`<li>${inlineFormat(line.slice(2).trim())}</li>`);
+      continue;
+    }
+
+    // Numbered list item (1. item)
+    if (/^\d+\. /.test(line)) {
+      if (listType !== "ol") { closeList(); output.push("<ol>"); listType = "ol"; }
+      output.push(`<li>${inlineFormat(line.replace(/^\d+\. /, "").trim())}</li>`);
+      continue;
+    }
+
+    // Regular paragraph line
+    closeList();
+    output.push(`<p>${inlineFormat(line.trim())}</p>`);
+  }
+
+  closeList();
+  return output.join("\n");
+}
+
+// Apply inline formatting: **bold**, `code`, and file:line references
+function inlineFormat(text) {
+  let s = escapeHtml(text);
+  // Protect code spans first — replace with tokens to prevent bold/file-ref inside them
+  const codeSpans = [];
+  s = s.replace(/`([^`]+)`/g, (_, content) => {
+    codeSpans.push(`<code>${content}</code>`);
+    return `\x00CODE${codeSpans.length - 1}\x00`;
+  });
+  // **bold** — safe now, won't match inside code tokens
+  s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  // file paths with :line — safe now, won't match inside code tokens
+  s = s.replace(/([\w./\-]+\.(?:ts|js|py|go|rs|md):\d+)/g, "<code>$1</code>");
+  // Restore code spans
+  s = s.replace(/\x00CODE(\d+)\x00/g, (_, i) => codeSpans[i]);
+  return s;
+}
+```
 
 ### Changed files list
 
@@ -322,14 +408,28 @@ Also add CSS for:
 - Reviewer narrative panel and collapsible section (from Section C)
 - File detail and summary card styles (extracted from `file-detail-card.html` and `file-summary-card.html` snippet `<style>` blocks)
 - Dependency tree CSS (extracted from `blast-radius-tree.html` snippet `<style>` block)
+- Narrative content typography (copy verbatim):
+
+```css
+.narrative-content h3 { font-size: 14px; font-weight: 600; margin: 16px 0 8px; color: var(--text); }
+.narrative-content h4 { font-size: 13px; font-weight: 600; margin: 12px 0 6px; color: var(--text-secondary); }
+.narrative-content p { margin: 8px 0; font-size: 12px; line-height: 1.6; color: var(--text); }
+.narrative-content ul, .narrative-content ol { margin: 8px 0; padding-left: 20px; }
+.narrative-content li { font-size: 12px; line-height: 1.6; color: var(--text); margin: 4px 0; }
+.narrative-content code { background: var(--bg-secondary); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+```
 
 Include the `<script>` block from `file-detail-card.html` **ONCE** before `</body>` (Canvas graph initialization).
 
 ## Step 7 — Security
 
 Apply `escapeHtml` to ALL content extracted from REVIEW.md or returned by MCP tools before
-embedding in HTML. This includes: file paths, principle IDs, violation messages, narrative text,
-layer names, subsystem directories, and entity names.
+embedding in HTML. This includes: file paths, principle IDs, violation messages, layer names,
+subsystem directories, and entity names.
+
+**Exception**: The reviewer narrative is processed through `markdownToHtml()` (Step 4), which
+escapes raw text internally before wrapping in HTML tags. Do not double-escape by calling
+`escapeHtml()` on the narrative before passing it to `markdownToHtml()`.
 
 Implement inline (do not import):
 

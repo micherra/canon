@@ -6,7 +6,7 @@ description: >-
   into atomic task plans. Does NOT write code.
 model: opus
 color: green
-maxTurns: 30
+maxTurns: 140
 permissionMode: acceptEdits
 memory: project
 skills:
@@ -21,6 +21,7 @@ rules:
   - agent-artifact-write-before-return
   - agent-batch-tools
   - agent-context-budget-dispatch
+  - agent-budget-checkpoint
 references:
   - status-protocol
 templates:
