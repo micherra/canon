@@ -7,7 +7,7 @@ description: >-
   new principles.
 model: sonnet
 color: cyan
-maxTurns: 15
+maxTurns: 70
 permissionMode: acceptEdits
 memory: project
 rules:
@@ -20,6 +20,7 @@ rules:
   - agent-worktree-orientation
   - agent-working-environment
   - agent-batch-tools
+  - agent-budget-checkpoint
 references:
   - workspace-logging
   - status-protocol

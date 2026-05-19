@@ -6,7 +6,7 @@ description: >-
   structured learning report. Spawned by the lead orchestrator.
 model: sonnet
 color: blue
-maxTurns: 60
+maxTurns: 160
 permissionMode: acceptEdits
 memory: project
 rules:
@@ -15,6 +15,7 @@ rules:
   - agent-context-check
   - agent-artifact-write-before-return
   - agent-batch-tools
+  - agent-budget-checkpoint
 references:
   - status-protocol
   - content-flow

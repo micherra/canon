@@ -7,7 +7,7 @@ description: >-
   orchestrator.
 model: sonnet
 color: magenta
-maxTurns: 50
+maxTurns: 200
 permissionMode: acceptEdits
 memory: project
 rules:
@@ -25,6 +25,7 @@ rules:
   - agent-worktree-orientation
   - agent-working-environment
   - agent-batch-tools
+  - agent-budget-checkpoint
 references:
   - principle-loading
   - status-protocol
@@ -188,6 +189,14 @@ Populate the `#### Criteria Coverage` table in the Coverage Notes section. Map e
 - `semantic_search` for conceptual queries.
 - `get_file_context` before full file reads when scoping is enough.
 - `Bash` only for commands with no dedicated tool equivalent (git, npm, lint).
+
+### Orientation Protocol
+
+Minimize pre-edit orientation turns. The goal is to start producing edits quickly, not to read the entire codebase first.
+
+- **1-3 files in plan**: Read each file as you work on it. No upfront batch needed.
+- **4+ files in plan**: Call `get_context({ file_paths: [...all plan files], include: ["file_context"] })` once before starting. This gives you imports, exports, and graph metrics for every file in a single round-trip.
+- **Hard rule**: Never issue 3+ sequential `Read` calls without producing an `Edit` or `Write` in between. If you find yourself reading file after file without editing, stop and start working. You can always read more later when you need it.
 
 ### Web Research Policy
 

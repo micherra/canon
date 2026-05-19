@@ -1,6 +1,6 @@
 /** batch-log-steps — unit tests for batchLogSteps (split from orchestration-journal.test.ts). */
 
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -85,6 +85,111 @@ describe("batchLogSteps", () => {
       expect(result.error_code).toBe("INVALID_INPUT");
     }
 
+    expect(existsSync(join(workspace, "journal.json"))).toBe(false);
+  });
+
+  test("batchLogSteps rejects when a completed entry has missing artifacts", async () => {
+    const result = await batchLogSteps({
+      steps: [
+        {
+          artifacts_expected: ["plans/DESIGN.md"],
+          status: "completed" as const,
+          step_id: "design",
+        },
+      ],
+      workspace,
+    });
+
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.recoverable).toBe(false);
+      expect(result.message).toContain("plans/DESIGN.md");
+      expect(result.context?.artifacts_missing).toEqual(["plans/DESIGN.md"]);
+    }
+
+    // Fail-closed: journal must not be written
+    expect(existsSync(join(workspace, "journal.json"))).toBe(false);
+  });
+
+  test("batchLogSteps allows completion when all artifacts exist", async () => {
+    mkdirSync(join(workspace, "plans"), { recursive: true });
+    writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
+
+    const result = await batchLogSteps({
+      steps: [
+        {
+          artifacts_expected: ["plans/DESIGN.md"],
+          status: "completed" as const,
+          step_id: "design",
+        },
+      ],
+      workspace,
+    });
+
+    assertOk(result);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]?.status).toBe("completed");
+
+    const journal = await readJournalFile(workspace);
+    expect(journal.steps[0]?.status).toBe("completed");
+  });
+
+  test("batchLogSteps allows planned entries with missing artifact paths (no enforcement for non-completed)", async () => {
+    // artifacts_expected declared but file does not exist — should not block planned entries
+    const result = await batchLogSteps({
+      steps: [
+        {
+          artifacts_expected: ["plans/DESIGN.md"],
+          status: "planned" as const,
+          step_id: "design",
+        },
+        {
+          artifacts_expected: ["reviews/REVIEW.md"],
+          status: "started" as const,
+          step_id: "review",
+        },
+      ],
+      workspace,
+    });
+
+    assertOk(result);
+    expect(result.results).toHaveLength(2);
+
+    const journal = await readJournalFile(workspace);
+    expect(journal.steps).toHaveLength(2);
+    expect(journal.steps[0]?.status).toBe("planned");
+    expect(journal.steps[1]?.status).toBe("started");
+  });
+
+  test("batchLogSteps rejects whole batch when one completed entry has missing artifacts (fail-closed)", async () => {
+    mkdirSync(join(workspace, "plans"), { recursive: true });
+    writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
+
+    // First completed entry has artifact, second does not — entire batch must be rejected
+    const result = await batchLogSteps({
+      steps: [
+        {
+          artifacts_expected: ["plans/DESIGN.md"],
+          status: "completed" as const,
+          step_id: "design",
+        },
+        {
+          artifacts_expected: ["reviews/REVIEW.md"],
+          status: "completed" as const,
+          step_id: "review",
+        },
+      ],
+      workspace,
+    });
+
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.context?.artifacts_missing).toEqual(["reviews/REVIEW.md"]);
+    }
+
+    // No journal written — fail-closed
     expect(existsSync(join(workspace, "journal.json"))).toBe(false);
   });
 });
