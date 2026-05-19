@@ -167,16 +167,44 @@ export function buildSlimmedOutput(
   }
   if (output.file_context) {
     slimmed.file_context = output.file_context.map((fc) => ({
-      ...fc,
+      blast_radius: undefined,
+      co_change_partners: undefined,
       content: "",
+      entities: undefined,
       exports: [],
+      file_path: fc.file_path,
+      graph_metrics: fc.graph_metrics,
+      hotspot_score: undefined,
       imported_by: [],
+      imported_by_layer: {},
       imports: [],
+      imports_by_layer: {},
+      last_verdict: fc.last_verdict,
+      layer: fc.layer,
+      layer_stack: fc.layer_stack,
+      project_max_impact: fc.project_max_impact,
+      role: fc.role,
+      shape: fc.shape,
+      summary: fc.summary,
+      violation_count: fc.violation_count,
+      violations: [],
     }));
   }
-  if (output.drift !== undefined) slimmed.drift = output.drift;
-  if (output.graph !== undefined) slimmed.graph = output.graph;
-  if (output.signals !== undefined) slimmed.signals = output.signals;
+  if (output.drift !== undefined) {
+    slimmed.drift = {
+      formatted: (output.drift as { formatted?: string }).formatted ?? "See full data file.",
+    } as typeof output.drift;
+  }
+  if (output.graph !== undefined) {
+    const graphArr = Array.isArray(output.graph) ? output.graph : [];
+    slimmed.graph = {
+      file_count: graphArr.length,
+      note: "See full data file for blast radius details.",
+    };
+  }
+  if (output.signals !== undefined) {
+    slimmed.signals = output.signals.map((s) => ({ ...s, signals: [] }));
+  }
   if (output.accuracy_summary !== undefined) slimmed.accuracy_summary = output.accuracy_summary;
   return slimmed;
 }
@@ -186,8 +214,8 @@ export function buildSlimmedOutput(
  * Returns the output unchanged when under threshold; returns a slimmed version
  * with a file pointer when over threshold.
  */
-function applyContextDisclosure(output: GetContextOutput): GetContextOutput {
-  const disclosure = applyDisclosure(output, {
+async function applyContextDisclosure(output: GetContextOutput): Promise<GetContextOutput> {
+  const disclosure = await applyDisclosure(output, {
     filePrefix: "get-context",
     outputDir: join(projectDir, CANON_DIR, "artifacts"),
     summarize: summarizeContextOutput,

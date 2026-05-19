@@ -374,7 +374,7 @@ Classify each search query by shape:
 - **pattern**: glob-like patterns containing `*`, `?`, or `**`
 - **structural**: queries asking about callers, callees, imports, dependencies, blast radius
 
-**Minimum threshold**: 3 completed flows with transcripts required. Below threshold -> note "Skipped: retrieval-effectiveness -- requires 3 flows with transcripts, have {current}."
+**Minimum threshold**: 3 completed flows with transcripts required. Below threshold → note "Skipped: retrieval-effectiveness — requires 3 flows with transcripts, have {current}."
 
 ### Signals to analyze
 

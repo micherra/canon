@@ -9,7 +9,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /** Default threshold: 12,000 characters (~3,000 tokens). */
@@ -40,7 +40,10 @@ export type DisclosureOptions<T> = {
  * Error handling: file write errors propagate to the caller. MCP tools are wrapped in
  * `wrapHandler` which converts unexpected throws to UNEXPECTED CanonToolError.
  */
-export const applyDisclosure = <T>(data: T, opts: DisclosureOptions<T>): DisclosureResult<T> => {
+export const applyDisclosure = async <T>(
+  data: T,
+  opts: DisclosureOptions<T>,
+): Promise<DisclosureResult<T>> => {
   const serialized = JSON.stringify(data);
   const threshold = opts.threshold ?? DEFAULT_DISCLOSURE_THRESHOLD;
 
@@ -52,8 +55,8 @@ export const applyDisclosure = <T>(data: T, opts: DisclosureOptions<T>): Disclos
   const fileName = `${opts.filePrefix}-${hash}.json`;
   const filePath = join(opts.outputDir, fileName);
 
-  mkdirSync(opts.outputDir, { recursive: true });
-  writeFileSync(filePath, serialized, "utf-8");
+  await mkdir(opts.outputDir, { recursive: true });
+  await writeFile(filePath, serialized, "utf-8");
 
   return {
     byte_size: Buffer.byteLength(serialized, "utf-8"),

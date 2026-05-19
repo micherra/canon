@@ -91,20 +91,20 @@ describe("applyFileContextDisclosure", () => {
     await rm(tmpDir, { force: true, recursive: true });
   });
 
-  it("returns output unchanged when payload is small", () => {
+  it("returns output unchanged when payload is small", async () => {
     const output = makeOutput();
-    const result = applyFileContextDisclosure(output, tmpDir);
+    const result = await applyFileContextDisclosure(output, tmpDir);
 
     expect(result.truncated).toBeUndefined();
     expect(result.full_data_path).toBeUndefined();
     expect(result.content).toBe(output.content);
   });
 
-  it("truncates and writes file when payload exceeds threshold", () => {
+  it("truncates and writes file when payload exceeds threshold", async () => {
     // Generate a content string large enough to exceed the 12,000-char threshold.
     const largeContent = "x".repeat(15_000);
     const output = makeOutput({ content: largeContent });
-    const result = applyFileContextDisclosure(output, tmpDir);
+    const result = await applyFileContextDisclosure(output, tmpDir);
 
     expect(result.truncated).toBe(true);
     expect(result.full_data_path).toBeDefined();
@@ -115,10 +115,37 @@ describe("applyFileContextDisclosure", () => {
     expect(existsSync(result.full_data_path!)).toBe(true);
   });
 
-  it("writes full data to .canon/artifacts under the project dir", () => {
+  it("strips large fields from truncated output", async () => {
+    const largeContent = "x".repeat(15_000);
+    const output = makeOutput({
+      blast_radius: { direct: [], total_affected: 5, transitive: [] } as never,
+      co_change_partners: [{ co_change_count: 3, confidence: 0.8, file_path: "x.ts" }] as never,
+      content: largeContent,
+      entities: [
+        { is_exported: true, kind: "function" as never, line_end: 5, line_start: 1, name: "foo" },
+      ],
+      violations: [{ principle_id: "p1", severity: "warning" }],
+    });
+    const result = await applyFileContextDisclosure(output, tmpDir);
+
+    expect(result.truncated).toBe(true);
+    expect(result.blast_radius).toBeUndefined();
+    expect(result.entities).toBeUndefined();
+    expect(result.co_change_partners).toBeUndefined();
+    expect(result.hotspot_score).toBeUndefined();
+    expect(result.violations).toEqual([]);
+    expect(result.imports).toEqual([]);
+    expect(result.exports).toEqual([]);
+    // Routing metadata preserved
+    expect(result.file_path).toBe(output.file_path);
+    expect(result.layer).toBe(output.layer);
+    expect(result.summary).toBe(output.summary);
+  });
+
+  it("writes full data to .canon/artifacts under the project dir", async () => {
     const largeContent = "x".repeat(15_000);
     const output = makeOutput({ content: largeContent });
-    const result = applyFileContextDisclosure(output, tmpDir);
+    const result = await applyFileContextDisclosure(output, tmpDir);
 
     if (!result.truncated) return; // shouldn't happen given large content
     expect(result.full_data_path).toContain(".canon");

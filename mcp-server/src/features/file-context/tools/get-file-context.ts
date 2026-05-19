@@ -547,5 +547,5 @@ export async function getFileContext(
     layerStack: Object.keys(layerMappings).sort(),
   });
 
-  return toolOk(applyFileContextDisclosure(output, projectDir));
+  return toolOk(await applyFileContextDisclosure(output, projectDir));
 }

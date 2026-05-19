@@ -51,9 +51,9 @@ describe("applyDisclosure", () => {
   });
 
   describe("under-threshold passthrough", () => {
-    it("returns { truncated: false, data } for small payloads", () => {
+    it("returns { truncated: false, data } for small payloads", async () => {
       const data = { message: "hello" };
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "test",
         outputDir: tmpDir,
         summarize: () => "summary",
@@ -66,10 +66,10 @@ describe("applyDisclosure", () => {
       }
     });
 
-    it("does not write any file when under threshold", () => {
+    it("does not write any file when under threshold", async () => {
       const filesBefore = existsSync(tmpDir) ? readdirSync(tmpDir) : [];
 
-      applyDisclosure(
+      await applyDisclosure(
         { tiny: true },
         {
           filePrefix: "test",
@@ -83,13 +83,13 @@ describe("applyDisclosure", () => {
       expect(filesAfter.length).toBe(filesBefore.length);
     });
 
-    it("uses DEFAULT_DISCLOSURE_THRESHOLD when threshold is omitted", () => {
+    it("uses DEFAULT_DISCLOSURE_THRESHOLD when threshold is omitted", async () => {
       // Data just under default threshold passes through
       const data = { v: makeString(DEFAULT_DISCLOSURE_THRESHOLD - 20) };
       const serialized = JSON.stringify(data);
       expect(serialized.length).toBeLessThanOrEqual(DEFAULT_DISCLOSURE_THRESHOLD);
 
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "test",
         outputDir: tmpDir,
         summarize: () => "s",
@@ -99,9 +99,9 @@ describe("applyDisclosure", () => {
   });
 
   describe("over-threshold truncation", () => {
-    it("returns { truncated: true, summary, full_data_path, byte_size } for large payloads", () => {
+    it("returns { truncated: true, summary, full_data_path, byte_size } for large payloads", async () => {
       const data = makeLargeData(200);
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "fc",
         outputDir: tmpDir,
         summarize: (d) => `keys: ${Object.keys(d).join(",")}`,
@@ -116,9 +116,9 @@ describe("applyDisclosure", () => {
       }
     });
 
-    it("writes the full payload to disk at the returned path", () => {
+    it("writes the full payload to disk at the returned path", async () => {
       const data = makeLargeData(200);
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "fc",
         outputDir: tmpDir,
         summarize: () => "s",
@@ -131,9 +131,9 @@ describe("applyDisclosure", () => {
       }
     });
 
-    it("written file round-trips back to original data", () => {
+    it("written file round-trips back to original data", async () => {
       const data = { nested: { a: 1, b: [2, 3] }, top: "level" };
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "rt",
         outputDir: tmpDir,
         summarize: () => "s",
@@ -147,9 +147,9 @@ describe("applyDisclosure", () => {
       }
     });
 
-    it("byte_size matches the actual byte length of the file on disk", () => {
+    it("byte_size matches the actual byte length of the file on disk", async () => {
       const data = makeLargeData(300);
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "bs",
         outputDir: tmpDir,
         summarize: () => "s",
@@ -165,9 +165,9 @@ describe("applyDisclosure", () => {
   });
 
   describe("custom threshold", () => {
-    it("threshold of 10 triggers truncation on small data", () => {
+    it("threshold of 10 triggers truncation on small data", async () => {
       const data = { x: "hello world" }; // JSON > 10 chars
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "small",
         outputDir: tmpDir,
         summarize: () => "short",
@@ -176,9 +176,9 @@ describe("applyDisclosure", () => {
       expect(result.truncated).toBe(true);
     });
 
-    it("threshold of 1_000_000 passes large data through", () => {
+    it("threshold of 1_000_000 passes large data through", async () => {
       const data = makeLargeData(5_000);
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "big",
         outputDir: tmpDir,
         summarize: () => "s",
@@ -187,10 +187,10 @@ describe("applyDisclosure", () => {
       expect(result.truncated).toBe(false);
     });
 
-    it("exactly at threshold passes through (<=, not <)", () => {
+    it("exactly at threshold passes through (<=, not <)", async () => {
       const data = { v: "a" };
       const serialized = JSON.stringify(data);
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "exact",
         outputDir: tmpDir,
         summarize: () => "s",
@@ -201,9 +201,9 @@ describe("applyDisclosure", () => {
   });
 
   describe("file pointer format", () => {
-    it("full_data_path ends with '{filePrefix}-{8-char-hex}.json'", () => {
+    it("full_data_path ends with '{filePrefix}-{8-char-hex}.json'", async () => {
       const data = makeLargeData(200);
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "file-context",
         outputDir: tmpDir,
         summarize: () => "s",
@@ -217,9 +217,9 @@ describe("applyDisclosure", () => {
       }
     });
 
-    it("full_data_path is inside outputDir", () => {
+    it("full_data_path is inside outputDir", async () => {
       const data = makeLargeData(200);
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "ctx",
         outputDir: tmpDir,
         summarize: () => "s",
@@ -234,11 +234,11 @@ describe("applyDisclosure", () => {
   });
 
   describe("summary function", () => {
-    it("calls summarize with the original data", () => {
+    it("calls summarize with the original data", async () => {
       let capturedData: unknown = null;
       const data = makeLargeData(200);
 
-      applyDisclosure(data, {
+      await applyDisclosure(data, {
         filePrefix: "sum",
         outputDir: tmpDir,
         summarize: (d) => {
@@ -251,9 +251,9 @@ describe("applyDisclosure", () => {
       expect(capturedData).toEqual(data);
     });
 
-    it("includes the summarize return value in the result summary field", () => {
+    it("includes the summarize return value in the result summary field", async () => {
       const data = makeLargeData(200);
-      const result = applyDisclosure(data, {
+      const result = await applyDisclosure(data, {
         filePrefix: "sum",
         outputDir: tmpDir,
         summarize: () => "my custom summary text",
@@ -268,7 +268,7 @@ describe("applyDisclosure", () => {
   });
 
   describe("deterministic filenames", () => {
-    it("same data + same prefix produces the same filename", () => {
+    it("same data + same prefix produces the same filename", async () => {
       const data = makeLargeData(200);
       const opts = {
         filePrefix: "det",
@@ -277,8 +277,8 @@ describe("applyDisclosure", () => {
         threshold: 10,
       } as const;
 
-      const r1 = applyDisclosure(data, opts);
-      const r2 = applyDisclosure(data, opts);
+      const r1 = await applyDisclosure(data, opts);
+      const r2 = await applyDisclosure(data, opts);
 
       expect(r1.truncated).toBe(true);
       expect(r2.truncated).toBe(true);
@@ -287,14 +287,14 @@ describe("applyDisclosure", () => {
       }
     });
 
-    it("different data produces different filenames", () => {
-      const r1 = applyDisclosure(makeLargeData(200), {
+    it("different data produces different filenames", async () => {
+      const r1 = await applyDisclosure(makeLargeData(200), {
         filePrefix: "det",
         outputDir: tmpDir,
         summarize: () => "s",
         threshold: 10,
       });
-      const r2 = applyDisclosure(makeLargeData(201), {
+      const r2 = await applyDisclosure(makeLargeData(201), {
         filePrefix: "det",
         outputDir: tmpDir,
         summarize: () => "s",
@@ -310,11 +310,11 @@ describe("applyDisclosure", () => {
   });
 
   describe("directory creation", () => {
-    it("creates outputDir when it does not yet exist", () => {
+    it("creates outputDir when it does not yet exist", async () => {
       const nonExistentDir = join(tmpDir, "nested", "subdir");
       expect(existsSync(nonExistentDir)).toBe(false);
 
-      const result = applyDisclosure(makeLargeData(200), {
+      const result = await applyDisclosure(makeLargeData(200), {
         filePrefix: "mkdir",
         outputDir: nonExistentDir,
         summarize: () => "s",
