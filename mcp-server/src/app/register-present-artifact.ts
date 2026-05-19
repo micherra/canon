@@ -19,7 +19,7 @@ export function registerPresentArtifactTool(): void {
           .min(1, "html must be a non-empty HTML string when provided")
           .optional()
           .describe(
-            "Complete HTML string to serve directly. When provided, bypasses VIEW_MAP lookup — the 'type' field is used only as the artifact key prefix.",
+            "Complete HTML string to serve directly. Required — the 'type' field is used only as the artifact key prefix.",
           ),
         slug: z
           .string()
@@ -29,7 +29,7 @@ export function registerPresentArtifactTool(): void {
           .string()
           .min(1, "type must not be empty")
           .describe(
-            'Artifact view type — used as the artifact key prefix (e.g., "design", "review"). When html is provided, bypasses VIEW_MAP lookup.',
+            'Artifact view type — used as the artifact key prefix (e.g., "design", "review").',
           ),
         workspace: z
           .string()

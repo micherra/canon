@@ -1,8 +1,8 @@
 /**
  * Tests for present-artifact.ts
  *
- * Verifies behavior after VIEW_MAP was emptied (planning-brief entry removed).
- * The primary use path is now html-bypass (caller passes html string directly).
+ * The only supported path is the html parameter path — callers must pass
+ * HTML content directly. No compiled-view fallback exists.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,9 +21,6 @@ vi.mock("@platform/adapters/process-adapter.ts", () => ({
   openBrowser: vi.fn(),
 }));
 
-vi.mock("node:fs/promises");
-
-import { readFile } from "node:fs/promises";
 import { isHttpServerRunning, registerArtifact } from "@app/http-server.ts";
 import { openBrowser } from "@platform/adapters/process-adapter.ts";
 import { presentArtifact } from "../tools/present-artifact.ts";
@@ -82,49 +79,37 @@ describe("presentArtifact", () => {
       expect(openBrowser).toHaveBeenCalledOnce();
       expect(vi.mocked(openBrowser).mock.calls[0][0]).toContain("design/test");
     });
-
-    it("does not call readFile when html is provided", async () => {
-      await presentArtifact({
-        data: {},
-        html: "<html/>",
-        slug: "slug",
-        type: "any-type",
-        workspace: "/ws",
-      });
-
-      expect(readFile).not.toHaveBeenCalled();
-    });
   });
 
-  describe("VIEW_MAP is empty — no compiled view types", () => {
-    it("returns INVALID_INPUT for planning-brief type (removed from VIEW_MAP)", async () => {
+  describe("html parameter is required", () => {
+    it("returns INVALID_INPUT when html is not provided", async () => {
       const result = await presentArtifact({
         data: {},
         slug: "my-slug",
         type: "planning-brief",
         workspace: "/ws",
-        // no html — uses VIEW_MAP path
+        // no html
       });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error_code).toBe("INVALID_INPUT");
-        expect(result.message).toContain("planning-brief");
+        expect(result.message).toContain("No html content provided");
       }
     });
 
-    it("error message lists empty known types when VIEW_MAP is empty", async () => {
+    it("error message mentions the artifact type and instructs to pass html parameter", async () => {
       const result = await presentArtifact({
         data: {},
         slug: "s",
-        type: "planning-brief",
+        type: "design",
         workspace: "/ws",
       });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        // Known types: <empty string> since VIEW_MAP has no entries
-        expect(result.message).toMatch(/Known types:/);
+        expect(result.message).toContain("design");
+        expect(result.message).toContain("html parameter");
       }
     });
 
