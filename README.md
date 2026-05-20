@@ -66,9 +66,9 @@ At two key moments in every build, Canon renders an interactive HTML dashboard:
 
 You type: **"add dark mode to the dashboard"**
 
-**Triage.** Claude evaluates the request, finds the theming system, identifies the files that would change, and flags that user preference isn't currently persisted. This is non-trivial — the architect is spawned.
+**Triage.** Claude evaluates the request, checks scope, and routes to the architect.
 
-**Design.** The architect researches the codebase, produces a design (CSS custom properties for tokens, `prefers-color-scheme` as default, localStorage for persistence), and writes a `task-dag.yaml` with parallel tasks. A design brief opens in your browser. You review and approve.
+**Design.** The architect researches the codebase, finds the theming system, identifies the files that would change, and flags that user preference isn't currently persisted. It produces a design (CSS custom properties for tokens, `prefers-color-scheme` as default, localStorage for persistence) and writes a `task-dag.yaml` with parallel tasks. A design brief opens in your browser. You review and approve.
 
 **Implement.** Two engineer agents work in parallel worktrees — one on the theming system, one on the component updates. Each receives its task plan, relevant principles, and knowledge graph context for the files it touches.
 
@@ -95,6 +95,8 @@ You approved the plan and saw the review. Canon drove everything else.
 | Shipper | Merge, PR creation, deployment prep |
 | Writer | Principle and convention authoring |
 | Learner | Review data analysis, principle improvement suggestions |
+
+Canon also includes background agents (evaluator, janitor) for quality gates and workspace cleanup.
 
 ---
 
@@ -140,6 +142,7 @@ When you touch `src/routes/orders.ts`, Canon loads principles scoped to the `api
 | `/canon:edit-principle` | Edit a principle — severity, scope, tags, or body |
 | `/canon:test-principle` | Verify a principle fires by generating a violation |
 | `/canon:review-learnings` | Review proposed learnings and apply accepted ones as principle/convention updates |
+| `/canon:learn` | Analyze build patterns and suggest principle improvements |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts; optionally archive to project history |
 
