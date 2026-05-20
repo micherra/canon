@@ -3,8 +3,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   RESOURCE_MIME_TYPE,
+  RESOURCE_URI_META_KEY,
   registerAppResource,
-  registerAppTool,
 } from "@modelcontextprotocol/ext-apps/server";
 import type { ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -82,11 +82,10 @@ export function registerToolWithUi<Schema extends ZodRawShapeCompat>(
   options: RegisterToolWithUiOptions<Schema>,
 ) {
   const { resourceUri, title, description, inputSchema, htmlFile, handler } = options;
-  registerAppTool(
-    server,
+  server.registerTool(
     toolName,
     {
-      _meta: { ui: { resourceUri } },
+      _meta: { ui: { resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri },
       description,
       inputSchema,
       title,
