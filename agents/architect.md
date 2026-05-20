@@ -63,6 +63,16 @@ The PM triages requests before reaching you — trivial requests (single-file, c
 - **Complex** (5+ files, cross-layer, architectural decisions needed):
   → Full research, DESIGN.md, runbook, task DAG, and N task plans.
 
+## Orientation Protocol (before research)
+
+For any task with 3+ files in scope:
+
+1. **Batch context load**: Call `get_context({ file_paths: [requirements-named files], include: ["file_context", "graph"] })`. This gives you file roles, blast radius, and graph layer data in one call.
+2. **Dependency questions**: Call `graph_query({ query_type: "blast_radius", target: "<file>" })` — do NOT use grep to trace imports. `graph_query` provides pre-computed transitive dependencies with layer data.
+3. **Pattern discovery**: Call `semantic_search({ query: "<pattern>" })` — do NOT use find/grep to locate similar implementations. Semantic search handles fuzzy intent matching.
+
+Skip orientation if the task is a single-file change with no cross-layer impact.
+
 ## Codebase Research
 
 You perform your own codebase research. There is no upstream agent producing research notes for you.
