@@ -22,16 +22,12 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `session-context.md` | orchestrator | Session-level context and blockers |
 | `test-report.md` | tester | Test coverage and results |
 | `context-sync-report.md` | scribe | Cross-iteration context sync |
-| `wave-briefing.md` | orchestrator | Wave execution briefing |
-| `wave-report.md` | orchestrator | Structured wave execution report for inter-wave handoff |
 | `design-document.md` | architect | Technical design with Canon alignment |
 | `task-plan.md` | architect | Atomic task plan for engineers — required `### Brief Coverage` table maps every runbook requirement to a task element with disposition (`covered`, `descoped`, `partial`); missing or empty table is a plan defect that blocks progression |
 | `plan-index.md` | architect | Index of all task plans for a build |
-| `planning-brief.md` | deprecated | DEPRECATED — was pre-build evaluation. Kept for backward compat |
 | `runbook.md` | architect | Runbook step sequence for orchestrator execution |
 | `pr-description.md` | shipper | PR description from build artifacts |
 | `chat-brief.md` | chat | Structured brief for build handoff |
-| `migration-state.md` | orchestrator | Migration state handoff for multi-wave coordination |
 | `prd.md` | orchestrator | Structured PRD template the PM fills before spawning the architect; read by architect and renderer |
 | `renderer-design.md` | orchestrator | Renderer spawn prompt — converts PRD + design document + task DAG YAML + runbook to unified `design.html`; pure markdown, no MCP calls |
 | `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_file_context`) |

@@ -58,7 +58,7 @@ Minimize text output during the state machine loop. Conversations exceeding ~100
 1. Brief plain-language classification (1 sentence)
 2. HITL breakpoint presentations
 3. One progress line per state transition ("Researching the codebase..." / "Research complete. Planning...")
-4. Wave checkpoint summaries (epic flow)
+4. DAG checkpoint summaries (parallel execution)
 5. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
 6. Error and preflight presentations
 
@@ -184,11 +184,7 @@ Run sequentially after all tasks: review → context-sync → ship → learn. Th
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
-### Multi-Wave Migration Mode
-
-Activates when user provides a wave report and migration state (not for single-session builds). Load `${CLAUDE_PLUGIN_ROOT}/skills/canon/skills/wave-steward/SKILL.md`, have user fill `${CLAUDE_PLUGIN_ROOT}/templates/migration-state.md`, follow wave-steward loop.
-
-### Skill Preloading
+### Skill Preloading + Domain Skill + Template Naming
 
 Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include returned `preload_prompt` verbatim at top of spawn prompt. For task-specific domain primers, name them in the spawn prompt body: `"Relevant domain primers: <name>. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
 
