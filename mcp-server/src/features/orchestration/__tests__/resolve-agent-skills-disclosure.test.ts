@@ -140,7 +140,6 @@ describe("applyAgentSkillsDisclosure", () => {
     const disclosed = await applyAgentSkillsDisclosure(result, projectDir);
 
     expect(disclosed.full_data_path).toBeDefined();
-    // biome-ignore lint/style/noNonNullAssertion: guarded by expect above
     const filePath = disclosed.full_data_path!;
     expect(existsSync(filePath)).toBe(true);
 
