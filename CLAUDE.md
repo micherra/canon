@@ -268,6 +268,7 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 | `"session timeout"` | Session ended before tail steps |
 | `"no new patterns observed"` | Learn step: no novel patterns |
 | `"documentation-only diff, verify produces zero signal"` | All changed files are `.md`/`.txt` |
+| `"context-sync targets are build artifacts"` | Build directly modifies scribe-managed files (CLAUDE.md, CONVENTIONS.md) |
 
 - Inline WARNING resolution (no fix agent spawned): log synthetic step `step_id: inline-fix`, `status: completed`, resolution in `outcome`.
 
@@ -410,9 +411,10 @@ When re-spawning an agent after a failure, fix-after-review cycle, or reviewer r
 
 **What to include in every re-spawn prompt:**
 
-1. **Files already completed**: Derive from `git diff --name-only {base_commit}..HEAD` in the worktree, or from the prior agent's implementation summary. Include as an explicit list: "The following files were already successfully modified by a prior attempt and do NOT need re-implementation: [list]. Focus only on the remaining work."
-2. **Step ID and artifacts already produced**: Read from journal state (`journal.json`) — include the `step_id` and all `artifacts_actual` entries from the prior attempt.
-3. **Explicit no-duplicate instruction**: "Do not re-implement files that were already completed. Pick up from where the prior attempt left off."
+1. **Uncommitted work recovery**: Before re-spawning, run `git diff --name-only` in the worktree. If modified files exist (edits done but no commit), instruct the re-spawned agent: "The following files have uncommitted changes from the prior attempt: [list]. Commit them first with `wip(recovery): save prior agent work` before proceeding."
+2. **Files already completed**: Derive from `git diff --name-only {base_commit}..HEAD` in the worktree, or from the prior agent's implementation summary. Include as an explicit list: "The following files were already successfully modified by a prior attempt and do NOT need re-implementation: [list]. Focus only on the remaining work."
+3. **Step ID and artifacts already produced**: Read from journal state (`journal.json`) — include the `step_id` and all `artifacts_actual` entries from the prior attempt.
+4. **Explicit no-duplicate instruction**: "Do not re-implement files that were already completed. Pick up from where the prior attempt left off."
 
 **Applies to all re-spawn scenarios:**
 
