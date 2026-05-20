@@ -21,6 +21,7 @@ and passes the result as the worker's spawn prompt.
 - `${WORKSPACE}` — absolute path to the Canon workspace
 - `${SLUG}` — the build slug
 - `${CANON_PARENT_WORKSPACE}` — relative workspace path under `.canon/workspaces/` (e.g., `main/{slug}`) for L4 hook authorization
+- `${MODEL_TIER}` — the model tier of this worker (e.g., `sonnet`, `haiku`, `opus`)
 
 ## Prompt
 
@@ -61,6 +62,23 @@ If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook
 - One task at a time. Complete the current task before claiming the next.
 - If a task fails, mark it as failed with TaskUpdate and move to the next available task.
 - Do not modify files outside the task plan's file list.
+
+## Retrieval Strategy
+
+For retrieval tool selection, follow the patterns in `primers/retrieval-strategy.md`.
+
+**Model-specific guidance for ${MODEL_TIER}:**
+
+- **sonnet** (default): Prefer Grep and Glob for identifier lookup, file discovery, and path matching. Use semantic_search only when you cannot name the exact string you are looking for. When a tool response includes `truncated: true`, Read the `full_data_path` file only if you need the full details.
+- **haiku**: STRONGLY prefer Grep and Glob for ALL search tasks. Use semantic_search only as a last resort after Grep returns no results. Limit search result consumption to top 5. Minimize context by requesting only the sections you need from get_context.
+- **opus**: Use your judgment per the retrieval-strategy primer. You may use semantic_search freely for conceptual queries. For large results with `truncated: true`, decide based on what you need — the summary may be sufficient.
+
+Quick reference:
+- Known identifier or exact string → Grep
+- File pattern or directory → Glob
+- Concept or paraphrased intent → semantic_search
+- Dependencies, callers, blast radius → graph_query
+- File role and metrics → get_file_context
 ````
 
 ## Template Notes

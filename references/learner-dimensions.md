@@ -360,6 +360,47 @@ Artifact: {rules/{agent_type}.md | principles/{severity}/{slug}.md | .canon/CONV
 
 ---
 
+## Dimension: retrieval-effectiveness
+
+**Goal**: Measure whether agents select the optimal retrieval tool for each search task, detect anti-patterns in tool selection, and track improvement over time as retrieval guidance (primer, model-conditioned steering) takes effect.
+
+### Data source
+
+Agent transcripts via `get_transcript` MCP tool (same pipeline as `agent-effectiveness`). Parse entries where `tool_name` is one of: `Grep`, `Glob`, `semantic_search`, `graph_query`, `get_file_context`.
+
+Classify each search query by shape:
+- **identifier**: camelCase, PascalCase, snake_case tokens, or strings containing `.`/`/` path separators
+- **conceptual**: natural language phrases (3+ words without identifier patterns)
+- **pattern**: glob-like patterns containing `*`, `?`, or `**`
+- **structural**: queries asking about callers, callees, imports, dependencies, blast radius
+
+**Minimum threshold**: 3 completed flows with transcripts required. Below threshold → note "Skipped: retrieval-effectiveness — requires 3 flows with transcripts, have {current}."
+
+### Signals to analyze
+
+| Signal | How to detect | Threshold | Suggestion |
+|--------|--------------|-----------|------------|
+| semantic_search for identifiers | `tool_name: "semantic_search"` where query classifies as `identifier` | >= 3 occurrences across >= 2 flows | Primer update: strengthen "Use Grep for exact identifiers" guidance |
+| Grep for conceptual queries | `tool_name: "Grep"` where query classifies as `conceptual` | >= 3 occurrences across >= 2 flows | Primer update: strengthen "Use semantic_search for conceptual queries" guidance |
+| Repeated search refinement | Same `tool_name` called 3+ times in sequence with progressively narrowing/shifting queries | >= 2 occurrences per flow, >= 2 flows | Investigate: initial search strategy may need improvement; primer may need "one search then act" emphasis |
+| Tool switch after failure | Search tool A returns no/empty results, then search tool B called with semantically similar query | >= 2 occurrences across >= 2 flows | Track: positive if grep→semantic or semantic→grep (adaptive behavior); negative if circular (A→B→A) |
+| Grep dominance ratio | Count Grep calls / total search calls, per agent_type and model | Report metric, no threshold | Baseline: track over time to measure Wave 1-3 effectiveness; expect ratio to increase for sonnet/haiku |
+
+### Cross-checks
+
+- Compare against the `agent-effectiveness` dimension's "Unused available tools" signal -- if agents have `semantic_search` available but never use it, that's different from using Grep instead (intentional per primer guidance vs ignorance).
+- When `tool_switch_after_failure` is detected, check if the switch direction aligns with the retrieval-strategy primer's decision framework. Aligned switches suggest the primer is working; misaligned switches suggest a gap.
+
+### Output per suggestion
+
+```
+**{agent_type}: {signal name}** ({N} occurrences across {M} flows)
+Evidence: {step_id} in {flow_slug} -- {tool_name} called with query "{query}" (classified: {identifier|conceptual|pattern|structural})
+Suggest: {primer update: "{specific text change}" | investigate: "{description}" | baseline metric: {current value}}
+```
+
+---
+
 ## Report Template
 
 Combine all suggestions into `.canon/LEARNING-REPORT.md`:
@@ -406,6 +447,14 @@ Transcript: {workspace}/transcripts/{relevant_file}
 Suggest: {agent rule change: "{exact text}" | principle proposal: "{description}" | convention update: "{text}"}
 Artifact: {rules/{agent_type}.md | principles/{severity}/{slug}.md | .canon/CONVENTIONS.md}
 
+### Retrieval Effectiveness (from search tool analysis)
+{retrieval-effectiveness suggestions, or "No retrieval effectiveness issues detected." if none}
+
+Each suggestion follows this format:
+**{agent_type}: {signal name}** ({N} occurrences across {M} flows)
+Evidence: {step_id} in {flow_slug} -- {tool_name} called with query "{query}" (classified: {query_shape})
+Suggest: {primer update: "{text}" | investigate: "{description}" | baseline: {value}}
+
 ### Recurring Suggestions
 {Suggestions that appeared in 3+ previous learning runs but were never acted on — flag these prominently}
 
@@ -427,7 +476,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
 {
   "run_id": "learn_{YYYYMMDD}_{random_hex}",
   "timestamp": "{ISO-8601}",
-  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health", "agent-effectiveness"],
+  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health", "agent-effectiveness", "retrieval-effectiveness"],
   "data_summary": {
     "reviews_analyzed": 0,
     "source_files_scanned": 0,
@@ -438,7 +487,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
     {
       "id": "sug_{deterministic_hash}",
       "dimension": "principle-health",
-      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-anti-pattern",
+      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-anti-pattern|semantic-for-identifier|grep-for-conceptual|search-refinement-chain|tool-switch-pattern|grep-dominance-ratio",
       "target": "principle-id or convention text or state name",
       "summary": "One-line description of what's suggested",
       "confidence": "high|medium",

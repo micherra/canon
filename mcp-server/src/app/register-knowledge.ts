@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { AccuracyMap } from "@features/diagnostics/services/prediction-accuracy.ts";
 import {
   buildAccuracySummary,
@@ -6,7 +7,10 @@ import {
 import { recordPrediction } from "@features/diagnostics/services/prediction-tracker.ts";
 import type { FileSignals } from "@features/diagnostics/services/signal-compiler.ts";
 import { compileSignals } from "@features/diagnostics/services/signal-compiler.ts";
-import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
+import {
+  type DriftReportOutput,
+  getDriftReport,
+} from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
 import type { FileContextOutput } from "@features/file-context/tools/get-file-context.ts";
@@ -20,6 +24,8 @@ import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.
 import type { GetPrinciplesBatchOutput } from "@features/principles/tools/get-principles.ts";
 import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { CANON_DIR } from "@shared/constants.ts";
+import { applyDisclosure } from "@shared/lib/progressive-disclosure.ts";
 import { z } from "zod";
 import {
   gatedWrapHandler,
@@ -33,16 +39,31 @@ import {
 
 type IncludeSection = "principles" | "file_context" | "drift" | "graph" | "signals";
 
+/**
+ * Compact drift section returned when the full get_context response is truncated.
+ * Only preserves the pre-formatted summary string; full data is available at full_data_path.
+ */
+export type SlimmedDriftOutput = {
+  formatted: string;
+  truncated: true;
+};
+
 export type GetContextOutput = {
   file_paths: string[];
   include: IncludeSection[];
   principles?: GetPrinciplesBatchOutput;
   file_context?: FileContextOutput[];
-  drift?: Awaited<ReturnType<typeof getDriftReport>>;
+  drift?: DriftReportOutput | SlimmedDriftOutput;
   graph?: unknown;
   signals?: FileSignals[];
   /** Wave 3: Per-principle accuracy summary for learner agent consumption. */
   accuracy_summary?: string;
+  /** When true, response was truncated due to size. Full data at full_data_path. */
+  truncated?: boolean;
+  /** Absolute path to full response JSON when truncated is true. */
+  full_data_path?: string;
+  /** Compact overview of the response content when truncated is true. */
+  disclosure_summary?: string;
 };
 
 const getContextInputSchema = {
@@ -116,6 +137,114 @@ function resolveSignals(filePaths: string[], output: GetContextOutput): void {
   }
 }
 
+/**
+ * Produce a compact summary string for a GetContextOutput for disclosure logging.
+ * Reports section presence and counts without including full payloads.
+ */
+function summarizeContextOutput(data: GetContextOutput): string {
+  const parts: string[] = [
+    `Files: ${data.file_paths.join(", ")}`,
+    `Sections: ${data.include.join(", ")}`,
+  ];
+  if (data.principles) {
+    const count = Array.isArray(data.principles.principles)
+      ? data.principles.principles.length
+      : "batch";
+    parts.push(`Principles: ${count} matched`);
+  }
+  if (data.file_context) parts.push(`File contexts: ${data.file_context.length} files`);
+  if (data.drift) parts.push("Drift: included");
+  if (data.graph) parts.push("Graph: included");
+  if (data.signals) parts.push(`Signals: ${data.signals.length} files`);
+  return parts.join("\n");
+}
+
+/**
+ * Build a slimmed GetContextOutput for truncated responses.
+ * Preserves routing metadata but strips large payloads (bodies, content, dependency lists).
+ */
+export function buildSlimmedOutput(
+  output: GetContextOutput,
+  fullDataPath: string,
+): GetContextOutput {
+  const slimmed: GetContextOutput = {
+    file_paths: output.file_paths,
+    full_data_path: fullDataPath,
+    include: output.include,
+    truncated: true,
+  };
+  if (output.principles) {
+    slimmed.principles = {
+      ...output.principles,
+      principles: output.principles.principles.map((p) => ({ ...p, body: "" })),
+    };
+  }
+  if (output.file_context) {
+    slimmed.file_context = output.file_context.map((fc) => ({
+      blast_radius: undefined,
+      co_change_partners: undefined,
+      content: "",
+      entities: undefined,
+      exports: [],
+      file_path: fc.file_path,
+      graph_metrics: fc.graph_metrics,
+      hotspot_score: undefined,
+      imported_by: [],
+      imported_by_layer: {},
+      imports: [],
+      imports_by_layer: {},
+      last_verdict: fc.last_verdict,
+      layer: fc.layer,
+      layer_stack: fc.layer_stack,
+      project_max_impact: fc.project_max_impact,
+      role: fc.role,
+      shape: fc.shape,
+      summary: fc.summary,
+      violation_count: fc.violation_count,
+      violations: [],
+    }));
+  }
+  if (output.drift !== undefined) {
+    const slimmedDrift: SlimmedDriftOutput = {
+      formatted: output.drift.formatted ?? "See full data file.",
+      truncated: true,
+    };
+    slimmed.drift = slimmedDrift;
+  }
+  if (output.graph !== undefined) {
+    const graphArr = Array.isArray(output.graph) ? output.graph : [];
+    slimmed.graph = {
+      file_count: graphArr.length,
+      note: "See full data file for blast radius details.",
+    };
+  }
+  if (output.signals !== undefined) {
+    slimmed.signals = output.signals.map((s) => ({ ...s, signals: [] }));
+  }
+  if (output.accuracy_summary !== undefined) slimmed.accuracy_summary = output.accuracy_summary;
+  return slimmed;
+}
+
+/**
+ * Apply progressive disclosure to the assembled GetContextOutput.
+ * Returns the output unchanged when under threshold; returns a slimmed version
+ * with a file pointer when over threshold.
+ */
+async function applyContextDisclosure(output: GetContextOutput): Promise<GetContextOutput> {
+  const disclosure = await applyDisclosure(output, {
+    filePrefix: "get-context",
+    outputDir: join(projectDir, CANON_DIR, "artifacts"),
+    summarize: summarizeContextOutput,
+  });
+  if (disclosure.truncated) {
+    const slimmed = buildSlimmedOutput(output, disclosure.full_data_path);
+    // Include the disclosure summary so callers get a useful overview without reading the full file.
+    slimmed.disclosure_summary = disclosure.summary;
+    return slimmed;
+  }
+  return output;
+}
+
 async function handleGetContext(input: {
   file_paths: string[];
   include?: IncludeSection[];
@@ -184,7 +313,7 @@ async function handleGetContext(input: {
   }
 
   await Promise.all(tasks);
-  return output;
+  return applyContextDisclosure(output);
 }
 
 export { handleGetContext };
