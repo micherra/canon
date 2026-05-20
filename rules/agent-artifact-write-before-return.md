@@ -65,3 +65,20 @@ Status: DONE
 ## Exceptions
 
 - **Zero-artifact steps**: This rule does not apply to agents that genuinely produce no file artifacts for a given step. However, if your step was logged with `artifacts_expected`, you always have declared artifacts. If your step produces only a status verdict with no file (e.g., a reviewer reporting CLEAN in early-scan mode), verify with the orchestrator that no artifact path was declared before skipping.
+
+## Context Budget
+
+Artifact writes happen at the end of your execution. If you exhaust your context window before reaching the write step, the artifact is never produced. This is the most common cause of missing artifacts.
+
+**Turn budget awareness**:
+- At 50% of your available turns, verify you have started producing your primary artifact. If you have not started, reduce scope and begin writing immediately.
+- At 75% of your available turns, your primary artifact MUST be written to disk. Remaining turns are for refinement only.
+- If you detect you are running low on turns (repeated tool calls without progress, investigation spiraling), write a partial artifact immediately with a `## Status: Partial` heading and return BLOCKED. A partial artifact that exists is strictly better than a complete artifact that was never written.
+
+**Early-write pattern**:
+For complex artifacts (design documents, reviews, test reports), write a skeleton to disk early in your execution, then refine it in place:
+1. After initial investigation, write a skeleton with headings and placeholder content
+2. Fill in sections as you complete analysis
+3. Final pass: polish and verify completeness
+
+This ensures the artifact exists on disk even if you exhaust context mid-execution. The `enforceArtifacts` gate in `logStep` will catch a completely missing artifact, but it cannot catch an artifact you never started writing.
