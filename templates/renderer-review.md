@@ -524,6 +524,17 @@ Include before `</body>` (in this order):
 
 ```javascript
 (function () {
+  // ── Design token mapping (Canvas 2D cannot use CSS custom properties) ──
+  // The hex values below correspond to DESIGN-SYSTEM.md Section A tokens:
+  //   #6c8cff  → var(--accent)      — changed file nodes
+  //   #ff6b6b  → var(--danger)      — violation ring stroke on nodes
+  //   #888780  → (no direct token)  — edge lines and arrowheads; visually between --text-muted and --text
+  //   #b4b8c8  → var(--text)        — node label text color
+  //   #1e2030  → var(--bg)          — tooltip background (slightly lighter variant)
+  //   #3a3d52  → var(--border)      — tooltip border (opaque variant of --border rgba)
+  //   #e8eaf0  → var(--text-bright) — tooltip text color
+  // When design tokens change, update these hex values to match.
+
   var canvas = document.getElementById('review-subgraph-canvas');
   if (!canvas) return;
   var raw = canvas.getAttribute('data-subgraph');

@@ -341,6 +341,15 @@ rendering with a force-directed layout plus click-to-inspect side panel:
 
 ```javascript
 (function () {
+  // ── Design token mapping (Canvas 2D cannot use CSS custom properties) ──
+  // The hex values below correspond to DESIGN-SYSTEM.md Section A tokens:
+  //   #6c8cff  → var(--accent)      — changed nodes, selection rings
+  //   #ff6b6b  → var(--danger)      — violation nodes, violation rings
+  //   #636a80  → var(--text-muted)  — fallback layer color (when layer has no color)
+  //   #888780  → (no direct token)  — same-layer edge color; visually between --text-muted and --text
+  //   #EF9F27  → (no direct token)  — cross-layer edge color; amber similar to --warning (#fbbf24)
+  // When design tokens change, update these hex values to match.
+
   const canvas = document.getElementById('codebase-graph-canvas');
   const tooltip = document.getElementById('graph-tooltip');
   const legend = document.getElementById('layer-legend');
@@ -615,7 +624,8 @@ rendering with a force-directed layout plus click-to-inspect side panel:
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function showPanel(node) {
