@@ -1,165 +1,108 @@
 # Canon principle overrides for this repository.
 #
-# This file is version-controlled (gitignore exception: !.canon/principle-overrides.yaml)
-# so that all team members and CI share the same principle scope calibration.
+# This file configures the principle system for the Canon codebase itself —
+# a TypeScript MCP server with no UI, no Terraform, no Docker, no SQL schema.
+# Built-in principles that target UI or infrastructure file patterns will never
+# match any file in this repository. Rather than deleting them (they are correct
+# for other projects), we disable them here using the override mechanism.
 #
-# Rationale for the overall override set:
-# The Canon codebase is a TypeScript MCP server with no UI, no Terraform, no Docker,
-# no SQL schema files, and no Kubernetes manifests. 20 principles are scoped exclusively
-# to UI and infra patterns that will structurally never match any file in this repo.
-# Disabling them prevents reviewer context exhaustion (57 → ~37 principles loaded)
-# and eliminates false-positive rule matches from the layer inferrer.
-# Source: LEARNING-REPORT.md, principle-usage-audit, 2026-05-20.
+# Additionally, observable-best-effort is promoted to rule severity and scoped
+# to the MCP server source where the 131 catch-block pattern is most prevalent.
+#
+# Actions:
+#   disable         — principle never fires in this repository
+#   override-severity — change the enforcement level for this repository only
+#   narrow-scope    — restrict the principle to a subset of files
 
 overrides:
+  # --- UI-scoped principles (11 unique) ---
+  # All target src/components/**, src/ui/**, *.tsx, *.vue, *.svelte, *.css, *.scss
+  # patterns that match zero files in this TypeScript MCP server repository.
+  # The Svelte UI was deleted (confirmed: workspace delete-mcp-svelte-app-uis).
 
-  # ── UI-scoped principles (11) ─────────────────────────────────────────────
-  # The Svelte UI was deleted (workspace: delete-mcp-svelte-app-uis). No *.svelte,
-  # *.css, *.scss, or src/components/** files exist in this repository.
-  # These 11 principles have never triggered in 18 reviews (drift report, 2026-05-20).
-
-  - id: compose-from-small-to-large
+  - principle_id: compose-from-small-to-large
     action: disable
-    reason: >
-      Scoped to Svelte/React component files (*.svelte, src/components/**).
-      The Canon UI was deleted; zero component files exist in this repository.
-      Never triggered in 18 reviews. Disabling prevents false-positive scope matches.
+    reason: "UI-scoped principle (src/components/**, src/ui/**, *.tsx/*.vue/*.svelte); no UI component files in this TypeScript MCP server repository — Svelte app was deleted"
 
-  - id: props-are-the-component-contract
+  - principle_id: props-are-the-component-contract
     action: disable
-    reason: >
-      Scoped to component prop patterns (*.tsx, *.vue, *.svelte).
-      No component files exist in this repository since the Svelte UI deletion.
-      Never triggered in 18 reviews.
+    reason: "UI-scoped principle (src/components/**, src/ui/**, *.tsx/*.vue/*.svelte); no component files exist in this repository"
 
-  - id: unidirectional-data-flow
+  - principle_id: unidirectional-data-flow
     action: disable
-    reason: >
-      Scoped to UI state management patterns (*.svelte, *.tsx, *.vue).
-      No UI layer exists in this repository. Never triggered in 18 reviews.
+    reason: "UI-scoped principle (src/components/**, src/ui/**, *.tsx/*.vue/*.svelte); no UI files in this repository"
 
-  - id: deploy-frontend-modules-independently
+  - principle_id: deploy-frontend-modules-independently
     action: disable
-    reason: >
-      Scoped to frontend deployment patterns and bundler configuration.
-      This repository ships a TypeScript MCP server, not a frontend module.
-      Never triggered in 18 reviews.
+    reason: "UI/infra-scoped principle for micro-frontend deployments (src/**, packages/**, apps/**); this repository has no frontend modules to deploy independently"
 
-  - id: minimize-client-side-state
+  - principle_id: minimize-client-side-state
     action: disable
-    reason: >
-      Scoped to client-side state management (*.svelte, *.tsx, React/Svelte stores).
-      No client-side code exists in this repository. Never triggered in 18 reviews.
+    reason: "UI-scoped principle (src/**, *.tsx/*.vue/*.svelte); no client-side state management in this server-side TypeScript MCP server"
 
-  - id: isolate-frontend-runtime-state
+  - principle_id: isolate-frontend-runtime-state
     action: disable
-    reason: >
-      Scoped to frontend runtime isolation patterns (*.svelte, *.tsx).
-      No frontend runtime exists in this repository. Never triggered in 18 reviews.
+    reason: "UI-scoped principle for micro-frontend module isolation (src/**, packages/**, apps/**); no frontend runtime exists in this repository"
 
-  - id: resilient-frontend-composition
+  - principle_id: resilient-frontend-composition
     action: disable
-    reason: >
-      Scoped to frontend component composition and error boundary patterns.
-      No component layer exists in this repository. Never triggered in 18 reviews.
+    reason: "UI-scoped principle for frontend module error boundaries (src/**, packages/**, apps/**); no frontend composition in this repository"
 
-  - id: single-source-of-component-styles
+  - principle_id: single-source-of-component-styles
     action: disable
-    reason: >
-      Scoped to CSS/SCSS co-location rules (*.css, *.scss, *.svelte).
-      No stylesheet files exist in this repository. Never triggered in 18 reviews.
+    reason: "UI/style-scoped principle (*.css, *.scss, *.tsx/*.vue); no CSS, SCSS, or styled component files exist in this repository"
 
-  - id: design-tokens-as-style-contract
+  - principle_id: design-tokens-as-style-contract
     action: disable
-    reason: >
-      Scoped to design token files and CSS custom property conventions.
-      No design token or stylesheet files exist in this repository.
-      Never triggered in 18 reviews.
+    reason: "UI/style-scoped principle (*.css, *.scss, *.tsx/*.vue); no design tokens or style files exist in this repository"
 
-  - id: colocate-component-assets
+  - principle_id: colocate-component-assets
     action: disable
-    reason: >
-      Scoped to component asset co-location (src/components/**, *.module.css).
-      No component directories or assets exist in this repository.
-      Never triggered in 18 reviews.
+    reason: "UI-scoped principle for component file co-location (src/components/**, src/ui/**); no UI components exist in this repository"
 
-  - id: prefer-browser-native-integration
+  - principle_id: prefer-browser-native-integration
     action: disable
-    reason: >
-      Scoped to browser API usage patterns (Web Components, native form elements).
-      This repository has no browser-facing code. Never triggered in 18 reviews.
+    reason: "UI-scoped principle for browser API usage in micro-frontends (src/**, packages/**, apps/**); no browser runtime in this server-side repository"
 
-  # ── Infra-scoped principles (5) ───────────────────────────────────────────
-  # No Terraform, Dockerfile, Kubernetes manifests, or Helm charts exist in
-  # this repository. These 5 principles will structurally never match any file.
-  # All 5 have never triggered in 18 reviews (drift report, 2026-05-20).
-  #
-  # Note: least-privilege-access is a rule-severity principle. Disabling it here
-  # is appropriate because it is scoped to infra IAM patterns (*.tf, k8s RBAC YAML)
-  # which do not exist in this repository. It would not apply to TypeScript code
-  # access-control decisions, which are covered by fail-closed-by-default instead.
+  # --- Infrastructure-scoped principles (5) ---
+  # All target *.tf, *.tfvars, **/terraform/**, Dockerfile, **/k8s/**, etc.
+  # This repository has no Terraform, no Kubernetes manifests, no Dockerfiles.
 
-  - id: immutable-infrastructure
+  - principle_id: immutable-infrastructure
     action: disable
-    reason: >
-      Scoped to Terraform and Dockerfile patterns (**/*.tf, **/Dockerfile*).
-      No infrastructure-as-code files exist in this repository.
-      Never triggered in 18 reviews.
+    reason: "Infra-scoped principle (*.tf, *.tfvars, **/terraform/**, Dockerfile, k8s/**); no infrastructure-as-code files exist in this repository"
 
-  - id: least-privilege-access
+  - principle_id: least-privilege-access
     action: disable
-    reason: >
-      Scoped to IAM role definitions and Kubernetes RBAC (**/*.tf, **/k8s/**).
-      No infra policy files exist in this repository. TypeScript access-control
-      decisions are covered by fail-closed-by-default instead.
-      Never triggered in 18 reviews.
+    reason: "Infra-scoped principle (*.tf, *.tfvars, **/terraform/**, Dockerfile, k8s/**, helm/**); no IAM or infra config files in this repository — the rule-level security constraint is handled by secrets-never-in-code for this codebase"
 
-  - id: design-for-self-healing
+  - principle_id: design-for-self-healing
     action: disable
-    reason: >
-      Scoped to infrastructure health check and restart policies (**/k8s/**, **/helm/**).
-      No Kubernetes or Helm configuration exists in this repository.
-      Never triggered in 18 reviews.
+    reason: "Infra-scoped principle for orchestration/restart policies (*.tf, Dockerfile, k8s/**); no infrastructure definitions in this repository"
 
-  - id: infrastructure-tested-like-code
+  - principle_id: infrastructure-tested-like-code
     action: disable
-    reason: >
-      Scoped to Terraform and Helm chart testing conventions (**/*.tf, **/helm/**).
-      No infrastructure configuration files exist in this repository.
-      Never triggered in 18 reviews.
+    reason: "Infra-scoped principle for testing Terraform/k8s definitions (*.tf, Dockerfile, k8s/**); no infrastructure definitions exist to test in this repository"
 
-  - id: architectural-fitness-functions
+  - principle_id: architectural-fitness-functions
     action: disable
-    reason: >
-      Scoped to fitness function definitions in infra testing frameworks.
-      No infra testing layer exists in this repository. Never triggered in 18 reviews.
+    reason: "Infra-scoped principle (scope.layers: [infra]); despite matching **/__tests__/** file patterns, the infra layer gate prevents it from firing on mcp-server test files — disabling to make this structural non-applicability explicit"
 
-  # ── observable-best-effort scope and severity overrides ───────────────────
-  # Evidence: 131 catch blocks in mcp-server/src production code; 10-sample found
-  # ~2/10 genuinely silent catch blocks. The principle has been treated as blocking-level
-  # in practice across multiple reviews. The canonical transcript-capture failure story
-  # (3 rounds of fixes, all silently failing in production due to empty catch blocks)
-  # demonstrates the severity of this pattern.
-  # Source: LEARNING-REPORT.md, Section 5 (R2, R3), 2026-05-20.
+  # --- observable-best-effort: promote to rule + narrow to MCP server ---
+  # Evidence: 131 catch blocks in mcp-server/src/; canonical transcript-capture
+  # failure story (principle fixed 3 times, never worked due to silent catches);
+  # treated as blocking-level in practice. Keeping file in strong-opinions/ and
+  # using overrides to promote severity and add explicit scope.
 
-  - id: observable-best-effort
+  - principle_id: observable-best-effort
     action: override-severity
     severity: rule
-    reason: >
-      Promoting from strong-opinion to rule. Evidence: 131 catch blocks in production
-      mcp-server/src code; 10-sample found ~2/10 genuinely silent. The canonical
-      transcript-capture feature was silently broken across 3 fix rounds due to empty
-      catch blocks — bugs that survived code review, tests, and production deployment.
-      Reviewers already treat silent catch blocks as blocking violations in practice;
-      this override makes enforcement consistent and removes the ambiguity.
+    reason: "131 catch blocks in mcp-server/src/ with ~20% genuinely silent; canonical silent-failure story documented in principle body (transcript-capture fixed 3 times, never worked); reviewers already treat violations as blocking — promoting to rule makes enforcement consistent with practice"
 
-  - id: observable-best-effort
+  - principle_id: observable-best-effort
     action: narrow-scope
-    file_patterns:
-      - "mcp-server/src/**"
-    reason: >
-      Narrowing scope to mcp-server/src/** where the 131 catch blocks are concentrated
-      (78 in features/ alone). This repo's production code is entirely in mcp-server/src/.
-      Narrowing prevents false-positive matches on documentation, agent protocol files,
-      templates, and test fixtures where catch-block patterns are illustrative rather
-      than operational.
+    applies_to:
+      layers: []
+      file_patterns:
+        - "mcp-server/src/**"
+    reason: "Scope observable-best-effort explicitly to the MCP server production code where the 131 catch-block pattern is most prevalent; the principle body's examples and rationale are all drawn from mcp-server/src/ findings"
