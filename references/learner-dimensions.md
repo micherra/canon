@@ -383,7 +383,7 @@ Classify each search query by shape:
 | semantic_search for identifiers | `tool_name: "semantic_search"` where query classifies as `identifier` | >= 3 occurrences across >= 2 flows | Primer update: strengthen "Use Grep for exact identifiers" guidance |
 | Grep for conceptual queries | `tool_name: "Grep"` where query classifies as `conceptual` | >= 3 occurrences across >= 2 flows | Primer update: strengthen "Use semantic_search for conceptual queries" guidance |
 | Repeated search refinement | Same `tool_name` called 3+ times in sequence with progressively narrowing/shifting queries | >= 2 occurrences per flow, >= 2 flows | Investigate: initial search strategy may need improvement; primer may need "one search then act" emphasis |
-| Tool switch after failure | Search tool A returns no/empty results, then search tool B called with semantically similar query | >= 2 occurrences across >= 2 flows | Track: positive if grep->semantic or semantic->grep (adaptive behavior); negative if circular (A->B->A) |
+| Tool switch after failure | Search tool A returns no/empty results, then search tool B called with semantically similar query | >= 2 occurrences across >= 2 flows | Track: positive if grep→semantic or semantic→grep (adaptive behavior); negative if circular (A→B→A) |
 | Grep dominance ratio | Count Grep calls / total search calls, per agent_type and model | Report metric, no threshold | Baseline: track over time to measure Wave 1-3 effectiveness; expect ratio to increase for sonnet/haiku |
 
 ### Cross-checks

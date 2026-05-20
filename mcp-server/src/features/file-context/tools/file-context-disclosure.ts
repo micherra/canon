@@ -58,7 +58,8 @@ export async function applyFileContextDisclosure(
     project_max_impact: output.project_max_impact,
     role: output.role,
     shape: output.shape,
-    summary: output.summary,
+    // Include the disclosure summary so callers get a useful overview without reading the full file.
+    summary: disclosure.summary,
     truncated: true,
     violation_count: output.violation_count,
     violations: [],

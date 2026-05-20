@@ -51,7 +51,7 @@ export const applyDisclosure = async <T>(
     return { data, truncated: false };
   }
 
-  const hash = createHash("md5").update(serialized).digest("hex").slice(0, 8);
+  const hash = createHash("sha256").update(serialized).digest("hex").slice(0, 16);
   const fileName = `${opts.filePrefix}-${hash}.json`;
   const filePath = join(opts.outputDir, fileName);
 

@@ -7,7 +7,7 @@ import {
 import { recordPrediction } from "@features/diagnostics/services/prediction-tracker.ts";
 import type { FileSignals } from "@features/diagnostics/services/signal-compiler.ts";
 import { compileSignals } from "@features/diagnostics/services/signal-compiler.ts";
-import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
+import { getDriftReport, type DriftReportOutput } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
 import type { FileContextOutput } from "@features/file-context/tools/get-file-context.ts";
@@ -36,12 +36,21 @@ import {
 
 type IncludeSection = "principles" | "file_context" | "drift" | "graph" | "signals";
 
+/**
+ * Compact drift section returned when the full get_context response is truncated.
+ * Only preserves the pre-formatted summary string; full data is available at full_data_path.
+ */
+export type SlimmedDriftOutput = {
+  formatted: string;
+  truncated: true;
+};
+
 export type GetContextOutput = {
   file_paths: string[];
   include: IncludeSection[];
   principles?: GetPrinciplesBatchOutput;
   file_context?: FileContextOutput[];
-  drift?: Awaited<ReturnType<typeof getDriftReport>>;
+  drift?: DriftReportOutput | SlimmedDriftOutput;
   graph?: unknown;
   signals?: FileSignals[];
   /** Wave 3: Per-principle accuracy summary for learner agent consumption. */
@@ -50,6 +59,8 @@ export type GetContextOutput = {
   truncated?: boolean;
   /** Absolute path to full response JSON when truncated is true. */
   full_data_path?: string;
+  /** Compact overview of the response content when truncated is true. */
+  disclosure_summary?: string;
 };
 
 const getContextInputSchema = {
@@ -191,9 +202,11 @@ export function buildSlimmedOutput(
     }));
   }
   if (output.drift !== undefined) {
-    slimmed.drift = {
-      formatted: (output.drift as { formatted?: string }).formatted ?? "See full data file.",
-    } as typeof output.drift;
+    const slimmedDrift: SlimmedDriftOutput = {
+      formatted: output.drift.formatted ?? "See full data file.",
+      truncated: true,
+    };
+    slimmed.drift = slimmedDrift;
   }
   if (output.graph !== undefined) {
     const graphArr = Array.isArray(output.graph) ? output.graph : [];
@@ -221,7 +234,10 @@ async function applyContextDisclosure(output: GetContextOutput): Promise<GetCont
     summarize: summarizeContextOutput,
   });
   if (disclosure.truncated) {
-    return buildSlimmedOutput(output, disclosure.full_data_path);
+    const slimmed = buildSlimmedOutput(output, disclosure.full_data_path);
+    // Include the disclosure summary so callers get a useful overview without reading the full file.
+    slimmed.disclosure_summary = disclosure.summary;
+    return slimmed;
   }
   return output;
 }

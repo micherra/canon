@@ -6,7 +6,7 @@
  * 2. Over-threshold truncation — returns summary + file pointer, writes file
  * 3. Custom threshold (low) — small data triggers truncation
  * 4. Custom threshold (high) — large data passes through
- * 5. File pointer format — full_data_path ends with "{prefix}-{8-hex}.json"
+ * 5. File pointer format — full_data_path ends with "{prefix}-{16-hex}.json"
  * 6. Summary function called — receives original data, result appears in summary field
  * 7. Deterministic filenames — same data+prefix → same name; different data → different name
  * 8. Directory creation — works when outputDir does not yet exist
@@ -201,7 +201,7 @@ describe("applyDisclosure", () => {
   });
 
   describe("file pointer format", () => {
-    it("full_data_path ends with '{filePrefix}-{8-char-hex}.json'", async () => {
+    it("full_data_path ends with '{filePrefix}-{16-char-hex}.json'", async () => {
       const data = makeLargeData(200);
       const result = await applyDisclosure(data, {
         filePrefix: "file-context",
@@ -213,7 +213,7 @@ describe("applyDisclosure", () => {
       expect(result.truncated).toBe(true);
       if (result.truncated) {
         const filename = result.full_data_path.split("/").pop()!;
-        expect(filename).toMatch(/^file-context-[0-9a-f]{8}\.json$/);
+        expect(filename).toMatch(/^file-context-[0-9a-f]{16}\.json$/);
       }
     });
 
