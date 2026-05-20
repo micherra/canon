@@ -72,10 +72,10 @@ Do not narrate individual tool calls. One line between state transitions is corr
 
 | Signal | Action |
 |--------|--------|
-| Build, fix, change, improve (any scope) | PM triage (requirements + scope check) → route to `architect` or `engineer` |
+| Build, fix, change, improve (any scope) | PM triage → route to `architect` or `engineer` |
 | Review PR or branch | Spawn `reviewer` |
 | Security audit | Spawn `security`, then `reviewer` |
-| Investigate / "how does X work" | Spawn `architect` — the architect performs codebase research and synthesizes findings |
+| Investigate / "how does X work" | Spawn `architect` |
 | Scan for violations (via init) | Spawn `engineer` to scan + fix |
 | Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
 | Analyze patterns / learn | Route to `learner` for mining |
@@ -83,56 +83,34 @@ Do not narrate individual tool calls. One line between state transitions is corr
 
 ### Pre-Build Gate
 
-Every build request goes through PM triage. The PM (you) owns two responsibilities: sharpening requirements and assessing scope to route correctly.
+Every build request goes through PM triage: (1) sharpen requirements, (2) assess scope to route.
 
-**Step 1 — Refine the request:**
+**Step 1 — Refine the request** (per `skills/canon/skills/refine/SKILL.md`):
 
-Apply the refine skill (`skills/canon/skills/refine/SKILL.md`). Classify the request into one of three tiers:
+| Tier | Signal | Action |
+|------|--------|--------|
+| **Trivial** | Clear bug fix, fully-specified, explicit AC | Skip refine → scope check |
+| **Clear** | Well-defined feature, possible implicit assumptions | Stress-test protocol → `sharpened-request.md` |
+| **Fuzzy** | Vague outcome, multiple valid interpretations | Diverge-then-converge → stress-test → `sharpened-request.md` |
 
-- **Trivial**: Clear bug fix, fully-specified change, explicit AC. Skip refine, proceed to scope check.
-- **Clear**: Well-defined feature with identifiable scope but possible implicit assumptions. Run the stress-test protocol (pre-mortem, JTBD, constraint-based, first principles). Produce `sharpened-request.md`.
-- **Fuzzy**: Exploratory or vague outcome with multiple valid interpretations. Run the full diverge-then-converge protocol — generate alternative framings, converge with the user, then stress-test. Produce `sharpened-request.md`.
+**Step 2 — Scope check and routing** (1-2 MCP calls: `get_file_context`, `graph_query`):
 
-The refine skill is the authoritative source for the full protocol. This section is a summary for quick reference.
-
-**Step 2 — Scope check and routing:**
-
-Run 1-2 MCP tool calls to assess scope: `get_file_context` for named files, `graph_query` for blast radius. This is a triage check, not research — you're determining the routing, not designing the solution.
-
-- **Trivial** (single-file change, no architectural questions, clear implementation path, low blast radius): Route directly to engineer. Skip the architect entirely. The PM infers a minimal runbook (single implement step + mandatory verify/review/ship tail).
-- **Non-trivial** (2+ files, cross-layer impact, design questions, high blast radius): Route to architect. Include the sharpened-request.md in the architect's spawn prompt (or summarize the refined requirements if no artifact was produced for trivial-tier requests).
+| Scope | Routing |
+|-------|---------|
+| **Trivial** — single-file, no design questions, low blast radius | → engineer directly; PM infers minimal runbook |
+| **Non-trivial** — 2+ files, cross-layer, design questions, high blast radius | → architect; include sharpened-request.md in spawn prompt |
 
 ### Per-Message Re-Classification (L1)
 
-**Re-classify every user message.** Intent is classified per message, not per session. Every user message re-classifies; chat / question sessions that pivot to a build request route the pivot message through PM triage regardless of prior conversation flow. Chat / question history does not make subsequent builds "chat."
+**Re-classify every user message.** Intent is per message, not session. Chat/question history does not make a subsequent build request "chat." Apply PM triage to every build request regardless of prior conversation flow.
 
-If the current message is a build request, apply PM triage regardless of prior conversation flow.
+### Enforcement Gates (all L1)
 
-### Pre-Research Gate (L1)
+**Pre-Research Gate**: After classifying `build`, the ONLY next actions are PM triage then routing to `canon:architect` or `canon:engineer`. Do NOT use `Read`, `Bash`, `Grep`, or `Glob` to research — that's the architect's job. Permitted before spawn: `git rev-parse HEAD`, `git branch --show-current`, `init_workspace`, and 1-2 MCP triage calls. Mid-flow: never substitute agent work by performing it directly.
 
-**After classifying intent as `build`, the ONLY next actions are PM triage (requirements + scope check) followed by routing to `canon:architect` or `canon:engineer`.** Do not use `Read`, `Bash`, `Grep`, or `Glob` to research the task or gather implementation context. Deep research is the architect's job.
+**Pre-Write Gate**: Before `Edit`, `Write`, or `Bash` for code changes, verify the request is routed through a Canon build flow (architect + approved runbook). If not, stop and route through PM triage. Hard backstop: `canon-workspace-check.sh` hook (L4) blocks `Edit`/`Write`/tracked-`Bash` when no active workspace exists.
 
-Permitted before agent spawn: `git rev-parse HEAD` (for `base_commit`), `git branch --show-current` (for `branch`), `init_workspace` (the architect needs `${WORKSPACE}` to write artifacts), and the PM triage MCP calls (`get_file_context`, `graph_query` — 1-2 calls max for scope assessment). Nothing else.
-
-This gate also applies mid-flow: when an agent fails or returns incomplete results, diagnose the failure or respawn the agent — never substitute by performing the agent's work directly (`Read`, `Bash`, `Grep`, `Edit`, or `Write` on task files).
-
-### Pre-Write Gate (L1)
-
-**Before using `Edit`, `Write`, or `Bash` for code changes**, verify Canon routing: ask yourself *"Is this request currently routed through a Canon build flow (architect + approved runbook)?"* If no, stop. Present the build request to the user and route through the PM requirements gate then `architect`. Editing code outside a Canon flow is the failure mode this rule prevents.
-
-This is the soft enforcement layer (L1). The hard backstop is the `canon-workspace-check.sh` PreToolUse hook (L4, v2_1a-05) that blocks `Edit` / `Write` / `Bash`-on-tracked-files when no active Canon workspace exists for the current flow. L4 fires only on `Edit` / `Write` / tracked-Bash calls — MCP tool calls used by the lead to call `init_workspace` are not `Edit` / `Write` / `Bash` and are never blocked.
-
-### Pre-Analysis Gate (L1)
-
-**Before producing substantive analytical text output**, verify it is on the Silent Dispatch allowlist (see the Silent Dispatch section — items 1–6). If the output you are about to write is not on that list, it is agent work — dispatch it instead of writing it yourself.
-
-This gate applies when the orchestrator is executing a build flow. Question and chat intents respond directly per the Intent Classification table and are not subject to this gate.
-
-**PM carve-out**: Requirements sharpening (per the refine skill) and scope triage — scope questions, acceptance criteria negotiation, value assessment, requirements clarification, and 1-2 MCP triage calls (`get_file_context`, `graph_query`) — are PM work and are permitted inline. The boundary: PM work asks "what should we build, is it worth it, and how big is it?" Technical work asks "how should we build it?" Explicitly excluded from the PM carve-out: deep codebase investigation, root-cause analysis, design tradeoff evaluation, implementation planning. These remain agent work.
-
-This gate closes the third seam in the enforcement triangle. Pre-Research Gate covers tool-based investigation before architect spawn. Pre-Write Gate covers code edits outside a Canon flow. This gate covers the remaining failure mode: the orchestrator generating multi-paragraph analysis, root-cause explanations, design tradeoff evaluations, or research summaries directly in its response. These are specialist-agent deliverables regardless of whether a tool call is involved. The mechanism is a self-check: *"Am I about to write something a researcher, architect, or analyst would produce?"* If yes, spawn that agent.
-
-This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool calls, not text generation. Enforcement is entirely behavioral.
+**Pre-Analysis Gate**: Before producing substantive analytical text, verify it is on the Silent Dispatch allowlist (items 1–6). If not on the list, it is agent work — dispatch instead of writing it yourself. PM carve-out: requirements sharpening, scope questions, AC negotiation, and 1-2 MCP triage calls are permitted inline. Excluded: deep codebase investigation, root-cause analysis, design tradeoffs, implementation planning. Self-check: *"Am I about to write something a researcher or architect would produce?"* If yes, spawn that agent. L1-only — no L4 backstop; enforcement is entirely behavioral.
 
 ### Setup
 
@@ -141,117 +119,78 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 
 #### Trivial path (PM → engineer) <!-- last-updated: 2026-05-18 -->
 
-When triage determines trivial (single-file, no architectural questions, clear implementation, low blast radius):
+1. `init_workspace({ flow_name, task, branch, base_commit, tier: "trivial", original_input, preflight: true })` → save `worktree_path`, `workspace`.
+2. Infer runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps`.
+3. **Pre-spawn check**: `test -d "${worktree_path}"`. If missing, report BLOCKED.
+4. Spawn `canon:engineer` with request, `worktree_path`, `turn_budget: {maxTurns}`.
 
-1. Call `init_workspace({ flow_name, task, branch, base_commit, tier: "trivial", original_input, preflight: true })`. Save `worktree_path` and `workspace`.
-2. Infer a minimal runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps` with these steps.
-3. **Pre-spawn worktree verification**: Run `test -d "${worktree_path}"` via Bash. If missing, report BLOCKED.
-4. Spawn `canon:engineer` with the build request, `worktree_path`, and `turn_budget: {maxTurns}`. Proceed through the standard step execution loop (verify, review, ship, etc.).
-
-**Fast-path context enrichment**: When a trivial-path build involves 4+ files or 2+ distinct workstreams (e.g., "fix the linter config and update the tests"), include minimal context in the engineer's spawn prompt: scope summary (what to change and why), key files (paths and one-line purpose), and gotchas (known edge cases, related files that must not be modified). This prevents the engineer from spending 25+ turns on orientation that the orchestrator could resolve with 1-2 `get_file_context` calls during triage.
+**Fast-path enrichment**: For 4+ files or 2+ workstreams, include in engineer's spawn prompt: scope summary, key files with one-line purpose, known gotchas.
 
 #### Non-trivial path (PM → architect → execution)
 
-When triage determines non-trivial (2+ files, cross-layer, design questions, high blast radius):
-
-1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`. Save `worktree_path` and `workspace`.
-2. **Write PRD**: Fill `templates/prd.md` with the requirements gathered during PM triage. Write the completed PRD to `${WORKSPACE}/plans/${SLUG}/prd.md` (create the `plans/${SLUG}/` directory if needed). This artifact is consumed by both the architect (requirements context) and the renderer (PRD panels in design.html). Save the path as `${PRD_PATH}`.
-   **Verify**: Before spawning the architect (Step 3), confirm `${WORKSPACE}/plans/${SLUG}/prd.md` exists. If missing, you skipped this step — go back and write it.
-3. **Spawn `canon:architect`** with the build request, requirements summary, `PRD_PATH=${PRD_PATH}`, and `WORKSPACE=${workspace}`. The architect performs codebase research, produces a design, and generates the runbook. The architect calibrates depth (small vs complex) accordingly.
-4. **Validate architect output**. Check the design's Requirements Coverage section for completeness and dispositions. If any requirements are `descoped`, `partial`, or missing from the coverage table, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
-   Additionally, for each row with disposition `covered`, verify that the row names a specific runbook step or DAG task responsible for delivering it (in the "Runbook step or rationale" column). Rows marked `covered` with no owning step/task are treated as `partial` with rationale "no owning task identified" and surfaced to the user alongside other gaps.
-5. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
-6. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
-7. **Pre-spawn worktree verification**: Before spawning any code-writing agent (engineer, tester, scribe, shipper), run `test -d "${worktree_path}"` via Bash. If the worktree is missing, do NOT spawn the agent — report BLOCKED to the user: "Worktree at {path} no longer exists. It may have been cleaned up by a concurrent process. Re-run `init_workspace` to recreate, or investigate."
-8. Execute steps in order, spawning the agent specified by each step. Pass `turn_budget: {maxTurns}` in the spawn prompt of all agents scoped by the budget-checkpoint rule: engineer, reviewer, architect, scribe, shipper, and learner. For code-writing agents (engineer, scribe, tester, shipper), also pass `worktree_path` and use `isolation: "none"`. See the isolation model section above.
+1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` → save `worktree_path`, `workspace`.
+2. **Write PRD**: Fill `templates/prd.md` → write to `${WORKSPACE}/plans/${SLUG}/prd.md`. Verify it exists before Step 3.
+3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`.
+4. **Validate architect output**: Check Requirements Coverage section. Surface any `descoped`/`partial`/missing requirements to user before proceeding. For `covered` rows, verify each names an owning runbook step — rows without an owner are treated as `partial`. Proceed silently if all requirements are `covered` with owners.
+5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
+6. `batch_log_steps` with all approved runbook steps.
+7. **Pre-spawn check**: `test -d "${worktree_path}"` before any code-writing agent spawn. If missing, report BLOCKED.
+8. Execute steps in order. Pass `turn_budget: {maxTurns}` to all agents. Pass `worktree_path` and `isolation: "none"` to code-writing agents (engineer, scribe, tester, shipper).
 
 ### DAG Execution Protocol
 
-When the architect produces a `task-dag.yaml` alongside task plans, the orchestrator uses it for parallel dispatch instead of sequential step execution. The orchestrator delegates scheduling and dependency enforcement to Claude Code's native agent teams API. Canon owns worktree isolation, merge, and quality gates.
+When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch via agent teams. Each entry has `task_id`, `depends_on: []`, `files: []`. If absent, fall back to sequential execution.
 
-#### Reading the DAG
-
-After the architect step completes, check for `${WORKSPACE}/plans/${slug}/task-dag.yaml`. If present:
-
-1. Parse the YAML file. Each entry has: `task_id`, `depends_on: []`, `files: []`. The `depends_on` field expresses all ordering constraints — no pre-processing or conversion needed.
-2. Validate the DAG: no cycles, all `depends_on` refs resolve, no self-references. The `dag-validator.ts` utility in `mcp-server/src/shared/lib/` provides this validation. If validation fails, present errors to the user and re-spawn the architect.
-
-If no `task-dag.yaml` exists, fall back to sequential step execution (existing behavior).
+**Validate DAG** (via `dag-validator.ts` in `mcp-server/src/shared/lib/`): no cycles, all `depends_on` refs resolve, no self-references. On failure: present errors, re-spawn architect.
 
 #### Task Queue Setup
 
-1. **Create the team**: `TeamCreate({ team_name: "canon-{slug}" })` — creates a team with a shared task list.
-
-2. **Create tasks**: For each DAG node, call `TaskCreate` with `title: task_id` and `description`: the full agent enrichment payload (preloaded context from `resolve_agent_skills("engineer")`, principles, file context, task plan content, worktree/provenance instructions). For tasks with `depends_on`: call `TaskUpdate({ addBlockedBy: [dependent_task_ids] })` after creation.
-
-3. **Enrichment follows the MCP Tool Composition table**: Call `resolve_agent_skills` and `get_context(include: ["principles", "file_context"])` before creating each task.
+1. `TeamCreate({ team_name: "canon-{slug}" })`
+2. For each node: `TaskCreate({ title: task_id, description: <enrichment payload> })`. Enrichment: `resolve_agent_skills("engineer")` + `get_context(include: ["principles", "file_context"])` + task plan content + worktree/provenance instructions. For `depends_on` tasks: `TaskUpdate({ addBlockedBy: [...] })`.
 
 #### Worker Dispatch
 
-1. **Spawn N workers**: Use `Agent({ team_name: "canon-{slug}", name: "worker-{N}", subagent_type: "canon:engineer", isolation: "none" })`.
-
-2. **Worker count**: Spawn as many workers as there are root tasks (tasks with empty `depends_on`), capped at 5.
-
-3. **Worker prompt** (the spawn prompt for each worker): Use `templates/worker-prompt.md` — fill in `${TEAM_NAME}`, `${WORKER_NAME}`, `${PROJECT_DIR}`, `${WORKSPACE}`, `${SLUG}` variables before injecting into the Agent spawn prompt.
-
-4. **Worktree creation by workers**: Each worker creates its own worktree after claiming a task:
-   - Worktree path: `{projectDir}/.canon/worktrees/{task_id}`
-   - Branch: `canon-wave/{task_id}`
-
-5. **Model selection**: Workers default to Sonnet. For complex tasks, pass `model: "opus"` in the Agent call.
-
-6. **L4 hook authorization**: Derive `CANON_PARENT_WORKSPACE` from the workspace path by stripping `{projectDir}/.canon/workspaces/` to get the relative path (e.g., `main/{slug}`). Include this as a variable when filling the worker prompt template. The L4 hook (`canon-workspace-check.sh`) uses this to authorize DAG workers on `canon-task/` branches that have no direct workspace match.
+1. Spawn N workers (= root task count, capped at 5): `Agent({ team_name: "canon-{slug}", name: "worker-{N}", subagent_type: "canon:engineer", isolation: "none" })`.
+2. Worker prompt: fill `templates/worker-prompt.md` with `${TEAM_NAME}`, `${WORKER_NAME}`, `${PROJECT_DIR}`, `${WORKSPACE}`, `${SLUG}`, `${CANON_PARENT_WORKSPACE}` (workspace path minus `{projectDir}/.canon/workspaces/` prefix — needed for L4 hook authorization).
+3. Workers create their own worktrees: path `{projectDir}/.canon/worktrees/{task_id}`, branch `canon-wave/{task_id}`.
+4. Complex tasks: pass `model: "opus"`.
 
 #### Merge Protocol
 
-After ALL team tasks complete (monitor via `TaskList` — when empty, all done):
+After `TaskList` is empty (all done):
 
-1. Call `mergeWaveResults(worktreeResults, buildWorktreePath, "sequential")` — merges each task's worktree into the build worktree in alphabetical `task_id` order.
+1. `mergeWaveResults(worktreeResults, buildWorktreePath, "sequential")` — alphabetical `task_id` order.
+2. **Post-merge verification**: For each task, `git diff {base_commit} -- {file}` for every declared file. Empty diff = no committed changes = task failed → retry (one retry, then HITL).
+3. Conflict: `git merge --abort` auto-runs → HITL: `"Merge conflict in task {task_id} affecting files: {files}."`.
+4. Success: `cleanupWorktrees(worktreeResults, projectDir)` then `TeamDelete({ team_name: "canon-{slug}" })`.
 
-1b. **Post-merge file verification**: For each merged task, run `git diff {base_commit} -- {file}` for every file in the task's `files:` list from `task-dag.yaml`. If a declared file shows no diff (empty output), the task produced no committed changes for that file — treat the task as failed and re-spawn using the existing retry protocol (one retry, then HITL). This catches workers that complete without committing their edits.
-
-2. On conflict: `git merge --abort` runs automatically. Enter HITL with conflict details: `"Merge conflict in task {task_id} affecting files: {files}. Resolve manually or re-run the conflicting task."`.
-3. On success: call `cleanupWorktrees(worktreeResults, projectDir)` then `TeamDelete({ team_name: "canon-{slug}" })`.
-
-**Key asymmetry**: merges target `buildWorktreePath`, cleanup uses `projectDir`.
+**Key asymmetry**: merges target `buildWorktreePath`; cleanup uses `projectDir`.
 
 #### Post-DAG Tail
 
-After all DAG tasks complete, execute the remaining runbook steps sequentially:
-- Review step (if present)
-- Context-sync step — runs before ship so scribe commits land on the build branch and are included in the PR
-- Ship step
-- Learn step
-
-These are NOT nodes in the DAG — they always run sequentially after all implementation tasks.
+Run sequentially after all tasks: review → context-sync → ship → learn. These are NOT DAG nodes.
 
 #### Failure Handling
 
-- **Task failure**: Re-create task via `TaskCreate` for another worker. One retry, then HITL.
-- **Merge conflict**: HITL with conflict details. User can resolve manually or instruct re-run.
-- **Team stalled**: `TaskList` shows remaining tasks all blocked, none in-progress — dependencies failed. Enter HITL listing blocked tasks and their unmet dependencies.
-- **Validation failure**: If `task-dag.yaml` fails validation, present errors and re-spawn architect.
-- **Race condition**: Two workers may claim the same task. Low risk (worktree isolation). Discard the later result.
+| Failure | Action |
+|---------|--------|
+| Task failure | Re-create via `TaskCreate`. One retry, then HITL. |
+| Merge conflict | HITL with conflict details. |
+| Team stalled | All remaining tasks blocked, none in-progress. HITL listing blocked tasks + unmet dependencies. |
+| Validation failure | Present errors, re-spawn architect. |
+| Race condition | Two workers claim same task. Discard later result. |
 
 ### Resume Protocol
 
-When resuming a session or the user says "continue" / "resume":
-
-1. Read the journal file (`journal.json` in the workspace).
-2. Identify the last step with `status: "completed"`.
-3. Read the workspace artifacts produced by completed steps for context.
-4. Continue from the first step with `status: "started"` or the next unstarted step.
-5. If no journal exists, check for legacy workspace state and advise the user.
+Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
 ### Multi-Wave Migration Mode
 
-When coordinating a multi-wave migration (epic-scale work spanning multiple execution sessions): load `${CLAUDE_PLUGIN_ROOT}/skills/canon/skills/wave-steward/SKILL.md`, have the user fill `${CLAUDE_PLUGIN_ROOT}/templates/migration-state.md`, and follow the wave-steward operating loop. This mode activates explicitly when the user provides a wave report and migration state — not for single-session builds.
+Activates when user provides a wave report and migration state (not for single-session builds). Load `${CLAUDE_PLUGIN_ROOT}/skills/canon/skills/wave-steward/SKILL.md`, have user fill `${CLAUDE_PLUGIN_ROOT}/templates/migration-state.md`, follow wave-steward loop.
 
-### Skill Preloading + Domain Skill + Template Naming
+### Skill Preloading
 
-**Preloaded rules, references, primers, and templates (from agent frontmatter):** Before the `Agent` tool call, invoke `resolve_agent_skills({ agent_name })`. The tool reads four frontmatter fields — `rules:`, `references:`, `primers:`, `templates:` — and returns a `preload_prompt` string. Include that string verbatim at the top of the spawn prompt.
-
-**On-demand domain primers (from task context):** Name task-specific domain primers in the spawn prompt body — the agent Reads them per `agent-context-check`: `"Relevant domain primers: authentication-security, backend-api. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
+Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include returned `preload_prompt` verbatim at top of spawn prompt. For task-specific domain primers, name them in the spawn prompt body: `"Relevant domain primers: <name>. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
 
 ### MCP Tool Composition
 
@@ -317,107 +256,66 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 
 ### Journal Protocol
 
-- Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
-- After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
-- The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
-- When a tail step (context-sync, learn) is skipped, the orchestrator SHOULD include a `skip_reason` in the `log_step` outcome explaining why. Accepted `skip_reason` values:
-  - `"fix-type build, no contract-level changes"` — fix builds that only correct existing code without changing APIs, types, or conventions.
-  - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
-  - `"session timeout"` — session ending before tail steps could run.
-  - `"no new patterns observed"` — learn step skipped because the build introduced no novel patterns worth mining.
-  - `"documentation-only diff, verify produces zero signal"` — all changed files are documentation (`.md`, `.txt`); no compiled code to verify.
-- When a WARNING verdict is resolved by the orchestrator inline (no fix agent spawned), log a synthetic step entry with `step_id: inline-fix`, `status: completed`, and the resolution details in `outcome`.
+- Before spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
+- After spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id, artifacts_actual: [...] })`
+- `finalize_workspace` verifies the journal.
+- Skipped tail steps require `skip_reason`:
+
+| Accepted `skip_reason` | When |
+|------------------------|------|
+| `"fix-type build, no contract-level changes"` | Fix builds only correcting existing code |
+| `"markdown-only change, no context drift"` | Doc/config-only changes |
+| `"session timeout"` | Session ended before tail steps |
+| `"no new patterns observed"` | Learn step: no novel patterns |
+| `"documentation-only diff, verify produces zero signal"` | All changed files are `.md`/`.txt` |
+
+- Inline WARNING resolution (no fix agent spawned): log synthetic step `step_id: inline-fix`, `status: completed`, resolution in `outcome`.
 
 ### Post-Subagent Artifact Check
 
-After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
+After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL.
 
-**Universal artifact check**: After ANY agent step completes, verify all `artifacts_expected` paths exist. If any artifact is missing:
-1. Re-spawn the agent with explicit instruction: "The following artifacts were not written: {missing_paths}. You MUST write these artifacts before returning. See rule `agent-artifact-write-before-return`."
-2. If the second attempt also fails, present to the user as HITL: "{agent_type} failed to write artifacts after two attempts: {missing_paths}. Manual intervention required."
-
-**Step-specific artifact expectations**:
-- **Architect**: `plans/${slug}/DESIGN.md`, `plans/${slug}/INDEX.md` (non-trivial builds)
-- **Engineer (implement)**: `plans/${slug}/*-SUMMARY.md` (implementation summary via `write_implementation_summary`)
-- **Reviewer**: `reviews/REVIEW.md` (review via `write_review`)
-- **Tester**: `plans/${slug}/TEST-REPORT.md` (test report via `write_test_report`)
-- **Scribe**: `plans/${slug}/CONTEXT-SYNC.md` (context sync report)
+| Agent | Expected artifact |
+|-------|------------------|
+| Architect | `plans/${slug}/DESIGN.md`, `plans/${slug}/INDEX.md` |
+| Engineer (implement) | `plans/${slug}/*-SUMMARY.md` |
+| Reviewer | `reviews/REVIEW.md` |
+| Tester | `plans/${slug}/TEST-REPORT.md` |
+| Scribe | `plans/${slug}/CONTEXT-SYNC.md` |
 
 ### HITL Patterns <!-- last-updated: 2026-05-17 -->
 
-- **PM Triage**: The PM owns two responsibilities before agent spawn: (1) requirements sharpening via the refine skill (`skills/canon/skills/refine/SKILL.md`) — classify the request as trivial (pass-through), clear (stress-test), or fuzzy (diverge-then-converge); produce a sharpened-request.md for non-trivial tiers; (2) scope check — run 1-2 MCP triage calls (`get_file_context`, `graph_query`) to assess blast radius and route: trivial → engineer directly, non-trivial → architect. For fully-specified requests, skip the requirements conversation and proceed directly to scope check.
-- **Requirement coverage check**: After the architect returns, check the design's Requirements Coverage section for completeness (all original requirements have rows) and dispositions (any `descoped`/`partial`/missing). Surface gaps explicitly before runbook approval. If all requirements are present and `covered`, proceed silently.
-- **Coverage chain**: Requirement coverage propagates downstream — architect task plans must include a populated `### Brief Coverage` table (runbook req → task element); engineer implementation logs must include a populated `#### Criteria Coverage` table (task acceptance criterion → implementation). Missing or empty tables are artifact defects. Reviewer checks Criteria Coverage in Stage 3. Disposition vocabulary is shared: `covered`, `descoped`, `partial`.
-- **Plan approval HTML**: Before presenting the runbook to the user for approval, check if `${WORKSPACE}/artifacts/design.html` exists. If it exists, read its content and call `present_artifact({ type: "design", slug, html: <file content>, data: {}, workspace })` to open it in the browser. The HTML view is supplementary — the text-based approval flow (runbook presentation + user confirmation) is unchanged.
-- **Architect approval**: Present the plan to the user. For agent teams, use native plan approval mode. If `${WORKSPACE}/artifacts/design.html` exists, call `present_artifact({ type: "design", slug, html: <file content>, data: {}, workspace })` before presenting the text plan.
-- **Review verdict**: Present review results. If not clean, spawn engineer in fix mode. If `${WORKSPACE}/artifacts/review.html` exists, call `present_artifact({ type: "review", slug, html: <file content>, data: {}, workspace })` alongside the text verdict presentation.
-- **Review-fix iteration loop**: After the fix agent completes, re-spawn the reviewer to verify ALL previously flagged violations were addressed — not just some.
-  - Loop continues until reviewer returns CLEAN or WARNING.
-  - Maximum 3 fix→review iterations before escalating to the user via HITL.
-  - Iteration pattern: fix → re-review → (if still BLOCKING) → fix → re-review → (if still BLOCKING after 3 iterations) → HITL.
-  - When the reviewer flags Stage 3 cross-check discrepancies (tagged `SUMMARY CORRECTION REQUIRED`), the fix spawn prompt MUST include the discrepancy details and instruct the engineer to correct the implementation summary (`*-SUMMARY.md`) in addition to fixing any code violations. The corrected summary replaces the original at the same artifact path.
-  - Note: the `SUMMARY CORRECTION REQUIRED` flow is L1-only enforcement — there is no automated check that the orchestrator included discrepancy details in the fix prompt; correct behavior depends on the orchestrator following this rule.
-- **WARNING advisory close-out**: After the review-fix loop resolves BLOCKING items (or if the initial verdict is WARNING with no BLOCKING violations), the orchestrator surfaces WARNING advisory items to the user as a HITL checkpoint before proceeding to ship. Three options:
-  - (a) **fix** — spawns another engineer fix cycle targeting the advisory items; build resumes after fix.
-  - (b) **acknowledge** — items logged as accepted in the journal via `log_step` outcome, build proceeds (accept as-is — no follow-up planned).
-  - (c) **defer** — items noted as follow-up, build proceeds (plan to address later — noted as follow-up).
-  - This checkpoint occurs between the review step and the ship step. It does NOT apply if the review verdict is CLEAN.
-- **Manual verification gate**: After the tester reports `manual_verification_needed` items, the orchestrator presents them to the user as a HITL checkpoint before ship (via `AskUserQuestion`). The orchestrator detects manual verification items by checking the tester's test report for a `## Manual Verification Needed` section. If this section is present and contains table rows, present them to the user via `AskUserQuestion`. If the section is absent or empty, skip this gate. Options:
-  - (a) **confirmed** — user has verified the items manually, proceed to ship.
-  - (b) **not verified** — user cannot confirm; build pauses for investigation.
-  - (c) **defer** — accept risk, proceed to ship, note as unverified in PR description.
-  - This checkpoint occurs between the test step and the ship step. It does NOT apply when no manual items are reported.
-- **Build-step checkpoint**: After each major build step completes (design, implement, verify, review), the orchestrator offers a session checkpoint:
-  - "Step {N} of {total} complete ({step_name}). Continue, or start a fresh session and say 'resume'?"
-  - If the user says "keep going", "continue", or similar affirmative: proceed to the next step.
-  - If the user starts a fresh session: Canon's resume protocol picks up from the next unstarted step via journal state.
-  - Skip this checkpoint when `CANON_SKIP_SESSION_CHECKPOINTS=1` is set.
-  - This checkpoint does NOT apply to tail steps (ship, context-sync, learn) — only to steps of type design, implement, verify, review.
-- **Gate failure**: Present the failure output and ask the user how to proceed.
-- **Architect design conversation**: For requests with genuine design tradeoffs, the architect thinks out loud about the problem space before committing to design approaches. The architect now encompasses the full technical planning conversation — research, requirements validation, design, and runbook production. The architect reports `HAS_QUESTIONS` with reasoning about tradeoffs, a stated lean, and a request for the user's correction or confirmation. The orchestrator surfaces this to the user. On re-spawn, the architect reads the feedback and continues the conversation or proceeds to design production.
-  - Gate: skipped when only one reasonable approach exists or changes are mechanical. Conducted when "a reasonable engineer could disagree about the right approach."
-  - No round limit. The conversation continues until the user says to proceed. The architect checks in periodically: "I think we have a direction — ready to move to implementation, or is there more to explore?"
-  - Style: think-out-loud, NOT multiple choice. The architect states a lean and invites correction, not options for selection.
-  - Re-spawn: include the user's feedback verbatim in the architect's spawn prompt on each re-spawn.
-- **Merge conflict**: Present conflicting files and ask for resolution strategy.
+- **PM Triage**: (1) Refine: classify trivial/clear/fuzzy; produce `sharpened-request.md` for non-trivial tiers. (2) Scope check: 1-2 MCP calls → trivial → engineer, non-trivial → architect. Fully-specified requests skip the requirements conversation.
+- **Requirement coverage check**: After architect returns, surface any `descoped`/`partial`/missing requirements before runbook approval. Proceed silently if all are `covered` with owning steps.
+- **Coverage chain**: Architect task plans need `### Brief Coverage` table (runbook req → task element). Engineer logs need `#### Criteria Coverage` table (AC → implementation). Missing/empty tables are artifact defects. Disposition vocabulary: `covered`, `descoped`, `partial`.
+- **Plan approval HTML**: If `${WORKSPACE}/artifacts/design.html` exists, call `present_artifact({ type: "design", slug, html, data: {}, workspace })` before presenting the text runbook for approval.
+- **Architect approval**: Present plan for user approval. If design.html exists, call `present_artifact` first. Architect decides execution strategy.
+- **Review verdict**: Present results. If not CLEAN, spawn engineer fix mode. If `review.html` exists, call `present_artifact({ type: "review", ... })` alongside text verdict.
+- **Review-fix iteration loop**: Re-spawn reviewer after each fix to verify ALL flagged violations addressed. Loop until CLEAN or WARNING. Max 3 fix→review iterations, then HITL. When reviewer flags `SUMMARY CORRECTION REQUIRED` discrepancies, include them in fix spawn prompt and instruct engineer to correct `*-SUMMARY.md`. (L1-only enforcement — no automated check.)
+- **WARNING advisory close-out**: After BLOCKING items resolved (or initial WARNING verdict), present advisory items to user: (a) **fix** — another engineer cycle; (b) **acknowledge** — log as accepted; (c) **defer** — note as follow-up. Occurs between review and ship. Does not apply if verdict is CLEAN.
+- **Manual verification gate**: If tester report has `## Manual Verification Needed` section with rows, present via `AskUserQuestion` before ship: (a) **confirmed** → ship; (b) **not verified** → pause; (c) **defer** → ship with note. Absent or empty section: skip gate.
+- **Build-step checkpoint**: After design/implement/verify/review steps: "Step {N} of {total} complete. Continue, or resume fresh?" Skip when `CANON_SKIP_SESSION_CHECKPOINTS=1`. Does not apply to tail steps.
+- **Gate failure**: Present output, ask user how to proceed.
+- **Architect design conversation**: For genuine design tradeoffs, architect reports `HAS_QUESTIONS` with reasoning, stated lean, and request for user correction. Orchestrator surfaces to user; re-spawn with feedback. Style: think-out-loud, state a lean (not multiple choice). No round limit. Skip when only one reasonable approach exists.
+- **Merge conflict**: Present conflicting files, ask for resolution strategy.
 
 ### Post-Step Effects
 
-- After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
-- After reviewer completes (mandatory): spawn the renderer agent to convert `${WORKSPACE}/reviews/REVIEW.md` to HTML. The renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, calls `get_context` and `show_pr_impact` for structural data, and writes `${WORKSPACE}/artifacts/review.html`. Open the HTML in the browser (`open` command) before presenting the review verdict at the HITL checkpoint. This is not optional — every review step produces rendered HTML.
-- After architect completes (mandatory): spawn the renderer agent to convert the design document (`${WORKSPACE}/plans/${slug}/DESIGN.md` or `INDEX.md`) to HTML. Read `templates/renderer-design.md`, fill in all `## Variables` placeholders — `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}` (from `${WORKSPACE}/plans/${SLUG}/task-dag.yaml`, or empty if absent), `${PRD_PATH}` (from `${WORKSPACE}/plans/${SLUG}/prd.md`, or empty if absent), and `${RUNBOOK_PATH}` (from `${WORKSPACE}/plans/${SLUG}/runbook.md`, or empty if absent) — then pass the filled prompt to the renderer. The renderer writes `${WORKSPACE}/artifacts/design.html`. Open the HTML in the browser before presenting the design for user approval at the HITL checkpoint.
-- After each step: call `record_agent_metrics` if the agent didn't call it itself. Agents are required by rule `agent-metrics-before-return` to call this before their terminal status; the orchestrator fallback covers non-compliant agents.
-- Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
+- **After reviewer**: call `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict.
+- **After architect**: spawn renderer (mandatory) → `${WORKSPACE}/artifacts/design.html`. Open in browser before plan approval HITL.
+- **After each step**: call `record_agent_metrics` if agent didn't. Pass `agent_id` to `log_step` completion (transcript capture is automatic — no separate call needed).
 - Run contract-checker assertions via Bash when postconditions are declared.
 
 ### Renderer Spawn Protocol
 
-Spawn a generic `Agent()` (not a named agent definition) with `model: "haiku"` using the structured
-renderer prompt template for the checkpoint type. The renderer reads the markdown artifact (and calls
-MCP tools when the template requires it), produces a fully self-contained HTML file to
-`${WORKSPACE}/artifacts/`, and returns. The renderer does NOT modify the worktree.
-
-**Before spawning the renderer**, read the appropriate template from `templates/renderer-*.md`,
-fill in the `## Variables` placeholders, and pass the `## Prompt` section (the content inside
-the fenced code block) as the renderer agent's spawn prompt.
-
-**Checkpoint-to-template mapping:**
+Spawn `Agent()` (generic, not named) with `model: "haiku"`. Read the appropriate template from `templates/renderer-*.md`, fill `## Variables`, pass `## Prompt` section as spawn prompt. Renderer writes to `${WORKSPACE}/artifacts/` and does NOT modify the worktree.
 
 | Checkpoint | Template | Output | Required variables |
 |------------|----------|--------|--------------------|
-| Design document | `templates/renderer-design.md` | `design.html` | `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}`, `${PRD_PATH}`, `${RUNBOOK_PATH}` |
-| Review dashboard | `templates/renderer-review.md` | `review.html` | `${WORKSPACE}`, `${SLUG}` |
+| Design | `renderer-design.md` | `design.html` | `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}`, `${PRD_PATH}`, `${RUNBOOK_PATH}` |
+| Review | `renderer-review.md` | `review.html` | `${WORKSPACE}`, `${SLUG}` |
 
-**MCP tool requirements per template:**
-- `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML and runbook directly)
-- `renderer-review.md` — requires `show_pr_impact` and `get_context` calls
-
-**Artifact naming convention:**
-| Artifact | HTML filename |
-|----------|--------------|
-| Design document | `design.html` |
-| Review dashboard | `review.html` |
-| Task plan index | `task-index.html` |
+MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_pr_impact` + `get_context`.
 
 ### Post-Review Tester Enrichment
 
@@ -425,33 +323,22 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 ### Step Enforcement Contracts <!-- last-updated: 2026-05-18 -->
 
-**Verify step**: When the runbook contains a step with `type: verify` (or the step name is `verify`), the engineer executing it MUST run all three gates in order:
+**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test`. All three must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL.
 
-1. `npm run build` — TypeScript compilation.
-2. `npm run lint` — Biome/ESLint check.
-3. `npm test` — Full test suite.
+**Verify skip**: If `git diff {base_commit} --name-only` contains only `.md`/`.txt` files, skip with `skip_reason: "documentation-only diff, verify produces zero signal"`.
 
-ALL three must pass for the verify step to succeed. When a gate fails, the engineer MAY apply minor inline fixes (lint warnings, missing lint excludes, small type errors) and re-run the gate. This fix-and-rerun loop is expected and reduces round-trips. If fixing would require architectural changes, substantial new code, or modifications to files outside the verify step's scope, the engineer reports BLOCKED with the exact failure output and does NOT proceed. The orchestrator presents BLOCKED failures to the user via HITL (`on_failure` handler). The engineer reports DONE only when all three gates exit 0.
-
-**Verify skip for documentation-only diffs**: For builds where `git diff {base_commit} --name-only` contains only `.md` and `.txt` files, the verify step MAY be skipped with `skip_reason: "documentation-only diff, verify produces zero signal"`. The orchestrator checks the diff before spawning the verify engineer. If any non-documentation file is present, the full verify step runs.
-
-**In-wave baseline**: When the verify step runs after sequential wave execution (multiple implement steps on the same branch), the engineer MUST use `base_commit` (not `main`) as the pre-existing violation baseline. Run the same lint/build/test commands at `base_commit` to establish which violations already existed. Only violations absent at `base_commit` are in-build regressions and must be fixed. Violations already present at `base_commit` remain pre-existing even if the file was touched (optionally fix under "leave touched files better").
+**In-wave baseline**: After sequential wave execution, use `base_commit` (not `main`) as violation baseline. Only violations absent at `base_commit` are regressions. Pre-existing violations remain pre-existing even if the file was touched.
 
 ### Completion Checklist
 
-1. Call `finalize_workspace({ workspace })` — if steps or artifacts missing, resolve before proceeding. For non-trivial builds with a design step, verify `prd.md` exists in `${WORKSPACE}/plans/${SLUG}/`.
-2. Run context-sync: spawn the scribe agent. The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md on the build branch. Context-sync runs before ship so that doc updates are committed to the build branch and included in the PR — the scribe needs the worktree available to commit doc updates before the PR is created.
-3. Ship the build:
-   - **Default**: spawn the shipper agent. The shipper pushes the worktree branch to origin and creates a PR to main. The shipper must NOT run `git worktree remove` — `finalize_workspace` needs the worktree for artifact verification. The shipper does NOT delete the build branch — it is needed for the PR.
-   - **Fallback (direct merge)** — only when the user explicitly requests it (e.g., "merge it", "skip PR"):
-     - `git checkout main`
-     - `git merge canon/{slug} --no-edit`
-     - If merge conflicts: present conflicting files to user as HITL — do NOT force-push or use `--theirs`.
-     - If clean merge: proceed to step 4.
-     - After successful merge: `git branch -d canon/{slug}`. Do NOT run `git worktree remove` — worktree cleanup is handled after `finalize_workspace` completes.
-4. Call `update_board({ workspace, operation: "complete_flow" })`.
+1. `finalize_workspace({ workspace })` — resolve missing steps/artifacts first. Verify `prd.md` exists for non-trivial builds.
+2. Context-sync: spawn scribe. Updates CLAUDE.md, context.md, CONVENTIONS.md on build branch before ship.
+3. Ship:
+   - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
+   - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
+4. `update_board({ workspace, operation: "complete_flow" })`.
 5. Verify file claims released.
-6. Evaluate learn gate: run `.canon/learn.sh` if it exists.
+6. Run `.canon/learn.sh` if it exists.
 7. Record final flow metrics.
 
 ### Commit Provenance
