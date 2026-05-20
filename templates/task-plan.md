@@ -62,6 +62,7 @@ domains:
 
 ## Rules
 
+- Before adding nesting (loops, switches, conditionals) to an existing function, check its current cognitive complexity. If the function already has a switch or nested loop, extract a helper first to stay under the Biome complexity threshold.
 - Each task should complete in ~50% of a fresh context window
 - Touch a small, well-defined set of files
 - Include tests the implementor writes alongside the code
