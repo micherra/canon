@@ -70,7 +70,9 @@ Below, subsections tagged `[impl]` apply only to implementation mode; `[fix]` on
 
 ### Step 1: Read your plan [impl] / Parse issue details [fix]
 
-**[impl]** The plan file is your primary instruction. It specifies: exact file paths, action instructions, Canon principles to apply, verification steps, done criteria.
+**[impl]** Record `git rev-parse HEAD` as `{pre_task_head}` — you'll need this in Step 10 to scope your file list.
+
+The plan file is your primary instruction. It specifies: exact file paths, action instructions, Canon principles to apply, verification steps, done criteria.
 
 **[fix]** Parse input by fix sub-mode:
 - **test-fix**: read TEST-REPORT.md. Focus on `### Issues Found` — exact files, failing tests, root causes, suggested fixes.
@@ -177,6 +179,8 @@ Before committing, check: if any modified file contains a `<!-- last-updated: ..
 Write summary to the path specified, using the implementation-log template (agent-template-required). Include: what changed, files modified, tests written, coverage notes, compliance declarations, verification results. The summary MUST include a `### Status` heading with DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT.
 
 Populate the `#### Criteria Coverage` table in the Coverage Notes section. Map every acceptance criterion from the task plan's `### Done when` section to what was implemented. Use disposition values `covered`, `descoped`, or `partial` — the same vocabulary as the planning brief. A missing or empty Criteria Coverage table is a summary defect; the reviewer will flag it.
+
+**File path accuracy**: Derive the Files Changed list from git diff, not from memory. Writing paths from memory produces missing directory components (e.g., `orchestration/foo.ts` instead of `orchestration/tools/foo.ts`) that prevent the orchestrator's artifact check from resolving files. To keep the list task-scoped in multi-task runs: record `git rev-parse HEAD` at the start of your task, then diff against that snapshot — `git diff --name-only {pre_task_head}..HEAD`. Do NOT diff against `{base_commit}`, which is branch-cumulative and would include files changed by earlier tasks.
 
 ---
 
