@@ -128,7 +128,7 @@ src/
 | `store_pr_review` | Store a PR review result for drift tracking |
 
 **Transcript capture** — best-effort; always returns `ok: true`; writes to `{workspace}/transcripts/`; path-traversal guarded
-**Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`
+**Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`; `resolve_agent_skills`: **async** since 2026-05-20; applies progressive disclosure when `projectDir` provided — if `preload_prompt` exceeds 12k chars, full JSON is written to `.canon/artifacts/agent-skills-*.json` and result contains a compact summary + `full_data_path` pointer
 **Gate runner** — `normalizeGates` resolves via 3-tier priority (direct > named > discovered); **fail-closed**: unresolved gate → `{ passed: false }`; `bash_check` denylist: `rm`, `sudo`, `curl`, `wget`, `chmod`, `chown`, `mkfs`, `dd`
 **Flow schema** (`flow-schema.ts`) — `StateDefinitionSchema` is a `z.discriminatedUnion` with 5 type schemas; all new fields MUST be `.optional()`; `WavePolicy` defaults: isolation=worktree, merge=sequential, on_conflict=hitl
 **`report_result`** — accepts quality signals (gate_results, postconditions, violations, tests, files_changed) + discovery fields (accumulated, not replaced); optional roles excluded from aggregation

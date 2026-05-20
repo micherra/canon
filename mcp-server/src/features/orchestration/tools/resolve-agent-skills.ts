@@ -4,6 +4,7 @@ import {
   formatCorrectionsSection,
   readCorrections,
 } from "@features/orchestration/services/correction-reader.ts";
+import { applyAgentSkillsDisclosure } from "@features/orchestration/tools/resolve-agent-skills-disclosure.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import matter from "gray-matter";
 
@@ -53,6 +54,8 @@ export type ResolveAgentSkillsResult = {
   skills: ResolvedSkill[];
   unresolved: string[];
   preload_prompt: string;
+  /** Set when progressive disclosure truncated the result; path to full JSON payload. */
+  full_data_path?: string;
 };
 
 const KIND_TO_DIR: Record<ResolvedSkillKind, string> = {
@@ -145,11 +148,11 @@ function resolveSkills(
   return { skills, unresolved };
 }
 
-export function resolveAgentSkills(
+export async function resolveAgentSkills(
   input: ResolveAgentSkillsInput,
   pluginDir: string,
   projectDir?: string,
-): ToolResult<ResolveAgentSkillsResult> {
+): Promise<ToolResult<ResolveAgentSkillsResult>> {
   const agentName = stripCanonPrefix(input.agent_name).trim();
   if (!agentName || !/^[a-zA-Z0-9_-]+$/.test(agentName)) {
     return toolError(
@@ -174,10 +177,17 @@ export function resolveAgentSkills(
   const correctionsSection = buildCorrectionsSection(projectDir);
   const preload_prompt = correctionsSection ? `${basePrompt}\n\n${correctionsSection}` : basePrompt;
 
-  return toolOk<ResolveAgentSkillsResult>({
+  const result: ResolveAgentSkillsResult = {
     agent_name: agentName,
     preload_prompt,
     skills,
     unresolved,
-  });
+  };
+
+  if (projectDir) {
+    const disclosed = await applyAgentSkillsDisclosure(result, projectDir);
+    return toolOk<ResolveAgentSkillsResult>(disclosed);
+  }
+
+  return toolOk<ResolveAgentSkillsResult>(result);
 }

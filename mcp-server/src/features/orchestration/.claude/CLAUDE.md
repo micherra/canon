@@ -9,6 +9,7 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 <!-- last-updated: 2026-05-15 -->
 
 **`tools/`** — MCP tool handlers. All handlers are thin wrappers calling services.
+<!-- last-updated: 2026-05-20 (resolve-agent-skills-disclosure.ts added; resolveAgentSkills made async) -->
 
 | Tool file | MCP tool name |
 |-----------|--------------|
@@ -20,7 +21,8 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `post-event.ts` | `post_event` |
 | `present-artifact.ts` | `present_artifact` — fire-and-forget; serves HTML, opens browser, returns `{ url }` immediately (does not block) |
 | `report.ts` | `report` |
-| `resolve-agent-skills.ts` | `resolve_agent_skills` |
+| `resolve-agent-skills.ts` | `resolve_agent_skills` — **async** since 2026-05-20; calls `applyAgentSkillsDisclosure` when `projectDir` provided |
+| `resolve-agent-skills-disclosure.ts` | (helper module, not a tool) — progressive disclosure for `resolve_agent_skills`; exports `summarizeAgentSkills(data)` and `applyAgentSkillsDisclosure(result, projectDir)`; when `preload_prompt` exceeds 12k chars, writes full JSON to `.canon/artifacts/` and returns slim result with file pointer |
 | `seed-workspace.ts` | `seed_workspace` |
 | `write-design-brief.ts` | `write_design_brief` |
 | `write-implementation-summary.ts` | `write_implementation_summary` |
@@ -38,12 +40,13 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `workspace-cleanup.ts` | Workspace cleanup utilities |
 
 ## Contracts
-<!-- last-updated: 2026-05-16 (present_artifact fire-and-forget; PresentArtifactResult now { url: string } only) -->
+<!-- last-updated: 2026-05-20 (resolveAgentSkills async; ResolveAgentSkillsResult.full_data_path added; present_artifact fire-and-forget) -->
 Key tool functions (all return `ToolResult<T>` — see `@shared/lib/tool-result.ts`):
 
 - `initWorkspace(input)` — create or resume workspace; preflight checks when `preflight: true`; `tryResumeWorkspace` accepts optional `expectedTask` to block resume on task-identity mismatch (slug-collision defense)
 - `captureTranscript(input: CaptureTranscriptInput)` → `Promise<ToolResult<CaptureTranscriptResult>>` — best-effort; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon format, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; returns `warning` (never an error) when source file not found
 - `transformClaudeCodeTranscript(entries: ClaudeCodeEntry[])` → `TranscriptEntry[]` — pure function; maps CC JSONL content blocks to Canon transcript entries; malformed entries skipped silently; exported from `services/transcript-transformer.ts`
+- `resolveAgentSkills(input, pluginDir, projectDir?)` → `Promise<ToolResult<ResolveAgentSkillsResult>>` — **async** since 2026-05-20; when `projectDir` provided, runs progressive disclosure via `applyAgentSkillsDisclosure`; `ResolveAgentSkillsResult.full_data_path?: string` is set when disclosure truncated the payload (path to full JSON in `.canon/artifacts/`)
 
 ## Invariants
 <!-- last-updated: 2026-05-15 -->
