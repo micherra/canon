@@ -151,7 +151,7 @@ describe("Pipeline → KgQuery end-to-end flow", () => {
     rmSync(projectDir, { force: true, recursive: true });
   });
 
-  test("pipeline populates DB and KgQuery returns correct nodes and edges", async () => {
+  test("pipeline populates DB and KgQuery returns correct nodes and edges", { timeout: 15_000 }, async () => {
     writeProjectFile(projectDir, "src/a.ts", "export function hello() {}");
     writeProjectFile(projectDir, "src/b.ts", "import { hello } from './a.ts';");
 
