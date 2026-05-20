@@ -139,7 +139,9 @@ describe("applyFileContextDisclosure", () => {
     // Routing metadata preserved
     expect(result.file_path).toBe(output.file_path);
     expect(result.layer).toBe(output.layer);
-    expect(result.summary).toBe(output.summary);
+    // summary is the disclosure-generated string (not the original null)
+    expect(typeof result.summary).toBe("string");
+    expect(result.summary).toContain("src/api/handler.ts");
   });
 
   it("writes full data to .canon/artifacts under the project dir", async () => {

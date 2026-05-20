@@ -7,7 +7,10 @@ import {
 import { recordPrediction } from "@features/diagnostics/services/prediction-tracker.ts";
 import type { FileSignals } from "@features/diagnostics/services/signal-compiler.ts";
 import { compileSignals } from "@features/diagnostics/services/signal-compiler.ts";
-import { getDriftReport, type DriftReportOutput } from "@features/diagnostics/tools/get-drift-report.ts";
+import {
+  type DriftReportOutput,
+  getDriftReport,
+} from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
 import type { FileContextOutput } from "@features/file-context/tools/get-file-context.ts";
