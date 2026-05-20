@@ -20,16 +20,9 @@ export function summarizeAgentSkills(data: ResolveAgentSkillsResult): string {
 
   const skillLines = data.skills.map((s) => `- ${s.kind}: ${s.id}`);
   const unresolvedLines =
-    data.unresolved.length > 0
-      ? ["", "Unresolved:", ...data.unresolved.map((u) => `- ${u}`)]
-      : [];
+    data.unresolved.length > 0 ? ["", "Unresolved:", ...data.unresolved.map((u) => `- ${u}`)] : [];
 
-  return [
-    `Agent: ${data.agent_name}`,
-    countLine,
-    ...skillLines,
-    ...unresolvedLines,
-  ]
+  return [`Agent: ${data.agent_name}`, countLine, ...skillLines, ...unresolvedLines]
     .filter((line) => line !== undefined)
     .join("\n");
 }

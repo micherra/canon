@@ -1,9 +1,20 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
+import {
+  type ResolveAgentSkillsResult,
+  resolveAgentSkills,
+} from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+async function ok(
+  result: ReturnType<typeof resolveAgentSkills>,
+): Promise<{ ok: true } & ResolveAgentSkillsResult> {
+  const resolved = await result;
+  assertOk<ResolveAgentSkillsResult>(resolved);
+  return resolved;
+}
 
 function seedPluginDir(): string {
   const pluginDir = mkdtempSync(join(tmpdir(), "canon-skills-corrections-"));
@@ -61,7 +72,7 @@ describe("resolveAgentSkills — correction injection", () => {
     rmSync(projectDir, { force: true, recursive: true });
   });
 
-  it("without projectDir does not include corrections section", () => {
+  it("without projectDir does not include corrections section", async () => {
     // Write a correction to make sure it's not picked up without projectDir
     writeCorrection(projectDir, "c1.json", {
       agent_type: "engineer",
@@ -72,20 +83,18 @@ describe("resolveAgentSkills — correction injection", () => {
       timestamp: recentTimestamp(),
     });
     // Call without projectDir
-    const result = resolveAgentSkills({ agent_name: "engineer" }, pluginDir);
-    assertOk(result);
+    const result = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(result.preload_prompt).not.toContain("Recent User Corrections");
   });
 
-  it("with projectDir and no corrections returns normal preload_prompt without corrections section", () => {
+  it("with projectDir and no corrections returns normal preload_prompt without corrections section", async () => {
     // projectDir exists but has no .canon/corrections directory
-    const result = resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir);
-    assertOk(result);
+    const result = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir));
     // Should not include corrections section
     expect(result.preload_prompt).not.toContain("Recent User Corrections");
   });
 
-  it("with projectDir and corrections includes Recent User Corrections section in preload_prompt", () => {
+  it("with projectDir and corrections includes Recent User Corrections section in preload_prompt", async () => {
     writeCorrection(projectDir, "c1.json", {
       agent_type: "engineer",
       commit_sha: "abc12345def",
@@ -94,8 +103,7 @@ describe("resolveAgentSkills — correction injection", () => {
       file_path: "src/important.ts",
       timestamp: recentTimestamp(),
     });
-    const result = resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir);
-    assertOk(result);
+    const result = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir));
     expect(result.preload_prompt).toContain("Recent User Corrections");
     expect(result.preload_prompt).toContain("src/important.ts");
     expect(result.preload_prompt).toContain("abc12345"); // truncated sha
@@ -103,7 +111,7 @@ describe("resolveAgentSkills — correction injection", () => {
     expect(result.preload_prompt).toContain("git commit --amend --no-edit");
   });
 
-  it("with projectDir, corrections section appended after skills section", () => {
+  it("with projectDir, corrections section appended after skills section", async () => {
     writeFileSync(join(pluginDir, "rules", "some-rule.md"), "Rule body");
     writeAgent(pluginDir, "engineer", ["name: engineer", "rules:", "  - some-rule"].join("\n"));
     writeCorrection(projectDir, "c1.json", {
@@ -114,8 +122,7 @@ describe("resolveAgentSkills — correction injection", () => {
       file_path: "src/foo.ts",
       timestamp: recentTimestamp(),
     });
-    const result = resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir);
-    assertOk(result);
+    const result = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir));
     // Both sections present
     expect(result.preload_prompt).toContain("## Preloaded Skills");
     expect(result.preload_prompt).toContain("## Recent User Corrections");
@@ -125,19 +132,18 @@ describe("resolveAgentSkills — correction injection", () => {
     expect(skillsIdx).toBeLessThan(corrIdx);
   });
 
-  it("succeeds even when corrections directory contains malformed files (non-blocking)", () => {
+  it("succeeds even when corrections directory contains malformed files (non-blocking)", async () => {
     // Write a malformed correction file
     const dir = join(projectDir, ".canon", "corrections");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "bad.json"), "not valid json at all!!!");
     // resolveAgentSkills should still succeed
-    const result = resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir);
-    assertOk(result);
+    const result = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir));
     // No corrections section because all files are malformed
     expect(result.preload_prompt).not.toContain("Recent User Corrections");
   });
 
-  it("preload_prompt is unaffected when projectDir has no corrections (only skills)", () => {
+  it("preload_prompt is unaffected when projectDir has no corrections (only skills)", async () => {
     writeFileSync(join(pluginDir, "rules", "agent-tdd-required.md"), "TDD rule body");
     writeAgent(
       pluginDir,
@@ -145,10 +151,10 @@ describe("resolveAgentSkills — correction injection", () => {
       ["name: engineer", "rules:", "  - agent-tdd-required"].join("\n"),
     );
     // No corrections
-    const withProjectDir = resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir);
-    const withoutProjectDir = resolveAgentSkills({ agent_name: "engineer" }, pluginDir);
-    assertOk(withProjectDir);
-    assertOk(withoutProjectDir);
+    const withProjectDir = await ok(
+      resolveAgentSkills({ agent_name: "engineer" }, pluginDir, projectDir),
+    );
+    const withoutProjectDir = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     // Both should produce the same preload_prompt when there are no corrections
     expect(withProjectDir.preload_prompt).toBe(withoutProjectDir.preload_prompt);
   });

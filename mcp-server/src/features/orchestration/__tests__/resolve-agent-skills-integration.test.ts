@@ -57,8 +57,10 @@ describe("resolve_agent_skills against shipped agents", () => {
   });
 
   for (const name of listAgents()) {
-    it(`${name}: every rules/references/primers/templates entry resolves`, { retry: 2 }, () => {
-      const result = resolveAgentSkills({ agent_name: name }, REPO_ROOT);
+    it(`${name}: every rules/references/primers/templates entry resolves`, {
+      retry: 2,
+    }, async () => {
+      const result = await resolveAgentSkills({ agent_name: name }, REPO_ROOT);
       assertOk<ResolveAgentSkillsResult>(result);
       const fm = agentFrontmatter(name);
       const declaredCount =

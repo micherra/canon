@@ -1,12 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ResolveAgentSkillsResult } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import {
   applyAgentSkillsDisclosure,
   summarizeAgentSkills,
 } from "@features/orchestration/tools/resolve-agent-skills-disclosure.ts";
-import type { ResolveAgentSkillsResult } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 function makeResult(overrides: Partial<ResolveAgentSkillsResult> = {}): ResolveAgentSkillsResult {
