@@ -133,6 +133,39 @@ describe("applyAgentSkillsDisclosure", () => {
     ]);
   });
 
+  it("preserves corrections section inline when truncating a large prompt", async () => {
+    const correctionsSection =
+      '\n\n## Recent User Corrections\n\nThe following files were recently corrected by the user after an agent commit. Pay extra attention to these patterns:\n\n- **src/foo.ts**: Correction at 2026-05-20T10:00:00Z\n  - Agent commit: `abc12345` — "feat: add foo"\n  - Correction: `git revert abc12345`\n\n';
+    const bigBase = "x".repeat(13_000);
+    const bigPrompt = bigBase + correctionsSection;
+    const result = makeResult({ preload_prompt: bigPrompt });
+
+    const disclosed = await applyAgentSkillsDisclosure(result, projectDir);
+
+    expect(disclosed).not.toBe(result);
+    // Slim preload should NOT contain the big base content
+    expect(disclosed.preload_prompt).not.toContain("x".repeat(100));
+    // But it MUST contain the corrections section inline
+    expect(disclosed.preload_prompt).toContain("## Recent User Corrections");
+    expect(disclosed.preload_prompt).toContain("src/foo.ts");
+    expect(disclosed.preload_prompt).toContain("abc12345");
+    // And still contain the summary + file pointer
+    expect(disclosed.preload_prompt).toContain("Agent: engineer");
+    expect(disclosed.preload_prompt).toContain("Full preload content at:");
+  });
+
+  it("truncation without corrections section is unchanged in behavior", async () => {
+    // A large prompt with no corrections section should not gain a spurious section
+    const bigPrompt = "y".repeat(13_000);
+    const result = makeResult({ preload_prompt: bigPrompt });
+
+    const disclosed = await applyAgentSkillsDisclosure(result, projectDir);
+
+    expect(disclosed).not.toBe(result);
+    expect(disclosed.preload_prompt).not.toContain("## Recent User Corrections");
+    expect(disclosed.preload_prompt).toContain("Full preload content at:");
+  });
+
   it("writes full JSON to disk at full_data_path when truncated", async () => {
     const bigPrompt = "z".repeat(13_000);
     const result = makeResult({ preload_prompt: bigPrompt });

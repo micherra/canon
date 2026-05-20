@@ -47,9 +47,20 @@ export async function applyAgentSkillsDisclosure(
   if (!disclosure.truncated) return result;
 
   const slimSkills = result.skills.map((s) => ({ ...s, content: "" }));
+
+  // Extract the corrections section from the original preload_prompt so it is
+  // always inline — never deferred to the full-data file. The corrections section
+  // starts with "## Recent User Corrections" and is separated from the base prompt
+  // by a double newline.
+  const CORRECTIONS_MARKER = "\n\n## Recent User Corrections";
+  const correctionsIdx = result.preload_prompt.indexOf(CORRECTIONS_MARKER);
+  const inlineCorrections =
+    correctionsIdx !== -1 ? result.preload_prompt.slice(correctionsIdx) : "";
+
   const slimPreload = [
     disclosure.summary,
     `\n\nFull preload content at: ${disclosure.full_data_path}\nInstruct the agent to Read this file path for the complete rules, references, primers, and templates.`,
+    inlineCorrections,
   ].join("");
 
   return {
