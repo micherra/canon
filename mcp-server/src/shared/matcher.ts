@@ -256,6 +256,24 @@ async function loadOverrides(projectDir: string): Promise<PrincipleOverride[]> {
   }
 }
 
+function applySingleOverride(principle: Principle, override: PrincipleOverride): Principle {
+  switch (override.action) {
+    case "override-severity":
+      return { ...principle, severity: override.severity };
+    case "narrow-scope":
+      return {
+        ...principle,
+        scope: {
+          file_patterns: override.applies_to.file_patterns,
+          layers: override.applies_to.layers,
+        },
+      };
+    default:
+      // Unknown action — silently skip override, keep principle unchanged
+      return principle;
+  }
+}
+
 function applyOverrides(principles: Principle[], overrides: PrincipleOverride[]): Principle[] {
   if (overrides.length === 0) return principles;
 
@@ -285,26 +303,7 @@ function applyOverrides(principles: Principle[], overrides: PrincipleOverride[])
     }
 
     // Apply remaining overrides sequentially in YAML file order
-    let current = p;
-    for (const override of principleOverrides) {
-      switch (override.action) {
-        case "override-severity":
-          current = { ...current, severity: override.severity };
-          break;
-        case "narrow-scope":
-          current = {
-            ...current,
-            scope: {
-              file_patterns: override.applies_to.file_patterns,
-              layers: override.applies_to.layers,
-            },
-          };
-          break;
-        default:
-          // Unknown action — silently skip override, keep principle unchanged
-          break;
-      }
-    }
+    const current = principleOverrides.reduce(applySingleOverride, p);
     result.push(current);
   }
 
