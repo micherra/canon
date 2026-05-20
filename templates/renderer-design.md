@@ -1,6 +1,6 @@
 ---
 template: renderer-design
-description: Renderer spawn prompt for converting the architect design document + task DAG into design.html
+description: Renderer spawn prompt for converting the PRD + architect design document + task DAG into a unified design.html
 used-by: [orchestrator]
 read-by: [renderer-agent]
 output-path: ${WORKSPACE}/artifacts/design.html
@@ -21,12 +21,16 @@ result as the renderer agent's spawn prompt.
   (typically `${WORKSPACE}/plans/${SLUG}/DESIGN.md` or `${WORKSPACE}/plans/${SLUG}/INDEX.md`)
 - `${DAG_PATH}` — absolute path to the task DAG YAML file
   (typically `${WORKSPACE}/plans/${SLUG}/task-dag.yaml`); leave empty if no DAG exists
+- `${PRD_PATH}` — absolute path to the PRD markdown file
+  (typically `${WORKSPACE}/plans/${SLUG}/prd.md`); leave empty if no PRD exists
+- `${RUNBOOK_PATH}` — absolute path to the runbook markdown file
+  (typically `${WORKSPACE}/plans/${SLUG}/runbook.md`); leave empty if no runbook exists
 
 ## Prompt
 
 ````
-You are a renderer agent. Your sole job is to convert the architect design document and
-optional task DAG into a self-contained HTML file and write it to
+You are a renderer agent. Your sole job is to convert the architect design document,
+optional task DAG, and optional PRD into a self-contained HTML file and write it to
 ${WORKSPACE}/artifacts/design.html.
 Do NOT modify the worktree. Do NOT call Canon MCP tools.
 
@@ -36,9 +40,14 @@ Read these files:
 1. ${DESIGN_PATH} — the design document markdown (your primary data source)
 2. mcp-server/src/ui/snippets/DESIGN-SYSTEM.md — the design system reference
 3. ${DAG_PATH} — the task DAG YAML (if the path is non-empty and the file exists)
+4. ${PRD_PATH} — the PRD markdown (if the path is non-empty and the file exists)
+5. ${RUNBOOK_PATH} — the runbook markdown (if the path is non-empty and the file exists)
 
 If ${DAG_PATH} is empty or the file does not exist, treat this as a single-task build
 (no DAG) and skip all DAG-specific rendering.
+
+If ${PRD_PATH} is empty or the file does not exist, treat this as a design-only build
+(no PRD) and skip all PRD-specific rendering.
 
 ## Step 2 — Parse the design document
 
@@ -54,6 +63,30 @@ Extract these sections from the markdown:
 - **Assumptions**: The `## Assumptions` section — list of assumptions made during design.
 - **Brief coverage**: The `### Brief Coverage` table — maps runbook requirements to task elements
   with dispositions (`covered`, `descoped`, `partial`).
+- **Runbook**: Runbook data is parsed from the runbook file read in Step 1 (`${RUNBOOK_PATH}`),
+  not from the design document. Skip this extraction if no runbook file was loaded.
+
+## Step 2b — Parse the PRD (if present)
+
+If the PRD file was read, extract these fields:
+
+- **Outcome badge**: The value on the `## Outcome` line — `GREENLIGHT`, `CAUTION`, or `NO-GO`.
+  Default to `GREENLIGHT` if absent.
+- **Effort estimate**: The value on the `## Effort Estimate` line — e.g., `small`, `medium`,
+  `large`. Omit if absent.
+- **Value estimate**: The value on the `## Value Estimate` line — e.g., `low`, `medium`, `high`.
+  Extract just the level word before the dash separator. Omit if absent.
+- **Problem statement**: The body of the `## Problem Statement` section, including the
+  `**Evidence:**` sub-field if present.
+- **Acceptance criteria**: The `## Acceptance Criteria` table rows — columns are `#`,
+  `Criterion`, `Verification`, `Type`.
+- **Requirement coverage map**: The `## Requirement Coverage Map` table rows — columns are
+  `#`, `Requirement`, `Disposition`, `Runbook step or rationale`.
+- **Scope & Constraints**: The `## Scope & Constraints` section body — in-scope items, out-of-scope
+  items, and constraints. Omit if absent.
+- **Alternatives considered**: The `## Alternatives Considered` section — may contain multiple
+  `### Alternative:` sub-sections. Omit if absent.
+- **Open questions**: The `## Open Questions` numbered list. Omit if absent or empty.
 
 ## Step 3 — Parse the task DAG (if present)
 
@@ -91,13 +124,20 @@ Use the design system (Section A tokens, Section B page boilerplate, Section C c
 </head>
 <body>
   <div class="container">
-    <!-- Header panel -->
-    <!-- Architecture overview panel -->
+    <!-- Header panel (unified: title + scope + slug badge + outcome badge if PRD present) -->
+    <!-- PRD: Problem Statement panel (if PRD present) -->
+    <!-- PRD: Acceptance Criteria panel (if PRD present) -->
+    <!-- PRD: Requirement Coverage Map panel (if PRD present) -->
+    <!-- PRD: Scope & Constraints panel (if PRD present and non-empty) -->
+    <!-- Architecture overview panel (from design doc) -->
     <!-- Task DAG visualization panel (or single-task summary) -->
     <!-- Per-task cards -->
     <!-- Design decisions panel -->
-    <!-- Tradeoffs panel (collapsible) -->
+    <!-- PRD: Alternatives panel (collapsible, if PRD present and non-empty) -->
+    <!-- Tradeoffs panel (collapsible, from design doc) -->
+    <!-- PRD: Open Questions panel (if PRD present and questions exist) -->
     <!-- Assumptions panel -->
+    <!-- Runbook overview panel -->
   </div>
 </body>
 </html>
@@ -105,10 +145,35 @@ Use the design system (Section A tokens, Section B page boilerplate, Section C c
 
 ### Header panel
 
-Render a `.section-card` at the top showing:
-- Document title as the card title (`font-size: 18px; font-weight: 700`)
-- Scope summary as subtitle (`font-size: 13px; color: var(--text-muted)`)
-- Build slug badge in the header
+**When PRD is present**, render a unified header showing PRD signals alongside design identity:
+
+```html
+<div class="section-card" style="margin-bottom: 16px;">
+  <div class="section-card-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+    <div>
+      <h1 style="font-size: 18px; font-weight: 700; color: var(--text-bright);">{title}</h1>
+      <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">{scope summary}</p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      <span style="background: {badgeColor}22; color: {badgeColor}; border: 1px solid {badgeColor}44; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px; letter-spacing: 0.04em;">{OUTCOME}</span>
+      <span style="font-size: 11px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
+    </div>
+  </div>
+  <div class="section-card-body" style="display: flex; gap: 12px; flex-wrap: wrap; padding-top: 8px;">
+    <span style="font-size: 12px; color: var(--text-muted);">Effort: {effort}</span>
+    <span style="font-size: 12px; color: var(--text-muted);">Value: {value}</span>
+  </div>
+</div>
+```
+
+Outcome badge color mapping:
+- `GREENLIGHT` → `var(--success)` (use `#34d399` for the `{badgeColor}22` / `{badgeColor}44` fill pattern)
+- `CAUTION` → `var(--warning)` (use `#fbbf24`)
+- `NO-GO` → `var(--danger)` (use `#ff6b6b`)
+
+Omit the effort/value row if neither value is present in the PRD.
+
+**When no PRD exists**, render the design-only header (no outcome badge, no effort/value chips):
 
 ```html
 <div class="section-card" style="margin-bottom: 16px;">
@@ -122,10 +187,52 @@ Render a `.section-card` at the top showing:
 </div>
 ```
 
+### PRD: Problem Statement panel
+
+**Only render if PRD data exists.**
+
+Use `.section-card` with title "Problem Statement". Render the section body using
+`markdownToHtml()` inside `.section-card-body` — the body may contain bold, italic, lists,
+or inline code. If an `**Evidence:**` sub-field is present, render it as a separate block
+with `color: var(--text-muted)`, also processed through `markdownToHtml()`.
+
+### PRD: Acceptance Criteria panel
+
+**Only render if PRD data exists.**
+
+Use `.section-card` with title "Acceptance Criteria". Render the table using `.table-scroll-wrapper`
+and `.requirement-table` from Section C. Columns: `#`, `Criterion`, `Verification`, `Type`.
+
+If no table rows exist in the PRD, render an `.empty-note` paragraph: "No acceptance criteria defined."
+
+### PRD: Requirement Coverage Map panel
+
+**Only render if PRD data exists.**
+
+Use `.section-card` with title "Requirement Coverage". Render the table using `.table-scroll-wrapper`
+and `.requirement-table`. Add a Disposition column rendered with `.disposition` badges from Section C:
+- `covered` → `.disposition--covered`
+- `descoped` → `.disposition--descoped`
+- `partial` → `.disposition--partial`
+
+If no table rows exist, render an `.empty-note`: "No requirement coverage map defined."
+
+### PRD: Scope & Constraints panel
+
+**Only render if PRD data exists and the section is non-empty.**
+
+Use `.section-card` with title "Scope & Constraints". Render the in-scope items as a `<ul>` list
+under a sub-label, out-of-scope items under a second sub-label, and constraints under a third.
+Use `font-size: 11px; font-weight: 600; color: var(--text-muted)` for sub-labels. Omit
+sub-sections that have no items. Use `markdownToHtml()` for item text (items may contain
+inline code or bold emphasis); use `escapeHtml()` for sub-label text only.
+
 ### Architecture overview panel
 
-Use `.section-card` with title "Architecture Overview". Render the section body as paragraphs
-inside `.section-card-body`. Escape all content. Render any sub-headings as `<h3>` tags.
+Use `.section-card` with title "Architecture Overview". Render the section body using
+`markdownToHtml()` inside `.section-card-body` — this section commonly contains code blocks,
+inline code, bold terms, and sub-headings. `markdownToHtml()` handles heading conversion to
+`<h3>`/`<h4>` tags automatically.
 
 ### Task DAG visualization panel
 
@@ -209,28 +316,87 @@ extract the `### Brief Coverage` table rows and render them with `.disposition` 
 
 Use `.section-card` with title "Design Decisions". Render as a list of decision entries.
 Each entry shows:
-- Decision title (bold)
-- Choice made
-- Rationale (muted text)
-- Tradeoffs / alternatives rejected (muted, smaller)
+- Decision title (bold) — use `escapeHtml()` (atomic value)
+- Choice made — use `escapeHtml()` (short phrase)
+- Rationale (muted text) — use `markdownToHtml()` (may contain inline code, lists, emphasis)
+- Tradeoffs / alternatives rejected (muted, smaller) — use `markdownToHtml()`
 
-If decisions are in a table, render using `.requirement-table`. If in sub-sections,
-render each `### Decision: …` as a card within the panel.
+If decisions are in a table, render using `.requirement-table` with `escapeHtml()` on cell
+values. If in sub-sections, render each `### Decision: …` as a card within the panel,
+applying `markdownToHtml()` to the body text.
+
+### PRD: Alternatives panel (collapsible)
+
+**Only render if PRD data exists and the Alternatives Considered section is non-empty.**
+
+Use `<details class="collapsible-section">` from Section C. Title: "Alternatives Considered".
+Start collapsed (`<details>` without `open`). Render each `### Alternative:` sub-section as
+a titled block (title with `escapeHtml()`) with its description and "Why not chosen" rationale
+rendered using `markdownToHtml()` — these bodies may contain lists, code, and emphasis.
 
 ### Tradeoffs panel (collapsible)
 
 Use `<details class="collapsible-section">`. Title: "Tradeoffs & Alternatives Considered".
-Start collapsed. Render tradeoff content as paragraphs or lists. If absent, omit.
+Start collapsed. Render tradeoff content from the design document using `markdownToHtml()` —
+this section typically contains lists, inline code, and emphasis. If the design document has
+no tradeoffs section, omit this panel.
+
+### PRD: Open Questions panel
+
+**Only render if PRD data exists and the Open Questions list is non-empty.**
+
+Use `.section-card` with title "Open Questions". Render as a numbered `<ol>` list, one
+question per `<li>`. Use `markdownToHtml()` for each question — questions may reference
+inline code or use emphasis.
 
 ### Assumptions panel
 
-Use `.section-card` with title "Assumptions". Render as a `<ul>` list. If absent, omit.
+Use `.section-card` with title "Assumptions". Render as a `<ul>` list. Use `markdownToHtml()`
+for each assumption item — items may reference code or use emphasis. If absent, omit.
 
-## Step 5 — Security
+### Runbook overview panel
 
-Apply `escapeHtml` to ALL content extracted from the design document before embedding in HTML.
-This includes: task IDs, file paths, decision titles, rationale text, assumption text,
-section body content.
+**Only render if `${RUNBOOK_PATH}` is non-empty and the file exists.**
+
+Use `.section-card` with title "Runbook". Extract runbook steps from the runbook file read in
+Step 1 (`${RUNBOOK_PATH}`). Parse the numbered steps — each step typically has a name, agent
+type, and expected artifacts listed. Render each step as a numbered row with:
+- Step number (large, `var(--accent)` colored)
+- Step name / description
+- Agent type as a small badge
+- Expected artifacts (if listed)
+
+```html
+<div class="section-card">
+  <div class="section-card-header"><h2 class="section-title">Runbook</h2></div>
+  <div class="section-card-body">
+    <ol style="list-style: none; display: flex; flex-direction: column; gap: 10px;">
+      <li style="display: flex; gap: 12px; align-items: flex-start;">
+        <span style="font-size: 20px; font-weight: 700; color: var(--accent); min-width: 28px;">{N}</span>
+        <div>
+          <div style="font-weight: 600; color: var(--text-bright); font-size: 13px;">{step name}</div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Agent: {agent type}</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Artifacts: {artifacts}</div>
+        </div>
+      </li>
+    </ol>
+  </div>
+</div>
+```
+
+If `${RUNBOOK_PATH}` is empty or the file does not exist, omit the Runbook panel entirely.
+
+## Step 5 — Security and Markdown Conversion
+
+Use the two helper functions below to embed content safely. The key rule:
+
+- **Prose / body content** (sections, rationale, descriptions, assumptions) → `markdownToHtml()`
+- **Atomic values** (slugs, task IDs, file paths, badge text, table cell values, step names, agent types) → `escapeHtml()`
+
+`markdownToHtml` calls `escapeHtml` on text runs internally (escape-first, wrap-second), so
+do NOT pre-escape text before passing it to `markdownToHtml` — that would double-escape.
+
+Color constants, CSS property values, and numeric values do not need escaping.
 
 ```javascript
 function escapeHtml(s) {
@@ -240,6 +406,135 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * Convert common markdown patterns to HTML.
+ * Calls escapeHtml on text content before wrapping in tags (escape-first, wrap-second).
+ * Do NOT pre-escape input — this function handles escaping internally.
+ */
+function markdownToHtml(md) {
+  if (!md) return "";
+  const lines = String(md).split("\n");
+  const out = [];
+  let inCodeFence = false;
+  let codeFenceLang = "";
+  let codeLines = [];
+  let inUl = false;
+  let inOl = false;
+
+  function closeList() {
+    if (inUl) { out.push("</ul>"); inUl = false; }
+    if (inOl) { out.push("</ol>"); inOl = false; }
+  }
+
+  function inlineFormat(text) {
+    // Escape first, then apply inline patterns
+    let s = escapeHtml(text);
+    // Code spans — backticks are not HTML special chars so they survive escapeHtml unchanged
+    s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+    // Bold (**text** or __text__)
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+    // Italic (*text* or _text_) — must come after bold
+    s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    s = s.replace(/_([^_]+)_/g, "<em>$1</em>");
+    return s;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Code fence open/close
+    if (/^```/.test(line)) {
+      if (!inCodeFence) {
+        closeList();
+        inCodeFence = true;
+        codeFenceLang = line.slice(3).trim();
+        codeLines = [];
+      } else {
+        inCodeFence = false;
+        const langAttr = codeFenceLang ? ` class="language-${escapeHtml(codeFenceLang)}"` : "";
+        out.push(`<pre><code${langAttr}>${codeLines.map(escapeHtml).join("\n")}</code></pre>`);
+        codeLines = [];
+        codeFenceLang = "";
+      }
+      continue;
+    }
+    if (inCodeFence) { codeLines.push(line); continue; }
+
+    // Headings
+    const h4 = line.match(/^#### (.+)/);
+    if (h4) { closeList(); out.push(`<h4>${inlineFormat(h4[1])}</h4>`); continue; }
+    const h3 = line.match(/^### (.+)/);
+    if (h3) { closeList(); out.push(`<h3>${inlineFormat(h3[1])}</h3>`); continue; }
+    const h2 = line.match(/^## (.+)/);
+    if (h2) { closeList(); out.push(`<h2>${inlineFormat(h2[1])}</h2>`); continue; }
+    const h1 = line.match(/^# (.+)/);
+    if (h1) { closeList(); out.push(`<h1>${inlineFormat(h1[1])}</h1>`); continue; }
+
+    // Unordered list items
+    const ul = line.match(/^[-*] (.+)/);
+    if (ul) {
+      if (inOl) { out.push("</ol>"); inOl = false; }
+      if (!inUl) { out.push("<ul>"); inUl = true; }
+      out.push(`<li>${inlineFormat(ul[1])}</li>`);
+      continue;
+    }
+
+    // Ordered list items
+    const ol = line.match(/^\d+\. (.+)/);
+    if (ol) {
+      if (inUl) { out.push("</ul>"); inUl = false; }
+      if (!inOl) { out.push("<ol>"); inOl = true; }
+      out.push(`<li>${inlineFormat(ol[1])}</li>`);
+      continue;
+    }
+
+    // Blank line — close lists and paragraph boundary
+    if (line.trim() === "") {
+      closeList();
+      out.push(""); // paragraph break marker
+      continue;
+    }
+
+    // Regular paragraph line — close any open list first
+    closeList();
+    out.push(inlineFormat(line));
+  }
+
+  // Close any unclosed list
+  closeList();
+
+  // Wrap consecutive non-empty lines into <p> blocks
+  const result = [];
+  let paraLines = [];
+  for (const token of out) {
+    if (token === "") {
+      if (paraLines.length) {
+        // If it's already a block element, emit as-is; otherwise wrap in <p>
+        const joined = paraLines.join(" ");
+        if (/^<(h[1-6]|ul|ol|pre|li)/.test(joined)) {
+          result.push(joined);
+        } else {
+          result.push(`<p>${joined}</p>`);
+        }
+        paraLines = [];
+      }
+    } else {
+      paraLines.push(token);
+    }
+  }
+  if (paraLines.length) {
+    const joined = paraLines.join(" ");
+    if (/^<(h[1-6]|ul|ol|pre|li)/.test(joined)) {
+      result.push(joined);
+    } else {
+      result.push(`<p>${joined}</p>`);
+    }
+  }
+
+  return result.join("\n");
 }
 ```
 
@@ -258,6 +553,10 @@ Return when the file is written. Do not call any MCP tools. Do not modify the wo
 
 - Variable substitution is the orchestrator's responsibility before passing to Agent()
 - The DAG path variable may be empty — renderer must handle that gracefully
+- The PRD path variable may be empty — renderer must handle that gracefully; all PRD panels
+  are omitted when no PRD file exists
+- The runbook path variable may be empty — renderer must handle that gracefully; the Runbook
+  panel is omitted when `${RUNBOOK_PATH}` is empty or the file does not exist
 - Task plan files are read opportunistically — if absent, skip the brief coverage sub-section
 - The renderer writes exclusively to `${WORKSPACE}/artifacts/` — never to the worktree
 - If `${DESIGN_PATH}` does not exist, check for `INDEX.md` in the same directory before

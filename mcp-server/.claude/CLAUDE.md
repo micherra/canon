@@ -49,7 +49,7 @@ src/
 ## Contracts
 <!-- last-updated: 2026-05-16 (present_artifact + present_review fire-and-forget; Decision type + POST decision route removed) -->
 
-**`present_artifact` MCP tool** — `html?: string` optional input; when provided, bypasses VIEW_MAP and serves the HTML directly; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
+**`present_artifact` MCP tool** — `html` parameter required; serves the provided HTML directly via HTTP server; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
 
 **`present_review` MCP tool** — thin composition: `showPrImpact` → read pre-rendered `${workspace}/artifacts/review.html` → `presentArtifact`; returns `{ url: string }`; `INVALID_INPUT` when `review.html` missing or `has_review === false`. Added 2026-05-15, updated 2026-05-16.
 

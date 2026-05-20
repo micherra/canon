@@ -139,27 +139,30 @@ This gate is L1-only — no L4 backstop exists. Claude Code hooks fire on tool c
 1. **PM triage**: Conduct requirements conversation if needed, then run 1-2 MCP triage calls (`get_file_context`, `graph_query`) to assess scope. See Pre-Build Gate for details.
 2. **Route based on triage result**:
 
-#### Trivial path (PM → engineer)
+#### Trivial path (PM → engineer) <!-- last-updated: 2026-05-18 -->
 
 When triage determines trivial (single-file, no architectural questions, clear implementation, low blast radius):
 
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier: "trivial", original_input, preflight: true })`. Save `worktree_path` and `workspace`.
 2. Infer a minimal runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps` with these steps.
 3. **Pre-spawn worktree verification**: Run `test -d "${worktree_path}"` via Bash. If missing, report BLOCKED.
-4. Spawn `canon:engineer` with the build request and `worktree_path`. Proceed through the standard step execution loop (verify, review, ship, etc.).
+4. Spawn `canon:engineer` with the build request, `worktree_path`, and `turn_budget: {maxTurns}`. Proceed through the standard step execution loop (verify, review, ship, etc.).
+
+**Fast-path context enrichment**: When a trivial-path build involves 4+ files or 2+ distinct workstreams (e.g., "fix the linter config and update the tests"), include minimal context in the engineer's spawn prompt: scope summary (what to change and why), key files (paths and one-line purpose), and gotchas (known edge cases, related files that must not be modified). This prevents the engineer from spending 25+ turns on orientation that the orchestrator could resolve with 1-2 `get_file_context` calls during triage.
 
 #### Non-trivial path (PM → architect → execution)
 
 When triage determines non-trivial (2+ files, cross-layer, design questions, high blast radius):
 
 1. Call `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`. Save `worktree_path` and `workspace`.
-2. **Spawn `canon:architect`** with the build request, requirements summary, and `WORKSPACE=${workspace}`. The architect performs codebase research, produces a design, and generates the runbook. The architect calibrates depth (small vs complex) accordingly.
-3. **Validate architect output**. Check the design's Requirements Coverage section for completeness and dispositions. If any requirements are `descoped`, `partial`, or missing from the coverage table, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
+2. **Write PRD**: Fill `templates/prd.md` with the requirements gathered during PM triage. Write the completed PRD to `${WORKSPACE}/plans/${SLUG}/prd.md` (create the `plans/${SLUG}/` directory if needed). This artifact is consumed by both the architect (requirements context) and the renderer (PRD panels in design.html). Save the path as `${PRD_PATH}`.
+3. **Spawn `canon:architect`** with the build request, requirements summary, `PRD_PATH=${PRD_PATH}`, and `WORKSPACE=${workspace}`. The architect performs codebase research, produces a design, and generates the runbook. The architect calibrates depth (small vs complex) accordingly.
+4. **Validate architect output**. Check the design's Requirements Coverage section for completeness and dispositions. If any requirements are `descoped`, `partial`, or missing from the coverage table, surface them to the user explicitly: "The following items from your request are not fully covered by this runbook: [list with rationales]. Proceed with reduced scope, or revise?" If all requirements are present and `covered`, proceed silently. If the section is absent or contains no rows, treat all stated requirements as `descoped` and surface the full list to the user before proceeding.
    Additionally, for each row with disposition `covered`, verify that the row names a specific runbook step or DAG task responsible for delivering it (in the "Runbook step or rationale" column). Rows marked `covered` with no owning step/task are treated as `partial` with rationale "no owning task identified" and surfaced to the user alongside other gaps.
-4. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
-5. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
-6. **Pre-spawn worktree verification**: Before spawning any code-writing agent (engineer, tester, scribe, shipper), run `test -d "${worktree_path}"` via Bash. If the worktree is missing, do NOT spawn the agent — report BLOCKED to the user: "Worktree at {path} no longer exists. It may have been cleaned up by a concurrent process. Re-run `init_workspace` to recreate, or investigate."
-7. Execute steps in order, spawning the agent specified by each step. For code-writing agents (engineer, scribe, tester, shipper), pass `worktree_path` in the spawn prompt and use `isolation: "none"`. See the isolation model section above.
+5. Present the runbook to the user for approval. Iterate if the user requests changes. The architect decides execution strategy (team dispatch vs sequential, worker count) — this is a technical decision. The orchestrator follows the architect's recommendation in the runbook.
+6. Call `batch_log_steps` with all steps from the approved runbook (creates the checklist in one call). Falls back to individual `log_step` calls if needed.
+7. **Pre-spawn worktree verification**: Before spawning any code-writing agent (engineer, tester, scribe, shipper), run `test -d "${worktree_path}"` via Bash. If the worktree is missing, do NOT spawn the agent — report BLOCKED to the user: "Worktree at {path} no longer exists. It may have been cleaned up by a concurrent process. Re-run `init_workspace` to recreate, or investigate."
+8. Execute steps in order, spawning the agent specified by each step. Pass `turn_budget: {maxTurns}` in the spawn prompt of all agents scoped by the budget-checkpoint rule: engineer, reviewer, architect, scribe, shipper, and learner. For code-writing agents (engineer, scribe, tester, shipper), also pass `worktree_path` and use `isolation: "none"`. See the isolation model section above.
 
 ### DAG Execution Protocol
 
@@ -258,7 +261,7 @@ Table of which Canon MCP tools to call before spawning each step type:
 | Any step before spawn | `resolve_agent_skills` (preloaded rules + references injected into the spawn prompt) |
 | Design | `get_context({ file_paths, include: ["principles", "file_context", "graph"] })` |
 | Implement | `get_context({ file_paths, include: ["principles", "file_context", "drift"] })` |
-| Review | `get_context({ file_paths, include: ["principles", "drift"] })` |
+| Review | `get_context({ file_paths, include: ["principles", "file_context", "drift"] })` |
 | Test | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 | Security | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 
@@ -328,7 +331,16 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 
 After each subagent returns, verify expected artifacts exist at the paths listed in the runbook's `artifacts` field before proceeding to the next step. Subagents don't trigger `TaskCompleted` hooks — this manual check is your enforcement layer.
 
-**Reviewer step — mandatory check**: After the reviewer step completes, verify `${WORKSPACE}/reviews/REVIEW.md` exists. If absent, re-spawn the reviewer with explicit instruction: "The review artifact was not written. You MUST call `mcp__canon__write_review` to write your findings to `${WORKSPACE}/reviews/REVIEW.md` before returning." If the second attempt also fails to produce the file, present to the user as HITL: "Reviewer failed to write REVIEW.md after two attempts. Manual review required."
+**Universal artifact check**: After ANY agent step completes, verify all `artifacts_expected` paths exist. If any artifact is missing:
+1. Re-spawn the agent with explicit instruction: "The following artifacts were not written: {missing_paths}. You MUST write these artifacts before returning. See rule `agent-artifact-write-before-return`."
+2. If the second attempt also fails, present to the user as HITL: "{agent_type} failed to write artifacts after two attempts: {missing_paths}. Manual intervention required."
+
+**Step-specific artifact expectations**:
+- **Architect**: `plans/${slug}/DESIGN.md`, `plans/${slug}/INDEX.md` (non-trivial builds)
+- **Engineer (implement)**: `plans/${slug}/*-SUMMARY.md` (implementation summary via `write_implementation_summary`)
+- **Reviewer**: `reviews/REVIEW.md` (review via `write_review`)
+- **Tester**: `plans/${slug}/TEST-REPORT.md` (test report via `write_test_report`)
+- **Scribe**: `plans/${slug}/CONTEXT-SYNC.md` (context sync report)
 
 ### HITL Patterns <!-- last-updated: 2026-05-17 -->
 
@@ -372,7 +384,7 @@ After each subagent returns, verify expected artifacts exist at the paths listed
 
 - After reviewer completes: call `store_pr_review` or `write_review`. When spawning the reviewer, include `WORKSPACE={workspace_path}` in the spawn prompt (the workspace root, not the worktree path). This ensures review artifacts land at `${WORKSPACE}/reviews/REVIEW.md`, not inside the worktree. Also include an explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`" — this avoids false-positive "Drift from Plan" findings from unrelated accumulated changes.
 - After reviewer completes (mandatory): spawn the renderer agent to convert `${WORKSPACE}/reviews/REVIEW.md` to HTML. The renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`, calls `get_context` and `show_pr_impact` for structural data, and writes `${WORKSPACE}/artifacts/review.html`. Open the HTML in the browser (`open` command) before presenting the review verdict at the HITL checkpoint. This is not optional — every review step produces rendered HTML.
-- After architect completes (mandatory): spawn the renderer agent to convert the design document (`${WORKSPACE}/plans/${slug}/DESIGN.md` or `INDEX.md`) to HTML. The renderer reads the design doc + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` and writes `${WORKSPACE}/artifacts/design.html`. Open the HTML in the browser before presenting the design for user approval at the HITL checkpoint.
+- After architect completes (mandatory): spawn the renderer agent to convert the design document (`${WORKSPACE}/plans/${slug}/DESIGN.md` or `INDEX.md`) to HTML. Read `templates/renderer-design.md`, fill in all `## Variables` placeholders — `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}` (from `${WORKSPACE}/plans/${SLUG}/task-dag.yaml`, or empty if absent), `${PRD_PATH}` (from `${WORKSPACE}/plans/${SLUG}/prd.md`, or empty if absent), and `${RUNBOOK_PATH}` (from `${WORKSPACE}/plans/${SLUG}/runbook.md`, or empty if absent) — then pass the filled prompt to the renderer. The renderer writes `${WORKSPACE}/artifacts/design.html`. Open the HTML in the browser before presenting the design for user approval at the HITL checkpoint.
 - After each step: call `record_agent_metrics` if the agent didn't call it itself. Agents are required by rule `agent-metrics-before-return` to call this before their terminal status; the orchestrator fallback covers non-compliant agents.
 - Transcript capture is automatic: pass `agent_id` (from the Agent tool result) to the `log_step` completion call. `logStep` calls `captureTranscript` internally and records `transcript_path` in the journal. No separate `capture_transcript` call needed.
 - Run contract-checker assertions via Bash when postconditions are declared.
@@ -390,15 +402,13 @@ the fenced code block) as the renderer agent's spawn prompt.
 
 **Checkpoint-to-template mapping:**
 
-| Checkpoint | Template | Output |
-|------------|----------|--------|
-| Planning brief | `templates/renderer-planning-brief.md` | `planning-brief.html` |
-| Design document | `templates/renderer-design.md` | `design.html` |
-| Review dashboard | `templates/renderer-review.md` | `review.html` |
+| Checkpoint | Template | Output | Required variables |
+|------------|----------|--------|--------------------|
+| Design document | `templates/renderer-design.md` | `design.html` | `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}`, `${PRD_PATH}`, `${RUNBOOK_PATH}` |
+| Review dashboard | `templates/renderer-review.md` | `review.html` | `${WORKSPACE}`, `${SLUG}` |
 
 **MCP tool requirements per template:**
-- `renderer-planning-brief.md` — pure markdown, no MCP tool calls
-- `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML directly)
+- `renderer-design.md` — pure markdown, no MCP tool calls (reads DAG YAML and runbook directly)
 - `renderer-review.md` — requires `show_pr_impact` and `get_context` calls
 
 **Artifact naming convention:**
@@ -412,15 +422,15 @@ the fenced code block) as the renderer agent's spawn prompt.
 
 When the review step completes and a tester step follows: extract Stage 5 "Acceptance Criteria Verification" from `${WORKSPACE}/reviews/REVIEW.md` and include it (plus the architect design's Acceptance Criteria section) in the tester's spawn prompt. When runbook ACs include verification method/type columns, the tester MUST run after the review step — it consumes the reviewer's Stage 5 output.
 
-### Step Enforcement Contracts
+### Step Enforcement Contracts <!-- last-updated: 2026-05-18 -->
 
 **Verify step**: When the runbook contains a step with `type: verify` (or the step name is `verify`), the engineer executing it MUST run all three gates in order:
 
-1. `npm run build` — TypeScript compilation. Any error is a BLOCKING failure.
-2. `npm run lint` — Biome/ESLint check. Any error is a BLOCKING failure.
-3. `npm test` — Full test suite. Any failure is a BLOCKING failure.
+1. `npm run build` — TypeScript compilation.
+2. `npm run lint` — Biome/ESLint check.
+3. `npm test` — Full test suite.
 
-ALL three must pass for the verify step to succeed. If any gate fails, the engineer reports BLOCKED with the exact failure output and does NOT proceed past the verify step. The orchestrator presents the failure to the user via HITL (`on_failure` handler). The engineer reports DONE only when all three gates exit 0.
+ALL three must pass for the verify step to succeed. When a gate fails, the engineer MAY apply minor inline fixes (lint warnings, missing lint excludes, small type errors) and re-run the gate. This fix-and-rerun loop is expected and reduces round-trips. If fixing would require architectural changes, substantial new code, or modifications to files outside the verify step's scope, the engineer reports BLOCKED with the exact failure output and does NOT proceed. The orchestrator presents BLOCKED failures to the user via HITL (`on_failure` handler). The engineer reports DONE only when all three gates exit 0.
 
 **Verify skip for documentation-only diffs**: For builds where `git diff {base_commit} --name-only` contains only `.md` and `.txt` files, the verify step MAY be skipped with `skip_reason: "documentation-only diff, verify produces zero signal"`. The orchestrator checks the diff before spawning the verify engineer. If any non-documentation file is present, the full verify step runs.
 
@@ -481,11 +491,11 @@ Do NOT use Claude Code's `isolation: "worktree"` for agent-teams builds. It auto
 Agent({
   subagent_type: "canon:engineer",
   isolation: "none",    // Canon owns the worktree — no Agent tool isolation
-  prompt: "... Working directory: {worktree_path} ..."
+  prompt: "... Working directory: {worktree_path}\nturn_budget: {maxTurns} ..."
 })
 ```
 
-The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt.
+The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt. Also include `turn_budget: {maxTurns}` (from the agent's frontmatter) so the agent can pace its work per the `agent-budget-checkpoint` rule.
 
 **Exceptions (no worktree needed):**
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
