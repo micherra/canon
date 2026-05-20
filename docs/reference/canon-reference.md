@@ -130,7 +130,7 @@ Projects can tune Canon's principle set without editing principle files. Overrid
 | `override-severity` | Changes the enforcement level to `rule`, `strong-opinion`, or `convention` |
 | `narrow-scope` | Replaces the principle's scope with the specified layers and file patterns (replace semantics — original `scope.layers`, `scope.file_patterns`, and `scope.tags` are all dropped) |
 
-All actions require a non-empty `reason` field for auditability. Entries missing `reason` (or with an empty string) are silently dropped — the principle is left unchanged.
+`disable` and `override-severity` require a non-empty `reason` field for auditability. Entries missing `reason` (or with an empty string) are silently dropped — the principle is left unchanged. `narrow-scope` validates the `applies_to` structure but does not currently enforce `reason`; including one is recommended for auditability.
 
 ### YAML format
 
