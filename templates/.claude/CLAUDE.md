@@ -37,6 +37,18 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_file_context`) |
 | `sharpened-request.md` | pm-orchestrator | PM-to-architect hand-off artifact with Problem, Direction, Scope Boundaries, Acceptance Criteria, and Not Doing sections |
 
+## Spawn-Prompt Templates
+
+Spawn-prompt templates are structurally distinct from artifact-output templates. They are read by the **orchestrator** (not agents) before `Agent()` calls:
+
+| Template | Agent | Purpose |
+|----------|-------|---------|
+| `worker-prompt.md` | engineer (DAG worker) | DAG worker spawn prompt |
+| `renderer-design.md` | renderer | Design document HTML renderer spawn prompt |
+| `renderer-review.md` | renderer | Review dashboard HTML renderer spawn prompt |
+
+**Reading protocol**: The orchestrator reads the template, fills `## Variables` placeholders, and passes the `## Prompt` section content to the `Agent()` call. See `principles/conventions/spawn-prompt-template-structure.md` for the full convention.
+
 ## Conventions
 <!-- last-updated: 2026-03-22 -->
 
