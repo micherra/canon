@@ -110,7 +110,7 @@ Every build request goes through PM triage: (1) sharpen requirements, (2) assess
 
 **Pre-Write Gate**: Before `Edit`, `Write`, or `Bash` for code changes, verify the request is routed through a Canon build flow (architect + approved runbook). If not, stop and route through PM triage. Hard backstop: `canon-workspace-check.sh` hook (L4) blocks `Edit`/`Write`/tracked-`Bash` when no active workspace exists.
 
-**Pre-Analysis Gate**: Before producing substantive analytical text, verify it is on the Silent Dispatch allowlist (items 1–6). If not on the list, it is agent work — dispatch instead of writing it yourself. PM carve-out: requirements sharpening, scope questions, AC negotiation, and 1-2 MCP triage calls are permitted inline. Excluded: deep codebase investigation, root-cause analysis, design tradeoffs, implementation planning. Self-check: *"Am I about to write something a researcher or architect would produce?"* If yes, spawn that agent. L1-only — no L4 backstop; enforcement is entirely behavioral.
+**Pre-Analysis Gate**: Before producing substantive analytical text, verify it is on the Silent Dispatch allowlist (items 1–6). If not on the list, it is agent work — dispatch instead of writing it yourself. PM carve-out: requirements sharpening, scope questions, AC negotiation, and 1-2 MCP triage calls are permitted inline. Excluded: deep codebase investigation, root-cause analysis, design tradeoffs, implementation planning. Self-check: *"Am I about to write something a researcher or architect would produce?"* If yes, spawn that agent. L1-only — no L4 backstop; enforcement is entirely behavioral. Applies during build flows only. Question/chat intents respond directly and are exempt.
 
 ### Setup
 
@@ -131,7 +131,7 @@ Every build request goes through PM triage: (1) sharpen requirements, (2) assess
 1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` → save `worktree_path`, `workspace`.
 2. **Write PRD**: Fill `templates/prd.md` → write to `${WORKSPACE}/plans/${SLUG}/prd.md`. Verify it exists before Step 3.
 3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`.
-4. **Validate architect output**: Check Requirements Coverage section. Surface any `descoped`/`partial`/missing requirements to user before proceeding. For `covered` rows, verify each names an owning runbook step — rows without an owner are treated as `partial`. Proceed silently if all requirements are `covered` with owners.
+4. **Validate architect output**: Check Requirements Coverage section. Surface any `descoped`/`partial`/missing requirements to user before proceeding. If the section is absent or has no rows, treat all requirements as `descoped` and surface to user. For `covered` rows, verify each names an owning runbook step — rows without an owner are treated as `partial`. Proceed silently if all requirements are `covered` with owners.
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
 6. `batch_log_steps` with all approved runbook steps.
 7. **Pre-spawn check**: `test -d "${worktree_path}"` before any code-writing agent spawn. If missing, report BLOCKED.
@@ -301,7 +301,7 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 
 ### Post-Step Effects
 
-- **After reviewer**: call `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict.
+- **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict.
 - **After architect**: spawn renderer (mandatory) → `${WORKSPACE}/artifacts/design.html`. Open in browser before plan approval HITL.
 - **After each step**: call `record_agent_metrics` if agent didn't. Pass `agent_id` to `log_step` completion (transcript capture is automatic — no separate call needed).
 - Run contract-checker assertions via Bash when postconditions are declared.
