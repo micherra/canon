@@ -16,6 +16,14 @@ mkdir -p .canon/principles/rules .canon/principles/strong-opinions .canon/princi
 mkdir -p .canon/workspaces .canon/history
 ```
 
+Then ensure `principle-overrides.yaml` will be tracked by git even though `.canon/` is otherwise gitignored. Check whether `.gitignore` ignores `.canon/` and doesn't already have the exception; if so, append it:
+
+```bash
+grep -q '\.canon/' .gitignore && ! grep -q '!\.canon/principle-overrides\.yaml' .gitignore && echo '!.canon/principle-overrides.yaml' >> .gitignore
+```
+
+This is a no-op if `.gitignore` does not ignore `.canon/` or already contains the exception.
+
 ### Step 2: Explain the two-layer principle model
 
 The `.canon/principles/` directories created in Step 1 are for **project-local principles only** — custom principles you write for this specific project. Built-in Canon principles are loaded automatically from the plugin directory at runtime.
