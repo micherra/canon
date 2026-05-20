@@ -23,6 +23,20 @@ Don't discard principles silently. If you deprioritize a principle, you're choos
 
 Use the `list_principles` MCP tool to get the metadata-only index (id, title, severity, scope, tags). This avoids loading full bodies into context. Use this when you need to survey all principles without reading their content — e.g., conflict checking, learner baseline, writer dedup.
 
+## Override Loading Step
+
+After merging project-local and built-in principles, the loader applies any project-level overrides declared in `.canon/principle-overrides.yaml`. This step runs automatically — you do not need to call it explicitly.
+
+The pipeline order:
+1. Load project-local principles from `.canon/principles/` (these take precedence on ID conflict).
+2. Load built-in principles from `${CLAUDE_PLUGIN_ROOT}/principles/`.
+3. Merge: project-local IDs shadow built-in IDs.
+4. Load overrides from `.canon/principle-overrides.yaml` and apply them to the merged set.
+
+If the override file is absent or malformed, step 4 is a no-op — principles load as if the file were absent (fail-closed).
+
+See [Principle Overrides in canon-reference.md](../docs/reference/canon-reference.md#principle-overrides) for the full override format and validation behavior.
+
 ## Filesystem Fallback
 
 If MCP tools are unavailable or fail:
@@ -31,6 +45,7 @@ If MCP tools are unavailable or fail:
 2. Then glob `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md` (built-in principles)
 3. Read only the YAML frontmatter of each file for the index
 4. Read full body only for principles you need to apply
+5. Check for `.canon/principle-overrides.yaml` and apply any declared overrides to the loaded set
 
 Principles are organized into severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`.
 
