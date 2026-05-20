@@ -256,42 +256,55 @@ async function loadOverrides(projectDir: string): Promise<PrincipleOverride[]> {
   }
 }
 
+function applySingleOverride(principle: Principle, override: PrincipleOverride): Principle {
+  switch (override.action) {
+    case "override-severity":
+      return { ...principle, severity: override.severity };
+    case "narrow-scope":
+      return {
+        ...principle,
+        scope: {
+          file_patterns: override.applies_to.file_patterns,
+          layers: override.applies_to.layers,
+        },
+      };
+    default:
+      // Unknown action — silently skip override, keep principle unchanged
+      return principle;
+  }
+}
+
 function applyOverrides(principles: Principle[], overrides: PrincipleOverride[]): Principle[] {
   if (overrides.length === 0) return principles;
 
-  const overrideMap = new Map<string, PrincipleOverride>();
+  // Collect all overrides per principle in YAML file order
+  const overrideMap = new Map<string, PrincipleOverride[]>();
   for (const o of overrides) {
-    overrideMap.set(o.principle_id, o);
+    const existing = overrideMap.get(o.principle_id);
+    if (existing) {
+      existing.push(o);
+    } else {
+      overrideMap.set(o.principle_id, [o]);
+    }
   }
 
   const result: Principle[] = [];
   for (const p of principles) {
-    const override = overrideMap.get(p.id);
-    if (!override) {
+    const principleOverrides = overrideMap.get(p.id);
+    if (!principleOverrides) {
       result.push(p);
       continue;
     }
 
-    switch (override.action) {
-      case "disable":
-        // Skip — principle removed from output entirely
-        break;
-      case "override-severity":
-        result.push({ ...p, severity: override.severity });
-        break;
-      case "narrow-scope":
-        result.push({
-          ...p,
-          scope: {
-            file_patterns: override.applies_to.file_patterns,
-            layers: override.applies_to.layers,
-          },
-        });
-        break;
-      default:
-        // Unknown action — silently skip override, keep principle unchanged
-        result.push(p);
+    // disable wins regardless of order — check first
+    if (principleOverrides.some((o) => o.action === "disable")) {
+      // Skip — principle removed from output entirely
+      continue;
     }
+
+    // Apply remaining overrides sequentially in YAML file order
+    const current = principleOverrides.reduce(applySingleOverride, p);
+    result.push(current);
   }
 
   return result;

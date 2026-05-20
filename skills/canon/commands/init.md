@@ -16,17 +16,15 @@ mkdir -p .canon/principles/rules .canon/principles/strong-opinions .canon/princi
 mkdir -p .canon/workspaces .canon/history
 ```
 
-### Step 2: Copy starter principles
+### Step 2: Explain the two-layer principle model
 
-If the user passed `--empty` as an argument, skip this step and just create an empty `.canon/principles/` directory structure.
+The `.canon/principles/` directories created in Step 1 are for **project-local principles only** — custom principles you write for this specific project. Built-in Canon principles are loaded automatically from the plugin directory at runtime.
 
-Otherwise (default behavior), copy all principle files from the plugin's starter set, preserving the severity subdirectory structure:
+If you need to customize a built-in principle, use the writer agent's `fork` mode to copy it into `.canon/principles/` for editing.
 
-```bash
-cp ${CLAUDE_PLUGIN_ROOT}/principles/rules/*.md .canon/principles/rules/
-cp ${CLAUDE_PLUGIN_ROOT}/principles/strong-opinions/*.md .canon/principles/strong-opinions/
-cp ${CLAUDE_PLUGIN_ROOT}/principles/conventions/*.md .canon/principles/conventions/
-```
+Do NOT copy built-in principles into `.canon/principles/` — this would create stale duplicates that shadow updates from the plugin.
+
+If the user passed `--empty`, skip this step entirely (same as before — but now this step has no copy action since the directories are empty by design).
 
 ### Step 3: Create default config
 
@@ -68,7 +66,9 @@ Classify every user message by intent:
 
 ## Canon Engineering Principles
 
-This project uses Canon for engineering principles. Before writing or modifying code, load relevant principles via the `get_principles` MCP tool. Principles are in `.canon/principles/`. Severity levels: `rule` is non-negotiable, `strong-opinion` requires justification to skip, `convention` is noted but doesn't block.
+This project uses Canon for engineering principles. Before writing or modifying code, load relevant principles via the `get_principles` MCP tool. Severity levels: `rule` is non-negotiable, `strong-opinion` requires justification to skip, `convention` is noted but doesn't block.
+
+Built-in principles are loaded from the Canon plugin automatically. Project-local principles (custom additions) go in `.canon/principles/`. Project-local principles with the same ID as a built-in principle take precedence. Use `.canon/principle-overrides.yaml` to disable or adjust built-in principles without copying them.
 ```
 
 If `CLAUDE.md` doesn't exist, create it with just the Canon sections above.
