@@ -141,6 +141,25 @@ For the full template with section headers and editing rules, see `${CLAUDE_PLUG
 
 Remove specific lines or sections — do not restructure. If all derivable content is already removed and the file still exceeds 40,000 characters, do not trim further; record the file as over budget in the CONTEXT-SYNC.md report (Step 7) as a warning.
 
+### Step 4b: Length Management Pass
+
+**When**: After all Step 4 edits are complete, run `wc -c` on every CLAUDE.md file in scope — the root `CLAUDE.md` plus every subdirectory CLAUDE.md identified in Step 3 classification. If any file exceeds **40,000 characters**, apply prose compression. This check runs regardless of whether Step 4 produced edits — accumulated bloat from manual edits or skipped context-sync passes should still be caught.
+
+**Techniques**:
+- Convert verbose paragraphs to tables where content is structured (lists of rules, conditions, mappings)
+- Eliminate redundant phrasing — if two sentences say the same thing differently, keep the clearer one
+- Consolidate repeated concepts — if the same rule appears in multiple sections, define once and reference it
+- Compress verbose explanations into terse declarative statements
+- Remove filler words and hedging language
+
+**What NOT to do**:
+- Never remove protocol semantics — every rule, gate, contract, and behavioral instruction must survive
+- Never extract content to other files — CLAUDE.md must remain self-contained
+- Never restructure the document's section hierarchy
+- Never remove tables, section headings, or `<!-- last-updated -->` tags
+
+**Target**: Under 35,000 characters after compression. If not achievable without losing semantics, get as close as possible and note the floor in CONTEXT-SYNC.md.
+
 ### Step 5: Update README.md (structure changes only)
 
 If any change was classified as `structure` in Step 3:
