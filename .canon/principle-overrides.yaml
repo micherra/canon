@@ -1,10 +1,17 @@
 # Canon principle overrides for this repository.
 #
 # This file configures the principle system for the Canon codebase itself —
-# a TypeScript MCP server with no UI, no Terraform, no Docker, no SQL schema.
-# Built-in principles that target UI or infrastructure file patterns will never
-# match any file in this repository. Rather than deleting them (they are correct
-# for other projects), we disable them here using the override mechanism.
+# a TypeScript MCP server that includes a Svelte-based UI layer at
+# mcp-server/src/ui/ (30 Svelte components, stores, bridges, and CSS).
+# Principles that target *.svelte, src/ui/**, *.css, and src/** patterns
+# apply to those files and are NOT disabled here.
+#
+# Only principles whose applies_to patterns genuinely match zero files
+# in this repository are disabled:
+#   - Infrastructure principles (*.tf, Dockerfile, k8s/**, etc.)
+#   - deploy-frontend-modules-independently: targets independent micro-frontend
+#     deployment pipelines (packages/**, apps/**); not applicable — this repo
+#     has a single server with an embedded UI, not independently deployed modules.
 #
 # Additionally, observable-best-effort is promoted to rule severity and scoped
 # to the MCP server source where the 131 catch-block pattern is most prevalent.
@@ -15,54 +22,16 @@
 #   narrow-scope    — restrict the principle to a subset of files
 
 overrides:
-  # --- UI-scoped principles (11 unique) ---
-  # All target src/components/**, src/ui/**, *.tsx, *.vue, *.svelte, *.css, *.scss
-  # patterns that match zero files in this TypeScript MCP server repository.
-  # The Svelte UI was deleted (confirmed: workspace delete-mcp-svelte-app-uis).
-
-  - principle_id: compose-from-small-to-large
-    action: disable
-    reason: "UI-scoped principle (src/components/**, src/ui/**, *.tsx/*.vue/*.svelte); no UI component files in this TypeScript MCP server repository — Svelte app was deleted"
-
-  - principle_id: props-are-the-component-contract
-    action: disable
-    reason: "UI-scoped principle (src/components/**, src/ui/**, *.tsx/*.vue/*.svelte); no component files exist in this repository"
-
-  - principle_id: unidirectional-data-flow
-    action: disable
-    reason: "UI-scoped principle (src/components/**, src/ui/**, *.tsx/*.vue/*.svelte); no UI files in this repository"
+  # --- deploy-frontend-modules-independently ---
+  # applies_to: src/**, packages/**, apps/**, **/*.config.*
+  # While src/** broadly matches, this principle governs independent CI/CD
+  # deployment of micro-frontend modules (packages/, apps/) — a topology this
+  # repo doesn't have. The single embedded UI at mcp-server/src/ui/ is shipped
+  # as part of the server, not as an independent deployable artifact.
 
   - principle_id: deploy-frontend-modules-independently
     action: disable
-    reason: "UI/infra-scoped principle for micro-frontend deployments (src/**, packages/**, apps/**); this repository has no frontend modules to deploy independently"
-
-  - principle_id: minimize-client-side-state
-    action: disable
-    reason: "UI-scoped principle (src/**, *.tsx/*.vue/*.svelte); no client-side state management in this server-side TypeScript MCP server"
-
-  - principle_id: isolate-frontend-runtime-state
-    action: disable
-    reason: "UI-scoped principle for micro-frontend module isolation (src/**, packages/**, apps/**); no frontend runtime exists in this repository"
-
-  - principle_id: resilient-frontend-composition
-    action: disable
-    reason: "UI-scoped principle for frontend module error boundaries (src/**, packages/**, apps/**); no frontend composition in this repository"
-
-  - principle_id: single-source-of-component-styles
-    action: disable
-    reason: "UI/style-scoped principle (*.css, *.scss, *.tsx/*.vue); no CSS, SCSS, or styled component files exist in this repository"
-
-  - principle_id: design-tokens-as-style-contract
-    action: disable
-    reason: "UI/style-scoped principle (*.css, *.scss, *.tsx/*.vue); no design tokens or style files exist in this repository"
-
-  - principle_id: colocate-component-assets
-    action: disable
-    reason: "UI-scoped principle for component file co-location (src/components/**, src/ui/**); no UI components exist in this repository"
-
-  - principle_id: prefer-browser-native-integration
-    action: disable
-    reason: "UI-scoped principle for browser API usage in micro-frontends (src/**, packages/**, apps/**); no browser runtime in this server-side repository"
+    reason: "Micro-frontend deployment principle (packages/**, apps/**); this repository has a single embedded Svelte UI at mcp-server/src/ui/ shipped as part of the server binary — there are no independently deployed frontend modules"
 
   # --- Infrastructure-scoped principles (5) ---
   # All target *.tf, *.tfvars, **/terraform/**, Dockerfile, **/k8s/**, etc.
