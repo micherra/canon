@@ -143,7 +143,7 @@ Remove specific lines or sections — do not restructure. If all derivable conte
 
 ### Step 4b: Length Management Pass
 
-**When**: After all Step 4 edits are complete, run `wc -c` on each CLAUDE.md file you touched. If any file exceeds **40,000 characters**, apply prose compression. Also run this check even when Step 4 produced no edits — accumulated bloat from manual edits or skipped context-sync passes should still be caught.
+**When**: After all Step 4 edits are complete, run `wc -c` on every CLAUDE.md file in scope — the root `CLAUDE.md` plus every subdirectory CLAUDE.md identified in Step 3 classification. If any file exceeds **40,000 characters**, apply prose compression. This check runs regardless of whether Step 4 produced edits — accumulated bloat from manual edits or skipped context-sync passes should still be caught.
 
 **Techniques**:
 - Convert verbose paragraphs to tables where content is structured (lists of rules, conditions, mappings)
