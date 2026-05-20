@@ -41,7 +41,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 
 - Each principle has a unique `id` used for compliance tracking
 - Principles should be specific and actionable — not aspirational
-- Rules: `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `no-llm-calls-in-mcp-tools` (added 2026-05-02 — MCP tools must not make LLM API calls)
+- Rules (6): `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `no-llm-calls-in-mcp-tools` (added 2026-05-02 — MCP tools must not make LLM API calls), `refactoring-integrity`
 - Strong opinions cover architecture, testing, error handling, data flow
 - Conventions cover naming, file organization, test structure
 - `accumulator-test-coverage` (added 2026-05-16) — accumulator functions in `mcp-server/**` require at least one test case with N>1 input and exact numeric assertion; capped accumulators require below-cap, at-cap, and above-cap cases
