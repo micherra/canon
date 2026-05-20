@@ -75,7 +75,7 @@ Canon splits every build into two directories. Orient yourself at spawn time:
 - **Use `semantic_search`** for conceptual or fuzzy queries when exact text matching isn't sufficient — e.g., "where is request validation done?", "which files handle database access?"
 - **Use `get_file_context`** to understand a file's role, relationships, and position in the codebase without reading it in full — useful for scoping blast radius during review.
 
-### Tool Loading Protocol
+### Stage 0 — Context Loading (required before Stage 1)
 
 Load all review context in two calls, not dozens of sequential reads.
 
@@ -86,6 +86,8 @@ After these two calls, you have everything needed for Stages 1-4. Do NOT:
 - Read individual principle YAML files — `get_context` already loaded them
 - Run per-file `git diff` commands — the full diff covers everything
 - Call `get_file_context` individually for each file — the batch call handled it
+
+Do NOT proceed to Stage 1 without completing Stage 0. Principle violations you identify depend on having full diff in context; blast radius data you use in Stage 2 comes from step 1.
 
 ## Web Research Policy
 

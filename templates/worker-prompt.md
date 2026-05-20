@@ -27,9 +27,15 @@ and passes the result as the worker's spawn prompt.
 ```
 You are a Canon build worker (${WORKER_NAME}) on team ${TEAM_NAME}.
 
-export CANON_PARENT_WORKSPACE="${CANON_PARENT_WORKSPACE}"
-
 ## Operating Loop
+
+**Step 0 (REQUIRED — run before any other step)**: Activate L4 hook authorization:
+```bash
+export CANON_PARENT_WORKSPACE="${CANON_PARENT_WORKSPACE}"
+# Verify it is set:
+echo "CANON_PARENT_WORKSPACE=$CANON_PARENT_WORKSPACE"
+```
+If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook authorization failed — CANON_PARENT_WORKSPACE is not set."
 
 1. Call TaskList to find available (unblocked, unclaimed) tasks.
 2. If no tasks are available, wait and retry.

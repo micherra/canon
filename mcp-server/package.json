@@ -14,10 +14,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.0.1",
-    "@modelcontextprotocol/ext-apps": "^1.5.0",
+    "@huggingface/transformers": "^4.2.0",
+    "@modelcontextprotocol/ext-apps": "^1.7.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "better-sqlite3": "^12.8.0",
+    "better-sqlite3": "^12.10.0",
     "graphology": "^0.26",
     "graphology-communities-louvain": "^2.0.2",
     "gray-matter": "^4.0.3",
@@ -28,22 +28,22 @@
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
     "web-tree-sitter": "^0.26.8",
-    "yaml": "^2.8.3",
-    "zod": "^4.0.0"
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.10",
-    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@biomejs/biome": "2.4.15",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.5.2",
-    "dependency-cruiser": "^17.3.10",
+    "@types/node": "^25.8.0",
+    "dependency-cruiser": "^17.4.0",
     "graphology-layout-forceatlas2": "^0.10.1",
     "sigma": "^3",
-    "svelte": "^5.55.1",
-    "tsx": "^4.19.0",
-    "typescript": "^6.0.2",
-    "vite": "^8.0.3",
-    "vite-plugin-singlefile": "^2.3.0",
-    "vitest": "^4.1.2"
+    "svelte": "^5.55.7",
+    "tsx": "^4.22.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.13",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^4.1.6"
   }
 }
