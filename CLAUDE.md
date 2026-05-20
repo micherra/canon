@@ -424,7 +424,7 @@ ALL three must pass for the verify step to succeed. If any gate fails, the engin
 
 **Verify skip for documentation-only diffs**: For builds where `git diff {base_commit} --name-only` contains only `.md` and `.txt` files, the verify step MAY be skipped with `skip_reason: "documentation-only diff, verify produces zero signal"`. The orchestrator checks the diff before spawning the verify engineer. If any non-documentation file is present, the full verify step runs.
 
-**In-wave baseline**: When the verify step runs after sequential wave execution (multiple implement steps on the same branch), the engineer MUST use `base_commit` (not `main`) as the pre-existing violation baseline. Run `git log --oneline {base_commit}..HEAD` to identify in-build commits. Lint violations in files changed by those commits are in-build failures, not pre-existing — they must be fixed.
+**In-wave baseline**: When the verify step runs after sequential wave execution (multiple implement steps on the same branch), the engineer MUST use `base_commit` (not `main`) as the pre-existing violation baseline. Run the same lint/build/test commands at `base_commit` to establish which violations already existed. Only violations absent at `base_commit` are in-build regressions and must be fixed. Violations already present at `base_commit` remain pre-existing even if the file was touched (optionally fix under "leave touched files better").
 
 ### Completion Checklist
 
@@ -504,7 +504,7 @@ Detect and retry transient failures:
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
 
-**Architect re-spawn tracking**: When the architect requires 2+ spawn attempts before producing expected artifacts, include `respawn_reason` in the `log_step` outcome when logging the design step completion. Values: `"artifacts_missing"` (agent returned without writing design), `"rate_limit"`, `"ttl_ordering"`, `"timeout"`. This enables trend tracking across builds.
+**Architect re-spawn tracking**: When the architect requires 2+ spawn attempts before producing expected artifacts, record the reason in the `log_step` outcome `review_verdict` field as `"respawn:{reason}"` (e.g., `"respawn:artifacts_missing"`). Values for `{reason}`: `artifacts_missing` (agent returned without writing design), `rate_limit`, `auth_failure`, `ttl_ordering`, `timeout`. This enables trend tracking across builds. When the `JournalOutcome` schema is extended with a dedicated `respawn_reason` field, migrate to that field.
 
 ## Re-spawn Enrichment Protocol
 
