@@ -47,9 +47,11 @@ Read all sections of DESIGN-SYSTEM.md before composing. You will use:
 - Section F (Review Dashboard Patterns) — full layout, all subsections F.1–F.14
 - Section G (Graph Context Patterns) — file detail and summary cards
 
-Also read these snippet files for file card HTML and CSS:
-- mcp-server/src/ui/snippets/file-detail-card.html — full card HTML + CSS for high-impact files
-- mcp-server/src/ui/snippets/file-summary-card.html — compact card HTML + CSS for standard files
+Also read this snippet file for file card HTML and CSS:
+- mcp-server/src/ui/snippets/file-detail-card.html — full card HTML + CSS used for all changed files (both high-impact and standard)
+
+Note: `file-summary-card.html` is no longer used in this template. All files now use the expandable
+`<details>` pattern (Step 5) with `file-detail-card.html` in the expanded body.
 
 Do NOT duplicate the patterns inline. Read them from DESIGN-SYSTEM.md and the snippet files and apply them.
 
@@ -352,6 +354,52 @@ function inlineFormat(text) {
 }
 ```
 
+### Dependency subgraph
+
+At the top of the Graph Context section (inside the collapsible body, before the file cards),
+conditionally render a Canvas-based dependency subgraph showing only the changed files and their
+mutual connections.
+
+**Render only when:** there are 2+ changed files AND at least 1 edge between them (where both
+endpoints are in the changed files set). If all changed files are disconnected from each other,
+omit the subgraph entirely.
+
+Build the subgraph data from `fileContextMap` (populated in Step 3b):
+
+```javascript
+const changedFiles = /* files from Stage 1 of REVIEW.md */;
+const changedSet = new Set(changedFiles);
+const subgraphNodes = changedFiles.map(fp => ({
+  id: fp,
+  layer: fileContextMap[fp]?.layer ?? 'unknown',
+  violation_count: fileContextMap[fp]?.violation_count ?? 0
+}));
+const subgraphEdges = [];
+for (const fp of changedFiles) {
+  for (const imp of (fileContextMap[fp]?.imports ?? [])) {
+    if (changedSet.has(imp)) subgraphEdges.push({ source: fp, target: imp });
+  }
+}
+const showSubgraph = subgraphEdges.length >= 1 && subgraphNodes.length >= 2;
+```
+
+When `showSubgraph` is true, render this block at the top of the Graph Context collapsible body,
+before the file cards. `{subgraphDataJson}` = `JSON.stringify({ nodes: subgraphNodes, edges: subgraphEdges })`
+then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`):
+
+```html
+<div class="review-subgraph-section">
+  <div class="review-subgraph-label">Changed Files — Dependency Map</div>
+  <canvas id="review-subgraph-canvas"
+          data-subgraph="{subgraphDataJson}"
+          style="display: block; width: 100%; height: 300px; background: var(--bg);"></canvas>
+</div>
+```
+
+The subgraph Canvas script (in Step 6) reads `data-subgraph`, runs 100-iteration force simulation,
+draws nodes and edges, and adds click/hover handlers. Clicking a node scrolls to and expands the
+corresponding `<details id="file-card-{encodedId}">` element below.
+
 ### Changed files list
 
 Include the changed files as part of the Graph Context section (Section G). Use the Graph Context
@@ -359,7 +407,23 @@ patterns from Section G of DESIGN-SYSTEM.md exactly:
 
 - Wrap the entire section per Section G.3 — `<div class="grid-card" style="grid-column: 1 / -1;">` with a `<details>` collapsible wrapper
 - Classify each file using Section G.2 — `isHighImpact(fileContext)` → hub shape OR violations > 0 OR blast_radius > 5
-- **High-impact files** get full **detail cards** from the `file-detail-card.html` snippet (Section G.4):
+- **ALL files** use a click-to-expand `<details>` pattern:
+  - High-impact files: `<details open id="file-card-{encodedId}">` (starts expanded)
+  - Standard files: `<details id="file-card-{encodedId}">` (starts collapsed)
+  - Where `encodedId` = file path with all non-alphanumeric chars replaced by `-`
+  - The `<summary>` for both types shows a compact header row:
+
+    ```html
+    <summary class="file-expandable-summary">
+      <span class="file-expand-arrow">&#9654;</span>
+      <span class="file-summary-path">{escapeHtml(filePath)}</span>
+      <span class="layer-badge" style="background: {layerColor}22; color: {layerColor}; border-color: {layerColor}44;">{escapeHtml(layer)}</span>
+      <span class="file-summary-shape">{escapeHtml(shapeLabel)}</span>
+    </summary>
+    ```
+
+  - The expanded body for ALL files contains the full `file-detail-card.html` snippet content
+- **file-detail-card.html** snippet (Section G.4) for ALL files:
   - Read the snippet from `mcp-server/src/ui/snippets/file-detail-card.html`
   - Substitute all placeholders as documented in Section G.4 of DESIGN-SYSTEM.md:
     - `{{FILE_PATH}}`, `{{LAYER}}`, `{{SHAPE_LABEL}}`, `{{SHAPE_DESCRIPTION}}` — through `escapeHtml`
@@ -375,11 +439,8 @@ patterns from Section G of DESIGN-SYSTEM.md exactly:
     - `{{BLAST_RADIUS_DEPTH1_HTML}}` — pre-rendered depth-chip spans (see G.4 for format, limit 8 chips)
   - Extract the `<style>` block from the snippet and include it in the page `<style>` tag (once)
   - Extract the `<script>` block from the snippet and include it **ONCE** before `</body>` (not per card)
-- **Standard files** get compact **summary cards** from the `file-summary-card.html` snippet (Section G.5):
-  - Read the snippet from `mcp-server/src/ui/snippets/file-summary-card.html`
-  - Substitute: `{{FILE_PATH}}`, `{{LAYER}}`, `{{LAYER_COLOR}}`, `{{SHAPE_LABEL}}`
-  - Extract and include the `<style>` block from the snippet (deduplicate `.layer-badge` if both snippets used)
-- Both card types are expandable via `<details>` elements wrapping the card body content — high-impact cards should use `<details open>` so they start expanded; summary cards use `<details>` (closed by default)
+- **Note**: `file-summary-card.html` is no longer used for the card body — the `<summary>` row above replaces it. The `.file-summary-path` and `.file-summary-shape` styles from that snippet are included in the expandable pattern CSS (Step 6). You do NOT need to read `file-summary-card.html`.
+- This means `file-detail-card.html` data must be prepared for ALL changed files, not just high-impact ones. Step 3b already fetches context for all files.
 
 ### Blast radius dependency tree
 
@@ -415,7 +476,7 @@ Do not abbreviate or omit any CSS rule.
 
 Also add CSS for:
 - Reviewer narrative panel and collapsible section (from Section C)
-- File detail and summary card styles (extracted from `file-detail-card.html` and `file-summary-card.html` snippet `<style>` blocks)
+- File detail card styles (extracted from `file-detail-card.html` snippet `<style>` block)
 - Dependency tree CSS (extracted from `blast-radius-tree.html` snippet `<style>` block)
 - Narrative content typography (copy verbatim):
 
@@ -428,7 +489,208 @@ Also add CSS for:
 .narrative-content code { background: var(--bg-secondary); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
 ```
 
-Include the `<script>` block from `file-detail-card.html` **ONCE** before `</body>` (Canvas graph initialization).
+- Expandable file card pattern CSS (copy verbatim):
+
+```css
+.file-expandable-summary {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  cursor: pointer; list-style: none; user-select: none;
+  background: var(--bg-surface); border-radius: 4px; margin-bottom: 4px;
+}
+.file-expandable-summary::-webkit-details-marker { display: none; }
+.file-expand-arrow {
+  font-size: 8px; color: var(--text-muted); transition: transform 0.15s; flex-shrink: 0;
+}
+details[open] > .file-expandable-summary .file-expand-arrow { transform: rotate(90deg); }
+.file-expandable-summary .file-summary-path {
+  flex: 1; font-family: monospace; font-size: 11px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.file-expandable-summary .file-summary-shape {
+  font-size: 10px; color: var(--text-muted); font-style: italic; flex-shrink: 0;
+}
+.review-subgraph-section {
+  margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px;
+}
+.review-subgraph-label {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em; padding: 0 0 8px;
+}
+```
+
+Include before `</body>` (in this order):
+1. The `<script>` block from `file-detail-card.html` (Canvas graph initialization for detail cards)
+2. The subgraph Canvas script (copy verbatim):
+
+```javascript
+(function () {
+  var canvas = document.getElementById('review-subgraph-canvas');
+  if (!canvas) return;
+  var raw = canvas.getAttribute('data-subgraph');
+  if (!raw) return;
+  var data;
+  try { data = JSON.parse(raw); } catch (e) { return; }
+  var nodes = (data.nodes || []).map(function (n) {
+    return { id: n.id, layer: n.layer, violation_count: n.violation_count || 0,
+             x: 0, y: 0, vx: 0, vy: 0 };
+  });
+  var edges = data.edges || [];
+  if (nodes.length === 0) return;
+  var dpr = window.devicePixelRatio || 1;
+  var W = canvas.offsetWidth || 600;
+  var H = 300;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.height = H + 'px';
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  var PAD = 40;
+  for (var i = 0; i < nodes.length; i++) {
+    nodes[i].x = PAD + Math.random() * (W - PAD * 2);
+    nodes[i].y = PAD + Math.random() * (H - PAD * 2);
+  }
+  var K_REPEL = 3000, K_SPRING = 0.015, REST_LENGTH = 40;
+  var K_GRAVITY = 0.4, DAMPING = 0.85, MAX_FORCE = 8, ITERATIONS = 100;
+  var CX = W / 2, CY = H / 2;
+  for (var iter = 0; iter < ITERATIONS; iter++) {
+    var forces = nodes.map(function () { return { fx: 0, fy: 0 }; });
+    for (var a = 0; a < nodes.length; a++) {
+      for (var b = a + 1; b < nodes.length; b++) {
+        var dx = nodes[a].x - nodes[b].x;
+        var dy = nodes[a].y - nodes[b].y;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        var f = Math.min(K_REPEL / (dist * dist), MAX_FORCE);
+        var fx = (dx / dist) * f, fy = (dy / dist) * f;
+        forces[a].fx += fx; forces[a].fy += fy;
+        forces[b].fx -= fx; forces[b].fy -= fy;
+      }
+    }
+    for (var e = 0; e < edges.length; e++) {
+      var si = -1, ti = -1;
+      for (var k = 0; k < nodes.length; k++) {
+        if (nodes[k].id === edges[e].source) si = k;
+        if (nodes[k].id === edges[e].target) ti = k;
+      }
+      if (si < 0 || ti < 0) continue;
+      var edx = nodes[ti].x - nodes[si].x;
+      var edy = nodes[ti].y - nodes[si].y;
+      var edist = Math.sqrt(edx * edx + edy * edy) || 1;
+      var sf = Math.min(K_SPRING * (edist - REST_LENGTH), MAX_FORCE);
+      var sfx = (edx / edist) * sf, sfy = (edy / edist) * sf;
+      forces[si].fx += sfx; forces[si].fy += sfy;
+      forces[ti].fx -= sfx; forces[ti].fy -= sfy;
+    }
+    for (var g = 0; g < nodes.length; g++) {
+      var gdx = CX - nodes[g].x, gdy = CY - nodes[g].y;
+      var gdist = Math.sqrt(gdx * gdx + gdy * gdy) || 1;
+      forces[g].fx += K_GRAVITY * gdx / gdist * Math.min(gdist, 100);
+      forces[g].fy += K_GRAVITY * gdy / gdist * Math.min(gdist, 100);
+    }
+    for (var n = 0; n < nodes.length; n++) {
+      nodes[n].vx = (nodes[n].vx + forces[n].fx) * DAMPING;
+      nodes[n].vy = (nodes[n].vy + forces[n].fy) * DAMPING;
+      nodes[n].x = Math.max(PAD, Math.min(W - PAD, nodes[n].x + nodes[n].vx));
+      nodes[n].y = Math.max(PAD, Math.min(H - PAD, nodes[n].y + nodes[n].vy));
+    }
+  }
+  ctx.clearRect(0, 0, W, H);
+  var NODE_R = 7;
+  for (var de = 0; de < edges.length; de++) {
+    var dsi = -1, dti = -1;
+    for (var dk = 0; dk < nodes.length; dk++) {
+      if (nodes[dk].id === edges[de].source) dsi = dk;
+      if (nodes[dk].id === edges[de].target) dti = dk;
+    }
+    if (dsi < 0 || dti < 0) continue;
+    var ax = nodes[dsi].x, ay = nodes[dsi].y;
+    var bx = nodes[dti].x, by = nodes[dti].y;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.strokeStyle = '#888780';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.35;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    var angle = Math.atan2(by - ay, bx - ax);
+    var tipX = bx - Math.cos(angle) * NODE_R;
+    var tipY = by - Math.sin(angle) * NODE_R;
+    var AL = 7, AW = Math.PI / 6;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX - AL * Math.cos(angle - AW), tipY - AL * Math.sin(angle - AW));
+    ctx.lineTo(tipX - AL * Math.cos(angle + AW), tipY - AL * Math.sin(angle + AW));
+    ctx.closePath();
+    ctx.fillStyle = '#888780';
+    ctx.globalAlpha = 0.5;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  for (var dn = 0; dn < nodes.length; dn++) {
+    var nd = nodes[dn];
+    ctx.beginPath();
+    ctx.arc(nd.x, nd.y, NODE_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#6c8cff';
+    ctx.fill();
+    if (nd.violation_count > 0) {
+      ctx.strokeStyle = '#ff6b6b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    var label = nd.id.split('/').pop() || nd.id;
+    if (label.length > 20) label = label.slice(0, 18) + '...';
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#b4b8c8';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, nd.x, nd.y + NODE_R + 11);
+  }
+  var tooltip = document.createElement('div');
+  tooltip.style.cssText = 'position:fixed;pointer-events:none;background:#1e2030;border:1px solid #3a3d52;' +
+    'color:#e8eaf0;padding:4px 8px;border-radius:4px;font-size:11px;font-family:monospace;' +
+    'display:none;z-index:9999;max-width:400px;word-break:break-all;';
+  document.body.appendChild(tooltip);
+  function getNodeAt(mx, my) {
+    for (var k = 0; k < nodes.length; k++) {
+      var dx = mx - nodes[k].x, dy = my - nodes[k].y;
+      if (Math.sqrt(dx * dx + dy * dy) <= NODE_R + 4) return nodes[k];
+    }
+    return null;
+  }
+  canvas.addEventListener('mousemove', function (evt) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = (evt.clientX - rect.left) * (W / rect.width);
+    var my = (evt.clientY - rect.top) * (H / rect.height);
+    var hit = getNodeAt(mx, my);
+    if (hit) {
+      tooltip.textContent = hit.id;
+      tooltip.style.display = 'block';
+      tooltip.style.left = (evt.clientX + 12) + 'px';
+      tooltip.style.top = (evt.clientY - 8) + 'px';
+      canvas.style.cursor = 'pointer';
+    } else {
+      tooltip.style.display = 'none';
+      canvas.style.cursor = 'default';
+    }
+  });
+  canvas.addEventListener('mouseleave', function () {
+    tooltip.style.display = 'none';
+    canvas.style.cursor = 'default';
+  });
+  canvas.addEventListener('click', function (evt) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = (evt.clientX - rect.left) * (W / rect.width);
+    var my = (evt.clientY - rect.top) * (H / rect.height);
+    var hit = getNodeAt(mx, my);
+    if (!hit) return;
+    var encodedId = hit.id.replace(/[^a-zA-Z0-9]/g, '-');
+    var cardEl = document.getElementById('file-card-' + encodedId);
+    if (cardEl) {
+      cardEl.open = true;
+      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+})();
+```
 
 ## Step 7 — Security
 
@@ -473,8 +735,13 @@ Return when the file is written. Do not modify the worktree.
 - The reviewer narrative is NOT optional — the template explicitly marks it as REQUIRED
 - The reviewer narrative appears immediately after the verdict banner (before stats row)
 - Read Sections F and G from DESIGN-SYSTEM.md; do not reconstruct patterns from memory
-- Read `file-detail-card.html`, `file-summary-card.html`, and `blast-radius-tree.html` for snippet HTML/CSS — do NOT write your own card markup
+- Read `file-detail-card.html` and `blast-radius-tree.html` for snippet HTML/CSS — do NOT write your own card markup
+- `file-summary-card.html` is no longer used in the Graph Context section — the expandable `<summary>` row replaces it
+- `file-detail-card.html` is used for ALL changed files (not just high-impact ones) in the expanded `<details>` body
 - `file-detail-card.html` uses a Canvas-based dependency graph — include its `<script>` block once before `</body>`
+- The subgraph Canvas script (Step 6) goes after the file-detail-card script, also before `</body>`
+- The Graph Context section dependency subgraph is conditional: only rendered when 2+ changed files have at least 1 mutual edge
+- Click a subgraph node → expands and scrolls to the corresponding `<details id="file-card-{encodedId}">` element
 - The blast radius visualization uses a dependency tree (per-file roots), NOT concentric SVG rings
 - Dependency tree uses per-file `get_file_context().blast_radius` data for source-aware root→dependent mapping
 - Do NOT reference Section H of DESIGN-SYSTEM.md — it describes the old rings pattern which is no longer used
