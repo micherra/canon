@@ -41,7 +41,7 @@ export async function applyFileContextDisclosure(
   return {
     blast_radius: undefined,
     co_change_partners: undefined,
-    content: `[Truncated — full content at ${disclosure.full_data_path}]`,
+    content: `[Truncated — full response data at ${disclosure.full_data_path}]`,
     entities: undefined,
     exports: [],
     file_path: output.file_path,
