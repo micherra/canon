@@ -34,7 +34,7 @@ src/
 ├── shared/               # Shared kernel: constants, parser, matcher, schema, lib/ utilities
 ├── tests/                # Cross-cutting test helpers
 └── ui/                   # Svelte frontend — MCP App (Sigma.js graph, PR review UI)
-    └── snippets/         # HTML/CSS component recipes for agent-composed artifacts (9 files: verdict-banner, stats-card, bar-chart-row, severity-badge, compliance-bars, file-detail-card, file-summary-card, blast-radius-rings, blast-radius-tree); file-detail-card.html is Canvas-based (bezier dependency graph, 4-metric stat bar, entity table, blast radius panel) updated 2026-05-17; blast-radius-tree.html added 2026-05-17; DESIGN-SYSTEM.md is authoritative reference
+    └── snippets/         # HTML/CSS component recipes for agent-composed artifacts (10 files: verdict-banner, stats-card, bar-chart-row, severity-badge, compliance-bars, file-detail-card, file-summary-card, blast-radius-rings, blast-radius-tree, node-detail-panel); file-detail-card.html is Canvas-based (bezier dependency graph, 4-metric stat bar, entity table, blast radius panel) updated 2026-05-17; blast-radius-tree.html added 2026-05-17; node-detail-panel.html added 2026-05-20 (DOM-based inspect panel for codebase graph click-to-inspect); DESIGN-SYSTEM.md is authoritative reference
 ```
 
 **Key subsystems:**

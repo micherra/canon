@@ -6,7 +6,7 @@
 Structured output templates that agents must follow for consistent, parseable artifacts. Enforced by the `agent-template-required` rule — agents must read the template before producing output.
 
 ## Architecture
-<!-- last-updated: 2026-05-17 (renderer-review.md added) -->
+<!-- last-updated: 2026-05-20 (renderer-codebase-graph.md and renderer-file-context.md added; renderer-review.md updated with expandable cards + Canvas subgraph) -->
 
 Each template is a markdown file with placeholder sections that agents fill in.
 
@@ -34,7 +34,9 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `migration-state.md` | orchestrator | Migration state handoff for multi-wave coordination |
 | `prd.md` | orchestrator | Structured PRD template the PM fills before spawning the architect; read by architect and renderer |
 | `renderer-design.md` | orchestrator | Renderer spawn prompt — converts PRD + design document + task DAG YAML + runbook to unified `design.html`; pure markdown, no MCP calls |
-| `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_file_context`) |
+| `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; file cards are `<details>`-expandable; includes Canvas dependency subgraph in Graph Context; references `file-detail-card.html`; requires MCP calls (`show_pr_impact`, `get_file_context`) |
+| `renderer-codebase-graph.md` | orchestrator | Renderer spawn prompt — converts `codebase_graph` MCP data into standalone `codebase-graph.html`; force-directed layout, click-to-inspect side panel, DIFF_BASE filtering; requires MCP call (`codebase_graph`) |
+| `renderer-file-context.md` | orchestrator | Renderer spawn prompt — converts `get_file_context` MCP data into standalone `file-context.html`; requires MCP call (`get_file_context`) |
 | `sharpened-request.md` | pm-orchestrator | PM-to-architect hand-off artifact with Problem, Direction, Scope Boundaries, Acceptance Criteria, and Not Doing sections |
 
 ## Conventions
