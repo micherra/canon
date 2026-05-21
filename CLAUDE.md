@@ -58,7 +58,7 @@ Minimize text output during the state machine loop. Conversations exceeding ~100
 1. Brief plain-language classification (1 sentence)
 2. HITL breakpoint presentations
 3. One progress line per state transition ("Researching the codebase..." / "Research complete. Planning...")
-4. Wave checkpoint summaries (epic flow)
+4. DAG checkpoint summaries (parallel execution)
 5. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
 6. Error and preflight presentations
 
@@ -184,10 +184,6 @@ Run sequentially after all tasks: review → context-sync → ship → learn. Th
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
-### Multi-Wave Migration Mode
-
-Activates when user provides a wave report and migration state (not for single-session builds). Load `${CLAUDE_PLUGIN_ROOT}/skills/canon/skills/wave-steward/SKILL.md`, have user fill `${CLAUDE_PLUGIN_ROOT}/templates/migration-state.md`, follow wave-steward loop.
-
 ### Skill Preloading
 
 Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include returned `preload_prompt` verbatim at top of spawn prompt. For task-specific domain primers, name them in the spawn prompt body: `"Relevant domain primers: <name>. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
@@ -257,7 +253,7 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 ### Journal Protocol
 
 - Before spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
-- After spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id, artifacts_actual: [...] })`
+- After spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
 - `finalize_workspace` verifies the journal.
 - Skipped tail steps require `skip_reason`:
 
@@ -270,6 +266,12 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 | `"documentation-only diff, verify produces zero signal"` | All changed files are `.md`/`.txt` |
 
 - Inline WARNING resolution (no fix agent spawned): log synthetic step `step_id: inline-fix`, `status: completed`, resolution in `outcome`.
+
+**Before skipping any step**: You MUST log the skip. Call:
+```
+log_step({ workspace, step_id, status: "skipped", outcome: { skip_reason: "<value>" } })
+```
+Accepted values: `"fix-type build, no contract-level changes"` | `"markdown-only change, no context drift"` | `"session timeout"` | `"no new patterns observed"` | `"documentation-only diff, verify produces zero signal"`
 
 ### Post-Subagent Artifact Check
 
@@ -440,7 +442,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (55 total: 4 rules, 33 strong-opinions, 18 conventions)
+├── principles/           # Built-in principles (59 total: 6 rules, 35 strong-opinions, 18 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/

@@ -206,6 +206,8 @@ Assign wave numbers based on dependencies:
 
 **Wave count heuristic**: Default to 1 wave if all tasks can be independently committed with no shared new types or utilities. Add waves only when tasks have true data dependencies (Task B imports a type that Task A creates). Over-waving adds merge overhead for no benefit.
 
+**Signature-change caller sweep**: When a task includes a public function signature change (sync→async, added/removed parameters, changed return type), use `graph_query({ query_type: "callers", target: "<function name>" })` to enumerate ALL files that import and call the changed function — including test files. Mark each file in the File Structure table as either "change required" or "no change needed — already compatible." Incomplete enumeration means the engineer discovers missing files mid-implementation or the reviewer catches type errors that could have been fixed up front.
+
 For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md` using the task-plan template at `${CLAUDE_PLUGIN_ROOT}/templates/task-plan.md`.
 
 **Domain classification**: For each task plan, add a `domains:` field listing the relevant domains. Built-in domains: `frontend`, `backend-api`, `backend-data`, `infrastructure`, `testing`, `deprecation`. Use project-specific domain names if `.canon/domains/{name}.md` exists. The engineer reads domain priming files based on this field. Omit `domains:` if no domain-specific guidance applies.

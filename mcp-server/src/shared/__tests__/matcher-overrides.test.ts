@@ -405,6 +405,70 @@ Body for alpha.
     expect(alpha?.scope.layers).toEqual(["api", "ui"]);
   });
 
+  it("multiple overrides on same principle — override-severity and narrow-scope both applied", async () => {
+    const content = `---
+id: alpha
+title: Test alpha
+severity: strong-opinion
+scope:
+  layers: [api, ui]
+  file_patterns: []
+tags: []
+---
+
+Body for alpha.
+`;
+    await writeFile(
+      join(projectDir, ".canon", "principles", "strong-opinions", "alpha.md"),
+      content,
+    );
+
+    const overrideYaml = `overrides:
+  - principle_id: alpha
+    action: override-severity
+    severity: convention
+    reason: Downgraded for this project
+  - principle_id: alpha
+    action: narrow-scope
+    applies_to:
+      layers: [api]
+      file_patterns: ["src/services/**"]
+    reason: Narrowed for this project
+`;
+    await writeFile(join(projectDir, ".canon", "principle-overrides.yaml"), overrideYaml);
+
+    const principles = await loadAllPrinciples(projectDir, pluginDir);
+    const alpha = principles.find((p) => p.id === "alpha");
+    expect(alpha).toBeDefined();
+    // Both overrides applied: severity downgraded AND scope narrowed
+    expect(alpha?.severity).toBe("convention");
+    expect(alpha?.scope.layers).toEqual(["api"]);
+    expect(alpha?.scope.file_patterns).toEqual(["src/services/**"]);
+  });
+
+  it("disable wins over override-severity on same principle — principle removed", async () => {
+    await writeFile(
+      join(projectDir, ".canon", "principles", "strong-opinions", "alpha.md"),
+      principleContent("alpha", "strong-opinion"),
+    );
+
+    // disable listed after override-severity — disable must still win
+    const overrideYaml = `overrides:
+  - principle_id: alpha
+    action: override-severity
+    severity: convention
+    reason: Downgraded
+  - principle_id: alpha
+    action: disable
+    reason: Actually disabled
+`;
+    await writeFile(join(projectDir, ".canon", "principle-overrides.yaml"), overrideYaml);
+
+    const principles = await loadAllPrinciples(projectDir, pluginDir);
+    // disable wins regardless of order
+    expect(principles.map((p) => p.id)).not.toContain("alpha");
+  });
+
   it("override-severity entry with invalid severity value is silently skipped — principle unchanged", async () => {
     await writeFile(
       join(projectDir, ".canon", "principles", "strong-opinions", "alpha.md"),

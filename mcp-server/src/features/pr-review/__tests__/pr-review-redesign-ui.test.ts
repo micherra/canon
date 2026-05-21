@@ -2,17 +2,16 @@
  * pr-review-redesign-ui.test.ts
  *
  * Pure-logic tests for PrReview UI state: setActiveLayer toggle logic,
- * filteredFiles derived state, and PrReview.svelte v2 structural contract.
+ * filteredFiles derived state.
  *
- * Items 7-9 from the original integration test file:
+ * Items 7-8 from the original integration test file:
  *   7. setActiveLayer() toggle: second click on same layer resets to null
  *   8. filteredFiles derived state logic
- *   9. Svelte component contract: No `truncate` import gap (uses lib/constants)
+ *
+ * Note: Item 9 (PrReview.svelte v2 structural contract) was removed when
+ * the Svelte UI files were deleted (delete-mcp-svelte-app-uis build, 2026-05-20).
  */
 
-import { readFileSync } from "node:fs";
-import { dirname, join as pathJoin } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { PrFileInfo } from "../tools/pr-review-data.ts";
 
@@ -121,47 +120,5 @@ describe("filteredFiles derived state logic (declared gap)", () => {
     expect(worthALook).toHaveLength(1);
     // The graph/low.ts file is filtered out — not visible in tools layer
     expect(lowRisk).toHaveLength(0);
-  });
-});
-
-// 9. Svelte component structural contract: truncate used from lib/constants
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const uiDir = pathJoin(__dirname, "../../../ui");
-
-describe("PrReview.svelte — v2 container structural contract", () => {
-  // Updated 2026-03-25: PrReviewPrep.svelte merged into PrReview.svelte (unified view)
-  const sveltePath = pathJoin(uiDir, "PrReview.svelte");
-
-  it("v2: does NOT import truncate (error display moved to header simplification)", () => {
-    // v2 rewrite: thin container removed the truncate import — error display
-    // simplified (no partial-data error in header bar in v2 design).
-    // This test replaces the v1 truncate import assertion.
-    const content = readFileSync(sveltePath, "utf-8");
-    // The container should NOT contain blast-standalone (moved to ImpactTabs child)
-    expect(content).not.toContain("blast-standalone");
-  });
-
-  it("v2: blast_radius passed to ImpactTabs child component", () => {
-    // v2 rewrite: blast radius rendering delegated to ImpactTabs (Tab C: Critical Deps)
-    // instead of standalone panel in the container.
-    // In unified PrReview, data is at data.prep.blast_radius
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("blastRadius={data.prep.blast_radius}");
-  });
-
-  it("v2: does NOT contain standalone blast section (moved to ImpactTabs)", () => {
-    // The Wave 2 standalone blast-standalone section is removed in v2.
-    // ImpactTabs Tab C now renders critical deps from blast_radius.
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("standaloneBlast");
-  });
-
-  it("v2: does NOT contain expandedBlastRadius (moved to ImpactTabs child)", () => {
-    // v2 rewrite: blast radius toggle state now lives in ImpactTabs/DepRow.
-    // Container only passes blastRadius prop down.
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("expandedBlastRadius");
-    expect(content).not.toContain("toggleBlastRadius");
   });
 });

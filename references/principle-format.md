@@ -63,6 +63,8 @@ The markdown body after frontmatter follows this fixed structure:
 | `strong-opinion` | Default path | Warn, don't block | Warning — justify or fix |
 | `convention` | Stylistic preference | Silent | Info — note only |
 
+Severity can be changed per-project without editing the principle file — see [Principle Overrides](../docs/reference/canon-reference.md#principle-overrides).
+
 ## Authoring Tips
 
 1. Lead with the constraint, not the philosophy. Make it falsifiable.
