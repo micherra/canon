@@ -267,7 +267,6 @@ Stage 3 does NOT change the verdict. Discrepancies are addenda for the next revi
   violations: []
   honored: []
   score: { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } }
-  summary: "Review in progress — do not use this artifact until verdict is final."
 
 This guarantees REVIEW.md exists regardless of turn exhaustion. Update it with the
 final verdict when analysis is complete.
