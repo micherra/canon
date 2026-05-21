@@ -47,7 +47,7 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-16 (present_artifact + present_review fire-and-forget; Decision type + POST decision route removed) -->
+<!-- last-updated: 2026-05-21 (compute_autonomy_tier + get_next_escalation_strategy tools added) -->
 
 **`present_artifact` MCP tool** — `html` parameter required; serves the provided HTML directly via HTTP server; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
 

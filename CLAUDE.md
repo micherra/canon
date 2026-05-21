@@ -101,6 +101,7 @@ Every build request goes through PM triage: (1) sharpen requirements, (2) assess
 | **Non-trivial** — 2+ files, cross-layer, design questions, high blast radius | → architect; include sharpened-request.md in spawn prompt |
 
 ### Autonomy Tier Protocol
+<!-- last-updated: 2026-05-21 -->
 
 After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_paths, override_tier? })` to assess build risk.
 
@@ -421,6 +422,7 @@ Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful resu
 **Architect re-spawn tracking**: When the architect requires 2+ spawn attempts before producing expected artifacts, record the reason in the `log_step` outcome `review_verdict` field as `"respawn:{reason}"` (e.g., `"respawn:artifacts_missing"`). Values for `{reason}`: `artifacts_missing` (agent returned without writing design), `rate_limit`, `auth_failure`, `ttl_ordering`, `timeout`. This enables trend tracking across builds. When the `JournalOutcome` schema is extended with a dedicated `respawn_reason` field, migrate to that field.
 
 ### Auto-Escalation Protocol
+<!-- last-updated: 2026-05-21 -->
 
 When an agent failure or stuck condition is detected (`isStuck` returns true, agent returns error, or retry fails), call `get_next_escalation_strategy({ workspace, step_id, flow_config? })` BEFORE escalating to HITL.
 
