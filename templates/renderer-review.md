@@ -709,12 +709,6 @@ Canvas script MUST be preceded by a comment naming the design token it maps to:
   ctx.strokeStyle = /* --danger */ '#ff6b6b';
 This satisfies the design-tokens-as-style-contract convention for Canvas contexts.
 
-IMPORTANT: Canvas 2D does not support CSS variables. Every hex color value in the
-Canvas script MUST be preceded by a comment naming the design token it maps to:
-  ctx.fillStyle = /* --accent */ '#6c8cff';
-  ctx.strokeStyle = /* --danger */ '#ff6b6b';
-This satisfies the design-tokens-as-style-contract convention for Canvas contexts.
-
 ## Step 7 — Security
 
 Apply `escapeHtml` to ALL content extracted from REVIEW.md or returned by MCP tools before
