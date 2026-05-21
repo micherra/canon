@@ -4,7 +4,6 @@ description: Renderer spawn prompt for converting the review markdown + live MCP
 used-by: [orchestrator]
 read-by: [renderer-agent]
 output-path: ${WORKSPACE}/artifacts/review.html
-model: sonnet
 ---
 
 # Template: Renderer — Review Dashboard
@@ -13,10 +12,6 @@ Use this template when spawning the renderer agent after the reviewer step compl
 
 The orchestrator reads this template, fills in the variable placeholders, and passes the
 result as the renderer agent's spawn prompt.
-
-> **Model note**: Spawn this renderer with `model: "sonnet"` (not Haiku). This template
-> requires MCP tool calls + snippet composition + complex HTML assembly — Haiku exhausts
-> its context budget before reaching the Graph Context sections.
 
 ## Variables
 
@@ -34,34 +29,56 @@ Do NOT modify the worktree.
 
 ## SNIPPET FIDELITY RULE
 
-For file-summary-card sections: read the snippet file, substitute {{PLACEHOLDER}} values,
-and use the result verbatim. For file-detail-card sections: use the simplified inline HTML
-template defined in Step 5 (the full 790-line snippet has too many placeholders for reliable
-substitution — the inline template captures the same visual pattern with ~50 lines).
+Do NOT compose your own HTML for any section that has a corresponding snippet file in `mcp-server/src/ui/snippets/`. You MUST:
+1. Read the snippet file using the Read tool
+2. Substitute {{PLACEHOLDER}} values into the literal file content
+3. Use the substituted result verbatim in the artifact
+
+Writing your own HTML for a section with an existing snippet is a violation of the snippet contract and will require re-spawn. There are no exceptions.
 
 ## Step 1 — Read source files
 
 Read these files:
 1. ${WORKSPACE}/reviews/REVIEW.md — the reviewer's output (your primary narrative source)
 2. mcp-server/src/ui/snippets/DESIGN-SYSTEM.md — the design system reference
-3. mcp-server/src/ui/snippets/file-summary-card.html — compact card HTML + CSS for standard files
-4. mcp-server/src/ui/snippets/blast-radius-tree.html — dependency tree HTML + CSS
 
 Read all sections of DESIGN-SYSTEM.md before composing. You will use:
 - Section A (CSS tokens) — copy verbatim into your <style> tag
 - Section F (Review Dashboard Patterns) — full layout, all subsections F.1–F.14
-- Section G (Graph Context Patterns) — file detail and summary card patterns
+- Section G (Graph Context Patterns) — file detail and summary cards
 
-Do NOT duplicate the patterns inline. Read them from DESIGN-SYSTEM.md and the snippet files
-and apply them. For file-detail-card, use the inline template in Step 5 instead of the
-790-line snippet file.
+Also read this snippet file for file card HTML and CSS:
+- mcp-server/src/ui/snippets/file-detail-card.html — full card HTML + CSS used for all changed files (both high-impact and standard)
 
-## Step 2 — Call MCP tools for live graph data
+Note: `file-summary-card.html` is no longer used in this template. All files now use the expandable
+`<details>` pattern (Step 5) with `file-detail-card.html` in the expanded body.
 
-Call these two MCP tools immediately after reading source files, before parsing the review
-markdown. Calling them early keeps the data fresh in context throughout composition.
+Do NOT duplicate the patterns inline. Read them from DESIGN-SYSTEM.md and the snippet files and apply them.
 
-### 2a. show_pr_impact
+## Step 2 — Parse the review markdown
+
+Extract these sections from REVIEW.md:
+
+- **Verdict**: Look for `VERDICT: BLOCKING`, `VERDICT: WARNING`, or `VERDICT: CLEAN`
+  (or equivalent phrasing near the top). Required.
+- **Violations**: The violations table or list — each entry has: file path, principle ID,
+  severity (rule / strong-opinion / convention), line numbers, explanation.
+- **Compliance summary**: Principles checked vs. violations by severity tier. May appear as
+  a table or summary line like "4 rules checked, 0 violations."
+- **Honored principles**: List of principles explicitly checked and found compliant.
+- **Reviewer narrative**: ALL of Stage 2 — code quality analysis, advisory items, gotcha
+  documentation. This is the full free-text analysis section. Preserve it verbatim.
+  Do NOT truncate or omit the narrative. It is the most valuable part of the review.
+- **Changed files list**: Stage 1 — the list of files in the diff with their layer assignments.
+- **Stage 5 acceptance criteria**: If present, the `## Stage 5` section — AC verification table.
+- **Recommendations**: Any structured recommendation list (when present, use for "Fix Before
+  Merge" instead of raw violations).
+
+## Step 3 — Call MCP tools for live graph data
+
+Call these two MCP tools to enrich the HTML with structural context:
+
+### 3a. show_pr_impact
 
 ```
 mcp__canon__show_pr_impact({
@@ -77,10 +94,9 @@ From the result, extract:
 - `subsystems` — new or removed subsystems
 - `pr_metrics` — any PR-level metrics (lines added/removed, etc.)
 
-### 2b. get_context (all changed files, batched)
+### 3b. get_context (all changed files, batched)
 
-From the REVIEW.md you already read, identify the changed files list (Stage 1), then make
-a single batched call:
+Collect the full list of changed files from Stage 1 of REVIEW.md, then make a single batched call:
 
 ```
 mcp__canon__get_context({
@@ -125,25 +141,6 @@ The `file_context` map is keyed by file path. For each entry, extract:
 Collect results into a map: `fileContextMap[filePath] = result.file_context[filePath]`.
 
 If a file is absent from the response's `file_context` map, skip it — do not block rendering.
-
-## Step 3 — Parse the review markdown
-
-Extract these sections from REVIEW.md:
-
-- **Verdict**: Look for `VERDICT: BLOCKING`, `VERDICT: WARNING`, or `VERDICT: CLEAN`
-  (or equivalent phrasing near the top). Required.
-- **Violations**: The violations table or list — each entry has: file path, principle ID,
-  severity (rule / strong-opinion / convention), line numbers, explanation.
-- **Compliance summary**: Principles checked vs. violations by severity tier. May appear as
-  a table or summary line like "4 rules checked, 0 violations."
-- **Honored principles**: List of principles explicitly checked and found compliant.
-- **Reviewer narrative**: ALL of Stage 2 — code quality analysis, advisory items, gotcha
-  documentation. This is the full free-text analysis section. Preserve it verbatim.
-  Do NOT truncate or omit the narrative. It is the most valuable part of the review.
-- **Changed files list**: Stage 1 — the list of files in the diff with their layer assignments.
-- **Stage 5 acceptance criteria**: If present, the `## Stage 5` section — AC verification table.
-- **Recommendations**: Any structured recommendation list (when present, use for "Fix Before
-  Merge" instead of raw violations).
 
 ## Step 4 — Compute derived values
 
@@ -211,12 +208,8 @@ Assemble in this order:
 
 1. **Verdict banner** (Section F.3) — full-width, no container
 2. **Reviewer narrative panel** — full-width card immediately after the verdict banner (see below)
-3. **Graph Context section** (Section G) — full-width collapsible card with file detail and
-   summary cards (moved up from position 5 so MCP data is still fresh in context)
-4. **Blast Radius Dependency Tree** — full-width collapsible card (see below) — **omit entirely
-   if blast radius data is empty**
-5. **Stats row** (Section F.4) — 4 stat cards
-6. **Dashboard grid** (Section F.5) — 2-column grid, conditional cards:
+3. **Stats row** (Section F.4) — 4 stat cards
+4. **Dashboard grid** (Section F.5) — 2-column grid, conditional cards:
    - Row 1 left: "Fix Before Merge" (Section F.6) — **omit entirely if 0 violations**; instead
      render a compact "No violations — looking good." success banner below the stats row
    - Row 1 right: "Violations by Principle" (Section F.7) + "Compliance Score" (Section F.8)
@@ -226,6 +219,8 @@ Assemble in this order:
      have depCount === 0)
    - Row 2 right: "Changes by Layer" (Section F.10) — **omit if layerData is empty**;
      "New Subsystems" (Section F.11) stacked below — **omit if subsystemData is empty**
+5. **Graph Context section** (Section G) — full-width collapsible card with file-detail-card and file-summary-card snippets
+6. **Blast Radius Dependency Tree** — full-width collapsible card (see "Blast radius dependency tree" below) — **omit entirely if blast radius data is empty**
 
 ### Conditional rendering rules
 
@@ -254,8 +249,7 @@ Apply these rules to avoid empty-section clutter:
 
 This panel is REQUIRED. Do not omit it.
 
-Place it as a full-width panel immediately after the verdict banner, before the Graph Context
-section:
+Place it as a full-width panel immediately after the verdict banner, before the stats row:
 
 ```html
 <div class="grid-card" style="grid-column: 1 / -1; margin-top: 8px;">
@@ -360,141 +354,103 @@ function inlineFormat(text) {
 }
 ```
 
-### Graph Context section
+### Dependency subgraph
 
-Include the changed files as a Graph Context section (Section G). Place it immediately after
-the reviewer narrative panel.
+At the top of the Graph Context section (inside the collapsible body, before the file cards),
+conditionally render a Canvas-based dependency subgraph showing only the changed files and their
+mutual connections.
 
-> **Fallback rule**: If `fileContextMap` is empty (MCP data unavailable), render the
-> Section G.6 empty state from DESIGN-SYSTEM.md. Do NOT skip the section entirely — always
-> render either full file cards or the empty state.
+**Render only when:** there are 2+ changed files AND at least 1 edge between them (where both
+endpoints are in the changed files set). If all changed files are disconnected from each other,
+omit the subgraph entirely.
 
-Wrap the entire section per Section G.3:
+Build the subgraph data from `fileContextMap` (populated in Step 3b):
+
+```javascript
+const changedFiles = /* files from Stage 1 of REVIEW.md */;
+const changedSet = new Set(changedFiles);
+const subgraphNodes = changedFiles.map(fp => ({
+  id: fp,
+  layer: fileContextMap[fp]?.layer ?? 'unknown',
+  violation_count: fileContextMap[fp]?.violation_count ?? 0
+}));
+const subgraphEdges = [];
+for (const fp of changedFiles) {
+  for (const imp of (fileContextMap[fp]?.imports ?? [])) {
+    if (changedSet.has(imp)) subgraphEdges.push({ source: fp, target: imp });
+  }
+}
+const showSubgraph = subgraphEdges.length >= 1 && subgraphNodes.length >= 2;
+```
+
+When `showSubgraph` is true, render this block at the top of the Graph Context collapsible body,
+before the file cards. `{subgraphDataJson}` = `JSON.stringify({ nodes: subgraphNodes, edges: subgraphEdges })`
+then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`):
 
 ```html
-<div class="grid-card" style="grid-column: 1 / -1; margin-top: 8px;">
-  <details class="collapsible-section" open>
-    <summary class="collapsible-summary">
-      <span class="collapsible-arrow">&#9654;</span>
-      <span class="collapsible-title">Graph Context — Changed Files (N files)</span>
+<div class="review-subgraph-section">
+  <div class="review-subgraph-label">Changed Files — Dependency Map</div>
+  <canvas id="review-subgraph-canvas"
+          data-subgraph="{subgraphDataJson}"
+          style="display: block; width: 100%; height: 300px; background: var(--bg);"></canvas>
+</div>
+```
+
+The subgraph Canvas script (in Step 6) reads `data-subgraph`, runs 100-iteration force simulation,
+draws nodes and edges, and adds click/hover handlers. Clicking a node scrolls to and expands the
+corresponding `<details id="file-card-{encodedId}">` element below.
+
+### Changed files list
+
+Include the changed files as part of the Graph Context section (Section G). Use the Graph Context
+patterns from Section G of DESIGN-SYSTEM.md exactly:
+
+- Wrap the entire section per Section G.3 — `<div class="grid-card" style="grid-column: 1 / -1;">` with a `<details>` collapsible wrapper
+- Classify each file using Section G.2 — `isHighImpact(fileContext)` → hub shape OR violations > 0 OR blast_radius > 5
+- **ALL files** use a click-to-expand `<details>` pattern:
+  - High-impact files: `<details open id="file-card-{encodedId}">` (starts expanded)
+  - Standard files: `<details id="file-card-{encodedId}">` (starts collapsed)
+  - Where `encodedId` = collision-safe encoding of file path: replace each non-alphanumeric character `c` with `-` + `c.charCodeAt(0)` + `-` (e.g. `/` → `-47-`, `.` → `-46-`, `-` → `-45-`); alphanumeric chars pass through unchanged. This encoding is injective — different paths always produce different IDs.
+  - The `<summary>` for both types shows a compact header row:
+
+    ```html
+    <summary class="file-expandable-summary">
+      <span class="file-expand-arrow">&#9654;</span>
+      <span class="file-summary-path">{escapeHtml(filePath)}</span>
+      <span class="layer-badge" style="background: {layerColor}22; color: {layerColor}; border-color: {layerColor}44;">{escapeHtml(layer)}</span>
+      <span class="file-summary-shape">{escapeHtml(shapeLabel)}</span>
     </summary>
-    <div class="collapsible-body">
-      <!-- file cards go here -->
-    </div>
-  </details>
-</div>
-```
+    ```
 
-Classify each file using Section G.2 — `isHighImpact(fileContext)` → hub shape OR
-violations > 0 OR blast_radius total > 5.
-
-**High-impact files** get a simplified detail card (inline template below — do NOT read
-`file-detail-card.html` for this). Render one card per high-impact file:
-
-```html
-<div class="fdc-card" id="fdc-{CARD_ID}" style="border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; overflow: hidden;">
-  <!-- Header -->
-  <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-subtle);">
-    <span style="font-family: monospace; font-size: 12px; font-weight: 600; color: var(--text-bright); flex: 1;">{FILE_PATH}</span>
-    <span style="padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: {LAYER_COLOR}22; color: {LAYER_COLOR}; border: 1px solid {LAYER_COLOR}44;">{LAYER}</span>
-    <span style="padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; {VIOLATION_BADGE_STYLE}">{VIOLATION_BADGE_TEXT}</span>
-  </div>
-  <!-- Stat row: 4 metric cards -->
-  <div style="display: flex; gap: 8px; padding: 10px 14px; background: var(--bg-card); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap;">
-    <div style="flex: 1; min-width: 80px; text-align: center; padding: 6px; border: 1px solid var(--border-subtle); border-radius: 4px;">
-      <div style="font-size: 18px; font-weight: 700; color: var(--text-bright);">{IMPORT_COUNT}</div>
-      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Imports</div>
-    </div>
-    <div style="flex: 1; min-width: 80px; text-align: center; padding: 6px; border: 1px solid var(--border-subtle); border-radius: 4px;">
-      <div style="font-size: 18px; font-weight: 700; color: var(--text-bright);">{IMPORTED_BY_COUNT}</div>
-      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Referenced by</div>
-    </div>
-    <div style="flex: 1; min-width: 80px; text-align: center; padding: 6px; border: 1px solid var(--border-subtle); border-radius: 4px;">
-      <div style="font-size: 18px; font-weight: 700; color: var(--text-bright);">{EXPORT_COUNT}</div>
-      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Exports</div>
-    </div>
-    <div style="flex: 1; min-width: 80px; text-align: center; padding: 6px; border: 1px solid var(--border-subtle); border-radius: 4px;">
-      <div style="font-size: 18px; font-weight: 700; color: var(--text-bright);">{IMPACT_SCORE}</div>
-      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Impact score</div>
-    </div>
-  </div>
-  <!-- Canvas dependency graph -->
-  <div style="padding: 10px 14px; background: var(--bg-card);">
-    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">
-      <span style="display: inline-flex; align-items: center; gap: 4px; margin-right: 12px;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #7F77DD; display: inline-block;"></span>this file
-      </span>
-      <span style="display: inline-flex; align-items: center; gap: 4px; margin-right: 12px;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #888780; display: inline-block;"></span>depends on
-      </span>
-      <span style="display: inline-flex; align-items: center; gap: 4px; margin-right: 12px;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #1D9E75; display: inline-block;"></span>used by
-      </span>
-      <span style="display: inline-flex; align-items: center; gap: 4px;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #EF9F27; display: inline-block;"></span>cross-layer
-      </span>
-    </div>
-    <canvas id="fdc-canvas-{CARD_ID}" width="600" height="160"
-      data-graph="{GRAPH_DATA_JSON}"
-      style="width: 100%; height: 160px; display: block; border-radius: 4px; background: var(--bg-secondary);"></canvas>
-  </div>
-  <!-- Shape badge -->
-  <div style="padding: 6px 14px 10px; font-size: 11px; color: var(--text-muted);">
-    <strong>{SHAPE_LABEL}</strong> — {SHAPE_DESCRIPTION}
-  </div>
-</div>
-```
-
-Placeholder values for the inline card template:
-- `{FILE_PATH}` — `escapeHtml(filePath)`
-- `{CARD_ID}` — file path with non-alphanumeric chars replaced by `-` (no escaping)
-- `{LAYER}` — `escapeHtml(fileContext.layer)`
-- `{LAYER_COLOR}` — CSS color constant from DESIGN-SYSTEM.md layer color table (no escaping)
-- `{VIOLATION_BADGE_STYLE}` — `"background: #fdf2f2; color: #c0392b; border: 1px solid #e74c3c;"` if violations > 0; else `"background: #eafaf1; color: #27ae60; border: 1px solid #27ae60;"`
-- `{VIOLATION_BADGE_TEXT}` — `"N violations"` if violations > 0; else `"no violations"`
-- `{IMPORT_COUNT}` — `fileContext.imports.length ?? 0` (numeric, no escaping)
-- `{IMPORTED_BY_COUNT}` — `fileContext.imported_by.length ?? 0` (numeric, no escaping)
-- `{EXPORT_COUNT}` — `fileContext.exports.length ?? 0` (numeric, no escaping)
-- `{IMPACT_SCORE}` — `(fileContext.impact_score ?? 0).toFixed(2)` (string, no escaping)
-- `{GRAPH_DATA_JSON}` — JSON-stringified object `{ imports, imported_by, exports, layer, crossLayerImports: [], crossLayerDependents: [], fileName }` then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`)
-- `{SHAPE_LABEL}` — `escapeHtml(fileContext.shape?.label ?? "Standard")`
-- `{SHAPE_DESCRIPTION}` — `escapeHtml(fileContext.shape?.description ?? "")`
-
-The canvas graph initialization script uses the same pattern as `file-detail-card.html` —
-include the `<script>` block from `mcp-server/src/ui/snippets/file-detail-card.html` ONCE
-before `</body>` (it reads `data-graph` attributes from all `fdc-canvas-*` canvases).
-
-**Standard files** get compact **summary cards** from the `file-summary-card.html` snippet:
-
-- Read the snippet from `mcp-server/src/ui/snippets/file-summary-card.html`
-- Substitute: `{{FILE_PATH}}`, `{{LAYER}}`, `{{LAYER_COLOR}}`, `{{SHAPE_LABEL}}`
-- Extract and include the `<style>` block from the snippet once in the page `<style>` tag
-
-Both card types: high-impact cards start expanded (`<details open>`); summary cards start
-collapsed (`<details>`).
-
-> **Fallback**: If you cannot produce a file card (MCP data absent for that file or snippet
-> unreadable), render a minimal row:
-> ```html
-> <div style="padding: 8px 14px; font-family: monospace; font-size: 12px; color: var(--text-muted); border-bottom: 1px solid var(--border-subtle);">{FILE_PATH} — graph data unavailable</div>
-> ```
-> Do NOT skip the file entirely — always render at minimum this fallback row.
+  - The expanded body for ALL files contains the full `file-detail-card.html` snippet content
+- **file-detail-card.html** snippet (Section G.4) for ALL files:
+  - Read the snippet from `mcp-server/src/ui/snippets/file-detail-card.html`
+  - Substitute all placeholders as documented in Section G.4 of DESIGN-SYSTEM.md:
+    - `{{FILE_PATH}}`, `{{LAYER}}`, `{{SHAPE_LABEL}}`, `{{SHAPE_DESCRIPTION}}` — through `escapeHtml`
+    - `{{LAYER_COLOR}}` — CSS color constant, no escaping
+    - `{{IMPORT_COUNT}}`, `{{IMPORTED_BY_COUNT}}`, `{{IMPORT_LAYER_COUNT}}` — numeric, no escaping
+    - `{{EXPORT_COUNT}}`, `{{ENTITY_TYPE_COUNT}}`, `{{ENTITY_FN_COUNT}}` — numeric, no escaping
+    - `{{IMPACT_SCORE}}`, `{{IMPACT_RANK}}` — string/number, no escaping
+    - `{{VIOLATION_COUNT}}` — numeric; `{{VIOLATION_BADGE_CLASS}}` = "clean" | "danger"; `{{VIOLATION_BADGE_TEXT}}` = "no violations" | "N violations"
+    - `{{BLAST_RADIUS_SEVERITY}}` — severity string, no escaping; `{{BLAST_RADIUS_TOTAL}}` — numeric
+    - `{{CARD_ID}}` — collision-safe encoding of file path: replace each non-alphanumeric char `c` with `-` + `c.charCodeAt(0)` + `-` (e.g. `/` → `-47-`, `.` → `-46-`, `-` → `-45-`); alphanumeric chars pass through unchanged; no HTML escaping
+    - `{{GRAPH_DATA_JSON}}` — JSON-stringified GraphData object, then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`)
+    - `{{ENTITIES_HTML}}` — pre-rendered `<tr>` rows (see G.4 for format, limit 15 rows)
+    - `{{BLAST_RADIUS_DEPTH1_HTML}}` — pre-rendered depth-chip spans (see G.4 for format, limit 8 chips)
+  - Extract the `<style>` block from the snippet and include it in the page `<style>` tag (once)
+  - Extract the `<script>` block from the snippet and include it **ONCE** before `</body>` (not per card)
+- **Note**: `file-summary-card.html` is no longer used for the card body — the `<summary>` row above replaces it. The `.file-summary-path` and `.file-summary-shape` styles from that snippet are included in the expandable pattern CSS (Step 6). You do NOT need to read `file-summary-card.html`.
+- This means `file-detail-card.html` data must be prepared for ALL changed files, not just high-impact ones. Step 3b already fetches context for all files.
 
 ### Blast radius dependency tree
 
-Render the blast radius as a **dependency tree/graph view** instead of concentric rings.
-Place it immediately after the Graph Context section (before stats row).
-
-> **Fallback rule**: If blast radius data is empty (all changed files are leaf nodes), omit
-> this section entirely — do NOT render an empty tree. If the snippet cannot be read, render
-> the Section G.6 empty state from DESIGN-SYSTEM.md. Do NOT skip silently.
-
-Use **per-file blast radius data from `fileContextMap`** (Step 2b) — NOT the global
+Render the blast radius as a **dependency tree/graph view** instead of concentric rings. Use
+**per-file blast radius data from `get_file_context`** (Step 3b) — NOT the global
 `show_pr_impact blastRadius.affected` array, which lacks source attribution and cannot map
 affected files back to specific changed-file roots.
 
-Read the snippet from `mcp-server/src/ui/snippets/blast-radius-tree.html` and substitute
-placeholders:
+Place it as a full-width row after the Graph Context section. Read the snippet from
+`mcp-server/src/ui/snippets/blast-radius-tree.html` and substitute placeholders:
 
 - `{{TOTAL_AFFECTED}}` — total count of affected files (number, no escaping needed)
 - `{{TREE_GROUPS_HTML}}` — pre-rendered group HTML (escapeHtml all text content within)
@@ -520,7 +476,7 @@ Do not abbreviate or omit any CSS rule.
 
 Also add CSS for:
 - Reviewer narrative panel and collapsible section (from Section C)
-- File summary card styles (extracted from `file-summary-card.html` snippet `<style>` block)
+- File detail card styles (extracted from `file-detail-card.html` snippet `<style>` block)
 - Dependency tree CSS (extracted from `blast-radius-tree.html` snippet `<style>` block)
 - Narrative content typography (copy verbatim):
 
@@ -533,8 +489,219 @@ Also add CSS for:
 .narrative-content code { background: var(--bg-secondary); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
 ```
 
-Include the `<script>` block from `file-detail-card.html` **ONCE** before `</body>` (Canvas
-graph initialization for all `fdc-canvas-*` elements).
+- Expandable file card pattern CSS (copy verbatim):
+
+```css
+.file-expandable-summary {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  cursor: pointer; list-style: none; user-select: none;
+  background: var(--bg-surface); border-radius: 4px; margin-bottom: 4px;
+}
+.file-expandable-summary::-webkit-details-marker { display: none; }
+.file-expand-arrow {
+  font-size: 8px; color: var(--text-muted); transition: transform 0.15s; flex-shrink: 0;
+}
+details[open] > .file-expandable-summary .file-expand-arrow { transform: rotate(90deg); }
+.file-expandable-summary .file-summary-path {
+  flex: 1; font-family: monospace; font-size: 11px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.file-expandable-summary .file-summary-shape {
+  font-size: 10px; color: var(--text-muted); font-style: italic; flex-shrink: 0;
+}
+.review-subgraph-section {
+  margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px;
+}
+.review-subgraph-label {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em; padding: 0 0 8px;
+}
+```
+
+Include before `</body>` (in this order):
+1. The `<script>` block from `file-detail-card.html` (Canvas graph initialization for detail cards)
+2. The subgraph Canvas script (copy verbatim):
+
+```javascript
+(function () {
+  // ── Design token mapping (Canvas 2D cannot use CSS custom properties) ──
+  // The hex values below correspond to DESIGN-SYSTEM.md Section A tokens:
+  //   #6c8cff  → var(--accent)      — changed file nodes
+  //   #ff6b6b  → var(--danger)      — violation ring stroke on nodes
+  //   #888780  → (no direct token)  — edge lines and arrowheads; visually between --text-muted and --text
+  //   #b4b8c8  → var(--text)        — node label text color
+  //   #1e2030  → var(--bg)          — tooltip background (slightly lighter variant)
+  //   #3a3d52  → var(--border)      — tooltip border (opaque variant of --border rgba)
+  //   #e8eaf0  → var(--text-bright) — tooltip text color
+  // When design tokens change, update these hex values to match.
+
+  var canvas = document.getElementById('review-subgraph-canvas');
+  if (!canvas) return;
+  var raw = canvas.getAttribute('data-subgraph');
+  if (!raw) return;
+  var data;
+  try { data = JSON.parse(raw); } catch (e) { return; }
+  var nodes = (data.nodes || []).map(function (n) {
+    return { id: n.id, layer: n.layer, violation_count: n.violation_count || 0,
+             x: 0, y: 0, vx: 0, vy: 0 };
+  });
+  var edges = data.edges || [];
+  if (nodes.length === 0) return;
+  var dpr = window.devicePixelRatio || 1;
+  var W = canvas.offsetWidth || 600;
+  var H = 300;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.height = H + 'px';
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  var PAD = 40;
+  for (var i = 0; i < nodes.length; i++) {
+    nodes[i].x = PAD + Math.random() * (W - PAD * 2);
+    nodes[i].y = PAD + Math.random() * (H - PAD * 2);
+  }
+  var K_REPEL = 3000, K_SPRING = 0.015, REST_LENGTH = 40;
+  var K_GRAVITY = 0.4, DAMPING = 0.85, MAX_FORCE = 8, ITERATIONS = 100;
+  var CX = W / 2, CY = H / 2;
+  for (var iter = 0; iter < ITERATIONS; iter++) {
+    var forces = nodes.map(function () { return { fx: 0, fy: 0 }; });
+    for (var a = 0; a < nodes.length; a++) {
+      for (var b = a + 1; b < nodes.length; b++) {
+        var dx = nodes[a].x - nodes[b].x;
+        var dy = nodes[a].y - nodes[b].y;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        var f = Math.min(K_REPEL / (dist * dist), MAX_FORCE);
+        var fx = (dx / dist) * f, fy = (dy / dist) * f;
+        forces[a].fx += fx; forces[a].fy += fy;
+        forces[b].fx -= fx; forces[b].fy -= fy;
+      }
+    }
+    for (var e = 0; e < edges.length; e++) {
+      var si = -1, ti = -1;
+      for (var k = 0; k < nodes.length; k++) {
+        if (nodes[k].id === edges[e].source) si = k;
+        if (nodes[k].id === edges[e].target) ti = k;
+      }
+      if (si < 0 || ti < 0) continue;
+      var edx = nodes[ti].x - nodes[si].x;
+      var edy = nodes[ti].y - nodes[si].y;
+      var edist = Math.sqrt(edx * edx + edy * edy) || 1;
+      var sf = Math.min(K_SPRING * (edist - REST_LENGTH), MAX_FORCE);
+      var sfx = (edx / edist) * sf, sfy = (edy / edist) * sf;
+      forces[si].fx += sfx; forces[si].fy += sfy;
+      forces[ti].fx -= sfx; forces[ti].fy -= sfy;
+    }
+    for (var g = 0; g < nodes.length; g++) {
+      var gdx = CX - nodes[g].x, gdy = CY - nodes[g].y;
+      var gdist = Math.sqrt(gdx * gdx + gdy * gdy) || 1;
+      forces[g].fx += K_GRAVITY * gdx / gdist * Math.min(gdist, 100);
+      forces[g].fy += K_GRAVITY * gdy / gdist * Math.min(gdist, 100);
+    }
+    for (var n = 0; n < nodes.length; n++) {
+      nodes[n].vx = (nodes[n].vx + forces[n].fx) * DAMPING;
+      nodes[n].vy = (nodes[n].vy + forces[n].fy) * DAMPING;
+      nodes[n].x = Math.max(PAD, Math.min(W - PAD, nodes[n].x + nodes[n].vx));
+      nodes[n].y = Math.max(PAD, Math.min(H - PAD, nodes[n].y + nodes[n].vy));
+    }
+  }
+  ctx.clearRect(0, 0, W, H);
+  var NODE_R = 7;
+  for (var de = 0; de < edges.length; de++) {
+    var dsi = -1, dti = -1;
+    for (var dk = 0; dk < nodes.length; dk++) {
+      if (nodes[dk].id === edges[de].source) dsi = dk;
+      if (nodes[dk].id === edges[de].target) dti = dk;
+    }
+    if (dsi < 0 || dti < 0) continue;
+    var ax = nodes[dsi].x, ay = nodes[dsi].y;
+    var bx = nodes[dti].x, by = nodes[dti].y;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.strokeStyle = '#888780';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.35;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    var angle = Math.atan2(by - ay, bx - ax);
+    var tipX = bx - Math.cos(angle) * NODE_R;
+    var tipY = by - Math.sin(angle) * NODE_R;
+    var AL = 7, AW = Math.PI / 6;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX - AL * Math.cos(angle - AW), tipY - AL * Math.sin(angle - AW));
+    ctx.lineTo(tipX - AL * Math.cos(angle + AW), tipY - AL * Math.sin(angle + AW));
+    ctx.closePath();
+    ctx.fillStyle = '#888780';
+    ctx.globalAlpha = 0.5;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  for (var dn = 0; dn < nodes.length; dn++) {
+    var nd = nodes[dn];
+    ctx.beginPath();
+    ctx.arc(nd.x, nd.y, NODE_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#6c8cff';
+    ctx.fill();
+    if (nd.violation_count > 0) {
+      ctx.strokeStyle = '#ff6b6b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    var label = nd.id.split('/').pop() || nd.id;
+    if (label.length > 20) label = label.slice(0, 18) + '...';
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#b4b8c8';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, nd.x, nd.y + NODE_R + 11);
+  }
+  var tooltip = document.createElement('div');
+  tooltip.style.cssText = 'position:fixed;pointer-events:none;background:#1e2030;border:1px solid #3a3d52;' +
+    'color:#e8eaf0;padding:4px 8px;border-radius:4px;font-size:11px;font-family:monospace;' +
+    'display:none;z-index:9999;max-width:400px;word-break:break-all;';
+  document.body.appendChild(tooltip);
+  function getNodeAt(mx, my) {
+    for (var k = 0; k < nodes.length; k++) {
+      var dx = mx - nodes[k].x, dy = my - nodes[k].y;
+      if (Math.sqrt(dx * dx + dy * dy) <= NODE_R + 4) return nodes[k];
+    }
+    return null;
+  }
+  canvas.addEventListener('mousemove', function (evt) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = (evt.clientX - rect.left) * (W / rect.width);
+    var my = (evt.clientY - rect.top) * (H / rect.height);
+    var hit = getNodeAt(mx, my);
+    if (hit) {
+      tooltip.textContent = hit.id;
+      tooltip.style.display = 'block';
+      tooltip.style.left = (evt.clientX + 12) + 'px';
+      tooltip.style.top = (evt.clientY - 8) + 'px';
+      canvas.style.cursor = 'pointer';
+    } else {
+      tooltip.style.display = 'none';
+      canvas.style.cursor = 'default';
+    }
+  });
+  canvas.addEventListener('mouseleave', function () {
+    tooltip.style.display = 'none';
+    canvas.style.cursor = 'default';
+  });
+  canvas.addEventListener('click', function (evt) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = (evt.clientX - rect.left) * (W / rect.width);
+    var my = (evt.clientY - rect.top) * (H / rect.height);
+    var hit = getNodeAt(mx, my);
+    if (!hit) return;
+    var encodedId = hit.id.replace(/[^a-zA-Z0-9]/g, function(c) { return '-' + c.charCodeAt(0) + '-'; });
+    var cardEl = document.getElementById('file-card-' + encodedId);
+    if (cardEl) {
+      cardEl.open = true;
+      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+})();
+```
 
 ## Step 7 — Security
 
@@ -542,7 +709,7 @@ Apply `escapeHtml` to ALL content extracted from REVIEW.md or returned by MCP to
 embedding in HTML. This includes: file paths, principle IDs, violation messages, layer names,
 subsystem directories, and entity names.
 
-**Exception**: The reviewer narrative is processed through `markdownToHtml()` (Step 3), which
+**Exception**: The reviewer narrative is processed through `markdownToHtml()` (Step 4), which
 escapes raw text internally before wrapping in HTML tags. Do not double-escape by calling
 `escapeHtml()` on the narrative before passing it to `markdownToHtml()`.
 
@@ -574,21 +741,21 @@ Return when the file is written. Do not modify the worktree.
 
 ## Template Notes
 
-- **Model**: Spawn this renderer with `model: "sonnet"` (not Haiku). MCP tool calls + complex
-  HTML assembly exceed Haiku's practical context budget, causing Graph Context sections to be
-  silently dropped.
 - Variable substitution is the orchestrator's responsibility before passing to Agent()
 - This is the ONLY renderer template that requires MCP tool calls (show_pr_impact, get_context)
-- MCP tools are called in Step 2 (before parsing) so data stays fresh through composition
 - The reviewer narrative is NOT optional — the template explicitly marks it as REQUIRED
-- **Composition order**: verdict banner → reviewer narrative → Graph Context → Blast Radius Tree → stats row → dashboard grid. Graph Context and Blast Radius Tree come immediately after the narrative so MCP data is still in active context.
-- For high-impact files: use the simplified inline card template in Step 5 (NOT the 790-line `file-detail-card.html` snippet which has 20+ placeholders — too complex for reliable substitution)
-- For standard files: use the `file-summary-card.html` snippet (only 4 placeholders — simple enough)
-- `file-detail-card.html` canvas `<script>` block must still be included ONCE before `</body>` (reads `data-graph` attributes from inline card canvases)
+- The reviewer narrative appears immediately after the verdict banner (before stats row)
+- Read Sections F and G from DESIGN-SYSTEM.md; do not reconstruct patterns from memory
+- Read `file-detail-card.html` and `blast-radius-tree.html` for snippet HTML/CSS — do NOT write your own card markup
+- `file-summary-card.html` is no longer used in the Graph Context section — the expandable `<summary>` row replaces it
+- `file-detail-card.html` is used for ALL changed files (not just high-impact ones) in the expanded `<details>` body
+- `file-detail-card.html` uses a Canvas-based dependency graph — include its `<script>` block once before `</body>`
+- The subgraph Canvas script (Step 6) goes after the file-detail-card script, also before `</body>`
+- The Graph Context section dependency subgraph is conditional: only rendered when 2+ changed files have at least 1 mutual edge
+- Click a subgraph node → expands and scrolls to the corresponding `<details id="file-card-{encodedId}">` element
 - The blast radius visualization uses a dependency tree (per-file roots), NOT concentric SVG rings
-- Dependency tree uses per-file `get_context` blast_radius data for source-aware root→dependent mapping
+- Dependency tree uses per-file `get_file_context().blast_radius` data for source-aware root→dependent mapping
 - Do NOT reference Section H of DESIGN-SYSTEM.md — it describes the old rings pattern which is no longer used
-- Every section with complex data has an explicit fallback instruction — always render the empty state rather than skipping the section silently
 - The renderer writes exclusively to `${WORKSPACE}/artifacts/` — never to the worktree
 - If REVIEW.md does not exist at `${WORKSPACE}/reviews/REVIEW.md`, report failure and stop
 - Do NOT render empty sections — only render sections that have data to display

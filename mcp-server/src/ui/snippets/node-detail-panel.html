@@ -1,0 +1,124 @@
+<!--
+  @snippet node-detail-panel
+  @description Side panel for inspecting a clicked node in the codebase graph. Shows file path,
+    layer/changed/kind badges, and dependency lists (imports and imported-by). Positioned as a
+    fixed-width right panel overlaying the graph canvas area.
+  @data {
+    filePath: string,
+    layer: string,
+    layerColor: string,
+    kind: string,
+    isChanged: boolean,
+    importedByCount: number,
+    importedByHtml: string (pre-rendered <li> items),
+    importsCount: number,
+    importsHtml: string (pre-rendered <li> items)
+  }
+  @tokens --bg-card, --border, --text, --text-bright, --text-muted, --accent
+  @usage Rendered dynamically by JavaScript when a node is clicked. The panel div is always
+    present in the DOM but hidden (display: none) by default. JS populates content and
+    toggles visibility. Placeholders are NOT used — content is set via JS innerHTML.
+    The panel CSS uses position: absolute within the #graph-container flex parent.
+    NO script block — the codebase graph template's main script handles panel interactions.
+-->
+<div id="node-detail-panel">
+  <button id="ndp-close" title="Close panel">&times;</button>
+  <div id="ndp-path"></div>
+  <div id="ndp-badges"></div>
+  <div id="ndp-imported-by-header"></div>
+  <ul id="ndp-imported-by-list"></ul>
+  <div id="ndp-imports-header"></div>
+  <ul id="ndp-imports-list"></ul>
+</div>
+<style>
+  #node-detail-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 30%;
+    min-width: 220px;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    display: none;
+    z-index: 10;
+    flex-direction: column;
+  }
+  #ndp-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--text-muted);
+    line-height: 1;
+    padding: 0 4px;
+  }
+  #ndp-close:hover {
+    color: var(--text-bright);
+  }
+  #ndp-path {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--text-bright);
+    word-break: break-all;
+    padding: 12px 36px 8px 14px;
+    line-height: 1.4;
+  }
+  #ndp-badges {
+    display: flex;
+    gap: 6px;
+    padding: 0 14px 10px;
+    flex-wrap: wrap;
+  }
+  .ndp-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .ndp-badge-layer {
+    /* background and color set inline by JS using layer color */
+  }
+  .ndp-badge-changed {
+    background: rgba(108, 140, 255, 0.15);
+    color: #6c8cff;
+    border-color: rgba(108, 140, 255, 0.35);
+  }
+  .ndp-badge-kind {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+  #ndp-imported-by-header,
+  #ndp-imports-header {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 8px 14px 4px;
+    border-top: 1px solid var(--border);
+  }
+  #ndp-imported-by-list,
+  #ndp-imports-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 14px 8px;
+  }
+  #ndp-imported-by-list li,
+  #ndp-imports-list li {
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--text);
+    padding: 2px 0;
+    word-break: break-all;
+    line-height: 1.4;
+  }
+</style>
