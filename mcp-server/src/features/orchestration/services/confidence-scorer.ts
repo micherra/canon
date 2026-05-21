@@ -13,7 +13,6 @@
  *    score >= 40 → light-touch, else → supervised
  */
 
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 
 // ---- Types ----
@@ -41,6 +40,25 @@ export type ConfidenceSignals = {
   override_tier?: AutonomyTier; // user-forced tier
 };
 
+/**
+ * Minimal adapter interface for drift.db access within confidence scoring.
+ * Defined here so confidence-scorer.ts has no direct platform dependency.
+ * Tool wrappers (in tools/) import getDriftDb and create a concrete instance.
+ */
+export type DriftDbAdapter = {
+  getAllFlowRuns(): Array<{
+    state_iterations: unknown;
+    gate_pass_rate?: number | null;
+  }>;
+  getSignals(): {
+    getFileViolationHistory(filePaths: string[]): unknown[];
+    getPathEffects(filePaths: string[]): Array<{
+      violation_streak: number;
+      clean_streak: number;
+    }>;
+  };
+};
+
 export type ConfidenceResult = {
   tier: AutonomyTier;
   score: number; // 0-100, or -1 for override
@@ -53,12 +71,7 @@ export type ConfidenceResult = {
 // Security file patterns — must be an anchored top-level directory or specific path.
 // principles/, rules/, hooks/ must appear at the start of the path (not nested under src/).
 // .canon/config.json must be the exact path from the repo root.
-const SECURITY_PATTERNS = [
-  /^principles\//,
-  /^rules\//,
-  /^hooks\//,
-  /^\.canon\/config\.json$/,
-];
+const SECURITY_PATTERNS = [/^principles\//, /^rules\//, /^hooks\//, /^\.canon\/config\.json$/];
 
 /**
  * Returns true when any file path matches a security-sensitive pattern.
@@ -93,7 +106,9 @@ function buildReasoning(signals: ConfidenceSignals, score: number): string {
   } else if (signals.blast_radius.total_affected_files > 20) {
     parts.push(`medium blast radius (${signals.blast_radius.total_affected_files} affected files)`);
   } else if (signals.blast_radius.total_affected_files > 10) {
-    parts.push(`low-medium blast radius (${signals.blast_radius.total_affected_files} affected files)`);
+    parts.push(
+      `low-medium blast radius (${signals.blast_radius.total_affected_files} affected files)`,
+    );
   }
   if (signals.blast_radius.max_depth > 3) {
     parts.push(`dependency depth ${signals.blast_radius.max_depth}`);
@@ -112,6 +127,76 @@ function buildReasoning(signals: ConfidenceSignals, score: number): string {
     return `score ${score} — clean signals across all dimensions`;
   }
   return `score ${score} — penalized by: ${parts.join(", ")}`;
+}
+
+/** Deduct build history penalties from score; push used signal names to the list. */
+function applyBuildHistoryPenalties(
+  signals: ConfidenceSignals["build_history"],
+  score: number,
+  used: string[],
+): number {
+  let s = score;
+  if (signals.recent_runs < 5) {
+    s -= 30;
+    used.push("build_history.recent_runs");
+  }
+  const cleanPenalty = (1 - signals.clean_review_rate) * 30;
+  if (cleanPenalty > 0) {
+    s -= cleanPenalty;
+    used.push("build_history.clean_review_rate");
+  }
+  const retryPenalty = Math.min(signals.avg_retry_count * 5, 20);
+  if (retryPenalty > 0) {
+    s -= retryPenalty;
+    used.push("build_history.avg_retry_count");
+  }
+  const failurePenalty = signals.recent_failure_rate * 10;
+  if (failurePenalty > 0) {
+    s -= failurePenalty;
+    used.push("build_history.recent_failure_rate");
+  }
+  return s;
+}
+
+/** Deduct blast radius and compliance penalties; push used signal names to the list. */
+function applyBlastAndCompliancePenalties(
+  signals: ConfidenceSignals,
+  score: number,
+  used: string[],
+): number {
+  let s = score;
+  if (signals.blast_radius.total_affected_files > 50) {
+    s -= 30;
+    used.push("blast_radius.total_affected_files");
+  } else if (signals.blast_radius.total_affected_files > 20) {
+    s -= 20;
+    used.push("blast_radius.total_affected_files");
+  } else if (signals.blast_radius.total_affected_files > 10) {
+    s -= 10;
+    used.push("blast_radius.total_affected_files");
+  }
+  if (signals.blast_radius.max_depth > 3) {
+    s -= 10;
+    used.push("blast_radius.max_depth");
+  }
+  const violationPenalty = Math.min(signals.compliance.total_active_violations * 5, 15);
+  if (violationPenalty > 0) {
+    s -= violationPenalty;
+    used.push("compliance.total_active_violations");
+  }
+  const streakPenalty = signals.compliance.max_violation_streak * 3;
+  if (streakPenalty > 0) {
+    s -= streakPenalty;
+    used.push("compliance.max_violation_streak");
+  }
+  if (signals.file_paths.length > 20) {
+    s -= 10;
+    used.push("file_paths.length");
+  } else if (signals.file_paths.length > 10) {
+    s -= 5;
+    used.push("file_paths.length");
+  }
+  return s;
 }
 
 // ---- Pure scoring function ----
@@ -142,75 +227,13 @@ export function computeConfidence(signals: ConfidenceSignals): ConfidenceResult 
     };
   }
 
-  let score = 100;
   const signals_used: string[] = [];
-
-  // Build history scoring (up to 40 points deducted)
-  if (signals.build_history.recent_runs < 5) {
-    score -= 30;
-    signals_used.push("build_history.recent_runs");
-  }
-
-  const cleanPenalty = (1 - signals.build_history.clean_review_rate) * 30;
-  if (cleanPenalty > 0) {
-    score -= cleanPenalty;
-    signals_used.push("build_history.clean_review_rate");
-  }
-
-  // avg_retry_count penalty: 5 points per retry, capped at 20
-  const retryPenalty = Math.min(signals.build_history.avg_retry_count * 5, 20);
-  if (retryPenalty > 0) {
-    score -= retryPenalty;
-    signals_used.push("build_history.avg_retry_count");
-  }
-
-  const failurePenalty = signals.build_history.recent_failure_rate * 10;
-  if (failurePenalty > 0) {
-    score -= failurePenalty;
-    signals_used.push("build_history.recent_failure_rate");
-  }
-
-  // Blast radius scoring (up to 30 points deducted)
-  if (signals.blast_radius.total_affected_files > 50) {
-    score -= 30;
-    signals_used.push("blast_radius.total_affected_files");
-  } else if (signals.blast_radius.total_affected_files > 20) {
-    score -= 20;
-    signals_used.push("blast_radius.total_affected_files");
-  } else if (signals.blast_radius.total_affected_files > 10) {
-    score -= 10;
-    signals_used.push("blast_radius.total_affected_files");
-  }
-
-  if (signals.blast_radius.max_depth > 3) {
-    score -= 10;
-    signals_used.push("blast_radius.max_depth");
-  }
-
-  // Compliance scoring (up to 20 points deducted)
-  const violationPenalty = Math.min(signals.compliance.total_active_violations * 5, 15);
-  if (violationPenalty > 0) {
-    score -= violationPenalty;
-    signals_used.push("compliance.total_active_violations");
-  }
-
-  const streakPenalty = signals.compliance.max_violation_streak * 3;
-  if (streakPenalty > 0) {
-    score -= streakPenalty;
-    signals_used.push("compliance.max_violation_streak");
-  }
-
-  // File count scoring (up to 10 points deducted)
-  if (signals.file_paths.length > 20) {
-    score -= 10;
-    signals_used.push("file_paths.length");
-  } else if (signals.file_paths.length > 10) {
-    score -= 5;
-    signals_used.push("file_paths.length");
-  }
-
+  let score = 100;
+  score = applyBuildHistoryPenalties(signals.build_history, score, signals_used);
+  score = applyBlastAndCompliancePenalties(signals, score, signals_used);
   score = Math.max(0, Math.min(100, score));
-  const tier: AutonomyTier = score >= 80 ? "autonomous" : score >= 40 ? "light-touch" : "supervised";
+  const tier: AutonomyTier =
+    score >= 80 ? "autonomous" : score >= 40 ? "light-touch" : "supervised";
 
   return {
     reasoning: buildReasoning(signals, score),
@@ -224,64 +247,33 @@ export function computeConfidence(signals: ConfidenceSignals): ConfidenceResult 
 
 const RECENT_RUNS_LOOKBACK = 10;
 
-/**
- * Gather confidence signals from drift.db, KG blast radius, and file path patterns.
- * NOT pure — performs I/O.
- *
- * Each signal source is wrapped in try/catch: failure sets that signal to its
- * worst-case (most conservative) value rather than best-case.
- */
-export async function gatherSignals(
-  filePaths: string[],
-  projectDir: string,
-): Promise<ConfidenceSignals> {
-  const signals: ConfidenceSignals = {
-    blast_radius: { max_depth: 0, total_affected_files: 0 },
-    build_history: {
-      avg_retry_count: 0,
-      clean_review_rate: 0, // worst-case default
-      recent_failure_rate: 1, // worst-case default
-      recent_runs: 0,
-    },
-    compliance: {
-      has_clean_streak: false,
-      max_violation_streak: 0,
-      total_active_violations: 0,
-    },
-    file_paths: filePaths,
-    has_security_files: hasSecurityFiles(filePaths),
-  };
-
-  // -- Build history signals --
+/** Populate build_history signals from drift.db. Mutates signals in place. */
+async function gatherBuildHistorySignals(
+  signals: ConfidenceSignals,
+  driftDb: DriftDbAdapter,
+): Promise<void> {
   try {
-    const db = getDriftDb(projectDir);
-    const flowRuns = db.getAllFlowRuns();
+    const flowRuns = driftDb.getAllFlowRuns();
     const recent = flowRuns.slice(-RECENT_RUNS_LOOKBACK);
     signals.build_history.recent_runs = recent.length;
 
-    if (recent.length > 0) {
-      // avg_retry_count: average of total state_iterations across recent runs
-      const totalIter = recent.reduce((sum, run) => {
-        const iters = Object.values(run.state_iterations as Record<string, number>);
-        return sum + iters.reduce((s, v) => s + v, 0);
-      }, 0);
-      signals.build_history.avg_retry_count = totalIter / recent.length;
+    if (recent.length === 0) return; // keep worst-case defaults
 
-      // clean_review_rate: fraction of recent runs with gate_pass_rate === 1.0
-      const cleanCount = recent.filter(
-        (run) => run.gate_pass_rate !== null && run.gate_pass_rate >= 1.0,
-      ).length;
-      signals.build_history.clean_review_rate = cleanCount / recent.length;
+    const totalIter = recent.reduce((sum, run) => {
+      const iters = Object.values(run.state_iterations as Record<string, number>);
+      return sum + iters.reduce((s, v) => s + v, 0);
+    }, 0);
+    signals.build_history.avg_retry_count = totalIter / recent.length;
 
-      // recent_failure_rate: fraction of runs with gate_pass_rate < 1.0 or null
-      const failCount = recent.filter(
-        (run) => run.gate_pass_rate === null || run.gate_pass_rate < 1.0,
-      ).length;
-      signals.build_history.recent_failure_rate = failCount / recent.length;
-    } else {
-      // No runs — keep worst-case defaults except recent_runs is already 0
-      // clean_review_rate stays 0, recent_failure_rate stays 1
-    }
+    const cleanCount = recent.filter(
+      (run) => run.gate_pass_rate != null && run.gate_pass_rate >= 1.0,
+    ).length;
+    signals.build_history.clean_review_rate = cleanCount / recent.length;
+
+    const failCount = recent.filter(
+      (run) => run.gate_pass_rate == null || run.gate_pass_rate < 1.0,
+    ).length;
+    signals.build_history.recent_failure_rate = failCount / recent.length;
   } catch (err) {
     console.warn(
       "[canon] confidence-scorer: build history signal gathering failed:",
@@ -289,8 +281,24 @@ export async function gatherSignals(
     );
     // keep worst-case defaults
   }
+}
 
-  // -- Blast radius signals --
+/** Extract the maximum depth value from a blast radius result array. */
+function extractMaxDepth(results: Array<Record<string, unknown>>): number {
+  let maxDepth = 0;
+  for (const entry of results) {
+    const depth = typeof entry.depth === "number" ? entry.depth : 0;
+    if (depth > maxDepth) maxDepth = depth;
+  }
+  return maxDepth;
+}
+
+/** Populate blast_radius signals from the KG. Mutates signals in place. */
+async function gatherBlastRadiusSignals(
+  signals: ConfidenceSignals,
+  filePaths: string[],
+  projectDir: string,
+): Promise<void> {
   try {
     let totalAffected = 0;
     let maxDepth = 0;
@@ -302,11 +310,10 @@ export async function gatherSignals(
       );
       if (result.ok) {
         totalAffected += result.count;
-        // Infer depth from results (entries may have a depth field)
-        for (const entry of result.results as Array<Record<string, unknown>>) {
-          const depth = typeof entry.depth === "number" ? entry.depth : 0;
-          if (depth > maxDepth) maxDepth = depth;
-        }
+        maxDepth = Math.max(
+          maxDepth,
+          extractMaxDepth(result.results as Array<Record<string, unknown>>),
+        );
       }
       // KG_NOT_INDEXED is non-fatal — leave blast radius at 0
     }
@@ -320,11 +327,16 @@ export async function gatherSignals(
     );
     // keep default 0 values — lack of KG data is non-blocking
   }
+}
 
-  // -- Compliance signals --
+/** Populate compliance signals from drift.db signals DAO. Mutates signals in place. */
+async function gatherComplianceSignals(
+  signals: ConfidenceSignals,
+  filePaths: string[],
+  driftDb: DriftDbAdapter,
+): Promise<void> {
   try {
-    const db = getDriftDb(projectDir);
-    const signalsDao = db.getSignals();
+    const signalsDao = driftDb.getSignals();
 
     const violationHistory = signalsDao.getFileViolationHistory(filePaths);
     signals.compliance.total_active_violations = violationHistory.length;
@@ -345,6 +357,48 @@ export async function gatherSignals(
     );
     // keep worst-case defaults (total_active_violations=0, max_violation_streak=0)
   }
+}
+
+/**
+ * Gather confidence signals from drift.db, KG blast radius, and file path patterns.
+ * NOT pure — performs I/O.
+ *
+ * @param filePaths - Files changed in the build.
+ * @param projectDir - Absolute path to the project root (used for KG blast radius queries).
+ * @param driftDb - Optional DriftDbAdapter. When provided, build history and compliance
+ *   signals are gathered from the drift DB. When undefined, those signals remain at
+ *   worst-case defaults (conservative, never best-case).
+ *
+ * Each signal source is wrapped in try/catch: failure sets that signal to its
+ * worst-case (most conservative) value rather than best-case.
+ */
+export async function gatherSignals(
+  filePaths: string[],
+  projectDir: string,
+  driftDb?: DriftDbAdapter,
+): Promise<ConfidenceSignals> {
+  const signals: ConfidenceSignals = {
+    blast_radius: { max_depth: 0, total_affected_files: 0 },
+    build_history: {
+      avg_retry_count: 0,
+      clean_review_rate: 0, // worst-case default
+      recent_failure_rate: 1, // worst-case default
+      recent_runs: 0,
+    },
+    compliance: {
+      has_clean_streak: false,
+      max_violation_streak: 0,
+      total_active_violations: 0,
+    },
+    file_paths: filePaths,
+    has_security_files: hasSecurityFiles(filePaths),
+  };
+
+  if (driftDb !== undefined) {
+    await gatherBuildHistorySignals(signals, driftDb);
+    await gatherComplianceSignals(signals, filePaths, driftDb);
+  }
+  await gatherBlastRadiusSignals(signals, filePaths, projectDir);
 
   return signals;
 }

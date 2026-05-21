@@ -10,14 +10,15 @@
  */
 
 import { isAbsolute } from "node:path";
-import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { projectDir } from "@app/server-state.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import {
+  type AutonomyTier,
   computeConfidence,
   gatherSignals,
-  type AutonomyTier,
 } from "../services/confidence-scorer.ts";
 
 // ---- Types ----
@@ -65,7 +66,8 @@ export async function computeAutonomyTier(
   // Gather signals — wrapped in try/catch for fail-safe behavior
   let result: ComputeAutonomyTierResult;
   try {
-    const signals = await gatherSignals(file_paths, projectDir);
+    const driftDb = getDriftDb(projectDir);
+    const signals = await gatherSignals(file_paths, projectDir, driftDb);
 
     // Apply user override if provided
     if (override_tier !== undefined) {

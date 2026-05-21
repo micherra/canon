@@ -8,7 +8,7 @@
  *  4. override_tier short-circuits scoring
  *  5. Insufficient build history (<5 runs) penalizes score
  *  6. Medium signals return light-touch tier (score 40-79)
- *  7. gatherSignals returns correct ConfidenceSignals shape (mocked drift.db + graphQuery)
+ *  7. gatherSignals returns correct ConfidenceSignals shape (mocked DriftDbAdapter + graphQuery)
  *  8. Security file pattern matching — positive + negative cases
  *  9. Boundary: score exactly at 80 → autonomous
  * 10. Boundary: score exactly at 40 → light-touch
@@ -16,9 +16,10 @@
  * 12. avg_retry_count penalty capped at 20 points
  *
  * Mock strategy:
- *  - Mock `@platform/storage/drift/drift-db.ts` to control getDriftDb
+ *  - confidence-scorer.ts no longer imports drift-db directly; DriftDbAdapter is passed in
  *  - Mock `@features/knowledge-graph/tools/graph-query.ts` to control graphQuery
  *  - computeConfidence is pure: no mocks needed
+ *  - gatherSignals tests pass a mock DriftDbAdapter as the third argument
  *  - vi.mock factories must not reference outer variables (hoisting constraint)
  */
 
@@ -28,31 +29,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // vi.mock is hoisted before variable declarations. Factories must use only
 // vi.fn() inline — no references to outer let/const variables.
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
-  getDriftDb: vi.fn(() => ({
-    getAllFlowRuns: vi.fn(() => []),
-    getSignals: vi.fn(() => ({
-      getFileViolationHistory: vi.fn(() => []),
-      getPathEffects: vi.fn(() => []),
-    })),
-  })),
-}));
-
 vi.mock("@features/knowledge-graph/tools/graph-query.ts", () => ({
   graphQuery: vi.fn(() => ({ count: 0, ok: true, query_type: "blast_radius", results: [] })),
 }));
 
-// Import mocked modules for per-test control
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 
 // Import subject under test
-import type { ConfidenceSignals } from "../confidence-scorer.ts";
-import {
-  computeConfidence,
-  gatherSignals,
-  hasSecurityFiles,
-} from "../confidence-scorer.ts";
+import type { ConfidenceSignals, DriftDbAdapter } from "../confidence-scorer.ts";
+import { computeConfidence, gatherSignals, hasSecurityFiles } from "../confidence-scorer.ts";
 
 // ---- Helpers ----
 
@@ -91,10 +76,10 @@ describe("computeConfidence", () => {
       makeCleanSignals({
         blast_radius: { max_depth: 4, total_affected_files: 51 },
         build_history: {
-          recent_runs: 10,
-          clean_review_rate: 0.3,
           avg_retry_count: 3,
+          clean_review_rate: 0.3,
           recent_failure_rate: 0.5,
+          recent_runs: 10,
         },
       }),
     );
@@ -117,9 +102,7 @@ describe("computeConfidence", () => {
   });
 
   it("override_tier short-circuits scoring and returns the forced tier", () => {
-    const resultSupervised = computeConfidence(
-      makeCleanSignals({ override_tier: "supervised" }),
-    );
+    const resultSupervised = computeConfidence(makeCleanSignals({ override_tier: "supervised" }));
     expect(resultSupervised.tier).toBe("supervised");
     expect(resultSupervised.score).toBe(-1);
     expect(resultSupervised.signals_used).toEqual(["override_tier"]);
@@ -291,18 +274,26 @@ describe("hasSecurityFiles", () => {
   });
 });
 
+// ---- DriftDbAdapter mock factory ----
+
+function makeMockDriftDb(overrides?: {
+  flowRuns?: Array<{ state_iterations: unknown; gate_pass_rate: number | null | undefined }>;
+  violationHistory?: unknown[];
+  pathEffects?: Array<{ violation_streak: number; clean_streak: number }>;
+}): DriftDbAdapter {
+  return {
+    getAllFlowRuns: vi.fn(() => overrides?.flowRuns ?? []),
+    getSignals: vi.fn(() => ({
+      getFileViolationHistory: vi.fn(() => overrides?.violationHistory ?? []),
+      getPathEffects: vi.fn(() => overrides?.pathEffects ?? []),
+    })),
+  };
+}
+
 // ---- gatherSignals tests ----
 
 describe("gatherSignals", () => {
   beforeEach(() => {
-    vi.mocked(getDriftDb).mockReturnValue({
-      getAllFlowRuns: vi.fn(() => []),
-      getSignals: vi.fn(() => ({
-        getFileViolationHistory: vi.fn(() => []),
-        getPathEffects: vi.fn(() => []),
-      })),
-    } as ReturnType<typeof getDriftDb>);
-
     vi.mocked(graphQuery).mockReturnValue({
       count: 0,
       ok: true,
@@ -312,7 +303,8 @@ describe("gatherSignals", () => {
   });
 
   it("returns ConfidenceSignals shape with correct file_paths", async () => {
-    const result = await gatherSignals(["src/foo.ts", "src/bar.ts"], "/mock/project");
+    const mockDb = makeMockDriftDb();
+    const result = await gatherSignals(["src/foo.ts", "src/bar.ts"], "/mock/project", mockDb);
 
     expect(result.file_paths).toEqual(["src/foo.ts", "src/bar.ts"]);
     expect(typeof result.build_history.recent_runs).toBe("number");
@@ -323,10 +315,11 @@ describe("gatherSignals", () => {
   });
 
   it("sets has_security_files based on file path patterns", async () => {
-    const resultSafe = await gatherSignals(["src/foo.ts"], "/mock/project");
+    const mockDb = makeMockDriftDb();
+    const resultSafe = await gatherSignals(["src/foo.ts"], "/mock/project", mockDb);
     expect(resultSafe.has_security_files).toBe(false);
 
-    const resultSecurity = await gatherSignals(["hooks/pre-commit.sh"], "/mock/project");
+    const resultSecurity = await gatherSignals(["hooks/pre-commit.sh"], "/mock/project", mockDb);
     expect(resultSecurity.has_security_files).toBe(true);
   });
 
@@ -341,19 +334,36 @@ describe("gatherSignals", () => {
       ],
     } as ReturnType<typeof graphQuery>);
 
-    const result = await gatherSignals(["src/foo.ts"], "/mock/project");
+    const mockDb = makeMockDriftDb();
+    const result = await gatherSignals(["src/foo.ts"], "/mock/project", mockDb);
     expect(result.blast_radius.total_affected_files).toBe(15);
     expect(result.blast_radius.max_depth).toBe(3);
   });
 
-  it("uses worst-case defaults when drift.db is unavailable", async () => {
-    vi.mocked(getDriftDb).mockImplementationOnce(() => {
-      throw new Error("SQLITE_CANTOPEN");
-    });
-
+  it("uses worst-case defaults when driftDb is not provided", async () => {
+    // No driftDb argument — drift-dependent signals stay at worst-case defaults
     const result = await gatherSignals(["src/foo.ts"], "/mock/project");
 
     // Worst-case defaults: clean_review_rate=0, recent_failure_rate=1, recent_runs=0
+    expect(result.build_history.recent_runs).toBe(0);
+    expect(result.build_history.clean_review_rate).toBe(0);
+    expect(result.build_history.recent_failure_rate).toBe(1);
+  });
+
+  it("uses worst-case defaults when driftDb.getAllFlowRuns throws", async () => {
+    const failingDb: DriftDbAdapter = {
+      getAllFlowRuns: vi.fn(() => {
+        throw new Error("SQLITE_CANTOPEN");
+      }),
+      getSignals: vi.fn(() => ({
+        getFileViolationHistory: vi.fn(() => []),
+        getPathEffects: vi.fn(() => []),
+      })),
+    };
+
+    const result = await gatherSignals(["src/foo.ts"], "/mock/project", failingDb);
+
+    // Worst-case defaults preserved after error
     expect(result.build_history.recent_runs).toBe(0);
     expect(result.build_history.clean_review_rate).toBe(0);
     expect(result.build_history.recent_failure_rate).toBe(1);
