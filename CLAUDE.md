@@ -184,7 +184,7 @@ Run sequentially after all tasks: review → context-sync → ship → learn. Th
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
-### Skill Preloading + Domain Skill + Template Naming
+### Skill Preloading
 
 Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include returned `preload_prompt` verbatim at top of spawn prompt. For task-specific domain primers, name them in the spawn prompt body: `"Relevant domain primers: <name>. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
 
@@ -252,16 +252,20 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 
 ### Journal Protocol
 
-- Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
-- After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
-- The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
-- When a tail step (context-sync, learn) is skipped, the orchestrator MUST call `log_step` with `status: "skipped"` and a `skip_reason` in the outcome. Accepted `skip_reason` values:
-  - `"fix-type build, no contract-level changes"` — fix builds that only correct existing code without changing APIs, types, or conventions.
-  - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
-  - `"session timeout"` — session ending before tail steps could run.
-  - `"no new patterns observed"` — learn step skipped because the build introduced no novel patterns worth mining.
-  - `"documentation-only diff, verify produces zero signal"` — all changed files are documentation (`.md`, `.txt`); no compiled code to verify.
-- When a WARNING verdict is resolved by the orchestrator inline (no fix agent spawned), log a synthetic step entry with `step_id: inline-fix`, `status: completed`, and the resolution details in `outcome`.
+- Before spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
+- After spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
+- `finalize_workspace` verifies the journal.
+- Skipped tail steps require `skip_reason`:
+
+| Accepted `skip_reason` | When |
+|------------------------|------|
+| `"fix-type build, no contract-level changes"` | Fix builds only correcting existing code |
+| `"markdown-only change, no context drift"` | Doc/config-only changes |
+| `"session timeout"` | Session ended before tail steps |
+| `"no new patterns observed"` | Learn step: no novel patterns |
+| `"documentation-only diff, verify produces zero signal"` | All changed files are `.md`/`.txt` |
+
+- Inline WARNING resolution (no fix agent spawned): log synthetic step `step_id: inline-fix`, `status: completed`, resolution in `outcome`.
 
 **Before skipping any step**: You MUST log the skip. Call:
 ```
