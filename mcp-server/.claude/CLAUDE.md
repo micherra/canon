@@ -33,7 +33,7 @@ src/
 ├── platform/             # Infrastructure: adapters (git, process), job manager, workers, storage
 ├── shared/               # Shared kernel: constants, parser, matcher, schema, lib/ utilities
 ├── tests/                # Cross-cutting test helpers
-└── ui/                   # Svelte frontend — MCP App (Sigma.js graph, PR review UI)
+└── ui/
     └── snippets/         # HTML/CSS component recipes for agent-composed artifacts (9 files: verdict-banner, stats-card, bar-chart-row, severity-badge, compliance-bars, file-detail-card, file-summary-card, blast-radius-rings, blast-radius-tree); file-detail-card.html is Canvas-based (bezier dependency graph, 4-metric stat bar, entity table, blast radius panel) updated 2026-05-17; blast-radius-tree.html added 2026-05-17; DESIGN-SYSTEM.md is authoritative reference
 ```
 
@@ -86,17 +86,7 @@ src/
 **`get-principles`** — loads KG computed tags and passes to `matchPrinciples`; tag matching active when KG indexed
 **`get-file-context`** — surfaces `computed_tags`, `hotspot_score`, `co_change_partners`; `shape` derived from graph metrics (see `deriveShape` in source)
 **PR Review Data** (`pr-review-data.ts`) — pure functions: `classifyFile` (bucket assignment), `generateNarrative`, `buildFileViolationMap`; `PrFileInfo.bucket` thresholds: needs-attention = violations OR high in_degree; worth-a-look = priority >= 5
-**UI** — `PrReview.svelte`: unified progressive container with prep-only mode (`has_review=false`) and review dashboard mode; `clustering.ts`: `clusterFiles` groups into <= 30-file clusters; `bridge.sendMessage` sends prompts to Claude from UI
 **Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs
-
-**Tools with MCP App UIs** (each has its own `ui://canon/*` resource):
-
-| Tool | UI Resource | Purpose |
-|------|-------------|---------|
-| `show_pr_impact` | `ui://canon/pr-review` | PR Review — change analysis (always), blast radius, hotspots, violations, subgraph (when stored review exists) |
-| `codebase_graph` | `ui://canon/codebase-graph` | Interactive dependency graph with compliance overlay |
-| `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
-| `present_review` | `ui://canon/pr-review` | Render stored Canon review as interactive HTML dashboard; open in browser; return URL immediately (fire-and-forget) |
 
 **Composite context tool:**
 

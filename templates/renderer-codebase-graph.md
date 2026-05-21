@@ -221,7 +221,7 @@ Serialize the graph data for the canvas script. The data attribute must be HTML-
 ```javascript
 // Build the canvas data object
 const canvasData = {
-  layers: layers.map(l => ({ name: l.name, color: l.color, index: l.index })),
+  layers: layers.map(l => ({ name: l.name, color: l.color, index: l.index, file_count: l.file_count })),
   nodes: nodes.map(n => ({
     id: n.id,
     layer: n.layer,
@@ -361,14 +361,14 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
   ctx.textBaseline = 'top';
   for (const layer of sortedLayers) {
     const x = layerXMap.get(layer.name) ?? 0;
-    ctx.fillStyle = layer.color || '#636a80';
+    ctx.fillStyle = layer.color || /* --text-muted */ '#636a80';
     ctx.globalAlpha = 0.7;
     ctx.fillText(layer.name.length > 14 ? layer.name.slice(0, 13) + '…' : layer.name, x, 8);
     ctx.globalAlpha = 1;
     // Column separator line (subtle)
     const layerNodes = nodesByLayer.get(layer.name) ?? [];
     if (layerNodes.length > 1) {
-      ctx.strokeStyle = layer.color || '#636a80';
+      ctx.strokeStyle = layer.color || /* --text-muted */ '#636a80';
       ctx.globalAlpha = 0.08;
       ctx.lineWidth = colWidth - 8;
       ctx.beginPath();
@@ -392,7 +392,7 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
     const cpY = (src.y + tgt.y) / 2 - Math.abs(tgt.x - src.x) * 0.15;
     ctx.moveTo(src.x, src.y);
     ctx.quadraticCurveTo(cpX, cpY, tgt.x, tgt.y);
-    ctx.strokeStyle = isCrossLayer ? '#EF9F27' : '#888780';
+    ctx.strokeStyle = isCrossLayer ? /* --warning */ '#EF9F27' : /* --border-muted */ '#888780';
     ctx.globalAlpha = isCrossLayer ? 0.3 : 0.2;
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -403,15 +403,15 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
   for (const node of nodes) {
     const pos = nodePositions.get(node.id);
     if (!pos) continue;
-    const layerColor = layers.find(l => l.name === node.layer)?.color || '#636a80';
+    const layerColor = layers.find(l => l.name === node.layer)?.color || /* --text-muted */ '#636a80';
 
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, NODE_RADIUS, 0, Math.PI * 2);
 
     if (node.changed) {
-      ctx.fillStyle = '#6c8cff';
+      ctx.fillStyle = /* --accent */ '#6c8cff';
     } else if ((node.violation_count ?? 0) > 0) {
-      ctx.fillStyle = '#ff6b6b';
+      ctx.fillStyle = /* --danger */ '#ff6b6b';
     } else {
       ctx.fillStyle = layerColor;
     }
@@ -423,7 +423,7 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
     if ((node.violation_count ?? 0) > 0) {
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, NODE_RADIUS + 2, 0, Math.PI * 2);
-      ctx.strokeStyle = '#ff6b6b';
+      ctx.strokeStyle = /* --danger */ '#ff6b6b';
       ctx.lineWidth = 1.5;
       ctx.globalAlpha = 0.7;
       ctx.stroke();

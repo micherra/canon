@@ -1,0 +1,77 @@
+# Canon principle overrides for this repository.
+#
+# This file configures the principle system for the Canon codebase itself —
+# a TypeScript MCP server that includes a Svelte-based UI layer at
+# mcp-server/src/ui/ (30 Svelte components, stores, bridges, and CSS).
+# Principles that target *.svelte, src/ui/**, *.css, and src/** patterns
+# apply to those files and are NOT disabled here.
+#
+# Only principles whose applies_to patterns genuinely match zero files
+# in this repository are disabled:
+#   - Infrastructure principles (*.tf, Dockerfile, k8s/**, etc.)
+#   - deploy-frontend-modules-independently: targets independent micro-frontend
+#     deployment pipelines (packages/**, apps/**); not applicable — this repo
+#     has a single server with an embedded UI, not independently deployed modules.
+#
+# Additionally, observable-best-effort is promoted to rule severity and scoped
+# to the MCP server source where the 131 catch-block pattern is most prevalent.
+#
+# Actions:
+#   disable         — principle never fires in this repository
+#   override-severity — change the enforcement level for this repository only
+#   narrow-scope    — restrict the principle to a subset of files
+
+overrides:
+  # --- deploy-frontend-modules-independently ---
+  # applies_to: src/**, packages/**, apps/**, **/*.config.*
+  # While src/** broadly matches, this principle governs independent CI/CD
+  # deployment of micro-frontend modules (packages/, apps/) — a topology this
+  # repo doesn't have. The single embedded UI at mcp-server/src/ui/ is shipped
+  # as part of the server, not as an independent deployable artifact.
+
+  - principle_id: deploy-frontend-modules-independently
+    action: disable
+    reason: "Micro-frontend deployment principle (packages/**, apps/**); this repository has a single embedded Svelte UI at mcp-server/src/ui/ shipped as part of the server binary — there are no independently deployed frontend modules"
+
+  # --- Infrastructure-scoped principles (5) ---
+  # All target *.tf, *.tfvars, **/terraform/**, Dockerfile, **/k8s/**, etc.
+  # This repository has no Terraform, no Kubernetes manifests, no Dockerfiles.
+
+  - principle_id: immutable-infrastructure
+    action: disable
+    reason: "Infra-scoped principle (*.tf, *.tfvars, **/terraform/**, Dockerfile, k8s/**); no infrastructure-as-code files exist in this repository"
+
+  - principle_id: least-privilege-access
+    action: disable
+    reason: "Infra-scoped principle (*.tf, *.tfvars, **/terraform/**, Dockerfile, k8s/**, helm/**); no IAM or infra config files in this repository — the rule-level security constraint is handled by secrets-never-in-code for this codebase"
+
+  - principle_id: design-for-self-healing
+    action: disable
+    reason: "Infra-scoped principle for orchestration/restart policies (*.tf, Dockerfile, k8s/**); no infrastructure definitions in this repository"
+
+  - principle_id: infrastructure-tested-like-code
+    action: disable
+    reason: "Infra-scoped principle for testing Terraform/k8s definitions (*.tf, Dockerfile, k8s/**); no infrastructure definitions exist to test in this repository"
+
+  - principle_id: architectural-fitness-functions
+    action: disable
+    reason: "Infra-scoped principle (scope.layers: [infra]); despite matching **/__tests__/** file patterns, the infra layer gate prevents it from firing on mcp-server test files — disabling to make this structural non-applicability explicit"
+
+  # --- observable-best-effort: promote to rule + narrow to MCP server ---
+  # Evidence: 131 catch blocks in mcp-server/src/; canonical transcript-capture
+  # failure story (principle fixed 3 times, never worked due to silent catches);
+  # treated as blocking-level in practice. Keeping file in strong-opinions/ and
+  # using overrides to promote severity and add explicit scope.
+
+  - principle_id: observable-best-effort
+    action: override-severity
+    severity: rule
+    reason: "131 catch blocks in mcp-server/src/ with ~20% genuinely silent; canonical silent-failure story documented in principle body (transcript-capture fixed 3 times, never worked); reviewers already treat violations as blocking — promoting to rule makes enforcement consistent with practice"
+
+  - principle_id: observable-best-effort
+    action: narrow-scope
+    applies_to:
+      layers: []
+      file_patterns:
+        - "mcp-server/src/**"
+    reason: "Scope observable-best-effort explicitly to the MCP server production code where the 131 catch-block pattern is most prevalent; the principle body's examples and rationale are all drawn from mcp-server/src/ findings"

@@ -114,6 +114,63 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 
 This project uses Canon for engineering principles. Before writing or modifying code, load relevant principles via the `get_principles` MCP tool. Principles are in `.canon/principles/`. Severity levels: `rule` is non-negotiable, `strong-opinion` requires justification to skip, `convention` is noted but doesn't block.
 
+## Principle Overrides
+
+Projects can tune Canon's principle set without editing principle files. Overrides are declared in `.canon/principle-overrides.yaml` and applied at load time, after project-local principles are merged with built-in ones.
+
+### File location
+
+`.canon/principle-overrides.yaml`
+
+### Override actions
+
+| Action | Effect |
+|--------|--------|
+| `disable` | Removes the principle entirely from loading — it will not appear in `get_principles` results or reviewer checks |
+| `override-severity` | Changes the enforcement level to `rule`, `strong-opinion`, or `convention` |
+| `narrow-scope` | Replaces the principle's scope with the specified layers and file patterns (replace semantics — original `scope.layers`, `scope.file_patterns`, and `scope.tags` are all dropped) |
+
+`disable` and `override-severity` require a non-empty `reason` field for auditability. Entries missing `reason` (or with an empty string) are silently dropped — the principle is left unchanged. `narrow-scope` validates the `applies_to` structure but does not currently enforce `reason`; including one is recommended for auditability.
+
+### YAML format
+
+```yaml
+overrides:
+  # Remove a principle that doesn't apply to this project
+  - principle_id: thin-handlers
+    action: disable
+    reason: This project uses a single-file handler pattern; the principle is inapplicable.
+
+  # Relax a strong-opinion to a convention
+  - principle_id: errors-are-values
+    action: override-severity
+    severity: convention
+    reason: Legacy codebase uses throw-based error handling; migration is deferred.
+
+  # Narrow a broad principle to specific layers and file patterns
+  - principle_id: information-hiding
+    action: narrow-scope
+    applies_to:
+      layers: [domain, data]
+      file_patterns: ["src/services/**", "src/repositories/**"]
+    reason: Principle is critical in the domain layer but overly restrictive in infra glue code.
+```
+
+### Validation behavior
+
+- **Missing file**: If `.canon/principle-overrides.yaml` does not exist, no overrides are applied. This is the default state.
+- **Invalid entries**: Entries that fail validation (unknown `principle_id`, missing `reason`, malformed `applies_to`, invalid `severity` value) are silently dropped. The rest of the file is still applied.
+- **Malformed YAML**: If the file cannot be parsed, no overrides are applied (fail-closed). Principles load as if the file were absent.
+- **Unknown action**: An entry with an unrecognized `action` value passes the principle through unchanged.
+
+### Principle layering order
+
+1. Project-local principles (`.canon/principles/`) load and take precedence over built-ins on ID conflict.
+2. Built-in principles (`${CLAUDE_PLUGIN_ROOT}/principles/`) fill in any IDs not defined locally.
+3. The merged set is passed through `applyOverrides` — overrides modify or remove principles from the merged set.
+
+Project-local principles and overrides are two independent mechanisms: a project-local principle replaces the built-in definition by ID; an override mutates or removes any principle (local or built-in) after the merge.
+
 ## Hooks
 
 Hooks are pre/post tool-use interceptor scripts in `hooks/`. Key hooks: `destructive-guard.sh` (blocks dangerous git ops), `workspace-lock-guard.sh` (prevents concurrent builds), `pre-commit-check.sh` (secrets + compliance), `principle-inject.sh` (injects principle summaries into prompts).
