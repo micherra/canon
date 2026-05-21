@@ -310,14 +310,16 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 
 ### Renderer Spawn Protocol
 
-Spawn `Agent()` (generic, not named) with `model: "haiku"`. Read the appropriate template from `templates/renderer-*.md`, fill `## Variables`, pass `## Prompt` section as spawn prompt. Renderer writes to `${WORKSPACE}/artifacts/` and does NOT modify the worktree.
+Spawn `Agent()` (generic, not named). Use `model: "haiku"` for design templates; use `model: "sonnet"` for review, codebase-graph, and file-context templates (these require MCP tool calls and complex composition). Read the appropriate template from `templates/renderer-*.md`, fill `## Variables`, pass `## Prompt` section as spawn prompt. Renderer writes to `${WORKSPACE}/artifacts/` and does NOT modify the worktree.
 
 | Checkpoint | Template | Output | Required variables |
 |------------|----------|--------|--------------------|
 | Design | `renderer-design.md` | `design.html` | `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}`, `${PRD_PATH}`, `${RUNBOOK_PATH}` |
 | Review | `renderer-review.md` | `review.html` | `${WORKSPACE}`, `${SLUG}` |
+| Codebase graph | `renderer-codebase-graph.md` | `codebase-graph.html` | `${WORKSPACE}`, `${SLUG}`, `${DIFF_BASE}`, `${SOURCE_DIRS}` |
+| File context | `renderer-file-context.md` | `file-context.html` | `${WORKSPACE}`, `${SLUG}`, `${FILE_PATH}` |
 
-MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_pr_impact` + `get_context`.
+MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_pr_impact` + `get_context`; `renderer-codebase-graph.md` — `codebase_graph`; `renderer-file-context.md` — `get_file_context`.
 
 ### Post-Review Tester Enrichment
 

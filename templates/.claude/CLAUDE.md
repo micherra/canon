@@ -31,6 +31,8 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `prd.md` | orchestrator | Structured PRD template the PM fills before spawning the architect; read by architect and renderer |
 | `renderer-design.md` | orchestrator | Renderer spawn prompt — converts PRD + design document + task DAG YAML + runbook to unified `design.html`; pure markdown, no MCP calls |
 | `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_file_context`) |
+| `renderer-codebase-graph.md` | orchestrator | Renderer spawn prompt — converts `codebase_graph` MCP data into standalone `codebase-graph.html`; requires MCP call (`codebase_graph`) |
+| `renderer-file-context.md` | orchestrator | Renderer spawn prompt — converts `get_file_context` MCP data into standalone `file-context.html`; requires MCP call (`get_file_context`) |
 | `sharpened-request.md` | pm-orchestrator | PM-to-architect hand-off artifact with Problem, Direction, Scope Boundaries, Acceptance Criteria, and Not Doing sections |
 
 ## Spawn-Prompt Templates
