@@ -410,7 +410,7 @@ patterns from Section G of DESIGN-SYSTEM.md exactly:
 - **ALL files** use a click-to-expand `<details>` pattern:
   - High-impact files: `<details open id="file-card-{encodedId}">` (starts expanded)
   - Standard files: `<details id="file-card-{encodedId}">` (starts collapsed)
-  - Where `encodedId` = file path with all non-alphanumeric chars replaced by `-`
+  - Where `encodedId` = collision-safe encoding of file path: replace each non-alphanumeric character `c` with `-` + `c.charCodeAt(0)` + `-` (e.g. `/` → `-47-`, `.` → `-46-`, `-` → `-45-`); alphanumeric chars pass through unchanged. This encoding is injective — different paths always produce different IDs.
   - The `<summary>` for both types shows a compact header row:
 
     ```html
@@ -433,7 +433,7 @@ patterns from Section G of DESIGN-SYSTEM.md exactly:
     - `{{IMPACT_SCORE}}`, `{{IMPACT_RANK}}` — string/number, no escaping
     - `{{VIOLATION_COUNT}}` — numeric; `{{VIOLATION_BADGE_CLASS}}` = "clean" | "danger"; `{{VIOLATION_BADGE_TEXT}}` = "no violations" | "N violations"
     - `{{BLAST_RADIUS_SEVERITY}}` — severity string, no escaping; `{{BLAST_RADIUS_TOTAL}}` — numeric
-    - `{{CARD_ID}}` — derived from file path (replace non-alphanumeric chars with `-`), no escaping
+    - `{{CARD_ID}}` — collision-safe encoding of file path: replace each non-alphanumeric char `c` with `-` + `c.charCodeAt(0)` + `-` (e.g. `/` → `-47-`, `.` → `-46-`, `-` → `-45-`); alphanumeric chars pass through unchanged; no HTML escaping
     - `{{GRAPH_DATA_JSON}}` — JSON-stringified GraphData object, then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`)
     - `{{ENTITIES_HTML}}` — pre-rendered `<tr>` rows (see G.4 for format, limit 15 rows)
     - `{{BLAST_RADIUS_DEPTH1_HTML}}` — pre-rendered depth-chip spans (see G.4 for format, limit 8 chips)
@@ -693,7 +693,7 @@ Include before `</body>` (in this order):
     var my = (evt.clientY - rect.top) * (H / rect.height);
     var hit = getNodeAt(mx, my);
     if (!hit) return;
-    var encodedId = hit.id.replace(/[^a-zA-Z0-9]/g, '-');
+    var encodedId = hit.id.replace(/[^a-zA-Z0-9]/g, function(c) { return '-' + c.charCodeAt(0) + '-'; });
     var cardEl = document.getElementById('file-card-' + encodedId);
     if (cardEl) {
       cardEl.open = true;

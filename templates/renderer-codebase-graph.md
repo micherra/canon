@@ -379,15 +379,16 @@ rendering with a force-directed layout plus click-to-inspect side panel:
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
 
   // Canvas dimensions (CSS pixels)
-  const W = canvas.parentElement.clientWidth || 900;
+  const dpr = window.devicePixelRatio || 1;
+  let W = canvas.parentElement.clientWidth || 900;
   const H = canvas.getBoundingClientRect().height || 600;
-  canvas.width = W * window.devicePixelRatio;
-  canvas.height = H * window.devicePixelRatio;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
   canvas.style.width = W + 'px';
   canvas.style.height = H + 'px';
 
   const ctx = canvas.getContext('2d');
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.scale(dpr, dpr);
 
   // ── Force simulation constants ──────────────────────────────────
   const K_REPEL = 5000;
@@ -658,11 +659,15 @@ rendering with a force-directed layout plus click-to-inspect side panel:
     // Show panel
     panel.style.display = 'flex';
 
-    // Resize canvas to account for panel
+    // Resize canvas to account for panel — update both CSS width and backing
+    // buffer so hit-testing coordinates stay aligned with visual positions.
     const container = document.getElementById('graph-container');
     const panelWidth = panel.offsetWidth;
     const newW = (container.clientWidth - panelWidth) || W;
+    W = newW;
+    canvas.width = newW * dpr;
     canvas.style.width = newW + 'px';
+    ctx.scale(dpr, dpr);
 
     // Redraw with highlight
     drawGraph(node.id);
@@ -671,8 +676,13 @@ rendering with a force-directed layout plus click-to-inspect side panel:
   function hidePanel() {
     selectedNodeId = null;
     panel.style.display = 'none';
-    // Restore canvas width
-    canvas.style.width = '';
+    // Restore canvas to full container width
+    const container = document.getElementById('graph-container');
+    const fullW = container.clientWidth || W;
+    W = fullW;
+    canvas.width = fullW * dpr;
+    canvas.style.width = fullW + 'px';
+    ctx.scale(dpr, dpr);
     drawGraph(null);
   }
 
