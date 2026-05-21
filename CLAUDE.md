@@ -184,7 +184,7 @@ Run sequentially after all tasks: review → context-sync → ship → learn. Th
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
-### Skill Preloading + Domain Skill + Template Naming
+### Skill Preloading
 
 Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include returned `preload_prompt` verbatim at top of spawn prompt. For task-specific domain primers, name them in the spawn prompt body: `"Relevant domain primers: <name>. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
 
@@ -252,22 +252,26 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 
 ### Journal Protocol
 
-- Before each spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
-- After each spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
-- The journal is your checklist. The completion hook (`finalize_workspace`) verifies it.
-- When a tail step (context-sync, learn) is skipped, the orchestrator MUST call `log_step` with `status: "skipped"` and a `skip_reason` in the outcome. Accepted `skip_reason` values:
-  - `"fix-type build, no contract-level changes"` — fix builds that only correct existing code without changing APIs, types, or conventions.
-  - `"markdown-only change, no context drift"` — changes limited to documentation or configuration files.
-  - `"session timeout"` — session ending before tail steps could run.
-  - `"no new patterns observed"` — learn step skipped because the build introduced no novel patterns worth mining.
-  - `"documentation-only diff, verify produces zero signal"` — all changed files are documentation (`.md`, `.txt`); no compiled code to verify.
-- When a WARNING verdict is resolved by the orchestrator inline (no fix agent spawned), log a synthetic step entry with `step_id: inline-fix`, `status: completed`, and the resolution details in `outcome`.
+- Before spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
+- After spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
+- `finalize_workspace` verifies the journal.
+- Skipped tail steps require `skip_reason`:
+
+| Accepted `skip_reason` | When |
+|------------------------|------|
+| `"fix-type build, no contract-level changes"` | Fix builds only correcting existing code |
+| `"markdown-only change, no context drift"` | Doc/config-only changes |
+| `"session timeout"` | Session ended before tail steps |
+| `"no new patterns observed"` | Learn step: no novel patterns |
+| `"documentation-only diff, verify produces zero signal"` | All changed files are `.md`/`.txt` |
+
+- Inline WARNING resolution (no fix agent spawned): log synthetic step `step_id: inline-fix`, `status: completed`, resolution in `outcome`.
 
 **Before skipping any step**: You MUST log the skip. Call:
 ```
 log_step({ workspace, step_id, status: "skipped", outcome: { skip_reason: "<value>" } })
 ```
-Accepted values: `"fix-type build, no contract-level changes"` | `"markdown-only change, no context drift"` | `"session timeout"` | `"no new patterns observed"` | `"documentation-only diff, verify produces zero signal"`
+Accepted values: `"fix-type build, no contract-level changes"` | `"markdown-only change, no context drift"` | `"session timeout"` | `"no new patterns observed"` | `"documentation-only diff, verify produces zero signal"` | `"context-sync targets are build artifacts"`
 
 ### Post-Subagent Artifact Check
 
@@ -306,14 +310,16 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 
 ### Renderer Spawn Protocol
 
-Spawn `Agent()` (generic, not named) with `model: "haiku"`. Read the appropriate template from `templates/renderer-*.md`, fill `## Variables`, pass `## Prompt` section as spawn prompt. Renderer writes to `${WORKSPACE}/artifacts/` and does NOT modify the worktree.
+Spawn `Agent()` (generic, not named). Use `model: "haiku"` for design templates; use `model: "sonnet"` for review, codebase-graph, and file-context templates (these require MCP tool calls and complex composition). Read the appropriate template from `templates/renderer-*.md`, fill `## Variables`, pass `## Prompt` section as spawn prompt. Renderer writes to `${WORKSPACE}/artifacts/` and does NOT modify the worktree.
 
 | Checkpoint | Template | Output | Required variables |
 |------------|----------|--------|--------------------|
 | Design | `renderer-design.md` | `design.html` | `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}`, `${PRD_PATH}`, `${RUNBOOK_PATH}` |
 | Review | `renderer-review.md` | `review.html` | `${WORKSPACE}`, `${SLUG}` |
+| Codebase graph | `renderer-codebase-graph.md` | `codebase-graph.html` | `${WORKSPACE}`, `${SLUG}`, `${DIFF_BASE}`, `${SOURCE_DIRS}` |
+| File context | `renderer-file-context.md` | `file-context.html` | `${WORKSPACE}`, `${SLUG}`, `${FILE_PATH}` |
 
-MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_pr_impact` + `get_context`.
+MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_pr_impact` + `get_context`; `renderer-codebase-graph.md` — `codebase_graph`; `renderer-file-context.md` — `get_file_context`.
 
 ### Post-Review Tester Enrichment
 
@@ -323,7 +329,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 **Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test`. All three must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL.
 
-**Verify skip**: If `git diff {base_commit} --name-only` contains only `.md`/`.txt` files, skip with `skip_reason: "documentation-only diff, verify produces zero signal"`.
+**Verify skip**: If `git diff {base_commit}..HEAD --name-only` contains only `.md`/`.txt` files, skip with `skip_reason: "documentation-only diff, verify produces zero signal"`.
 
 **In-wave baseline**: After sequential wave execution, use `base_commit` (not `main`) as violation baseline. Only violations absent at `base_commit` are regressions. Pre-existing violations remain pre-existing even if the file was touched.
 
@@ -408,9 +414,10 @@ When re-spawning an agent after a failure, fix-after-review cycle, or reviewer r
 
 **What to include in every re-spawn prompt:**
 
-1. **Files already completed**: Derive from `git diff --name-only {base_commit}..HEAD` in the worktree, or from the prior agent's implementation summary. Include as an explicit list: "The following files were already successfully modified by a prior attempt and do NOT need re-implementation: [list]. Focus only on the remaining work."
-2. **Step ID and artifacts already produced**: Read from journal state (`journal.json`) — include the `step_id` and all `artifacts_actual` entries from the prior attempt.
-3. **Explicit no-duplicate instruction**: "Do not re-implement files that were already completed. Pick up from where the prior attempt left off."
+1. **Uncommitted work recovery**: Before re-spawning, run `git diff --name-only` in the worktree. If modified files exist (edits done but no commit), instruct the re-spawned agent: "The following files have uncommitted changes from the prior attempt: [list]. Commit them first with `wip(recovery): save prior agent work` before proceeding."
+2. **Files already completed**: Derive from `git diff --name-only {base_commit}..HEAD` in the worktree, or from the prior agent's implementation summary. Include as an explicit list: "The following files were already successfully modified by a prior attempt and do NOT need re-implementation: [list]. Focus only on the remaining work."
+3. **Step ID and artifacts already produced**: Read from journal state (`journal.json`) — include the `step_id` and all `artifacts_actual` entries from the prior attempt.
+4. **Explicit no-duplicate instruction**: "Do not re-implement files that were already completed. Pick up from where the prior attempt left off."
 
 **Applies to all re-spawn scenarios:**
 

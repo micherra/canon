@@ -160,6 +160,17 @@ Remove specific lines or sections — do not restructure. If all derivable conte
 
 **Target**: Under 35,000 characters after compression. If not achievable without losing semantics, get as close as possible and note the floor in CONTEXT-SYNC.md.
 
+#### Step 4b: Semantic compression pre-commit checklist
+
+Before committing compression edits to any CLAUDE.md, run these 4 grep checks against the original (pre-compression) content to verify no semantics were dropped:
+
+1. **Alternative tool calls**: grep for `or` patterns near tool/command names (e.g., "`X` or `Y`"). If the original had alternatives and the compressed version kept only one, restore the dropped alternative.
+2. **External filename references**: grep for backtick-quoted filenames (e.g., `` `settings.json` ``, `` `config.yaml` ``). Every filename reference in the original must appear in the compressed version.
+3. **Fallback rules**: grep for "if absent", "if it does not exist", "fall back", "fallback", "legacy". Fallback behavior is load-bearing for agents encountering missing files — never compress it away.
+4. **Scope exclusion clauses**: grep for "does not apply", "exempt", "excluded", "not subject to". Exclusion clauses define the negative boundary of a rule — dropping them changes the rule's meaning.
+
+If any check reveals dropped semantics, restore them before committing. Report restored items in CONTEXT-SYNC.md.
+
 ### Step 5: Update README.md (structure changes only)
 
 If any change was classified as `structure` in Step 3:

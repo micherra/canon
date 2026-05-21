@@ -152,7 +152,7 @@ When you touch `src/routes/orders.ts`, Canon loads principles scoped to the `api
 
 Canon includes interactive dashboards for codebase exploration, served via the MCP App protocol.
 
-**Codebase Graph** — Interactive dependency graph of your source files. Nodes colored by architectural layer. Filter by layer, violations, or changed files.
+**Codebase Graph** — Force-directed dependency graph of your source files. Nodes are colored by architectural layer and positioned by the physics simulation so clusters emerge naturally. Click any node to open a side panel showing the file's layer, imports, and importers. Hover for a tooltip with file path and metrics. Filter by layer, violations, or changed files (via the DIFF_BASE toggle to focus on what this build touched).
 
 ![Codebase Graph](./docs/images/codebase_graph.png)
 

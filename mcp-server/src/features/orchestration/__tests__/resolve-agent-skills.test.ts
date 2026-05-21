@@ -31,11 +31,12 @@ function writeSkill(
   writeFileSync(join(pluginDir, kind, `${id}.md`), body);
 }
 
-function ok(
+async function ok(
   result: ReturnType<typeof resolveAgentSkills>,
-): { ok: true } & ResolveAgentSkillsResult {
-  assertOk<ResolveAgentSkillsResult>(result);
-  return result;
+): Promise<{ ok: true } & ResolveAgentSkillsResult> {
+  const resolved = await result;
+  assertOk<ResolveAgentSkillsResult>(resolved);
+  return resolved;
 }
 
 describe("resolveAgentSkills", () => {
@@ -49,14 +50,14 @@ describe("resolveAgentSkills", () => {
     rmSync(pluginDir, { force: true, recursive: true });
   });
 
-  it("loads rules: entries from rules/<name>.md", () => {
+  it("loads rules: entries from rules/<name>.md", async () => {
     writeSkill(pluginDir, "rules", "agent-tdd-required", "TDD rule body\n");
     writeAgent(
       pluginDir,
       "engineer",
       ["name: engineer", "rules:", "  - agent-tdd-required"].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills).toHaveLength(1);
     expect(out.skills[0].kind).toBe("rule");
     expect(out.skills[0].id).toBe("agent-tdd-required");
@@ -64,39 +65,39 @@ describe("resolveAgentSkills", () => {
     expect(out.unresolved).toHaveLength(0);
   });
 
-  it("loads references: entries from references/<name>.md", () => {
+  it("loads references: entries from references/<name>.md", async () => {
     writeSkill(pluginDir, "references", "status-protocol", "Status protocol ref body\n");
     writeAgent(
       pluginDir,
       "engineer",
       ["name: engineer", "references:", "  - status-protocol"].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills[0].kind).toBe("ref");
     expect(out.skills[0].content).toContain("Status protocol ref body");
   });
 
-  it("loads primers: entries from primers/<name>.md", () => {
+  it("loads primers: entries from primers/<name>.md", async () => {
     writeSkill(pluginDir, "primers", "backend-api", "API primer body\n");
     writeAgent(pluginDir, "engineer", ["name: engineer", "primers:", "  - backend-api"].join("\n"));
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills[0].kind).toBe("primer");
     expect(out.skills[0].content).toContain("API primer body");
   });
 
-  it("loads templates: entries from templates/<name>.md", () => {
+  it("loads templates: entries from templates/<name>.md", async () => {
     writeSkill(pluginDir, "templates", "planning-brief", "Planning brief template body\n");
     writeAgent(
       pluginDir,
       "planner",
       ["name: planner", "templates:", "  - planning-brief"].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "planner" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "planner" }, pluginDir));
     expect(out.skills[0].kind).toBe("template");
     expect(out.skills[0].content).toContain("Planning brief template body");
   });
 
-  it("combines all four fields in rule → ref → primer → template order", () => {
+  it("combines all four fields in rule → ref → primer → template order", async () => {
     writeSkill(pluginDir, "rules", "r1", "rule body");
     writeSkill(pluginDir, "references", "p1", "ref body");
     writeSkill(pluginDir, "primers", "d1", "primer body");
@@ -116,12 +117,12 @@ describe("resolveAgentSkills", () => {
         "  - p1",
       ].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills.map((s) => s.kind)).toEqual(["rule", "ref", "primer", "template"]);
     expect(out.skills.map((s) => s.id)).toEqual(["r1", "p1", "d1", "t1"]);
   });
 
-  it("preserves in-field order", () => {
+  it("preserves in-field order", async () => {
     writeSkill(pluginDir, "rules", "first", "first");
     writeSkill(pluginDir, "rules", "second", "second");
     writeSkill(pluginDir, "rules", "third", "third");
@@ -130,38 +131,38 @@ describe("resolveAgentSkills", () => {
       "engineer",
       ["name: engineer", "rules:", "  - second", "  - third", "  - first"].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills.map((s) => s.id)).toEqual(["second", "third", "first"]);
   });
 
-  it("records missing files in unresolved with kind:id format", () => {
+  it("records missing files in unresolved with kind:id format", async () => {
     writeAgent(
       pluginDir,
       "engineer",
       ["name: engineer", "rules:", "  - does-not-exist"].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills).toHaveLength(0);
     expect(out.unresolved).toEqual(["rule:does-not-exist"]);
   });
 
-  it("ignores a rules: entry that only exists in references/", () => {
+  it("ignores a rules: entry that only exists in references/", async () => {
     writeSkill(pluginDir, "references", "misfiled", "lives in references\n");
     writeAgent(pluginDir, "engineer", ["name: engineer", "rules:", "  - misfiled"].join("\n"));
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills).toHaveLength(0);
     expect(out.unresolved).toEqual(["rule:misfiled"]);
   });
 
-  it("handles agents with no rules/references/primers/templates fields", () => {
+  it("handles agents with no rules/references/primers/templates fields", async () => {
     writeAgent(pluginDir, "engineer", "name: engineer");
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills).toHaveLength(0);
     expect(out.unresolved).toHaveLength(0);
     expect(out.preload_prompt).toBe("");
   });
 
-  it("ignores an unrelated skills: field used for native Claude Code skills", () => {
+  it("ignores an unrelated skills: field used for native Claude Code skills", async () => {
     writeSkill(pluginDir, "rules", "agent-tdd-required", "canon rule\n");
     writeAgent(
       pluginDir,
@@ -174,24 +175,24 @@ describe("resolveAgentSkills", () => {
         "  - agent-tdd-required",
       ].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills.map((s) => s.id)).toEqual(["agent-tdd-required"]);
     expect(out.unresolved).toHaveLength(0);
   });
 
-  it("strips a canon: prefix from agent_name", () => {
+  it("strips a canon: prefix from agent_name", async () => {
     writeSkill(pluginDir, "rules", "agent-tdd-required", "body\n");
     writeAgent(
       pluginDir,
       "engineer",
       ["name: engineer", "rules:", "  - agent-tdd-required"].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "canon:engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "canon:engineer" }, pluginDir));
     expect(out.agent_name).toBe("engineer");
     expect(out.skills).toHaveLength(1);
   });
 
-  it("produces a preload_prompt with section headers and separators for all kinds", () => {
+  it("produces a preload_prompt with section headers and separators for all kinds", async () => {
     writeSkill(pluginDir, "rules", "agent-tdd-required", "TDD rule body");
     writeSkill(pluginDir, "references", "status-protocol", "Status protocol ref body");
     writeSkill(pluginDir, "templates", "implementation-log", "Implementation log template");
@@ -208,7 +209,7 @@ describe("resolveAgentSkills", () => {
         "  - implementation-log",
       ].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.preload_prompt).toContain("## Preloaded Skills");
     expect(out.preload_prompt).toContain("### Rule: agent-tdd-required");
     expect(out.preload_prompt).toContain("### Reference: status-protocol");
@@ -219,8 +220,8 @@ describe("resolveAgentSkills", () => {
     expect(out.preload_prompt).toContain("---");
   });
 
-  it("returns INVALID_INPUT when agent file is missing", () => {
-    const result = resolveAgentSkills({ agent_name: "nonexistent" }, pluginDir);
+  it("returns INVALID_INPUT when agent file is missing", async () => {
+    const result = await resolveAgentSkills({ agent_name: "nonexistent" }, pluginDir);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error_code).toBe("INVALID_INPUT");
@@ -228,22 +229,22 @@ describe("resolveAgentSkills", () => {
     }
   });
 
-  it("returns INVALID_INPUT for agent_name with invalid characters", () => {
-    const result = resolveAgentSkills({ agent_name: "../etc/passwd" }, pluginDir);
+  it("returns INVALID_INPUT for agent_name with invalid characters", async () => {
+    const result = await resolveAgentSkills({ agent_name: "../etc/passwd" }, pluginDir);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error_code).toBe("INVALID_INPUT");
     }
   });
 
-  it("skips non-string entries in rules / references / primers lists", () => {
+  it("skips non-string entries in rules / references / primers lists", async () => {
     writeSkill(pluginDir, "rules", "valid-rule", "valid body");
     writeAgent(
       pluginDir,
       "engineer",
       ["name: engineer", "rules:", "  - valid-rule", "  - 42", "  - {nested: object}"].join("\n"),
     );
-    const out = ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
+    const out = await ok(resolveAgentSkills({ agent_name: "engineer" }, pluginDir));
     expect(out.skills).toHaveLength(1);
     expect(out.skills[0].id).toBe("valid-rule");
   });
