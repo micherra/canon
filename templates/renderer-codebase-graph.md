@@ -1,6 +1,6 @@
 ---
 template: renderer-codebase-graph
-description: Renderer spawn prompt for converting codebase_graph MCP data into a standalone codebase-graph.html
+description: Renderer spawn prompt for converting codebase_graph MCP data into a standalone codebase-graph.html with force-directed layout, click-to-inspect panel, and DIFF_BASE filtering
 used-by: [orchestrator]
 read-by: [renderer-agent]
 output-path: ${WORKSPACE}/artifacts/codebase-graph.html
@@ -30,13 +30,15 @@ Do NOT modify the worktree.
 
 ## Step 1 — Read source files
 
-Read this file:
+Read these files:
 1. `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` — the design system reference
+2. `mcp-server/src/ui/snippets/node-detail-panel.html` — the click-to-inspect panel snippet
 
 You will use:
-- Section A (CSS tokens) — copy verbatim into your `<style>` tag
-- Section B (page boilerplate) — use the `.container` wrapper (max-width: 960px)
-- Section C (component patterns) — section-card, collapsible-section, stats-row, stat-card
+- DESIGN-SYSTEM.md Section A (CSS tokens) — copy verbatim into your `<style>` tag
+- DESIGN-SYSTEM.md Section B (page boilerplate) — base HTML shell
+- DESIGN-SYSTEM.md Section C (component patterns) — section-card, collapsible-section
+- node-detail-panel.html — embed the HTML and `<style>` block inline in the graph container
 
 ## Step 2 — Call the codebase_graph MCP tool
 
@@ -110,30 +112,72 @@ for (const edge of normalizedEdges) {
   degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
 }
 
-// Group nodes by layer, sorted by degree descending within each group
-const nodesByLayer = new Map();
-for (const layer of layers) nodesByLayer.set(layer.name, []);
-for (const node of nodes) {
-  if (!nodesByLayer.has(node.layer)) nodesByLayer.set(node.layer, []);
-  nodesByLayer.get(node.layer).push(node);
-}
-for (const [, layerNodes] of nodesByLayer) {
-  layerNodes.sort((a, b) => (degreeMap.get(b.id) ?? 0) - (degreeMap.get(a.id) ?? 0));
-}
-
-// Max nodes in any layer (for canvas height)
-let maxNodesInAnyLayer = 0;
-for (const [, layerNodes] of nodesByLayer) {
-  if (layerNodes.length > maxNodesInAnyLayer) maxNodesInAnyLayer = layerNodes.length;
-}
-
 // Layer chart: sorted by file_count descending
 const sortedLayers = [...layers].sort((a, b) => b.file_count - a.file_count);
 const maxLayerFileCount = Math.max(...sortedLayers.map(l => l.file_count), 1);
 
-// Layer color map for the canvas script
+// Layer color map
 const layerColorMap = {};
 for (const layer of layers) layerColorMap[layer.name] = layer.color;
+
+// Adjacency maps for the detail panel (derived from edge list)
+const adjIn = new Map();  // nodeId -> [sourceIds that import this node]
+const adjOut = new Map(); // nodeId -> [targetIds this node imports]
+for (const edge of normalizedEdges) {
+  if (!adjOut.has(edge.source)) adjOut.set(edge.source, []);
+  adjOut.get(edge.source).push(edge.target);
+  if (!adjIn.has(edge.target)) adjIn.set(edge.target, []);
+  adjIn.get(edge.target).push(edge.source);
+}
+
+// DIFF_BASE filtering
+let displayNodes = nodes;
+let displayEdges = normalizedEdges;
+let filterActive = false;
+let neighborCount = 0;
+
+if ("${DIFF_BASE}" !== "" && changedNodeCount > 0) {
+  const changedIds = new Set(nodes.filter(n => n.changed).map(n => n.id));
+  const neighborIds = new Set();
+  for (const edge of normalizedEdges) {
+    if (changedIds.has(edge.source)) neighborIds.add(edge.target);
+    if (changedIds.has(edge.target)) neighborIds.add(edge.source);
+  }
+  // Remove changed files from neighbors set (they're already in changedIds)
+  for (const id of changedIds) neighborIds.delete(id);
+  const visibleIds = new Set([...changedIds, ...neighborIds]);
+  displayNodes = nodes.filter(n => visibleIds.has(n.id));
+  displayEdges = normalizedEdges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
+  filterActive = true;
+  neighborCount = neighborIds.size;
+}
+
+// Canvas data: include kind field for detail panel
+const canvasData = {
+  layers: layers.map(l => ({ name: l.name, color: l.color, index: l.index, file_count: l.file_count })),
+  nodes: displayNodes.map(n => ({
+    id: n.id,
+    layer: n.layer,
+    violation_count: n.violation_count ?? 0,
+    changed: n.changed ?? false,
+    kind: n.kind ?? ""
+  })),
+  edges: displayEdges.map(e => ({ source: e.source, target: e.target, type: e.type })),
+  // Adjacency for detail panel: build from displayEdges
+  adjIn: Object.fromEntries(
+    displayNodes.map(n => [n.id, (adjIn.get(n.id) ?? []).filter(id => displayNodes.some(dn => dn.id === id))])
+  ),
+  adjOut: Object.fromEntries(
+    displayNodes.map(n => [n.id, (adjOut.get(n.id) ?? []).filter(id => displayNodes.some(dn => dn.id === id))])
+  )
+};
+// Serialize: JSON.stringify, then escape & and " for use in data-* attribute
+const canvasDataJson = JSON.stringify(canvasData)
+  .replace(/&/g, "&amp;")
+  .replace(/"/g, "&quot;");
+
+// Canvas height: clamp between 500 and 800
+const canvasHeight = Math.max(500, Math.min(800, 650));
 
 // Insights data
 const mostConnected = (insights.most_connected ?? []).slice(0, 10);
@@ -149,60 +193,106 @@ const generatedDate = new Date(generatedAt).toLocaleString();
 ## Step 4 — Compose the HTML
 
 Use the Section B page boilerplate from DESIGN-SYSTEM.md. Title: `Codebase Graph — ${SLUG}`.
-Use the `.container` wrapper (max-width: 960px). Assemble the page in this exact order:
+The graph section goes FULL-WIDTH (no `.container` wrapper around the canvas/panel).
+Keep `.container` for the header, stats bar, layer chart, insights, and violations panels.
+
+Assemble the page in this exact order:
 
 ### 4.1 Header panel
 
-A `.section-card` with:
+A `.section-card` with `.container` wrapper:
 - Title: `Codebase Graph` (use `.section-title`)
 - Slug badge: monospace font, `var(--text-muted)` color, `var(--bg-surface)` background with border
 - Generated timestamp: small muted text
 
 ```html
-<div class="section-card" style="margin-bottom: 16px;">
-  <div class="section-card-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-    <h2 class="section-title" style="font-size: 18px;">Codebase Graph</h2>
-    <div style="display: flex; align-items: center; gap: 8px;">
-      <span style="font-size: 11px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
-      <span style="font-size: 11px; color: var(--text-muted);">{generatedDate}</span>
-    </div>
-  </div>
-</div>
-```
-
-### 4.2 Stats row
-
-4 `.stat-card` elements in a `.stats-row`:
-1. **Nodes** — value: `{nodeCount}`
-2. **Edges** — value: `{edgeCount}`
-3. **Layers** — value: `{layerCount}`
-4. **Files with violations** — value: `{violationNodeCount}`, class `.stat-value--danger` if > 0
-
-If `${DIFF_BASE}` is non-empty, add a 5th stat card: **Changed files** — value: `{changedNodeCount}`.
-
-### 4.3 Layer distribution panel
-
-A `.section-card` with title "Layers". Use a horizontal bar chart:
-
-```html
-<div class="section-card" style="margin-bottom: 16px;">
-  <div class="section-card-header"><h2 class="section-title">Layers</h2></div>
-  <div class="section-card-body">
-    <div class="chart-rows">
-      <!-- One row per layer, sorted by file_count descending -->
-      <div class="chart-row">
-        <span class="layer-name">{escapeHtml(layer.name)}</span>
-        <div class="bar-track">
-          <div class="bar-fill" style="width: {Math.round(layer.file_count / maxLayerFileCount * 100)}%; background: {layer.color}; opacity: 0.85;"></div>
-        </div>
-        <span class="file-count">{layer.file_count}</span>
+<div class="container">
+  <div class="section-card" style="margin-bottom: 16px;">
+    <div class="section-card-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+      <h2 class="section-title" style="font-size: 18px;">Codebase Graph</h2>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 11px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
+        <span style="font-size: 11px; color: var(--text-muted);">{generatedDate}</span>
       </div>
     </div>
   </div>
 </div>
 ```
 
-Add this CSS for the chart:
+### 4.2 Stats bar
+
+Render an inline text stats bar with dot separators (matching the old Svelte app pattern).
+Use `.container` wrapper. Render the filter-indicator span only when `filterActive` is true.
+
+```html
+<div class="container">
+  <div class="stats-bar">
+    <span class="stats-bar-val">{nodeCount} nodes</span>
+    <span class="stats-bar-sep">&middot;</span>
+    <span class="stats-bar-val">{edgeCount} edges</span>
+    <span class="stats-bar-sep">&middot;</span>
+    <span class="stats-bar-val">{layerCount} layers</span>
+    <span class="stats-bar-sep">&middot;</span>
+    <span class="stats-bar-val stats-bar-danger">{violationNodeCount} with violations</span>
+    <span class="stats-bar-sep">&middot;</span>
+    <span class="stats-bar-val stats-bar-accent">{changedNodeCount} changed</span>
+    <!-- Only when filterActive: -->
+    <span class="stats-bar-filter">Showing {displayNodes.length} files ({changedNodeCount} changed + {neighborCount} neighbors) of {nodeCount} total</span>
+  </div>
+</div>
+```
+
+CSS for the stats bar (add to `<style>` block):
+```css
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.stats-bar-sep { opacity: 0.4; }
+.stats-bar-danger { color: var(--danger); }
+.stats-bar-accent { color: var(--accent); }
+.stats-bar-filter {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+}
+```
+
+### 4.3 Layer distribution panel
+
+A `.section-card` with `.container` wrapper and title "Layers". Use a horizontal bar chart:
+
+```html
+<div class="container">
+  <div class="section-card" style="margin-bottom: 16px;">
+    <div class="section-card-header"><h2 class="section-title">Layers</h2></div>
+    <div class="section-card-body">
+      <div class="chart-rows">
+        <!-- One row per layer, sorted by file_count descending -->
+        <div class="chart-row">
+          <span class="layer-name">{escapeHtml(layer.name)}</span>
+          <div class="bar-track">
+            <div class="bar-fill" style="width: {Math.round(layer.file_count / maxLayerFileCount * 100)}%; background: {layer.color}; opacity: 0.85;"></div>
+          </div>
+          <span class="file-count">{layer.file_count}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+CSS for the chart:
 ```css
 .chart-rows { display: flex; flex-direction: column; gap: 6px; }
 .chart-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
@@ -212,31 +302,14 @@ Add this CSS for the chart:
 .file-count { width: 32px; flex-shrink: 0; color: var(--text-muted); text-align: right; font-size: 10px; }
 ```
 
-### 4.4 Graph canvas panel
+### 4.4 Graph canvas panel (full-width, no .container wrapper)
 
-A `.section-card` with title "Dependency Graph". Contains a `<canvas>` element and a tooltip div.
+The graph section goes full-width. The `#graph-container` is a flex row: canvas on the left
+taking `flex: 1`, detail panel on the right (30%, positioned absolute within the container).
 
-Serialize the graph data for the canvas script. The data attribute must be HTML-escaped:
-
-```javascript
-// Build the canvas data object
-const canvasData = {
-  layers: layers.map(l => ({ name: l.name, color: l.color, index: l.index, file_count: l.file_count })),
-  nodes: nodes.map(n => ({
-    id: n.id,
-    layer: n.layer,
-    violation_count: n.violation_count ?? 0,
-    changed: n.changed ?? false
-  })),
-  edges: normalizedEdges.map(e => ({ source: e.source, target: e.target, type: e.type }))
-};
-// Serialize: JSON.stringify, then escape & and " for use in data-* attribute
-const canvasDataJson = JSON.stringify(canvasData)
-  .replace(/&/g, "&amp;")
-  .replace(/"/g, "&quot;");
-```
-
-Canvas height: `Math.max(400, maxNodesInAnyLayer * 22 + 80)` px.
+Embed the node-detail-panel.html content (the `<div id="node-detail-panel">` HTML block) directly
+inside `#graph-container`. Also extract the `<style>` block from node-detail-panel.html and add
+it to the page's main `<style>` tag.
 
 ```html
 <div class="section-card" style="margin-bottom: 16px;">
@@ -248,24 +321,23 @@ Canvas height: `Math.max(400, maxNodesInAnyLayer * 22 + 80)` px.
     <div id="layer-legend" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border);">
       <!-- Rendered by JS below -->
     </div>
-    <canvas id="codebase-graph-canvas"
-            data-graph="{canvasDataJson}"
-            style="display: block; width: 100%; height: {canvasHeight}px; background: var(--bg);"></canvas>
-    <div id="graph-tooltip" style="
-      position: fixed; display: none; pointer-events: none;
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 6px; padding: 6px 10px; font-size: 11px;
-      color: var(--text-bright); font-family: monospace;
-      max-width: 360px; word-break: break-all;
-      box-shadow: var(--shadow); z-index: 1000;
-    "></div>
+    <!-- Graph container: canvas (flex: 1) + detail panel (absolute, 30%) -->
+    <div id="graph-container" style="position: relative; display: flex; overflow: hidden;">
+      <canvas id="codebase-graph-canvas"
+              data-graph="{canvasDataJson}"
+              style="display: block; flex: 1; min-width: 0; height: {canvasHeight}px; background: var(--bg);"></canvas>
+      <!-- Node detail panel (from node-detail-panel.html snippet, hidden by default) -->
+      {embed node-detail-panel.html <div id="node-detail-panel"> block here}
+    </div>
+    <div id="graph-tooltip" style="position: fixed; display: none; pointer-events: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 11px; color: var(--text-bright); font-family: monospace; max-width: 360px; word-break: break-all; box-shadow: var(--shadow); z-index: 1000;"></div>
   </div>
 </div>
 ```
 
-### 4.5 Canvas rendering script
+### 4.5 Canvas rendering script (force-directed layout)
 
-Include this script ONCE, immediately before `</body>`. It renders the layered column graph:
+Include this script ONCE, immediately before `</body>`. It replaces the layered-column
+rendering with a force-directed layout plus click-to-inspect side panel:
 
 IMPORTANT: Canvas 2D does not support CSS variables. Every hex color value in the
 Canvas script MUST be preceded by a comment naming the design token it maps to:
@@ -275,9 +347,26 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
 
 ```javascript
 (function () {
+  // ── Design token mapping (Canvas 2D cannot use CSS custom properties) ──
+  // The hex values below correspond to DESIGN-SYSTEM.md Section A tokens:
+  //   #6c8cff  → var(--accent)      — changed nodes, selection rings
+  //   #ff6b6b  → var(--danger)      — violation nodes, violation rings
+  //   #636a80  → var(--text-muted)  — fallback layer color (when layer has no color)
+  //   #888780  → (no direct token)  — same-layer edge color; visually between --text-muted and --text
+  //   #EF9F27  → (no direct token)  — cross-layer edge color; amber similar to --warning (#fbbf24)
+  // When design tokens change, update these hex values to match.
+
   const canvas = document.getElementById('codebase-graph-canvas');
   const tooltip = document.getElementById('graph-tooltip');
   const legend = document.getElementById('layer-legend');
+  const panel = document.getElementById('node-detail-panel');
+  const panelClose = document.getElementById('ndp-close');
+  const panelPath = document.getElementById('ndp-path');
+  const panelBadges = document.getElementById('ndp-badges');
+  const panelImportedByHeader = document.getElementById('ndp-imported-by-header');
+  const panelImportedByList = document.getElementById('ndp-imported-by-list');
+  const panelImportsHeader = document.getElementById('ndp-imports-header');
+  const panelImportsList = document.getElementById('ndp-imports-list');
   if (!canvas) return;
 
   const raw = canvas.dataset.graph;
@@ -290,162 +379,206 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
     return;
   }
 
-  const { layers, nodes, edges } = graph;
+  const { layers, nodes, edges, adjIn, adjOut } = graph;
 
   // Build lookup maps
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
 
-  // Assign node positions: layered columns left-to-right by layer index
-  // Layer columns sorted by layer.index ascending
-  const sortedLayers = [...layers].sort((a, b) => a.index - b.index);
-
-  // Group nodes by layer
-  const nodesByLayer = new Map();
-  for (const layer of sortedLayers) nodesByLayer.set(layer.name, []);
-  for (const node of nodes) {
-    if (!nodesByLayer.has(node.layer)) nodesByLayer.set(node.layer, []);
-    nodesByLayer.get(node.layer).push(node);
-  }
-
-  // Build degree map for vertical sorting within each column
-  const degreeMap = new Map(nodes.map(n => [n.id, 0]));
-  for (const edge of edges) {
-    degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1);
-    degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
-  }
-  for (const [, layerNodes] of nodesByLayer) {
-    layerNodes.sort((a, b) => (degreeMap.get(b.id) ?? 0) - (degreeMap.get(a.id) ?? 0));
-  }
-
   // Canvas dimensions (CSS pixels)
-  const W = canvas.parentElement.clientWidth || 800;
-  const H = canvas.getBoundingClientRect().height || 400;
-  canvas.width = W * window.devicePixelRatio;
-  canvas.height = H * window.devicePixelRatio;
+  const dpr = window.devicePixelRatio || 1;
+  let W = canvas.parentElement.clientWidth || 900;
+  const H = canvas.getBoundingClientRect().height || 600;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
   canvas.style.width = W + 'px';
   canvas.style.height = H + 'px';
 
   const ctx = canvas.getContext('2d');
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.scale(dpr, dpr);
 
-  // Layout constants
-  const PADDING_X = 48;
-  const HEADER_H = 32;
+  // ── Force simulation constants ──────────────────────────────────
+  const K_REPEL = 5000;
+  const K_SPRING = 0.01;
+  const REST_LENGTH = 50;
+  const K_GRAVITY = 0.3;
+  const DAMPING = 0.85;
+  const MAX_FORCE = 10;
+  const ITERATIONS = 200;
   const NODE_RADIUS = 5;
-  const colCount = sortedLayers.length || 1;
-  const colWidth = (W - PADDING_X * 2) / colCount;
+  const PADDING = 30;
 
-  // Compute column X centers and node positions
-  const layerXMap = new Map(); // layer name → x center
-  const nodePositions = new Map(); // node id → {x, y}
-
-  sortedLayers.forEach((layer, colIdx) => {
-    const x = PADDING_X + colIdx * colWidth + colWidth / 2;
-    layerXMap.set(layer.name, x);
-
-    const layerNodes = nodesByLayer.get(layer.name) ?? [];
-    const nodeCount = layerNodes.length;
-    const usableH = H - HEADER_H - NODE_RADIUS * 2 - 16;
-
-    layerNodes.forEach((node, rowIdx) => {
-      const y = HEADER_H + NODE_RADIUS + (nodeCount <= 1
-        ? usableH / 2
-        : (rowIdx / (nodeCount - 1)) * usableH);
-      nodePositions.set(node.id, { x, y });
-    });
-  });
-
-  // Draw layer column headers
-  ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  for (const layer of sortedLayers) {
-    const x = layerXMap.get(layer.name) ?? 0;
-    ctx.fillStyle = layer.color || /* --text-muted */ '#636a80';
-    ctx.globalAlpha = 0.7;
-    ctx.fillText(layer.name.length > 14 ? layer.name.slice(0, 13) + '…' : layer.name, x, 8);
-    ctx.globalAlpha = 1;
-    // Column separator line (subtle)
-    const layerNodes = nodesByLayer.get(layer.name) ?? [];
-    if (layerNodes.length > 1) {
-      ctx.strokeStyle = layer.color || /* --text-muted */ '#636a80';
-      ctx.globalAlpha = 0.08;
-      ctx.lineWidth = colWidth - 8;
-      ctx.beginPath();
-      ctx.moveTo(x, HEADER_H);
-      ctx.lineTo(x, H - 8);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  // Draw edges as quadratic bezier curves
-  const getNodeLayer = (id) => nodeMap.get(id)?.layer ?? '';
-  for (const edge of edges) {
-    const src = nodePositions.get(edge.source);
-    const tgt = nodePositions.get(edge.target);
-    if (!src || !tgt) continue;
-    const isCrossLayer = getNodeLayer(edge.source) !== getNodeLayer(edge.target);
-    ctx.beginPath();
-    // Control point: midpoint with vertical offset
-    const cpX = (src.x + tgt.x) / 2;
-    const cpY = (src.y + tgt.y) / 2 - Math.abs(tgt.x - src.x) * 0.15;
-    ctx.moveTo(src.x, src.y);
-    ctx.quadraticCurveTo(cpX, cpY, tgt.x, tgt.y);
-    ctx.strokeStyle = isCrossLayer ? /* --warning */ '#EF9F27' : /* --border-muted */ '#888780';
-    ctx.globalAlpha = isCrossLayer ? 0.3 : 0.2;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-
-  // Draw nodes
+  // ── Initialize node positions randomly within canvas bounds ─────
   for (const node of nodes) {
-    const pos = nodePositions.get(node.id);
-    if (!pos) continue;
-    const layerColor = layers.find(l => l.name === node.layer)?.color || /* --text-muted */ '#636a80';
+    node.x = PADDING + Math.random() * (W - PADDING * 2);
+    node.y = PADDING + Math.random() * (H - PADDING * 2);
+    node.vx = 0;
+    node.vy = 0;
+    node.fx = 0;
+    node.fy = 0;
+  }
 
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, NODE_RADIUS, 0, Math.PI * 2);
+  // ── Run force simulation (pre-computed, not animated) ───────────
+  for (let iter = 0; iter < ITERATIONS; iter++) {
+    // Reset forces
+    for (const node of nodes) { node.fx = 0; node.fy = 0; }
 
-    if (node.changed) {
-      ctx.fillStyle = /* --accent */ '#6c8cff';
-    } else if ((node.violation_count ?? 0) > 0) {
-      ctx.fillStyle = /* --danger */ '#ff6b6b';
-    } else {
-      ctx.fillStyle = layerColor;
+    // Charge repulsion (O(n^2) — acceptable for <600 nodes)
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const ni = nodes[i], nj = nodes[j];
+        let dx = ni.x - nj.x, dy = ni.y - nj.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = Math.min(K_REPEL / (dist * dist), MAX_FORCE);
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+        ni.fx += fx; ni.fy += fy;
+        nj.fx -= fx; nj.fy -= fy;
+      }
     }
-    ctx.globalAlpha = 0.85;
-    ctx.fill();
-    ctx.globalAlpha = 1;
 
-    // Violation ring
-    if ((node.violation_count ?? 0) > 0) {
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, NODE_RADIUS + 2, 0, Math.PI * 2);
-      ctx.strokeStyle = /* --danger */ '#ff6b6b';
-      ctx.lineWidth = 1.5;
-      ctx.globalAlpha = 0.7;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
+    // Spring attraction (edges)
+    for (const edge of edges) {
+      const src = nodeMap.get(edge.source);
+      const tgt = nodeMap.get(edge.target);
+      if (!src || !tgt) continue;
+      const dx = tgt.x - src.x, dy = tgt.y - src.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = K_SPRING * (dist - REST_LENGTH);
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      src.fx += fx; src.fy += fy;
+      tgt.fx -= fx; tgt.fy -= fy;
+    }
+
+    // Center gravity
+    const cx = W / 2, cy = H / 2;
+    for (const node of nodes) {
+      node.fx += (cx - node.x) * K_GRAVITY;
+      node.fy += (cy - node.y) * K_GRAVITY;
+    }
+
+    // Apply forces with damping
+    for (const node of nodes) {
+      node.vx = (node.vx + node.fx) * DAMPING;
+      node.vy = (node.vy + node.fy) * DAMPING;
+      node.x += node.vx;
+      node.y += node.vy;
     }
   }
 
-  // Layer legend (inject into legend div)
+  // Normalize positions to fit within canvas bounds with padding
+  if (nodes.length > 0) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const node of nodes) {
+      if (node.x < minX) minX = node.x;
+      if (node.x > maxX) maxX = node.x;
+      if (node.y < minY) minY = node.y;
+      if (node.y > maxY) maxY = node.y;
+    }
+    const rangeX = maxX - minX || 1;
+    const rangeY = maxY - minY || 1;
+    const drawW = W - PADDING * 2;
+    const drawH = H - PADDING * 2;
+    for (const node of nodes) {
+      node.x = PADDING + ((node.x - minX) / rangeX) * drawW;
+      node.y = PADDING + ((node.y - minY) / rangeY) * drawH;
+    }
+  }
+
+  // Build position map
+  const nodePositions = new Map(nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+
+  // ── Draw edges as quadratic bezier curves ─────────────────────
+  let selectedNodeId = null;
+
+  function drawGraph(highlightId) {
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw edges
+    for (const edge of edges) {
+      const src = nodePositions.get(edge.source);
+      const tgt = nodePositions.get(edge.target);
+      if (!src || !tgt) continue;
+      const srcNode = nodeMap.get(edge.source);
+      const tgtNode = nodeMap.get(edge.target);
+      const isCrossLayer = srcNode?.layer !== tgtNode?.layer;
+      const isConnectedToSelected = highlightId &&
+        (edge.source === highlightId || edge.target === highlightId);
+
+      ctx.beginPath();
+      const cpX = (src.x + tgt.x) / 2;
+      const cpY = (src.y + tgt.y) / 2 - Math.abs(tgt.x - src.x) * 0.15;
+      ctx.moveTo(src.x, src.y);
+      ctx.quadraticCurveTo(cpX, cpY, tgt.x, tgt.y);
+      ctx.strokeStyle = isCrossLayer ? /* --warning */ '#EF9F27' : /* --border-muted */ '#888780';
+      ctx.globalAlpha = isConnectedToSelected ? 0.7 : (isCrossLayer ? 0.25 : 0.15);
+      ctx.lineWidth = isConnectedToSelected ? 1.5 : 1;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Draw nodes
+    for (const node of nodes) {
+      const pos = nodePositions.get(node.id);
+      if (!pos) continue;
+      const layerColor = layers.find(l => l.name === node.layer)?.color || /* --text-muted */ '#636a80';
+      const isSelected = node.id === highlightId;
+
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, isSelected ? NODE_RADIUS + 2 : NODE_RADIUS, 0, Math.PI * 2);
+
+      if (node.changed) {
+        ctx.fillStyle = /* --accent */ '#6c8cff';
+      } else if ((node.violation_count ?? 0) > 0) {
+        ctx.fillStyle = /* --danger */ '#ff6b6b';
+      } else {
+        ctx.fillStyle = layerColor;
+      }
+      ctx.globalAlpha = isSelected ? 1 : (highlightId ? 0.5 : 0.85);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // Violation ring
+      if ((node.violation_count ?? 0) > 0) {
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, NODE_RADIUS + 2, 0, Math.PI * 2);
+        ctx.strokeStyle = /* --danger */ '#ff6b6b';
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.7;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      // Selection ring
+      if (isSelected) {
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, NODE_RADIUS + 5, 0, Math.PI * 2);
+        ctx.strokeStyle = /* --accent */ '#6c8cff';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.8;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // Initial draw
+  drawGraph(null);
+
+  // ── Layer legend (inject into legend div) ─────────────────────
+  const sortedLayers = [...layers].sort((a, b) => a.index - b.index);
   for (const layer of sortedLayers) {
     const chip = document.createElement('span');
     chip.style.cssText = `
       display: inline-flex; align-items: center; gap: 5px;
       font-size: 11px; color: var(--text-muted);
       background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 4px; padding: 2px 8px; cursor: pointer;
+      border-radius: 4px; padding: 2px 8px; cursor: default;
     `;
     chip.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${layer.color};"></span>${layer.name}`;
     chip.title = `${layer.file_count} files`;
     legend.appendChild(chip);
   }
-
-  // Also add legend items for changed and violation nodes if applicable
   const hasChanged = nodes.some(n => n.changed);
   const hasViolations = nodes.some(n => (n.violation_count ?? 0) > 0);
   if (hasChanged) {
@@ -461,22 +594,22 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
     legend.appendChild(chip);
   }
 
-  // Hover tooltip
+  // ── Hover tooltip ─────────────────────────────────────────────
+  function findNodeAt(mx, my) {
+    for (const node of nodes) {
+      const pos = nodePositions.get(node.id);
+      if (!pos) continue;
+      const dx = mx - pos.x, dy = my - pos.y;
+      if (Math.sqrt(dx * dx + dy * dy) <= NODE_RADIUS + 6) return node;
+    }
+    return null;
+  }
+
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    let found = null;
-    for (const node of nodes) {
-      const pos = nodePositions.get(node.id);
-      if (!pos) continue;
-      const dx = mx - pos.x;
-      const dy = my - pos.y;
-      if (Math.sqrt(dx * dx + dy * dy) <= NODE_RADIUS + 4) {
-        found = node;
-        break;
-      }
-    }
+    const found = findNodeAt(mx, my);
     if (found) {
       tooltip.textContent = found.id;
       tooltip.style.display = 'block';
@@ -491,13 +624,100 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
   canvas.addEventListener('mouseleave', () => {
     tooltip.style.display = 'none';
   });
+
+  // ── Click-to-inspect panel ────────────────────────────────────
+  function escHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showPanel(node) {
+    selectedNodeId = node.id;
+    const layerColor = layers.find(l => l.name === node.layer)?.color || /* --text-muted */ '#636a80';
+
+    // File path
+    panelPath.textContent = node.id;
+
+    // Badges
+    const layerBadge = `<span class="ndp-badge ndp-badge-layer" style="background:${layerColor}22;color:${layerColor};border-color:${layerColor}44;">${escHtml(node.layer)}</span>`;
+    const changedBadge = node.changed ? `<span class="ndp-badge ndp-badge-changed">changed</span>` : '';
+    const kindBadge = node.kind ? `<span class="ndp-badge ndp-badge-kind">${escHtml(node.kind)}</span>` : '';
+    panelBadges.innerHTML = layerBadge + changedBadge + kindBadge;
+
+    // Imported-by
+    const importedByIds = adjIn[node.id] ?? [];
+    panelImportedByHeader.textContent = `IMPORTED BY (${importedByIds.length})`;
+    panelImportedByList.innerHTML = importedByIds
+      .map(id => `<li>${escHtml(id)}</li>`)
+      .join('') || '<li style="color:var(--text-muted);font-style:italic;">none</li>';
+
+    // Imports
+    const importsIds = adjOut[node.id] ?? [];
+    panelImportsHeader.textContent = `IMPORTS (${importsIds.length})`;
+    panelImportsList.innerHTML = importsIds
+      .map(id => `<li>${escHtml(id)}</li>`)
+      .join('') || '<li style="color:var(--text-muted);font-style:italic;">none</li>';
+
+    // Show panel
+    panel.style.display = 'flex';
+
+    // Resize canvas to account for panel — update both CSS width and backing
+    // buffer so hit-testing coordinates stay aligned with visual positions.
+    const container = document.getElementById('graph-container');
+    const panelWidth = panel.offsetWidth;
+    const newW = (container.clientWidth - panelWidth) || W;
+    W = newW;
+    canvas.width = newW * dpr;
+    canvas.style.width = newW + 'px';
+    ctx.scale(dpr, dpr);
+
+    // Redraw with highlight
+    drawGraph(node.id);
+  }
+
+  function hidePanel() {
+    selectedNodeId = null;
+    panel.style.display = 'none';
+    // Restore canvas to full container width
+    const container = document.getElementById('graph-container');
+    const fullW = container.clientWidth || W;
+    W = fullW;
+    canvas.width = fullW * dpr;
+    canvas.style.width = fullW + 'px';
+    ctx.scale(dpr, dpr);
+    drawGraph(null);
+  }
+
+  canvas.addEventListener('click', (e) => {
+    tooltip.style.display = 'none';
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const found = findNodeAt(mx, my);
+    if (found) {
+      showPanel(found);
+    } else {
+      hidePanel();
+    }
+  });
+
+  if (panelClose) {
+    panelClose.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hidePanel();
+    });
+  }
 })();
 ```
 
 ### 4.6 Insights panel
 
-A collapsible section (`<details open>`) with title "Insights". Only render sub-sections that
-have data — omit any sub-section with an empty array.
+A collapsible section (`<details open>`) with `.container` wrapper and title "Insights".
+Only render sub-sections that have data — omit any sub-section with an empty array.
 
 Structure each sub-section as a titled block inside the collapsible body:
 
@@ -522,7 +742,7 @@ A compact table with columns: Entity, File, Affected files. Use `escapeHtml` on 
 ### 4.7 Violations panel (conditional)
 
 Render this panel ONLY if `violationNodeCount > 0`. Use a collapsible section (`<details>`).
-Title: "Files with Violations ({violationNodeCount})".
+Use `.container` wrapper. Title: "Files with Violations ({violationNodeCount})".
 
 List all nodes where `violation_count > 0`. For each:
 - File path in monospace (`escapeHtml`)
@@ -557,8 +777,8 @@ Write the complete, self-contained HTML to:
   ${WORKSPACE}/artifacts/codebase-graph.html
 
 The file must be fully self-contained (no external stylesheets, no JavaScript imports, no CDN
-links). All CSS is inline in the `<style>` tag. The canvas rendering script is inline before
-`</body>`.
+links). All CSS is inline in the `<style>` tag (including the CSS from node-detail-panel.html).
+The canvas rendering script is inline before `</body>`.
 
 Return when the file is written. Do not modify the worktree.
 ````
@@ -568,9 +788,14 @@ Return when the file is written. Do not modify the worktree.
 - Variable substitution is the orchestrator's responsibility before passing to Agent()
 - `${DIFF_BASE}` and `${SOURCE_DIRS}` are both optional — the renderer must handle empty strings gracefully
 - This template requires the `codebase_graph` MCP tool call (hence `model: sonnet` — Haiku cannot make MCP tool calls reliably for large graphs)
-- The canvas script uses a deterministic layered column layout — no force simulation, no physics iterations
-- Node coloring priority: changed (blue #6c8cff) > violation (red #ff6b6b) > layer color
-- Edge coloring: cross-layer edges amber (#EF9F27 at 0.3 opacity), same-layer edges gray (#888780 at 0.2 opacity)
+- The renderer reads `node-detail-panel.html` and embeds its HTML + CSS inline — no separate HTTP request is needed from the browser
+- **Force simulation**: Vanilla JS spring-charge-gravity model, 200 iterations, pre-computed (not animated). Constants: K_REPEL=5000, K_SPRING=0.01, REST_LENGTH=50, K_GRAVITY=0.3, DAMPING=0.85, MAX_FORCE=10
+- **Node coloring priority**: changed (blue #6c8cff) > violation (red #ff6b6b) > layer color
+- **Edge coloring**: cross-layer edges amber (#EF9F27 at 0.25 opacity), same-layer edges gray (#888780 at 0.15 opacity); highlight edges connected to selected node at 0.7 opacity
+- **DIFF_BASE filtering**: client-side, reduces displayNodes/displayEdges to changed + 1-hop neighbors before running force simulation
+- **Detail panel**: DOM-based (not Canvas), positioned absolute on the right within the flex graph-container; JS populates content on node click
+- The canvas width dynamically adjusts when the panel is shown (70/30 split approximated by subtracting panel.offsetWidth from container.clientWidth)
 - The renderer writes exclusively to `${WORKSPACE}/artifacts/` — never to the worktree
 - If `codebase_graph` returns no nodes (empty graph), write a minimal informational page and stop
 - The layer legend is injected into the DOM by JavaScript — do not pre-render it in static HTML
+- Graph section goes full-width (no `.container` wrapper); all other panels use `.container` (max-width: 960px)
