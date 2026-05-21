@@ -51,6 +51,18 @@ verbatim into your `<style>` tag before any component styles. Values are taken d
 }
 ```
 
+### Canvas 2D Token Bridging
+
+Canvas 2D contexts (`ctx.fillStyle`, `ctx.strokeStyle`, etc.) cannot use CSS `var()` references.
+When setting colors in Canvas scripts, precede each hex value with a comment naming the design token:
+
+```js
+ctx.fillStyle = /* --accent */ '#6c8cff';
+ctx.strokeStyle = /* --danger */ '#ef4444';
+```
+
+This satisfies the `design-tokens-as-style-contract` convention for Canvas contexts.
+
 ---
 
 ## Section B: Page Boilerplate

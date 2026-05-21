@@ -154,7 +154,7 @@ if ("${DIFF_BASE}" !== "" && changedNodeCount > 0) {
 
 // Canvas data: include kind field for detail panel
 const canvasData = {
-  layers: layers.map(l => ({ name: l.name, color: l.color, index: l.index })),
+  layers: layers.map(l => ({ name: l.name, color: l.color, index: l.index, file_count: l.file_count })),
   nodes: displayNodes.map(n => ({
     id: n.id,
     layer: n.layer,
@@ -339,6 +339,12 @@ it to the page's main `<style>` tag.
 Include this script ONCE, immediately before `</body>`. It replaces the layered-column
 rendering with a force-directed layout plus click-to-inspect side panel:
 
+IMPORTANT: Canvas 2D does not support CSS variables. Every hex color value in the
+Canvas script MUST be preceded by a comment naming the design token it maps to:
+  ctx.fillStyle = /* --accent */ '#6c8cff';
+  ctx.strokeStyle = /* --danger */ '#ef4444';
+This satisfies the design-tokens-as-style-contract convention for Canvas contexts.
+
 ```javascript
 (function () {
   // ── Design token mapping (Canvas 2D cannot use CSS custom properties) ──
@@ -504,7 +510,7 @@ rendering with a force-directed layout plus click-to-inspect side panel:
       const cpY = (src.y + tgt.y) / 2 - Math.abs(tgt.x - src.x) * 0.15;
       ctx.moveTo(src.x, src.y);
       ctx.quadraticCurveTo(cpX, cpY, tgt.x, tgt.y);
-      ctx.strokeStyle = isCrossLayer ? '#EF9F27' : '#888780';
+      ctx.strokeStyle = isCrossLayer ? /* --warning */ '#EF9F27' : /* --border-muted */ '#888780';
       ctx.globalAlpha = isConnectedToSelected ? 0.7 : (isCrossLayer ? 0.25 : 0.15);
       ctx.lineWidth = isConnectedToSelected ? 1.5 : 1;
       ctx.stroke();
@@ -515,16 +521,16 @@ rendering with a force-directed layout plus click-to-inspect side panel:
     for (const node of nodes) {
       const pos = nodePositions.get(node.id);
       if (!pos) continue;
-      const layerColor = layers.find(l => l.name === node.layer)?.color || '#636a80';
+      const layerColor = layers.find(l => l.name === node.layer)?.color || /* --text-muted */ '#636a80';
       const isSelected = node.id === highlightId;
 
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, isSelected ? NODE_RADIUS + 2 : NODE_RADIUS, 0, Math.PI * 2);
 
       if (node.changed) {
-        ctx.fillStyle = '#6c8cff';
+        ctx.fillStyle = /* --accent */ '#6c8cff';
       } else if ((node.violation_count ?? 0) > 0) {
-        ctx.fillStyle = '#ff6b6b';
+        ctx.fillStyle = /* --danger */ '#ff6b6b';
       } else {
         ctx.fillStyle = layerColor;
       }
@@ -536,7 +542,7 @@ rendering with a force-directed layout plus click-to-inspect side panel:
       if ((node.violation_count ?? 0) > 0) {
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, NODE_RADIUS + 2, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ff6b6b';
+        ctx.strokeStyle = /* --danger */ '#ff6b6b';
         ctx.lineWidth = 1.5;
         ctx.globalAlpha = 0.7;
         ctx.stroke();
@@ -547,7 +553,7 @@ rendering with a force-directed layout plus click-to-inspect side panel:
       if (isSelected) {
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, NODE_RADIUS + 5, 0, Math.PI * 2);
-        ctx.strokeStyle = '#6c8cff';
+        ctx.strokeStyle = /* --accent */ '#6c8cff';
         ctx.lineWidth = 2;
         ctx.globalAlpha = 0.8;
         ctx.stroke();
@@ -631,7 +637,7 @@ rendering with a force-directed layout plus click-to-inspect side panel:
 
   function showPanel(node) {
     selectedNodeId = node.id;
-    const layerColor = layers.find(l => l.name === node.layer)?.color || '#636a80';
+    const layerColor = layers.find(l => l.name === node.layer)?.color || /* --text-muted */ '#636a80';
 
     // File path
     panelPath.textContent = node.id;
