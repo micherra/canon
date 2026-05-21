@@ -50,28 +50,37 @@ mcp__canon__codebase_graph({
 })
 ```
 
-From the result, extract:
+The tool returns a **compact format** (`result._compact === true`). Decode it into full
+objects before proceeding:
 
 ```javascript
-const nodes = result.nodes ?? [];
-// Each node: { id: string, layer: string, color: string, violation_count: number,
-//              top_violations: string[], changed: boolean, kind: string }
+const nodeIds = result.node_ids ?? [];
+const compactNodes = result.nodes ?? [];
 
-const edges = result.edges ?? [];
-// Each edge: { source: string | { id: string }, target: string | { id: string },
-//              type: string, confidence?: number }
+// Decode nodes: combine node_ids with compact per-node data
+const nodes = nodeIds.map((id, i) => {
+  const cn = compactNodes[i] ?? {};
+  return {
+    id,
+    layer: cn.l ?? "unknown",
+    violation_count: cn.v ?? 0,
+    top_violations: cn.t ?? [],
+    changed: cn.c ?? false,
+    kind: cn.k ?? ""
+  };
+});
+
+// Decode edges: convert [sourceIndex, targetIndex] pairs to {source, target} objects
+const edges = (result.edges ?? []).map(([si, ti]) => ({
+  source: nodeIds[si],
+  target: nodeIds[ti]
+}));
 
 const layers = result.layers ?? [];
 // Each layer: { name: string, color: string, file_count: number, index: number }
 
+// Insights are not included in the compact format — default to empty
 const insights = result.insights ?? {};
-// insights.most_connected: Array<{ id: string, in_degree: number, out_degree: number }>
-// insights.orphan_files: string[]
-// insights.circular_dependencies: Array<string[]>  (each inner array is one cycle)
-// insights.layer_violations: Array<{ source: string, target: string,
-//                                    source_layer: string, target_layer: string }>
-// insights.blast_radius_hotspots: Array<{ entity_name: string, file_path: string,
-//                                          affected_count: number }>
 
 const generatedAt = result.generated_at ?? new Date().toISOString();
 ```
@@ -89,23 +98,10 @@ const layerCount = layers.length;
 const violationNodeCount = nodes.filter(n => (n.violation_count ?? 0) > 0).length;
 const changedNodeCount = nodes.filter(n => n.changed).length;
 
-// Resolve edge endpoint (edges may use string IDs or {id} objects)
-function resolveEndpoint(ep) {
-  return typeof ep === "string" ? ep : ep.id;
-}
-
-// Build a normalized edge list with string source/target
-const normalizedEdges = edges.map(e => ({
-  source: resolveEndpoint(e.source),
-  target: resolveEndpoint(e.target),
-  type: e.type ?? "imports",
-  confidence: e.confidence ?? 1
-}));
-
 // Degree map (in + out per node)
 const degreeMap = new Map();
 for (const node of nodes) degreeMap.set(node.id, 0);
-for (const edge of normalizedEdges) {
+for (const edge of edges) {
   degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1);
   degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
 }
@@ -228,7 +224,7 @@ const canvasData = {
     violation_count: n.violation_count ?? 0,
     changed: n.changed ?? false
   })),
-  edges: normalizedEdges.map(e => ({ source: e.source, target: e.target, type: e.type }))
+  edges: edges.map(e => ({ source: e.source, target: e.target }))
 };
 // Serialize: JSON.stringify, then escape & and " for use in data-* attribute
 const canvasDataJson = JSON.stringify(canvasData)
