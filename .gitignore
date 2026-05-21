@@ -26,8 +26,11 @@ mcp-server/.claude/agent-memory/
 !canon-cursor-cli/.claude/
 !canon-cursor-cli/.claude/CLAUDE.md
 
-# Canon local data (dogfooding — ignore entire .canon directory)
-.canon/
+# Canon local data (dogfooding — ignore .canon directory contents)
+# Using .canon/** instead of .canon/ so git traverses the directory and
+# the negation pattern !.canon/principle-overrides.yaml works reliably.
+.canon/**
+!.canon/principle-overrides.yaml
 .env
 
 # Ephemeral workspace artifacts

@@ -25,6 +25,7 @@ From the prompt you receive, determine the mode:
 - **new-agent-rule**: Creating a new agent-rule (targets agent behavior)
 - **edit**: Editing an existing principle or agent-rule
 - **apply-proposal**: Applying an accepted learner proposal to create or update an entry
+- **fork**: Copying a built-in principle to `.canon/principles/` for project-local customization
 
 ---
 
@@ -250,6 +251,55 @@ Run the same quality checks as other modes (see Quality Checks section below). G
 Follow the save and validate steps from the appropriate mode (new-principle, new-agent-rule, or edit). After saving, confirm to the lead:
 - The file path where the entry was saved
 - Any significant changes made to the proposal content during assembly
+
+---
+
+## Mode: fork
+
+### Step 1: Identify the principle
+
+Read the format spec:
+```
+${CLAUDE_PLUGIN_ROOT}/references/principle-format.md
+```
+
+The user will name a principle to fork (by ID or partial title). Search for it in the built-in principles:
+1. `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`
+
+If the principle is not found in the built-in directory, report: "No built-in principle found matching '{query}'. Fork mode is for copying built-in principles to project-local. Use `new-principle` mode to create a new principle."
+
+If the principle is found, read it in full and present its current state:
+- Frontmatter fields (id, title, severity, scope, tags)
+- Summary of the body (first paragraph + section headers)
+
+### Step 2: Check for existing project-local version
+
+Check if a project-local version already exists:
+1. `.canon/principles/{severity-subdir}/{id}.md`
+
+If it exists, warn: "A project-local version of `{id}` already exists at `.canon/principles/{severity-subdir}/{id}.md`. Editing the existing copy instead of creating a duplicate."
+
+Then switch to Mode: edit with the project-local file as the target.
+
+### Step 3: Copy to project-local
+
+Copy the built-in principle file to `.canon/principles/{severity-subdir}/{id}.md`, preserving the severity subdirectory structure.
+
+Confirm: "Forked `{id}` to `.canon/principles/{severity-subdir}/{id}.md`. This project-local copy now takes precedence over the built-in version."
+
+### Step 4: Edit (optional)
+
+Ask: "Would you like to edit the forked principle now?"
+
+If yes, switch to Mode: edit with the newly copied file as the target.
+If no, confirm the fork is complete and suggest editing later.
+
+### Step 5: Validate
+
+Re-read the saved file and verify:
+- YAML frontmatter parses correctly
+- The file is in the correct severity subdirectory
+- The content matches the built-in original (if no edits were made)
 
 ---
 

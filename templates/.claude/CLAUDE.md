@@ -22,22 +22,30 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `session-context.md` | orchestrator | Session-level context and blockers |
 | `test-report.md` | tester | Test coverage and results |
 | `context-sync-report.md` | scribe | Cross-iteration context sync |
-| `wave-briefing.md` | orchestrator | Wave execution briefing |
-| `wave-report.md` | orchestrator | Structured wave execution report for inter-wave handoff |
 | `design-document.md` | architect | Technical design with Canon alignment |
 | `task-plan.md` | architect | Atomic task plan for engineers — required `### Brief Coverage` table maps every runbook requirement to a task element with disposition (`covered`, `descoped`, `partial`); missing or empty table is a plan defect that blocks progression |
 | `plan-index.md` | architect | Index of all task plans for a build |
-| `planning-brief.md` | deprecated | DEPRECATED — was pre-build evaluation. Kept for backward compat |
 | `runbook.md` | architect | Runbook step sequence for orchestrator execution |
 | `pr-description.md` | shipper | PR description from build artifacts |
 | `chat-brief.md` | chat | Structured brief for build handoff |
-| `migration-state.md` | orchestrator | Migration state handoff for multi-wave coordination |
 | `prd.md` | orchestrator | Structured PRD template the PM fills before spawning the architect; read by architect and renderer |
 | `renderer-design.md` | orchestrator | Renderer spawn prompt — converts PRD + design document + task DAG YAML + runbook to unified `design.html`; pure markdown, no MCP calls |
 | `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; file cards are `<details>`-expandable; includes Canvas dependency subgraph in Graph Context; references `file-detail-card.html`; requires MCP calls (`show_pr_impact`, `get_file_context`) |
 | `renderer-codebase-graph.md` | orchestrator | Renderer spawn prompt — converts `codebase_graph` MCP data into standalone `codebase-graph.html`; force-directed layout, click-to-inspect side panel, DIFF_BASE filtering; requires MCP call (`codebase_graph`) |
 | `renderer-file-context.md` | orchestrator | Renderer spawn prompt — converts `get_file_context` MCP data into standalone `file-context.html`; requires MCP call (`get_file_context`) |
 | `sharpened-request.md` | pm-orchestrator | PM-to-architect hand-off artifact with Problem, Direction, Scope Boundaries, Acceptance Criteria, and Not Doing sections |
+
+## Spawn-Prompt Templates
+
+Spawn-prompt templates are structurally distinct from artifact-output templates. They are read by the **orchestrator** (not agents) before `Agent()` calls:
+
+| Template | Agent | Purpose |
+|----------|-------|---------|
+| `worker-prompt.md` | engineer (DAG worker) | DAG worker spawn prompt |
+| `renderer-design.md` | renderer | Design document HTML renderer spawn prompt |
+| `renderer-review.md` | renderer | Review dashboard HTML renderer spawn prompt |
+
+**Reading protocol**: The orchestrator reads the template, fills `## Variables` placeholders, and passes the `## Prompt` section content to the `Agent()` call. See `principles/conventions/spawn-prompt-template-structure.md` for the full convention.
 
 ## Conventions
 <!-- last-updated: 2026-03-22 -->
