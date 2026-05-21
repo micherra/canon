@@ -75,19 +75,19 @@ Canon splits every build into two directories. Orient yourself at spawn time:
 - **Use `semantic_search`** for conceptual or fuzzy queries when exact text matching isn't sufficient — e.g., "where is request validation done?", "which files handle database access?"
 - **Use `get_file_context`** to understand a file's role, relationships, and position in the codebase without reading it in full — useful for scoping blast radius during review.
 
-### Stage 0 — Context Loading (required before Stage 1)
+### Stage 0 — Context loading (REQUIRED before Stage 1)
 
-Load all review context in two calls, not dozens of sequential reads.
+Before reading any diff or file content:
 
-1. **First call** — batch context: `get_context({ file_paths: [all changed files], include: ["principles", "drift", "file_context"] })`. This gives you matched principles, file context, and drift data for every changed file in one round-trip.
-2. **Second call** — full diff: `git diff {base_commit}..HEAD` (single Bash call for the complete diff).
+1. Call `get_context({ file_paths: [all changed files], include: ["principles", "drift", "file_context"] })`. This loads principles, blast radius metrics, and file roles in one call.
+2. Run `git diff {base_commit}..HEAD` in a single Bash call. Save the output — this is your diff for Stages 1–4.
 
-After these two calls, you have everything needed for Stages 1-4. Do NOT:
-- Read individual principle YAML files — `get_context` already loaded them
-- Run per-file `git diff` commands — the full diff covers everything
-- Call `get_file_context` individually for each file — the batch call handled it
+Do not proceed to Stage 1 until both are complete. If you have not called `get_context` yet, do it now before reading any file.
 
-Do NOT proceed to Stage 1 without completing Stage 0. Principle violations you identify depend on having full diff in context; blast radius data you use in Stage 2 comes from step 1.
+Do NOT:
+- Read individual principle files — Step 1 loaded them
+- Call `get_file_context` individually for each file — Step 1 handled it
+- Run multiple Bash commands to reconstruct the diff — Step 2 gives you the complete diff
 
 ## Web Research Policy
 
@@ -359,6 +359,8 @@ After completing Stages 1–4, run the project build and lint to surface compila
 Do not suppress or omit lint output because it is voluminous — summarize if needed (e.g., "47 `no-unused-vars` errors across 12 files — all unused import variables introduced in this diff") but always report it.
 
 **Baseline comparison**: Before classifying errors as BLOCKING or WARNING, establish a baseline error count from the target branch (e.g., `main`). Run the same build and lint commands on the base branch and record the error count. Only NEW errors — those present in the worktree branch but absent from the base branch (delta above baseline) — are BLOCKING or WARNING findings. Pre-existing errors that exist on the base branch are noted as NON-BLOCKING context and tagged `[baseline]` in the Build Verification section of the review checklist. This prevents inherited errors from blocking otherwise-clean diffs.
+
+**Baseline comparison skip condition**: If `git diff {base_commit}..HEAD --name-only` shows only `.md`, `.txt`, `.yaml`, or other non-compiled files, skip the baseline comparison and note "Documentation-only diff — no baseline comparison needed." The same condition that allows the verify step to be skipped applies to the reviewer's build gate.
 
 **Re-review protocol**: When spawned for re-review after a fix cycle, check that ALL previously flagged violations in the prior review report were addressed — not just some. For each BLOCKING and WARNING finding from the previous report: verify the specific file and line was changed, and re-run the relevant check. Report any unresolved violations as new BLOCKING findings so the iteration loop terminates only when the code is genuinely clean.
 
