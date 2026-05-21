@@ -107,9 +107,11 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 | Tier | Gate behavior |
 |------|---------------|
-| **autonomous** | Skip plan-approval HITL, skip review-verdict HITL (WARNING items auto-acknowledged), skip build-step checkpoints. Review still runs (for audit) but verdict is auto-accepted unless BLOCKING. |
-| **light-touch** | Skip plan-approval HITL, skip build-step checkpoints. Review-verdict HITL still active. |
+| **autonomous** | Skip build-step checkpoints. Skip WARNING close-out (advisory items auto-acknowledged). CLEAN re-review after fix auto-proceeds (no HITL). Plan approval and initial review verdict always active. |
+| **light-touch** | Skip build-step checkpoints only. All other gates active. |
 | **supervised** | Current behavior — all HITL gates active. |
+
+**Plan approval and initial review verdict are always mandatory regardless of tier — these are the highest-value checkpoints where wrong assumptions are caught.**
 
 **Fail-safe**: If `compute_autonomy_tier` returns an error or the tool is unavailable, default to "supervised".
 

@@ -344,10 +344,15 @@ describe("gatherSignals", () => {
     // No driftDb argument — drift-dependent signals stay at worst-case defaults
     const result = await gatherSignals(["src/foo.ts"], "/mock/project");
 
-    // Worst-case defaults: clean_review_rate=0, recent_failure_rate=1, recent_runs=0
+    // Worst-case defaults: clean_review_rate=0, recent_failure_rate=1, recent_runs=0, avg_retry_count=4
     expect(result.build_history.recent_runs).toBe(0);
     expect(result.build_history.clean_review_rate).toBe(0);
     expect(result.build_history.recent_failure_rate).toBe(1);
+    expect(result.build_history.avg_retry_count).toBe(4);
+    // Compliance also worst-case when driftDb absent
+    expect(result.compliance.max_violation_streak).toBe(10);
+    expect(result.compliance.total_active_violations).toBe(10);
+    expect(result.compliance.has_clean_streak).toBe(false);
   });
 
   it("uses worst-case defaults when driftDb.getAllFlowRuns throws", async () => {
@@ -363,9 +368,58 @@ describe("gatherSignals", () => {
 
     const result = await gatherSignals(["src/foo.ts"], "/mock/project", failingDb);
 
-    // Worst-case defaults preserved after error
+    // Worst-case defaults preserved after error — avg_retry_count is penalizing, not zero
     expect(result.build_history.recent_runs).toBe(0);
     expect(result.build_history.clean_review_rate).toBe(0);
     expect(result.build_history.recent_failure_rate).toBe(1);
+    expect(result.build_history.avg_retry_count).toBe(4);
+  });
+
+  it("uses worst-case compliance defaults when getSignals throws", async () => {
+    const failingComplianceDb: DriftDbAdapter = {
+      getAllFlowRuns: vi.fn(() => []),
+      getSignals: vi.fn(() => {
+        throw new Error("signals_unavailable");
+      }),
+    };
+
+    const result = await gatherSignals(["src/foo.ts"], "/mock/project", failingComplianceDb);
+
+    // Compliance failure must produce penalizing values, not optimistic zeros
+    expect(result.compliance.max_violation_streak).toBe(10);
+    expect(result.compliance.total_active_violations).toBe(10);
+    expect(result.compliance.has_clean_streak).toBe(false);
+  });
+
+  it("counts only actual retries (state_iterations - 1), not baseline attempts", async () => {
+    // 3 runs, each with 2 states. First run: both states ran once (no retries).
+    // Second run: one state retried once → 1 actual retry.
+    // Third run: one state retried twice → 2 actual retries.
+    // total actual retries = 0 + 1 + 2 = 3; avg = 3 / 3 = 1.0
+    const db = makeMockDriftDb({
+      flowRuns: [
+        { gate_pass_rate: 1.0, state_iterations: { implement: 1, verify: 1 } },
+        { gate_pass_rate: 1.0, state_iterations: { implement: 2, verify: 1 } },
+        { gate_pass_rate: 1.0, state_iterations: { implement: 3, verify: 1 } },
+      ],
+    });
+
+    const result = await gatherSignals(["src/foo.ts"], "/mock/project", db);
+    expect(result.build_history.avg_retry_count).toBeCloseTo(1.0, 5);
+  });
+
+  it("clean build (all state_iterations=1) yields avg_retry_count of 0", async () => {
+    // A perfectly clean 5-step build — no state ever retried
+    const db = makeMockDriftDb({
+      flowRuns: [
+        {
+          gate_pass_rate: 1.0,
+          state_iterations: { implement: 1, learn: 1, review: 1, ship: 1, verify: 1 },
+        },
+      ],
+    });
+
+    const result = await gatherSignals(["src/foo.ts"], "/mock/project", db);
+    expect(result.build_history.avg_retry_count).toBe(0);
   });
 });

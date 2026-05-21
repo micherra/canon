@@ -251,9 +251,9 @@ const RECENT_RUNS_LOOKBACK = 10;
 async function gatherBuildHistorySignals(
   driftDb: DriftDbAdapter,
 ): Promise<ConfidenceSignals["build_history"]> {
-  // Worst-case defaults
+  // Worst-case defaults — high avg_retry_count maximises retry penalty
   const defaults: ConfidenceSignals["build_history"] = {
-    avg_retry_count: 0,
+    avg_retry_count: 4,
     clean_review_rate: 0,
     recent_failure_rate: 1,
     recent_runs: 0,
@@ -264,9 +264,11 @@ async function gatherBuildHistorySignals(
 
     if (recent.length === 0) return defaults; // keep worst-case defaults
 
+    // Subtract 1 from each state_iterations value — the baseline attempt is not a retry.
+    // Clamp to 0 so states that ran exactly once contribute 0 retries.
     const totalIter = recent.reduce((sum, run) => {
       const iters = Object.values(run.state_iterations as Record<string, number>);
-      return sum + iters.reduce((s, v) => s + v, 0);
+      return sum + iters.reduce((s, v) => s + Math.max(v - 1, 0), 0);
     }, 0);
 
     const cleanCount = recent.filter(
@@ -366,8 +368,8 @@ async function gatherComplianceSignals(
       "[canon] confidence-scorer: compliance signal gathering failed:",
       err instanceof Error ? err.message : err,
     );
-    // worst-case defaults
-    return { has_clean_streak: false, max_violation_streak: 0, total_active_violations: 0 };
+    // worst-case defaults — high values maximise penalty so scoring remains conservative
+    return { has_clean_streak: false, max_violation_streak: 10, total_active_violations: 10 };
   }
 }
 
@@ -393,7 +395,7 @@ export async function gatherSignals(
     driftDb !== undefined
       ? await gatherBuildHistorySignals(driftDb)
       : {
-          avg_retry_count: 0,
+          avg_retry_count: 4, // worst-case default — maximises retry penalty
           clean_review_rate: 0, // worst-case default
           recent_failure_rate: 1, // worst-case default
           recent_runs: 0,
@@ -402,7 +404,7 @@ export async function gatherSignals(
   const compliance =
     driftDb !== undefined
       ? await gatherComplianceSignals(driftDb, filePaths)
-      : { has_clean_streak: false, max_violation_streak: 0, total_active_violations: 0 };
+      : { has_clean_streak: false, max_violation_streak: 10, total_active_violations: 10 };
 
   const blastRadius = await gatherBlastRadiusSignals(filePaths, projectDir);
 
