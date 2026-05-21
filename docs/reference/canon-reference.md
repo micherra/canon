@@ -156,6 +156,20 @@ overrides:
     reason: Principle is critical in the domain layer but overly restrictive in infra glue code.
 ```
 
+### Field reference
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `principle_id` | string | always | Exact principle ID (filename without `.md`) |
+| `action` | string | always | `disable`, `override-severity`, or `narrow-scope` |
+| `reason` | string | always | Human-readable justification |
+| `severity` | string | `override-severity` only | `rule`, `strong-opinion`, or `convention` |
+| `applies_to` | object | `narrow-scope` only | Contains `layers` and `file_patterns` (both required; use `[]` to omit either) |
+| `applies_to.layers` | string[] | `narrow-scope` only (use `[]` to omit) | Layer names defined in `.canon/config.json` |
+| `applies_to.file_patterns` | string[] | `narrow-scope` only (use `[]` to omit) | Glob patterns relative to project root |
+
+Common mistakes: using `id:` instead of `principle_id:`, using flat `file_patterns:` instead of `applies_to: { file_patterns: [] }`.
+
 ### Validation behavior
 
 - **Missing file**: If `.canon/principle-overrides.yaml` does not exist, no overrides are applied. This is the default state.
@@ -170,6 +184,23 @@ overrides:
 3. The merged set is passed through `applyOverrides` — overrides modify or remove principles from the merged set.
 
 Project-local principles and overrides are two independent mechanisms: a project-local principle replaces the built-in definition by ID; an override mutates or removes any principle (local or built-in) after the merge.
+
+### Version control
+
+`.canon/` is typically gitignored for runtime data (workspaces, databases, caches). However, `principle-overrides.yaml` is project configuration and should be version-controlled alongside your code.
+
+To track it:
+
+```bash
+# Add the gitignore exception
+echo '!.canon/principle-overrides.yaml' >> .gitignore
+
+# Force-add the file (required because the parent directory is ignored)
+git add -f .canon/principle-overrides.yaml
+git commit -m "chore: track principle overrides"
+```
+
+The `!.canon/principle-overrides.yaml` exception in `.gitignore` tells git to track this specific file even though `.canon/` is otherwise ignored. Future `git add .` runs will pick it up automatically — the `-f` flag is only needed for the initial add.
 
 ## Hooks
 
