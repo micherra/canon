@@ -51,6 +51,8 @@ domains:
 <!-- If this task introduces a new gate or rule, add the following items: -->
 - [ ] Negative scope stated: what intents or contexts this gate does NOT apply to (required for any new gate or rule)
 - [ ] Taxonomy registration: rule file is listed in `rules/.claude/CLAUDE.md` under the appropriate behavioral category (required for any new rule file)
+<!-- If this task creates new MCP tool wrappers, add the following item: -->
+- [ ] Integration test for each new MCP tool wrapper: imports the handler function directly (not the service function), mocks infrastructure seams (`getDriftDb`, `getExecutionStore`, `projectDir`), and covers: (a) happy path, (b) fail-safe default on infrastructure failure, (c) at least one error code path (`WORKSPACE_NOT_FOUND` or equivalent)
 
 ### Brief Coverage
 <!-- Map every requirement from the approved runbook to a task element or explicitly mark it out-of-scope. -->

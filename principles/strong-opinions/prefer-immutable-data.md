@@ -68,6 +68,8 @@ class User:
 active_user = User(id=user.id, name=user.name, status="active")
 ```
 
+**Intra-feature consistency:** When two services in the same feature directory use different mutation patterns — one mutates parameters in place, the other returns new objects — readers cannot tell which pattern is canonical for that feature. Prefer consistency within a feature boundary: if existing services return new objects rather than mutating their inputs, new services in the same directory should follow suit. Mixing patterns within a feature imposes the cognitive cost of tracking both, negating the readability benefit of either.
+
 ## Exceptions
 
 Performance-critical inner loops where allocation matters (e.g., game engines, real-time audio processing) may justify mutable buffers. Builder patterns for constructing complex objects are acceptable — the mutability is scoped to the construction phase. State management stores (Redux, Zustand) have controlled mutation through reducers/actions — this is acceptable because mutation is channeled through a single controlled path.
