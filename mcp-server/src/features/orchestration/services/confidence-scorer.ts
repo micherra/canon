@@ -247,39 +247,48 @@ export function computeConfidence(signals: ConfidenceSignals): ConfidenceResult 
 
 const RECENT_RUNS_LOOKBACK = 10;
 
-/** Populate build_history signals from drift.db. Mutates signals in place. */
+/** Gather build_history signals from drift.db. Returns a new build_history sub-object. */
 async function gatherBuildHistorySignals(
-  signals: ConfidenceSignals,
   driftDb: DriftDbAdapter,
-): Promise<void> {
+): Promise<ConfidenceSignals["build_history"]> {
+  // Worst-case defaults
+  const defaults: ConfidenceSignals["build_history"] = {
+    avg_retry_count: 0,
+    clean_review_rate: 0,
+    recent_failure_rate: 1,
+    recent_runs: 0,
+  };
   try {
     const flowRuns = driftDb.getAllFlowRuns();
     const recent = flowRuns.slice(-RECENT_RUNS_LOOKBACK);
-    signals.build_history.recent_runs = recent.length;
 
-    if (recent.length === 0) return; // keep worst-case defaults
+    if (recent.length === 0) return defaults; // keep worst-case defaults
 
     const totalIter = recent.reduce((sum, run) => {
       const iters = Object.values(run.state_iterations as Record<string, number>);
       return sum + iters.reduce((s, v) => s + v, 0);
     }, 0);
-    signals.build_history.avg_retry_count = totalIter / recent.length;
 
     const cleanCount = recent.filter(
       (run) => run.gate_pass_rate != null && run.gate_pass_rate >= 1.0,
     ).length;
-    signals.build_history.clean_review_rate = cleanCount / recent.length;
 
     const failCount = recent.filter(
       (run) => run.gate_pass_rate == null || run.gate_pass_rate < 1.0,
     ).length;
-    signals.build_history.recent_failure_rate = failCount / recent.length;
+
+    return {
+      avg_retry_count: totalIter / recent.length,
+      clean_review_rate: cleanCount / recent.length,
+      recent_failure_rate: failCount / recent.length,
+      recent_runs: recent.length,
+    };
   } catch (err) {
     console.warn(
       "[canon] confidence-scorer: build history signal gathering failed:",
       err instanceof Error ? err.message : err,
     );
-    // keep worst-case defaults
+    return defaults;
   }
 }
 
@@ -293,12 +302,11 @@ function extractMaxDepth(results: Array<Record<string, unknown>>): number {
   return maxDepth;
 }
 
-/** Populate blast_radius signals from the KG. Mutates signals in place. */
+/** Gather blast_radius signals from the KG. Returns a new blast_radius sub-object. */
 async function gatherBlastRadiusSignals(
-  signals: ConfidenceSignals,
   filePaths: string[],
   projectDir: string,
-): Promise<void> {
+): Promise<ConfidenceSignals["blast_radius"]> {
   try {
     let totalAffected = 0;
     let maxDepth = 0;
@@ -318,28 +326,27 @@ async function gatherBlastRadiusSignals(
       // KG_NOT_INDEXED is non-fatal — leave blast radius at 0
     }
 
-    signals.blast_radius.total_affected_files = totalAffected;
-    signals.blast_radius.max_depth = maxDepth;
+    return { max_depth: maxDepth, total_affected_files: totalAffected };
   } catch (err) {
     console.warn(
       "[canon] confidence-scorer: blast radius signal gathering failed:",
       err instanceof Error ? err.message : err,
     );
     // keep default 0 values — lack of KG data is non-blocking
+    return { max_depth: 0, total_affected_files: 0 };
   }
 }
 
-/** Populate compliance signals from drift.db signals DAO. Mutates signals in place. */
+/** Gather compliance signals from drift.db signals DAO. Returns a new compliance sub-object. */
 async function gatherComplianceSignals(
-  signals: ConfidenceSignals,
-  filePaths: string[],
   driftDb: DriftDbAdapter,
-): Promise<void> {
+  filePaths: string[],
+): Promise<ConfidenceSignals["compliance"]> {
   try {
     const signalsDao = driftDb.getSignals();
 
     const violationHistory = signalsDao.getFileViolationHistory(filePaths);
-    signals.compliance.total_active_violations = violationHistory.length;
+    const totalActiveViolations = violationHistory.length;
 
     const pathEffects = signalsDao.getPathEffects(filePaths);
     let maxStreak = 0;
@@ -348,14 +355,19 @@ async function gatherComplianceSignals(
       if (effect.violation_streak > maxStreak) maxStreak = effect.violation_streak;
       if (effect.clean_streak >= 3) hasClean = true;
     }
-    signals.compliance.max_violation_streak = maxStreak;
-    signals.compliance.has_clean_streak = hasClean;
+
+    return {
+      has_clean_streak: hasClean,
+      max_violation_streak: maxStreak,
+      total_active_violations: totalActiveViolations,
+    };
   } catch (err) {
     console.warn(
       "[canon] confidence-scorer: compliance signal gathering failed:",
       err instanceof Error ? err.message : err,
     );
-    // keep worst-case defaults (total_active_violations=0, max_violation_streak=0)
+    // worst-case defaults
+    return { has_clean_streak: false, max_violation_streak: 0, total_active_violations: 0 };
   }
 }
 
@@ -377,28 +389,28 @@ export async function gatherSignals(
   projectDir: string,
   driftDb?: DriftDbAdapter,
 ): Promise<ConfidenceSignals> {
-  const signals: ConfidenceSignals = {
-    blast_radius: { max_depth: 0, total_affected_files: 0 },
-    build_history: {
-      avg_retry_count: 0,
-      clean_review_rate: 0, // worst-case default
-      recent_failure_rate: 1, // worst-case default
-      recent_runs: 0,
-    },
-    compliance: {
-      has_clean_streak: false,
-      max_violation_streak: 0,
-      total_active_violations: 0,
-    },
+  const buildHistory =
+    driftDb !== undefined
+      ? await gatherBuildHistorySignals(driftDb)
+      : {
+          avg_retry_count: 0,
+          clean_review_rate: 0, // worst-case default
+          recent_failure_rate: 1, // worst-case default
+          recent_runs: 0,
+        };
+
+  const compliance =
+    driftDb !== undefined
+      ? await gatherComplianceSignals(driftDb, filePaths)
+      : { has_clean_streak: false, max_violation_streak: 0, total_active_violations: 0 };
+
+  const blastRadius = await gatherBlastRadiusSignals(filePaths, projectDir);
+
+  return {
+    blast_radius: blastRadius,
+    build_history: buildHistory,
+    compliance,
     file_paths: filePaths,
     has_security_files: hasSecurityFiles(filePaths),
   };
-
-  if (driftDb !== undefined) {
-    await gatherBuildHistorySignals(signals, driftDb);
-    await gatherComplianceSignals(signals, filePaths, driftDb);
-  }
-  await gatherBlastRadiusSignals(signals, filePaths, projectDir);
-
-  return signals;
 }
