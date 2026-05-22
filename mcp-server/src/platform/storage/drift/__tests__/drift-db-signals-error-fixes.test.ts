@@ -36,7 +36,7 @@ function makeSignalsDb(): {
 
 // Helper: create a v5 database (without v6 migration)
 // Simulates an existing drift.db at v5 before the v6 migration runs.
-function createV5Db(): ReturnType<typeof initDriftDb> {
+function _createV5Db(): ReturnType<typeof initDriftDb> {
   // initDriftDb runs all migrations including v5; we need a db stuck at v5
   // We do this by running initDriftDb and then manually rolling back the version
   // Actually — the cleanest approach is to run v1 base + v2 + v3 + v4 + v5 manually.
@@ -47,7 +47,9 @@ function createV5Db(): ReturnType<typeof initDriftDb> {
 
   // Use an in-memory db that starts at v1 and we manually apply v2–v5 only.
   const { Database } = require("better-sqlite3") as { Database: typeof import("better-sqlite3") };
-  const db = new (Database as unknown as new (path: string) => ReturnType<typeof initDriftDb>)(":memory:");
+  const db = new (Database as unknown as new (path: string) => ReturnType<typeof initDriftDb>)(
+    ":memory:",
+  );
 
   // Attempt import using the module directly
   return db;
@@ -214,26 +216,26 @@ describe("DriftDbSignals.getErrorFixes", () => {
   test("returns matching rows for a given file path", () => {
     const { signals, db } = makeSignalsDb();
     const input: UpsertErrorFixInput = {
-      file_path: "src/foo.ts",
-      principle_id: "deep-modules",
       error_pattern: "Too many parameters in handler",
-      fix_pattern: "Extract logic into service layer",
-      occurrences: 3,
-      last_seen: "2026-05-01T00:00:00.000Z",
+      file_path: "src/foo.ts",
       first_seen: "2026-04-01T00:00:00.000Z",
+      fix_pattern: "Extract logic into service layer",
+      last_seen: "2026-05-01T00:00:00.000Z",
+      occurrences: 3,
+      principle_id: "deep-modules",
     };
     signals.upsertErrorFix(input);
 
     const result = signals.getErrorFixes(["src/foo.ts"]);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
-      file_path: "src/foo.ts",
-      principle_id: "deep-modules",
       error_pattern: "Too many parameters in handler",
-      fix_pattern: "Extract logic into service layer",
-      occurrences: 3,
-      last_seen: "2026-05-01T00:00:00.000Z",
+      file_path: "src/foo.ts",
       first_seen: "2026-04-01T00:00:00.000Z",
+      fix_pattern: "Extract logic into service layer",
+      last_seen: "2026-05-01T00:00:00.000Z",
+      occurrences: 3,
+      principle_id: "deep-modules",
     });
     db.close();
   });
@@ -241,22 +243,22 @@ describe("DriftDbSignals.getErrorFixes", () => {
   test("returns rows for multiple file paths", () => {
     const { signals, db } = makeSignalsDb();
     signals.upsertErrorFix({
-      file_path: "src/foo.ts",
-      principle_id: "deep-modules",
       error_pattern: "error A",
-      fix_pattern: "fix A",
-      occurrences: 1,
-      last_seen: "2026-05-01T00:00:00.000Z",
+      file_path: "src/foo.ts",
       first_seen: "2026-04-01T00:00:00.000Z",
+      fix_pattern: "fix A",
+      last_seen: "2026-05-01T00:00:00.000Z",
+      occurrences: 1,
+      principle_id: "deep-modules",
     });
     signals.upsertErrorFix({
-      file_path: "src/bar.ts",
-      principle_id: "simplicity-first",
       error_pattern: "error B",
-      fix_pattern: "fix B",
-      occurrences: 2,
-      last_seen: "2026-05-02T00:00:00.000Z",
+      file_path: "src/bar.ts",
       first_seen: "2026-04-02T00:00:00.000Z",
+      fix_pattern: "fix B",
+      last_seen: "2026-05-02T00:00:00.000Z",
+      occurrences: 2,
+      principle_id: "simplicity-first",
     });
 
     const result = signals.getErrorFixes(["src/foo.ts", "src/bar.ts"]);
@@ -270,13 +272,13 @@ describe("DriftDbSignals.getErrorFixes", () => {
   test("does not return rows for file paths not in the input list", () => {
     const { signals, db } = makeSignalsDb();
     signals.upsertErrorFix({
-      file_path: "src/other.ts",
-      principle_id: "deep-modules",
       error_pattern: "error",
-      fix_pattern: "fix",
-      occurrences: 1,
-      last_seen: "2026-05-01T00:00:00.000Z",
+      file_path: "src/other.ts",
       first_seen: "2026-04-01T00:00:00.000Z",
+      fix_pattern: "fix",
+      last_seen: "2026-05-01T00:00:00.000Z",
+      occurrences: 1,
+      principle_id: "deep-modules",
     });
 
     const result = signals.getErrorFixes(["src/foo.ts"]);
@@ -291,13 +293,13 @@ describe("DriftDbSignals.upsertErrorFix", () => {
   test("inserts a new record", () => {
     const { signals, db } = makeSignalsDb();
     const input: UpsertErrorFixInput = {
-      file_path: "src/new.ts",
-      principle_id: "thin-handlers",
       error_pattern: "Handler has too much logic",
-      fix_pattern: "Move to service",
-      occurrences: 1,
-      last_seen: "2026-05-10T00:00:00.000Z",
+      file_path: "src/new.ts",
       first_seen: "2026-05-10T00:00:00.000Z",
+      fix_pattern: "Move to service",
+      last_seen: "2026-05-10T00:00:00.000Z",
+      occurrences: 1,
+      principle_id: "thin-handlers",
     };
 
     expect(() => signals.upsertErrorFix(input)).not.toThrow();
@@ -311,22 +313,22 @@ describe("DriftDbSignals.upsertErrorFix", () => {
   test("updates occurrences and last_seen on conflict", () => {
     const { signals, db } = makeSignalsDb();
     signals.upsertErrorFix({
-      file_path: "src/foo.ts",
-      principle_id: "deep-modules",
       error_pattern: "Too many parameters",
-      fix_pattern: "Extract to service",
-      occurrences: 1,
-      last_seen: "2026-04-01T00:00:00.000Z",
+      file_path: "src/foo.ts",
       first_seen: "2026-03-01T00:00:00.000Z",
+      fix_pattern: "Extract to service",
+      last_seen: "2026-04-01T00:00:00.000Z",
+      occurrences: 1,
+      principle_id: "deep-modules",
     });
     signals.upsertErrorFix({
-      file_path: "src/foo.ts",
-      principle_id: "deep-modules",
       error_pattern: "Too many parameters",
-      fix_pattern: "Extract to service",
-      occurrences: 5,
-      last_seen: "2026-05-01T00:00:00.000Z",
+      file_path: "src/foo.ts",
       first_seen: "2026-03-01T00:00:00.000Z", // same — should be preserved
+      fix_pattern: "Extract to service",
+      last_seen: "2026-05-01T00:00:00.000Z",
+      occurrences: 5,
+      principle_id: "deep-modules",
     });
 
     const result = signals.getErrorFixes(["src/foo.ts"]);
@@ -339,22 +341,22 @@ describe("DriftDbSignals.upsertErrorFix", () => {
   test("preserves first_seen on conflict — DO UPDATE SET only updates occurrences and last_seen", () => {
     const { signals, db } = makeSignalsDb();
     signals.upsertErrorFix({
-      file_path: "src/foo.ts",
-      principle_id: "deep-modules",
       error_pattern: "Too many parameters",
-      fix_pattern: "Extract to service",
-      occurrences: 1,
-      last_seen: "2026-04-01T00:00:00.000Z",
+      file_path: "src/foo.ts",
       first_seen: "2026-03-01T00:00:00.000Z",
+      fix_pattern: "Extract to service",
+      last_seen: "2026-04-01T00:00:00.000Z",
+      occurrences: 1,
+      principle_id: "deep-modules",
     });
     signals.upsertErrorFix({
-      file_path: "src/foo.ts",
-      principle_id: "deep-modules",
       error_pattern: "Too many parameters",
-      fix_pattern: "Extract to service",
-      occurrences: 2,
-      last_seen: "2026-05-01T00:00:00.000Z",
+      file_path: "src/foo.ts",
       first_seen: "2099-01-01T00:00:00.000Z", // should NOT overwrite original first_seen
+      fix_pattern: "Extract to service",
+      last_seen: "2026-05-01T00:00:00.000Z",
+      occurrences: 2,
+      principle_id: "deep-modules",
     });
 
     const result = signals.getErrorFixes(["src/foo.ts"]);
@@ -368,22 +370,22 @@ describe("DriftDbSignals.upsertErrorFix", () => {
   test("preserves error_pattern and fix_pattern on conflict", () => {
     const { signals, db } = makeSignalsDb();
     signals.upsertErrorFix({
-      file_path: "src/foo.ts",
-      principle_id: "deep-modules",
       error_pattern: "original error pattern",
-      fix_pattern: "original fix pattern",
-      occurrences: 1,
-      last_seen: "2026-04-01T00:00:00.000Z",
+      file_path: "src/foo.ts",
       first_seen: "2026-03-01T00:00:00.000Z",
+      fix_pattern: "original fix pattern",
+      last_seen: "2026-04-01T00:00:00.000Z",
+      occurrences: 1,
+      principle_id: "deep-modules",
     });
     signals.upsertErrorFix({
-      file_path: "src/foo.ts",
-      principle_id: "deep-modules",
       error_pattern: "should not overwrite",
-      fix_pattern: "should not overwrite",
-      occurrences: 2,
-      last_seen: "2026-05-01T00:00:00.000Z",
+      file_path: "src/foo.ts",
       first_seen: "2026-03-01T00:00:00.000Z",
+      fix_pattern: "should not overwrite",
+      last_seen: "2026-05-01T00:00:00.000Z",
+      occurrences: 2,
+      principle_id: "deep-modules",
     });
 
     const result = signals.getErrorFixes(["src/foo.ts"]);

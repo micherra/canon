@@ -154,6 +154,7 @@ export class DriftDbSignals {
   // Prepared statements — error_fixes table (v6)
   private readonly stmtGetErrorFixes: Database.Statement;
   private readonly stmtUpsertErrorFix: Database.Statement;
+  private readonly stmtGetAllFileViolationHistory: Database.Statement;
 
   constructor(db: Database.Database) {
     this.stmtGetFileViolationHistory = db.prepare(`
@@ -242,6 +243,13 @@ export class DriftDbSignals {
       LIMIT 500
     `);
 
+    // All violation history (no WHERE clause — for backfill)
+    this.stmtGetAllFileViolationHistory = db.prepare(`
+      SELECT file_path, principle_id, violation_count, last_seen, first_seen
+      FROM file_violation_history
+      ORDER BY violation_count DESC
+    `);
+
     // Error fixes (v6)
     this.stmtGetErrorFixes = db.prepare(`
       SELECT id, file_path, principle_id, error_pattern, fix_pattern, occurrences, last_seen, first_seen
@@ -272,6 +280,15 @@ export class DriftDbSignals {
       results.push(...rows);
     }
     return results;
+  }
+
+  /**
+   * Get all violation history rows (no file filter).
+   * Used by the backfill script to mine the full history.
+   * Returns empty array when the table is empty (define-errors-out-of-existence).
+   */
+  getAllFileViolationHistory(): FileViolationHistoryRow[] {
+    return this.stmtGetAllFileViolationHistory.all() as FileViolationHistoryRow[];
   }
 
   /**
