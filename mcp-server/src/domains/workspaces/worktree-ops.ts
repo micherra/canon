@@ -22,7 +22,7 @@ export type WaveWorktreeResult = {
   branch: string;
 };
 
-export type MergeStrategy = "sequential" | "rebase" | "squash";
+export type MergeStrategy = "sequential";
 
 export type MergeWaveResult =
   | { ok: true; merged_count: number }
@@ -142,15 +142,6 @@ export async function createWorktrees(
 
 // mergeTaskResults
 
-/**
- * Sequentially merge completed task branches into the current HEAD.
- *
- * On merge conflict: aborts the merge and returns a structured error.
- * Does NOT silently resolve conflicts.
- *
- * Currently only "sequential" strategy is implemented. The `mergeStrategy`
- * parameter is accepted for forward compatibility.
- */
 /** Check if a git merge result indicates a conflict. */
 function isMergeConflict(result: { stdout: string; stderr: string }): boolean {
   return (
@@ -161,20 +152,17 @@ function isMergeConflict(result: { stdout: string; stderr: string }): boolean {
   );
 }
 
+/**
+ * Sequentially merge completed task branches into the current HEAD.
+ *
+ * On merge conflict: aborts the merge and returns a structured error.
+ * Does NOT silently resolve conflicts.
+ */
 export async function mergeTaskResults(
   tasks: WaveWorktreeResult[],
   projectDir: string,
   mergeStrategy: MergeStrategy,
 ): Promise<MergeWaveResult> {
-  if (mergeStrategy === "rebase" || mergeStrategy === "squash") {
-    return {
-      conflict_detail: `Merge strategy "${mergeStrategy}" is not yet implemented. Only "sequential" is supported.`,
-      conflict_task: "",
-      merged_count: 0,
-      ok: false,
-    };
-  }
-
   let mergedCount = 0;
 
   for (const task of tasks) {
