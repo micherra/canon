@@ -103,7 +103,7 @@ describe("buildLayerInferrer", () => {
       expect(infer("mcp-server/src/features/knowledge-graph/tools/codebase-graph.ts")).toBe(
         "mcp-server",
       );
-      expect(infer("mcp-server/src/ui/PrReview.svelte")).toBe("dashboard-ui");
+      expect(infer("mcp-server/src/ui/snippets/DESIGN-SYSTEM.md")).toBe("dashboard-ui");
       expect(infer("src/api/handler.ts")).toBe("api");
       expect(infer("agents/implementor.md")).toBe("agents");
       expect(infer("unmatched/file.ts")).toBe("unknown");
