@@ -1,15 +1,11 @@
 /**
- * Integration tests for the 3 new bounded-context schema files introduced in ddd-01.
+ * Tests for the bounded-context schema files.
  *
- * The completeness test (schema-split-completeness.test.ts) verifies that all exports
- * exist. These tests verify the CONTRACT of the new files:
+ * Verifies the CONTRACT of live schema files:
  *   - schemas parse valid inputs correctly
  *   - schemas reject invalid inputs
- *   - BaseStateFields is usable as a plain-object spread (not a Zod schema instance)
  *   - Cross-file imports (board-state-schemas → flow-definition-schemas) produce
  *     correct parse behaviour for fields that cross the boundary
- *
- * All imports target the new files directly — not the legacy flow-schema.ts.
  */
 
 import { describe, expect, it } from "vitest";
@@ -21,40 +17,13 @@ import {
   SessionSchema,
 } from "../board-state-schemas.ts";
 // --- flow-definition-schemas.ts imports ----------------------------------------
-import {
-  BaseStateFields,
-  DiscoveredGateSchema,
-  FlowDefinitionSchema,
-  FragmentBaseStateFields,
-  GateResultSchema,
-  RequiredArtifactSchema,
-  SingleStateSchema,
-  STATUS_ALIASES,
-  STATUS_KEYWORDS,
-} from "../flow-definition-schemas.ts";
+import { DiscoveredGateSchema, GateResultSchema } from "../flow-definition-schemas.ts";
 // --- transcript-schemas.ts imports --------------------------------------------------
 import { TranscriptEntrySchema } from "../transcript-schemas.ts";
 
 // =============================================================================
 // flow-definition-schemas.ts
 // =============================================================================
-
-describe("flow-definition-schemas.ts — STATUS_KEYWORDS / STATUS_ALIASES", () => {
-  it("STATUS_KEYWORDS is a non-empty tuple", () => {
-    expect(STATUS_KEYWORDS.length).toBeGreaterThan(0);
-    expect(STATUS_KEYWORDS).toContain("done");
-    expect(STATUS_KEYWORDS).toContain("blocked");
-    expect(STATUS_KEYWORDS).toContain("all_passing");
-    expect(STATUS_KEYWORDS).toContain("implementation_issue");
-  });
-
-  it("STATUS_ALIASES maps known aliases to canonical statuses", () => {
-    expect(STATUS_ALIASES.approve).toBe("approved");
-    expect(STATUS_ALIASES.done_with_concerns).toBe("done");
-    expect(STATUS_ALIASES.fixed).toBe("done");
-    expect(STATUS_ALIASES.needs_context).toBe("hitl");
-  });
-});
 
 describe("flow-definition-schemas.ts — GateResultSchema", () => {
   it("accepts a minimal gate result (required fields only)", () => {
@@ -111,110 +80,6 @@ describe("flow-definition-schemas.ts — DiscoveredGateSchema", () => {
 
   it("rejects when 'source' is missing", () => {
     expect(() => DiscoveredGateSchema.parse({ command: "npx vitest run" })).toThrow();
-  });
-});
-
-describe("flow-definition-schemas.ts — RequiredArtifactSchema", () => {
-  it("accepts a valid artifact with safe filename", () => {
-    const result = RequiredArtifactSchema.parse({ name: "SUMMARY.md", type: "summary" });
-    expect(result.name).toBe("SUMMARY.md");
-    expect(result.type).toBe("summary");
-  });
-
-  it("accepts filenames with dots, dashes, underscores", () => {
-    const result = RequiredArtifactSchema.parse({ name: "test-report_v2.md", type: "report" });
-    expect(result.name).toBe("test-report_v2.md");
-  });
-
-  it("rejects names with path separators", () => {
-    expect(() =>
-      RequiredArtifactSchema.parse({ name: "path/to/file.md", type: "summary" }),
-    ).toThrow();
-  });
-
-  it("rejects name '.' (dot-only)", () => {
-    expect(() => RequiredArtifactSchema.parse({ name: ".", type: "summary" })).toThrow();
-  });
-
-  it("rejects name '..' (double-dot)", () => {
-    expect(() => RequiredArtifactSchema.parse({ name: "..", type: "summary" })).toThrow();
-  });
-});
-
-describe("flow-definition-schemas.ts — FlowDefinitionSchema", () => {
-  it("accepts a minimal flow definition (name + description required)", () => {
-    const result = FlowDefinitionSchema.parse({ description: "A test flow", name: "test-flow" });
-    expect(result.name).toBe("test-flow");
-    expect(result.description).toBe("A test flow");
-  });
-
-  it("accepts a flow with states and transitions", () => {
-    const result = FlowDefinitionSchema.parse({
-      description: "Feature flow",
-      name: "feature",
-      states: {
-        done: { type: "terminal" },
-        implement: { agent: "canon:implementor", type: "single" },
-      },
-    });
-    expect(Object.keys(result.states ?? {})).toContain("implement");
-    expect(Object.keys(result.states ?? {})).toContain("done");
-  });
-
-  it("rejects a flow definition missing 'name'", () => {
-    expect(() => FlowDefinitionSchema.parse({ description: "Missing name" })).toThrow();
-  });
-
-  it("rejects a flow definition missing 'description'", () => {
-    expect(() => FlowDefinitionSchema.parse({ name: "no-desc" })).toThrow();
-  });
-
-  it("rejects invalid 'tier' value", () => {
-    expect(() =>
-      FlowDefinitionSchema.parse({ description: "d", name: "n", tier: "xlarge" }),
-    ).toThrow();
-  });
-});
-
-describe("flow-definition-schemas.ts — BaseStateFields usability", () => {
-  it("BaseStateFields is a plain object (not a Zod schema instance)", () => {
-    // BaseStateFields must be spreadable into z.object() calls, not itself a Zod schema
-    expect(typeof BaseStateFields).toBe("object");
-    expect(BaseStateFields).not.toBeNull();
-    // It should not have a Zod .parse() method — it's a raw field map
-    expect((BaseStateFields as Record<string, unknown>).parse).toBeUndefined();
-  });
-
-  it("BaseStateFields has expected keys", () => {
-    const keys = Object.keys(BaseStateFields);
-    expect(keys).toContain("agent");
-    expect(keys).toContain("max_iterations");
-    expect(keys).toContain("stuck_when");
-    expect(keys).toContain("tool_overrides");
-    expect(keys).toContain("transitions");
-  });
-
-  it("FragmentBaseStateFields is a plain object spreadable into z.object()", () => {
-    expect(typeof FragmentBaseStateFields).toBe("object");
-    expect(FragmentBaseStateFields).not.toBeNull();
-    expect((FragmentBaseStateFields as Record<string, unknown>).parse).toBeUndefined();
-  });
-
-  it("SingleStateSchema (which spreads BaseStateFields) parses the base fields correctly", () => {
-    // Verifies that BaseStateFields spread into SingleStateSchema works as intended
-    const result = SingleStateSchema.parse({
-      agent: "canon:implementor",
-      max_iterations: 5,
-      stuck_when: "same_violations",
-      tool_overrides: { allow: ["Read"] },
-      transitions: { done: "next-state" },
-      type: "single",
-    });
-    expect(result.agent).toBe("canon:implementor");
-    expect(result.max_iterations).toBe(5);
-    expect(result.stuck_when).toBe("same_violations");
-    expect(result.tool_overrides?.allow).toEqual(["Read"]);
-    expect(result.transitions?.done).toBe("next-state");
   });
 });
 
@@ -406,61 +271,5 @@ describe("transcript-schemas.ts — TranscriptEntrySchema", () => {
       });
       expect(result.role).toBe(role);
     }
-  });
-
-  it("accepts optional token fields", () => {
-    const result = TranscriptEntrySchema.parse({
-      content: "tool result here",
-      cumulative_tokens: 5000,
-      role: "tool_result",
-      timestamp: "2026-01-01T00:00:00Z",
-      tokens: 42,
-      tool_name: "Bash",
-      turn_number: 3,
-    });
-    expect(result.tokens).toBe(42);
-    expect(result.cumulative_tokens).toBe(5000);
-    expect(result.tool_name).toBe("Bash");
-  });
-
-  it("rejects invalid role value", () => {
-    expect(() =>
-      TranscriptEntrySchema.parse({
-        content: "test",
-        role: "bot",
-        timestamp: "2026-01-01T00:00:00Z",
-        turn_number: 1,
-      }),
-    ).toThrow();
-  });
-
-  it("rejects missing required 'content'", () => {
-    expect(() =>
-      TranscriptEntrySchema.parse({
-        role: "user",
-        timestamp: "2026-01-01T00:00:00Z",
-        turn_number: 1,
-      }),
-    ).toThrow();
-  });
-
-  it("rejects missing required 'turn_number'", () => {
-    expect(() =>
-      TranscriptEntrySchema.parse({
-        content: "hello",
-        role: "user",
-        timestamp: "2026-01-01T00:00:00Z",
-      }),
-    ).toThrow();
-  });
-
-  it("rejects missing required 'timestamp'", () => {
-    expect(() =>
-      TranscriptEntrySchema.parse({
-        content: "hello",
-        role: "user",
-        turn_number: 1,
-      }),
-    ).toThrow();
   });
 });

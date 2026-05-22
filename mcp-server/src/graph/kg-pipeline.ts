@@ -13,6 +13,10 @@
 import path from "node:path";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import type { Database } from "better-sqlite3";
+
+// biome-ignore lint/performance/noBarrelFile: intentional re-export — kg-pipeline is the single entry point for both bulk pipeline and incremental reindex; consumers should not need to know about the internal split
+export { readFileForReindex, reindexFile, reindexFileTransaction } from "./kg-pipeline-reindex.ts";
+
 import { detectCommunities } from "./kg-community.ts";
 import { EmbeddingService } from "./kg-embedding.ts";
 import type { FileImportMap } from "./kg-pipeline-phases.ts";

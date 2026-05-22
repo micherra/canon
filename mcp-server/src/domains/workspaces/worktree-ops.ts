@@ -22,17 +22,6 @@ export type WaveWorktreeResult = {
   branch: string;
 };
 
-export type MergeStrategy = "sequential";
-
-export type MergeWaveResult =
-  | { ok: true; merged_count: number }
-  | {
-      ok: false;
-      merged_count: number;
-      conflict_task: string;
-      conflict_detail: string;
-    };
-
 export type CleanupResult = {
   removed: number;
   errors: string[];
@@ -120,73 +109,6 @@ export async function createWorktree(
     task_id: task.task_id,
     worktree_path: worktreePath,
   };
-}
-
-/**
- * Create worktrees for multiple tasks sequentially.
- * Kept for merge protocol (mergeTaskResults needs all results).
- * @deprecated Prefer createWorktree for single-task DAG worker dispatch.
- */
-export async function createWorktrees(
-  tasks: WaveTask[],
-  projectDir: string,
-  baseCwd?: string,
-): Promise<WaveWorktreeResult[]> {
-  const results: WaveWorktreeResult[] = [];
-  for (const task of tasks) {
-    // biome-ignore lint/performance/noAwaitInLoops: worktrees must be created sequentially
-    results.push(await createWorktree(task, projectDir, baseCwd));
-  }
-  return results;
-}
-
-// mergeTaskResults
-
-/** Check if a git merge result indicates a conflict. */
-function isMergeConflict(result: { stdout: string; stderr: string }): boolean {
-  return (
-    result.stderr.includes("CONFLICT") ||
-    result.stdout.includes("CONFLICT") ||
-    result.stderr.includes("Automatic merge failed") ||
-    result.stdout.includes("Automatic merge failed")
-  );
-}
-
-/**
- * Sequentially merge completed task branches into the current HEAD.
- *
- * On merge conflict: aborts the merge and returns a structured error.
- * Does NOT silently resolve conflicts.
- */
-export async function mergeTaskResults(
-  tasks: WaveWorktreeResult[],
-  projectDir: string,
-  _mergeStrategy: MergeStrategy,
-): Promise<MergeWaveResult> {
-  let mergedCount = 0;
-
-  for (const task of tasks) {
-    // biome-ignore lint/performance/noAwaitInLoops: git merges must be sequential; each merge updates HEAD which subsequent merges build on
-    const mergeResult = await gitExecAsync(["merge", "--no-ff", task.branch], projectDir);
-    if (mergeResult.ok) {
-      mergedCount++;
-      continue;
-    }
-
-    const conflict = isMergeConflict(mergeResult);
-    if (conflict) {
-      await gitExecAsync(["merge", "--abort"], projectDir);
-    }
-
-    return {
-      conflict_detail: mergeResult.stderr || mergeResult.stdout,
-      conflict_task: conflict ? task.task_id : "",
-      merged_count: mergedCount,
-      ok: false,
-    };
-  }
-
-  return { merged_count: mergedCount, ok: true };
 }
 
 // cleanupWorktrees
