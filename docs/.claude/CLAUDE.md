@@ -10,7 +10,7 @@ Human-readable project documentation, architecture references, and historical an
 <!-- last-updated: 2026-04-09 -->
 
 - `reference/` — Authoritative reference documentation; `canon-reference.md` is the single comprehensive reference covering MCP tool tables, flow schema, hooks, and principles
-- Standalone documents in the root cover architecture analysis, roadmaps, and retrospectives (e.g., `bounded-context-map.md`, `codebase-intelligence-roadmap.md`)
+- Standalone documents in the root cover architecture analysis and direction (e.g., `bounded-context-map.md`, `supervised-build-quality.md`)
 - `images/` — Diagrams and screenshots referenced by documentation
 
 ## Conventions
@@ -19,4 +19,4 @@ Human-readable project documentation, architecture references, and historical an
 - Docs are for humans — prefer prose and tables over code snippets
 - CLAUDE.md files are for agents — do not conflate the two audiences
 - `canon-reference.md` is the canonical source of truth for MCP tool signatures; update it when tools change
-- Historical and retrospective documents (lessons learned, improvement plans) are kept for context even after their recommendations are implemented
+- Direction documents should be updated when priorities shift or epics ship
