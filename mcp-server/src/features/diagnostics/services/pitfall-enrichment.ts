@@ -120,6 +120,21 @@ export function queryErrorFixPitfalls(
   }));
 }
 
+// ---- Count function ----
+
+/**
+ * Count total pitfalls from both drift and error-fix arrays.
+ *
+ * Returns the sum of driftPitfalls.length and errorFixPitfalls.length.
+ * Avoids coupling the count to any markdown format.
+ */
+export function countPitfalls(
+  driftPitfalls: DriftPitfall[],
+  errorFixPitfalls: ErrorFixPitfall[],
+): number {
+  return driftPitfalls.length + errorFixPitfalls.length;
+}
+
 // ---- Formatting function ----
 
 /**

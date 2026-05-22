@@ -295,7 +295,7 @@ describe("backfillErrorFixes — multiple distinct rows", () => {
 // ---- backfillErrorFixes — idempotency ----
 
 describe("backfillErrorFixes — idempotency", () => {
-  test("second call on same data returns all skipped (INSERT OR UPDATE is idempotent)", () => {
+  test("second call on same data is idempotent (upsertErrorFix handles INSERT OR UPDATE)", () => {
     const { signals, db } = makeSignalsDb();
     signals.upsertFileViolation({
       file_path: "src/foo.ts",
@@ -309,10 +309,11 @@ describe("backfillErrorFixes — idempotency", () => {
     expect(first).toEqual({ inserted: 1, processed: 1, skipped: 0 });
 
     const second = backfillErrorFixes(signals);
-    // processed = 1 (row still present), inserted = 0, skipped = 1
+    // No pre-check needed — upsert handles idempotency.
+    // inserted = processed (every row is upserted), skipped = 0 always.
     expect(second.processed).toBe(1);
-    expect(second.inserted).toBe(0);
-    expect(second.skipped).toBe(1);
+    expect(second.inserted).toBe(1);
+    expect(second.skipped).toBe(0);
     db.close();
   });
 

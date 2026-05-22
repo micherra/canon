@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import {
+  countPitfalls,
   formatPitfallsSection,
   queryDriftSignalPitfalls,
   queryErrorFixPitfalls,
@@ -139,21 +140,30 @@ function formatPreloadPrompt(skills: ResolvedSkill[]): string {
 
 /**
  * Build pitfalls section by querying drift.db for historical violations and error-fix pairs.
- * Fail-open: returns empty string on any error so enrichment never blocks spawn.
+ * Fail-open: returns empty section and zero count on any error so enrichment never blocks spawn.
  *
  * @param filePaths - files to query pitfalls for
  * @param projectDir - project root used to locate drift.db
  */
-function buildPitfallsSection(filePaths: string[], projectDir: string): string {
-  if (filePaths.length === 0) return "";
+function buildPitfallsSection(
+  filePaths: string[],
+  projectDir: string,
+): { section: string; count: number } {
+  if (filePaths.length === 0) return { count: 0, section: "" };
   try {
     const driftDbSignals = getDriftDb(projectDir).getSignals();
     const driftPitfalls = queryDriftSignalPitfalls(filePaths, driftDbSignals);
     const errorFixPitfalls = queryErrorFixPitfalls(filePaths, driftDbSignals);
-    return formatPitfallsSection(driftPitfalls, errorFixPitfalls);
-  } catch {
-    // Non-blocking: pitfall enrichment failures are silently ignored
-    return "";
+    return {
+      count: countPitfalls(driftPitfalls, errorFixPitfalls),
+      section: formatPitfallsSection(driftPitfalls, errorFixPitfalls),
+    };
+  } catch (err) {
+    console.warn(
+      "[pitfall-enrichment] buildPitfallsSection failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return { count: 0, section: "" };
   }
 }
 
@@ -169,8 +179,11 @@ function logPitfallAuditEvent(workspace: string, agentName: string, pitfallCount
       pitfall_count: pitfallCount,
       timestamp: new Date().toISOString(),
     });
-  } catch {
-    // Non-blocking: audit logging failures are silently ignored
+  } catch (err) {
+    console.warn(
+      "[pitfall-enrichment] logPitfallAuditEvent failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 
@@ -237,13 +250,13 @@ export async function resolveAgentSkills(
 
   // Build pitfalls section when filePaths provided (fail-open)
   const filePaths = options?.filePaths ?? [];
-  const pitfallsSection =
-    filePaths.length > 0 && projectDir ? buildPitfallsSection(filePaths, projectDir) : "";
+  const { section: pitfallsSection, count: pitfallCount } =
+    filePaths.length > 0 && projectDir
+      ? buildPitfallsSection(filePaths, projectDir)
+      : { count: 0, section: "" };
 
   // Audit log when pitfalls found and workspace provided
   if (pitfallsSection && options?.workspace) {
-    // Count pitfall lines (each pitfall starts with "- **")
-    const pitfallCount = (pitfallsSection.match(/^- \*\*/gm) ?? []).length;
     logPitfallAuditEvent(options.workspace, agentName, pitfallCount);
   }
 

@@ -38,6 +38,7 @@ import { DriftDbSignals } from "@platform/storage/drift/drift-db-signals.ts";
 import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  countPitfalls,
   type DriftPitfall,
   type ErrorFixPitfall,
   formatPitfallsSection,
@@ -372,5 +373,49 @@ describe("formatPitfallsSection", () => {
     const result = formatPitfallsSection([], [errorFixPitfall, second]);
     const lines = result.split("\n").filter((l) => l.startsWith("- **"));
     expect(lines).toHaveLength(2);
+  });
+});
+
+// ---- countPitfalls ----
+
+describe("countPitfalls", () => {
+  const drift: DriftPitfall = {
+    file_path: "src/foo.ts",
+    last_seen: "2026-05-01T00:00:00.000Z",
+    principle_id: "simplicity-first",
+    violation_count: 3,
+  };
+  const errorFix: ErrorFixPitfall = {
+    error_pattern: "throwing instead of returning",
+    file_path: "src/foo.ts",
+    fix_pattern: "return toolError(...)",
+    occurrences: 2,
+    principle_id: "errors-are-values",
+  };
+
+  it("returns 0 when both arrays are empty", () => {
+    expect(countPitfalls([], [])).toBe(0);
+  });
+
+  it("returns drift array length when no error-fix pitfalls", () => {
+    expect(countPitfalls([drift], [])).toBe(1);
+  });
+
+  it("returns error-fix array length when no drift pitfalls", () => {
+    expect(countPitfalls([], [errorFix])).toBe(1);
+  });
+
+  it("returns sum of both arrays", () => {
+    expect(countPitfalls([drift], [errorFix])).toBe(2);
+  });
+
+  it("returns correct count for multiple items in each array", () => {
+    const secondDrift: DriftPitfall = {
+      ...drift,
+      principle_id: "deep-modules",
+      violation_count: 2,
+    };
+    const secondFix: ErrorFixPitfall = { ...errorFix, principle_id: "bounded-context" };
+    expect(countPitfalls([drift, secondDrift], [errorFix, secondFix])).toBe(4);
   });
 });

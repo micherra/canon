@@ -20,9 +20,9 @@ import type { DriftDbSignals } from "@platform/storage/drift/drift-db-signals.ts
 export type BackfillResult = {
   /** Total violation history rows processed. */
   processed: number;
-  /** New error_fix records inserted (did not already exist). */
+  /** error_fix records upserted (created or updated). */
   inserted: number;
-  /** Records that already existed (upsert was a no-op update). */
+  /** Always 0 — retained for backward compatibility. upsertErrorFix is idempotent; no pre-check is needed. */
   skipped: number;
 };
 
@@ -45,16 +45,7 @@ export function backfillErrorFixes(signals: DriftDbSignals): BackfillResult {
     return { inserted: 0, processed: 0, skipped: 0 };
   }
 
-  let inserted = 0;
-  let skipped = 0;
-
   for (const row of rows) {
-    // Check if an error_fix already exists for this file+principle pair.
-    // getErrorFixes filters by file_path; we then match on principle_id.
-    const existing = signals
-      .getErrorFixes([row.file_path])
-      .find((f) => f.principle_id === row.principle_id);
-
     const errorPattern = `${row.principle_id} violated ${row.violation_count} times`;
     const fixPattern = `Resolved after ${row.violation_count} violations; compliance now achieved`;
 
@@ -67,13 +58,7 @@ export function backfillErrorFixes(signals: DriftDbSignals): BackfillResult {
       occurrences: row.violation_count,
       principle_id: row.principle_id,
     });
-
-    if (existing !== undefined) {
-      skipped++;
-    } else {
-      inserted++;
-    }
   }
 
-  return { inserted, processed: rows.length, skipped };
+  return { inserted: rows.length, processed: rows.length, skipped: 0 };
 }
