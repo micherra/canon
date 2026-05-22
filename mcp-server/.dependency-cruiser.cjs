@@ -46,6 +46,9 @@ module.exports = {
           "^src/features/orchestration/services/learn-gate\\.ts$",
           // MP-7: build-trend-summary-writer reads drift DB directly — deferred DI exception
           "^src/features/orchestration/services/build-trend-summary-writer\\.ts$",
+          // compute-autonomy-tier instantiates DriftDb here and passes it as DriftDbAdapter —
+          // deferred DI exception until a DI container is wired
+          "^src/features/orchestration/tools/compute-autonomy-tier\\.ts$",
         ],
       },
       to: { path: "^src/platform/storage/drift/" },

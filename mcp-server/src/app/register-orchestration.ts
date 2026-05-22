@@ -1,5 +1,6 @@
 import { registerAgentTeamsTools } from "./register-agent-teams.ts";
 import { registerCategorizeTool } from "./register-categorize.ts";
+import { registerConfidenceTools } from "./register-confidence-tools.ts";
 import { registerHistoryTools } from "./register-history.ts";
 import { registerInitWorkspaceTool } from "./register-init-workspace.ts";
 import { registerJanitorTool } from "./register-janitor.ts";
@@ -18,4 +19,5 @@ export function registerOrchestrationTools(): void {
   registerAgentTeamsTools();
   registerHistoryTools();
   registerPresentArtifactTool();
+  registerConfidenceTools();
 }

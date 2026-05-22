@@ -100,6 +100,27 @@ Every build request goes through PM triage: (1) sharpen requirements, (2) assess
 | **Trivial** — single-file, no design questions, low blast radius | → engineer directly; PM infers minimal runbook |
 | **Non-trivial** — 2+ files, cross-layer, design questions, high blast radius | → architect; include sharpened-request.md in spawn prompt |
 
+### Autonomy Tier Protocol
+<!-- last-updated: 2026-05-21 -->
+
+After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_paths, override_tier? })` to assess build risk.
+
+| Tier | Gate behavior |
+|------|---------------|
+| **autonomous** | Skip build-step checkpoints. Skip WARNING close-out (advisory items auto-acknowledged). CLEAN re-review after fix auto-proceeds (no HITL). Plan approval and initial review verdict always active. |
+| **light-touch** | Skip build-step checkpoints only. All other gates active. |
+| **supervised** | Current behavior — all HITL gates active. |
+
+**Plan approval and initial review verdict are always mandatory regardless of tier — these are the highest-value checkpoints where wrong assumptions are caught.**
+
+**Fail-safe**: If `compute_autonomy_tier` returns an error or the tool is unavailable, default to "supervised".
+
+**Storage**: Store tier in board metadata: `update_board({ action: "set_metadata", metadata: { autonomy_tier: result.tier, autonomy_score: result.score } })`.
+
+**User override**: Pass `override_tier: "supervised"` to force full supervision. The user can request this at any point by saying "supervised mode" or "full supervision".
+
+**Logging**: The tool logs auto_decision events automatically. No additional orchestrator logging needed.
+
 ### Per-Message Re-Classification (L1)
 
 **Re-classify every user message.** Intent is per message, not session. Chat/question history does not make a subsequent build request "chat." Apply PM triage to every build request regardless of prior conversation flow.
@@ -360,7 +381,7 @@ The PostCommit hook validates `Canon-Workflow` trailer presence.
 
 ### Error Handling
 
-See the "Agent Spawn Error Handling" section below. The same retry logic (429 rate limits, auth failures, TTL ordering) applies to agent-teams orchestration. Retry up to 3 times with exponential backoff (4s, 8s, 16s). If all retries fail, inform the user and pause.
+See the "Agent Spawn Error Handling" section below. The same retry logic applies to agent-teams orchestration. For transient errors (429, auth, TTL), retry up to 3 times with exponential backoff (4s, 8s, 16s). For agent failures and stuck conditions, use the Auto-Escalation Protocol instead of immediate HITL. If all retries fail, inform the user and pause.
 
 ## Specialist Agents
 
@@ -407,6 +428,27 @@ Detect and retry transient failures:
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
 
 **Architect re-spawn tracking**: When the architect requires 2+ spawn attempts before producing expected artifacts, record the reason in the `log_step` outcome `review_verdict` field as `"respawn:{reason}"` (e.g., `"respawn:artifacts_missing"`). Values for `{reason}`: `artifacts_missing` (agent returned without writing design), `rate_limit`, `auth_failure`, `ttl_ordering`, `timeout`. This enables trend tracking across builds. When the `JournalOutcome` schema is extended with a dedicated `respawn_reason` field, migrate to that field.
+
+### Auto-Escalation Protocol
+<!-- last-updated: 2026-05-21 -->
+
+When an agent failure or stuck condition is detected (`isStuck` returns true, agent returns error, or retry fails), call `get_next_escalation_strategy({ workspace, step_id, flow_config? })` BEFORE escalating to HITL.
+
+**Strategy application:**
+
+| Strategy | How to apply |
+|----------|-------------|
+| `add_primer` | Add the domain primer for the failing area to the re-spawn prompt: "Relevant domain primers: {domain}. Load from ${CLAUDE_PLUGIN_ROOT}/primers/{domain}.md." |
+| `increase_budget` | Double the `turn_budget` in the re-spawn prompt (cap at 80). |
+| `escalate_model` | Add `model: "opus"` to the Agent call. |
+| `narrow_scope` | Split the failing task's file list in half. Re-spawn with only the first half. Queue the second half as a follow-up. |
+| `hitl` | Current behavior — escalate to user via HITL. |
+
+**When to call**: Replace the current "retry once then HITL" pattern. On first failure: call `get_next_escalation_strategy`. On subsequent failures of the same step: call again (it tracks state and returns the next strategy). When `is_terminal: true`, escalate to HITL.
+
+**Flow-specific config**: Pass `flow_config: { skip_strategies: ["narrow_scope"] }` for security flows. The escalation tool handles the skip internally.
+
+**Timeout**: The tool enforces a 2-minute cumulative timeout. If the cascade has been running for 2+ minutes, it returns "hitl" regardless of remaining strategies. The orchestrator does not need to track time separately.
 
 ## Re-spawn Enrichment Protocol
 
