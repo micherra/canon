@@ -161,7 +161,7 @@ function isMergeConflict(result: { stdout: string; stderr: string }): boolean {
 export async function mergeTaskResults(
   tasks: WaveWorktreeResult[],
   projectDir: string,
-  mergeStrategy: MergeStrategy,
+  _mergeStrategy: MergeStrategy,
 ): Promise<MergeWaveResult> {
   let mergedCount = 0;
 

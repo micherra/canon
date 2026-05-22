@@ -201,6 +201,10 @@ describe("codebaseGraphSubmit", () => {
     await codebaseGraphSubmit({ source_dirs: ["src"] }, "/fake/project", "/fake/plugin");
 
     // Without force, third argument should be undefined
-    expect(mockManager.submit).toHaveBeenCalledWith(expect.anything(), expect.anything(), undefined);
+    expect(mockManager.submit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+    );
   });
 });

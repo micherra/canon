@@ -124,8 +124,12 @@ describe("getPrReviewData — layer inference", () => {
     }));
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, dir.get());
-    expect(result.files.find((f) => f.path === "src/features/pr-review/tools/pr-review-data.ts")?.layer).toBe("tools");
-    expect(result.files.find((f) => f.path === "src/__tests__/pr-review-data.test.ts")?.layer).toBe("tests");
+    expect(
+      result.files.find((f) => f.path === "src/features/pr-review/tools/pr-review-data.ts")?.layer,
+    ).toBe("tools");
+    expect(result.files.find((f) => f.path === "src/__tests__/pr-review-data.test.ts")?.layer).toBe(
+      "tests",
+    );
   });
 
   it("groups files by layer in layers array", async () => {
@@ -288,9 +292,9 @@ describe("getPrReviewData — git ref sanitization", () => {
 
   it("throws on invalid git ref characters", async () => {
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await expect(
-      fn({ branch: "feat/x; rm -rf /", diff_base: "main" }, dir.get()),
-    ).rejects.toThrow("Invalid git ref");
+    await expect(fn({ branch: "feat/x; rm -rf /", diff_base: "main" }, dir.get())).rejects.toThrow(
+      "Invalid git ref",
+    );
   });
 
   it("throws on ref starting with dash", async () => {
@@ -321,7 +325,11 @@ describe("DriftStore — review methods", () => {
       honored: [],
       pr_number: 42,
       review_id: "rev_1",
-      score: { conventions: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, rules: { passed: 0, total: 0 } },
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
       timestamp: "2026-03-16T00:00:00Z",
       verdict: "CLEAN",
       violations: [],
@@ -331,7 +339,11 @@ describe("DriftStore — review methods", () => {
       honored: [],
       pr_number: 99,
       review_id: "rev_2",
-      score: { conventions: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, rules: { passed: 0, total: 0 } },
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
       timestamp: "2026-03-16T01:00:00Z",
       verdict: "WARNING",
       violations: [],
@@ -351,7 +363,11 @@ describe("DriftStore — review methods", () => {
       last_reviewed_sha: "sha1",
       pr_number: 42,
       review_id: "rev_1",
-      score: { conventions: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, rules: { passed: 0, total: 0 } },
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
       timestamp: "2026-03-16T00:00:00Z",
       verdict: "WARNING",
       violations: [],
@@ -362,7 +378,11 @@ describe("DriftStore — review methods", () => {
       last_reviewed_sha: "sha2",
       pr_number: 42,
       review_id: "rev_2",
-      score: { conventions: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, rules: { passed: 0, total: 0 } },
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
       timestamp: "2026-03-16T01:00:00Z",
       verdict: "CLEAN",
       violations: [],
@@ -405,9 +425,27 @@ describe("getPrReviewData — blast radius from KG", () => {
       mtime_ms: Date.now(),
       path: "src/api/handler.ts",
     });
-    for (const [hash, path] of [["s1", "src/services/svc1.ts"], ["s2", "src/services/svc2.ts"], ["s3", "src/services/svc3.ts"]]) {
-      const svc = store.upsertFile({ content_hash: hash, language: "typescript", last_indexed_at: Date.now(), layer: "services", mtime_ms: Date.now(), path });
-      store.insertFileEdge({ confidence: 1.0, edge_type: "imports", evidence: null, relation: null, source_file_id: svc.file_id!, target_file_id: handler.file_id! });
+    for (const [hash, path] of [
+      ["s1", "src/services/svc1.ts"],
+      ["s2", "src/services/svc2.ts"],
+      ["s3", "src/services/svc3.ts"],
+    ]) {
+      const svc = store.upsertFile({
+        content_hash: hash,
+        language: "typescript",
+        last_indexed_at: Date.now(),
+        layer: "services",
+        mtime_ms: Date.now(),
+        path,
+      });
+      store.insertFileEdge({
+        confidence: 1.0,
+        edge_type: "imports",
+        evidence: null,
+        relation: null,
+        source_file_id: svc.file_id!,
+        target_file_id: handler.file_id!,
+      });
     }
     db.close();
     vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
