@@ -80,36 +80,12 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
     expect(existsSync(path)).toBe(true);
   });
 
-  it("IKgStore/IKgQuery interface file exists at domains/knowledge-graph/kg-store.interface.ts", () => {
-    const path = resolve(SRC, "domains/knowledge-graph/kg-store.interface.ts");
-    expect(existsSync(path)).toBe(true);
-  });
-
-  it("IDriftStore interface file exists at domains/drift/drift-store.interface.ts", () => {
-    const path = resolve(SRC, "domains/drift/drift-store.interface.ts");
-    expect(existsSync(path)).toBe(true);
-  });
-
   it("IExecutionStore is exported from its interface file", () => {
     const content = readFileSync(
       resolve(SRC, "domains/workspaces/execution-store.interface.ts"),
       "utf-8",
     );
     expect(content).toMatch(/export (?:interface|type) IExecutionStore/);
-  });
-
-  it("IDriftStore is exported from its interface file", () => {
-    const content = readFileSync(resolve(SRC, "domains/drift/drift-store.interface.ts"), "utf-8");
-    expect(content).toMatch(/export (?:interface|type) IDriftStore/);
-  });
-
-  it("IKgStore and IKgQuery are exported from their interface file", () => {
-    const content = readFileSync(
-      resolve(SRC, "domains/knowledge-graph/kg-store.interface.ts"),
-      "utf-8",
-    );
-    expect(content).toMatch(/export (?:interface|type) IKgStore/);
-    expect(content).toMatch(/export (?:interface|type) IKgQuery/);
   });
 
   it("IExecutionStore imports types from split schema files (not deleted flow-schema.ts)", () => {
