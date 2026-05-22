@@ -96,7 +96,7 @@ export class JobManager {
    *
    * Flow:
    * 1. Compute fingerprint — return INVALID_INPUT if null (not a git repo).
-   * 2. Check cache — return cached result immediately if hit.
+   * 2. Check cache — return cached result immediately if hit (skipped when force=true).
    * 3. Check for running job with same fingerprint — return deduplicated: true if found.
    * 4. If sync mode — run runPipeline inline, cache result, return complete.
    * 5. Otherwise — create job row, fork worker, wire IPC handlers, start watchdog.
@@ -105,6 +105,7 @@ export class JobManager {
   async submit(
     input: CodebaseGraphInput,
     sourceDirs?: string[],
+    force?: boolean,
   ): Promise<ToolResult<SubmitResult>> {
     // Step 1: compute fingerprint
     const fingerprint = await computeJobFingerprint({
@@ -119,17 +120,19 @@ export class JobManager {
       );
     }
 
-    // Step 2: check cache
-    const cached = this.store.getCache(fingerprint);
-    if (cached) {
-      return toolOk<SubmitResult>({
-        cached: true,
-        deduplicated: false,
-        fingerprint,
-        job_id: randomUUID(),
-        result: JSON.parse(cached.result_summary) as Record<string, unknown>,
-        status: "complete",
-      });
+    // Step 2: check cache (skipped when force=true)
+    if (!force) {
+      const cached = this.store.getCache(fingerprint);
+      if (cached) {
+        return toolOk<SubmitResult>({
+          cached: true,
+          deduplicated: false,
+          fingerprint,
+          job_id: randomUUID(),
+          result: JSON.parse(cached.result_summary) as Record<string, unknown>,
+          status: "complete",
+        });
+      }
     }
 
     // Step 3: deduplication check
