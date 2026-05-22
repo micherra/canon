@@ -51,14 +51,14 @@ Workspaces are pruned in two passes. Run Pass 1 first; workspaces that survive P
 
 ### Pass 1 — Orphaned workspaces (no registered worktree)
 
-1. Collect the set of paths registered with git: `git worktree list --porcelain | grep '^worktree ' | awk '{print $2}'`.
-2. List directories under `.canon/workspaces/`. Skip the workspace for the current branch (safety check — see below).
-3. For each workspace directory, search up to 3 levels deep for a subdirectory named `worktree/`:
-   `find .canon/workspaces/<slug> -maxdepth 3 -type d -name worktree`
-4. If a `worktree/` subdirectory is found, resolve its absolute path with `realpath` and check whether that path appears in the registered-worktree set from step 1.
-5. If the `worktree/` path is NOT registered with git, the workspace is **orphaned** — safe to remove: `rm -rf .canon/workspaces/<slug>`.
-6. If no `worktree/` subdirectory exists at all, carry the workspace forward to Pass 2.
-7. If the `worktree/` path IS registered with git, carry the workspace forward to Pass 2.
+1. Collect the set of paths registered with git: `git worktree list --porcelain | grep '^worktree ' | sed 's/^worktree //'`.
+2. Find all `worktree/` subdirectories under `.canon/workspaces/` (up to 4 levels deep):
+   `find .canon/workspaces -maxdepth 4 -type d -name worktree`
+3. For each `worktree/` found, resolve its absolute path with `realpath` and check whether that path appears in the registered-worktree set from step 1. Skip if the path belongs to the current branch (safety check — see below).
+4. If the `worktree/` path is NOT registered with git, the workspace is **orphaned**. Delete the **workspace directory** (the direct parent of `worktree/`), not the top-level entry under `.canon/workspaces/`: `rm -rf <parent-of-worktree>`. Workspaces can be branch-scoped (`.canon/workspaces/<branch>/<slug>/worktree/`) — deleting the top-level entry would destroy sibling workspaces under the same branch container.
+5. After deleting an orphaned workspace, check if its branch container (if any) is now empty: `find <branch-container> -maxdepth 0 -empty`. If empty, remove the branch container too.
+6. Collect the set of top-level entries under `.canon/workspaces/` that still contain no `worktree/` subdirectory at any depth — carry these forward to Pass 2.
+7. Top-level entries that still contain at least one registered `worktree/` — carry these forward to Pass 2.
 
 ### Pass 2 — Merged or deleted branches
 
