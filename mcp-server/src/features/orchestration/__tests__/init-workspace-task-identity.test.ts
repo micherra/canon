@@ -34,6 +34,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
 
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
+// Scope: Tests the task-identity guard in tryResumeWorkspace — DB manipulation simulates slug collisions; mismatched task blocks resume.
+
 let tmpDirs: string[] = [];
 
 function makeTmpProjectDir(): string {

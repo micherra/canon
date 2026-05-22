@@ -26,6 +26,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
 
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
+// Scope: Tests runbook_content and brief_content params — both files persisted to plans/${slug}/ at init time, backward compat when omitted.
+
 let tmpDirs: string[] = [];
 
 function makeTmpProjectDir(): string {

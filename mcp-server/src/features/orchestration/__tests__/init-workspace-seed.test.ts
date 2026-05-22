@@ -29,6 +29,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 import { seedFromPriorWorkspace } from "../tools/seed-workspace.ts";
 
+// Scope: Tests seed_from parameter — copying handoffs/*.md and research/*.md from a prior workspace, path validation, and non-.md file filtering.
+
 let tmpDirs: string[] = [];
 
 function makeTmpDir(): string {
