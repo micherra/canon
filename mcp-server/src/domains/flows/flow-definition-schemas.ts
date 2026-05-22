@@ -257,7 +257,7 @@ export const WavePolicySchema = z
     coordination: z.string().optional(),
     gate: z.string().optional(),
     isolation: z.enum(["worktree", "branch", "none"]).default("worktree"),
-    merge_strategy: z.enum(["sequential", "rebase", "squash"]).default("sequential"),
+    merge_strategy: z.enum(["sequential"]).default("sequential"),
     on_conflict: z.enum(["hitl", "replan", "retry-single"]).default("hitl"),
   })
   .optional();
