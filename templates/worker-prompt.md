@@ -56,6 +56,16 @@ If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook
 9. Loop back to step 1.
 10. If TaskList returns empty (all tasks completed), you are done.
 
+## Budget Checkpoints (WIP Commits)
+
+Your spawn prompt includes `turn_budget: N`. Use it to pace your work and prevent lost progress:
+
+- **At ~50% of your turn budget**: Make a WIP commit of all modified files so far:
+  `wip(recovery): {task_id} — partial progress at 50% budget`
+  This ensures work is preserved if the session ends unexpectedly.
+
+- **At ~75% of your turn budget**: Enter wrap-up mode. Stop starting new workstreams, complete the current unit of work, commit all remaining changes, and mark the task complete or failed. Use the same commit prefix: `wip(recovery): {task_id} — wrap-up at 75% budget`
+
 ## Rules
 
 - Work ONLY in your worktree, never in the project root or build worktree.
