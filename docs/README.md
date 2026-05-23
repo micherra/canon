@@ -6,7 +6,7 @@ This directory contains human-readable documentation about Canon's architecture,
 
 The `reference/` subdirectory contains authoritative reference documentation. The primary reference — `canon-reference.md` — is the single comprehensive guide covering Canon's MCP tool signatures, flow schema, hook configuration, and principles overview. When you need to know the exact parameters for an MCP tool or the structure of a flow definition, this is where to look.
 
-The root of this directory holds architecture analysis, roadmaps, and retrospectives. These documents capture point-in-time thinking that may still be useful even after its immediate recommendations are implemented. The bounded-context map describes how the MCP server's eight bounded contexts relate to each other. The codebase intelligence roadmap captures the direction of Canon's knowledge graph and semantic search capabilities. Historical retrospectives preserve the lessons from past design experiments.
+The root of this directory holds architecture analysis and direction documents. The bounded-context map describes how the MCP server's eight bounded contexts relate to each other. The supervised-build-quality document captures the current direction: what shipped, what's next, and the prioritized feature backlog.
 
 The `images/` subdirectory holds diagrams and screenshots referenced by the documents here.
 
@@ -24,4 +24,4 @@ The distinction matters: if you find yourself writing something that an agent ne
 
 The `canon-reference.md` file in `reference/` is the document most likely to drift — it documents MCP tool signatures that change when the server is updated. Update it when tools are added, removed, or have their parameters changed.
 
-Architecture analysis and retrospective documents are less sensitive to drift. Their value is often in capturing the reasoning at a moment in time, even if the system has moved on. Resist the urge to delete them just because their recommendations have been implemented — the reasoning is still useful context.
+Direction documents like `supervised-build-quality.md` should be updated when priorities shift or epics ship. The bounded-context map should be updated when new bounded contexts are added or existing ones are restructured.
