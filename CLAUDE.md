@@ -147,6 +147,8 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Fast-path enrichment**: For 4+ files or 2+ workstreams, include in engineer's spawn prompt: scope summary, key files with one-line purpose, known gotchas.
 
+**Learner-proposal enrichment**: When the build addresses learner findings, add to the engineer spawn prompt: "After implementing each proposal, grep the same file and related files in the same directory for existing instances of the violation pattern. Apply the fix retroactively to every instance found. List retroactive fixes in the Criteria Coverage table."
+
 #### Non-trivial path (PM → architect → execution)
 
 1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` → save `worktree_path`, `workspace`.
@@ -293,6 +295,8 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and produce the fin
 log_step({ workspace, step_id, status: "skipped", outcome: { skip_reason: "<value>" } })
 ```
 Accepted values: `"fix-type build, no contract-level changes"` | `"markdown-only change, no context drift"` | `"session timeout"` | `"no new patterns observed"` | `"documentation-only diff, verify produces zero signal"` | `"context-sync targets are build artifacts"`
+
+An empty `skip_reason` is a protocol violation. If no accepted value fits, the step should not be skipped — run it or report BLOCKED.
 
 ### Post-Subagent Artifact Check
 
@@ -488,7 +492,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (59 total: 6 rules, 35 strong-opinions, 18 conventions)
+├── principles/           # Built-in principles (63 total: 6 rules, 35 strong-opinions, 22 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
