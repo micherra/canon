@@ -94,7 +94,7 @@ Categorize every changed file into one of:
 | **test-only** | New/modified test files only | No |
 | **config** | Changed build config, CI, linting | Rarely — only if it affects developer workflow |
 
-If ALL changes are internal/test-only/config, skip to Step 7 with status NO_UPDATES.
+If ALL changes are internal/test-only/config, skip to Step 8 with status NO_UPDATES.
 
 ### Step 4: Update CLAUDE.md
 
@@ -139,7 +139,7 @@ For the full template with section headers and editing rules, see `${CLAUDE_PLUG
 
 **Protected content (never trim):** behavioral instructions, invariants, `<!-- last-updated -->` tags, architecture tree structures, dependency tables, development commands, section headings.
 
-Remove specific lines or sections — do not restructure. If all derivable content is already removed and the file still exceeds 40,000 characters, do not trim further; record the file as over budget in the CONTEXT-SYNC.md report (Step 7) as a warning.
+Remove specific lines or sections — do not restructure. If all derivable content is already removed and the file still exceeds 40,000 characters, do not trim further; record the file as over budget in the CONTEXT-SYNC.md report (Step 8) as a warning.
 
 ### Step 4b: Length Management Pass
 
@@ -199,11 +199,28 @@ If no changes were classified as `structure`, skip this step entirely.
 - Never add conventions based on your own observation of patterns — that's the learner's job
 - If adding, use the existing format in CONVENTIONS.md
 
-### Step 7: Produce summary
+### Step 7: Commit worktree edits
+
+After all document edits in Steps 4–6 are complete, commit the worktree changes before reporting completion. This is mandatory — the scribe MUST NOT report UPDATED status before committing.
+
+Run in the worktree directory:
+
+```bash
+git add -A
+git commit -m "docs(context-sync): update CLAUDE.md, context.md, and CONVENTIONS.md
+
+Canon-Workflow: {slug}
+Canon-Agent: scribe
+Canon-State: context-sync"
+```
+
+Replace `{slug}` with the workflow slug from the orchestrator's spawn prompt. If no changes were staged (all files already committed or no edits were made), skip this step and report NO_UPDATES.
+
+### Step 8: Produce summary
 
 Write a sync report to `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`. The orchestrator **must** provide the context-sync-report template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md`.
 
-### Step 8: Log activity
+### Step 9: Log activity
 
 Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
