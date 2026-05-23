@@ -29,6 +29,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
 
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
+// Scope: Tests preflight gate behavior — dirty git state blocks workspace creation, .lock files are ignored, clean state passes.
+
 let tmpDirs: string[] = [];
 
 function makeTmpProjectDir(): string {

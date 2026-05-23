@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import matter from "gray-matter";
 import { PRINCIPLE_SECTIONS } from "./constants.ts";
 
-export type PrincipleScope = {
+type PrincipleScope = {
   layers: string[];
   file_patterns: string[];
   /** Optional tags for cross-cutting matching via computed file tags from the KG. */

@@ -468,6 +468,57 @@ describe("JobManager", () => {
 
     expect(pollResult.status).toBe("complete");
   });
+
+  // submit — force refresh
+
+  it("submit with force=true skips cache and starts a fresh job", async () => {
+    // Prime the cache by completing a job
+    const r1 = await manager.submit({ root_dir: "/fake/project" });
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+
+    fakeChild._simulateMessage({ result: { filesScanned: 99 }, type: "complete" });
+
+    // Reset fork mock for new job
+    vi.mocked(forkJob).mockClear();
+    const fakeChild2 = makeFakeChild();
+    vi.mocked(forkJob).mockImplementation((options) => {
+      fakeChild2.onMessage = options.onMessage as (msg: unknown) => void;
+      fakeChild2.onExit = options.onExit;
+      return fakeChild2 as unknown as ChildProcess;
+    });
+
+    // Submit with force=true — must bypass cache
+    const r2 = await manager.submit({ root_dir: "/fake/project" }, undefined, true);
+    expect(r2.ok).toBe(true);
+    if (!r2.ok) return;
+
+    expect(r2.cached).toBe(false);
+    expect(r2.deduplicated).toBe(false);
+    expect(r2.status).toBe("running");
+    // A fresh fork should have been created
+    expect(forkJob).toHaveBeenCalledOnce();
+  });
+
+  it("submit with force=true still deduplicates when an in-flight job exists", async () => {
+    // Start a job (running, not yet complete)
+    const r1 = await manager.submit({ root_dir: "/fake/project" });
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    expect(r1.status).toBe("running");
+
+    vi.mocked(forkJob).mockClear();
+
+    // Submit again with force=true — same fingerprint, job still in-flight
+    const r2 = await manager.submit({ root_dir: "/fake/project" }, undefined, true);
+    expect(r2.ok).toBe(true);
+    if (!r2.ok) return;
+
+    // Should dedup — no additional fork
+    expect(r2.deduplicated).toBe(true);
+    expect(r2.job_id).toBe(r1.job_id);
+    expect(forkJob).not.toHaveBeenCalled();
+  });
 });
 
 // getOrCreateJobManager — Comment #4 fixes

@@ -31,6 +31,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
+// Scope: Tests CONVENTIONS.md injection into the cache prefix and graceful degradation when KG DB or conventions file is absent.
+
 let tmpDirs: string[] = [];
 
 function makeTmpProjectDir(): string {

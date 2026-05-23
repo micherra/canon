@@ -32,6 +32,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
 
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
+// Scope: Tests worktree creation, resume detection, legacy path fallback, preflight-skips-worktree, and graceful failure when not in a git repo.
+
 let tmpDirs: string[] = [];
 
 function makeTmpProjectDir(): string {

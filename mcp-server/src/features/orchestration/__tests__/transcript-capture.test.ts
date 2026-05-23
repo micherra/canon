@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -23,6 +22,15 @@ vi.mock("../../../app/server-state.ts", async (importOriginal) => {
 // Mutable variable updated by each test before calling captureTranscript.
 let mockProjectDir = process.cwd();
 
+// Minimal shape of a resolved flow used only for test setup.
+type MinimalFlow = {
+  description: string;
+  entry: string;
+  name: string;
+  spawn_instructions: Record<string, string>;
+  states: Record<string, { type: string; transitions?: Record<string, string> }>;
+};
+
 let tmpDirs: string[] = [];
 
 function makeTmpDir(): string {
@@ -31,7 +39,7 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function makeMinimalFlow(): ResolvedFlow {
+function makeMinimalFlow(): MinimalFlow {
   return {
     description: "A test flow",
     entry: "build",
@@ -44,7 +52,7 @@ function makeMinimalFlow(): ResolvedFlow {
   };
 }
 
-function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
+function setupWorkspace(workspace: string, flow: MinimalFlow): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
