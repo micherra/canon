@@ -19,8 +19,25 @@ export function registerAgentTeamsTools(): void {
         agent_name: z
           .string()
           .describe("Agent name (with or without `canon:` prefix). Matches `agents/<name>.md`."),
+        file_paths: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "File paths to query for historical pitfalls. When provided, appends a Known Pitfalls section to preload_prompt.",
+          ),
+        workspace: z
+          .string()
+          .optional()
+          .describe(
+            "Workspace path for audit logging. When provided with file_paths, logs a pitfall_injected event.",
+          ),
       },
     },
-    wrapHandler(async (input) => resolveAgentSkills(input, pluginDir, projectDir)),
+    wrapHandler(async (input) =>
+      resolveAgentSkills({ agent_name: input.agent_name }, pluginDir, projectDir, {
+        filePaths: input.file_paths,
+        workspace: input.workspace,
+      }),
+    ),
   );
 }
