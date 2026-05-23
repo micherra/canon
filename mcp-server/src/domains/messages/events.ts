@@ -8,7 +8,7 @@ import type {
 } from "@domains/flows/flow-definition-schemas.ts";
 import { z } from "zod";
 
-export type FlowEventType =
+type FlowEventType =
   | "state_entered"
   | "state_completed"
   | "agent_spawned"
@@ -21,7 +21,7 @@ export type FlowEventType =
   | "tool_scope_audit"
   | "agent_activity";
 
-export type FlowEventMap = {
+type FlowEventMap = {
   state_entered: {
     stateId: string;
     stateType: string;

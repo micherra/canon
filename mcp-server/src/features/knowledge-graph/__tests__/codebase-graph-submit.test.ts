@@ -146,7 +146,7 @@ describe("codebaseGraphSubmit", () => {
     await codebaseGraphSubmit({}, "/fake/project", "/fake/plugin");
 
     // deriveSourceDirsFromLayers is mocked to return ['src']
-    expect(mockManager.submit).toHaveBeenCalledWith(expect.anything(), ["src"]);
+    expect(mockManager.submit).toHaveBeenCalledWith(expect.anything(), ["src"], undefined);
   });
 
   it("passes explicit source_dirs over config-derived dirs", async () => {
@@ -161,6 +161,50 @@ describe("codebaseGraphSubmit", () => {
 
     await codebaseGraphSubmit({ source_dirs: ["custom/src"] }, "/fake/project", "/fake/plugin");
 
-    expect(mockManager.submit).toHaveBeenCalledWith(expect.anything(), ["custom/src"]);
+    expect(mockManager.submit).toHaveBeenCalledWith(expect.anything(), ["custom/src"], undefined);
+  });
+
+  it("passes force=true to JobManager.submit when force is set", async () => {
+    mockManager.submit.mockResolvedValue({
+      cached: false,
+      deduplicated: false,
+      fingerprint: "fp-force-01",
+      job_id: "job-force-01",
+      ok: true,
+      status: "running",
+    });
+
+    const result = await codebaseGraphSubmit(
+      { force: true, source_dirs: ["src"] },
+      "/fake/project",
+      "/fake/plugin",
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.cached).toBe(false);
+    }
+    // force=true must be forwarded as the third argument
+    expect(mockManager.submit).toHaveBeenCalledWith(expect.anything(), expect.anything(), true);
+  });
+
+  it("does not pass force when force is not set", async () => {
+    mockManager.submit.mockResolvedValue({
+      cached: false,
+      deduplicated: false,
+      fingerprint: "fp-noforce",
+      job_id: "job-noforce",
+      ok: true,
+      status: "running",
+    });
+
+    await codebaseGraphSubmit({ source_dirs: ["src"] }, "/fake/project", "/fake/plugin");
+
+    // Without force, third argument should be undefined
+    expect(mockManager.submit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+    );
   });
 });

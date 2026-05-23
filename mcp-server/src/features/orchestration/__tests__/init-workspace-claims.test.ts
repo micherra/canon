@@ -13,6 +13,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runPreflightChecksForTest } from "../tools/init-workspace.ts";
 
+// Scope: Tests preflight claim overlap detection — active claims reported as warnings, stale/corrupt claims ignored.
+
 describe("init-workspace preflight — claim overlap check", () => {
   let tmpDir: string;
 

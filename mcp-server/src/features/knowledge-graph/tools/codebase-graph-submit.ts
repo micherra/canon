@@ -18,7 +18,7 @@ import type { ToolResult } from "@shared/lib/tool-result.ts";
 import type { CodebaseGraphInput } from "./codebase-graph.ts";
 
 export interface GraphSubmitInput extends CodebaseGraphInput {
-  /** Skip cache, force new run (not yet implemented — reserved). */
+  /** Skip cache and force a fresh graph scan. Dedup check remains active. */
   force?: boolean;
 }
 
@@ -39,5 +39,5 @@ export async function codebaseGraphSubmit(
   const sourceDirs = explicitSourceDirs || configSourceDirs || undefined;
 
   const manager = await getOrCreateJobManager(projectDir, pluginDir);
-  return manager.submit(input, sourceDirs ?? undefined);
+  return manager.submit(input, sourceDirs ?? undefined, input.force);
 }

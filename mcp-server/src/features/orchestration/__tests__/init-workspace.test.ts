@@ -19,6 +19,8 @@ import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts"
 import { afterEach, describe, expect, it } from "vitest";
 import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
 
+// Scope: Core SQLite init, resume detection, listBranchWorkspaces, workspace scoping to projectDir, slug-collision suffix, and concurrent init race.
+
 let tmpDirs: string[] = [];
 
 function makeTmpProjectDir(): string {

@@ -4,8 +4,7 @@
  * Integration tests and coverage gap fills for the PR Review Prep redesign.
  *
  * Wave 1 (pr-review-data.ts) adds classifyFile(), generateNarrative(), and
- * computeBlastRadius() to getPrReviewData(). Wave 2 (PrReview.svelte)
- * consumes those fields in the UI.
+ * computeBlastRadius() to getPrReviewData().
  *
  * This file covers:
  *   1. Cross-task integration: getPrReviewData() → bucket/reason fields
@@ -15,11 +14,7 @@
  *   3. computeBlastRadius() via getPrReviewData() with real graph edges
  *      (declared known gap from Task 01 summary)
  *
- * Split files:
- *   - pr-review-redesign-helpers.test.ts — UI helper pure-logic tests
- *     (statusIcon, statusClass, shortPath, formatAge, groupByDepth)
- *   - pr-review-redesign-ui.test.ts — setActiveLayer toggle, filteredFiles
- *     derived state, PrReview.svelte v2 structural contract
+ * Related files:
  *   - pr-review-redesign-classifynarrative.test.ts — classifyFile() and
  *     generateNarrative() pure function coverage gaps (describes 4-5)
  */

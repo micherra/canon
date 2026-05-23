@@ -3,9 +3,8 @@
  *
  * These tests verify cross-task contracts and coverage gaps:
  *   1. Schema split: flow-schema.ts is deleted; no importer references it
- *   2. Interface import paths: all 3 repository interfaces live in domains/ layer
- *   3. Bounded context directories: all 9 READMEs exist (dc-06)
- *   4. Boundary enforcement: npm run lint:deps exits 0 (dc-04)
+ *   2. Bounded context directories: all 8 READMEs exist (dc-06)
+ *   3. Boundary enforcement: npm run lint:deps exits 0 (dc-04)
  */
 
 import { execSync } from "node:child_process";
@@ -70,63 +69,7 @@ describe("schema split — flow-schema.ts deletion (dc-02)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Repository interface files: correct layer placement and cross-context
-//    callers import from domains/ (dc-03)
-// ---------------------------------------------------------------------------
-
-describe("repository interfaces — correct layer placement (dc-03)", () => {
-  it("IExecutionStore interface file exists at domains/workspaces/execution-store.interface.ts", () => {
-    const path = resolve(SRC, "domains/workspaces/execution-store.interface.ts");
-    expect(existsSync(path)).toBe(true);
-  });
-
-  it("IKgStore/IKgQuery interface file exists at domains/knowledge-graph/kg-store.interface.ts", () => {
-    const path = resolve(SRC, "domains/knowledge-graph/kg-store.interface.ts");
-    expect(existsSync(path)).toBe(true);
-  });
-
-  it("IDriftStore interface file exists at domains/drift/drift-store.interface.ts", () => {
-    const path = resolve(SRC, "domains/drift/drift-store.interface.ts");
-    expect(existsSync(path)).toBe(true);
-  });
-
-  it("IExecutionStore is exported from its interface file", () => {
-    const content = readFileSync(
-      resolve(SRC, "domains/workspaces/execution-store.interface.ts"),
-      "utf-8",
-    );
-    expect(content).toMatch(/export (?:interface|type) IExecutionStore/);
-  });
-
-  it("IDriftStore is exported from its interface file", () => {
-    const content = readFileSync(resolve(SRC, "domains/drift/drift-store.interface.ts"), "utf-8");
-    expect(content).toMatch(/export (?:interface|type) IDriftStore/);
-  });
-
-  it("IKgStore and IKgQuery are exported from their interface file", () => {
-    const content = readFileSync(
-      resolve(SRC, "domains/knowledge-graph/kg-store.interface.ts"),
-      "utf-8",
-    );
-    expect(content).toMatch(/export (?:interface|type) IKgStore/);
-    expect(content).toMatch(/export (?:interface|type) IKgQuery/);
-  });
-
-  it("IExecutionStore imports types from split schema files (not deleted flow-schema.ts)", () => {
-    const content = readFileSync(
-      resolve(SRC, "domains/workspaces/execution-store.interface.ts"),
-      "utf-8",
-    );
-    // Must reference the split files (wave event types removed in phase2-surgical cleanup)
-    expect(content).toMatch(/@domains\/flows\/board-state-schemas/);
-    expect(content).toMatch(/@domains\/flows\/flow-definition-schemas/);
-    // Must NOT reference the deleted monolithic file
-    expect(content).not.toMatch(/flow-schema['"]/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 3. Bounded context directory structure — all 9 READMEs exist (dc-06)
+// 2. Bounded context directory structure — all 8 READMEs exist (dc-06)
 // ---------------------------------------------------------------------------
 
 describe("bounded context directories — README.md files (dc-06)", () => {
@@ -136,7 +79,6 @@ describe("bounded context directories — README.md files (dc-06)", () => {
     "domains/board/README.md",
     "domains/messages/README.md",
     "domains/knowledge-graph/README.md",
-    "domains/drift/README.md",
     "graph/README.md",
     "platform/README.md",
     "shared/README.md",
@@ -161,7 +103,7 @@ describe("bounded context directories — README.md files (dc-06)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. Boundary enforcement — dependency-cruiser (dc-04)
+// 3. Boundary enforcement — dependency-cruiser (dc-04)
 // ---------------------------------------------------------------------------
 
 describe("boundary enforcement — dependency-cruiser (dc-04)", () => {

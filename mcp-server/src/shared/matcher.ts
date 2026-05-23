@@ -7,7 +7,7 @@ import { loadPrincipleFile, type Principle } from "./parser.ts";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
 
-export type MatchFilters = {
+type MatchFilters = {
   layers?: string[];
   file_path?: string;
   severity_filter?: "rule" | "strong-opinion" | "convention";
