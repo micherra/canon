@@ -140,6 +140,26 @@ If push/PR creation fails, save the PR description to `${WORKSPACE}/plans/${slug
 4. If clean merge: `git branch -d canon/{slug}`. Do NOT run `git worktree remove` — worktree cleanup is handled after `finalize_workspace` completes.
 5. Report success.
 
+### Step 4.5: Create GitHub release (conditional)
+
+After the PR is created, check whether a release tag exists on HEAD:
+
+```sh
+git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | head -1
+```
+
+If a matching tag is found (e.g., `v1.2.3`), create a GitHub release with auto-generated release notes:
+
+```sh
+gh release create <tag> --generate-notes
+```
+
+If the command succeeds, include the release URL in your status report alongside the PR URL.
+
+If the command fails (e.g., release already exists, auth error), note it in the PR description under "Build Notes" and report `DONE_WITH_CONCERNS` with the exact error. Do not block shipping over a failed release creation.
+
+If no matching tag exists on HEAD, skip this step silently.
+
 ### Step 5: Log activity
 
 Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
