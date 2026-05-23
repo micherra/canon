@@ -47,7 +47,7 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-21 (compute_autonomy_tier + get_next_escalation_strategy tools added) -->
+<!-- last-updated: 2026-05-22 (drift DB schema v6, DriftDbSignals new methods, resolve_agent_skills pitfall injection) -->
 
 **`present_artifact` MCP tool** — `html` parameter required; serves the provided HTML directly via HTTP server; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
 
@@ -69,9 +69,9 @@ src/
 
 **Fragment param syntax** — typed params (`param_name: { type: state_id|string|number|boolean, default? }`) replace null-marker `~`; backward compat retained; `state_id` params validated at load time.
 
-**Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "4"; v4 adds `file_violation_history` (PK: file_path + principle_id) and `path_effects` (PK: file_path) tables; idempotent migrations. Updated 2026-05-15.
+**Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "6"; v4 adds `file_violation_history` (PK: file_path + principle_id) and `path_effects` (PK: file_path) tables; v6 adds `error_fixes` table (PK: file_path + principle_id; columns: file_path, principle_id, error_pattern, fix_pattern, occurrences, last_seen, first_seen); idempotent migrations. Updated 2026-05-22.
 
-**DriftDbSignals DAO** (`src/platform/storage/drift/drift-db-signals.ts`) — sync DAO for `file_violation_history` and `path_effects`; methods: `getFileViolationHistory`, `upsertFileViolation`, `markFixed`, `getPathEffects`, `upsertPathEffect`. `DriftDb.getSignals()` is a lazy cached accessor. Added 2026-05-15.
+**DriftDbSignals DAO** (`src/platform/storage/drift/drift-db-signals.ts`) — sync DAO for `file_violation_history`, `path_effects`, and `error_fixes`; methods: `getFileViolationHistory`, `upsertFileViolation`, `markFixed`, `getPathEffects`, `upsertPathEffect`, `getErrorFixes(filePaths)`, `upsertErrorFix(input)`, `getAllFileViolationHistory()`. `DriftDb.getSignals()` is a lazy cached accessor. Updated 2026-05-22.
 
 **Drift Store** (`src/platform/storage/drift/store.ts`) — `ReviewEntry` is the unified type for all reviews (principle + PR); `PrStore` deleted 2026-03-25. `DriftStore.getReviews(options?)` AND-filters by principleId/branch/prNumber (see source for full signature).
 
@@ -80,6 +80,8 @@ src/
 **KgQuery** (`src/graph/kg-query.ts`) — `computeImpactScore`, `computeFileInsightMaps` (call once per request), `getFileMetrics`, `getSubgraph`; must call `computeFileInsightMaps` before `getFileMetrics` in loops (see source for full API)
 **Git Intelligence** (`src/features/knowledge-graph/git-intel/`) — pipeline: git log → parse → churn scoring → co-change detection → persist atomically; `ensureGitIntelFresh` is the main entry point (no-op when fresh)
 **Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — `compileSignals(filePaths, driftDbSignals)` reads violation history + path effects, scores by priority, fits within per-file token budget; read-only
+**Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — added 2026-05-22; exports `queryDriftSignalPitfalls(filePaths, signals)`, `queryErrorFixPitfalls(filePaths, signals)`, `formatPitfallsSection(drift, errorFix)`, `countPitfalls(drift, errorFix)`; pure functions (no DB calls); `formatPitfallsSection` returns `""` when both arrays empty
+**Backfill Error Fixes** (`src/features/diagnostics/services/backfill-error-fixes.ts`) — added 2026-05-22; script that mines `file_violation_history` to populate the `error_fixes` table; call once per project to seed historical data
 **`store-summaries`** — DB-only write path (JSON removed ADR-005); `inferLanguageFromExtension` maps extensions to language strings
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 **Principle matcher** (`src/shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; `matchesScopeTags` checks tag overlap
@@ -118,7 +120,7 @@ src/
 | `store_pr_review` | Store a PR review result for drift tracking |
 
 **Transcript capture** — best-effort; always returns `ok: true`; writes to `{workspace}/transcripts/`; path-traversal guarded
-**Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`; `resolve_agent_skills`: **async** since 2026-05-20; applies progressive disclosure when `projectDir` provided — if `preload_prompt` exceeds 12k chars, full JSON is written to `.canon/artifacts/agent-skills-*.json` and result contains a compact summary + `full_data_path` pointer
+**Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`; `resolve_agent_skills`: **async** since 2026-05-20; applies progressive disclosure when `projectDir` provided — if `preload_prompt` exceeds 12k chars, full JSON is written to `.canon/artifacts/agent-skills-*.json` and result contains a compact summary + `full_data_path` pointer; accepts optional `options?: { filePaths?: string[]; workspace?: string }` — when `filePaths` provided, appends "Known Pitfalls" section to `preload_prompt` (from drift signals + error_fixes) and logs `pitfall_injected` audit event to execution store. Updated 2026-05-22.
 **Gate runner** — `normalizeGates` resolves via 3-tier priority (direct > named > discovered); **fail-closed**: unresolved gate → `{ passed: false }`; `bash_check` denylist: `rm`, `sudo`, `curl`, `wget`, `chmod`, `chown`, `mkfs`, `dd`
 **Flow schema** (`flow-schema.ts`) — `StateDefinitionSchema` is a `z.discriminatedUnion` with 5 type schemas; all new fields MUST be `.optional()`; `WavePolicy` defaults: isolation=worktree, merge=sequential, on_conflict=hitl
 **`report_result`** — accepts quality signals (gate_results, postconditions, violations, tests, files_changed) + discovery fields (accumulated, not replaced); optional roles excluded from aggregation

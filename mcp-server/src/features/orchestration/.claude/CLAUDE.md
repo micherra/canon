@@ -21,7 +21,7 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `post-event.ts` | `post_event` |
 | `present-artifact.ts` | `present_artifact` — fire-and-forget; serves HTML, opens browser, returns `{ url }` immediately (does not block) |
 | `report.ts` | `report` |
-| `resolve-agent-skills.ts` | `resolve_agent_skills` — **async** since 2026-05-20; calls `applyAgentSkillsDisclosure` when `projectDir` provided |
+| `resolve-agent-skills.ts` | `resolve_agent_skills` — **async** since 2026-05-20; calls `applyAgentSkillsDisclosure` when `projectDir` provided; accepts `options?: { filePaths?, workspace? }` — when `filePaths` provided, appends "Known Pitfalls" section to `preload_prompt` and logs `pitfall_injected` audit event. Updated 2026-05-22. |
 | `resolve-agent-skills-disclosure.ts` | (helper module, not a tool) — progressive disclosure for `resolve_agent_skills`; exports `summarizeAgentSkills(data)` and `applyAgentSkillsDisclosure(result, projectDir)`; when `preload_prompt` exceeds 12k chars, writes full JSON to `.canon/artifacts/` and returns slim result with file pointer |
 | `seed-workspace.ts` | `seed_workspace` |
 | `write-design-brief.ts` | `write_design_brief` |
@@ -40,13 +40,13 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `workspace-cleanup.ts` | Workspace cleanup utilities |
 
 ## Contracts
-<!-- last-updated: 2026-05-20 (resolveAgentSkills async; ResolveAgentSkillsResult.full_data_path added; present_artifact fire-and-forget) -->
+<!-- last-updated: 2026-05-22 (resolveAgentSkills pitfall injection via options.filePaths; pitfall_injected audit event) -->
 Key tool functions (all return `ToolResult<T>` — see `@shared/lib/tool-result.ts`):
 
 - `initWorkspace(input)` — create or resume workspace; preflight checks when `preflight: true`; `tryResumeWorkspace` accepts optional `expectedTask` to block resume on task-identity mismatch (slug-collision defense)
 - `captureTranscript(input: CaptureTranscriptInput)` → `Promise<ToolResult<CaptureTranscriptResult>>` — best-effort; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon format, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; returns `warning` (never an error) when source file not found
 - `transformClaudeCodeTranscript(entries: ClaudeCodeEntry[])` → `TranscriptEntry[]` — pure function; maps CC JSONL content blocks to Canon transcript entries; malformed entries skipped silently; exported from `services/transcript-transformer.ts`
-- `resolveAgentSkills(input, pluginDir, projectDir?)` → `Promise<ToolResult<ResolveAgentSkillsResult>>` — **async** since 2026-05-20; when `projectDir` provided, runs progressive disclosure via `applyAgentSkillsDisclosure`; `ResolveAgentSkillsResult.full_data_path?: string` is set when disclosure truncated the payload (path to full JSON in `.canon/artifacts/`)
+- `resolveAgentSkills(input, pluginDir, projectDir?)` → `Promise<ToolResult<ResolveAgentSkillsResult>>` — **async** since 2026-05-20; when `projectDir` provided, runs progressive disclosure via `applyAgentSkillsDisclosure`; `ResolveAgentSkillsResult.full_data_path?: string` is set when disclosure truncated the payload (path to full JSON in `.canon/artifacts/`); `input.options?: { filePaths?: string[]; workspace?: string }` — when `filePaths` provided, queries pitfall data from drift DB and appends formatted "Known Pitfalls" section to `preload_prompt`; audit event `pitfall_injected` logged via `appendEvent` when pitfalls found. Updated 2026-05-22.
 
 ## Invariants
 <!-- last-updated: 2026-05-15 -->

@@ -98,6 +98,34 @@ export type ResolvePredictionInput = {
   outcome: string; // Pre-serialized JSON
 };
 
+/**
+ * A row from the error_fixes table.
+ * Tracks aggregated error/fix pattern pairs per (file_path, principle_id).
+ */
+export type ErrorFixRow = {
+  id: number;
+  file_path: string;
+  principle_id: string;
+  error_pattern: string;
+  fix_pattern: string;
+  occurrences: number;
+  last_seen: string;
+  first_seen: string;
+};
+
+/**
+ * Input for upserting an error fix record.
+ */
+export type UpsertErrorFixInput = {
+  file_path: string;
+  principle_id: string;
+  error_pattern: string;
+  fix_pattern: string;
+  occurrences: number;
+  last_seen: string;
+  first_seen: string;
+};
+
 // ---- DAO Class ----
 
 /**
@@ -122,6 +150,11 @@ export class DriftDbSignals {
   private readonly stmtGetPredictionById: Database.Statement;
   private readonly stmtGetResolvedAll: Database.Statement;
   private readonly stmtGetResolvedByPrinciple: Database.Statement;
+
+  // Prepared statements — error_fixes table (v6)
+  private readonly stmtGetErrorFixes: Database.Statement;
+  private readonly stmtUpsertErrorFix: Database.Statement;
+  private readonly stmtGetAllFileViolationHistory: Database.Statement;
 
   constructor(db: Database.Database) {
     this.stmtGetFileViolationHistory = db.prepare(`
@@ -209,6 +242,29 @@ export class DriftDbSignals {
       ORDER BY p.resolved_at DESC
       LIMIT 500
     `);
+
+    // All violation history (no WHERE clause — for backfill)
+    this.stmtGetAllFileViolationHistory = db.prepare(`
+      SELECT file_path, principle_id, violation_count, last_seen, first_seen
+      FROM file_violation_history
+      ORDER BY violation_count DESC
+    `);
+
+    // Error fixes (v6)
+    this.stmtGetErrorFixes = db.prepare(`
+      SELECT id, file_path, principle_id, error_pattern, fix_pattern, occurrences, last_seen, first_seen
+      FROM error_fixes
+      WHERE file_path = ?
+      ORDER BY occurrences DESC
+    `);
+
+    this.stmtUpsertErrorFix = db.prepare(`
+      INSERT INTO error_fixes (file_path, principle_id, error_pattern, fix_pattern, occurrences, last_seen, first_seen)
+      VALUES (@file_path, @principle_id, @error_pattern, @fix_pattern, @occurrences, @last_seen, @first_seen)
+      ON CONFLICT(file_path, principle_id) DO UPDATE SET
+        occurrences = @occurrences,
+        last_seen = @last_seen
+    `);
   }
 
   /**
@@ -224,6 +280,15 @@ export class DriftDbSignals {
       results.push(...rows);
     }
     return results;
+  }
+
+  /**
+   * Get all violation history rows (no file filter).
+   * Used by the backfill script to mine the full history.
+   * Returns empty array when the table is empty (define-errors-out-of-existence).
+   */
+  getAllFileViolationHistory(): FileViolationHistoryRow[] {
+    return this.stmtGetAllFileViolationHistory.all() as FileViolationHistoryRow[];
   }
 
   /**
@@ -334,5 +399,32 @@ export class DriftDbSignals {
       }
     }
     return results;
+  }
+
+  // ---- Error fixes (v6) ----
+
+  /**
+   * Get error fix records for a list of file paths.
+   * Returns a flat array of all matching rows, ordered by occurrences DESC per file.
+   * Returns empty array for empty input (define-errors-out-of-existence).
+   */
+  getErrorFixes(filePaths: string[]): ErrorFixRow[] {
+    if (filePaths.length === 0) return [];
+    const results: ErrorFixRow[] = [];
+    for (const fp of filePaths) {
+      const rows = this.stmtGetErrorFixes.all(fp) as ErrorFixRow[];
+      results.push(...rows);
+    }
+    return results;
+  }
+
+  /**
+   * Upsert an error fix record.
+   * INSERT OR UPDATE on (file_path, principle_id) unique key.
+   * On conflict, updates occurrences and last_seen only;
+   * preserves first_seen, error_pattern, and fix_pattern.
+   */
+  upsertErrorFix(input: UpsertErrorFixInput): void {
+    this.stmtUpsertErrorFix.run(input);
   }
 }

@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import { buildPitfallsSection } from "@features/diagnostics/services/pitfall-enrichment.ts";
 import {
   formatCorrectionsSection,
   readCorrections,
@@ -38,6 +40,20 @@ import matter from "gray-matter";
 
 export type ResolveAgentSkillsInput = {
   agent_name: string;
+};
+
+/**
+ * Options for feed-forward enrichment in resolve_agent_skills.
+ *
+ * When filePaths is provided, pitfall enrichment is performed against
+ * drift.db and appended to preload_prompt. Fail-open: errors produce
+ * an empty pitfalls section without blocking spawn.
+ */
+export type ResolveAgentSkillsOptions = {
+  /** File paths to query for historical pitfalls. */
+  filePaths?: string[];
+  /** Workspace path for audit logging. When provided, a pitfall_injected event is appended. */
+  workspace?: string;
 };
 
 export type ResolvedSkillKind = "rule" | "ref" | "primer" | "template";
@@ -116,6 +132,26 @@ function formatPreloadPrompt(skills: ResolvedSkill[]): string {
   ].join("\n");
 }
 
+/**
+ * Log a pitfall_injected audit event to the execution store.
+ * Fail-open: store errors are silently ignored so audit never blocks spawn.
+ */
+function logPitfallAuditEvent(workspace: string, agentName: string, pitfallCount: number): void {
+  try {
+    const store = getExecutionStore(workspace);
+    store.appendEvent("pitfall_injected", {
+      agent: agentName,
+      pitfall_count: pitfallCount,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn(
+      "[pitfall-enrichment] logPitfallAuditEvent failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 /** Read corrections and return formatted section string. Fail-open: returns "" on any error. */
 function buildCorrectionsSection(projectDir: string | undefined): string {
   if (!projectDir) return "";
@@ -152,6 +188,7 @@ export async function resolveAgentSkills(
   input: ResolveAgentSkillsInput,
   pluginDir: string,
   projectDir?: string,
+  options?: ResolveAgentSkillsOptions,
 ): Promise<ToolResult<ResolveAgentSkillsResult>> {
   const agentName = stripCanonPrefix(input.agent_name).trim();
   if (!agentName || !/^[a-zA-Z0-9_-]+$/.test(agentName)) {
@@ -175,7 +212,22 @@ export async function resolveAgentSkills(
 
   const basePrompt = formatPreloadPrompt(skills);
   const correctionsSection = buildCorrectionsSection(projectDir);
-  const preload_prompt = correctionsSection ? `${basePrompt}\n\n${correctionsSection}` : basePrompt;
+
+  // Build pitfalls section when filePaths provided (fail-open)
+  const filePaths = options?.filePaths ?? [];
+  const { section: pitfallsSection, count: pitfallCount } =
+    filePaths.length > 0 && projectDir
+      ? buildPitfallsSection(filePaths, projectDir)
+      : { count: 0, section: "" };
+
+  // Audit log when pitfalls found and workspace provided
+  if (pitfallsSection && options?.workspace) {
+    logPitfallAuditEvent(options.workspace, agentName, pitfallCount);
+  }
+
+  // Compose preload_prompt: base → corrections → pitfalls
+  const sections = [basePrompt, correctionsSection, pitfallsSection].filter(Boolean);
+  const preload_prompt = sections.join("\n\n");
 
   const result: ResolveAgentSkillsResult = {
     agent_name: agentName,

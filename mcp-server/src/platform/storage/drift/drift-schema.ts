@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "5";
+export const DRIFT_SCHEMA_VERSION = "6";
 
 // DDL statements — v1 base tables
 //
@@ -251,6 +251,29 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
     },
     version: "5",
+  },
+  {
+    up: (db) => {
+      // error_fixes — cross-session error/fix pattern index
+      // Stores error_pattern + fix_pattern pairs observed per (file_path, principle_id),
+      // with occurrence count and first_seen / last_seen timestamps.
+      // UNIQUE(file_path, principle_id) — one aggregated record per file+principle pair.
+      db.exec(`CREATE TABLE IF NOT EXISTS error_fixes (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_path      TEXT NOT NULL,
+        principle_id   TEXT NOT NULL,
+        error_pattern  TEXT NOT NULL,
+        fix_pattern    TEXT NOT NULL,
+        occurrences    INTEGER NOT NULL DEFAULT 0,
+        last_seen      TEXT NOT NULL,
+        first_seen     TEXT NOT NULL,
+        UNIQUE(file_path, principle_id)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ef_file ON error_fixes(file_path)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ef_principle ON error_fixes(principle_id)`);
+      db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
+    },
+    version: "6",
   },
 ];
 
