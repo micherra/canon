@@ -1,18 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import {
-  countPitfalls,
-  formatPitfallsSection,
-  queryDriftSignalPitfalls,
-  queryErrorFixPitfalls,
-} from "@features/diagnostics/services/pitfall-enrichment.ts";
+import { buildPitfallsSection } from "@features/diagnostics/services/pitfall-enrichment.ts";
 import {
   formatCorrectionsSection,
   readCorrections,
 } from "@features/orchestration/services/correction-reader.ts";
 import { applyAgentSkillsDisclosure } from "@features/orchestration/tools/resolve-agent-skills-disclosure.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import matter from "gray-matter";
 
@@ -136,35 +130,6 @@ function formatPreloadPrompt(skills: ResolvedSkill[]): string {
     "",
     sections.join("\n\n---\n\n"),
   ].join("\n");
-}
-
-/**
- * Build pitfalls section by querying drift.db for historical violations and error-fix pairs.
- * Fail-open: returns empty section and zero count on any error so enrichment never blocks spawn.
- *
- * @param filePaths - files to query pitfalls for
- * @param projectDir - project root used to locate drift.db
- */
-function buildPitfallsSection(
-  filePaths: string[],
-  projectDir: string,
-): { section: string; count: number } {
-  if (filePaths.length === 0) return { count: 0, section: "" };
-  try {
-    const driftDbSignals = getDriftDb(projectDir).getSignals();
-    const driftPitfalls = queryDriftSignalPitfalls(filePaths, driftDbSignals);
-    const errorFixPitfalls = queryErrorFixPitfalls(filePaths, driftDbSignals);
-    return {
-      count: countPitfalls(driftPitfalls, errorFixPitfalls),
-      section: formatPitfallsSection(driftPitfalls, errorFixPitfalls),
-    };
-  } catch (err) {
-    console.warn(
-      "[pitfall-enrichment] buildPitfallsSection failed:",
-      err instanceof Error ? err.message : err,
-    );
-    return { count: 0, section: "" };
-  }
 }
 
 /**

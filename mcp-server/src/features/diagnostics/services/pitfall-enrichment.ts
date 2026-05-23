@@ -13,6 +13,7 @@
  * - no-llm-calls-in-mcp-tools: all computation is deterministic
  */
 
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import type {
   DriftDbSignals,
   ErrorFixRow,
@@ -158,6 +159,32 @@ export function countPitfalls(
  * - **{file_path}** — {error_pattern}. Fix: {fix_pattern} (seen {N} times)
  * ```
  */
+/**
+ * Build pitfalls section by querying drift.db for historical violations and error-fix pairs.
+ * Fail-open: returns empty section and zero count on any error so enrichment never blocks spawn.
+ */
+export function buildPitfallsSection(
+  filePaths: string[],
+  projectDir: string,
+): { section: string; count: number } {
+  if (filePaths.length === 0) return { count: 0, section: "" };
+  try {
+    const driftDbSignals = getDriftDb(projectDir).getSignals();
+    const driftPitfalls = queryDriftSignalPitfalls(filePaths, driftDbSignals);
+    const errorFixPitfalls = queryErrorFixPitfalls(filePaths, driftDbSignals);
+    return {
+      count: countPitfalls(driftPitfalls, errorFixPitfalls),
+      section: formatPitfallsSection(driftPitfalls, errorFixPitfalls),
+    };
+  } catch (err) {
+    console.warn(
+      "[pitfall-enrichment] buildPitfallsSection failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return { count: 0, section: "" };
+  }
+}
+
 export function formatPitfallsSection(
   driftPitfalls: DriftPitfall[],
   errorFixPitfalls: ErrorFixPitfall[],
