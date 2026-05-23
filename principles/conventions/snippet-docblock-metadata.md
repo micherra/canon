@@ -4,7 +4,7 @@ title: HTML Snippet Files Require Machine-Readable Docblock
 severity: convention
 scope:
   file_patterns:
-    - "mcp-server/src/ui/snippets/**/*.html"
+    - "mcp-server/src/ui/snippets/*.html"
   layers: []
 tags:
   - ui
