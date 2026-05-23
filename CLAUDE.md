@@ -314,7 +314,7 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 
 - **PM Triage**: (1) Refine: classify trivial/clear/fuzzy; produce `sharpened-request.md` for non-trivial tiers. (2) Scope check: 1-2 MCP calls → trivial → engineer, non-trivial → architect. Fully-specified requests skip the requirements conversation.
 - **Requirement coverage check**: After architect returns, surface any `descoped`/`partial`/missing requirements before runbook approval. Proceed silently if all are `covered` with owning steps.
-- **Coverage chain**: Architect task plans need `### Brief Coverage` table (runbook req → task element). Engineer logs need `#### Criteria Coverage` table (AC → implementation). Missing/empty tables are artifact defects. Disposition vocabulary: `covered`, `descoped`, `partial`.
+- **Coverage chain**: Architect task plans need `### Brief Coverage` table (runbook req → task element). Engineer logs need `#### Criteria Coverage` table (AC → implementation). Missing/empty tables are artifact defects. Disposition vocabulary: `covered`, `descoped`, `partial`. Engineer summaries must also include `### Canon Compliance` table listing applicable principles with `honored`/`violated`/`n/a` status, enabling reviewer Stage 3 cross-check.
 - **Plan approval HTML**: If `${WORKSPACE}/artifacts/design.html` exists, call `present_artifact({ type: "design", slug, html, data: {}, workspace })` before presenting the text runbook for approval.
 - **Architect approval**: Present plan for user approval. If design.html exists, call `present_artifact` first. Architect decides execution strategy.
 - **Review verdict**: Present results. If not CLEAN, spawn engineer fix mode. If `review.html` exists, call `present_artifact({ type: "review", ... })` alongside text verdict.
@@ -330,6 +330,7 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 
 - **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict.
 - **After architect**: spawn renderer (mandatory) → `${WORKSPACE}/artifacts/design.html`. Open in browser before plan approval HITL.
+- **After scribe**: verify the scribe committed its worktree edits before proceeding to ship. Run `git log --oneline -3` in the worktree and confirm a `docs(context-sync):` commit is present. If absent, recover: `git add -A && git commit -m "docs(context-sync): update CLAUDE.md, context.md, and CONVENTIONS.md" -m "Canon-Workflow: {slug}" -m "Canon-Agent: scribe" -m "Canon-State: context-sync"` in the worktree before proceeding.
 - **After each step**: call `record_agent_metrics` if agent didn't. Pass `agent_id` to `log_step` completion (transcript capture is automatic — no separate call needed).
 - Run contract-checker assertions via Bash when postconditions are declared.
 

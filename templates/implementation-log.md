@@ -61,8 +61,10 @@ commit: "{hash}"
 - `{URL}` — {what implementation decision, API usage, or constraint this source informed}
 
 ### Canon Compliance
-<!-- One line per principle from the plan. -->
-- **{principle-id}** ({severity}): {✓ COMPLIANT|⚠ JUSTIFIED_DEVIATION|✗ VIOLATION_FOUND → FIXED} — {detail}
+
+| Principle | Status | Notes |
+|-----------|--------|-------|
+| {principle-id} | honored / violated / n/a | {brief note} |
 
 ### Verification
 - [ ] New tests: {N} passing
