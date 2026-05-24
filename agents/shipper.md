@@ -148,15 +148,25 @@ After the PR is created, check whether a release tag exists on HEAD:
 git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | head -1
 ```
 
-If a matching tag is found (e.g., `v1.2.3`), create a GitHub release with auto-generated release notes:
+If a matching tag is found (e.g., `v1.2.3`):
 
-```sh
-gh release create <tag> --generate-notes
-```
+1. Push the tag to the remote first:
 
-If the command succeeds, include the release URL in your status report alongside the PR URL.
+   ```sh
+   git push origin <tag>
+   ```
 
-If the command fails (e.g., release already exists, auth error), note it in the PR description under "Build Notes" and report `DONE_WITH_CONCERNS` with the exact error. Do not block shipping over a failed release creation.
+   If the tag push fails, note it in the PR description under "Build Notes" and report `DONE_WITH_CONCERNS` with the exact error. Do not proceed to release creation.
+
+2. Create a GitHub release with auto-generated release notes, using `--verify-tag` to ensure the remote tag exists rather than auto-creating from the wrong commit:
+
+   ```sh
+   gh release create <tag> --generate-notes --verify-tag
+   ```
+
+   If the command succeeds, include the release URL in your status report alongside the PR URL.
+
+   If the command fails (e.g., release already exists, auth error), note it in the PR description under "Build Notes" and report `DONE_WITH_CONCERNS` with the exact error. Do not block shipping over a failed release creation.
 
 If no matching tag exists on HEAD, skip this step silently.
 
