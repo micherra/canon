@@ -7,7 +7,6 @@
 # degrades those calls. This hook emits an informational nudge when the KG
 # looks missing or old; it does not block.
 #
-# Only active when CANON_AGENT_TEAMS_MODE=on.
 # Always exits 0 — advisory only.
 
 set -euo pipefail

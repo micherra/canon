@@ -17,7 +17,6 @@
 #   CANON_AGENT_TYPE  — e.g. "engineer", "reviewer"
 #   CANON_STEP_ID     — e.g. "implement", "review"
 #
-# Only active when CANON_AGENT_TEAMS_MODE=on.
 # Never blocks: advisory only, exit 0 always (exit 2 on timeout to surface HITL).
 #
 # Actually: exits 2 on timeout (like session-duration-watchdog) to surface a
@@ -28,10 +27,6 @@ set -euo pipefail
 # Consume stdin (required by Claude Code hook contract)
 INPUT=$(cat)
 
-# Only active in agent-teams mode
-if [[ "${CANON_AGENT_TEAMS_MODE:-}" != "on" ]]; then
-  exit 0
-fi
 
 CANON_DIR="${CANON_PROJECT_DIR:-.}/.canon"
 SPAWN_TS_FILE="${CANON_DIR}/.spawn-start-ts"

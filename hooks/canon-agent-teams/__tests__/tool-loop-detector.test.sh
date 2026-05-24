@@ -27,9 +27,9 @@ make_payload() {
     "$session" "$tool" "$cmd"
 }
 
-# Helper: run the hook with CANON_AGENT_TEAMS_MODE=on
+# Helper: run the hook
 run_hook() {
-  CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$1"
+  bash "$HOOK" <<<"$1"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ PAYLOAD="$(make_payload "Bash" "git status --porcelain")"
 run_hook "$PAYLOAD" || fail "test3: call 1 should exit 0"
 run_hook "$PAYLOAD" || fail "test3: call 2 should exit 0"
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
+bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then
   fail "test3: 3rd identical call should exit 2, got $EXIT_CODE"
 fi
@@ -79,7 +79,7 @@ run_hook "$B" || fail "test4: B should exit 0"
 run_hook "$A" || fail "test4: A3 should exit 0 (streak reset by B)"
 run_hook "$A" || fail "test4: A4 should exit 0"
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$A" || EXIT_CODE=$?
+bash "$HOOK" <<<"$A" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then
   fail "test4: 3rd consecutive A should exit 2, got $EXIT_CODE"
 fi
@@ -89,11 +89,11 @@ pass "mixed calls reset streak; 3 consecutive A after B triggers exit 2"
 # Test 5: No session_id → exit 0 (cannot scope state)
 # ──────────────────────────────────────────────────────────────────────────────
 PAYLOAD_NO_SESSION='{"tool_name":"Bash","tool_use_id":"use-123","tool_input":{"command":"npm test"}}'
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$PAYLOAD_NO_SESSION" \
+bash "$HOOK" <<<"$PAYLOAD_NO_SESSION" \
   || fail "test5: no session_id should exit 0"
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$PAYLOAD_NO_SESSION" \
+bash "$HOOK" <<<"$PAYLOAD_NO_SESSION" \
   || fail "test5: no session_id call 2 should exit 0"
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$PAYLOAD_NO_SESSION" \
+bash "$HOOK" <<<"$PAYLOAD_NO_SESSION" \
   || fail "test5: no session_id call 3 should exit 0"
 pass "no session_id exits 0 (cannot scope state)"
 
@@ -103,7 +103,7 @@ pass "no session_id exits 0 (cannot scope state)"
 SESSION_6="test-fp-${RANDOM}"
 clean_state
 PAYLOAD_6="$(make_payload "Bash" "cat /etc/hosts" "$SESSION_6")"
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$PAYLOAD_6" || true
+bash "$HOOK" <<<"$PAYLOAD_6" || true
 STATE_FILE="${TMPDIR:-/tmp}/canon-tool-fingerprints-${SESSION_6}"
 if [[ ! -f "$STATE_FILE" ]]; then
   fail "test6: state file not created"
@@ -120,10 +120,10 @@ pass "fingerprint is 16-char hex (SHA-256 prefix)"
 # ──────────────────────────────────────────────────────────────────────────────
 SESSION_7="test-cleanup-${RANDOM}"
 PAYLOAD_7="$(make_payload "Edit" "/some/file.ts" "$SESSION_7")"
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$PAYLOAD_7" || true
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$PAYLOAD_7" || true
+bash "$HOOK" <<<"$PAYLOAD_7" || true
+bash "$HOOK" <<<"$PAYLOAD_7" || true
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$PAYLOAD_7" || EXIT_CODE=$?
+bash "$HOOK" <<<"$PAYLOAD_7" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then
   fail "test7: 3rd identical call should exit 2 (setup)"
 fi
@@ -142,10 +142,10 @@ SESSION_8="test-output-${RANDOM}"
 P8A=$(printf '{"session_id":"%s","tool_name":"Bash","tool_use_id":"u1","tool_input":{"command":"npm test"},"tool_result":{"output":"PASS"}}' "$SESSION_8")
 P8B=$(printf '{"session_id":"%s","tool_name":"Bash","tool_use_id":"u2","tool_input":{"command":"npm test"},"tool_result":{"output":"FAIL"}}' "$SESSION_8")
 P8C=$(printf '{"session_id":"%s","tool_name":"Bash","tool_use_id":"u3","tool_input":{"command":"npm test"},"tool_result":{"output":"ERROR"}}' "$SESSION_8")
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$P8A" || true
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$P8B" || true
+bash "$HOOK" <<<"$P8A" || true
+bash "$HOOK" <<<"$P8B" || true
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on bash "$HOOK" <<<"$P8C" || EXIT_CODE=$?
+bash "$HOOK" <<<"$P8C" || EXIT_CODE=$?
 # Different outputs produce different fingerprints → streak is broken → exit 0
 if [[ "$EXIT_CODE" -ne 0 ]]; then
   fail "test8: different tool_output should break streak (exit 0), got exit $EXIT_CODE"

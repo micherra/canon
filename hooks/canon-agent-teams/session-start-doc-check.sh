@@ -8,7 +8,6 @@
 # informational hint on stdout for the lead to consider running the
 # scribe before relying on agent-facing docs.
 #
-# Only active when CANON_AGENT_TEAMS_MODE=on.
 # Never blocks: this is an advisory nudge, exit 0 regardless.
 
 set -euo pipefail

@@ -21,7 +21,7 @@ mkdir -p "$CANON_DIR"
 date +%s > "$TS_FILE"
 
 # Also write spawn-start-ts so the spawn-timeout-watchdog can measure
-# agent spawn duration from session start (used when CANON_AGENT_TEAMS_MODE=on).
+# agent spawn duration from session start.
 SPAWN_TS_FILE="${CANON_DIR}/.spawn-start-ts"
 date +%s > "$SPAWN_TS_FILE"
 

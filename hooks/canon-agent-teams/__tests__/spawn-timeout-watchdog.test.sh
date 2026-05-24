@@ -19,11 +19,11 @@ make_canon_dir() {
   echo "$dir"
 }
 
-# Helper: run hook with CANON_AGENT_TEAMS_MODE=on, CANON_PROJECT_DIR set
+# Helper: run hook with CANON_PROJECT_DIR set
 run_hook() {
   local dir="$1"
   shift
-  CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$dir" "$@" bash "$HOOK" \
+  CANON_PROJECT_DIR="$dir" "$@" bash "$HOOK" \
     <'{"tool_name":"Bash","tool_input":{"command":"npm test"}}'
 }
 
@@ -35,7 +35,7 @@ PAYLOAD='{"tool_name":"Bash","tool_input":{"command":"npm test"}}'
 # ──────────────────────────────────────────────────────────────────────────────
 DIR1=$(make_canon_dir)
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$DIR1" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
+CANON_PROJECT_DIR="$DIR1" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 0 ]]; then
   fail "test1: no spawn-start-ts should exit 0, got $EXIT_CODE"
 fi
@@ -48,7 +48,7 @@ pass "no spawn timestamp file exits 0"
 DIR2=$(make_canon_dir)
 echo "$(( $(date +%s) - 60 ))" > "${DIR2}/.canon/.spawn-start-ts"
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$DIR2" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
+CANON_PROJECT_DIR="$DIR2" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 0 ]]; then
   fail "test2: spawn under threshold should exit 0, got $EXIT_CODE"
 fi
@@ -61,7 +61,7 @@ pass "spawn under threshold exits 0"
 DIR3=$(make_canon_dir)
 echo "$(( $(date +%s) - 1500 ))" > "${DIR3}/.canon/.spawn-start-ts"
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$DIR3" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
+CANON_PROJECT_DIR="$DIR3" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then
   fail "test3: spawn over threshold should exit 2, got $EXIT_CODE"
 fi
@@ -75,7 +75,7 @@ pass "spawn over threshold exits 2"
 DIR4=$(make_canon_dir)
 echo "$(( $(date +%s) - 360 ))" > "${DIR4}/.canon/.spawn-start-ts"
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$DIR4" CANON_SPAWN_TIMEOUT_MINUTES=5 bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
+CANON_PROJECT_DIR="$DIR4" CANON_SPAWN_TIMEOUT_MINUTES=5 bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then
   fail "test4: custom env threshold (5m), 6m elapsed should exit 2, got $EXIT_CODE"
 fi
@@ -89,7 +89,7 @@ DIR5=$(make_canon_dir)
 echo "$(( $(date +%s) - 360 ))" > "${DIR5}/.canon/.spawn-start-ts"
 printf '{"spawn_timeout_minutes": 5}' > "${DIR5}/.canon/config.json"
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$DIR5" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
+CANON_PROJECT_DIR="$DIR5" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then
   fail "test5: config.json threshold (5m), 6m elapsed should exit 2, got $EXIT_CODE"
 fi
@@ -101,7 +101,7 @@ pass "custom threshold via config.json respected"
 # ──────────────────────────────────────────────────────────────────────────────
 DIR6=$(make_canon_dir)
 echo "$(( $(date +%s) - 1500 ))" > "${DIR6}/.canon/.spawn-start-ts"
-OUTPUT=$(CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$DIR6" \
+OUTPUT=$(CANON_PROJECT_DIR="$DIR6" \
   CANON_AGENT_TYPE="reviewer" CANON_STEP_ID="review-pass-2" \
   bash "$HOOK" <<<"$PAYLOAD" 2>&1 || true)
 if ! echo "$OUTPUT" | grep -q "reviewer"; then
@@ -120,7 +120,7 @@ DIR7=$(make_canon_dir)
 echo "$(( $(date +%s) - 1500 ))" > "${DIR7}/.canon/.spawn-start-ts"
 # First call: should exit 2 and write dedup file
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$DIR7" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
+CANON_PROJECT_DIR="$DIR7" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then
   fail "test7: first call over threshold should exit 2, got $EXIT_CODE"
 fi
@@ -131,7 +131,7 @@ if [[ ! -f "$DEDUP" ]]; then
 fi
 # Second call immediately after — within dedup interval → exit 0
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$DIR7" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
+CANON_PROJECT_DIR="$DIR7" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 0 ]]; then
   fail "test7: second call within dedup interval should exit 0, got $EXIT_CODE"
 fi
@@ -147,7 +147,7 @@ echo "$(( $(date +%s) - 2400 ))" > "${DIR8}/.canon/.spawn-start-ts"
 # Dedup file shows it last fired 25 minutes ago (> threshold of 20 min)
 echo "$(( $(date +%s) - 1500 ))" > "${DIR8}/.canon/.spawn-watchdog-shown"
 EXIT_CODE=0
-CANON_AGENT_TEAMS_MODE=on CANON_PROJECT_DIR="$DIR8" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
+CANON_PROJECT_DIR="$DIR8" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then
   fail "test8: dedup expired (25m ago, threshold 20m) should re-fire exit 2, got $EXIT_CODE"
 fi

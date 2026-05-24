@@ -12,7 +12,6 @@
 #   .canon/.session-start-ts             — epoch seconds written at SessionStart
 #   .canon/.session-watchdog-last-shown  — epoch seconds when advisory last shown
 #
-# Only active when CANON_AGENT_TEAMS_MODE=on.
 # Never blocks: advisory only, exit 0 always.
 
 set -euo pipefail

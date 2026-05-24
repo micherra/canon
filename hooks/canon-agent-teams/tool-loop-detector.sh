@@ -13,16 +13,11 @@
 # Exit 0: no loop (or cannot determine).
 # Exit 2: loop detected — Claude Code interrupts the agent.
 #
-# Only active when CANON_AGENT_TEAMS_MODE=on.
 
 set -euo pipefail
 
 INPUT=$(cat)
 
-# Only active in agent-teams mode
-if [[ "${CANON_AGENT_TEAMS_MODE:-}" != "on" ]]; then
-  exit 0
-fi
 
 # Extract session_id (used to scope state file per session)
 SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
