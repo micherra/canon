@@ -13,7 +13,13 @@
 
 set -euo pipefail
 
-LAST_SCRIBE_FILE="${CANON_PROJECT_DIR:-.}/.canon/last-scribe-commit"
+CANON_DIR="${CANON_PROJECT_DIR:-.}/.canon"
+
+if [[ ! -d "$CANON_DIR" ]]; then
+  exit 0
+fi
+
+LAST_SCRIBE_FILE="${CANON_DIR}/last-scribe-commit"
 
 if [[ ! -f "$LAST_SCRIBE_FILE" ]]; then
   cat <<'EOF'
