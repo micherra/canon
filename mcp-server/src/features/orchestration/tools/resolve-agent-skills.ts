@@ -152,7 +152,7 @@ function logPitfallAuditEvent(workspace: string, agentName: string, pitfallCount
   }
 }
 
-/** Read corrections and return formatted section string. Fail-open: returns "" on any error. */
+/** Read corrections and return formatted section string. INTENTIONAL FAIL-OPEN: returns "" on any error — corrections are optional enrichment, their absence does not degrade agent skills. */
 function buildCorrectionsSection(projectDir: string | undefined): string {
   if (!projectDir) return "";
   try {

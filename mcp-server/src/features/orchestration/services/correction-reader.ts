@@ -47,7 +47,8 @@ function parseCorrectionFile(
  * Read all correction records from `.canon/corrections/`, optionally
  * filtered to those affecting specific file paths.
  *
- * Fail-open: returns empty array on any filesystem error.
+ * INTENTIONAL FAIL-OPEN: returns empty array when corrections directory is absent
+ * or unreadable — corrections are optional enrichment data; their absence is safe.
  * Malformed JSON files are skipped silently.
  * Results are sorted by timestamp DESC (most recent first).
  *
@@ -69,7 +70,7 @@ export function readCorrections(
   try {
     fileNames = readdirSync(correctionsDir).filter((f) => f.endsWith(".json"));
   } catch {
-    return []; // Directory doesn't exist or unreadable — fail-open
+    return []; // INTENTIONAL FAIL-OPEN: corrections directory absence is safe default
   }
 
   const fileSet = filePaths ? new Set(filePaths) : null;

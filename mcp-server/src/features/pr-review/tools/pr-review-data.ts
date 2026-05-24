@@ -231,12 +231,9 @@ type DiffCommand = {
   args: string[];
 };
 
-/** Build the diff command based on input parameters. */
+/** Build the diff command based on input parameters. Caller must validate pr_number first. */
 function buildDiffCommand(input: PrReviewDataInput): DiffCommand {
   if (input.pr_number !== undefined) {
-    if (!Number.isInteger(input.pr_number) || input.pr_number! <= 0) {
-      throw new Error("pr_number must be a positive integer");
-    }
     return { args: ["pr", "diff", String(input.pr_number), "--name-only"], cmd: "gh" };
   }
   if (input.branch) {
@@ -269,6 +266,26 @@ export async function getPrReviewData(
   input: PrReviewDataInput,
   projectDir: string,
 ): Promise<PrReviewDataOutput> {
+  // Validate pr_number before proceeding. Invalid pr_number is an expected input
+  // error — return it via the `error` field rather than throwing (errors-are-values).
+  if (input.pr_number !== undefined) {
+    if (!Number.isInteger(input.pr_number) || input.pr_number <= 0) {
+      return {
+        blast_radius: [],
+        diff_command: "",
+        error: "pr_number must be a positive integer",
+        files: [],
+        impact_files: [],
+        incremental: false,
+        layers: [],
+        narrative: "",
+        net_new_files: 0,
+        total_files: 0,
+        total_violations: 0,
+      };
+    }
+  }
+
   const driftStore = new DriftStore(projectDir);
   const isPrNumberMode = input.pr_number !== undefined;
 
