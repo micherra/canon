@@ -164,6 +164,7 @@ function buildCorrectionsSection(projectDir: string | undefined): string {
   if (!projectDir) return "";
   const result = readCorrections(projectDir);
   if (!result.ok) {
+    console.warn("[resolve-agent-skills] corrections unavailable:", result.error);
     return `<!-- corrections unavailable: ${result.error} -->`;
   }
   return formatCorrectionsSection(result.records);

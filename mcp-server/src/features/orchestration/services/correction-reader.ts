@@ -87,8 +87,10 @@ export function readCorrections(
       return { ok: true, records: [] };
     }
     // Any other I/O error (EACCES, ENOTDIR, etc.) is a real failure callers should see.
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn("[correction-reader] corrections directory unreadable:", errMsg);
     return {
-      error: `corrections directory unreadable: ${err instanceof Error ? err.message : String(err)}`,
+      error: `corrections directory unreadable: ${errMsg}`,
       ok: false,
     };
   }

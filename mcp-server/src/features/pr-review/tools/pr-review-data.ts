@@ -265,7 +265,7 @@ function emptyOutput(error: string): PrReviewDataOutput {
   };
 }
 
-type AssembleParams = {
+export type AssembleParams = {
   files: PrFileInfo[];
   layers: Array<{ name: string; file_count: number }>;
   diffCommand: string;
@@ -278,7 +278,7 @@ type AssembleParams = {
 };
 
 /** Assemble the final output from computed values. */
-function assembleOutput({
+export function assembleOutput({
   files,
   layers,
   diffCommand,
