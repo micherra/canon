@@ -54,7 +54,7 @@ if [[ "$LINE_COUNT" -ge 3 ]]; then
     # Loop detected — reset state and exit 2
     rm -f "$STATE_FILE"
 
-    cat <<EOF
+    cat >&2 <<EOF
 CANON LOOP DETECTED: The agent has issued the same tool call ($TOOL_NAME) 3 consecutive times with identical inputs.
 
 This usually means the agent is stuck in a retry loop without making progress.

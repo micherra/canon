@@ -27,8 +27,9 @@ run_hook() {
     <'{"tool_name":"Bash","tool_input":{"command":"npm test"}}'
 }
 
-# Minimal JSON payload
-PAYLOAD='{"tool_name":"Bash","tool_input":{"command":"npm test"}}'
+# Minimal JSON payload (session_id scopes dedup file)
+TEST_SESSION="test-spawn-$$"
+PAYLOAD="{\"session_id\":\"${TEST_SESSION}\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"npm test\"}}"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 1: No spawn timestamp file → exit 0
@@ -124,8 +125,8 @@ CANON_PROJECT_DIR="$DIR7" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then
   fail "test7: first call over threshold should exit 2, got $EXIT_CODE"
 fi
-# Dedup file should exist now (written to 'now')
-DEDUP="${DIR7}/.canon/.spawn-watchdog-shown"
+# Dedup file should exist now (per-session: keyed by session_id)
+DEDUP="${DIR7}/.canon/.spawn-watchdog-shown-${TEST_SESSION}"
 if [[ ! -f "$DEDUP" ]]; then
   fail "test7: dedup file should be created after first fire"
 fi
@@ -145,7 +146,7 @@ DIR8=$(make_canon_dir)
 # Spawn started 40 minutes ago (2400 seconds)
 echo "$(( $(date +%s) - 2400 ))" > "${DIR8}/.canon/.spawn-start-ts"
 # Dedup file shows it last fired 25 minutes ago (> threshold of 20 min)
-echo "$(( $(date +%s) - 1500 ))" > "${DIR8}/.canon/.spawn-watchdog-shown"
+echo "$(( $(date +%s) - 1500 ))" > "${DIR8}/.canon/.spawn-watchdog-shown-${TEST_SESSION}"
 EXIT_CODE=0
 CANON_PROJECT_DIR="$DIR8" bash "$HOOK" <<<"$PAYLOAD" || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -ne 2 ]]; then

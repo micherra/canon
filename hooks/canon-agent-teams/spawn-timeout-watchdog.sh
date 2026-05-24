@@ -11,22 +11,22 @@
 # State files (written to .canon/, which is gitignored):
 #   .canon/.spawn-start-ts           — epoch seconds written at agent spawn start
 #                                      (by session-start-timestamp.sh — this hook reads it)
-#   .canon/.spawn-watchdog-shown     — epoch seconds when advisory last shown
+#   .canon/.spawn-watchdog-shown-{session_id} — epoch when advisory last shown (per-session)
 #
 # Agent identity read from env vars:
 #   CANON_AGENT_TYPE  — e.g. "engineer", "reviewer"
 #   CANON_STEP_ID     — e.g. "implement", "review"
 #
-# Never blocks: advisory only, exit 0 always (exit 2 on timeout to surface HITL).
-#
-# Actually: exits 2 on timeout (like session-duration-watchdog) to surface a
-# HITL checkpoint so the orchestrator can decide whether to continue or abort.
+# Exit 0: under threshold or dedup suppressed.
+# Exit 2: timeout exceeded — surfaces HITL so user can wait, investigate, or cancel.
 
 set -euo pipefail
 
 # Consume stdin (required by Claude Code hook contract)
 INPUT=$(cat)
 
+# Extract session_id for per-session dedup
+SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
 
 CANON_DIR="${CANON_PROJECT_DIR:-.}/.canon"
 SPAWN_TS_FILE="${CANON_DIR}/.spawn-start-ts"
@@ -62,7 +62,8 @@ if (( ELAPSED < THRESHOLD_SECONDS )); then
 fi
 
 # Interval-aware dedup: only re-fire after another full threshold interval
-DEDUP_FILE="${CANON_DIR}/.spawn-watchdog-shown"
+DEDUP_SUFFIX="${SESSION_ID:-global}"
+DEDUP_FILE="${CANON_DIR}/.spawn-watchdog-shown-${DEDUP_SUFFIX}"
 if [[ -f "$DEDUP_FILE" ]]; then
   LAST_SHOWN=$(cat "$DEDUP_FILE")
   if (( (NOW - LAST_SHOWN) < THRESHOLD_SECONDS )); then
@@ -87,7 +88,7 @@ if [[ -z "$LAST_TOOL" ]]; then
   LAST_TOOL="unknown"
 fi
 
-cat <<EOF
+cat >&2 <<EOF
 CANON SPAWN TIMEOUT: The agent has been running for ${ELAPSED_HOURS}h ${ELAPSED_MINS}m (threshold: ${THRESHOLD_MINUTES} minutes).
 
 Agent:      ${AGENT_TYPE}
