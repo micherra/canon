@@ -36,39 +36,21 @@ From the original dark factory proposal, two capabilities were merged (PR #232):
 - Only low-value gates are skippable: build-step checkpoints, WARNING close-out, CLEAN re-review after fix
 - Fail-safe: defaults to supervised on any signal-gathering error
 
-## What's Next: Epic 6 — Cross-Agent Learning Loop
+## What Shipped: Epic 6 — Feed-Forward Enrichment (PR #239)
 
-Close the gap between learner suggestions and applied changes. The learner already runs every build and writes proposals to `.canon/proposed-learnings/` — but humans must manually review and apply them.
+Cross-session error+fix index and pitfall enrichment. Before agent spawns, the orchestrator queries build history and injects context:
 
-### Auto-application rules
+- **Before architect**: common failures in touched files → "known pitfalls"
+- **Before engineer**: previous fix attempts in same area → "prior approaches"
+- **Before reviewer**: principle violation history for files → "watch areas"
 
-| Pattern | Threshold | Action |
-|---------|-----------|--------|
-| Convention promotion | Compliance > 95% across 5+ builds | Auto-promote to strong-opinion |
-| Principle demotion | 0 violations across 20+ builds, no reviewer citations | Auto-archive (soft delete) |
-| Build pattern | Same failure mode in 3+ builds in same area | Auto-add to architect primer for that area |
+`error_fixes` table in execution store, populated from `write_implementation_summary`, queried via `get_context`.
 
-### Feed-forward enrichment
+### Epic 6 — remaining (not yet built)
 
-Before agent spawns, inject context from build history:
-
-- **Before architect**: query drift.db for common failures in touched files → inject as "known pitfalls"
-- **Before engineer**: query build history for previous fix attempts in same area → inject as "prior approaches"
-- **Before reviewer**: query principle violation history for files → inject as "watch areas"
-
-### Infrastructure that already exists
-
-- `signal-compiler.ts` scores violations by priority per file
-- `drift-db-signals.ts` has `getFileViolationHistory` and `getPathEffects`
-- `get_context` already batches signals for spawn prompts (just needs `signals` in the `include` array)
-- Learner produces structured findings to `.canon/proposed-learnings/`
-
-### What needs building
-
-- Threshold logic for auto-promotion/demotion (query drift.db for compliance rates across N builds)
-- Feed-forward injection in orchestrator's MCP Tool Composition (add `signals` to implement/design `include` arrays, format as "known pitfalls" section in spawn prompts)
+- Auto-promotion: convention → strong-opinion when compliance > 95% across 5+ builds
+- Auto-demotion: archive principles with 0 violations across 20+ builds
 - Auto-apply policy config: `auto` | `suggest` | `off` (per project)
-- Audit trail for all auto-decisions (log to journal)
 
 ## Supervised Build Quality — Feature Backlog
 
@@ -80,9 +62,11 @@ The biggest time sink. If the engineer gets it right first pass, you skip 1-2 fu
 
 | Feature | Effort | Leverage | Source |
 |---------|--------|----------|--------|
-| **Feed-forward enrichment** (Epic 6) | Medium | Very high | Inject known pitfalls before engineer starts |
-| **Cross-session error + fix index** | Medium | High | Engineer inherits prior fix patterns. `error_fixes` table in execution store, populated from `write_implementation_summary`. Queried via `get_context` before engineer spawn. |
+| ~~**Feed-forward enrichment** (Epic 6)~~ | ~~Medium~~ | ~~Very high~~ | Shipped (PR #239) |
+| ~~**Cross-session error + fix index**~~ | ~~Medium~~ | ~~High~~ | Shipped (PR #239) |
 | **Short-term area memory** | Small | High | Compact observations attached to subsystems with 7-day expiry. Next agent in same area gets them pre-injected. |
+| **Hot-file caution for engineers** | Small | Medium | Inject a caution note when an engineer edits a file modified across many recent builds. Hotspot data exists in `get_file_context` — just needs injection into engineer spawn prompts. |
+| **Outdated violation detection** | Medium | Medium | Track which diff lines each violation was pinned to. On re-review, violations on unchanged lines persist; violations on changed lines are marked "outdated." Stops reviewers from re-flagging fixed code. |
 
 ### Thread 2: Better HITL Presentations
 
@@ -92,6 +76,7 @@ Make each gate decision faster and more confident.
 |---------|--------|----------|--------|
 | **Confidence per violation** | Small | High | `write_review` gains a `confidence` field (0-100) per violation. Default threshold: 80; findings below suppressed. Reduces noise. |
 | **Confidence decay for drift** | Medium | Medium | Replace binary pass/fail with 0.0-1.0 confidence that decays as commits accumulate without re-review. Sorts drift report by "most overdue." |
+| **GitHub-linkable review output** | Small | Medium | Review output includes clickable GitHub line links (`/blob/[sha]/path#L42-L48`). Useful when posting PR comments or sharing findings. |
 
 ### Thread 3: Faster Agent Turns
 
@@ -103,6 +88,32 @@ Context gathering burns the most agent turns. Reduce wasted work.
 | **In-flight spawn watchdog** | Small | High | Track start timestamp per spawn. Wall-clock threshold (default: 20 min) surfaces long-running agents with options to wait, cancel, or intervene. |
 | **PostCompact narrative capture** | Tiny | Medium | PostCompact hook appends compaction summary to workspace journal. Prevents re-discovery after context reset. ~50 LOC. |
 | **Skill effectiveness tracking** | Medium | Medium | Learner analyzes journal outcomes to recommend: primers that help, `maxTurns` adjustments, skills that need updating. Requires extending `FlowRunEntry` with domain skill counts. |
+| **Effort budgets** | Medium | Medium | Maximum tool calls per state, wall-clock duration limits, max agent spawns per flow. "Focus and wrap up" note injected when approaching limit; pause for approval when hit. |
+
+### Thread 4: Codebase & Artifact Hygiene
+
+Canon's own documentation and artifacts accumulate drift. Eat your own dogfood.
+
+| Feature | Effort | Leverage | Source |
+|---------|--------|----------|--------|
+| **Wiki-lint over Canon's own artifacts** | Medium | High | Lint pass over contradictions between CLAUDE.md files, orphan principles with no usages, stale plans referencing renamed files, principles lacking backing examples. Canon lints code but not its own meta-layer. |
+| **Composite health score** | Small | High | Collapse compliance %, cycle count, hub density, drift trends into an A-F grade in `get_drift_report`. Single summary signal for humans and the learner. |
+| **Proactive doc gap detection** | Small | Medium | Before classifying a diff, scribe scans for directories that contain source files but no CLAUDE.md. Finds gaps that passive diff-watching never catches. |
+| **Documentation staleness in drift reports** | Medium | Medium | Add a documentation freshness dimension alongside principle compliance. Each CLAUDE.md gets a "commits since last sync" count and decaying confidence score. |
+| **Repo-level `.canon/log.md`** | Tiny | Medium | Global timeline of flow completions, principle additions, and lint passes. Single append at `complete_flow`. Grep-parseable `## [YYYY-MM-DD] type | title` prefix. |
+| **Consolidate `write_*` → `write_artifact`** | Small | Low | 5 individual write tools still individually registered. One `write_artifact({ type, workspace, data })` reduces MCP surface. |
+
+### Thread 5: Flow Inputs & Exploration
+
+Make Canon smarter about what goes into builds, not just what comes out.
+
+| Feature | Effort | Leverage | Source |
+|---------|--------|----------|--------|
+| **Smarter scribe spawn decisions** | Small | Medium | Pre-classify the diff for signals that reliably warrant doc updates (exported signature changes, new routes, schema changes). Scribe focuses judgment on boundary cases. |
+| **Static security pre-filter** | Small | Medium | Cheap regex checks (`eval`, SQL concatenation, common secret formats) give the security agent a pre-filtered candidate list instead of starting from scratch. |
+| **Idea-to-spec flow** | Medium | Medium | Takes a vague idea through structured clarification into a concrete spec. Conversational research, surface assumptions, clarifying questions, written spec as output. PM refine skill partially covers this; full explore→spec pipeline closes the loop. |
+| **Compounding exploration** | Tiny | Low | Scribe convention that promotes notable explore findings into project-level `docs/notes/`. Explorations compound over time instead of evaporating. |
+| **Explicit code-to-docs mapping** | Small | Low | Project-local config declaring which source directories are documented by which CLAUDE.md files. Eliminates scribe guesswork. |
 
 ### Not Doing
 
@@ -114,12 +125,24 @@ These were evaluated and explicitly rejected:
 - **Progressive trust model** — Interesting but premature. Need 50+ builds of data before trust scores are meaningful. Revisit when build history is deep enough.
 - **Autonomous PR lifecycle** — Removes the human from post-ship. The value of review comments is high; auto-responding risks missing nuance.
 - **Recursive agent spawning** — Research shows 37% of multi-agent failures are coordination failures. Canon's flat orchestrator-worker hierarchy is correct.
+- **Design-pattern/anti-pattern labels in KG** — Academic labeling (God Object, Singleton, etc.) with low practical impact for a solo dev project. The KG already exposes hub scores and cycles.
+- **Duplicate-block detection** — AST shingling is a large build for medium signal. Reviewer and learner catch copy-paste issues well enough.
+- **Graph-structured agent memory** — Premature. Requires memory architecture (P5) that isn't needed yet. Current `MEMORY.md` approach is sufficient.
+- **Memory decay / Ebbinghaus model** — No pain point driving this. Memory isn't growing fast enough to need automated pruning.
+- **4-tier memory hierarchy** — Formalization without a clear need. The tiers exist informally and work fine.
+- **Parallel multi-perspective review** — Team dispatch already covers file-partition fan-out. Perspective-based split (compliance vs bugs vs security) adds coordination cost for marginal gain.
+- **Inline diff view (Shiki)** — The HTML renderer already shows violations per file. A line-level diff viewer is a large UI build for incremental improvement.
+- **Test coverage mapping** — Depends on Istanbul/c8 being configured in the project. Revisit if coverage tooling is set up.
+- **Expanded agent evals / eval scenario library** — Large scope. Current intent-classification evals are sufficient. Revisit when agent behavior regressions become a problem.
+- **KG query traceability log** — Useful in theory for tuning retrieval, but no pain point today.
 
 ## Recommended Build Order
 
 | Phase | What | Rationale |
 |-------|------|-----------|
-| **Next** | Epic 6 — feed-forward enrichment only | Highest leverage single feature. Infrastructure exists. Directly reduces fix loops. |
-| **Then** | Tool-level loop detection + spawn watchdog | Small builds, immediate value for agent efficiency. |
-| **Then** | Cross-session error index | Requires Epic 6 infrastructure + sufficient build history. |
-| **Later** | Confidence per violation, area memory, skill tracking | Compound value features that improve over time. |
+| **Next** | Tool-level loop detection + spawn watchdog | Small builds, immediate value for agent efficiency. |
+| **Then** | Wiki-lint + composite health score + doc gap detection | Canon eating its own dogfood. Addresses the 57-commit scribe drift problem. |
+| **Then** | Confidence per violation + GitHub-linkable output | Better HITL signal with less noise. Small builds. |
+| **Then** | Short-term area memory + hot-file caution | Compound context for engineers. Data exists, needs injection. |
+| **Later** | Effort budgets, smarter scribe, idea-to-spec, skill tracking, outdated violations | Compound value features that improve over time. |
+| **Remaining Epic 6** | Auto-promotion/demotion thresholds, auto-apply policy | Needs sufficient build history to be meaningful. |
