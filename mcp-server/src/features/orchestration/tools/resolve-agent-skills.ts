@@ -152,15 +152,21 @@ function logPitfallAuditEvent(workspace: string, agentName: string, pitfallCount
   }
 }
 
-/** Read corrections and return formatted section string. INTENTIONAL FAIL-OPEN: returns "" on any error — corrections are optional enrichment, their absence does not degrade agent skills. */
+/**
+ * Read corrections and return formatted section string.
+ *
+ * When the corrections directory is absent, returns "" (no corrections recorded yet).
+ * When the directory exists but is unreadable (permissions, I/O error), surfaces a
+ * warning notice in the returned string so the spawned agent knows corrections are
+ * unavailable rather than silently seeing an empty result.
+ */
 function buildCorrectionsSection(projectDir: string | undefined): string {
   if (!projectDir) return "";
-  try {
-    return formatCorrectionsSection(readCorrections(projectDir));
-  } catch {
-    // Non-blocking: correction read failures are silently ignored
-    return "";
+  const result = readCorrections(projectDir);
+  if (!result.ok) {
+    return `<!-- corrections unavailable: ${result.error} -->`;
   }
+  return formatCorrectionsSection(result.records);
 }
 
 /** Resolve skills for an agent from its frontmatter fields. */
