@@ -184,6 +184,15 @@ async function resolveIncrementalDiff(
   };
 }
 
+/** Apply bucket and reason classification to each file in-place. */
+function classifyFiles(files: PrFileInfo[]): void {
+  for (const file of files) {
+    const { bucket, reason } = classifyFile(file);
+    file.bucket = bucket;
+    file.reason = reason;
+  }
+}
+
 /** Build layer grouping from files. */
 function buildLayerGrouping(files: PrFileInfo[]): Array<{ name: string; file_count: number }> {
   const layerCounts = new Map<string, number>();
@@ -231,6 +240,82 @@ type DiffCommand = {
   args: string[];
 };
 
+/** Validate pr_number. Returns an error string if invalid, undefined if valid. */
+function validatePrNumber(prNumber: number): string | undefined {
+  if (!Number.isInteger(prNumber) || prNumber <= 0) {
+    return "pr_number must be a positive integer";
+  }
+  return undefined;
+}
+
+/** Return a zero-state output for early-exit cases (validation failure, etc.). */
+function emptyOutput(error: string): PrReviewDataOutput {
+  return {
+    blast_radius: [],
+    diff_command: "",
+    error,
+    files: [],
+    impact_files: [],
+    incremental: false,
+    layers: [],
+    narrative: "",
+    net_new_files: 0,
+    total_files: 0,
+    total_violations: 0,
+  };
+}
+
+type AssembleParams = {
+  files: PrFileInfo[];
+  layers: Array<{ name: string; file_count: number }>;
+  diffCommand: string;
+  lastReviewedSha: string | undefined;
+  kgResult: { kgFreshnessMs: number | undefined } | undefined;
+  narrative: string;
+  blastRadius: BlastRadiusEntry[];
+  hotspot_files: string[] | undefined;
+  execError: string | undefined;
+};
+
+/** Assemble the final output from computed values. */
+function assembleOutput({
+  files,
+  layers,
+  diffCommand,
+  lastReviewedSha,
+  kgResult,
+  narrative,
+  blastRadius,
+  hotspot_files,
+  execError,
+}: AssembleParams): PrReviewDataOutput {
+  const totalViolations = files.reduce((sum, f) => sum + (f.violations?.length ?? 0), 0);
+  const netNewFiles =
+    files.filter((f) => f.status === "added").length -
+    files.filter((f) => f.status === "deleted").length;
+  return {
+    blast_radius: blastRadius,
+    diff_command: diffCommand,
+    files: files.map((f) => ({ layer: f.layer, path: f.path, status: f.status })),
+    impact_files: files.filter(
+      (f) =>
+        f.bucket === "needs-attention" ||
+        (f.priority_score ?? 0) >= 15 ||
+        (f.violations && f.violations.length > 0),
+    ),
+    incremental: !!lastReviewedSha,
+    kg_freshness_ms: kgResult?.kgFreshnessMs,
+    last_reviewed_sha: lastReviewedSha,
+    layers,
+    narrative,
+    net_new_files: netNewFiles,
+    total_files: files.length,
+    total_violations: totalViolations,
+    ...(execError ? { error: execError } : {}),
+    ...(hotspot_files !== undefined ? { hotspot_files } : {}),
+  };
+}
+
 /** Build the diff command based on input parameters. Caller must validate pr_number first. */
 function buildDiffCommand(input: PrReviewDataInput): DiffCommand {
   if (input.pr_number !== undefined) {
@@ -266,24 +351,11 @@ export async function getPrReviewData(
   input: PrReviewDataInput,
   projectDir: string,
 ): Promise<PrReviewDataOutput> {
-  // Validate pr_number before proceeding. Invalid pr_number is an expected input
-  // error — return it via the `error` field rather than throwing (errors-are-values).
+  // Validate pr_number — invalid input is an expected condition, not an exception
+  // (errors-are-values). Return via the `error` field rather than throwing.
   if (input.pr_number !== undefined) {
-    if (!Number.isInteger(input.pr_number) || input.pr_number <= 0) {
-      return {
-        blast_radius: [],
-        diff_command: "",
-        error: "pr_number must be a positive integer",
-        files: [],
-        impact_files: [],
-        incremental: false,
-        layers: [],
-        narrative: "",
-        net_new_files: 0,
-        total_files: 0,
-        total_violations: 0,
-      };
-    }
+    const validationError = validatePrNumber(input.pr_number);
+    if (validationError) return emptyOutput(validationError);
   }
 
   const driftStore = new DriftStore(projectDir);
@@ -311,44 +383,25 @@ export async function getPrReviewData(
   if (kgDb) enrichWithPriorityScores(files, kgDb);
 
   const layers = buildLayerGrouping(files);
-  for (const file of files) {
-    const { bucket, reason } = classifyFile(file);
-    file.bucket = bucket;
-    file.reason = reason;
-  }
+  classifyFiles(files);
   await attachViolations(files, driftStore);
 
   const narrative = generateNarrative(files, layers);
   const blastRadius = safeComputeBlastRadius(files, kgDb);
-  const totalViolations = files.reduce((sum, f) => sum + (f.violations?.length ?? 0), 0);
-  const added = files.filter((f) => f.status === "added").length;
-  const deleted = files.filter((f) => f.status === "deleted").length;
-
   const hotspot_files = detectHotspotFiles(kgDb, files, projectDir);
-
   kgDb?.close();
 
-  return {
-    blast_radius: blastRadius,
-    diff_command: diffCommand,
-    files: files.map((f) => ({ layer: f.layer, path: f.path, status: f.status })),
-    impact_files: files.filter(
-      (f) =>
-        f.bucket === "needs-attention" ||
-        (f.priority_score ?? 0) >= 15 ||
-        (f.violations && f.violations.length > 0),
-    ),
-    incremental: !!lastReviewedSha,
-    kg_freshness_ms: kgResult?.kgFreshnessMs,
-    last_reviewed_sha: lastReviewedSha,
+  return assembleOutput({
+    blastRadius,
+    diffCommand,
+    execError,
+    files,
+    hotspot_files,
+    kgResult,
+    lastReviewedSha,
     layers,
     narrative,
-    net_new_files: added - deleted,
-    total_files: files.length,
-    total_violations: totalViolations,
-    ...(execError ? { error: execError } : {}),
-    ...(hotspot_files !== undefined ? { hotspot_files } : {}),
-  };
+  });
 }
 
 /**
