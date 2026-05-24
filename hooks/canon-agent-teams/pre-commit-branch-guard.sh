@@ -3,7 +3,6 @@
 # directly to main or master during a Canon build.
 #
 # This prevents engineers from accidentally committing to the trunk branch
-# instead of their worktree branch. Always active — no CANON_AGENT_TEAMS_MODE
 # flag gate.
 #
 # Input: JSON on stdin (Claude Code PreToolUse hook format).

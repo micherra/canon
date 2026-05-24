@@ -6,7 +6,6 @@
 # source changes. The lead is instructed (via CLAUDE.md completion checklist)
 # to spawn scribe before completing the flow when this file exists.
 #
-# Only active when CANON_AGENT_TEAMS_MODE=on.
 #
 # Input: JSON on stdin (Claude Code SubagentStop hook format). We inspect the
 #        subagent's type and, when engineer is the one stopping, record
