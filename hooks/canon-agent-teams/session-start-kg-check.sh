@@ -12,7 +12,13 @@
 
 set -euo pipefail
 
-KG_DB="${CANON_PROJECT_DIR:-.}/.canon/knowledge-graph.db"
+CANON_DIR="${CANON_PROJECT_DIR:-.}/.canon"
+
+if [[ ! -d "$CANON_DIR" ]]; then
+  exit 0
+fi
+
+KG_DB="${CANON_DIR}/knowledge-graph.db"
 
 if [[ ! -f "$KG_DB" ]]; then
   cat <<EOF

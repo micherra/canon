@@ -14,10 +14,13 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
 
 CANON_DIR="${CANON_PROJECT_DIR:-.}/.canon"
+
+if [[ ! -d "$CANON_DIR" ]]; then
+  exit 0
+fi
+
 TS_FILE="${CANON_DIR}/.session-start-ts"
 
-# Write current epoch timestamp; create .canon dir if needed
-mkdir -p "$CANON_DIR"
 date +%s > "$TS_FILE"
 
 exit 0
