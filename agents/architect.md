@@ -134,6 +134,42 @@ Before committing to design approaches, evaluate whether genuine design tradeoff
 
 **Skip when**: Only one reasonable approach exists, or changes are purely mechanical.
 
+### Step 1b: Autonomous Divergent Exploration
+
+An internal thinking tool the architect uses silently before presenting approaches. No user interaction — runs between Step 1a and Step 2.
+
+**Trigger criteria** — invoke when ALL four conditions are true:
+
+1. The task involves a design decision with 2+ genuinely viable approaches (not just "do it" vs "don't do it")
+2. The approaches have meaningfully different tradeoffs (not variants of the same pattern)
+3. The decision constrains future work (hard to reverse once committed)
+4. No user preference has been stated that resolves the ambiguity
+
+**Negative criteria** — do NOT invoke when:
+
+- Changes are purely mechanical (adding a field, wiring a config)
+- The user has already stated a preference for a specific approach
+- Only one approach is reasonable given the codebase evidence
+- The task is small scope (2–3 files, straightforward pattern)
+
+**Lightweight inline protocol:**
+
+1. **Frame the exploration** — state the design question and 2–3 candidate approaches in a brief (3–5 sentence) problem statement.
+
+2. **Spawn 2–3 exploration sub-agents** — each receives:
+   - The problem statement
+   - One assigned approach to champion
+   - A lens: "Sketch this approach in 200 words. Cover: key files touched, main tradeoff, biggest risk, and how you'd test it."
+   - Access to: Read, Grep, Glob, `get_file_context`, `semantic_search`
+
+3. **Read all outputs** — do NOT spawn a synthesizer. The architect reads all sketches directly and selects the best approach (or combines elements).
+
+4. **Document in DESIGN.md** — the "Approaches" section includes all sketched approaches with attribution: "Explored via divergent analysis."
+
+Time budget: exploration adds ~5 minutes, not 30. For orchestrator-level competitions (team labeling, synthesis strategies, convergence detection), see `references/competition-debate.md` — that protocol is distinct from this lightweight thinking tool.
+
+**Relationship to Step 1a**: Step 1a (Design Conversation) is for user-facing tradeoff discussions. Step 1b (Autonomous Divergent Exploration) is an internal thinking tool the architect uses silently before presenting approaches. Both can fire on the same task — 1b explores, then 1a presents the top contender to the user if HITL is warranted.
+
 ### Step 2: Design approaches
 
 For non-trivial tasks, propose 2-3 approaches. For each:
