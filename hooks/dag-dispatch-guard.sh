@@ -16,6 +16,9 @@
 
 set -euo pipefail
 
+# ── 0. Drain stdin to prevent upstream pipe blocks ─────────────────────────────
+cat >/dev/null
+
 # ── 1. Only fire on Agent tool ─────────────────────────────────────────────────
 if [[ "${TOOL_NAME:-}" != "Agent" ]]; then
   exit 0

@@ -139,7 +139,7 @@ describe("openArtifact", () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error_code).toBe("INVALID_INPUT");
-        expect(result.message).toContain("outside");
+        expect(result.message).toContain("invalid characters");
       }
     });
 

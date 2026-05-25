@@ -173,7 +173,7 @@ When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch vi
 
 #### Worker Dispatch
 
-> **Anti-pattern**: Do NOT substitute parallel Agent spawns for team dispatch. Raw Agent spawns bypass dependency tracking and task queue visibility. When `task-dag.yaml` exists and the step is `implement`, always use `TeamCreate`/`TaskCreate` for worker dispatch. The `dag-dispatch-guard.sh` hook (L4) will warn on raw Agent spawns during DAG execution.
+> **Anti-pattern**: Do NOT substitute parallel Agent spawns for team dispatch. Raw Agent spawns bypass dependency tracking and task queue visibility. When `task-dag.yaml` exists and the step is `implement`, always use `TeamCreate`/`TaskCreate` for worker dispatch. The `dag-dispatch-guard.sh` hook (advisory, L1) will warn on raw Agent spawns during DAG execution.
 
 1. Spawn N workers (= root task count, capped at 5): `Agent({ team_name: "canon-{slug}", name: "worker-{N}", subagent_type: "canon:engineer", isolation: "none" })`.
 2. Worker prompt: fill `templates/worker-prompt.md` with `${TEAM_NAME}`, `${WORKER_NAME}`, `${PROJECT_DIR}`, `${WORKSPACE}`, `${SLUG}`, `${CANON_PARENT_WORKSPACE}` (workspace path minus `{projectDir}/.canon/workspaces/` prefix — needed for L4 hook authorization).

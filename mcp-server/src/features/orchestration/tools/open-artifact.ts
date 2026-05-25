@@ -15,12 +15,15 @@
  * 7. Return { url } immediately.
  */
 
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { extname, join, relative, resolve } from "node:path";
+import { basename, extname, isAbsolute, join, resolve } from "node:path";
 import { getHttpPort, isHttpServerRunning, registerArtifact } from "@app/http-server.ts";
 import { openBrowser } from "@platform/adapters/process-adapter.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+
+const SAFE_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,13 +60,20 @@ export async function openArtifact(
   // Normalize artifact name — append .html if missing
   const name = extname(artifact_name) === "" ? `${artifact_name}.html` : artifact_name;
 
-  // Validate: artifact_name must not escape the artifacts directory
+  // Reject path separators and unsafe characters
+  if (!SAFE_NAME_PATTERN.test(name)) {
+    return toolError(
+      "INVALID_INPUT",
+      `Artifact name "${artifact_name}" contains invalid characters. Only alphanumeric, dots, underscores, and hyphens are allowed (no path separators).`,
+      false,
+    );
+  }
+
+  // Validate: resolved path must remain inside the artifacts directory
   const artifactsDir = join(workspace, "artifacts");
-  const resolvedArtifactsDir = resolve(artifactsDir);
   const resolvedTarget = resolve(join(artifactsDir, name));
 
-  const rel = relative(resolvedArtifactsDir, resolvedTarget);
-  if (rel.startsWith("..") || rel.startsWith("/")) {
+  if (!resolvedTarget.startsWith(resolve(artifactsDir)) || isAbsolute(artifact_name)) {
     return toolError(
       "INVALID_INPUT",
       `Artifact name "${artifact_name}" resolves to a path outside the workspace artifacts directory. Path traversal is not allowed.`,
@@ -92,8 +102,10 @@ export async function openArtifact(
     );
   }
 
-  // Register and serve the artifact
-  const key = `open-artifact/${name}`;
+  // Register with workspace-scoped key to avoid collisions across builds
+  const wsHash = createHash("sha256").update(workspace).digest("hex").slice(0, 8);
+  const slug = `${wsHash}-${basename(name, extname(name))}`;
+  const key = `open-artifact/${slug}`;
   const url = `http://127.0.0.1:${getHttpPort()}/artifact/${key}`;
   registerArtifact(key, html, {});
 
