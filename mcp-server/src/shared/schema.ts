@@ -24,6 +24,21 @@ export const reportInputSchema = z.discriminatedUnion("type", [
           message: z.string().optional().describe("Human-readable violation reason"),
           principle_id: z.string(),
           severity: z.string(),
+          confidence: z
+            .object({
+              score: z.number().min(0).max(1),
+              tier: z.enum(["high", "medium", "low", "insufficient"]),
+              basis: z.array(
+                z.object({
+                  signal: z.string(),
+                  weight: z.number(),
+                  detail: z.string(),
+                }),
+              ),
+              sample_size: z.number().int().min(0),
+            })
+            .optional()
+            .describe("Confidence annotation for this violation (server-computed)"),
         }),
       )
       .max(1000)

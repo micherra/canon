@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 /**
@@ -57,6 +58,7 @@ export type WriteReviewInput = {
     file_path?: string;
     description?: string;
     fix?: string;
+    confidence?: ConfidenceAnnotation;
   }>;
   honored: string[];
   score: {
@@ -155,12 +157,13 @@ function generateMarkdown(
   // Violations section
   lines.push("#### Violations");
   lines.push("");
-  lines.push("| Principle | Severity | Location |");
-  lines.push("|-----------|----------|----------|");
+  lines.push("| Principle | Severity | Location | Confidence |");
+  lines.push("|-----------|----------|----------|------------|");
   for (const v of input.violations) {
     const filePath = v.file_path ?? "(none)";
+    const confidenceTier = v.confidence ? v.confidence.tier.toUpperCase() : "";
     lines.push(
-      `| ${escapeMdCell(v.principle_id)} | ${escapeMdCell(v.severity)} | ${escapeMdCell(filePath)} |`,
+      `| ${escapeMdCell(v.principle_id)} | ${escapeMdCell(v.severity)} | ${escapeMdCell(filePath)} | ${confidenceTier} |`,
     );
   }
   lines.push("");
@@ -324,13 +327,31 @@ export function updateFileViolationHistory(
   }
 }
 
+/** Optional adapter for computing server-side confidence on violations. */
+export type ConfidenceAdapter = {
+  computeViolationConfidence: (
+    violation: { principle_id: string; severity: string; file_path?: string },
+  ) => ConfidenceAnnotation;
+};
+
 export async function writeReview(
   input: WriteReviewInput,
   signals?: SignalWriter,
+  confidenceAdapter?: ConfidenceAdapter,
 ): Promise<ToolResult<WriteReviewResult>> {
   const validated = validateInput(input);
   if ("ok" in validated && !validated.ok) return validated;
   const { reviewsDir } = validated as { reviewsDir: string };
+
+  // Populate missing confidence annotations server-side when adapter is provided.
+  // Runs before generateMarkdown so the Confidence column reflects computed values.
+  if (confidenceAdapter) {
+    for (const violation of input.violations) {
+      if (!violation.confidence) {
+        violation.confidence = confidenceAdapter.computeViolationConfidence(violation);
+      }
+    }
+  }
 
   const mappedVerdict = VERDICT_MAP[input.verdict];
   const markdown = generateMarkdown(input, mappedVerdict);
