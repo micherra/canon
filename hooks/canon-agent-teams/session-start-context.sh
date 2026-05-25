@@ -21,11 +21,12 @@ echo "CANON PROJECT PULSE:"
 
 # 1. Recent builds (last 5 workspace sessions)
 if [[ -d "$WORKSPACES_DIR" ]] && command -v sqlite3 &>/dev/null; then
-  RECENT_BUILDS=$(find "$WORKSPACES_DIR" -name "orchestration.db" -maxdepth 3 2>/dev/null | while read -r db_path; do
-    sqlite3 "$db_path" "SELECT slug, flow_name, status FROM execution LIMIT 1;" 2>/dev/null | while IFS='|' read -r slug flow status; do
-      echo "  - ${slug} (${flow:-unknown}, ${status:-unknown})"
-    done
-  done | head -5)
+  RECENT_BUILDS=""
+  while IFS= read -r db_path; do
+    ROW=$(sqlite3 "$db_path" "SELECT slug, flow_name, status FROM execution LIMIT 1;" 2>/dev/null) || continue
+    IFS='|' read -r slug flow status <<< "$ROW"
+    RECENT_BUILDS+="  - ${slug} (${flow:-unknown}, ${status:-unknown})"$'\n'
+  done < <(find "$WORKSPACES_DIR" -name "orchestration.db" -maxdepth 3 2>/dev/null)
   if [[ -n "$RECENT_BUILDS" ]]; then
     echo "  Recent builds:"
     echo "$RECENT_BUILDS"
