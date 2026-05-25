@@ -188,7 +188,7 @@ If any change was classified as `structure` in Step 3:
 
 If no changes were classified as `structure`, skip this step entirely.
 
-### Step 6: Update context.md and CONVENTIONS.md
+### Step 6: Update context.md, CONVENTIONS.md, and CONTEXT.md
 
 **context.md** (`${WORKSPACE}/context.md`):
 - Update the Architecture Summary if structural changes occurred

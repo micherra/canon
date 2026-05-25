@@ -3,9 +3,9 @@ id: observable-best-effort
 title: Best-Effort Operations Must Be Observable
 severity: strong-opinion
 scope:
+  file_patterns:
+    - "mcp-server/src/**"
   layers: []
-  tags:
-    - observability
 tags:
   - observability
   - reliability

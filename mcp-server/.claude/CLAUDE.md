@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-05-16 (post_message + get_messages MCP tools removed; messages.ts deleted) -->
+<!-- last-updated: 2026-05-25 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -23,6 +23,7 @@ src/
 ├── features/             # Tool implementations grouped by bounded context
 │   ├── diagnostics/      # Drift reports, agent metrics, summary storage
 │   ├── file-context/     # get_file_context tool
+│   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
 │   ├── orchestration/    # Flow engine, drive_flow, init_workspace, report_result, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
@@ -33,8 +34,8 @@ src/
 ├── platform/             # Infrastructure: adapters (git, process), job manager, workers, storage
 ├── shared/               # Shared kernel: constants, parser, matcher, schema, lib/ utilities
 ├── tests/                # Cross-cutting test helpers
-└── ui/                   # Svelte frontend — MCP App (Sigma.js graph, PR review UI)
-    └── snippets/         # HTML/CSS component recipes for agent-composed artifacts (10 files: verdict-banner, stats-card, bar-chart-row, severity-badge, compliance-bars, file-detail-card, file-summary-card, blast-radius-rings, blast-radius-tree, node-detail-panel); file-detail-card.html is Canvas-based (bezier dependency graph, 4-metric stat bar, entity table, blast radius panel) updated 2026-05-17; blast-radius-tree.html added 2026-05-17; node-detail-panel.html added 2026-05-20 (DOM-based inspect panel for codebase graph click-to-inspect); DESIGN-SYSTEM.md is authoritative reference
+└── ui/                   # HTML artifact rendering — renderer agent utilities and design system snippets (Svelte app removed 2026-05-20)
+    └── snippets/         # HTML/CSS component recipes for agent-composed artifacts; DESIGN-SYSTEM.md is authoritative reference; includes node-detail-panel.html (click-to-inspect panel, added 2026-05-20)
 ```
 
 **Key subsystems:**
@@ -47,7 +48,7 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-22 (drift DB schema v6, DriftDbSignals new methods, resolve_agent_skills pitfall injection) -->
+<!-- last-updated: 2026-05-25 (features/history MCP tools added, readCorrections discriminated union, assembleOutput exported, getPrReviewData no-throw validation) -->
 
 **`present_artifact` MCP tool** — `html` parameter required; serves the provided HTML directly via HTTP server; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
 
@@ -87,7 +88,8 @@ src/
 **Principle matcher** (`src/shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; `matchesScopeTags` checks tag overlap
 **`get-principles`** — loads KG computed tags and passes to `matchPrinciples`; tag matching active when KG indexed
 **`get-file-context`** — surfaces `computed_tags`, `hotspot_score`, `co_change_partners`; `shape` derived from graph metrics (see `deriveShape` in source)
-**PR Review Data** (`pr-review-data.ts`) — pure functions: `classifyFile` (bucket assignment), `generateNarrative`, `buildFileViolationMap`; `PrFileInfo.bucket` thresholds: needs-attention = violations OR high in_degree; worth-a-look = priority >= 5
+**PR Review Data** (`pr-review-data.ts`) — pure functions: `classifyFile` (bucket assignment), `generateNarrative`, `buildFileViolationMap`, `assembleOutput(AssembleParams): PrReviewDataOutput` (extracted 2026-05-25); `PrFileInfo.bucket` thresholds: needs-attention = violations OR high in_degree; worth-a-look = priority >= 5; `getPrReviewData` returns `{ error }` (not throw) for invalid `pr_number`
+**Correction Reader** (`features/orchestration/services/correction-reader.ts`) — `readCorrections(projectDir, filePaths?, maxAge?): ReadCorrectionsResult`; `ReadCorrectionsResult` = `{ ok: true; records: CorrectionRecord[] } | { ok: false; error: string }`; ENOENT → `ok:true, records:[]`; other I/O errors → `ok:false`; updated 2026-05-25
 **Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs
 
 **Composite context tool:**
@@ -118,6 +120,14 @@ src/
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result for drift tracking |
+
+**History tools** (`src/features/history/`):
+
+| Tool | Purpose |
+|------|---------|
+| `get_build_history` | List archived build runs with metadata |
+| `get_historical_artifacts` | Retrieve archived artifacts from a previous build |
+| `get_cross_run_analysis` | Cross-run meta-analysis for the learner agent |
 
 **Transcript capture** — best-effort; always returns `ok: true`; writes to `{workspace}/transcripts/`; path-traversal guarded
 **Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`; `resolve_agent_skills`: **async** since 2026-05-20; applies progressive disclosure when `projectDir` provided — if `preload_prompt` exceeds 12k chars, full JSON is written to `.canon/artifacts/agent-skills-*.json` and result contains a compact summary + `full_data_path` pointer; accepts optional `options?: { filePaths?: string[]; workspace?: string }` — when `filePaths` provided, appends "Known Pitfalls" section to `preload_prompt` (from drift signals + error_fixes) and logs `pitfall_injected` audit event to execution store. Updated 2026-05-22.

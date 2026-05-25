@@ -14,7 +14,7 @@ The file `board.json` in the workspace root. Tracks flow state, current step, au
 
 ## Context Sync
 
-The mandatory post-implementation step where the scribe agent updates `CLAUDE.md`, `context.md`, and `CONVENTIONS.md` to reflect contract-level changes introduced by the build. Internal refactors, test-only changes, and variable renames do not trigger a context sync. Managed by the scribe agent via the `agent-context-sync` rule.
+The mandatory post-implementation step where the scribe agent updates `CLAUDE.md`, `context.md`, `CONVENTIONS.md`, and `CONTEXT.md` to reflect contract-level changes introduced by the build. Internal refactors, test-only changes, and variable renames do not trigger a context sync. `CONTEXT.md` is updated only when a build explicitly introduces, renames, or removes a domain concept. Managed by the scribe agent via the `agent-context-sync` rule.
 
 ## Convention
 

@@ -1,7 +1,7 @@
 ---
 description: Structured diagnosis for bugs and failures
 argument-hint: <description of the problem>
-allowed-tools: [Read, Bash, Grep, Glob, WebFetch, mcp__canon__semantic_search, mcp__canon__get_file_context, mcp__canon__graph_query]
+allowed-tools: [Read, Bash, Grep, Glob, WebFetch, mcp__canon__semantic_search, mcp__canon__get_file_context, mcp__canon__graph_query, Edit, Write]
 model: sonnet
 ---
 
@@ -50,7 +50,7 @@ If all hypotheses are eliminated, generate a second round of hypotheses based on
 
 Once a hypothesis is confirmed:
 1. Apply `agent-structured-triage` — the 5-step fix protocol: reproduce, localize, reduce, fix, guard.
-2. Load `primers/diagnosis.md` for mental model guidance during the fix.
+2. Load `${CLAUDE_PLUGIN_ROOT}/primers/diagnosis.md` for mental model guidance during the fix.
 3. Write a test that guards against regression before applying the fix.
 
 If the fix requires architectural changes beyond this task's scope, note that and report the minimal containment fix separately from the architectural improvement.
