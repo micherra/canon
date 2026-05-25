@@ -59,7 +59,7 @@ function _createV5Db(): ReturnType<typeof initDriftDb> {
 
 describe("DRIFT_SCHEMA_VERSION", () => {
   test("is '6' after v6 migration added", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("6");
+    expect(DRIFT_SCHEMA_VERSION).toBe("7");
   });
 });
 
@@ -71,7 +71,7 @@ describe("initDriftDb — v6 fresh database", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("6");
+    expect(row.value).toBe("7");
     db.close();
   });
 
@@ -181,7 +181,7 @@ describe("runDriftMigrations — v5 to v6 upgrade", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("6");
+    expect(row.value).toBe("7");
     db.close();
   });
 });

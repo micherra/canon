@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "6";
+export const DRIFT_SCHEMA_VERSION = "7";
 
 // DDL statements — v1 base tables
 //
@@ -274,6 +274,26 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
     },
     version: "6",
+  },
+  {
+    up: (db) => {
+      // violation_outcomes — records user decisions on reviewer-flagged violations
+      // Each workflow produces at most one outcome per (file_path, principle_id) pair.
+      // Multiple workflows may record outcomes for the same pair (different slugs).
+      // Primary key ensures upsert semantics: last action per workflow wins.
+      db.exec(`CREATE TABLE IF NOT EXISTS violation_outcomes (
+        file_path    TEXT NOT NULL,
+        principle_id TEXT NOT NULL,
+        action       TEXT NOT NULL CHECK(action IN ('fix', 'acknowledge', 'defer')),
+        slug         TEXT NOT NULL,
+        timestamp    TEXT NOT NULL,
+        PRIMARY KEY (file_path, principle_id, slug)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_vo_principle ON violation_outcomes(principle_id)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_vo_file ON violation_outcomes(file_path)`);
+      db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
+    },
+    version: "7",
   },
 ];
 
