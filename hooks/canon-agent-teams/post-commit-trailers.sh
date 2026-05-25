@@ -14,6 +14,11 @@
 
 set -euo pipefail
 
+# Source shared hook helpers.
+_HOOK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/canon-hook-lib.sh"
+# shellcheck source=hooks/lib/canon-hook-lib.sh
+source "$_HOOK_LIB"
+
 INPUT=$(cat)
 
 # Only care about Bash calls — non-Bash tools don't produce commits.
@@ -21,16 +26,17 @@ if ! echo "$INPUT" | grep -q '"tool_name"[[:space:]]*:[[:space:]]*"Bash"'; then
   exit 0
 fi
 
-COMMAND=$(echo "$INPUT" \
-  | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' \
-  | head -1 \
-  | sed 's/"command"[[:space:]]*:[[:space:]]*"//;s/"$//')
+COMMAND=$(canon_extract_command "$INPUT")
 
-if ! echo "$COMMAND" | grep -qE 'git[[:space:]]+commit'; then
+if ! canon_is_git_cmd "$COMMAND" "commit"; then
   exit 0
 fi
 
-LAST_MSG=$(git log -1 --format='%B' 2>/dev/null || echo "")
+# Resolve the worktree directory so git log runs in the right repo context.
+GIT_DIR_ARG=$(canon_git_dir_arg "$COMMAND")
+
+# shellcheck disable=SC2086
+LAST_MSG=$(git $GIT_DIR_ARG log -1 --format='%B' 2>/dev/null || echo "")
 
 if echo "$LAST_MSG" | grep -q '^Canon-Workflow:'; then
   exit 0

@@ -11,6 +11,11 @@
 
 set -euo pipefail
 
+# Source shared hook helpers.
+_HOOK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/canon-hook-lib.sh"
+# shellcheck source=hooks/lib/canon-hook-lib.sh
+source "$_HOOK_LIB"
+
 INPUT=$(cat)
 
 # Only care about Bash calls
@@ -20,18 +25,19 @@ if [[ "$TOOL_NAME" != "Bash" ]]; then
 fi
 
 # Extract command
-COMMAND=$(echo "$INPUT" \
-  | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' \
-  | head -1 \
-  | sed 's/"command"[[:space:]]*:[[:space:]]*"//;s/"$//')
+COMMAND=$(canon_extract_command "$INPUT")
 
 # Check for git restore or git checkout -- patterns
 if ! echo "$COMMAND" | grep -qE 'git[[:space:]]+(checkout[[:space:]]+--|restore)'; then
   exit 0
 fi
 
+# Resolve the worktree directory so git log runs in the right repo context.
+GIT_DIR_ARG=$(canon_git_dir_arg "$COMMAND")
+
 # Check if the last commit was recent (within 60 seconds)
-LAST_COMMIT_EPOCH=$(git log -1 --format='%ct' 2>/dev/null || echo "0")
+# shellcheck disable=SC2086
+LAST_COMMIT_EPOCH=$(git $GIT_DIR_ARG log -1 --format='%ct' 2>/dev/null || echo "0")
 NOW_EPOCH=$(date +%s)
 ELAPSED=$(( NOW_EPOCH - LAST_COMMIT_EPOCH ))
 
@@ -53,11 +59,14 @@ if [[ -z "$AFFECTED_FILES" ]]; then
 fi
 
 # Get the last commit SHA and message for context
-LAST_SHA=$(git log -1 --format='%H' 2>/dev/null || echo "unknown")
-LAST_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "unknown")
+# shellcheck disable=SC2086
+LAST_SHA=$(git $GIT_DIR_ARG log -1 --format='%H' 2>/dev/null || echo "unknown")
+# shellcheck disable=SC2086
+LAST_MSG=$(git $GIT_DIR_ARG log -1 --format='%s' 2>/dev/null || echo "unknown")
 
 # Extract agent type from the last commit's Canon-Agent trailer (if present)
-AGENT_TYPE=$(git log -1 --format='%B' 2>/dev/null | grep '^Canon-Agent:' | sed 's/Canon-Agent:[[:space:]]*//' || echo "unknown")
+# shellcheck disable=SC2086
+AGENT_TYPE=$(git $GIT_DIR_ARG log -1 --format='%B' 2>/dev/null | grep '^Canon-Agent:' | sed 's/Canon-Agent:[[:space:]]*//' || echo "unknown")
 # Default to unknown if empty
 AGENT_TYPE="${AGENT_TYPE:-unknown}"
 
