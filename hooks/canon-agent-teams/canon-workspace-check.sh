@@ -15,6 +15,11 @@
 
 set -euo pipefail
 
+# Source shared hook helpers.
+_HOOK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/canon-hook-lib.sh"
+# shellcheck source=hooks/lib/canon-hook-lib.sh
+source "$_HOOK_LIB"
+
 # ── 1. Bypass gate ────────────────────────────────────────────────────────────
 if [[ "${CANON_BYPASS_WORKSPACE_CHECK:-0}" == "1" ]]; then
   exit 0
@@ -37,6 +42,7 @@ _jq_field() {
 
 # ── 3. Resolve target file path(s) ────────────────────────────────────────────
 declare -a TARGETS=()
+GIT_DIR_ARG=""
 
 case "${TOOL_NAME:-}" in
   Edit|Write)
@@ -46,10 +52,14 @@ case "${TOOL_NAME:-}" in
     fi
     ;;
   Bash)
-    cmd=$(_jq_field "command")
+    cmd=$(canon_extract_command "$TOOL_INPUT_JSON")
     if [[ -z "$cmd" ]]; then
       exit 0
     fi
+
+    # Resolve the worktree directory from the command so git operations run
+    # in the right repo context.
+    GIT_DIR_ARG=$(canon_git_dir_arg "$cmd")
 
     # Parse Bash command for file write targets.
     # Redirect targets: > file, >> file (with or without space after operator)
@@ -99,7 +109,9 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
 fi
 
 # ── 5 & 6. Check gitignore for each target ────────────────────────────────────
-GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+# Resolve git root in the target worktree when a cd target was detected.
+# shellcheck disable=SC2086
+GIT_ROOT=$(git $GIT_DIR_ARG rev-parse --show-toplevel 2>/dev/null || true)
 
 has_tracked=0
 for target in "${TARGETS[@]}"; do
@@ -118,7 +130,8 @@ for target in "${TARGETS[@]}"; do
     abs_target="$target"
   fi
 
-  if git check-ignore -q "$abs_target" 2>/dev/null; then
+  # shellcheck disable=SC2086
+  if git $GIT_DIR_ARG check-ignore -q "$abs_target" 2>/dev/null; then
     # Gitignored — skip this target
     continue
   else
@@ -134,13 +147,17 @@ if [[ "$has_tracked" -eq 0 ]]; then
 fi
 
 # ── 6. Workspace check — find active workspace for current branch ──────────────
-CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || true)
+# Resolve branch in the target worktree when a cd target was detected.
+# shellcheck disable=SC2086
+CURRENT_BRANCH=$(git $GIT_DIR_ARG symbolic-ref --short HEAD 2>/dev/null || git $GIT_DIR_ARG rev-parse --short HEAD 2>/dev/null || true)
 
 # Determine all candidate .canon/workspaces/ roots to search.
 # Worktrees share the main repo's .canon/ since .canon/ lives in the working tree,
 # not the .git dir. We must search from the main working tree root.
-GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || true)
-GIT_COMMON_DIR=$(git rev-parse --git-common-dir 2>/dev/null || true)
+# shellcheck disable=SC2086
+GIT_DIR=$(git $GIT_DIR_ARG rev-parse --git-dir 2>/dev/null || true)
+# shellcheck disable=SC2086
+GIT_COMMON_DIR=$(git $GIT_DIR_ARG rev-parse --git-common-dir 2>/dev/null || true)
 IN_WORKTREE=0
 
 SEARCH_ROOTS=("$GIT_ROOT")

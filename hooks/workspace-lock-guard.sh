@@ -10,19 +10,28 @@
 
 set -euo pipefail
 
+# Source shared hook helpers.
+_HOOK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/canon-hook-lib.sh"
+# shellcheck source=hooks/lib/canon-hook-lib.sh
+source "$_HOOK_LIB"
+
 # Read the tool input from stdin
 INPUT=$(cat)
 
 # Extract the command being run
-COMMAND=$(echo "$INPUT" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+COMMAND=$(canon_extract_command "$INPUT")
 
 # Only trigger on git commit or git merge commands
-if ! echo "$COMMAND" | grep -qE '\bgit\b.*(commit|merge)\b'; then
+if ! canon_is_git_cmd "$COMMAND" "commit" && ! canon_is_git_cmd "$COMMAND" "merge"; then
   exit 0
 fi
 
-# Get the current branch
-BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+# Extract cd target so we resolve the branch in the right worktree.
+GIT_DIR_ARG=$(canon_git_dir_arg "$COMMAND")
+
+# Get the current branch (in the target directory if cd was used)
+# shellcheck disable=SC2086
+BRANCH=$(git $GIT_DIR_ARG branch --show-current 2>/dev/null || echo "")
 if [[ -z "$BRANCH" ]]; then
   exit 0
 fi
@@ -34,7 +43,8 @@ if [[ -z "$SANITIZED" ]]; then
 fi
 
 # Resolve main repo root for worktree support
-MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+# shellcheck disable=SC2086
+MAIN_ROOT=$(git $GIT_DIR_ARG rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
 CANON_DIR="${MAIN_ROOT:-.}/.canon"
 
 LOCK_FILE="${CANON_DIR}/workspaces/${SANITIZED}/.lock"
