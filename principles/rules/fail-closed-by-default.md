@@ -95,6 +95,7 @@ Public, read-only endpoints where denying access has a worse user impact than al
 | "Returning `null` is fine — the caller will check for it." | Null as a success-neutral value is fail-open if the caller treats null as non-denial. The caller may not check, or may treat null as "no opinion = allow." | Return an explicit denial value. Don't rely on the caller to interpret null correctly. |
 | "If auth is down, we shouldn't block all users." | Availability and security are in tension here, and the principle resolves it: security wins by default. Documented exceptions exist for public content, not for authenticated operations. | Fail closed. Return a 503 with a message explaining auth is unavailable. Users wait; the system stays secure. |
 | "It's just feature flags — not real security." | Feature flags gate features, A/B tests, and sometimes billing-restricted functionality. Fail-open on a feature flag can expose unreleased or paid features to all users. | Default to the safe state: disable the feature when the flag service is unreachable, not enable it. |
+| "I documented it as INTENTIONAL FAIL-OPEN, so the violation is resolved." | A comment labeling a fail-open catch block as "intentional" doesn't change the behavior — the code still silently succeeds when it should surface the error. Documentation-only resolutions don't satisfy fail-closed. | Change the code: return an error value, propagate the failure, or add observable logging. The comment can stay as supplementary documentation, but the behavioral fix must come first. |
 
 ## Verification
 

@@ -47,7 +47,7 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-22 (drift DB schema v6, DriftDbSignals new methods, resolve_agent_skills pitfall injection) -->
+<!-- last-updated: 2026-05-25 (readCorrections discriminated union, assembleOutput exported, getPrReviewData no-throw validation) -->
 
 **`present_artifact` MCP tool** — `html` parameter required; serves the provided HTML directly via HTTP server; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
 
@@ -87,7 +87,8 @@ src/
 **Principle matcher** (`src/shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; `matchesScopeTags` checks tag overlap
 **`get-principles`** — loads KG computed tags and passes to `matchPrinciples`; tag matching active when KG indexed
 **`get-file-context`** — surfaces `computed_tags`, `hotspot_score`, `co_change_partners`; `shape` derived from graph metrics (see `deriveShape` in source)
-**PR Review Data** (`pr-review-data.ts`) — pure functions: `classifyFile` (bucket assignment), `generateNarrative`, `buildFileViolationMap`; `PrFileInfo.bucket` thresholds: needs-attention = violations OR high in_degree; worth-a-look = priority >= 5
+**PR Review Data** (`pr-review-data.ts`) — pure functions: `classifyFile` (bucket assignment), `generateNarrative`, `buildFileViolationMap`, `assembleOutput(AssembleParams): PrReviewDataOutput` (extracted 2026-05-25); `PrFileInfo.bucket` thresholds: needs-attention = violations OR high in_degree; worth-a-look = priority >= 5; `getPrReviewData` returns `{ error }` (not throw) for invalid `pr_number`
+**Correction Reader** (`features/orchestration/services/correction-reader.ts`) — `readCorrections(projectDir, filePaths?, maxAge?): ReadCorrectionsResult`; `ReadCorrectionsResult` = `{ ok: true; records: CorrectionRecord[] } | { ok: false; error: string }`; ENOENT → `ok:true, records:[]`; other I/O errors → `ok:false`; updated 2026-05-25
 **Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs
 
 **Composite context tool:**

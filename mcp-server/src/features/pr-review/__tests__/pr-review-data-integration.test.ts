@@ -200,19 +200,25 @@ describe("getPrReviewData — pr_number validation", () => {
     await rm(tmpDir, { force: true, recursive: true });
   });
 
-  it("rejects pr_number of zero", async () => {
+  it("returns error field for pr_number of zero", async () => {
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await expect(fn({ pr_number: 0 }, tmpDir)).rejects.toThrow("pr_number");
+    const result = await fn({ pr_number: 0 }, tmpDir);
+    expect(result.error).toMatch(/pr_number/);
+    expect(result.files).toEqual([]);
   });
 
-  it("rejects negative pr_number", async () => {
+  it("returns error field for negative pr_number", async () => {
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await expect(fn({ pr_number: -5 }, tmpDir)).rejects.toThrow("pr_number");
+    const result = await fn({ pr_number: -5 }, tmpDir);
+    expect(result.error).toMatch(/pr_number/);
+    expect(result.files).toEqual([]);
   });
 
-  it("rejects non-integer pr_number (1.5)", async () => {
+  it("returns error field for non-integer pr_number (1.5)", async () => {
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await expect(fn({ pr_number: 1.5 }, tmpDir)).rejects.toThrow("pr_number");
+    const result = await fn({ pr_number: 1.5 }, tmpDir);
+    expect(result.error).toMatch(/pr_number/);
+    expect(result.files).toEqual([]);
   });
 });
 

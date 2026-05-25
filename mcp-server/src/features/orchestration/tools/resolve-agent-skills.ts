@@ -152,15 +152,14 @@ function logPitfallAuditEvent(workspace: string, agentName: string, pitfallCount
   }
 }
 
-/** Read corrections and return formatted section string. Fail-open: returns "" on any error. */
 function buildCorrectionsSection(projectDir: string | undefined): string {
   if (!projectDir) return "";
-  try {
-    return formatCorrectionsSection(readCorrections(projectDir));
-  } catch {
-    // Non-blocking: correction read failures are silently ignored
-    return "";
+  const result = readCorrections(projectDir);
+  if (!result.ok) {
+    console.warn("[resolve-agent-skills] corrections unavailable:", result.error);
+    return "\n\n## Recent User Corrections\n\n_Corrections unavailable due to a read error. Details have been logged._";
   }
+  return formatCorrectionsSection(result.records);
 }
 
 /** Resolve skills for an agent from its frontmatter fields. */

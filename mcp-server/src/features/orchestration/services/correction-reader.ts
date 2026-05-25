@@ -12,6 +12,14 @@ export type CorrectionRecord = {
   timestamp: string;
 };
 
+/**
+ * Result type for readCorrections — distinguishes success (including
+ * legitimately-empty results) from I/O failures the caller should surface.
+ */
+export type ReadCorrectionsResult =
+  | { ok: true; records: CorrectionRecord[] }
+  | { ok: false; error: string };
+
 /** Parse one correction file, returning null if invalid or too old. */
 function parseCorrectionFile(
   filePath: string,
@@ -47,7 +55,11 @@ function parseCorrectionFile(
  * Read all correction records from `.canon/corrections/`, optionally
  * filtered to those affecting specific file paths.
  *
- * Fail-open: returns empty array on any filesystem error.
+ * Returns a discriminated union so callers can distinguish between:
+ *  - `{ ok: true; records: [] }` — directory absent or empty (legitimately no corrections)
+ *  - `{ ok: true; records: [...] }` — corrections found
+ *  - `{ ok: false; error: string }` — I/O failure reading an existing directory
+ *
  * Malformed JSON files are skipped silently.
  * Results are sorted by timestamp DESC (most recent first).
  *
@@ -61,28 +73,39 @@ export function readCorrections(
   projectDir: string,
   filePaths?: string[],
   maxAge = 24 * 60 * 60 * 1000,
-): CorrectionRecord[] {
+): ReadCorrectionsResult {
   const correctionsDir = join(projectDir, CANON_DIR, "corrections");
   const now = Date.now();
 
   let fileNames: string[];
   try {
     fileNames = readdirSync(correctionsDir).filter((f) => f.endsWith(".json"));
-  } catch {
-    return []; // Directory doesn't exist or unreadable — fail-open
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    // ENOENT means the directory simply doesn't exist yet — no corrections recorded.
+    if (code === "ENOENT") {
+      return { ok: true, records: [] };
+    }
+    // Any other I/O error (EACCES, ENOTDIR, etc.) is a real failure callers should see.
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn("[correction-reader] corrections directory unreadable:", errMsg);
+    return {
+      error: `corrections directory unreadable: ${errMsg}`,
+      ok: false,
+    };
   }
 
   const fileSet = filePaths ? new Set(filePaths) : null;
-  const results: CorrectionRecord[] = [];
+  const records: CorrectionRecord[] = [];
 
   for (const fileName of fileNames) {
     const record = parseCorrectionFile(join(correctionsDir, fileName), now, maxAge, fileSet);
-    if (record) results.push(record);
+    if (record) records.push(record);
   }
 
   // Most recent first
-  results.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-  return results;
+  records.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  return { ok: true, records };
 }
 
 /**
