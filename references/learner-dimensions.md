@@ -401,6 +401,61 @@ Suggest: {primer update: "{specific text change}" | investigate: "{description}"
 
 ---
 
+## Dimension: rule-compliance-measurement
+
+**Goal**: Measure whether agent-behavior rules earn their keep in the preload context window. Identify rules that agents naturally follow (retirement candidates -- they waste context), rules with low compliance despite loading (investment candidates -- they need clearer wording or examples), and the marginal compliance impact of rule presence.
+
+### Data source
+
+Cross-reference two data sources:
+
+1. **Agent preload manifests**: Read `agents/*.md` frontmatter `rules:` fields to determine which rules each agent type receives.
+2. **Build transcripts**: Call `get_transcript` MCP tool for completed builds. For each agent invocation, determine:
+   - Which rules were in the agent's preload (`rules:` field from its agent definition)
+   - Whether the agent's behavior complied with each loaded rule (analyze transcript for rule adherence)
+   - Whether the agent complied with rules it did NOT have loaded (natural compliance)
+
+For compliance scoring, classify each rule-agent pairing per build as:
+- **compliant**: agent followed the rule
+- **violated**: agent broke the rule
+- **n/a**: rule was not applicable to the work performed
+
+**Minimum threshold**: 10 completed builds with transcripts required. Below threshold → note "Skipped: rule-compliance-measurement — requires 10 builds with transcripts, have {current}."
+
+### Signals to analyze
+
+| Signal | How to detect | Threshold | Suggestion |
+|--------|--------------|-----------|------------|
+| Natural compliance (retirement candidate) | Rule has >= 95% compliance across agents that do NOT have it preloaded, across >= 10 builds | >= 95% natural compliance | Rule may be redundant -- agents follow it without loading. Consider removing from preload to save context tokens. CAUTION: do not retire security-tagged rules. |
+| Low compliance despite loading (investment candidate) | Rule has < 60% compliance across agents that DO have it preloaded, across >= 10 builds | < 60% loaded compliance | Rule needs investment -- rewrite for clarity, add examples, or add anti-rationalization table. Current wording is not effective. |
+| High-value rule (keep) | Rule has >= 80% loaded compliance AND < 50% natural compliance, across >= 10 builds | Loaded >= 80%, natural < 50% | Rule is earning its keep -- compliance improves significantly when loaded. Protect from retirement. |
+| Context cost outlier | Rule file exceeds 80 lines AND compliance improvement (loaded vs natural) is < 10 percentage points | File size > 80 lines, delta < 10pp | Rule is expensive (many context tokens) with low marginal value. Consider compressing or splitting. |
+| Cross-agent compliance variance | Same rule has > 30pp compliance variance across different agent types that load it | Variance > 30pp across >= 3 agent types | Rule may need agent-specific wording or should be split into agent-specific variants. |
+
+### Compliance scoring methodology
+
+For each rule-agent-build triple, the learner examines the transcript to score compliance:
+
+1. **Identify applicability**: Did the agent perform work where the rule would apply? (e.g., `agent-tdd-required` only applies when the agent writes code, not when it reads files)
+2. **Score compliance**: If applicable, did the agent follow the rule?
+   - For process rules (TDD, structured triage): check transcript for evidence of the process steps
+   - For constraint rules (fresh context, workspace scoping): check for violations
+   - For output rules (template required, artifact write): check for required outputs
+3. **Natural compliance baseline**: Compare compliance of agents that have the rule loaded vs agents that perform similar work but do NOT have the rule loaded
+
+### Output per suggestion
+
+```
+**{rule-id}** (current: loaded by {N} agents, {compliance_rate}% loaded compliance, {natural_rate}% natural compliance)
+Delta: {loaded - natural}pp marginal compliance improvement
+Context cost: {line_count} lines in {N} agent preloads = ~{token_estimate} tokens/build
+Signal: {retirement candidate | investment candidate | high-value | context cost outlier | variance outlier}
+Suggest: {retire from preload | rewrite for clarity | keep -- high value | compress to {N} lines | split into agent-specific variants}
+{CAUTION note if rule has security tag}
+```
+
+---
+
 ## Report Template
 
 Combine all suggestions into `.canon/LEARNING-REPORT.md`:
@@ -455,6 +510,15 @@ Each suggestion follows this format:
 Evidence: {step_id} in {flow_slug} -- {tool_name} called with query "{query}" (classified: {query_shape})
 Suggest: {primer update: "{text}" | investigate: "{description}" | baseline: {value}}
 
+### Rule Compliance Measurement (from preload analysis)
+{rule-compliance-measurement suggestions, or "No rule compliance issues detected." if none}
+
+Each suggestion follows this format:
+**{rule-id}** (loaded by {N} agents, {compliance_rate}% loaded, {natural_rate}% natural)
+Delta: {delta}pp | Context cost: {lines} lines, ~{tokens} tokens/build
+Signal: {signal type}
+Suggest: {action}
+
 ### Recurring Suggestions
 {Suggestions that appeared in 3+ previous learning runs but were never acted on — flag these prominently}
 
@@ -476,7 +540,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
 {
   "run_id": "learn_{YYYYMMDD}_{random_hex}",
   "timestamp": "{ISO-8601}",
-  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health", "agent-effectiveness", "retrieval-effectiveness"],
+  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health", "agent-effectiveness", "retrieval-effectiveness", "rule-compliance-measurement"],
   "data_summary": {
     "reviews_analyzed": 0,
     "source_files_scanned": 0,
@@ -487,7 +551,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
     {
       "id": "sug_{deterministic_hash}",
       "dimension": "principle-health",
-      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-anti-pattern|semantic-for-identifier|grep-for-conceptual|search-refinement-chain|tool-switch-pattern|grep-dominance-ratio",
+      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-anti-pattern|semantic-for-identifier|grep-for-conceptual|search-refinement-chain|tool-switch-pattern|grep-dominance-ratio|retirement-candidate|investment-candidate|high-value-rule|context-cost-outlier|compliance-variance",
       "target": "principle-id or convention text or state name",
       "summary": "One-line description of what's suggested",
       "confidence": "high|medium",
