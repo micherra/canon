@@ -178,15 +178,54 @@ function journalPath(workspace: string): string {
   return join(workspace, "journal.json");
 }
 
+const VALID_STEP_STATUSES: ReadonlySet<string> = new Set<JournalStepStatus>([
+  "planned",
+  "started",
+  "completed",
+  "skipped",
+]);
+
+/**
+ * Validates that a value has the minimum shape of a JournalStep.
+ * Elements are written by this process but journal.json can be corrupted
+ * or hand-edited. Validates all required fields and the status union values;
+ * any element that fails this check is silently dropped.
+ */
+function isWellFormedStep(value: unknown): value is JournalStep {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.step_id === "string" &&
+    typeof v.status === "string" &&
+    VALID_STEP_STATUSES.has(v.status) &&
+    Array.isArray(v.artifacts_expected) &&
+    (v.agent_type === null || typeof v.agent_type === "string")
+  );
+}
+
 async function readJournal(workspace: string): Promise<Journal> {
   const path = journalPath(workspace);
   if (!existsSync(path)) {
     return { steps: [], version: 1, workspace };
   }
   const raw = await readFile(path, "utf-8");
-  const parsed = JSON.parse(raw) as Journal;
-  if (!Array.isArray(parsed.steps)) parsed.steps = [];
-  return parsed;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // Syntactically invalid JSON (truncated or hand-edited) — return safe default.
+    return { steps: [], version: 1, workspace };
+  }
+  // Validate at file I/O boundary: journal.json is written by this process but
+  // could be corrupted or hand-edited. Normalise to a safe default shape.
+  if (typeof parsed !== "object" || parsed === null) {
+    return { steps: [], version: 1, workspace };
+  }
+  const obj = parsed as Record<string, unknown>;
+  // Filter to well-formed step objects only — corrupted entries (null, missing fields)
+  // would throw later in finalizeWorkspace/scanArtifacts.
+  const steps = Array.isArray(obj.steps) ? obj.steps.filter(isWellFormedStep) : [];
+  return { steps, version: 1, workspace };
 }
 
 async function writeJournal(workspace: string, journal: Journal): Promise<void> {

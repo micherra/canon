@@ -321,3 +321,36 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
     expect(result.steps_missing_skip_reason).toEqual([]);
   });
 });
+
+describe("finalizeWorkspace — corrupted journal handling (validate-at-trust-boundaries)", () => {
+  let workspace: string;
+
+  beforeEach(async () => {
+    workspace = await mkdtemp(join(tmpdir(), "finalize-corrupt-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(workspace, { force: true, recursive: true });
+  });
+
+  test("treats journal.json with a non-array steps field as empty journal", async () => {
+    // Simulates corrupted or hand-edited journal where steps is not an array.
+    // An empty journal has 0 steps logged — it does not produce missing-step errors.
+    writeFileSync(
+      join(workspace, "journal.json"),
+      JSON.stringify({ steps: "not-an-array", version: 1, workspace }),
+    );
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    expect(result.steps_logged).toBe(0);
+    expect(result.steps_missing).toHaveLength(0);
+    expect(result.artifacts_missing).toHaveLength(0);
+  });
+
+  test("treats journal.json with a JSON primitive as empty journal", async () => {
+    writeFileSync(join(workspace, "journal.json"), JSON.stringify(42));
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    expect(result.steps_logged).toBe(0);
+  });
+});

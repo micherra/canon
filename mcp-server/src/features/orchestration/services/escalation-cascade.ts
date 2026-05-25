@@ -174,6 +174,49 @@ export function recordAttempt(
 const METRICS_KEY = "escalation_state";
 
 /**
+ * Type guard: validate that a parsed value has the shape of an EscalationAttempt.
+ * Validates all required fields: strategy, attempted_at, and step_id must all
+ * be strings. Any element that fails is silently dropped by the caller.
+ */
+function isWellFormedAttempt(value: unknown): value is EscalationAttempt {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.strategy === "string" &&
+    typeof v.attempted_at === "string" &&
+    typeof v.step_id === "string"
+  );
+}
+
+/**
+ * Type guard: validate that a parsed value has the shape of EscalationState.
+ * Data is stored as a JSON string in execution store metrics — it crosses a
+ * deserialization boundary and must be validated before use.
+ *
+ * Validates:
+ *  - cascade_started_at is a string that parses to a finite timestamp (guards
+ *    against NaN elapsed-time calculations in getNextStrategy)
+ *  - current_step_id is a string
+ *  - attempts is an array of well-formed EscalationAttempt objects (guards
+ *    against null/missing-field elements that would throw later)
+ */
+function isEscalationState(value: unknown): value is EscalationState {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.cascade_started_at !== "string") return false;
+  if (typeof v.current_step_id !== "string") return false;
+  if (!Array.isArray(v.attempts)) return false;
+  // Validate cascade_started_at parses to a finite timestamp to prevent NaN
+  // elapsed-time in getNextStrategy (which uses new Date(cascade_started_at).getTime()).
+  const ts = new Date(v.cascade_started_at).getTime();
+  if (!Number.isFinite(ts)) return false;
+  // Filter attempt elements to well-formed objects; corrupted entries are dropped
+  // rather than blocking the entire state — getNextStrategy only needs the strategy set.
+  (v as Record<string, unknown>).attempts = (v.attempts as unknown[]).filter(isWellFormedAttempt);
+  return true;
+}
+
+/**
  * Reads escalation state from execution store metrics.
  * Returns null when no state has been persisted for the given stateId.
  */
@@ -191,7 +234,8 @@ export function readEscalationState(
   if (typeof raw !== "string") return null;
 
   try {
-    return JSON.parse(raw) as EscalationState;
+    const parsed: unknown = JSON.parse(raw);
+    return isEscalationState(parsed) ? parsed : null;
   } catch {
     return null;
   }
