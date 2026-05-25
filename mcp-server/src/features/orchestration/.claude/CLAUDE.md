@@ -9,7 +9,7 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 <!-- last-updated: 2026-05-15 -->
 
 **`tools/`** — MCP tool handlers. All handlers are thin wrappers calling services.
-<!-- last-updated: 2026-05-20 (resolve-agent-skills-disclosure.ts added; resolveAgentSkills made async) -->
+<!-- last-updated: 2026-05-25 (open-artifact.ts added) -->
 
 | Tool file | MCP tool name |
 |-----------|--------------|
@@ -17,6 +17,7 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `get-transcript.ts` | `get_transcript` |
 | `init-workspace.ts` | `init_workspace` |
 | `invoke-janitor.ts` | `invoke_janitor` |
+| `open-artifact.ts` | `open_artifact` — reads `${workspace}/artifacts/${artifact_name}`, registers with HTTP server, opens browser fire-and-forget; returns `{ url }`; `INVALID_INPUT` on path traversal or missing file; `UNEXPECTED` when HTTP server not running |
 | `orchestration-journal.ts` | `log_step` / `batch_log_steps` |
 | `post-event.ts` | `post_event` |
 | `present-artifact.ts` | `present_artifact` — fire-and-forget; serves HTML, opens browser, returns `{ url }` immediately (does not block) |
@@ -40,9 +41,10 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `workspace-cleanup.ts` | Workspace cleanup utilities |
 
 ## Contracts
-<!-- last-updated: 2026-05-22 (resolveAgentSkills pitfall injection via options.filePaths; pitfall_injected audit event) -->
+<!-- last-updated: 2026-05-25 (openArtifact added) -->
 Key tool functions (all return `ToolResult<T>` — see `@shared/lib/tool-result.ts`):
 
+- `openArtifact(input: OpenArtifactInput)` → `Promise<ToolResult<{ url: string }>>` — reads `${workspace}/artifacts/${artifact_name}` (appends `.html` if no extension), validates no path traversal, registers with HTTP server, opens browser fire-and-forget; `INVALID_INPUT` on traversal or missing file; `UNEXPECTED` when HTTP server not running
 - `initWorkspace(input)` — create or resume workspace; preflight checks when `preflight: true`; `tryResumeWorkspace` accepts optional `expectedTask` to block resume on task-identity mismatch (slug-collision defense)
 - `captureTranscript(input: CaptureTranscriptInput)` → `Promise<ToolResult<CaptureTranscriptResult>>` — best-effort; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon format, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; returns `warning` (never an error) when source file not found
 - `transformClaudeCodeTranscript(entries: ClaudeCodeEntry[])` → `TranscriptEntry[]` — pure function; maps CC JSONL content blocks to Canon transcript entries; malformed entries skipped silently; exported from `services/transcript-transformer.ts`

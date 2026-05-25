@@ -7,9 +7,9 @@
 Pre/post tool-use interceptors that enforce policy and prevent mistakes without requiring agent compliance. Hooks run automatically on matched tool invocations.
 
 ## Architecture
-<!-- last-updated: 2026-05-23 -->
+<!-- last-updated: 2026-05-25 -->
 
-`hooks.json` is the single registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode), `PostToolUse` (after Bash), `SessionStart`, or `SubagentStop`. The separate `canon-agent-teams/hooks.json` was merged into this file (2026-04-26); `canon-agent-teams/hooks.json` no longer exists.
+`hooks.json` is the single registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode/Agent), `PostToolUse` (after Bash), `SessionStart`, or `SubagentStop`. The separate `canon-agent-teams/hooks.json` was merged into this file (2026-04-26); `canon-agent-teams/hooks.json` no longer exists.
 
 **Hook scripts:**
 
@@ -22,6 +22,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `large-file-guard.sh` | PreToolUse (Write/Edit) | Prevent accidental large file commits |
 | `principle-inject.sh` | PreToolUse (Write/Edit) | Inject principle summaries into prompts |
 | `plan-mode-guard.sh` | PreToolUse (EnterPlanMode) | Guard against unintended plan mode entry |
+| `dag-dispatch-guard.sh` | PreToolUse (Agent) | Advisory warning when raw Agent spawns detected during DAG implement state — never blocks (exit 0) |
 | `canon-agent-teams/canon-workspace-check.sh` | PreToolUse (Edit/Write/Bash) | Block file edits when no active Canon workspace exists (L4 enforcement) |
 | `canon-agent-teams/pre-commit-branch-guard.sh` | PreToolUse (Bash) | Block commits directly to main/master during a Canon build |
 | `learn-nudge.sh` | PostToolUse (Bash) | Suggest principle creation/updates |
