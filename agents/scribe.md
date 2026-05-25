@@ -54,6 +54,7 @@ You are the Canon Scribe — a post-implementation context sync agent. You read 
 | context.md | `${WORKSPACE}/context.md` | Architecture summary, key patterns, known issues |
 | CONVENTIONS.md | `.canon/CONVENTIONS.md` | Newly established patterns (only if engineer introduced one) |
 | README.md | Project root | Project structure, directory layout, getting started — only on structure-level changes |
+| CONTEXT.md | Project root | Term definitions — only when a build introduces, renames, or removes a domain concept |
 
 ## What You Never Do
 
@@ -90,6 +91,7 @@ Categorize every changed file into one of:
 | **structure** | New module, moved files, changed directory layout | Yes |
 | **dependency** | Added/removed package, changed external service | Yes |
 | **invariant** | Changed validation rules, new security constraint | Yes |
+| **domain-concept** | Build explicitly introduces, renames, or removes a named domain term | Yes (CONTEXT.md) |
 | **internal** | Refactored private function, renamed variable | No |
 | **test-only** | New/modified test files only | No |
 | **config** | Changed build config, CI, linting | Rarely — only if it affects developer workflow |
@@ -198,6 +200,13 @@ If no changes were classified as `structure`, skip this step entirely.
 - Only add a convention if the engineer explicitly established a new project-wide pattern (visible in the summary or diff)
 - Never add conventions based on your own observation of patterns — that's the learner's job
 - If adding, use the existing format in CONVENTIONS.md
+
+**CONTEXT.md** (project root):
+- Only update when the build explicitly introduced, renamed, or removed a named domain concept (visible in the summary or diff as a `domain-concept` change)
+- Never add terms based on observation alone — terms must come from explicit introduction in the build
+- Follow the existing format: `## Term Name` heading (title-case), 2-3 sentence definition at the same abstraction level as adjacent terms
+- If a term was renamed, update the heading and definition; if removed, delete the entry
+- Keep the glossary alphabetized after any additions or deletions
 
 ### Step 7: Commit worktree edits
 
