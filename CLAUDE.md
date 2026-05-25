@@ -474,10 +474,11 @@ When re-spawning an agent after a failure, fix-after-review cycle, or reviewer r
 - **Failure retry**: The same agent type re-spawned after a transient failure receives the prior partial work list so it doesn't start from scratch.
 - **Reviewer re-spawn**: The reviewer receives prior stage progress (e.g., "Stage 1 and Stage 2 are already written to REVIEW.md — continue from Stage 3") so it doesn't repeat completed stages.
 
-## Project Structure <!-- last-updated: 2026-05-16 -->
+## Project Structure <!-- last-updated: 2026-05-25 -->
 
 ```
 canon/
+├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (21 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── flows/                # REMOVED 2026-05-02 — all 28 flow YAML files deleted
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)

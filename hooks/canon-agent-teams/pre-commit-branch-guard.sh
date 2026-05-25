@@ -27,8 +27,6 @@ if [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-# Check if this is a git commit command (match "git commit" as adjacent words,
-# not "commit" appearing anywhere in arguments/filenames)
 if ! canon_is_git_cmd "$COMMAND" "commit"; then
   exit 0
 fi

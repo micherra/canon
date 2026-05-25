@@ -33,5 +33,4 @@ mcp-server/.claude/agent-memory/
 !.canon/principle-overrides.yaml
 .env
 
-# Ephemeral workspace artifacts
-context.md
+# Ephemeral workspace artifacts (covered by .canon/** above)
