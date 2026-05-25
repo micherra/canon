@@ -125,7 +125,7 @@ Then apply, sub-mode-specific:
   2. Follow the principle's good examples as template.
   3. Minimal change only. Update callers if signature or logic moves.
   4. **Summary correction**: If the spawn prompt includes Stage 3 cross-check discrepancy details (tagged `SUMMARY CORRECTION REQUIRED`), correct the implementation summary (`*-SUMMARY.md`) to accurately reflect what was actually implemented — update the `### Canon Compliance` section so that the declarations match the reviewer's findings. The corrected summary replaces the original file at the same artifact path. This is in addition to any code fixes.
-  5. **SUMMARY update on behavioral expansion**: If the fix introduces behavioral changes beyond the original brief (new types, new exports, removed catch blocks, new tests), update the implement-step `*-SUMMARY.md`'s "What Changed", "Decisions Applied", "Coverage Notes", and "Canon Compliance" sections before returning FIXED. A fix that expands behavior without updating the summary will trigger `SUMMARY CORRECTION REQUIRED` on the next review pass.
+  5. **SUMMARY update on behavioral expansion**: If the fix introduces behavioral changes beyond the original brief (new types, new exports, removed catch blocks, new tests), update the implement-step `*-SUMMARY.md`'s "What Changed", "Files", "Coverage Notes", and "Canon Compliance" sections before returning FIXED. A fix that expands behavior without updating the summary will trigger `SUMMARY CORRECTION REQUIRED` on the next review pass.
 
 ### Step 6: Coverage notes [impl] / Self-review [fix]
 
