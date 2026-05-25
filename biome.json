@@ -138,6 +138,13 @@
   "overrides": [
     {
       "includes": ["mcp-server/src/**/*.test.{ts,tsx,js,jsx}", "mcp-server/src/**/*.spec.{ts,tsx,js,jsx}"],
+      "assist": {
+        "actions": {
+          "source": {
+            "useSortedKeys": "off"
+          }
+        }
+      },
       "linter": {
         "rules": {
           "complexity": {
