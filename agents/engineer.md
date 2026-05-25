@@ -29,6 +29,11 @@ rules:
 references:
   - principle-loading
   - status-protocol
+primers:
+  - testing
+  - mocking-boundaries
+  - refactoring-patterns
+  - interface-design-for-testability
 templates:
   - implementation-log
 tools:
