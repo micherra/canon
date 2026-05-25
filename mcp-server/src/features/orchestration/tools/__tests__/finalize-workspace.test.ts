@@ -330,7 +330,7 @@ describe("finalizeWorkspace — corrupted journal handling (validate-at-trust-bo
   });
 
   afterEach(async () => {
-    await rm(workspace, { recursive: true, force: true });
+    await rm(workspace, { force: true, recursive: true });
   });
 
   test("treats journal.json with a non-array steps field as empty journal", async () => {

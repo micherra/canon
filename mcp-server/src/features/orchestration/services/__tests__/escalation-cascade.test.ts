@@ -239,7 +239,7 @@ describe("readEscalationState / writeEscalationState", () => {
     store.upsertState("step-corrupt", { entries: 0, status: "pending" });
     // Inject a JSON string that parses but is NOT an EscalationState
     store.updateStateMetrics("step-corrupt", {
-      escalation_state: JSON.stringify({ unexpected: "field", num: 42 }),
+      escalation_state: JSON.stringify({ num: 42, unexpected: "field" }),
     });
     // Should return null, not crash or return a mistyped object
     expect(readEscalationState(store, "step-corrupt")).toBeNull();
