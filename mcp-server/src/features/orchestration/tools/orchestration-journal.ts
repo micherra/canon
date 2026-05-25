@@ -178,16 +178,29 @@ function journalPath(workspace: string): string {
   return join(workspace, "journal.json");
 }
 
+const VALID_STEP_STATUSES: ReadonlySet<string> = new Set<JournalStepStatus>([
+  "planned",
+  "started",
+  "completed",
+  "skipped",
+]);
+
 /**
  * Validates that a value has the minimum shape of a JournalStep.
  * Elements are written by this process but journal.json can be corrupted
- * or hand-edited. At minimum we require step_id and status to be strings;
+ * or hand-edited. Validates all required fields and the status union values;
  * any element that fails this check is silently dropped.
  */
 function isWellFormedStep(value: unknown): value is JournalStep {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
-  return typeof v.step_id === "string" && typeof v.status === "string";
+  return (
+    typeof v.step_id === "string" &&
+    typeof v.status === "string" &&
+    VALID_STEP_STATUSES.has(v.status) &&
+    Array.isArray(v.artifacts_expected) &&
+    (v.agent_type === null || typeof v.agent_type === "string")
+  );
 }
 
 async function readJournal(workspace: string): Promise<Journal> {

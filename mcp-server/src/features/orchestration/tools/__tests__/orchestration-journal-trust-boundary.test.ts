@@ -78,15 +78,15 @@ describe("readJournal — invalid JSON (trust-boundary fix 1)", () => {
     // finalizeWorkspace requires the journal.json to exist (it checks for the file before reading)
     writeRawJournal(workspace, "{{{{ broken json");
 
-    // finalizeWorkspace will return WORKSPACE_NOT_FOUND because our safe-default produces
-    // steps:[] which means all steps would be missing — but it should NOT throw.
-    // The key assertion is that it handles the corrupt file gracefully.
+    // The key assertion is that finalizeWorkspace handles a corrupt file gracefully
+    // (no uncaught exception). With the safe-default producing steps:[], there are
+    // no completed steps and no missing artifacts — complete evaluates to true.
     const result = await finalizeWorkspace({ workspace });
 
     // Should not throw — either ok or a tool error, never an uncaught exception
     expect(result).toBeDefined();
-    // With an empty-journal fallback, there are no completed steps and no missing artifacts —
-    // complete:true if there are also no missing/skipped steps.
+    // With an empty-journal fallback, there are no completed or missing steps,
+    // so the result is ok with an empty steps_missing array.
     if (result.ok) {
       expect(Array.isArray(result.steps_missing)).toBe(true);
     }

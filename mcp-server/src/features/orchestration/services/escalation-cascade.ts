@@ -175,13 +175,17 @@ const METRICS_KEY = "escalation_state";
 
 /**
  * Type guard: validate that a parsed value has the shape of an EscalationAttempt.
- * At minimum, the element must have a `strategy` string field — enough to drive
- * the "already attempted" set without risking undefined access later.
+ * Validates all required fields: strategy, attempted_at, and step_id must all
+ * be strings. Any element that fails is silently dropped by the caller.
  */
 function isWellFormedAttempt(value: unknown): value is EscalationAttempt {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
-  return typeof v.strategy === "string";
+  return (
+    typeof v.strategy === "string" &&
+    typeof v.attempted_at === "string" &&
+    typeof v.step_id === "string"
+  );
 }
 
 /**
