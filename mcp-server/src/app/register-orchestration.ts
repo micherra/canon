@@ -6,6 +6,7 @@ import { registerInitWorkspaceTool } from "./register-init-workspace.ts";
 import { registerJanitorTool } from "./register-janitor.ts";
 import { registerJournalTools } from "./register-journal.ts";
 import { registerMessagingTools } from "./register-messaging.ts";
+import { registerOpenArtifactTool } from "./register-open-artifact.ts";
 import { registerPresentArtifactTool } from "./register-present-artifact.ts";
 import { registerReportTools } from "./register-report.ts";
 
@@ -19,5 +20,6 @@ export function registerOrchestrationTools(): void {
   registerAgentTeamsTools();
   registerHistoryTools();
   registerPresentArtifactTool();
+  registerOpenArtifactTool();
   registerConfidenceTools();
 }
