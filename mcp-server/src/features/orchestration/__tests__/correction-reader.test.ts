@@ -241,6 +241,43 @@ describe("readCorrections", () => {
     expect(records).toHaveLength(1);
   });
 
+  it("skips records with wrong field types (validate-at-trust-boundaries)", () => {
+    const dir = join(projectDir, ".canon", "corrections");
+    mkdirSync(dir, { recursive: true });
+    // Record where agent_type is a number instead of a string — passes JSON.parse but fails validation
+    writeFileSync(
+      join(dir, "wrong-types.json"),
+      JSON.stringify({
+        agent_type: 42, // wrong type
+        commit_sha: "abc123",
+        commit_subject: "test",
+        correction_command: "git commit",
+        file_path: "src/foo.ts",
+        timestamp: recentTimestamp(),
+      }),
+    );
+    writeCorrection(projectDir, "valid.json", {
+      file_path: "src/valid.ts",
+      timestamp: recentTimestamp(1000),
+    });
+    const records = okRecords(readCorrections(projectDir));
+    expect(records).toHaveLength(1);
+    expect(records[0].file_path).toBe("src/valid.ts");
+  });
+
+  it("skips records that are JSON primitives, not objects", () => {
+    const dir = join(projectDir, ".canon", "corrections");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "array.json"), JSON.stringify(["not", "an", "object"]));
+    writeFileSync(join(dir, "string.json"), JSON.stringify("just a string"));
+    writeCorrection(projectDir, "valid.json", {
+      file_path: "src/valid.ts",
+      timestamp: recentTimestamp(),
+    });
+    const records = okRecords(readCorrections(projectDir));
+    expect(records).toHaveLength(1);
+  });
+
   it("returns ok:false when corrections directory exists but is unreadable", () => {
     // Simulate an unreadable directory by pointing to a file instead of a directory
     const canonDir = join(projectDir, ".canon");

@@ -184,9 +184,15 @@ async function readJournal(workspace: string): Promise<Journal> {
     return { steps: [], version: 1, workspace };
   }
   const raw = await readFile(path, "utf-8");
-  const parsed = JSON.parse(raw) as Journal;
-  if (!Array.isArray(parsed.steps)) parsed.steps = [];
-  return parsed;
+  const parsed: unknown = JSON.parse(raw);
+  // Validate at file I/O boundary: journal.json is written by this process but
+  // could be corrupted or hand-edited. Normalise to a safe default shape.
+  if (typeof parsed !== "object" || parsed === null) {
+    return { steps: [], version: 1, workspace };
+  }
+  const obj = parsed as Record<string, unknown>;
+  const steps = Array.isArray(obj.steps) ? (obj.steps as JournalStep[]) : [];
+  return { steps, version: 1, workspace };
 }
 
 async function writeJournal(workspace: string, journal: Journal): Promise<void> {

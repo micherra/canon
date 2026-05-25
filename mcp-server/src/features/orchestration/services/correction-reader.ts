@@ -20,6 +20,26 @@ export type ReadCorrectionsResult =
   | { ok: true; records: CorrectionRecord[] }
   | { ok: false; error: string };
 
+/**
+ * Type guard: validate that a parsed JSON value has the shape of CorrectionRecord.
+ * Files are written by correction-capture.sh (external trust boundary) and must be
+ * validated before use — TypeScript's type system provides no runtime guarantee.
+ */
+function isCorrectionRecord(value: unknown): value is CorrectionRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.agent_type === "string" &&
+    typeof v.commit_sha === "string" &&
+    typeof v.commit_subject === "string" &&
+    typeof v.correction_command === "string" &&
+    typeof v.file_path === "string" &&
+    typeof v.timestamp === "string" &&
+    v.file_path.length > 0 &&
+    v.timestamp.length > 0
+  );
+}
+
 /** Parse one correction file, returning null if invalid or too old. */
 function parseCorrectionFile(
   filePath: string,
@@ -34,12 +54,15 @@ function parseCorrectionFile(
     return null;
   }
 
-  let record: CorrectionRecord;
+  let parsed: unknown;
   try {
-    record = JSON.parse(raw) as CorrectionRecord;
+    parsed = JSON.parse(raw);
   } catch {
     return null;
   }
+
+  if (!isCorrectionRecord(parsed)) return null;
+  const record = parsed;
 
   if (!record.file_path || !record.timestamp) return null;
 

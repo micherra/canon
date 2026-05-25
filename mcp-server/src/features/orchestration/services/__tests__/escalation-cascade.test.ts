@@ -232,4 +232,25 @@ describe("readEscalationState / writeEscalationState", () => {
     const result = readEscalationState(store, "step-overwrite");
     expect(result!.attempts).toHaveLength(1);
   });
+
+  test("returns null when stored JSON is valid but not an EscalationState shape (validate-at-trust-boundaries)", () => {
+    // Manually inject corrupt/wrong-shape data into the metrics key
+    const store = makeStore();
+    store.upsertState("step-corrupt", { entries: 0, status: "pending" });
+    // Inject a JSON string that parses but is NOT an EscalationState
+    store.updateStateMetrics("step-corrupt", {
+      escalation_state: JSON.stringify({ unexpected: "field", num: 42 }),
+    });
+    // Should return null, not crash or return a mistyped object
+    expect(readEscalationState(store, "step-corrupt")).toBeNull();
+  });
+
+  test("returns null when stored JSON is a JSON array, not an object", () => {
+    const store = makeStore();
+    store.upsertState("step-array", { entries: 0, status: "pending" });
+    store.updateStateMetrics("step-array", {
+      escalation_state: JSON.stringify([{ strategy: "add_primer" }]),
+    });
+    expect(readEscalationState(store, "step-array")).toBeNull();
+  });
 });

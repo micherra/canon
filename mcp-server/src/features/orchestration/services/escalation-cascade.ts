@@ -174,6 +174,21 @@ export function recordAttempt(
 const METRICS_KEY = "escalation_state";
 
 /**
+ * Type guard: validate that a parsed value has the shape of EscalationState.
+ * Data is stored as a JSON string in execution store metrics — it crosses a
+ * deserialization boundary and must be validated before use.
+ */
+function isEscalationState(value: unknown): value is EscalationState {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.cascade_started_at === "string" &&
+    typeof v.current_step_id === "string" &&
+    Array.isArray(v.attempts)
+  );
+}
+
+/**
  * Reads escalation state from execution store metrics.
  * Returns null when no state has been persisted for the given stateId.
  */
@@ -191,7 +206,8 @@ export function readEscalationState(
   if (typeof raw !== "string") return null;
 
   try {
-    return JSON.parse(raw) as EscalationState;
+    const parsed: unknown = JSON.parse(raw);
+    return isEscalationState(parsed) ? parsed : null;
   } catch {
     return null;
   }
