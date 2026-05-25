@@ -152,20 +152,12 @@ function logPitfallAuditEvent(workspace: string, agentName: string, pitfallCount
   }
 }
 
-/**
- * Read corrections and return formatted section string.
- *
- * When the corrections directory is absent, returns "" (no corrections recorded yet).
- * When the directory exists but is unreadable (permissions, I/O error), surfaces a
- * warning notice in the returned string so the spawned agent knows corrections are
- * unavailable rather than silently seeing an empty result.
- */
 function buildCorrectionsSection(projectDir: string | undefined): string {
   if (!projectDir) return "";
   const result = readCorrections(projectDir);
   if (!result.ok) {
     console.warn("[resolve-agent-skills] corrections unavailable:", result.error);
-    return `<!-- corrections unavailable: ${result.error} -->`;
+    return "\n\n## Recent User Corrections\n\n_Corrections unavailable due to a read error. Details have been logged._";
   }
   return formatCorrectionsSection(result.records);
 }
