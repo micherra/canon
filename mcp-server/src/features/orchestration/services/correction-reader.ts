@@ -67,7 +67,9 @@ function parseCorrectionFile(
   if (!record.file_path || !record.timestamp) return null;
 
   const age = now - new Date(record.timestamp).getTime();
-  if (age > maxAge) return null;
+  // Guard against non-empty but invalid date strings producing NaN — which
+  // would bypass the max-age check (NaN > maxAge is always false).
+  if (!Number.isFinite(age) || age > maxAge) return null;
 
   if (fileSet && !fileSet.has(record.file_path)) return null;
 

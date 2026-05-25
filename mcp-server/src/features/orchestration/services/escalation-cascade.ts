@@ -174,18 +174,42 @@ export function recordAttempt(
 const METRICS_KEY = "escalation_state";
 
 /**
+ * Type guard: validate that a parsed value has the shape of an EscalationAttempt.
+ * At minimum, the element must have a `strategy` string field — enough to drive
+ * the "already attempted" set without risking undefined access later.
+ */
+function isWellFormedAttempt(value: unknown): value is EscalationAttempt {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.strategy === "string";
+}
+
+/**
  * Type guard: validate that a parsed value has the shape of EscalationState.
  * Data is stored as a JSON string in execution store metrics — it crosses a
  * deserialization boundary and must be validated before use.
+ *
+ * Validates:
+ *  - cascade_started_at is a string that parses to a finite timestamp (guards
+ *    against NaN elapsed-time calculations in getNextStrategy)
+ *  - current_step_id is a string
+ *  - attempts is an array of well-formed EscalationAttempt objects (guards
+ *    against null/missing-field elements that would throw later)
  */
 function isEscalationState(value: unknown): value is EscalationState {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
-  return (
-    typeof v.cascade_started_at === "string" &&
-    typeof v.current_step_id === "string" &&
-    Array.isArray(v.attempts)
-  );
+  if (typeof v.cascade_started_at !== "string") return false;
+  if (typeof v.current_step_id !== "string") return false;
+  if (!Array.isArray(v.attempts)) return false;
+  // Validate cascade_started_at parses to a finite timestamp to prevent NaN
+  // elapsed-time in getNextStrategy (which uses new Date(cascade_started_at).getTime()).
+  const ts = new Date(v.cascade_started_at).getTime();
+  if (!Number.isFinite(ts)) return false;
+  // Filter attempt elements to well-formed objects; corrupted entries are dropped
+  // rather than blocking the entire state — getNextStrategy only needs the strategy set.
+  (v as Record<string, unknown>).attempts = (v.attempts as unknown[]).filter(isWellFormedAttempt);
+  return true;
 }
 
 /**

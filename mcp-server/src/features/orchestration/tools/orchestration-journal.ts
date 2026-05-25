@@ -178,20 +178,40 @@ function journalPath(workspace: string): string {
   return join(workspace, "journal.json");
 }
 
+/**
+ * Validates that a value has the minimum shape of a JournalStep.
+ * Elements are written by this process but journal.json can be corrupted
+ * or hand-edited. At minimum we require step_id and status to be strings;
+ * any element that fails this check is silently dropped.
+ */
+function isWellFormedStep(value: unknown): value is JournalStep {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.step_id === "string" && typeof v.status === "string";
+}
+
 async function readJournal(workspace: string): Promise<Journal> {
   const path = journalPath(workspace);
   if (!existsSync(path)) {
     return { steps: [], version: 1, workspace };
   }
   const raw = await readFile(path, "utf-8");
-  const parsed: unknown = JSON.parse(raw);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // Syntactically invalid JSON (truncated or hand-edited) — return safe default.
+    return { steps: [], version: 1, workspace };
+  }
   // Validate at file I/O boundary: journal.json is written by this process but
   // could be corrupted or hand-edited. Normalise to a safe default shape.
   if (typeof parsed !== "object" || parsed === null) {
     return { steps: [], version: 1, workspace };
   }
   const obj = parsed as Record<string, unknown>;
-  const steps = Array.isArray(obj.steps) ? (obj.steps as JournalStep[]) : [];
+  // Filter to well-formed step objects only — corrupted entries (null, missing fields)
+  // would throw later in finalizeWorkspace/scanArtifacts.
+  const steps = Array.isArray(obj.steps) ? obj.steps.filter(isWellFormedStep) : [];
   return { steps, version: 1, workspace };
 }
 

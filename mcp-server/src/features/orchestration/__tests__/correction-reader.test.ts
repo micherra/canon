@@ -278,6 +278,33 @@ describe("readCorrections", () => {
     expect(records).toHaveLength(1);
   });
 
+  it("skips records with an invalid (NaN-producing) timestamp string", () => {
+    // A non-empty invalid date string passes typeof/length checks but produces NaN
+    // when parsed — without the Number.isFinite(age) guard it would bypass the
+    // max-age check (NaN > maxAge is always false).
+    const dir = join(projectDir, ".canon", "corrections");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "bad-date.json"),
+      JSON.stringify({
+        agent_type: "engineer",
+        commit_sha: "abc12345",
+        commit_subject: "feat: test",
+        correction_command: "git commit --amend",
+        file_path: "src/bad-date.ts",
+        timestamp: "not-a-valid-date",
+      }),
+    );
+    writeCorrection(projectDir, "valid.json", {
+      file_path: "src/valid.ts",
+      timestamp: recentTimestamp(),
+    });
+    const records = okRecords(readCorrections(projectDir));
+    // Only the valid record should be returned — the bad-date record is skipped
+    expect(records).toHaveLength(1);
+    expect(records[0].file_path).toBe("src/valid.ts");
+  });
+
   it("returns ok:false when corrections directory exists but is unreadable", () => {
     // Simulate an unreadable directory by pointing to a file instead of a directory
     const canonDir = join(projectDir, ".canon");

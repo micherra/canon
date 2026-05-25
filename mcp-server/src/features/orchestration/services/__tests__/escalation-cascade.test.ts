@@ -253,4 +253,74 @@ describe("readEscalationState / writeEscalationState", () => {
     });
     expect(readEscalationState(store, "step-array")).toBeNull();
   });
+
+  test("returns null when cascade_started_at is a non-empty invalid date string", () => {
+    // An invalid date string (non-empty, passes typeof check) that produces NaN
+    // when parsed — this would cause getNextStrategy to compute NaN elapsed time
+    // and bypass the timeout check.
+    const store = makeStore();
+    store.upsertState("step-bad-ts", { entries: 0, status: "pending" });
+    store.updateStateMetrics("step-bad-ts", {
+      escalation_state: JSON.stringify({
+        attempts: [],
+        cascade_started_at: "not-a-date",
+        current_step_id: "step-bad-ts",
+      }),
+    });
+    expect(readEscalationState(store, "step-bad-ts")).toBeNull();
+  });
+
+  test("drops null and malformed attempt elements, retains well-formed ones", () => {
+    // A stored state where attempts includes null and an object missing strategy —
+    // the type guard should filter those out rather than returning null or crashing.
+    const store = makeStore();
+    store.upsertState("step-bad-attempts", { entries: 0, status: "pending" });
+    store.updateStateMetrics("step-bad-attempts", {
+      escalation_state: JSON.stringify({
+        attempts: [
+          null,
+          { attempted_at: "2026-05-20T10:00:00Z", step_id: "step-bad-attempts" }, // missing strategy
+          {
+            attempted_at: "2026-05-20T10:01:00Z",
+            step_id: "step-bad-attempts",
+            strategy: "add_primer",
+          },
+        ],
+        cascade_started_at: new Date().toISOString(),
+        current_step_id: "step-bad-attempts",
+      }),
+    });
+    const result = readEscalationState(store, "step-bad-attempts");
+    // Should return a valid state (not null) with only the well-formed attempt
+    expect(result).not.toBeNull();
+    expect(result!.attempts).toHaveLength(1);
+    expect(result!.attempts[0].strategy).toBe("add_primer");
+  });
+
+  test("getNextStrategy returns correct result when read state has filtered attempts", () => {
+    // End-to-end: write corrupt state, read it back, call getNextStrategy
+    const store = makeStore();
+    store.upsertState("step-e2e-filter", { entries: 0, status: "pending" });
+    store.updateStateMetrics("step-e2e-filter", {
+      escalation_state: JSON.stringify({
+        attempts: [
+          null, // invalid — dropped
+          {
+            attempted_at: "2026-05-20T10:00:00Z",
+            step_id: "step-e2e-filter",
+            strategy: "add_primer",
+          }, // valid
+        ],
+        cascade_started_at: new Date().toISOString(),
+        current_step_id: "step-e2e-filter",
+      }),
+    });
+    const state = readEscalationState(store, "step-e2e-filter");
+    expect(state).not.toBeNull();
+
+    // add_primer was (the only valid) attempted — next should be increase_budget
+    const result = getNextStrategy(state!);
+    expect(result.strategy).toBe("increase_budget");
+    expect(result.is_terminal).toBe(false);
+  });
 });

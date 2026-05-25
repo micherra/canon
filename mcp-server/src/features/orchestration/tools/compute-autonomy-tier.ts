@@ -47,8 +47,8 @@ const FAIL_SAFE_RESULT: ComputeAutonomyTierResult = {
 // ---- Tool implementation ----
 
 /**
- * Compute the confidence tier based on gathered signals.
- * Pure computation — no side effects.
+ * Signal gathering and tier computation — no execution-store writes.
+ * (I/O is limited to drift.db and KG reads for signal gathering.)
  */
 async function computeTierResult(
   file_paths: string[],
