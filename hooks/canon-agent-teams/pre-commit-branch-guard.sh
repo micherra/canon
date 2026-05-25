@@ -22,13 +22,22 @@ if [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-# Check if this is a git commit command
-if ! echo "$COMMAND" | grep -qE '\bgit\b.*\bcommit\b'; then
+# Check if this is a git commit command (match "git commit" as adjacent words,
+# not "commit" appearing anywhere in arguments/filenames)
+if ! echo "$COMMAND" | grep -qE '\bgit\b[[:space:]]+([^;&|]*[[:space:]]+)*commit\b'; then
   exit 0
 fi
 
-# Detect the current branch
-CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+# Extract cd target from the command so we resolve the branch in the right worktree.
+# Commands often look like: cd /path/to/worktree && git commit ...
+GIT_DIR_ARG=""
+CD_TARGET=$(echo "$COMMAND" | grep -oE '^[[:space:]]*cd[[:space:]]+[^;&|]+' | sed 's/^[[:space:]]*cd[[:space:]]*//' | sed 's/[[:space:]]*$//' || true)
+if [[ -n "$CD_TARGET" ]] && [[ -d "$CD_TARGET" ]]; then
+  GIT_DIR_ARG="-C $CD_TARGET"
+fi
+
+# Detect the current branch (in the target directory if cd was used)
+CURRENT_BRANCH=$(git $GIT_DIR_ARG symbolic-ref --short HEAD 2>/dev/null || true)
 
 # If we cannot detect the branch, pass through
 if [[ -z "$CURRENT_BRANCH" ]]; then
