@@ -8,6 +8,12 @@ import {
 } from "@features/orchestration/services/correction-reader.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+/** Unwrap a successful ReadCorrectionsResult, throwing if it's an error. */
+function okRecords(result: ReturnType<typeof readCorrections>): CorrectionRecord[] {
+  if (!result.ok) throw new Error(`Expected ok result but got error: ${result.error}`);
+  return result.records;
+}
+
 function seedProjectDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "canon-corrections-test-"));
   return dir;
@@ -45,16 +51,18 @@ describe("readCorrections", () => {
     rmSync(projectDir, { force: true, recursive: true });
   });
 
-  it("returns empty array when corrections directory does not exist", () => {
+  it("returns ok with empty records when corrections directory does not exist", () => {
     // projectDir exists but no .canon/corrections dir
     const result = readCorrections(projectDir);
-    expect(result).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(okRecords(result)).toEqual([]);
   });
 
-  it("returns empty array when directory is empty", () => {
+  it("returns ok with empty records when directory is empty", () => {
     mkdirSync(join(projectDir, ".canon", "corrections"), { recursive: true });
     const result = readCorrections(projectDir);
-    expect(result).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(okRecords(result)).toEqual([]);
   });
 
   it("reads a valid correction JSON file", () => {
@@ -62,10 +70,10 @@ describe("readCorrections", () => {
       file_path: "src/foo.ts",
       timestamp: recentTimestamp(),
     });
-    const result = readCorrections(projectDir);
-    expect(result).toHaveLength(1);
-    expect(result[0].file_path).toBe("src/foo.ts");
-    expect(result[0].agent_type).toBe("engineer");
+    const records = okRecords(readCorrections(projectDir));
+    expect(records).toHaveLength(1);
+    expect(records[0].file_path).toBe("src/foo.ts");
+    expect(records[0].agent_type).toBe("engineer");
   });
 
   it("reads multiple valid correction JSON files", () => {
@@ -77,8 +85,8 @@ describe("readCorrections", () => {
       file_path: "src/bar.ts",
       timestamp: recentTimestamp(1000),
     });
-    const result = readCorrections(projectDir);
-    expect(result).toHaveLength(2);
+    const records = okRecords(readCorrections(projectDir));
+    expect(records).toHaveLength(2);
   });
 
   it("skips malformed JSON files without error", () => {
@@ -89,9 +97,9 @@ describe("readCorrections", () => {
       file_path: "src/good.ts",
       timestamp: recentTimestamp(),
     });
-    const result = readCorrections(projectDir);
-    expect(result).toHaveLength(1);
-    expect(result[0].file_path).toBe("src/good.ts");
+    const records = okRecords(readCorrections(projectDir));
+    expect(records).toHaveLength(1);
+    expect(records[0].file_path).toBe("src/good.ts");
   });
 
   it("filters by file paths when provided", () => {
@@ -103,9 +111,9 @@ describe("readCorrections", () => {
       file_path: "src/unwanted.ts",
       timestamp: recentTimestamp(1000),
     });
-    const result = readCorrections(projectDir, ["src/wanted.ts"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].file_path).toBe("src/wanted.ts");
+    const records = okRecords(readCorrections(projectDir, ["src/wanted.ts"]));
+    expect(records).toHaveLength(1);
+    expect(records[0].file_path).toBe("src/wanted.ts");
   });
 
   it("returns all corrections when filePaths filter is undefined", () => {
@@ -117,8 +125,8 @@ describe("readCorrections", () => {
       file_path: "src/b.ts",
       timestamp: recentTimestamp(1000),
     });
-    const result = readCorrections(projectDir, undefined);
-    expect(result).toHaveLength(2);
+    const records = okRecords(readCorrections(projectDir, undefined));
+    expect(records).toHaveLength(2);
   });
 
   it("excludes corrections older than maxAge", () => {
@@ -133,9 +141,9 @@ describe("readCorrections", () => {
       timestamp: recentTimestamp(tenMinutesMs),
     });
     // Default maxAge is 24 hours
-    const result = readCorrections(projectDir);
-    expect(result).toHaveLength(1);
-    expect(result[0].file_path).toBe("src/recent.ts");
+    const records = okRecords(readCorrections(projectDir));
+    expect(records).toHaveLength(1);
+    expect(records[0].file_path).toBe("src/recent.ts");
   });
 
   it("respects custom maxAge parameter", () => {
@@ -150,9 +158,9 @@ describe("readCorrections", () => {
       timestamp: recentTimestamp(twoHoursMs),
     });
     // Custom maxAge: 3 hours
-    const result = readCorrections(projectDir, undefined, 3 * 60 * 60 * 1000);
-    expect(result).toHaveLength(1);
-    expect(result[0].file_path).toBe("src/recent.ts");
+    const records = okRecords(readCorrections(projectDir, undefined, 3 * 60 * 60 * 1000));
+    expect(records).toHaveLength(1);
+    expect(records[0].file_path).toBe("src/recent.ts");
   });
 
   it("sorts results by timestamp DESC (most recent first)", () => {
@@ -168,10 +176,10 @@ describe("readCorrections", () => {
       file_path: "src/middle.ts",
       timestamp: recentTimestamp(15 * 60 * 1000),
     });
-    const result = readCorrections(projectDir);
-    expect(result[0].file_path).toBe("src/newest.ts");
-    expect(result[1].file_path).toBe("src/middle.ts");
-    expect(result[2].file_path).toBe("src/oldest.ts");
+    const records = okRecords(readCorrections(projectDir));
+    expect(records[0].file_path).toBe("src/newest.ts");
+    expect(records[1].file_path).toBe("src/middle.ts");
+    expect(records[2].file_path).toBe("src/oldest.ts");
   });
 
   it("skips records missing required file_path field", () => {
@@ -192,9 +200,9 @@ describe("readCorrections", () => {
       file_path: "src/valid.ts",
       timestamp: recentTimestamp(1000),
     });
-    const result = readCorrections(projectDir);
-    expect(result).toHaveLength(1);
-    expect(result[0].file_path).toBe("src/valid.ts");
+    const records = okRecords(readCorrections(projectDir));
+    expect(records).toHaveLength(1);
+    expect(records[0].file_path).toBe("src/valid.ts");
   });
 
   it("skips records missing required timestamp field", () => {
@@ -215,9 +223,9 @@ describe("readCorrections", () => {
       file_path: "src/valid.ts",
       timestamp: recentTimestamp(1000),
     });
-    const result = readCorrections(projectDir);
-    expect(result).toHaveLength(1);
-    expect(result[0].file_path).toBe("src/valid.ts");
+    const records = okRecords(readCorrections(projectDir));
+    expect(records).toHaveLength(1);
+    expect(records[0].file_path).toBe("src/valid.ts");
   });
 
   it("ignores non-.json files in the corrections directory", () => {
@@ -229,8 +237,21 @@ describe("readCorrections", () => {
       file_path: "src/valid.ts",
       timestamp: recentTimestamp(),
     });
+    const records = okRecords(readCorrections(projectDir));
+    expect(records).toHaveLength(1);
+  });
+
+  it("returns ok:false when corrections directory exists but is unreadable", () => {
+    // Simulate an unreadable directory by pointing to a file instead of a directory
+    const canonDir = join(projectDir, ".canon");
+    mkdirSync(canonDir, { recursive: true });
+    // Write a file where the corrections directory would be — readdirSync on a file errors with ENOTDIR
+    writeFileSync(join(canonDir, "corrections"), "not a directory");
     const result = readCorrections(projectDir);
-    expect(result).toHaveLength(1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("corrections directory unreadable");
+    }
   });
 });
 
