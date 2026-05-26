@@ -37,6 +37,8 @@ Findings: {N} ({X} critical, {X} high, {X} medium, {X} low)
 **Pattern:** {Category — e.g., SQL injection, XSS, open redirect}
 **Detail:** {What the vulnerability is and how it could be exploited.}
 **Recommendation:** {How to fix it.}
+**Confidence:** {HIGH|MEDIUM|LOW|INSUFFICIENT} (score: {0-1})
+**Basis:** {signal descriptions — e.g., "code pattern match (HIGH)", "inferred from context (MEDIUM)"}
 **Evidence URLs:** {advisories, docs, or references consulted}
 **Verified Facts:** {externally supported claims relevant to this finding}
 **Assumptions:** {anything not fully verified from the available evidence}
@@ -63,3 +65,8 @@ Findings: {N} ({X} critical, {X} high, {X} medium, {X} low)
 5. **File field must include line number** when identifiable.
 6. **Passed Checks section is required** even when findings exist — it shows what was verified clean.
 7. **Evidence fields are required** when external research materially informed the finding. Omit them only if the finding is fully supported by local code evidence.
+8. **Confidence assessment**: For each finding, assess confidence based on:
+   - Whether the finding was detected via code pattern match (HIGH) or inference (MEDIUM/LOW)
+   - Whether similar findings were confirmed in prior reviews
+   - The severity tier of the finding
+   Express confidence as: tier (HIGH/MEDIUM/LOW/INSUFFICIENT), score (0-1), and basis description. Use INSUFFICIENT when evidence is too thin to be actionable.

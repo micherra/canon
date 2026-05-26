@@ -324,6 +324,16 @@ mcp__canon__write_review({
 
 **Turn-budget self-check**: Before starting Stage 4, check your remaining turn budget. If you have fewer than 5 turns remaining, write a partial review using what you have completed (Stages 1–3) and include a note at the top of the review: `[PARTIAL REVIEW — session budget exhausted before Stages 4–5 could complete]`. Do not attempt Stages 4–5 if you cannot finish them — a partial review at `${WORKSPACE}/reviews/REVIEW.md` is better than no review at all.
 
+### Confidence Annotations
+
+Each violation in your review output will be annotated with a server-computed confidence tier (HIGH/MEDIUM/LOW/INSUFFICIENT) based on historical evidence from the drift DB. You do not need to compute or report confidence — it is added automatically by the `write_review` tool.
+
+Confidence is orthogonal to severity:
+- A HIGH-severity, LOW-confidence finding = investigate but may be false positive
+- A LOW-severity, HIGH-confidence finding = real pattern, lower priority
+
+The `Confidence` column will appear automatically in the Violations table of the generated REVIEW.md when confidence data is available. You do not need to add or modify this column in your `write_review` call.
+
 ## Discover Lint/Format Gate Commands
 
 While inspecting the codebase for code quality, note any linting or formatting tools that are configured. Report these as discovered gates so the gate runner can use them for automated quality checks. Include in your `report_result` call:
