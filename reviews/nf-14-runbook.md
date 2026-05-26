@@ -97,7 +97,7 @@ skip_when: ~
 
 1. **Rule content for `agent-artifact-write-before-return`**: What exactly must the rule say? How does it interact with `agent-template-required` (which governs output format but not the write act itself) and `agent-missing-artifact` (which governs missing input, not missing output)? The rule must be precise enough to be actionable but not so rigid that it conflicts with agents that write artifacts via MCP tools (reviewer uses `write_review`, engineer uses `write_implementation_summary`).
 
-2. **Rule content for `agent-worktree-orientation`**: What verification steps are required? Just `git branch --show-current`, or also `pwd` verification? Should the rule cover both code-writing agents (who use worktrees) and artifact-writing agents (who write to workspace paths)? How does this interact with agents spawned with `isolation: "none"` (they rely on the orchestrator to set up the worktree correctly)?
+2. **Rule content for `agent-worktree-orientation`**: What verification steps are required? Just `git branch --show-current`, or also `pwd` verification? Should the rule cover both code-writing agents (who use worktrees) and artifact-writing agents (who write to workspace paths)? How does this interact with agents spawned without Agent-managed isolation (they rely on the orchestrator to set up the worktree correctly)?
 
 3. **Agent update strategy**: Which agents get which rules? The audit table from research determines this. Design the specific frontmatter and instruction changes for each affected agent.
 
