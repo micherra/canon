@@ -90,13 +90,14 @@ export async function getCompliance(
   const rawStats = report.most_violated.find((s) => s.principle_id === input.principle_id);
   const resolved = resolveStats(rawStats, input.principle_id, reviews);
 
-  const confidence = computeComplianceConfidence({
-    compliance_rate: resolved.compliance_rate,
-    principle_id: input.principle_id,
-    times_honored: resolved.times_honored,
-    total_violations: resolved.total_violations,
-    trend: report.trend,
-  });
+  const confidence =
+    rawStats?.confidence ??
+    computeComplianceConfidence({
+      compliance_rate: resolved.compliance_rate,
+      principle_id: input.principle_id,
+      times_honored: resolved.times_honored,
+      total_violations: resolved.total_violations,
+    });
 
   return {
     compliance_rate: resolved.compliance_rate,

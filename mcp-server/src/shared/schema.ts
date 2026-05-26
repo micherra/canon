@@ -1,3 +1,4 @@
+import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { z } from "zod";
 
 // --- Report input: review only ---
@@ -16,21 +17,9 @@ export const reportInputSchema = z.discriminatedUnion("type", [
     violations: z
       .array(
         z.object({
-          confidence: z
-            .object({
-              basis: z.array(
-                z.object({
-                  detail: z.string(),
-                  signal: z.string(),
-                  weight: z.number().min(0).max(1),
-                }),
-              ),
-              sample_size: z.number().int().min(0),
-              score: z.number().min(0).max(1),
-              tier: z.enum(["high", "medium", "low", "insufficient"]),
-            })
-            .optional()
-            .describe("Confidence annotation for this violation (server-computed)"),
+          confidence: ConfidenceAnnotationSchema.optional().describe(
+            "Confidence annotation for this violation (server-computed)",
+          ),
           file_path: z.string().optional().describe("Specific file where violation occurred"),
           impact_score: z
             .number()

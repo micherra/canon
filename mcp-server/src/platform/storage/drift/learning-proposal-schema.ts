@@ -12,24 +12,12 @@
  * structured errors rather than silently failing (no-silent-failures).
  */
 
+import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { z } from "zod";
 
 export const LearningProposalSchema = z.object({
   confidence: z.number().min(0).max(1),
-  confidence_annotation: z
-    .object({
-      basis: z.array(
-        z.object({
-          detail: z.string(),
-          signal: z.string(),
-          weight: z.number().min(0).max(1),
-        }),
-      ),
-      sample_size: z.number().int().min(0),
-      score: z.number().min(0).max(1),
-      tier: z.enum(["high", "medium", "low", "insufficient"]),
-    })
-    .optional(),
+  confidence_annotation: ConfidenceAnnotationSchema.optional(),
   proposal_id: z.string(),
   target: z.string(),
   type: z.enum([

@@ -6,6 +6,7 @@ import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.t
 import { type ConfidenceAdapter, writeReview } from "@features/orchestration/tools/write-review.ts";
 import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { z } from "zod";
 import { gatedWrapHandler, projectDir, server } from "./server-state.ts";
 
@@ -98,6 +99,7 @@ function registerReviewArtifactTools(): void {
         ]),
         violations: z.array(
           z.object({
+            confidence: ConfidenceAnnotationSchema.optional(),
             description: z.string().optional(),
             file_path: z.string().optional(),
             fix: z.string().optional(),
