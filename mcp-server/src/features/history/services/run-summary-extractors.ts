@@ -7,12 +7,7 @@
  * All functions are pure (no I/O) and never throw — parse errors return partial/empty data.
  */
 
-import type {
-  DecisionSummary,
-  ReviewResult,
-  ReviewViolation,
-  RunbookStep,
-} from "../history-types.ts";
+import type { ReviewResult, ReviewViolation, RunbookStep } from "../history-types.ts";
 
 // ---- Planning brief ----
 
@@ -214,37 +209,6 @@ export function parseReviewFile(content: string): ReviewResult | null {
   };
 }
 
-// ---- Decision file parsing ----
-
-/**
- * Parse a decision .md file for id, title, chosen option, and rationale snippet.
- * Returns null if the file cannot be parsed.
- */
-export function parseDecisionFile(content: string): DecisionSummary | null {
-  const frontmatter = extractFrontmatter(content);
-
-  const decisionId =
-    frontmatter !== null && typeof frontmatter["decision-id"] === "string"
-      ? frontmatter["decision-id"]
-      : "";
-  const title =
-    frontmatter !== null && typeof frontmatter.title === "string" ? frontmatter.title : "";
-
-  const chosenOption = extractChosenOption(content);
-  const rationaleSnippet = extractRationaleSnippet(content);
-
-  if (!decisionId && !title) {
-    return null;
-  }
-
-  return {
-    chosen_option: chosenOption,
-    decision_id: decisionId,
-    rationale_snippet: rationaleSnippet,
-    title,
-  };
-}
-
 // ---- Shared markdown extraction ----
 
 /**
@@ -339,26 +303,4 @@ function extractHonoredSection(content: string): string[] {
   }
 
   return honored;
-}
-
-/**
- * Extract the chosen option from "### Chosen: {option}" line.
- */
-function extractChosenOption(content: string): string {
-  const match = content.match(/###\s+Chosen:\s*(.+)/);
-  return match?.[1]?.trim() ?? "";
-}
-
-/**
- * Extract and truncate rationale snippet from "### Rationale" section.
- * Truncates to ~200 characters.
- */
-function extractRationaleSnippet(content: string): string {
-  const sectionMatch = content.match(/###\s+Rationale\s*\n([\s\S]*?)(?=\n###|\n##|$)/);
-  if (!sectionMatch?.[1]) return "";
-
-  const text = sectionMatch[1].trim();
-  if (text.length <= 200) return text;
-
-  return `${text.slice(0, 200)}...`;
 }

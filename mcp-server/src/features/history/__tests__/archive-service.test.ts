@@ -108,17 +108,18 @@ describe("archiveWorkspace — happy path", () => {
     expect(result.archive_path).not.toBeNull();
 
     if (result.archive_path) {
-      expect(existsSync(join(result.archive_path, "research"))).toBe(true);
       expect(existsSync(join(result.archive_path, "plans"))).toBe(true);
-      expect(existsSync(join(result.archive_path, "decisions"))).toBe(true);
       expect(existsSync(join(result.archive_path, "reviews"))).toBe(true);
+      // research, decisions, handoffs no longer in ARCHIVE_DIRS
+      expect(existsSync(join(result.archive_path, "research"))).toBe(false);
+      expect(existsSync(join(result.archive_path, "decisions"))).toBe(false);
     }
   });
 
   test("skips directories that don't exist in the workspace", async () => {
-    // Only research and plans exist — handoffs, transcripts do NOT
+    // Only plans exists — transcripts does NOT
     const ws = makeWorkspace(projectDir, {
-      dirs: ["research", "plans"],
+      dirs: ["plans"],
       files: [],
     });
 
@@ -131,10 +132,11 @@ describe("archiveWorkspace — happy path", () => {
 
     expect(result.archived).toBe(true);
     if (result.archive_path) {
-      expect(existsSync(join(result.archive_path, "research"))).toBe(true);
       expect(existsSync(join(result.archive_path, "plans"))).toBe(true);
-      expect(existsSync(join(result.archive_path, "handoffs"))).toBe(false);
       expect(existsSync(join(result.archive_path, "transcripts"))).toBe(false);
+      // research, decisions, handoffs no longer in ARCHIVE_DIRS
+      expect(existsSync(join(result.archive_path, "research"))).toBe(false);
+      expect(existsSync(join(result.archive_path, "handoffs"))).toBe(false);
     }
   });
 
@@ -261,13 +263,15 @@ describe("archiveWorkspace — happy path", () => {
 
     expect(result.manifest_entry).not.toBeNull();
     const types = result.manifest_entry?.artifact_types ?? [];
-    expect(types).toContain("research");
     expect(types).toContain("plans");
-    expect(types).toContain("decisions");
     expect(types).toContain("reviews");
     expect(types).toContain("log.jsonl");
     expect(types).toContain("context.md");
     expect(types).toContain("journal.json");
+    // research, decisions, handoffs no longer in ARCHIVE_DIRS
+    expect(types).not.toContain("research");
+    expect(types).not.toContain("decisions");
+    expect(types).not.toContain("handoffs");
   });
 
   test("archive path follows expected structure: .canon/history/{slug}/", async () => {

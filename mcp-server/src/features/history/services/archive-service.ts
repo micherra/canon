@@ -26,14 +26,7 @@ import { buildRunSummary } from "./run-summary-builder.ts";
 // ---- Constants ----
 
 /** Directories to copy from workspace to archive (if they exist). */
-const ARCHIVE_DIRS = [
-  "research",
-  "plans",
-  "decisions",
-  "reviews",
-  "handoffs",
-  "transcripts",
-] as const;
+const ARCHIVE_DIRS = ["plans", "reviews", "transcripts"] as const;
 
 /** Top-level files to copy from workspace to archive (if they exist). */
 const ARCHIVE_FILES = ["log.jsonl", "context.md", "journal.json"] as const;
