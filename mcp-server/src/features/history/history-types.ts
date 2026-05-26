@@ -85,14 +85,6 @@ export type ReviewResult = {
   honored: string[];
 };
 
-/** Decision summary extracted from decision files. */
-export type DecisionSummary = {
-  decision_id: string;
-  title: string;
-  chosen_option: string;
-  rationale_snippet: string;
-};
-
 /** Artifact inventory — what was archived. */
 export type ArtifactInventory = {
   directories: { name: string; file_count: number }[];
@@ -122,7 +114,6 @@ export type RunSummary = {
   planner_context: PlannerContext | null;
   step_outcomes: StepOutcome[];
   review_results: ReviewResult[];
-  decision_summaries: DecisionSummary[];
   artifact_inventory: ArtifactInventory;
 };
 

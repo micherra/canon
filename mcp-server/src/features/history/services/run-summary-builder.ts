@@ -59,7 +59,6 @@ export function buildRunSummary(input: {
   return {
     archive_id: archiveId,
     artifact_inventory: artifactInventory,
-    decision_summaries: [],
     planner_context: plannerContext,
     review_results: reviewResults,
     run_metadata: {

@@ -423,11 +423,11 @@ async function finalizeNewWorkspace(
 /** Apply optional seed-from after workspace creation. */
 async function applyPostCreateSteps(
   input: InitWorkspaceInput,
-  workspace: string,
+  _workspace: string,
   result: InitWorkspaceResult,
 ): Promise<void> {
   if (input.seed_from) {
-    const seedResult = await seedFromPriorWorkspace(input.seed_from, workspace);
+    const seedResult = await seedFromPriorWorkspace(input.seed_from);
     for (const warning of seedResult.warnings) {
       console.warn(`[init-workspace] ${warning}`);
     }

@@ -1,8 +1,8 @@
 /**
  * Run Summary Extractors — pure text-parsing helpers for run-summary-builder.
  *
- * These functions parse planning-brief.md, runbook.md, review .md files,
- * and decision .md files into structured types for RunSummary construction.
+ * These functions parse planning-brief.md, runbook.md, and review .md files
+ * into structured types for RunSummary construction.
  *
  * All functions are pure (no I/O) and never throw — parse errors return partial/empty data.
  */

@@ -58,7 +58,7 @@ describe("seedFromPriorWorkspace", () => {
     const targetDir = join(baseDir, ".canon", "workspaces", "main", "new-task");
     mkdirSync(targetDir, { recursive: true });
 
-    const result = await seedFromPriorWorkspace(source, targetDir);
+    const result = await seedFromPriorWorkspace(source);
 
     expect(result.seeded).toBe(true);
     expect(result.warnings).toHaveLength(0);
@@ -70,7 +70,7 @@ describe("seedFromPriorWorkspace", () => {
     const targetDir = join(baseDir, ".canon", "workspaces", "main", "new-task");
     mkdirSync(targetDir, { recursive: true });
 
-    const result = await seedFromPriorWorkspace(source, targetDir);
+    const result = await seedFromPriorWorkspace(source);
 
     expect(result.seeded).toBe(false);
     expect(
@@ -81,9 +81,7 @@ describe("seedFromPriorWorkspace", () => {
   });
 
   it("returns warning and seeded: false when a relative path is provided", async () => {
-    const targetDir = makeTmpDir();
-
-    const result = await seedFromPriorWorkspace("../relative/path", targetDir);
+    const result = await seedFromPriorWorkspace("../relative/path");
 
     expect(result.seeded).toBe(false);
     expect(
@@ -105,7 +103,7 @@ describe("seedFromPriorWorkspace", () => {
     const targetDir = join(baseDir, ".canon", "workspaces", "main", "new-task");
     mkdirSync(targetDir, { recursive: true });
 
-    const result = await seedFromPriorWorkspace(source, targetDir);
+    const result = await seedFromPriorWorkspace(source);
 
     expect(result.seeded).toBe(false);
     expect(

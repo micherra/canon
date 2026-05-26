@@ -68,7 +68,6 @@ function makeRunSummary(archiveId: string, overrides: Partial<RunSummary> = {}):
   return {
     archive_id: archiveId,
     artifact_inventory: { directories: [], files: [], total_files: 0 },
-    decision_summaries: [],
     planner_context: null,
     review_results: [],
     run_metadata: {

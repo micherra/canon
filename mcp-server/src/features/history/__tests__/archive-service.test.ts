@@ -208,7 +208,6 @@ describe("archiveWorkspace — happy path", () => {
       expect(parsed).toMatchObject({
         archive_id: expect.any(String) as unknown,
         artifact_inventory: expect.any(Object) as unknown,
-        decision_summaries: expect.any(Array) as unknown,
         review_results: expect.any(Array) as unknown,
         run_metadata: expect.objectContaining({
           branch: "main",

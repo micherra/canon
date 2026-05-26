@@ -1,5 +1,5 @@
 /**
- * seed-workspace.ts — Seeds a new workspace from a prior workspace's artifacts.
+ * seed-workspace.ts — Validates a prior workspace path for seeding.
  *
  * Extracted from init-workspace.ts to keep that file under the line limit and
  * isolate seeding responsibility.
@@ -16,7 +16,6 @@ import { isAbsolute } from "node:path";
  */
 export async function seedFromPriorWorkspace(
   sourceWorkspace: string,
-  _targetWorkspace: string,
 ): Promise<{ seeded: boolean; warnings: string[] }> {
   const warnings: string[] = [];
 

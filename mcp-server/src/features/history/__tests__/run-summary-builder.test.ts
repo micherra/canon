@@ -362,25 +362,6 @@ No violations found.
   });
 });
 
-// ---- decision_summaries ----
-
-describe("buildRunSummary — decision_summaries", () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = makeTmpDir();
-  });
-
-  afterEach(() => {
-    rmSync(tmpDir, { force: true, recursive: true });
-  });
-
-  test("always returns empty array (decisions/ directory no longer scanned)", () => {
-    const result = callBuildRunSummary(tmpDir);
-    expect(result.decision_summaries).toEqual([]);
-  });
-});
-
 // ---- artifact_inventory ----
 
 describe("buildRunSummary — artifact_inventory", () => {
@@ -502,7 +483,6 @@ describe("buildRunSummary", () => {
     expect(result.run_metadata.archived_at).toBe("2026-04-24T12:00:00.000Z");
     expect(result.planner_context).not.toBeNull();
     expect(result.step_outcomes).toHaveLength(1);
-    expect(result.decision_summaries).toEqual([]);
     expect(result.artifact_inventory).toBeDefined();
   });
 
@@ -525,7 +505,6 @@ describe("buildRunSummary", () => {
     expect(result.planner_context).toBeNull();
     expect(result.step_outcomes).toEqual([]);
     expect(result.review_results).toEqual([]);
-    expect(result.decision_summaries).toEqual([]);
     expect(result.artifact_inventory.total_files).toBe(0);
     // run_metadata timing should default to null when not available
     expect(result.run_metadata.started_at).toBeNull();
