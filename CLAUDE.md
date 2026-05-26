@@ -159,7 +159,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
 6. `batch_log_steps` with all approved runbook steps.
 7. **Pre-spawn check**: `test -d "${worktree_path}"` before any code-writing agent spawn. If missing, report BLOCKED.
-8. Execute steps in order. Pass `turn_budget: {maxTurns}` to all agents. Pass `worktree_path` and `isolation: "none"` to code-writing agents (engineer, scribe, tester, shipper).
+8. Execute steps in order. Pass `turn_budget: {maxTurns}` to all agents. Pass `worktree_path` to code-writing agents (engineer, scribe, tester, shipper).
 
 ### DAG Execution Protocol
 
@@ -176,7 +176,7 @@ When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch vi
 
 > **Anti-pattern**: Do NOT substitute parallel Agent spawns for team dispatch. Raw Agent spawns bypass dependency tracking and task queue visibility. When `task-dag.yaml` exists and the step is `implement`, always use `TeamCreate`/`TaskCreate` for worker dispatch. The `dag-dispatch-guard.sh` hook (advisory, L1) will warn on raw Agent spawns during DAG execution.
 
-1. Spawn N workers (= root task count, capped at 5): `Agent({ team_name: "canon-{slug}", name: "worker-{N}", subagent_type: "canon:engineer", isolation: "none" })`.
+1. Spawn N workers (= root task count, capped at 5): `Agent({ team_name: "canon-{slug}", name: "worker-{N}", subagent_type: "canon:engineer" })`.
 2. Worker prompt: fill `templates/worker-prompt.md` with `${TEAM_NAME}`, `${WORKER_NAME}`, `${PROJECT_DIR}`, `${WORKSPACE}`, `${SLUG}`, `${CANON_PARENT_WORKSPACE}` (workspace path minus `{projectDir}/.canon/workspaces/` prefix — needed for L4 hook authorization).
 3. Workers create their own worktrees: path `{projectDir}/.canon/worktrees/{task_id}`, branch `canon-wave/{task_id}`.
 4. Complex tasks: pass `model: "opus"`.
@@ -270,7 +270,7 @@ Spawn N reviewers in parallel via `Agent()`, each with:
 - An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
 - Their assigned file list
 - Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
-- `isolation: "none"` (shared workspace)
+- No `isolation` parameter (reviewers run in the shared workspace, not a worktree)
 
 #### Phase 3 — Consolidate
 
@@ -407,15 +407,12 @@ See the "Agent Spawn Error Handling" section below. The same retry logic applies
 | Writer | `canon:writer` | Principle authoring |
 | Learner | `canon:learner` | Pattern analysis |
 
-**Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt and are spawned with `isolation: "none"`. Canon owns the worktree lifecycle — changes stay on the build branch until explicitly merged.
-
-Do NOT use Claude Code's `isolation: "worktree"` for agent-teams builds. It auto-merges the worktree branch back to the calling branch (main) on agent completion, bypassing Canon's controlled merge lifecycle.
+**Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
 **Spawn pattern for code-writing agents:**
 ```
 Agent({
   subagent_type: "canon:engineer",
-  isolation: "none",    // Canon owns the worktree — no Agent tool isolation
   prompt: "... Working directory: {worktree_path}\nturn_budget: {maxTurns} ..."
 })
 ```
