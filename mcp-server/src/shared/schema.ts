@@ -1,3 +1,4 @@
+import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { z } from "zod";
 
 // --- Report input: review only ---
@@ -16,6 +17,9 @@ export const reportInputSchema = z.discriminatedUnion("type", [
     violations: z
       .array(
         z.object({
+          confidence: ConfidenceAnnotationSchema.optional().describe(
+            "Confidence annotation for this violation (server-computed)",
+          ),
           file_path: z.string().optional().describe("Specific file where violation occurred"),
           impact_score: z
             .number()

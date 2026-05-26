@@ -30,7 +30,7 @@ if [[ -d "$WORKSPACES_DIR" ]] && command -v sqlite3 &>/dev/null; then
     IFS='|' read -r slug flow status <<< "$ROW"
     RECENT_BUILDS+="  - ${slug} (${flow:-unknown}, ${status:-unknown})"$'\n'
     BUILD_COUNT=$((BUILD_COUNT + 1))
-  done < <(find "$WORKSPACES_DIR" -name "orchestration.db" -maxdepth 3 2>/dev/null)
+  done < <(find "$WORKSPACES_DIR" -maxdepth 3 -name "orchestration.db" 2>/dev/null)
   if [[ -n "$RECENT_BUILDS" ]]; then
     echo "  Recent builds:"
     echo "$RECENT_BUILDS"

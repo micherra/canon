@@ -31,12 +31,13 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `write-test-report.ts` | `write_test_report` |
 
 **`services/`** — Business logic backing tools.
-<!-- last-updated: 2026-05-15 -->
+<!-- last-updated: 2026-05-25 (review-confidence-adapter added) -->
 
 | File | Responsibility |
 |------|---------------|
 | `janitor.ts` | `runJanitor(projectDir)` — gate checks (enabled, time, lock), WAL checkpoint, prune detection; returns `JanitorResult` |
 | `transcript-transformer.ts` | `transformClaudeCodeTranscript(entries)` — pure; converts CC JSONL entries to Canon `TranscriptEntry[]`; exports `ClaudeCodeEntry` type |
+| `review-confidence-adapter.ts` | Pure compute function; returns `ConfidenceAnnotation` for a violation from severity_tier, violation_history, path_effects, base_sample signals; zero-confidence for undefined file_path |
 | `workspace-cleanup.ts` | Workspace cleanup utilities |
 
 ## Contracts

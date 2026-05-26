@@ -1,5 +1,7 @@
 import { dirname } from "node:path";
+import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
+import { computeComplianceConfidence } from "./drift-confidence-adapter.ts";
 
 export type PrincipleStats = {
   principle_id: string;
@@ -7,6 +9,7 @@ export type PrincipleStats = {
   unintentional_violations: number;
   times_honored: number;
   compliance_rate: number; // 0-100
+  confidence?: ConfidenceAnnotation;
 };
 
 export type DirectoryStats = {
@@ -175,6 +178,29 @@ function computeTrend(reviews: ReviewEntry[]): DriftReport["trend"] {
   return "stable";
 }
 
+function computePrincipleTrend(reviews: ReviewEntry[], principleId: string): DriftReport["trend"] {
+  if (reviews.length < 6) return "insufficient_data";
+
+  const mid = Math.floor(reviews.length / 2);
+  const firstHalf = reviews.slice(0, mid);
+  const secondHalf = reviews.slice(mid);
+
+  const countViolations = (rs: ReviewEntry[]) =>
+    rs.reduce(
+      (sum, r) => sum + r.violations.filter((v) => v.principle_id === principleId).length,
+      0,
+    );
+
+  const firstAvg = countViolations(firstHalf) / firstHalf.length;
+  const secondAvg = countViolations(secondHalf) / secondHalf.length;
+
+  if (firstAvg === 0 && secondAvg === 0) return "stable";
+  if (firstAvg === 0) return "declining";
+  if (secondAvg < firstAvg * 0.8) return "improving";
+  if (secondAvg > firstAvg * 1.2) return "declining";
+  return "stable";
+}
+
 // Main
 
 export function analyzeDrift(
@@ -184,20 +210,30 @@ export function analyzeDrift(
 ): DriftReport {
   const filteredReviews = applyFilters(reviews, options);
   const principleMap = computePrincipleStats(filteredReviews);
+  const trend = computeTrend(filteredReviews);
 
-  const mostViolated = [...principleMap.values()]
+  const topViolated = [...principleMap.values()]
     .filter((s) => s.total_violations > 0)
-    .sort((a, b) => b.total_violations - a.total_violations);
+    .sort((a, b) => b.total_violations - a.total_violations)
+    .slice(0, 10);
+
+  const mostViolated = topViolated.map((s) => ({
+    ...s,
+    confidence: computeComplianceConfidence({
+      ...s,
+      trend: computePrincipleTrend(filteredReviews, s.principle_id),
+    }),
+  }));
 
   const triggeredIds = new Set(principleMap.keys());
   const neverTriggered = allPrincipleIds.filter((id) => !triggeredIds.has(id));
 
   return {
     avg_score: computeAverageScores(filteredReviews),
-    most_violated: mostViolated.slice(0, 10),
+    most_violated: mostViolated,
     never_triggered: neverTriggered,
     total_reviews: filteredReviews.length,
-    trend: computeTrend(filteredReviews),
+    trend,
     violation_directories: computeViolationDirectories(filteredReviews),
   };
 }
