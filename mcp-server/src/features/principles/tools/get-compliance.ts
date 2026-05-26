@@ -1,6 +1,12 @@
+import type { PrincipleStats } from "@platform/storage/drift/analyzer.ts";
 import { analyzeDrift } from "@platform/storage/drift/analyzer.ts";
+import {
+  type ConfidenceAnnotation,
+  computeComplianceConfidence,
+} from "@platform/storage/drift/drift-confidence-adapter.ts";
 import { DriftStore, type WeeklyTrendPoint } from "@platform/storage/drift/store.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
+import type { ReviewEntry } from "@shared/schema.ts";
 
 export type ComplianceInput = {
   principle_id: string;
@@ -16,7 +22,38 @@ export type ComplianceOutput = {
   total_reviews: number;
   trend: "improving" | "stable" | "declining" | "insufficient_data";
   weekly_trend: WeeklyTrendPoint[];
+  confidence?: ConfidenceAnnotation;
 };
+
+type ResolvedStats = {
+  compliance_rate: number;
+  times_honored: number;
+  total_violations: number;
+  unintentional_violations: number;
+};
+
+function resolveStats(
+  stats: PrincipleStats | undefined,
+  principleId: string,
+  reviews: ReviewEntry[],
+): ResolvedStats {
+  if (stats) {
+    return {
+      compliance_rate: stats.compliance_rate,
+      times_honored: stats.times_honored,
+      total_violations: stats.total_violations,
+      unintentional_violations: stats.unintentional_violations,
+    };
+  }
+  // Principle only honored, never violated
+  const honored = reviews.filter((r) => r.honored.includes(principleId)).length;
+  return {
+    compliance_rate: 100,
+    times_honored: honored,
+    total_violations: 0,
+    unintentional_violations: 0,
+  };
+}
 
 export async function getCompliance(
   input: ComplianceInput,
@@ -49,39 +86,28 @@ export async function getCompliance(
     };
   }
 
-  const report = analyzeDrift(reviews, allIds, {
-    principleId: input.principle_id,
+  const report = analyzeDrift(reviews, allIds, { principleId: input.principle_id });
+  const rawStats = report.most_violated.find((s) => s.principle_id === input.principle_id);
+  const resolved = resolveStats(rawStats, input.principle_id, reviews);
+
+  const confidence = computeComplianceConfidence({
+    compliance_rate: resolved.compliance_rate,
+    principle_id: input.principle_id,
+    times_honored: resolved.times_honored,
+    total_violations: resolved.total_violations,
+    trend: report.trend,
   });
 
-  const stats = report.most_violated.find((s) => s.principle_id === input.principle_id);
-
-  // If principle wasn't in most_violated, check if it was honored
-  if (!stats) {
-    // Count times honored — already filtered to this principle
-    const honored = reviews.filter((r) => r.honored.includes(input.principle_id)).length;
-
-    return {
-      compliance_rate: 100,
-      found: true,
-      principle_id: input.principle_id,
-      times_honored: honored,
-      total_reviews: report.total_reviews,
-      total_violations: 0,
-      trend: report.trend,
-      unintentional_violations: 0,
-      weekly_trend: weeklyTrend,
-    };
-  }
-
   return {
-    compliance_rate: stats.compliance_rate,
+    compliance_rate: resolved.compliance_rate,
+    confidence,
     found: true,
     principle_id: input.principle_id,
-    times_honored: stats.times_honored,
+    times_honored: resolved.times_honored,
     total_reviews: report.total_reviews,
-    total_violations: stats.total_violations,
+    total_violations: resolved.total_violations,
     trend: report.trend,
-    unintentional_violations: stats.unintentional_violations,
+    unintentional_violations: resolved.unintentional_violations,
     weekly_trend: weeklyTrend,
   };
 }

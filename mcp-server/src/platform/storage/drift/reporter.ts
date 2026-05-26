@@ -31,8 +31,11 @@ function formatMostViolatedSection(
   if (mostViolated.length === 0) return;
   lines.push("### Most violated principles");
   for (const stat of mostViolated) {
+    const confidenceSuffix = stat.confidence
+      ? ` [confidence: ${stat.confidence.tier.toUpperCase()}]`
+      : "";
     lines.push(
-      `${stat.principle_id} — ${stat.total_violations} violations (${stat.unintentional_violations} unintentional), ${stat.compliance_rate}% compliance`,
+      `${stat.principle_id} — ${stat.total_violations} violations (${stat.unintentional_violations} unintentional), ${stat.compliance_rate}% compliance${confidenceSuffix}`,
     );
   }
   lines.push("");
