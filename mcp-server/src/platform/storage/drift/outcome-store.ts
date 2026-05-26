@@ -50,7 +50,6 @@ export class OutcomeStore {
   private readonly stmtRecordOutcome: Database.Statement;
   private readonly stmtGetForPrinciple: Database.Statement;
   private readonly stmtGetStats: Database.Statement;
-  private readonly stmtGetStatsFiltered: Database.Statement;
   private readonly stmtGetForFiles: Database.Statement;
 
   constructor(db: Database.Database) {
@@ -80,12 +79,6 @@ export class OutcomeStore {
       ORDER BY total DESC
     `);
 
-    // Aggregated stats — filtered by list of principle IDs.
-    // Prepared with a single placeholder; the query is built dynamically per call.
-    // This statement is re-prepared per call in getOutcomeStats() when filtering.
-    // Stored as a no-op sentinel here to satisfy TypeScript initialization.
-    this.stmtGetStatsFiltered = db.prepare(`SELECT 1`);
-
     this.stmtGetForFiles = db.prepare(`
       SELECT file_path, principle_id, action, slug, timestamp
       FROM violation_outcomes
@@ -102,8 +95,8 @@ export class OutcomeStore {
   recordOutcome(input: ViolationOutcome): void {
     try {
       this.stmtRecordOutcome.run(input);
-    } catch {
-      // Swallow — errors-are-values: outcome recording is best-effort
+    } catch (e) {
+      console.warn("[OutcomeStore] recordOutcome failed:", e);
     }
   }
 
@@ -114,7 +107,8 @@ export class OutcomeStore {
   getOutcomesForPrinciple(principleId: string): ViolationOutcome[] {
     try {
       return this.stmtGetForPrinciple.all(principleId) as ViolationOutcome[];
-    } catch {
+    } catch (e) {
+      console.warn("[OutcomeStore] getOutcomesForPrinciple failed:", e);
       return [];
     }
   }
@@ -148,7 +142,8 @@ export class OutcomeStore {
         return stmt.all(...principleIds) as OutcomeStats[];
       }
       return this.stmtGetStats.all() as OutcomeStats[];
-    } catch {
+    } catch (e) {
+      console.warn("[OutcomeStore] getOutcomeStats failed:", e);
       return [];
     }
   }
@@ -167,7 +162,8 @@ export class OutcomeStore {
         results.push(...rows);
       }
       return results;
-    } catch {
+    } catch (e) {
+      console.warn("[OutcomeStore] getOutcomesForFiles failed:", e);
       return [];
     }
   }
