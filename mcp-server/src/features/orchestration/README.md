@@ -5,7 +5,7 @@ This bounded context owns Canon's flow state machine runtime and every MCP tool 
 ## What this context owns
 
 - **Flow engine** (`engine/`) — state transition evaluation, convergence enforcement, effects, competitive flows, debate protocol, consultation execution
-- **Orchestration tools** (`tools/`) — all harness MCP tools: `drive_flow`, `init_workspace`, `load_flow`, `report_result`, `update_board`, `post_message`, `get_messages`, `inject_wave_event`, `resolve_wave_event`, `resolve_after_consultations`, `record_agent_metrics`, `post_event`, `write_plan_index`, `simulate_flow`, and the artifact-write tools (`write_design_brief`, `write_implementation_summary`, `write_research_synthesis`, `write_review`, `write_test_report`)
+- **Orchestration tools** (`tools/`) — all harness MCP tools: `drive_flow`, `init_workspace`, `load_flow`, `report_result`, `update_board`, `post_message`, `get_messages`, `inject_wave_event`, `resolve_wave_event`, `resolve_after_consultations`, `record_agent_metrics`, `post_event`, `write_plan_index`, `simulate_flow`, and the artifact-write tools (`write_implementation_summary`, `write_review`, `write_test_report`)
 - **Orchestration services** (`services/`) — context budget, prompt enrichment, contract checking, diff clustering, context injection, KG context formatting, learn gate evaluation, scope resolution, wave briefing assembly
 
 ## What this context does NOT own

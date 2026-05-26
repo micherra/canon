@@ -11,10 +11,11 @@ import { isAbsolute } from "node:path";
 /**
  * Validate a prior workspace path for seeding.
  * Returns warnings (not errors) for invalid or missing paths.
+ * The function is validation-only — it does not copy or modify any files.
  *
  * errors-are-values: never throws; all failures produce warnings.
  */
-export async function seedFromPriorWorkspace(
+export async function validateSeedPath(
   sourceWorkspace: string,
 ): Promise<{ seeded: boolean; warnings: string[] }> {
   const warnings: string[] = [];

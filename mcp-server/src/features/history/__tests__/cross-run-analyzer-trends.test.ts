@@ -47,6 +47,7 @@ function makeRunSummary(overrides: Partial<RunSummary> = {}): RunSummary {
       files: [],
       total_files: 0,
     },
+    decision_summaries: [],
     planner_context: null,
     review_results: [],
     run_metadata: {

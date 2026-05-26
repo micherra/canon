@@ -96,6 +96,10 @@ export type ArtifactInventory = {
  * Structured run summary — the primary artifact for cross-run analysis.
  * Versioned with version: 1 to support future schema evolution.
  * aggregates-reference-by-id: references archives by archive_path, not by embedding content.
+ *
+ * Backward compat note: decision_summaries was populated from the decisions/ workspace
+ * directory (removed 2026-05-25). The field is retained as an always-empty array so
+ * version: 1 consumers that branch on its presence remain compatible.
  */
 export type RunSummary = {
   version: 1;
@@ -114,6 +118,8 @@ export type RunSummary = {
   planner_context: PlannerContext | null;
   step_outcomes: StepOutcome[];
   review_results: ReviewResult[];
+  /** Always empty — retained for version: 1 backward compatibility. */
+  decision_summaries: [];
   artifact_inventory: ArtifactInventory;
 };
 

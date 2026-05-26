@@ -18,7 +18,7 @@ import {
 } from "@domains/workspaces/workspace.ts";
 import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
 import { CANON_DIR } from "@shared/constants.ts";
-import { seedFromPriorWorkspace } from "./seed-workspace.ts";
+import { validateSeedPath } from "./seed-workspace.ts";
 
 type InitWorkspaceInput = {
   flow_name: string;
@@ -427,7 +427,7 @@ async function applyPostCreateSteps(
   result: InitWorkspaceResult,
 ): Promise<void> {
   if (input.seed_from) {
-    const seedResult = await seedFromPriorWorkspace(input.seed_from);
+    const seedResult = await validateSeedPath(input.seed_from);
     for (const warning of seedResult.warnings) {
       console.warn(`[init-workspace] ${warning}`);
     }

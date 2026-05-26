@@ -59,6 +59,8 @@ export function buildRunSummary(input: {
   return {
     archive_id: archiveId,
     artifact_inventory: artifactInventory,
+    // decision_summaries is always empty — retained for version: 1 backward compatibility
+    decision_summaries: [] as const,
     planner_context: plannerContext,
     review_results: reviewResults,
     run_metadata: {

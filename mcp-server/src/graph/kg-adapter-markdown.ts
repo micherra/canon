@@ -59,8 +59,6 @@ function extractMetadata(
       };
     case "agent":
       return { role: data.role ?? null };
-    case "decision":
-      return { status: data.status ?? null };
     default:
       return null;
   }

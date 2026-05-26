@@ -511,4 +511,21 @@ describe("buildRunSummary", () => {
     expect(result.run_metadata.completed_at).toBeNull();
     expect(result.run_metadata.total_duration_ms).toBeNull();
   });
+
+  test("decision_summaries is always an empty array for version: 1 backward compat", () => {
+    const result = buildRunSummary({
+      archiveId: "arch_compat_001",
+      metadata: {
+        archivedAt: "2026-05-25T12:00:00.000Z",
+        branch: "main",
+        flow: "fast-path",
+        task: "Compat test",
+        tier: "simple",
+      },
+      slug: "compat-slug",
+      workspacePath: tmpDir,
+    });
+
+    expect(result.decision_summaries).toEqual([]);
+  });
 });

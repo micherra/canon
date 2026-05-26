@@ -108,24 +108,26 @@ describe("archiveWorkspace — happy path", () => {
     expect(result.archive_path).not.toBeNull();
 
     if (result.archive_path) {
+      // Current canonical dirs
       expect(existsSync(join(result.archive_path, "plans"))).toBe(true);
       expect(existsSync(join(result.archive_path, "reviews"))).toBe(true);
-      // research, decisions, handoffs no longer in ARCHIVE_DIRS
-      expect(existsSync(join(result.archive_path, "research"))).toBe(false);
-      expect(existsSync(join(result.archive_path, "decisions"))).toBe(false);
+      // Legacy dirs included for backward-compat archival of older workspaces
+      expect(existsSync(join(result.archive_path, "research"))).toBe(true);
+      expect(existsSync(join(result.archive_path, "decisions"))).toBe(true);
     }
   });
 
   test("skips directories that don't exist in the workspace", async () => {
-    // Only plans exists — transcripts does NOT
-    const ws = makeWorkspace(projectDir, {
+    // Use a fresh isolated project dir so only the dirs listed below exist.
+    const isolatedProjectDir = makeTmpDir();
+    const ws = makeWorkspace(isolatedProjectDir, {
       dirs: ["plans"],
       files: [],
     });
 
     const result = await archiveWorkspace({
       branch: "main",
-      projectDir,
+      projectDir: isolatedProjectDir,
       slug: "partial-feature",
       workspacePath: ws,
     });
@@ -133,11 +135,14 @@ describe("archiveWorkspace — happy path", () => {
     expect(result.archived).toBe(true);
     if (result.archive_path) {
       expect(existsSync(join(result.archive_path, "plans"))).toBe(true);
+      // transcripts not in workspace — should not appear in archive
       expect(existsSync(join(result.archive_path, "transcripts"))).toBe(false);
-      // research, decisions, handoffs no longer in ARCHIVE_DIRS
+      // legacy dirs not in workspace — should not appear in archive
       expect(existsSync(join(result.archive_path, "research"))).toBe(false);
       expect(existsSync(join(result.archive_path, "handoffs"))).toBe(false);
     }
+
+    rmSync(isolatedProjectDir, { force: true, recursive: true });
   });
 
   test("copies log.jsonl, context.md, journal.json when present", async () => {
@@ -208,6 +213,8 @@ describe("archiveWorkspace — happy path", () => {
       expect(parsed).toMatchObject({
         archive_id: expect.any(String) as unknown,
         artifact_inventory: expect.any(Object) as unknown,
+        // decision_summaries always present as empty array for version: 1 backward compat
+        decision_summaries: [] as unknown,
         review_results: expect.any(Array) as unknown,
         run_metadata: expect.objectContaining({
           branch: "main",
@@ -267,9 +274,10 @@ describe("archiveWorkspace — happy path", () => {
     expect(types).toContain("log.jsonl");
     expect(types).toContain("context.md");
     expect(types).toContain("journal.json");
-    // research, decisions, handoffs no longer in ARCHIVE_DIRS
-    expect(types).not.toContain("research");
-    expect(types).not.toContain("decisions");
+    // legacy dirs present in workspace — included for backward-compat archival
+    expect(types).toContain("research");
+    expect(types).toContain("decisions");
+    // handoffs not created in this workspace — should not appear
     expect(types).not.toContain("handoffs");
   });
 

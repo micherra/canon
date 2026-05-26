@@ -1,7 +1,7 @@
 /**
  * Tests for seed_from parameter in init_workspace.
  *
- * Covers: path validation for seedFromPriorWorkspace — absolute path check,
+ * Covers: path validation for validateSeedPath — absolute path check,
  * .canon/workspaces/ segment check, workspace existence check.
  */
 
@@ -25,7 +25,7 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
 }));
 
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
-import { seedFromPriorWorkspace } from "../tools/seed-workspace.ts";
+import { validateSeedPath } from "../tools/seed-workspace.ts";
 
 let tmpDirs: string[] = [];
 
@@ -51,14 +51,14 @@ afterEach(() => {
   tmpDirs = [];
 });
 
-describe("seedFromPriorWorkspace", () => {
+describe("validateSeedPath", () => {
   it("returns seeded: true when source workspace exists and path is valid", async () => {
     const baseDir = makeTmpDir();
     const source = makePriorWorkspace(baseDir);
     const targetDir = join(baseDir, ".canon", "workspaces", "main", "new-task");
     mkdirSync(targetDir, { recursive: true });
 
-    const result = await seedFromPriorWorkspace(source);
+    const result = await validateSeedPath(source);
 
     expect(result.seeded).toBe(true);
     expect(result.warnings).toHaveLength(0);
@@ -70,7 +70,7 @@ describe("seedFromPriorWorkspace", () => {
     const targetDir = join(baseDir, ".canon", "workspaces", "main", "new-task");
     mkdirSync(targetDir, { recursive: true });
 
-    const result = await seedFromPriorWorkspace(source);
+    const result = await validateSeedPath(source);
 
     expect(result.seeded).toBe(false);
     expect(
@@ -81,7 +81,7 @@ describe("seedFromPriorWorkspace", () => {
   });
 
   it("returns warning and seeded: false when a relative path is provided", async () => {
-    const result = await seedFromPriorWorkspace("../relative/path");
+    const result = await validateSeedPath("../relative/path");
 
     expect(result.seeded).toBe(false);
     expect(
@@ -103,7 +103,7 @@ describe("seedFromPriorWorkspace", () => {
     const targetDir = join(baseDir, ".canon", "workspaces", "main", "new-task");
     mkdirSync(targetDir, { recursive: true });
 
-    const result = await seedFromPriorWorkspace(source);
+    const result = await validateSeedPath(source);
 
     expect(result.seeded).toBe(false);
     expect(
