@@ -8,7 +8,7 @@ Part of the **Orchestration Context** (`features/orchestration/`, `domains/works
 
 The Workspaces context is responsible for **workspace initialization and execution-state persistence**. It owns everything needed to create a workspace on disk and to record the full runtime state of a flow execution:
 
-- **Workspace directory initialization** — creates the canonical `.canon/workspaces/<sanitized>/` tree with subdirectories (`decisions/`, `handoffs/`, `plans/`, `research/`, `reviews/`, `transcripts/`)
+- **Workspace directory initialization** — creates the canonical `.canon/workspaces/<sanitized>/` tree with subdirectories (`artifacts/`, `plans/`, `reviews/`, `transcripts/`)
 - **Execution store (SQLite)** — durable, synchronous CRUD for all orchestration state that previously lived in flat files: `board.json`, `progress.md`, per-channel messages, wave events, and the event log. One `orchestration.db` per workspace
 - **Wave event storage** — `postWaveEvent`, `getWaveEvents`, `updateWaveEvent` for in-flight agent coordination signals (`add_task`, `skip_task`, `guidance`, `inject_context`, `pause`, `reprioritize`)
 - **Wave lifecycle** — git worktree creation (`createWaveWorktrees`), sequential merge (`mergeWaveResults`), and best-effort cleanup (`cleanupWorktrees`)

@@ -22,7 +22,6 @@ export type EntityKind =
   | "flow-fragment"
   | "agent"
   | "template"
-  | "decision"
   | "hook";
 
 export type EdgeType =

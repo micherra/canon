@@ -25,7 +25,6 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `resolve-agent-skills.ts` | `resolve_agent_skills` — **async** since 2026-05-20; calls `applyAgentSkillsDisclosure` when `projectDir` provided; accepts `options?: { filePaths?, workspace? }` — when `filePaths` provided, appends "Known Pitfalls" section to `preload_prompt` and logs `pitfall_injected` audit event. Updated 2026-05-22. |
 | `resolve-agent-skills-disclosure.ts` | (helper module, not a tool) — progressive disclosure for `resolve_agent_skills`; exports `summarizeAgentSkills(data)` and `applyAgentSkillsDisclosure(result, projectDir)`; when `preload_prompt` exceeds 12k chars, writes full JSON to `.canon/artifacts/` and returns slim result with file pointer |
 | `seed-workspace.ts` | `seed_workspace` |
-| `write-design-brief.ts` | `write_design_brief` |
 | `write-implementation-summary.ts` | `write_implementation_summary` |
 | `write-plan-index.ts` | `write_plan_index` |
 | `write-review.ts` | `write_review` |

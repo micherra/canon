@@ -35,7 +35,6 @@ function classifyEntityKind(filePath: string, data: Record<string, unknown>): En
   if ("tier" in data || "states" in data) return "flow";
   if ("role" in data && pathContains(filePath, "agents")) return "agent";
   if (pathContains(filePath, "templates")) return "template";
-  if ("status" in data && pathContains(filePath, "decisions")) return "decision";
   return null;
 }
 
@@ -60,8 +59,6 @@ function extractMetadata(
       };
     case "agent":
       return { role: data.role ?? null };
-    case "decision":
-      return { status: data.status ?? null };
     default:
       return null;
   }

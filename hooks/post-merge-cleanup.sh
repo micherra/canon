@@ -17,8 +17,9 @@
 # WHAT IT DOES:
 #   1. After a merge into main/master, finds local branches that are now
 #      fully merged (git branch --merged).
-#   2. For each merged branch, archives decisions/ and notes/ from every
-#      task workspace under .canon/workspaces/{sanitized-branch}/ into
+#   2. For each merged branch, archives plans/, reviews/, artifacts/, and
+#      transcripts/ from every task workspace under
+#      .canon/workspaces/{sanitized-branch}/ into
 #      .canon/history/{sanitized-branch}/, generates archive-meta.json and
 #      summary.md, then deletes the workspace directory.
 #   3. Deletes the local branch with `git branch -d` (safe — git refuses if
@@ -125,10 +126,15 @@ for BRANCH in "${MERGED_BRANCHES[@]}"; do
 
   if [[ -d "$WORKSPACE_PATH" ]]; then
     ARCHIVE_DIR="${HISTORY_DIR}/${SANITIZED}"
-    mkdir -p "${ARCHIVE_DIR}/decisions" "${ARCHIVE_DIR}/notes"
+    mkdir -p "${ARCHIVE_DIR}"
 
     ARCHIVED_AT="$(now_iso)"
     TASK_SLUGS=()
+
+    # Current canonical workspace subdirs (as of 2026-05-25)
+    CANONICAL_DIRS=("plans" "reviews" "artifacts" "transcripts")
+    # Legacy dirs retained for backward-compatible archival of older workspaces
+    LEGACY_DIRS=("decisions" "handoffs" "research" "notes")
 
     # Walk every task-slug sub-directory inside the branch workspace
     for TASK_DIR in "${WORKSPACE_PATH}"/*/; do
@@ -136,15 +142,13 @@ for BRANCH in "${MERGED_BRANCHES[@]}"; do
       TASK_SLUG="$(basename "$TASK_DIR")"
       TASK_SLUGS+=("$TASK_SLUG")
 
-      # Copy decisions (merge all task slugs into shared history dir)
-      if [[ -d "${TASK_DIR}decisions" ]]; then
-        cp -r "${TASK_DIR}decisions/." "${ARCHIVE_DIR}/decisions/" 2>/dev/null || true
-      fi
-
-      # Copy notes
-      if [[ -d "${TASK_DIR}notes" ]]; then
-        cp -r "${TASK_DIR}notes/." "${ARCHIVE_DIR}/notes/" 2>/dev/null || true
-      fi
+      # Copy canonical artifact dirs
+      for DIR_NAME in "${CANONICAL_DIRS[@]}" "${LEGACY_DIRS[@]}"; do
+        if [[ -d "${TASK_DIR}${DIR_NAME}" ]]; then
+          mkdir -p "${ARCHIVE_DIR}/${DIR_NAME}"
+          cp -r "${TASK_DIR}${DIR_NAME}/." "${ARCHIVE_DIR}/${DIR_NAME}/" 2>/dev/null || true
+        fi
+      done
     done
 
     # Build tasks JSON array for archive-meta.json
@@ -214,12 +218,16 @@ EOF
         echo ""
       fi
 
-      # Count decisions and notes
-      DECISION_COUNT="$(find "${ARCHIVE_DIR}/decisions" -type f 2>/dev/null | wc -l | tr -d ' ')"
-      NOTES_COUNT="$(find "${ARCHIVE_DIR}/notes" -type f 2>/dev/null | wc -l | tr -d ' ')"
+      # Count archived files per directory
       echo "### Preserved Artifacts"
-      echo "- Decisions: ${DECISION_COUNT} file(s) → \`.canon/history/${SANITIZED}/decisions/\`"
-      echo "- Notes: ${NOTES_COUNT} file(s) → \`.canon/history/${SANITIZED}/notes/\`"
+      for DIR_NAME in plans reviews artifacts transcripts decisions handoffs research notes; do
+        if [[ -d "${ARCHIVE_DIR}/${DIR_NAME}" ]]; then
+          FILE_COUNT="$(find "${ARCHIVE_DIR}/${DIR_NAME}" -type f 2>/dev/null | wc -l | tr -d ' ')"
+          if [[ "$FILE_COUNT" -gt 0 ]]; then
+            echo "- ${DIR_NAME^}: ${FILE_COUNT} file(s) → \`.canon/history/${SANITIZED}/${DIR_NAME}/\`"
+          fi
+        fi
+      done
     } > "${ARCHIVE_DIR}/summary.md"
 
     echo "Canon:   archived to .canon/history/${SANITIZED}/"
