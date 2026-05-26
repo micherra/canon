@@ -88,7 +88,7 @@ INPUT="{\"session_id\":\"${SESSION_ID}\",\"file_path\":\"src/app.ts\"}"
 
 EXIT_CODE=0
 OUTPUT=$(cd "$T_NOWORKER" && \
-  bash "$HOOK_NOWORKER" <<<"$INPUT" 2>&1) || EXIT_CODE=$?
+  TMPDIR="$TMPDIR_BASE" bash "$HOOK_NOWORKER" <<<"$INPUT" 2>&1) || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -eq 0 ]]; then
   echo "  PASS: missing worker exits 0 gracefully"
   PASS=$((PASS + 1))
@@ -110,11 +110,11 @@ INPUT_DEDUP="{\"session_id\":\"${SESSION_DEDUP}\",\"file_path\":\"src/app.ts\"}"
 
 # First call: use the worker-absent copy so we control the hook dir.
 # Will exit 0 with no output, and write the dedup marker file.
-(cd "$T_DEDUP" && echo "$INPUT_DEDUP" | bash "$HOOK_NOWORKER" >/dev/null 2>&1) || true
+(cd "$T_DEDUP" && echo "$INPUT_DEDUP" | TMPDIR="$TMPDIR_BASE" bash "$HOOK_NOWORKER" >/dev/null 2>&1) || true
 
 # Second call: dedup marker exists — should skip immediately with no output
 EXIT_CODE=0
-OUTPUT=$(cd "$T_DEDUP" && echo "$INPUT_DEDUP" | bash "$HOOK_NOWORKER" 2>&1) || EXIT_CODE=$?
+OUTPUT=$(cd "$T_DEDUP" && echo "$INPUT_DEDUP" | TMPDIR="$TMPDIR_BASE" bash "$HOOK_NOWORKER" 2>&1) || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -eq 0 ]] && [[ -z "$OUTPUT" ]]; then
   echo "  PASS: dedup exits 0 silently on second call"
   PASS=$((PASS + 1))

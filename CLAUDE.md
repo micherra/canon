@@ -150,6 +150,8 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Learner-proposal enrichment**: When the build addresses learner findings, add to the engineer spawn prompt: "After implementing each proposal, grep the same file and related files in the same directory for existing instances of the violation pattern. Apply the fix retroactively to every instance found. List retroactive fixes in the Criteria Coverage table."
 
+**Dead-code-removal enrichment**: For builds that delete symbols, functions, types, or directory paths, add to the engineer spawn prompt: "After deleting each symbol, grep the full codebase for: (1) the symbol name as a string literal (catches constant arrays and config entries), (2) the TypeScript type name (catches orphan type declarations whose value-producers were deleted), (3) any directory path strings being removed (catches docstrings and comments). List all additional deletions in the Criteria Coverage table."
+
 #### Non-trivial path (PM → architect → execution)
 
 1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` → save `worktree_path`, `workspace`.

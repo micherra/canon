@@ -15,7 +15,6 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type {
   ArtifactInventory,
-  DecisionSummary,
   PlannerContext,
   ReviewResult,
   RunbookStep,
@@ -23,7 +22,6 @@ import type {
   StepOutcome,
 } from "../history-types.ts";
 import {
-  parseDecisionFile,
   parsePlanningBrief,
   parseReviewFile,
   parseRunbookSteps,
@@ -53,7 +51,6 @@ export function buildRunSummary(input: {
   const plannerContext = extractPlannerContext(plansDir, slug);
   const stepOutcomes = extractStepOutcomes(workspacePath);
   const reviewResults = extractReviewResults(workspacePath);
-  const decisionSummaries = extractDecisionSummaries(workspacePath);
   const artifactInventory = buildArtifactInventory(workspacePath);
 
   // Compute timing from step outcomes
@@ -62,7 +59,8 @@ export function buildRunSummary(input: {
   return {
     archive_id: archiveId,
     artifact_inventory: artifactInventory,
-    decision_summaries: decisionSummaries,
+    // decision_summaries is always empty — retained for version: 1 backward compatibility
+    decision_summaries: [] as const,
     planner_context: plannerContext,
     review_results: reviewResults,
     run_metadata: {
@@ -192,43 +190,6 @@ function extractReviewResults(workspacePath: string): ReviewResult[] {
   }
 
   return results;
-}
-
-/**
- * Extract decision summaries from workspace/decisions/ directory.
- * Parses YAML frontmatter and chosen option/rationale from .md files.
- * Returns empty array when decisions/ is missing.
- */
-function extractDecisionSummaries(workspacePath: string): DecisionSummary[] {
-  const decisionsDir = join(workspacePath, "decisions");
-  if (!existsSync(decisionsDir)) {
-    return [];
-  }
-
-  const summaries: DecisionSummary[] = [];
-  let entries: string[] = [];
-
-  try {
-    entries = readdirSync(decisionsDir);
-  } catch {
-    return [];
-  }
-
-  for (const entry of entries) {
-    if (!entry.endsWith(".md")) continue;
-    const filePath = join(decisionsDir, entry);
-    try {
-      const content = readFileSync(filePath, "utf-8");
-      const summary = parseDecisionFile(content);
-      if (summary !== null) {
-        summaries.push(summary);
-      }
-    } catch {
-      // Skip unreadable files
-    }
-  }
-
-  return summaries;
 }
 
 /**

@@ -164,8 +164,6 @@ setup_repo "$T_WRITE"
 
 # Build a content string with 510 newline-separated lines, then JSON-encode it.
 # jq encodes newlines as \n in the string value, which is what the hook parses.
-WRITE_CONTENT=$(seq 1 510 | awk '{print "const w" $1 " = " $1 ";"}' | paste -sd '\n' -)
-
 if command -v jq &>/dev/null; then
   # Use jq to safely build the JSON payload with proper escaping.
   WRITE_INPUT=$(jq -n --arg fp "${T_WRITE}/src/newfile.ts" --arg ct "$(seq 1 510 | awk '{print "const w" $1 " = " $1 ";"}')" \

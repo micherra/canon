@@ -25,19 +25,19 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `resolve-agent-skills.ts` | `resolve_agent_skills` — **async** since 2026-05-20; calls `applyAgentSkillsDisclosure` when `projectDir` provided; accepts `options?: { filePaths?, workspace? }` — when `filePaths` provided, appends "Known Pitfalls" section to `preload_prompt` and logs `pitfall_injected` audit event. Updated 2026-05-22. |
 | `resolve-agent-skills-disclosure.ts` | (helper module, not a tool) — progressive disclosure for `resolve_agent_skills`; exports `summarizeAgentSkills(data)` and `applyAgentSkillsDisclosure(result, projectDir)`; when `preload_prompt` exceeds 12k chars, writes full JSON to `.canon/artifacts/` and returns slim result with file pointer |
 | `seed-workspace.ts` | `seed_workspace` |
-| `write-design-brief.ts` | `write_design_brief` |
 | `write-implementation-summary.ts` | `write_implementation_summary` |
 | `write-plan-index.ts` | `write_plan_index` |
 | `write-review.ts` | `write_review` |
 | `write-test-report.ts` | `write_test_report` |
 
 **`services/`** — Business logic backing tools.
-<!-- last-updated: 2026-05-15 -->
+<!-- last-updated: 2026-05-25 (review-confidence-adapter added) -->
 
 | File | Responsibility |
 |------|---------------|
 | `janitor.ts` | `runJanitor(projectDir)` — gate checks (enabled, time, lock), WAL checkpoint, prune detection; returns `JanitorResult` |
 | `transcript-transformer.ts` | `transformClaudeCodeTranscript(entries)` — pure; converts CC JSONL entries to Canon `TranscriptEntry[]`; exports `ClaudeCodeEntry` type |
+| `review-confidence-adapter.ts` | Pure compute function; returns `ConfidenceAnnotation` for a violation from severity_tier, violation_history, path_effects, base_sample signals; zero-confidence for undefined file_path |
 | `workspace-cleanup.ts` | Workspace cleanup utilities |
 
 ## Contracts

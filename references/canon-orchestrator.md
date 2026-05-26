@@ -194,7 +194,6 @@ When all implementation steps complete:
 | Tool | Used by |
 |------|---------|
 | `write_plan_index` | architect |
-| `write_design_brief` | architect |
 | `write_implementation_summary` | engineer |
 | `write_review` | reviewer |
 | `write_test_report` | tester |
