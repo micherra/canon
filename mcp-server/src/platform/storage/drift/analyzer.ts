@@ -1,5 +1,14 @@
 import { dirname } from "node:path";
 import type { ReviewEntry } from "@shared/schema.ts";
+import { computeComplianceConfidence } from "./drift-confidence-adapter.ts";
+
+/** Inline structural type — mirrors ConfidenceAnnotation from @shared/lib/confidence.ts */
+type InlineConfidenceAnnotation = {
+  score: number;
+  tier: "high" | "medium" | "low" | "insufficient";
+  basis: Array<{ signal: string; weight: number; detail: string }>;
+  sample_size: number;
+};
 
 export type PrincipleStats = {
   principle_id: string;
@@ -7,6 +16,7 @@ export type PrincipleStats = {
   unintentional_violations: number;
   times_honored: number;
   compliance_rate: number; // 0-100
+  confidence?: InlineConfidenceAnnotation;
 };
 
 export type DirectoryStats = {
@@ -184,10 +194,15 @@ export function analyzeDrift(
 ): DriftReport {
   const filteredReviews = applyFilters(reviews, options);
   const principleMap = computePrincipleStats(filteredReviews);
+  const trend = computeTrend(filteredReviews);
 
   const mostViolated = [...principleMap.values()]
     .filter((s) => s.total_violations > 0)
-    .sort((a, b) => b.total_violations - a.total_violations);
+    .sort((a, b) => b.total_violations - a.total_violations)
+    .map((s) => ({
+      ...s,
+      confidence: computeComplianceConfidence({ ...s, trend }),
+    }));
 
   const triggeredIds = new Set(principleMap.keys());
   const neverTriggered = allPrincipleIds.filter((id) => !triggeredIds.has(id));
@@ -197,7 +212,7 @@ export function analyzeDrift(
     most_violated: mostViolated.slice(0, 10),
     never_triggered: neverTriggered,
     total_reviews: filteredReviews.length,
-    trend: computeTrend(filteredReviews),
+    trend,
     violation_directories: computeViolationDirectories(filteredReviews),
   };
 }
