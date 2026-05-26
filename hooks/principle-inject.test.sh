@@ -81,7 +81,7 @@ SESSION_ID="inject-noworker-$$"
 INPUT="{\"session_id\":\"${SESSION_ID}\",\"file_path\":\"src/app.ts\"}"
 
 EXIT_CODE=0
-OUTPUT=$(cd "$T_NOWORKER" \
+OUTPUT=$(cd "$T_NOWORKER" && \
   CANON_PLUGIN_DIR="$EMPTY_PLUGIN_DIR" \
   bash "$HOOK" <<<"$INPUT" 2>&1) || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -eq 0 ]]; then
