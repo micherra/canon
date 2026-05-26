@@ -160,6 +160,16 @@ export type FinalizeWorkspaceResult = {
    */
   steps_missing_skip_reason: string[];
   steps_skipped: string[];
+  /**
+   * Step IDs of steps that were registered with `status: "planned"` but
+   * never transitioned to `started`, `completed`, or `skipped`. These are
+   * "ghost" steps — they appear in the journal but were never executed.
+   * A subset of `steps_missing` (which includes both "planned" and "started").
+   * Always an array (empty when no ghosts). Informational only — does not add
+   * additional blocking beyond `steps_missing` (which already includes these
+   * steps and blocks `complete`).
+   */
+  steps_ghost: string[];
   /** Present only when complete is true. True when archive succeeded. */
   workspace_archived?: boolean;
   /** Present only when complete is true. True when workspace directory was deleted. */
@@ -654,6 +664,7 @@ export async function finalizeWorkspace(
   const skipped = steps.filter((s) => s.status === "skipped");
   const stepsSkipped = skipped.map((s) => s.step_id);
   const stepsMissingSkipReason = getStepsMissingSkipReason(skipped);
+  const stepsGhost = steps.filter((s) => s.status === "planned").map((s) => s.step_id);
 
   const artifacts = scanArtifacts(workspace, completed);
   const complete =
@@ -671,6 +682,7 @@ export async function finalizeWorkspace(
     complete,
     flow_outcome: computeFlowOutcome(steps),
     steps_completed: completed.length,
+    steps_ghost: stepsGhost,
     steps_logged: steps.length,
     steps_missing: stepsMissing,
     steps_missing_skip_reason: stepsMissingSkipReason,

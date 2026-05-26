@@ -354,3 +354,160 @@ describe("finalizeWorkspace — corrupted journal handling (validate-at-trust-bo
     expect(result.steps_logged).toBe(0);
   });
 });
+
+describe("finalizeWorkspace — steps_ghost field (planned-but-never-started steps)", () => {
+  let workspace: string;
+
+  beforeEach(async () => {
+    workspace = await mkdtemp(join(tmpdir(), "finalize-ghost-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(workspace, { force: true, recursive: true });
+  });
+
+  test("steps_ghost is an empty array when no planned steps exist", async () => {
+    await logStep({
+      agent_id: "test-agent-ghost-1",
+      status: "completed",
+      step_id: "implement",
+      workspace,
+    });
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    expect(Array.isArray(result.steps_ghost)).toBe(true);
+    expect(result.steps_ghost).toEqual([]);
+  });
+
+  test("steps_ghost contains step_ids of steps with status=planned (never started)", async () => {
+    // Write a journal with one planned step (ghost) and one completed step
+    writeFileSync(
+      join(workspace, "journal.json"),
+      JSON.stringify({
+        steps: [
+          {
+            agent_type: null,
+            artifacts_expected: [],
+            status: "planned",
+            step_id: "context-sync",
+          },
+          {
+            agent_type: "engineer",
+            artifacts_expected: [],
+            completed_at: new Date().toISOString(),
+            started_at: new Date().toISOString(),
+            status: "completed",
+            step_id: "implement",
+          },
+        ],
+        version: 1,
+        workspace,
+      }),
+    );
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    expect(result.steps_ghost).toEqual(["context-sync"]);
+  });
+
+  test("steps_ghost lists all planned steps when multiple exist", async () => {
+    writeFileSync(
+      join(workspace, "journal.json"),
+      JSON.stringify({
+        steps: [
+          {
+            agent_type: null,
+            artifacts_expected: [],
+            status: "planned",
+            step_id: "context-sync",
+          },
+          {
+            agent_type: null,
+            artifacts_expected: [],
+            status: "planned",
+            step_id: "learn",
+          },
+          {
+            agent_type: "engineer",
+            artifacts_expected: [],
+            completed_at: new Date().toISOString(),
+            started_at: new Date().toISOString(),
+            status: "completed",
+            step_id: "implement",
+          },
+        ],
+        version: 1,
+        workspace,
+      }),
+    );
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    expect(result.steps_ghost).toHaveLength(2);
+    expect(result.steps_ghost).toContain("context-sync");
+    expect(result.steps_ghost).toContain("learn");
+  });
+
+  test("started steps are NOT included in steps_ghost (only pure planned)", async () => {
+    writeFileSync(
+      join(workspace, "journal.json"),
+      JSON.stringify({
+        steps: [
+          {
+            agent_type: null,
+            artifacts_expected: [],
+            status: "planned",
+            step_id: "ghost-step",
+          },
+          {
+            agent_type: "engineer",
+            artifacts_expected: [],
+            started_at: new Date().toISOString(),
+            status: "started",
+            step_id: "in-progress-step",
+          },
+        ],
+        version: 1,
+        workspace,
+      }),
+    );
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    // Only "planned" steps are ghosts; "started" steps are in steps_missing, not steps_ghost
+    expect(result.steps_ghost).toEqual(["ghost-step"]);
+    expect(result.steps_ghost).not.toContain("in-progress-step");
+    // "started" step is in steps_missing
+    const missingIds = result.steps_missing.map((s) => s.step_id);
+    expect(missingIds).toContain("in-progress-step");
+  });
+
+  test("steps_ghost is present even when complete is false", async () => {
+    writeFileSync(
+      join(workspace, "journal.json"),
+      JSON.stringify({
+        steps: [
+          {
+            agent_type: null,
+            artifacts_expected: [],
+            status: "planned",
+            step_id: "never-started",
+          },
+        ],
+        version: 1,
+        workspace,
+      }),
+    );
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    expect(result.complete).toBe(false);
+    expect(result.steps_ghost).toEqual(["never-started"]);
+  });
+
+  test("steps_ghost is empty for empty journal", async () => {
+    writeFileSync(
+      join(workspace, "journal.json"),
+      JSON.stringify({ steps: [], version: 1, workspace }),
+    );
+    const result = await finalizeWorkspace({ workspace });
+    assertOk(result);
+    expect(result.steps_ghost).toEqual([]);
+  });
+});
