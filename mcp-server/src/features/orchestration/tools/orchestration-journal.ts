@@ -165,7 +165,9 @@ export type FinalizeWorkspaceResult = {
    * never transitioned to `started`, `completed`, or `skipped`. These are
    * "ghost" steps — they appear in the journal but were never executed.
    * A subset of `steps_missing` (which includes both "planned" and "started").
-   * Always an array (empty when no ghosts). Does not block `complete`.
+   * Always an array (empty when no ghosts). Informational only — does not add
+   * additional blocking beyond `steps_missing` (which already includes these
+   * steps and blocks `complete`).
    */
   steps_ghost: string[];
   /** Present only when complete is true. True when archive succeeded. */

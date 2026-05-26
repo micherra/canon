@@ -292,7 +292,9 @@ git -C "$CLEAN_MAIN" branch --set-upstream-to="origin/$CLEAN_BRANCH" "$CLEAN_BRA
 
 # Add a reviews.jsonl with a fake recent review so the hook reaches the unpushed-count check.
 # Without reviews.jsonl, the hook warns unconditionally (no-reviews-file path).
-# The "0 unpushed commits" silent-pass only fires when reviews.jsonl exists AND upstream is set.
+# The "0 unpushed commits" silent-pass requires reviews.jsonl to exist (without it the hook
+# warns unconditionally). Upstream is not required — the hook falls back to
+# `git rev-list HEAD --count --not --remotes` when no upstream branch is set.
 add_reviews_file "$CLEAN_MAIN" '{"timestamp":"2030-01-01T00:00:00Z","result":"CLEAN"}'
 
 run_test_in_dir_no_pattern "push with 0 unpushed commits (reviews file present) — no CANON WARNING" 0 \

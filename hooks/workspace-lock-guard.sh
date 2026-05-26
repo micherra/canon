@@ -37,7 +37,7 @@ if [[ -z "$BRANCH" ]]; then
 fi
 
 # Sanitize the branch name (same logic as the orchestrator)
-SANITIZED=$(echo "$BRANCH" | tr '/' '--' | tr ' ' '-' | tr -cd 'a-zA-Z0-9-' | tr '[:upper:]' '[:lower:]' | cut -c1-80)
+SANITIZED=$(echo "$BRANCH" | sed 's|/|--|g' | tr ' ' '-' | tr -cd 'a-zA-Z0-9-' | tr '[:upper:]' '[:lower:]' | cut -c1-80)
 if [[ -z "$SANITIZED" ]]; then
   exit 0
 fi

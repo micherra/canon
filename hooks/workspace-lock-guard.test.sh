@@ -176,7 +176,7 @@ create_lock() {
   branch=$(git -C "$repo_dir" branch --show-current 2>/dev/null || echo "main")
 
   local sanitized
-  sanitized=$(echo "$branch" | tr '/' '--' | tr ' ' '-' | tr -cd 'a-zA-Z0-9-' | tr '[:upper:]' '[:lower:]' | cut -c1-80)
+  sanitized=$(echo "$branch" | sed 's|/|--|g' | tr ' ' '-' | tr -cd 'a-zA-Z0-9-' | tr '[:upper:]' '[:lower:]' | cut -c1-80)
 
   local lock_dir="$repo_dir/.canon/workspaces/$sanitized"
   mkdir -p "$lock_dir"
@@ -324,6 +324,24 @@ BRANCH=$(git -C "$REPO_DIFF" branch --show-current)
 run_test_in_dir_with_output "warning message includes branch name '$BRANCH'" 0 \
   "$BRANCH" \
   "$REPO_DIFF" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session-abc"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Slash-branch sanitization: `/` maps to `--` (matching sanitizeBranch)
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Slash-branch sanitization: feature/foo → feature--foo --"
+
+REPO_SLASH="$MASTER_TMP/slash-branch"
+setup_repo "$REPO_SLASH"
+git -C "$REPO_SLASH" checkout -b "feature/foo" 2>/dev/null
+
+create_lock "$REPO_SLASH" "{\"session_id\":\"other-session-xyz\",\"started\":\"$(fresh_ts)\"}"
+
+# Verify the lock landed at the correct sanitized path (feature--foo, not feature-foo)
+run_test_in_dir_with_output "slash-branch lock — sanitized path uses double-dash" 0 \
+  "CANON WARNING" \
+  "$REPO_SLASH" \
   '{"command":"git commit -m \"test\"","session_id":"my-session-abc"}'
 
 # ─────────────────────────────────────────────────────────────────────────────
