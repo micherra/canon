@@ -46,10 +46,100 @@ export type ReviewSignalReader = {
 };
 
 const SEVERITY_SCORES: Record<string, number> = {
+  convention: 0.3,
   rule: 0.9,
   "strong-opinion": 0.6,
-  convention: 0.3,
 };
+
+/** Build the severity_tier ConfidenceInput — always available, no DB needed. */
+function buildSeveritySignal(severity: string): ConfidenceInput {
+  return {
+    detail: `${severity}-level principle`,
+    sample_size: Infinity, // always available — clamped later against observed sample sizes
+    signal: "severity_tier",
+    value: SEVERITY_SCORES[severity] ?? 0.3,
+    weight: 0.3,
+  };
+}
+
+/** Build the violation_history ConfidenceInput from drift DB history. */
+function buildViolationHistorySignal(
+  filePath: string,
+  principleId: string,
+  signals: ReviewSignalReader,
+): ConfidenceInput {
+  try {
+    const history = signals
+      .getFileViolationHistory([filePath])
+      .find((r) => r.principle_id === principleId);
+    const violationCount = history?.violation_count ?? 0;
+    return {
+      detail:
+        violationCount > 0
+          ? `violated ${violationCount} times in this file`
+          : "no prior violations in this file",
+      sample_size: violationCount,
+      signal: "violation_history",
+      value: Math.min(violationCount / 10, 1.0),
+      weight: 0.35,
+    };
+  } catch {
+    return {
+      detail: "could not read violation history",
+      sample_size: 0,
+      signal: "violation_history",
+      value: 0,
+      weight: 0.35,
+    };
+  }
+}
+
+/** Build the path_effects ConfidenceInput and return total_reviews for base_sample. */
+function buildPathEffectsSignal(
+  filePath: string,
+  signals: ReviewSignalReader,
+): { input: ConfidenceInput; totalReviews: number } {
+  try {
+    const pathEffect = signals.getPathEffects([filePath])[0];
+    const totalReviews = pathEffect?.total_reviews ?? 0;
+    const violationStreak = pathEffect?.violation_streak ?? 0;
+    const cleanStreak = pathEffect?.clean_streak ?? 0;
+
+    let pathValue: number;
+    let pathDetail: string;
+    if (violationStreak > 0) {
+      pathValue = Math.min(violationStreak / 5, 1.0);
+      pathDetail = `violation streak of ${violationStreak}`;
+    } else if (cleanStreak >= 3) {
+      pathValue = 0.2; // file is usually clean, finding is surprising
+      pathDetail = `clean streak of ${cleanStreak}`;
+    } else {
+      pathValue = 0.5; // neutral
+      pathDetail = "neutral path history";
+    }
+    return {
+      input: {
+        detail: pathDetail,
+        sample_size: totalReviews,
+        signal: "path_effects",
+        value: pathValue,
+        weight: 0.2,
+      },
+      totalReviews,
+    };
+  } catch {
+    return {
+      input: {
+        detail: "could not read path effects",
+        sample_size: 0,
+        signal: "path_effects",
+        value: 0.5,
+        weight: 0.2,
+      },
+      totalReviews: 0,
+    };
+  }
+}
 
 /**
  * Compute a ConfidenceAnnotation for a reviewer violation using drift DB signals.
@@ -70,103 +160,35 @@ export function computeViolationConfidence(
   // errors-are-values: no file_path means we cannot query history
   if (!violation.file_path) {
     return {
-      score: 0.5,
-      tier: "insufficient",
       basis: [
         {
+          detail: "violation has no file path — cannot compute confidence",
           signal: "no_file_path",
           weight: 1,
-          detail: "violation has no file path — cannot compute confidence",
         },
       ],
       sample_size: 0,
+      score: 0.5,
+      tier: "insufficient",
     };
   }
 
   const filePath = violation.file_path;
 
-  // severity_tier signal — always available (no DB needed)
-  const severityValue = SEVERITY_SCORES[violation.severity] ?? 0.3;
-  const severityInput: ConfidenceInput = {
-    signal: "severity_tier",
-    value: severityValue,
-    weight: 0.3,
-    detail: `${violation.severity}-level principle`,
-    sample_size: Infinity, // always available — use a large number for min() calculation
-  };
+  const severityInput = buildSeveritySignal(violation.severity);
+  const violationHistoryInput = buildViolationHistorySignal(
+    filePath,
+    violation.principle_id,
+    signals,
+  );
+  const { input: pathEffectsInput, totalReviews } = buildPathEffectsSignal(filePath, signals);
 
-  // violation_history signal
-  let violationHistoryInput: ConfidenceInput;
-  try {
-    const history = signals
-      .getFileViolationHistory([filePath])
-      .find((r) => r.principle_id === violation.principle_id);
-    const violationCount = history?.violation_count ?? 0;
-    violationHistoryInput = {
-      signal: "violation_history",
-      value: Math.min(violationCount / 10, 1.0),
-      weight: 0.35,
-      detail:
-        violationCount > 0
-          ? `violated ${violationCount} times in this file`
-          : "no prior violations in this file",
-      sample_size: violationCount,
-    };
-  } catch {
-    violationHistoryInput = {
-      signal: "violation_history",
-      value: 0,
-      weight: 0.35,
-      detail: "could not read violation history",
-      sample_size: 0,
-    };
-  }
-
-  // path_effects signal
-  let pathEffectsInput: ConfidenceInput;
-  let totalReviews = 0;
-  try {
-    const pathEffect = signals.getPathEffects([filePath])[0];
-    totalReviews = pathEffect?.total_reviews ?? 0;
-    const violationStreak = pathEffect?.violation_streak ?? 0;
-    const cleanStreak = pathEffect?.clean_streak ?? 0;
-
-    let pathValue: number;
-    let pathDetail: string;
-    if (violationStreak > 0) {
-      pathValue = Math.min(violationStreak / 5, 1.0);
-      pathDetail = `violation streak of ${violationStreak}`;
-    } else if (cleanStreak >= 3) {
-      pathValue = 0.2; // file is usually clean, finding is surprising
-      pathDetail = `clean streak of ${cleanStreak}`;
-    } else {
-      pathValue = 0.5; // neutral
-      pathDetail = "neutral path history";
-    }
-    pathEffectsInput = {
-      signal: "path_effects",
-      value: pathValue,
-      weight: 0.2,
-      detail: pathDetail,
-      sample_size: totalReviews,
-    };
-  } catch {
-    pathEffectsInput = {
-      signal: "path_effects",
-      value: 0.5,
-      weight: 0.2,
-      detail: "could not read path effects",
-      sample_size: 0,
-    };
-  }
-
-  // base_sample signal
   const baseSampleInput: ConfidenceInput = {
+    detail: `${totalReviews} total reviews of this file`,
+    sample_size: totalReviews,
     signal: "base_sample",
     value: Math.min(totalReviews / 10, 1.0),
     weight: 0.15,
-    detail: `${totalReviews} total reviews of this file`,
-    sample_size: totalReviews,
   };
 
   // Clamp the Infinity sample_size for the severity signal before passing to the engine
