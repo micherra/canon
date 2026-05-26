@@ -48,7 +48,7 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-25 (open_artifact tool added; features/history MCP tools added, readCorrections discriminated union, assembleOutput exported, getPrReviewData no-throw validation) -->
+<!-- last-updated: 2026-05-25 (confidence scoring: ConfidenceAnnotation type, OutcomeStore, drift schema v7, review/drift adapters, write_review/get_compliance updated) -->
 
 **`present_artifact` MCP tool** — `html` parameter required; serves the provided HTML directly via HTTP server; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
 
@@ -70,7 +70,9 @@ src/
 
 **Fragment param syntax** — typed params (`param_name: { type: state_id|string|number|boolean, default? }`) replace null-marker `~`; backward compat retained; `state_id` params validated at load time.
 
-**Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "6"; v4 adds `file_violation_history` (PK: file_path + principle_id) and `path_effects` (PK: file_path) tables; v6 adds `error_fixes` table (PK: file_path + principle_id; columns: file_path, principle_id, error_pattern, fix_pattern, occurrences, last_seen, first_seen); idempotent migrations. Updated 2026-05-22.
+**Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "7"; v4 adds `file_violation_history` + `path_effects` tables; v6 adds `error_fixes` table; v7 adds `violation_outcomes` table (PK: file_path + principle_id + workflow_slug; columns: action CHECK('fix','acknowledge','defer'), resolved_at, notes); idempotent migrations. Updated 2026-05-25.
+
+**OutcomeStore** (`src/platform/storage/drift/outcome-store.ts`) — sync DAO for `violation_outcomes`; methods: `recordOutcome(input)`, `getOutcomes(filePath, principleId)`, `getOutcomeStats(filePath, principleId)`, `getOutcomesForFiles(filePaths)`, `getFixRate(filePath, principleId)`. Added 2026-05-25.
 
 **DriftDbSignals DAO** (`src/platform/storage/drift/drift-db-signals.ts`) — sync DAO for `file_violation_history`, `path_effects`, and `error_fixes`; methods: `getFileViolationHistory`, `upsertFileViolation`, `markFixed`, `getPathEffects`, `upsertPathEffect`, `getErrorFixes(filePaths)`, `upsertErrorFix(input)`, `getAllFileViolationHistory()`. `DriftDb.getSignals()` is a lazy cached accessor. Updated 2026-05-22.
 
@@ -90,6 +92,18 @@ src/
 **`get-file-context`** — surfaces `computed_tags`, `hotspot_score`, `co_change_partners`; `shape` derived from graph metrics (see `deriveShape` in source)
 **PR Review Data** (`pr-review-data.ts`) — pure functions: `classifyFile` (bucket assignment), `generateNarrative`, `buildFileViolationMap`, `assembleOutput(AssembleParams): PrReviewDataOutput` (extracted 2026-05-25); `PrFileInfo.bucket` thresholds: needs-attention = violations OR high in_degree; worth-a-look = priority >= 5; `getPrReviewData` returns `{ error }` (not throw) for invalid `pr_number`
 **Correction Reader** (`features/orchestration/services/correction-reader.ts`) — `readCorrections(projectDir, filePaths?, maxAge?): ReadCorrectionsResult`; `ReadCorrectionsResult` = `{ ok: true; records: CorrectionRecord[] } | { ok: false; error: string }`; ENOENT → `ok:true, records:[]`; other I/O errors → `ok:false`; updated 2026-05-25
+**Confidence engine** (`src/shared/lib/confidence.ts`) — exports `ConfidenceAnnotation`, `ConfidenceTier`, `ConfidenceBasis`, `ConfidenceInput` types + `ConfidenceAnnotationSchema` Zod schema; `deriveTier(score, sampleSize): ConfidenceTier` (returns `"insufficient"` for sparse data, never throws); `computeConfidenceAnnotation(inputs: ConfidenceInput[]): ConfidenceAnnotation` (returns zero-confidence annotation for empty inputs). Added 2026-05-25.
+
+**Review confidence adapter** (`src/features/orchestration/services/review-confidence-adapter.ts`) — pure compute function; composes severity_tier, violation_history, path_effects, base_sample signals from drift DB; returns `ConfidenceAnnotation`; zero-confidence for undefined file_path. Added 2026-05-25.
+
+**Drift confidence adapter** (`src/platform/storage/drift/drift-confidence-adapter.ts`) — pure compute function; composes recency, violation_trend, review_depth, fix_rate signals; placed in `platform/storage/drift/` to avoid cross-feature circular imports. Added 2026-05-25.
+
+**`write_review` tool** — updated 2026-05-25: accepts optional `confidence` annotation per violation; when `confidenceAdapter` (injected via `register-orchestration.ts`) is present, auto-annotates violations from drift DB signals; backward compatible when adapter absent.
+
+**`get_compliance` tool** — updated 2026-05-25: returns `confidence: ConfidenceAnnotation` in response; computed by drift confidence adapter from violation history + fix_rate signals.
+
+**`get_drift_report` tool** — updated 2026-05-25: confidence tier rendered inline as `[confidence: TIER]` per violation in formatted output.
+
 **Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs
 
 **Composite context tool:**
