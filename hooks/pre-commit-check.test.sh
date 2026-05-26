@@ -1,56 +1,57 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Tests for pre-commit-check.sh
 # Run with: bash hooks/pre-commit-check.test.sh
 # Exit 0 = all tests pass, Exit 1 = one or more failures
+#
+# All tests use isolated temp git repos. No hard-coded paths; safe for CI.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK="$SCRIPT_DIR/pre-commit-check.sh"
 
-# shellcheck source=hooks/test-helpers.sh
-source "$SCRIPT_DIR/test-helpers.sh"
-
 PASS=0
 FAIL=0
 
-# ---------------------------------------------------------------------------
-# Helper: create a minimal git repo with a file staged for commit
-# ---------------------------------------------------------------------------
-setup_commit_repo() {
-  local dir="$1"
-  local filename="${2:-src/app.ts}"
-  local content="${3:-export const foo = 1;}"
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
-  setup_repo "$dir"
-  mkdir -p "$dir/$(dirname "$filename")"
-  echo "$content" > "$dir/$filename"
-  git -C "$dir" add "$filename"
+MASTER_TMP=$(mktemp -d)
+trap 'rm -rf "$MASTER_TMP"' EXIT
+
+# setup_repo — minimal git repo with one initial commit
+setup_repo() {
+  local dir="$1"
+  mkdir -p "$dir"
+  git -C "$dir" init -q
+  git -C "$dir" config user.email "test@test"
+  git -C "$dir" config user.name "Test"
+  git -C "$dir" config commit.gpgsign false
+  echo "v1" > "$dir/file.txt"
+  git -C "$dir" add "$dir/file.txt"
+  git -C "$dir" commit -q -m "init"
 }
 
-# ---------------------------------------------------------------------------
-# Helper: invoke the hook in a git repo context
-# run_hook_in_repo <repo_dir> <input_json>
-# ---------------------------------------------------------------------------
-run_hook_in_repo() {
+# stage_file — write content to a file in the repo and stage it
+# Usage: stage_file <repo_dir> <filename> <content>
+stage_file() {
   local dir="$1"
-  local input_json="$2"
-  local actual_exit=0
-  (cd "$dir" && echo "$input_json" | bash "$HOOK" 2>&1) || actual_exit=$?
-  echo "$actual_exit"
+  local filename="$2"
+  local content="$3"
+  printf '%s\n' "$content" > "$dir/$filename"
+  git -C "$dir" add "$dir/$filename"
 }
 
-# ---------------------------------------------------------------------------
-# Helper: check hook exit code in a repo
-# ---------------------------------------------------------------------------
-check_hook_exit() {
+# run_test — validate exit code only, hook invoked from current directory
+# Usage: run_test "description" expected_exit stdin_json
+run_test() {
   local description="$1"
   local expected_exit="$2"
-  local dir="$3"
-  local input_json="$4"
+  local stdin_json="$3"
 
   local actual_exit=0
-  (cd "$dir" && echo "$input_json" | bash "$HOOK" >/dev/null 2>&1) || actual_exit=$?
+  echo "$stdin_json" | bash "$HOOK" >/dev/null 2>&1 || actual_exit=$?
 
   if [[ "$actual_exit" -eq "$expected_exit" ]]; then
     echo "  PASS: $description"
@@ -62,106 +63,323 @@ check_hook_exit() {
   fi
 }
 
-TMPDIR_BASE=$(mktemp -d)
-trap 'rm -rf "$TMPDIR_BASE"' EXIT
+# run_test_in_dir — validate exit code only, hook invoked from a specific dir
+run_test_in_dir() {
+  local description="$1"
+  local expected_exit="$2"
+  local repo_dir="$3"
+  local stdin_json="$4"
+
+  local tmpout
+  tmpout=$(mktemp)
+
+  local actual_exit=0
+  (cd "$repo_dir" && echo "$stdin_json" | bash "$HOOK" > "$tmpout" 2>&1) || actual_exit=$?
+
+  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    echo "        output: $(cat "$tmpout")"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -f "$tmpout"
+}
+
+# run_test_in_dir_with_output — validate exit code AND stdout/stderr pattern
+run_test_in_dir_with_output() {
+  local description="$1"
+  local expected_exit="$2"
+  local expected_pattern="$3"
+  local repo_dir="$4"
+  local stdin_json="$5"
+
+  local tmpout
+  tmpout=$(mktemp)
+
+  local actual_exit=0
+  (cd "$repo_dir" && echo "$stdin_json" | bash "$HOOK" > "$tmpout" 2>&1) || actual_exit=$?
+  local output
+  output=$(cat "$tmpout")
+  rm -f "$tmpout"
+
+  local ok=true
+  [[ "$actual_exit" -eq "$expected_exit" ]] || ok=false
+  if [[ -n "$expected_pattern" ]] && ! echo "$output" | grep -q "$expected_pattern"; then
+    ok=false
+  fi
+
+  if [[ "$ok" == "true" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    echo "        expected pattern: '$expected_pattern'"
+    echo "        actual output: '$output'"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# run_test_in_dir_no_pattern — validate exit code AND output does NOT match pattern
+run_test_in_dir_no_pattern() {
+  local description="$1"
+  local expected_exit="$2"
+  local forbidden_pattern="$3"
+  local repo_dir="$4"
+  local stdin_json="$5"
+
+  local tmpout
+  tmpout=$(mktemp)
+
+  local actual_exit=0
+  (cd "$repo_dir" && echo "$stdin_json" | bash "$HOOK" > "$tmpout" 2>&1) || actual_exit=$?
+  local output
+  output=$(cat "$tmpout")
+  rm -f "$tmpout"
+
+  local ok=true
+  [[ "$actual_exit" -eq "$expected_exit" ]] || ok=false
+  if [[ -n "$forbidden_pattern" ]] && echo "$output" | grep -q "$forbidden_pattern"; then
+    ok=false
+  fi
+
+  if [[ "$ok" == "true" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    echo "        forbidden pattern found: '$forbidden_pattern'"
+    echo "        actual output: '$output'"
+    FAIL=$((FAIL + 1))
+  fi
+}
 
 echo ""
 echo "=== pre-commit-check.sh tests ==="
 echo ""
 
-# ---------------------------------------------------------------------------
-# Non-commit commands: silent pass (exit 0)
-# ---------------------------------------------------------------------------
-echo "-- Non-commit commands (should pass, exit 0) --"
+# ─────────────────────────────────────────────────────────────────────────────
+# Bypass gate: non-commit commands exit 0 immediately (no git context needed)
+# ─────────────────────────────────────────────────────────────────────────────
+echo "-- Bypass gate: non-commit commands pass through --"
 
-T_NOCOMMIT="$TMPDIR_BASE/t_nocommit"
-setup_repo "$T_NOCOMMIT"
+run_test "git push does not trigger pre-commit check" 0 \
+  '{"command":"git push origin main"}'
 
-check_hook_exit "git status passes"       0 "$T_NOCOMMIT" '{"command":"git status"}'
-check_hook_exit "git log passes"          0 "$T_NOCOMMIT" '{"command":"git log --oneline -5"}'
-check_hook_exit "git push passes"         0 "$T_NOCOMMIT" '{"command":"git push origin main"}'
-check_hook_exit "npm test passes"         0 "$T_NOCOMMIT" '{"command":"npm test"}'
-check_hook_exit "empty command passes"    0 "$T_NOCOMMIT" '{"command":""}'
-check_hook_exit "no command field passes" 0 "$T_NOCOMMIT" '{"tool":"Bash","other":"value"}'
+run_test "git status does not trigger pre-commit check" 0 \
+  '{"command":"git status"}'
 
-# ---------------------------------------------------------------------------
-# Clean staged files: commit allowed (exit 0)
-# ---------------------------------------------------------------------------
+run_test "git fetch does not trigger pre-commit check" 0 \
+  '{"command":"git fetch --all"}'
+
+run_test "npm test does not trigger pre-commit check" 0 \
+  '{"command":"npm test"}'
+
+run_test "empty command passes through" 0 \
+  '{"command":""}'
+
+run_test "no command field passes through" 0 \
+  '{"tool":"Bash"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Silent pass: git commit with no staged files
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Clean staged files (should pass, exit 0) --"
+echo "-- Silent pass: git commit with no staged files --"
 
-T_CLEAN="$TMPDIR_BASE/t_clean"
-setup_commit_repo "$T_CLEAN" "src/app.ts" "export const greeting = 'hello';"
+REPO_NO_STAGE="$MASTER_TMP/no-stage"
+setup_repo "$REPO_NO_STAGE"
 
-check_hook_exit "clean TS file allows commit" 0 "$T_CLEAN" '{"command":"git commit -m \"feat: add greeting\""}'
+run_test_in_dir "git commit with no staged files — exits 0" 0 \
+  "$REPO_NO_STAGE" \
+  '{"command":"git commit -m \"test\""}'
 
-T_CLEAN2="$TMPDIR_BASE/t_clean2"
-setup_commit_repo "$T_CLEAN2" "src/config.ts" "export const MAX_RETRIES = 3;"
+run_test_in_dir_no_pattern "git commit with no staged files — no CANON output" 0 \
+  "CANON" \
+  "$REPO_NO_STAGE" \
+  '{"command":"git commit -m \"test\""}'
 
-check_hook_exit "clean config file allows commit" 0 "$T_CLEAN2" '{"command":"git commit -m \"chore: add config\""}'
-
-# ---------------------------------------------------------------------------
-# No staged files: commit allowed (exit 0)
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Silent pass: staged file with no secrets — exits 0, no output
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- No staged files (should pass, exit 0) --"
+echo "-- Silent pass: staged file with no secrets --"
 
-T_NOSTAGED="$TMPDIR_BASE/t_nostaged"
-setup_repo "$T_NOSTAGED"
+REPO_CLEAN="$MASTER_TMP/clean-stage"
+setup_repo "$REPO_CLEAN"
+stage_file "$REPO_CLEAN" "config.ts" 'export const APP_NAME = "canon";'
 
-check_hook_exit "no staged files passes" 0 "$T_NOSTAGED" '{"command":"git commit -m \"empty\""}'
+run_test_in_dir "clean staged file — exits 0" 0 \
+  "$REPO_CLEAN" \
+  '{"command":"git commit -m \"add config\""}'
 
-# ---------------------------------------------------------------------------
-# Secret detection: blocks (exit 2)
-# All fixtures use all-zeros or EXAMPLE-pattern placeholders to avoid
-# triggering GitHub push protection on this test file itself.
-# ---------------------------------------------------------------------------
+run_test_in_dir_no_pattern "clean staged file — no CANON PRE-COMMIT BLOCK emitted" 0 \
+  "CANON PRE-COMMIT BLOCK" \
+  "$REPO_CLEAN" \
+  '{"command":"git commit -m \"add config\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Blocking: AWS access key pattern (AKIA...)
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Secret detection: blocks (exit 2) --"
+echo "-- Blocking: AWS access key pattern --"
 
-# AWS access key pattern — all-zeros suffix (not a real key)
-T_AWS="$TMPDIR_BASE/t_aws"
-setup_commit_repo "$T_AWS" "src/config.ts" 'const key = "AKIAIOSFODNN7EXAMPLE";'
+REPO_AWS="$MASTER_TMP/aws-key"
+setup_repo "$REPO_AWS"
+stage_file "$REPO_AWS" "deploy.sh" 'AWS_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE123'
 
-check_hook_exit "AWS key pattern blocks commit" 2 "$T_AWS" '{"command":"git commit -m \"add config\""}'
+run_test_in_dir "staged file with AWS key — exits 2 (blocked)" 2 \
+  "$REPO_AWS" \
+  '{"command":"git commit -m \"add deploy\""}'
 
-# Private key header pattern
-T_PRIVKEY="$TMPDIR_BASE/t_privkey"
-setup_commit_repo "$T_PRIVKEY" "src/auth.ts" "const pem = '-----BEGIN RSA PRIVATE KEY-----';"
+run_test_in_dir_with_output "staged file with AWS key — emits CANON PRE-COMMIT BLOCK" 2 \
+  "CANON PRE-COMMIT BLOCK" \
+  "$REPO_AWS" \
+  '{"command":"git commit -m \"add deploy\""}'
 
-check_hook_exit "Private key header blocks commit" 2 "$T_PRIVKEY" '{"command":"git commit -m \"add auth\""}'
+run_test_in_dir_with_output "AWS key block mentions aws access key" 2 \
+  "AWS access key" \
+  "$REPO_AWS" \
+  '{"command":"git commit -m \"add deploy\""}'
 
-# Hardcoded credential assignment (long value)
-T_CRED="$TMPDIR_BASE/t_cred"
-setup_commit_repo "$T_CRED" "src/db.ts" 'const password = "thisIsALongPasswordValue123456";'
-
-check_hook_exit "Hardcoded password assignment blocks commit" 2 "$T_CRED" '{"command":"git commit -m \"add db\""}'
-
-# ---------------------------------------------------------------------------
-# Excluded file extensions: commit allowed even with secret-like content
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Blocking: Private key (BEGIN RSA PRIVATE KEY)
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Excluded extensions skipped (should pass, exit 0) --"
+echo "-- Blocking: private key pattern --"
 
-# .env.example — excluded by case statement in hook
-T_ENVEX="$TMPDIR_BASE/t_envex"
-setup_repo "$T_ENVEX"
-echo 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE' > "$T_ENVEX/.env.example"
-git -C "$T_ENVEX" add ".env.example"
+REPO_PRIVKEY="$MASTER_TMP/priv-key"
+setup_repo "$REPO_PRIVKEY"
+stage_file "$REPO_PRIVKEY" "server.key" '-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEA...
+-----END RSA PRIVATE KEY-----'
 
-check_hook_exit ".env.example file is skipped" 0 "$T_ENVEX" '{"command":"git commit -m \"add env example\""}'
+run_test_in_dir "staged file with private key — exits 2 (blocked)" 2 \
+  "$REPO_PRIVKEY" \
+  '{"command":"git commit -m \"add key\""}'
 
-# .lock file — excluded
-T_LOCK="$TMPDIR_BASE/t_lock"
-setup_repo "$T_LOCK"
-echo 'resolved "AKIAIOSFODNN7EXAMPLE"' > "$T_LOCK/package.lock"
-git -C "$T_LOCK" add "package.lock"
+run_test_in_dir_with_output "private key block mentions Private key" 2 \
+  "Private key" \
+  "$REPO_PRIVKEY" \
+  '{"command":"git commit -m \"add key\""}'
 
-check_hook_exit ".lock file is skipped" 0 "$T_LOCK" '{"command":"git commit -m \"add lock\""}'
+# ─────────────────────────────────────────────────────────────────────────────
+# Blocking: Hardcoded credential in variable assignment
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Blocking: hardcoded credential in variable assignment --"
 
-# ---------------------------------------------------------------------------
+REPO_CRED="$MASTER_TMP/credential"
+setup_repo "$REPO_CRED"
+stage_file "$REPO_CRED" "settings.py" 'SECRET_KEY = "supersecretvaluethatismorethan16chars"'
+
+run_test_in_dir "staged file with hardcoded secret — exits 2 (blocked)" 2 \
+  "$REPO_CRED" \
+  '{"command":"git commit -m \"add settings\""}'
+
+run_test_in_dir_with_output "hardcoded secret block mentions credential" 2 \
+  "credential" \
+  "$REPO_CRED" \
+  '{"command":"git commit -m \"add settings\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Blocking: Stripe live secret key
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Blocking: Stripe live secret key --"
+
+REPO_STRIPE="$MASTER_TMP/stripe"
+setup_repo "$REPO_STRIPE"
+stage_file "$REPO_STRIPE" "payment.ts" 'const stripeKey = "sk_live_00000000000000000000";'
+
+run_test_in_dir "staged file with Stripe key — exits 2 (blocked)" 2 \
+  "$REPO_STRIPE" \
+  '{"command":"git commit -m \"add payment\""}'
+
+run_test_in_dir_with_output "Stripe key block mentions Stripe" 2 \
+  "Stripe" \
+  "$REPO_STRIPE" \
+  '{"command":"git commit -m \"add payment\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Blocking: Connection string with embedded password
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Blocking: connection string with embedded password --"
+
+REPO_CONN="$MASTER_TMP/connstr"
+setup_repo "$REPO_CONN"
+stage_file "$REPO_CONN" "db.ts" 'const DB_URL = "postgres://admin:hunter2@localhost:5432/mydb";'
+
+run_test_in_dir "staged file with connection string — exits 2 (blocked)" 2 \
+  "$REPO_CONN" \
+  '{"command":"git commit -m \"add db config\""}'
+
+run_test_in_dir_with_output "connection string block mentions Connection string" 2 \
+  "Connection string" \
+  "$REPO_CONN" \
+  '{"command":"git commit -m \"add db config\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Silent pass: test files are skipped even if they contain secret-like content
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Silent pass: test and spec files are excluded from scanning --"
+
+REPO_TESTFILE="$MASTER_TMP/test-file"
+setup_repo "$REPO_TESTFILE"
+stage_file "$REPO_TESTFILE" "auth.test.ts" 'const AWS_KEY = "AKIAIOSFODNN7EXAMPLE123"; // fixture'
+stage_file "$REPO_TESTFILE" "payment.spec.js" 'const sk = "sk_live_00000000000000000000"; // fixture'
+
+run_test_in_dir "test file with secret-like content — exits 0 (skipped)" 0 \
+  "$REPO_TESTFILE" \
+  '{"command":"git commit -m \"add tests\""}'
+
+run_test_in_dir_no_pattern "test file — no CANON PRE-COMMIT BLOCK" 0 \
+  "CANON PRE-COMMIT BLOCK" \
+  "$REPO_TESTFILE" \
+  '{"command":"git commit -m \"add tests\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Silent pass: .env.example is excluded from scanning
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Silent pass: .env.example is excluded from scanning --"
+
+REPO_ENVEX="$MASTER_TMP/env-example"
+setup_repo "$REPO_ENVEX"
+stage_file "$REPO_ENVEX" ".env.example" 'SECRET_KEY = "your_secret_key_here_at_least_16ch"'
+
+run_test_in_dir ".env.example with secret-like content — exits 0 (skipped)" 0 \
+  "$REPO_ENVEX" \
+  '{"command":"git commit -m \"add env example\""}'
+
+run_test_in_dir_no_pattern ".env.example — no CANON PRE-COMMIT BLOCK" 0 \
+  "CANON PRE-COMMIT BLOCK" \
+  "$REPO_ENVEX" \
+  '{"command":"git commit -m \"add env example\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Variants: git commit with flags still triggers check
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Commit command variants still trigger the guard --"
+
+REPO_FLAGS="$MASTER_TMP/commit-flags"
+setup_repo "$REPO_FLAGS"
+stage_file "$REPO_FLAGS" "config.env" 'API_KEY = "AKIAIOSFODNN7FLAGSTEST1234"'
+
+run_test_in_dir "git commit --allow-empty with secret — exits 2" 2 \
+  "$REPO_FLAGS" \
+  '{"command":"git commit --allow-empty -m \"test\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 echo ""

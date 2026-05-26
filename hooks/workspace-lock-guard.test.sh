@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Tests for workspace-lock-guard.sh
 # Run with: bash hooks/workspace-lock-guard.test.sh
 # Exit 0 = all tests pass, Exit 1 = one or more failures
@@ -6,28 +6,27 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOK="$SCRIPT_DIR/workspace-lock-guard.sh"
-
-# shellcheck source=hooks/test-helpers.sh
-source "$SCRIPT_DIR/test-helpers.sh"
+GUARD="$SCRIPT_DIR/workspace-lock-guard.sh"
 
 PASS=0
 FAIL=0
 
-TMPDIR_BASE=$(mktemp -d)
-trap 'rm -rf "$TMPDIR_BASE"' EXIT
-
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
-# ---------------------------------------------------------------------------
-check_exit() {
+# ─────────────────────────────────────────────────────────────────────────────
+
+MASTER_TMP=$(mktemp -d)
+trap 'rm -rf "$MASTER_TMP"' EXIT
+
+# run_test — validate exit code only, hook invoked from current directory
+# Usage: run_test "description" expected_exit stdin_json
+run_test() {
   local description="$1"
   local expected_exit="$2"
-  local dir="$3"
-  local input_json="$4"
+  local stdin_json="$3"
 
   local actual_exit=0
-  (cd "$dir" && echo "$input_json" | bash "$HOOK" >/dev/null 2>&1) || actual_exit=$?
+  echo "$stdin_json" | bash "$GUARD" >/dev/null 2>&1 || actual_exit=$?
 
   if [[ "$actual_exit" -eq "$expected_exit" ]]; then
     echo "  PASS: $description"
@@ -39,144 +38,334 @@ check_exit() {
   fi
 }
 
-check_output_contains() {
+# run_test_in_dir — validate exit code only, hook invoked from a specific dir
+# Usage: run_test_in_dir "description" expected_exit repo_dir stdin_json
+run_test_in_dir() {
   local description="$1"
-  local pattern="$2"
-  local dir="$3"
-  local input_json="$4"
+  local expected_exit="$2"
+  local repo_dir="$3"
+  local stdin_json="$4"
 
-  local output
+  local tmpout
+  tmpout=$(mktemp)
+
   local actual_exit=0
-  output=$(cd "$dir" && echo "$input_json" | bash "$HOOK" 2>&1) || actual_exit=$?
+  (cd "$repo_dir" && echo "$stdin_json" | bash "$GUARD" > "$tmpout" 2>&1) || actual_exit=$?
 
-  if echo "$output" | grep -q "$pattern"; then
+  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
     echo "  PASS: $description"
     PASS=$((PASS + 1))
   else
     echo "  FAIL: $description"
-    echo "        expected output containing: $pattern"
-    echo "        actual output: $output"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    echo "        output: $(cat "$tmpout")"
     FAIL=$((FAIL + 1))
   fi
+  rm -f "$tmpout"
 }
 
-check_silent() {
+# run_test_in_dir_with_output — validate exit code AND stdout/stderr content
+# Usage: run_test_in_dir_with_output "description" expected_exit expected_pattern repo_dir stdin_json
+run_test_in_dir_with_output() {
   local description="$1"
-  local dir="$2"
-  local input_json="$3"
+  local expected_exit="$2"
+  local expected_pattern="$3"
+  local repo_dir="$4"
+  local stdin_json="$5"
 
-  local output
+  local tmpout
+  tmpout=$(mktemp)
+
   local actual_exit=0
-  output=$(cd "$dir" && echo "$input_json" | bash "$HOOK" 2>&1) || actual_exit=$?
+  (cd "$repo_dir" && echo "$stdin_json" | bash "$GUARD" > "$tmpout" 2>&1) || actual_exit=$?
+  local output
+  output=$(cat "$tmpout")
+  rm -f "$tmpout"
 
-  if [[ -z "$output" ]]; then
+  local exit_ok=true
+  local output_ok=true
+
+  if [[ "$actual_exit" -ne "$expected_exit" ]]; then
+    exit_ok=false
+  fi
+
+  if [[ -n "$expected_pattern" ]] && ! echo "$output" | grep -q "$expected_pattern"; then
+    output_ok=false
+  fi
+
+  if [[ "$exit_ok" == "true" ]] && [[ "$output_ok" == "true" ]]; then
     echo "  PASS: $description"
     PASS=$((PASS + 1))
   else
-    echo "  FAIL: $description (expected silent, got: $output)"
+    echo "  FAIL: $description"
+    if [[ "$exit_ok" == "false" ]]; then
+      echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    fi
+    if [[ "$output_ok" == "false" ]]; then
+      echo "        expected output matching: $expected_pattern"
+      echo "        actual output: $output"
+    fi
     FAIL=$((FAIL + 1))
   fi
 }
 
-# ---------------------------------------------------------------------------
-# Helper: write a workspace lock file
-# write_lock <repo_dir> <branch> <session_id> [started_ts]
-# ---------------------------------------------------------------------------
-write_lock() {
+# run_test_in_dir_no_pattern — validate exit code AND that output does NOT match pattern
+run_test_in_dir_no_pattern() {
+  local description="$1"
+  local expected_exit="$2"
+  local forbidden_pattern="$3"
+  local repo_dir="$4"
+  local stdin_json="$5"
+
+  local tmpout
+  tmpout=$(mktemp)
+
+  local actual_exit=0
+  (cd "$repo_dir" && echo "$stdin_json" | bash "$GUARD" > "$tmpout" 2>&1) || actual_exit=$?
+  local output
+  output=$(cat "$tmpout")
+  rm -f "$tmpout"
+
+  local exit_ok=true
+  local output_ok=true
+
+  if [[ "$actual_exit" -ne "$expected_exit" ]]; then
+    exit_ok=false
+  fi
+
+  if [[ -n "$forbidden_pattern" ]] && echo "$output" | grep -q "$forbidden_pattern"; then
+    output_ok=false
+  fi
+
+  if [[ "$exit_ok" == "true" ]] && [[ "$output_ok" == "true" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    if [[ "$exit_ok" == "false" ]]; then
+      echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    fi
+    if [[ "$output_ok" == "false" ]]; then
+      echo "        expected no output matching: $forbidden_pattern"
+      echo "        actual output: $output"
+    fi
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# setup_repo — create a minimal temp git repo
+setup_repo() {
+  local dir="$1"
+  mkdir -p "$dir"
+  git -C "$dir" init -q
+  git -C "$dir" config user.email "test@test"
+  git -C "$dir" config user.name "Test"
+  git -C "$dir" config commit.gpgsign false
+  echo "initial" > "$dir/file.txt"
+  git -C "$dir" add "$dir/file.txt"
+  git -C "$dir" commit -q -m "init"
+}
+
+# create_lock — write a .lock file for the current branch in a repo
+# Usage: create_lock <repo_dir> <lock_json>
+create_lock() {
   local repo_dir="$1"
-  local branch="$2"
-  local session_id="$3"
-  local started_ts="${4:-$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")}"
+  local lock_json="$2"
+
+  local branch
+  branch=$(git -C "$repo_dir" branch --show-current 2>/dev/null || echo "main")
 
   local sanitized
-  sanitized=$(echo "$branch" | tr '/' '--' | tr ' ' '-' | tr -cd 'a-zA-Z0-9-' | tr '[:upper:]' '[:lower:]' | cut -c1-80)
+  sanitized=$(echo "$branch" | sed 's|/|--|g' | tr ' ' '-' | tr -cd 'a-zA-Z0-9-' | tr '[:upper:]' '[:lower:]' | cut -c1-80)
+
   local lock_dir="$repo_dir/.canon/workspaces/$sanitized"
   mkdir -p "$lock_dir"
-  cat > "$lock_dir/.lock" <<JSON
-{"session_id":"${session_id}","branch":"${branch}","started":"${started_ts}"}
-JSON
+  echo "$lock_json" > "$lock_dir/.lock"
+}
+
+# fresh_ts — ISO-8601 UTC timestamp (now)
+fresh_ts() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+# stale_ts — ISO-8601 UTC timestamp 3 hours in the past
+stale_ts() {
+  if date -d "3 hours ago" +%Y-%m-%dT%H:%M:%SZ >/dev/null 2>&1; then
+    date -ud "3 hours ago" +%Y-%m-%dT%H:%M:%SZ
+  else
+    date -u -v-3H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "2000-01-01T00:00:00Z"
+  fi
 }
 
 echo ""
 echo "=== workspace-lock-guard.sh tests ==="
 echo ""
 
-# ---------------------------------------------------------------------------
-# Non-commit/merge commands: silent pass (exit 0)
-# ---------------------------------------------------------------------------
-echo "-- Non-commit/merge commands (should pass silently) --"
+# ─────────────────────────────────────────────────────────────────────────────
+# Bypass gate: non-commit/merge commands exit 0 immediately (no git context needed)
+# ─────────────────────────────────────────────────────────────────────────────
+echo "-- Bypass gate: non-commit/merge commands pass through --"
 
-T_BASE="$TMPDIR_BASE/t_base"
-setup_repo "$T_BASE"
+run_test "git push does not trigger guard" 0 \
+  '{"command":"git push origin main"}'
 
-check_silent "git status passes silently"  "$T_BASE" '{"command":"git status"}'
-check_silent "git push passes silently"    "$T_BASE" '{"command":"git push origin main"}'
-check_silent "npm test passes silently"    "$T_BASE" '{"command":"npm test"}'
-check_silent "empty command passes silently" "$T_BASE" '{"command":""}'
+run_test "git status does not trigger guard" 0 \
+  '{"command":"git status"}'
 
-# ---------------------------------------------------------------------------
-# No lock file: commit/merge pass silently
-# ---------------------------------------------------------------------------
+run_test "git log does not trigger guard" 0 \
+  '{"command":"git log --oneline -5"}'
+
+run_test "npm test does not trigger guard" 0 \
+  '{"command":"npm test"}'
+
+run_test "empty command passes through" 0 \
+  '{"command":""}'
+
+run_test "no command field passes through" 0 \
+  '{"tool":"Bash","other":"value"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Silent pass: commit/merge with no lock file — no warning, exit 0
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- No lock file (should pass silently) --"
+echo "-- Silent pass: no lock file present --"
 
-T_NOLOCK="$TMPDIR_BASE/t_nolock"
-setup_repo "$T_NOLOCK"
+REPO_NO_LOCK="$MASTER_TMP/no-lock"
+setup_repo "$REPO_NO_LOCK"
 
-check_silent "git commit, no lock — silent" "$T_NOLOCK" '{"command":"git commit -m \"feat: x\""}'
-check_silent "git merge, no lock — silent"  "$T_NOLOCK" '{"command":"git merge some-branch"}'
+run_test_in_dir "git commit with no lock — exits 0" 0 \
+  "$REPO_NO_LOCK" \
+  '{"command":"git commit -m \"test\""}'
 
-# ---------------------------------------------------------------------------
-# Lock belongs to same session: silent pass
-# ---------------------------------------------------------------------------
+run_test_in_dir_no_pattern "git commit with no lock — no CANON WARNING emitted" 0 \
+  "CANON WARNING" \
+  "$REPO_NO_LOCK" \
+  '{"command":"git commit -m \"test\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Silent pass: stale lock (>2 hours old) is ignored
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Lock belongs to same session (should pass silently) --"
+echo "-- Silent pass: stale lock (>2 hours old) --"
 
-T_SAMESESS="$TMPDIR_BASE/t_samesess"
-setup_repo "$T_SAMESESS"
-# Lock on main with session abc-123
-BRANCH=$(git -C "$T_SAMESESS" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
-write_lock "$T_SAMESESS" "$BRANCH" "session-abc-123"
+REPO_STALE="$MASTER_TMP/stale-lock"
+setup_repo "$REPO_STALE"
+create_lock "$REPO_STALE" "{\"session_id\":\"other-session\",\"started\":\"$(stale_ts)\"}"
 
-check_silent "same session — no warning" "$T_SAMESESS" \
-  '{"session_id":"session-abc-123","command":"git commit -m \"feat: x\""}'
+run_test_in_dir "stale lock — exits 0" 0 \
+  "$REPO_STALE" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session"}'
 
-# ---------------------------------------------------------------------------
-# Lock belongs to different session: warns (but still exits 0)
-# ---------------------------------------------------------------------------
+run_test_in_dir_no_pattern "stale lock — no CANON WARNING emitted" 0 \
+  "CANON WARNING" \
+  "$REPO_STALE" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Silent pass: lock belongs to the SAME session — no warning
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Lock belongs to different session (should warn, exit 0) --"
+echo "-- Silent pass: lock belongs to same session --"
 
-T_DIFFSESS="$TMPDIR_BASE/t_diffsess"
-setup_repo "$T_DIFFSESS"
-BRANCH=$(git -C "$T_DIFFSESS" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
-write_lock "$T_DIFFSESS" "$BRANCH" "session-other-456"
+REPO_SAME="$MASTER_TMP/same-session"
+setup_repo "$REPO_SAME"
+create_lock "$REPO_SAME" "{\"session_id\":\"my-session-abc\",\"started\":\"$(fresh_ts)\"}"
 
-check_output_contains "warns on different session lock" "CANON WARNING" "$T_DIFFSESS" \
-  '{"session_id":"session-me-789","command":"git commit -m \"feat: x\""}'
+run_test_in_dir "same-session lock — exits 0" 0 \
+  "$REPO_SAME" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session-abc"}'
 
-check_exit "always exits 0 (advisory)" 0 "$T_DIFFSESS" \
-  '{"session_id":"session-me-789","command":"git commit -m \"feat: x\""}'
+run_test_in_dir_no_pattern "same-session lock — no CANON WARNING" 0 \
+  "CANON WARNING" \
+  "$REPO_SAME" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session-abc"}'
 
-# ---------------------------------------------------------------------------
-# Stale lock (>2 hours old): passes silently (lock ignored)
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Silent pass: lock has no session_id — treat as no contention
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Stale lock (>2h old, should pass silently) --"
+echo "-- Silent pass: lock with no session_id --"
 
-T_STALE="$TMPDIR_BASE/t_stale"
-setup_repo "$T_STALE"
-BRANCH=$(git -C "$T_STALE" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
-# Write lock with a timestamp 3 hours ago
-STALE_TS=$(date -u -v-3H +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u --date="3 hours ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
-write_lock "$T_STALE" "$BRANCH" "session-stale" "$STALE_TS"
+REPO_NO_SID="$MASTER_TMP/no-session-id"
+setup_repo "$REPO_NO_SID"
+create_lock "$REPO_NO_SID" "{\"started\":\"$(fresh_ts)\"}"
 
-check_silent "stale lock ignored — silent pass" "$T_STALE" \
-  '{"session_id":"session-me-789","command":"git commit -m \"feat: x\""}'
+run_test_in_dir "lock with no session_id — exits 0" 0 \
+  "$REPO_NO_SID" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session"}'
 
-# ---------------------------------------------------------------------------
+run_test_in_dir_no_pattern "lock with no session_id — no CANON WARNING" 0 \
+  "CANON WARNING" \
+  "$REPO_NO_SID" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Warning condition: fresh lock from a DIFFERENT session — emit warning, exit 0
+# (advisory: never blocks — exit code is always 0)
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Warning condition: fresh lock from different session --"
+
+REPO_DIFF="$MASTER_TMP/diff-session"
+setup_repo "$REPO_DIFF"
+create_lock "$REPO_DIFF" "{\"session_id\":\"other-session-xyz\",\"started\":\"$(fresh_ts)\"}"
+
+run_test_in_dir "different-session lock — exits 0 (advisory, never blocks)" 0 \
+  "$REPO_DIFF" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session-abc"}'
+
+run_test_in_dir_with_output "different-session lock — emits CANON WARNING" 0 \
+  "CANON WARNING" \
+  "$REPO_DIFF" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session-abc"}'
+
+# Warning should contain the branch name
+BRANCH=$(git -C "$REPO_DIFF" branch --show-current)
+run_test_in_dir_with_output "warning message includes branch name '$BRANCH'" 0 \
+  "$BRANCH" \
+  "$REPO_DIFF" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session-abc"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Slash-branch sanitization: `/` maps to `--` (matching sanitizeBranch)
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Slash-branch sanitization: feature/foo → feature--foo --"
+
+REPO_SLASH="$MASTER_TMP/slash-branch"
+setup_repo "$REPO_SLASH"
+git -C "$REPO_SLASH" checkout -b "feature/foo" 2>/dev/null
+
+create_lock "$REPO_SLASH" "{\"session_id\":\"other-session-xyz\",\"started\":\"$(fresh_ts)\"}"
+
+# Verify the lock landed at the correct sanitized path (feature--foo, not feature-foo)
+run_test_in_dir_with_output "slash-branch lock — sanitized path uses double-dash" 0 \
+  "CANON WARNING" \
+  "$REPO_SLASH" \
+  '{"command":"git commit -m \"test\"","session_id":"my-session-abc"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Warning condition: git merge also triggers the guard
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Warning condition: git merge with different-session lock --"
+
+REPO_MERGE="$MASTER_TMP/merge"
+setup_repo "$REPO_MERGE"
+create_lock "$REPO_MERGE" "{\"session_id\":\"other-session-xyz\",\"started\":\"$(fresh_ts)\"}"
+
+run_test_in_dir "git merge triggers guard — exits 0" 0 \
+  "$REPO_MERGE" \
+  '{"command":"git merge feature/branch","session_id":"my-session-abc"}'
+
+run_test_in_dir_with_output "git merge with different-session lock — emits CANON WARNING" 0 \
+  "CANON WARNING" \
+  "$REPO_MERGE" \
+  '{"command":"git merge feature/branch","session_id":"my-session-abc"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 echo ""
