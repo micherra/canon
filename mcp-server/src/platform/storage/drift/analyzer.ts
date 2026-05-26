@@ -185,6 +185,29 @@ function computeTrend(reviews: ReviewEntry[]): DriftReport["trend"] {
   return "stable";
 }
 
+function computePrincipleTrend(reviews: ReviewEntry[], principleId: string): DriftReport["trend"] {
+  if (reviews.length < 6) return "insufficient_data";
+
+  const mid = Math.floor(reviews.length / 2);
+  const firstHalf = reviews.slice(0, mid);
+  const secondHalf = reviews.slice(mid);
+
+  const countViolations = (rs: ReviewEntry[]) =>
+    rs.reduce(
+      (sum, r) => sum + r.violations.filter((v) => v.principle_id === principleId).length,
+      0,
+    );
+
+  const firstAvg = countViolations(firstHalf) / firstHalf.length;
+  const secondAvg = countViolations(secondHalf) / secondHalf.length;
+
+  if (firstAvg === 0 && secondAvg === 0) return "stable";
+  if (firstAvg === 0) return "declining";
+  if (secondAvg < firstAvg * 0.8) return "improving";
+  if (secondAvg > firstAvg * 1.2) return "declining";
+  return "stable";
+}
+
 // Main
 
 export function analyzeDrift(
@@ -201,7 +224,10 @@ export function analyzeDrift(
     .sort((a, b) => b.total_violations - a.total_violations)
     .map((s) => ({
       ...s,
-      confidence: computeComplianceConfidence({ ...s, trend }),
+      confidence: computeComplianceConfidence({
+        ...s,
+        trend: computePrincipleTrend(filteredReviews, s.principle_id),
+      }),
     }));
 
   const triggeredIds = new Set(principleMap.keys());

@@ -161,7 +161,7 @@ function generateMarkdown(
   lines.push("|-----------|----------|----------|------------|");
   for (const v of input.violations) {
     const filePath = v.file_path ?? "(none)";
-    const confidenceTier = v.confidence ? v.confidence.tier.toUpperCase() : "";
+    const confidenceTier = v.confidence ? v.confidence.tier.toUpperCase() : "—";
     lines.push(
       `| ${escapeMdCell(v.principle_id)} | ${escapeMdCell(v.severity)} | ${escapeMdCell(filePath)} | ${confidenceTier} |`,
     );
@@ -329,9 +329,11 @@ export function updateFileViolationHistory(
 
 /** Optional adapter for computing server-side confidence on violations. */
 export type ConfidenceAdapter = {
-  computeViolationConfidence: (
-    violation: { principle_id: string; severity: string; file_path?: string },
-  ) => ConfidenceAnnotation;
+  computeViolationConfidence: (violation: {
+    principle_id: string;
+    severity: string;
+    file_path?: string;
+  }) => ConfidenceAnnotation;
 };
 
 export async function writeReview(

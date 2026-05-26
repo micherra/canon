@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  deriveTier,
-  computeConfidenceAnnotation,
   ConfidenceAnnotationSchema,
+  computeConfidenceAnnotation,
+  deriveTier,
 } from "../confidence.js";
 
 describe("deriveTier", () => {

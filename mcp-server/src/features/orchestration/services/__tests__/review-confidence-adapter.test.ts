@@ -5,7 +5,7 @@
  * Uses mock ReviewSignalReader to control signal inputs precisely.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   computeViolationConfidence,
   type ReviewSignalReader,
@@ -26,12 +26,7 @@ function makeSignals(opts: {
   cleanStreak?: number;
   totalReviews?: number;
 }): ReviewSignalReader {
-  const {
-    violationCount = 0,
-    violationStreak = 0,
-    cleanStreak = 0,
-    totalReviews = 0,
-  } = opts;
+  const { violationCount = 0, violationStreak = 0, cleanStreak = 0, totalReviews = 0 } = opts;
   return {
     getFileViolationHistory: (filePaths) =>
       violationCount > 0 && filePaths.length > 0
@@ -69,10 +64,7 @@ const baseViolation = {
 describe("computeViolationConfidence", () => {
   it("with rule severity and high violation count returns high-confidence annotation", () => {
     const signals = makeSignals({ violationCount: 15, totalReviews: 20, violationStreak: 3 });
-    const result = computeViolationConfidence(
-      { ...baseViolation, severity: "rule" },
-      signals,
-    );
+    const result = computeViolationConfidence({ ...baseViolation, severity: "rule" }, signals);
     // Rule=0.9 severity + high violation count + violation streak should push toward high
     expect(result.score).toBeGreaterThan(0.5);
     expect(result.basis.some((b) => b.signal === "severity_tier")).toBe(true);

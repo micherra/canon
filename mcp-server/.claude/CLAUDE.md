@@ -96,7 +96,7 @@ src/
 
 **Review confidence adapter** (`src/features/orchestration/services/review-confidence-adapter.ts`) — pure compute function; composes severity_tier, violation_history, path_effects, base_sample signals from drift DB; returns `ConfidenceAnnotation`; zero-confidence for undefined file_path. Added 2026-05-25.
 
-**Drift confidence adapter** (`src/platform/storage/drift/drift-confidence-adapter.ts`) — pure compute function; composes recency, violation_trend, review_depth, fix_rate signals; placed in `platform/storage/drift/` to avoid cross-feature circular imports. Added 2026-05-25.
+**Drift confidence adapter** (`src/platform/storage/drift/drift-confidence-adapter.ts`) — pure compute function; composes sample_size (weight 0.5), trend_stability (weight 0.3), rate_stability (weight 0.2) signals; placed in `platform/storage/drift/` to avoid cross-feature circular imports. Added 2026-05-25.
 
 **`write_review` tool** — updated 2026-05-25: accepts optional `confidence` annotation per violation; when `confidenceAdapter` (injected via `register-orchestration.ts`) is present, auto-annotates violations from drift DB signals; backward compatible when adapter absent.
 

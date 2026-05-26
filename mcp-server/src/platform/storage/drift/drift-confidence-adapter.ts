@@ -6,9 +6,8 @@
  * - trend_stability (weight 0.3): how stable the trend direction is
  * - rate_stability (weight 0.2): whether the compliance rate is in a decisive range
  *
- * Uses structural interfaces (not direct imports from shared/lib) per bounded-context-boundaries.
- * Callers must provide their own ConfidenceAnnotation / ConfidenceTier types compatible
- * with the shared schema, or use the re-exported inline types here.
+ * Imports computeConfidenceAnnotation and types from shared/lib/confidence.ts (shared kernel).
+ * Re-exports ConfidenceAnnotation so callers need not import from shared/lib directly.
  */
 
 import {

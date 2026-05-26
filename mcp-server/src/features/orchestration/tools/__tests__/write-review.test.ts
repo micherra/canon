@@ -8,13 +8,12 @@
  * - Generated markdown includes Confidence column
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { readFile } from "node:fs/promises";
-import { describe, it, expect, afterEach } from "vitest";
-import { writeReview, type WriteReviewInput, type ConfidenceAdapter } from "../write-review.ts";
+import { join } from "node:path";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
+import { afterEach, describe, expect, it } from "vitest";
+import { type ConfidenceAdapter, type WriteReviewInput, writeReview } from "../write-review.ts";
 
 // ---- Helpers ----
 
@@ -56,9 +55,8 @@ const mockAdapter: ConfidenceAdapter = {
 const tmpDirs: string[] = [];
 
 afterEach(async () => {
-  for (const d of tmpDirs.splice(0)) {
-    await rm(d, { recursive: true, force: true });
-  }
+  const dirs = tmpDirs.splice(0);
+  await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true })));
 });
 
 // ---- Tests ----
