@@ -366,83 +366,16 @@ No violations found.
 
 describe("buildRunSummary — decision_summaries", () => {
   let tmpDir: string;
-  let decisionsDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
-    decisionsDir = join(tmpDir, "decisions");
   });
 
   afterEach(() => {
     rmSync(tmpDir, { force: true, recursive: true });
   });
 
-  test("returns empty array when decisions/ missing", () => {
-    const result = callBuildRunSummary(tmpDir);
-    expect(result.decision_summaries).toEqual([]);
-  });
-
-  test("extracts decision-id, title, chosen option, rationale snippet", () => {
-    mkdirSync(decisionsDir, { recursive: true });
-    const decisionContent = `---
-decision-id: history-01
-title: Archive storage strategy
----
-
-## Options
-
-### Option A: File-based storage
-### Option B: Database-only
-
-### Chosen: file-based
-
-### Rationale
-
-File-based storage keeps archives as human-readable directories with no extra tooling required to inspect. The manifest is in drift.db for queryability.
-`;
-    writeText(decisionsDir, "history-01.md", decisionContent);
-
-    const result = callBuildRunSummary(tmpDir);
-    expect(result.decision_summaries).toHaveLength(1);
-    expect(result.decision_summaries[0].decision_id).toBe("history-01");
-    expect(result.decision_summaries[0].title).toBe("Archive storage strategy");
-    expect(result.decision_summaries[0].chosen_option).toBe("file-based");
-    expect(result.decision_summaries[0].rationale_snippet.length).toBeGreaterThan(0);
-    expect(result.decision_summaries[0].rationale_snippet).toContain("File-based storage");
-  });
-
-  test("truncates rationale to ~200 chars", () => {
-    mkdirSync(decisionsDir, { recursive: true });
-    const longRationale = "A".repeat(500);
-    const decisionContent = `---
-decision-id: long-01
-title: Long rationale decision
----
-
-### Chosen: option-a
-
-### Rationale
-
-${longRationale}
-`;
-    writeText(decisionsDir, "long-01.md", decisionContent);
-
-    const result = callBuildRunSummary(tmpDir);
-    expect(result.decision_summaries).toHaveLength(1);
-    expect(result.decision_summaries[0].rationale_snippet.length).toBeLessThanOrEqual(203); // ~200 + possible "..."
-  });
-
-  test("handles malformed decision files gracefully", () => {
-    mkdirSync(decisionsDir, { recursive: true });
-    writeText(decisionsDir, "bad.md", "no frontmatter at all\njust text");
-    // Should not throw
-    const result = callBuildRunSummary(tmpDir);
-    expect(Array.isArray(result.decision_summaries)).toBe(true);
-  });
-
-  test("ignores non-.md files", () => {
-    mkdirSync(decisionsDir, { recursive: true });
-    writeText(decisionsDir, "notes.txt", "some notes");
+  test("always returns empty array (decisions/ directory no longer scanned)", () => {
     const result = callBuildRunSummary(tmpDir);
     expect(result.decision_summaries).toEqual([]);
   });
@@ -467,19 +400,19 @@ describe("buildRunSummary — artifact_inventory", () => {
     writeText(plansDir, "PLAN.md", "plan content");
     writeText(plansDir, "SUMMARY.md", "summary content");
 
-    const decisionsDir = join(tmpDir, "decisions");
-    mkdirSync(decisionsDir, { recursive: true });
-    writeText(decisionsDir, "decision-01.md", "decision");
+    const reviewsDir = join(tmpDir, "reviews");
+    mkdirSync(reviewsDir, { recursive: true });
+    writeText(reviewsDir, "REVIEW.md", "review content");
 
     const result = callBuildRunSummary(tmpDir);
     const inventory = result.artifact_inventory;
     const plansEntry = inventory.directories.find((d) => d.name === "plans");
-    const decisionsEntry = inventory.directories.find((d) => d.name === "decisions");
+    const reviewsEntry = inventory.directories.find((d) => d.name === "reviews");
 
     expect(plansEntry).toBeDefined();
     expect(plansEntry?.file_count).toBe(2);
-    expect(decisionsEntry).toBeDefined();
-    expect(decisionsEntry?.file_count).toBe(1);
+    expect(reviewsEntry).toBeDefined();
+    expect(reviewsEntry?.file_count).toBe(1);
   });
 
   test("counts top-level files separately", () => {
@@ -534,14 +467,6 @@ describe("buildRunSummary", () => {
       "**Outcome**: approve\n**Effort estimate**: small\n**Value estimate**: high\n",
     );
 
-    const decisionsDir = join(tmpDir, "decisions");
-    mkdirSync(decisionsDir, { recursive: true });
-    writeText(
-      decisionsDir,
-      "d01.md",
-      "---\ndecision-id: d01\ntitle: A decision\n---\n### Chosen: option-a\n### Rationale\nBecause it works.\n",
-    );
-
     const journal = {
       steps: [
         {
@@ -577,7 +502,7 @@ describe("buildRunSummary", () => {
     expect(result.run_metadata.archived_at).toBe("2026-04-24T12:00:00.000Z");
     expect(result.planner_context).not.toBeNull();
     expect(result.step_outcomes).toHaveLength(1);
-    expect(result.decision_summaries).toHaveLength(1);
+    expect(result.decision_summaries).toEqual([]);
     expect(result.artifact_inventory).toBeDefined();
   });
 

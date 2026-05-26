@@ -203,7 +203,7 @@ src/
 - Atomic file writes prevent corruption on concurrent access
 - `CANON_PROJECT_DIR` env var sets project root (defaults to `process.cwd()`)
 - `CANON_PLUGIN_DIR` env var sets plugin directory (defaults to parent of mcp-server)
-- Workspace subdirectories created by `initWorkspace`: `artifacts/`, `decisions/`, `handoffs/`, `plans/`, `research/`, `reviews/`, `transcripts/` — `notes/` is NOT created (removed 2026-03-24); `artifacts/` added 2026-05-16 for HTML artifact storage
+- Workspace subdirectories created by `initWorkspace`: `artifacts/`, `plans/`, `reviews/`, `transcripts/` — `notes/` removed 2026-03-24; `artifacts/` added 2026-05-16; `decisions/`, `handoffs/`, `research/` removed 2026-05-25 (never populated by any tool)
 - `progress.md` is seeded at workspace creation and appended server-side by `report_result` via its `progress_line` parameter; agents treat it as read-only
 - Gate runner is **fail-closed**: a named gate that cannot be resolved returns `{ passed: false }` — never silently passes (changed from fail-open 2026-03-26)
 - `bash_check` postconditions are filtered against a denylist before shell execution: `rm`, `sudo`, `curl`, `wget`, `chmod`, `chown`, `mkfs`, `dd`; blocked commands return `passed: false`
