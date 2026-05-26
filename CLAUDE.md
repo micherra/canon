@@ -269,7 +269,7 @@ Spawn N reviewers in parallel via `Agent()`, each with:
 - An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
 - Their assigned file list
 - Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
-- No `isolation` parameter (Canon manages its own worktrees)
+- No `isolation` parameter (reviewers run in the shared workspace, not a worktree)
 
 #### Phase 3 — Consolidate
 
