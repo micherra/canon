@@ -38,10 +38,12 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `canon-agent-teams/post-engineer-scribe.sh` | SubagentStop | Queue scribe sync after engineer subagent completes |
 
 ## Conventions
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-05-25 -->
 
 - Hooks are guardrails — they enforce safety without requiring agents to opt in
 - Each hook script must be executable and exit 0 (pass) or non-zero (block)
 - Hook configuration lives in `hooks.json` with matcher patterns for tool names
 - `principle-inject-worker.mjs` is a Node.js helper invoked by `principle-inject.sh`
 - `destructive-guard.test.sh` and `install-git-hooks.sh` are utilities, not registered hooks
+- When testing secret-detection hooks, use all-zeros suffixes or EXAMPLE-pattern placeholders for key fixtures — not plausible real-looking values. GitHub push protection scans test files regardless of hook exclusion rules.
+- **Hook test files**: Hooks with 3+ decision branches, runtime state inspection (sqlite queries, filesystem checks), or bypass gate env vars MUST have a corresponding `.test.sh` file. Place it alongside the hook (e.g., `pre-commit-check.test.sh`) or in a `__tests__/` subdirectory. Tests must cover: bypass gate, all silent-pass paths, and all warning/blocking paths. Run with `bash hooks/<name>.test.sh`.

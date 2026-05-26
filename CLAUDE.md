@@ -138,12 +138,13 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 1. **PM triage**: Conduct requirements conversation if needed, then run 1-2 MCP triage calls (`get_file_context`, `graph_query`) to assess scope. See Pre-Build Gate for details.
 2. **Route based on triage result**:
 
-#### Trivial path (PM → engineer) <!-- last-updated: 2026-05-18 -->
+#### Trivial path (PM → engineer) <!-- last-updated: 2026-05-25 -->
 
 1. `init_workspace({ flow_name, task, branch, base_commit, tier: "trivial", original_input, preflight: true })` → save `worktree_path`, `workspace`.
 2. Infer runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps`.
 3. **Pre-spawn check**: `test -d "${worktree_path}"`. If missing, report BLOCKED.
 4. Spawn `canon:engineer` with request, `worktree_path`, `turn_budget: {maxTurns}`.
+5. **Verify journaling**: After engineer returns, check the SUMMARY `### Status` field. If the engineer's SUMMARY reports `DONE` or `DONE_WITH_CONCERNS` AND the build is fix-type (no new contracts, no new exports), log the verify step as skipped: `batch_log_steps([{ step_id: "verify", status: "skipped", skip_reason: "fix-type build, no contract-level changes" }])`. Otherwise, dispatch a separate verify agent (or run `npm run build && npm run lint && npm test` inline) before proceeding to review.
 
 **Fast-path enrichment**: For 4+ files or 2+ workstreams, include in engineer's spawn prompt: scope summary, key files with one-line purpose, known gotchas.
 
@@ -158,7 +159,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
 6. `batch_log_steps` with all approved runbook steps.
 7. **Pre-spawn check**: `test -d "${worktree_path}"` before any code-writing agent spawn. If missing, report BLOCKED.
-8. Execute steps in order. Pass `turn_budget: {maxTurns}` to all agents. Pass `worktree_path` and `isolation: "none"` to code-writing agents (engineer, scribe, tester, shipper).
+8. Execute steps in order. Pass `turn_budget: {maxTurns}` to all agents. Pass `worktree_path` to code-writing agents (engineer, scribe, tester, shipper).
 
 ### DAG Execution Protocol
 
@@ -175,7 +176,7 @@ When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch vi
 
 > **Anti-pattern**: Do NOT substitute parallel Agent spawns for team dispatch. Raw Agent spawns bypass dependency tracking and task queue visibility. When `task-dag.yaml` exists and the step is `implement`, always use `TeamCreate`/`TaskCreate` for worker dispatch. The `dag-dispatch-guard.sh` hook (advisory, L1) will warn on raw Agent spawns during DAG execution.
 
-1. Spawn N workers (= root task count, capped at 5): `Agent({ team_name: "canon-{slug}", name: "worker-{N}", subagent_type: "canon:engineer", isolation: "none" })`.
+1. Spawn N workers (= root task count, capped at 5): `Agent({ team_name: "canon-{slug}", name: "worker-{N}", subagent_type: "canon:engineer" })`.
 2. Worker prompt: fill `templates/worker-prompt.md` with `${TEAM_NAME}`, `${WORKER_NAME}`, `${PROJECT_DIR}`, `${WORKSPACE}`, `${SLUG}`, `${CANON_PARENT_WORKSPACE}` (workspace path minus `{projectDir}/.canon/workspaces/` prefix — needed for L4 hook authorization).
 3. Workers create their own worktrees: path `{projectDir}/.canon/worktrees/{task_id}`, branch `canon-wave/{task_id}`.
 4. Complex tasks: pass `model: "opus"`.
@@ -269,7 +270,7 @@ Spawn N reviewers in parallel via `Agent()`, each with:
 - An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
 - Their assigned file list
 - Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
-- `isolation: "none"` (shared workspace)
+- No `isolation` parameter (reviewers run in the shared workspace, not a worktree)
 
 #### Phase 3 — Consolidate
 
@@ -365,6 +366,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 ### Completion Checklist
 
 1. `finalize_workspace({ workspace })` — resolve missing steps/artifacts first. Verify `prd.md` exists for non-trivial builds.
+   If `steps_ghost` is non-empty in the response, surface the list to the user as advisory: "Note: {N} steps were planned but never dispatched: {list}."
 2. Context-sync: spawn scribe. Updates CLAUDE.md, context.md, CONVENTIONS.md on build branch before ship.
 3. Ship:
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
@@ -406,15 +408,12 @@ See the "Agent Spawn Error Handling" section below. The same retry logic applies
 | Writer | `canon:writer` | Principle authoring |
 | Learner | `canon:learner` | Pattern analysis |
 
-**Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt and are spawned with `isolation: "none"`. Canon owns the worktree lifecycle — changes stay on the build branch until explicitly merged.
-
-Do NOT use Claude Code's `isolation: "worktree"` for agent-teams builds. It auto-merges the worktree branch back to the calling branch (main) on agent completion, bypassing Canon's controlled merge lifecycle.
+**Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
 **Spawn pattern for code-writing agents:**
 ```
 Agent({
   subagent_type: "canon:engineer",
-  isolation: "none",    // Canon owns the worktree — no Agent tool isolation
   prompt: "... Working directory: {worktree_path}\nturn_budget: {maxTurns} ..."
 })
 ```
@@ -461,20 +460,16 @@ When an agent failure or stuck condition is detected (`isStuck` returns true, ag
 
 ## Re-spawn Enrichment Protocol
 
-When re-spawning an agent after a failure, fix-after-review cycle, or reviewer re-spawn, the orchestrator MUST include prior progress context in the re-spawn prompt. This prevents the re-spawned agent from duplicating completed work or missing artifacts already produced.
+Re-spawned agents (failure retry, fix-after-review, reviewer re-spawn) MUST receive prior progress context to avoid duplicating completed work.
 
-**What to include in every re-spawn prompt:**
+**Include in every re-spawn prompt:**
 
-1. **Uncommitted work recovery**: Before re-spawning, run `git diff --name-only` in the worktree. If modified files exist (edits done but no commit), instruct the re-spawned agent: "The following files have uncommitted changes from the prior attempt: [list]. Commit them first with `wip(recovery): save prior agent work` before proceeding."
-2. **Files already completed**: Derive from `git diff --name-only {base_commit}..HEAD` in the worktree, or from the prior agent's implementation summary. Include as an explicit list: "The following files were already successfully modified by a prior attempt and do NOT need re-implementation: [list]. Focus only on the remaining work."
-3. **Step ID and artifacts already produced**: Read from journal state (`journal.json`) — include the `step_id` and all `artifacts_actual` entries from the prior attempt.
-4. **Explicit no-duplicate instruction**: "Do not re-implement files that were already completed. Pick up from where the prior attempt left off."
+1. **Uncommitted work**: `git diff --name-only` in worktree → instruct agent to commit with `wip(recovery): save prior agent work` first.
+2. **Completed files**: `git diff --name-only {base_commit}..HEAD` → explicit list: "These files do NOT need re-implementation: [list]."
+3. **Prior artifacts**: `step_id` + `artifacts_actual` from `journal.json`.
+4. **No-duplicate instruction**: "Do not re-implement completed files. Pick up from where the prior attempt left off."
 
-**Applies to all re-spawn scenarios:**
-
-- **Fix-after-review**: The engineer fix agent receives reviewer findings PLUS a list of files already completed by the prior engineer pass. The engineer focuses only on files flagged by the reviewer, not all changed files.
-- **Failure retry**: The same agent type re-spawned after a transient failure receives the prior partial work list so it doesn't start from scratch.
-- **Reviewer re-spawn**: The reviewer receives prior stage progress (e.g., "Stage 1 and Stage 2 are already written to REVIEW.md — continue from Stage 3") so it doesn't repeat completed stages.
+**Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list (focus only on flagged files). Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
 ## Project Structure <!-- last-updated: 2026-05-25 -->
 
@@ -482,7 +477,6 @@ When re-spawning an agent after a failure, fix-after-review cycle, or reviewer r
 canon/
 ├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (21 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
-├── flows/                # REMOVED 2026-05-02 — all 28 flow YAML files deleted
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/

@@ -44,7 +44,6 @@ tools:
   - mcp__canon__codebase_graph
   - mcp__canon__write_plan_index
   - mcp__canon__update_board
-  - mcp__canon__write_design_brief
   - mcp__canon__get_context
 ---
 

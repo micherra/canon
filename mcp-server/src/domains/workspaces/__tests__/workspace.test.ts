@@ -118,10 +118,19 @@ describe("checkSlugCollision", () => {
 describe("initWorkspace", () => {
   it("creates all subdirectories", async () => {
     const ws = await initWorkspace(tmpDir, "my-branch");
-    const expected = ["research", "decisions", "plans", "reviews"];
+    const expected = ["artifacts", "plans", "reviews", "transcripts"];
     await Promise.all(
       expected.map((dir) =>
         expect(access(path.join(ws, dir)).then(() => true)).resolves.toBe(true),
+      ),
+    );
+  });
+
+  it("does not create research/, handoffs/, or decisions/ directories", async () => {
+    const ws = await initWorkspace(tmpDir, "my-branch-dead-dirs");
+    await Promise.all(
+      ["research", "handoffs", "decisions"].map((dir) =>
+        expect(access(path.join(ws, dir)).then(() => true)).rejects.toThrow(),
       ),
     );
   });

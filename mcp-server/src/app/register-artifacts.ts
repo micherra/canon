@@ -1,6 +1,5 @@
 import { reconcilePredictions } from "@features/diagnostics/services/prediction-tracker.ts";
 import { computeViolationConfidence } from "@features/orchestration/services/review-confidence-adapter.ts";
-import { writeDesignBrief } from "@features/orchestration/tools/write-design-brief.ts";
 import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
 import { type ConfidenceAdapter, writeReview } from "@features/orchestration/tools/write-review.ts";
@@ -145,37 +144,7 @@ function registerReviewArtifactTools(): void {
   );
 }
 
-function registerHandoffArtifactTools(): void {
-  server.registerTool(
-    "write_design_brief",
-    {
-      description:
-        "Write a structured design brief for architect-to-implementor handoff. Produces DESIGN-BRIEF.md + .meta.json sidecar in workspace handoffs/ directory.",
-      inputSchema: {
-        constraints: z.array(z.string()),
-        decisions_referenced: z.array(z.string()).optional(),
-        dependencies: z.array(z.string()).optional(),
-        file_targets: z.array(
-          z.object({
-            action: z.enum(["create", "modify", "delete"]),
-            description: z.string().optional(),
-            path: z.string(),
-          }),
-        ),
-        slug: z.string(),
-        task_id: z.string(),
-        test_expectations: z.array(
-          z.object({ description: z.string(), file: z.string().optional() }),
-        ),
-        workspace: z.string(),
-      },
-    },
-    gatedWrapHandler(async (input) => writeDesignBrief(input)),
-  );
-}
-
 export function registerArtifactTools(): void {
   registerPlanTools();
   registerReviewArtifactTools();
-  registerHandoffArtifactTools();
 }

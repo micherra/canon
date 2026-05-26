@@ -85,7 +85,7 @@ Spawn the agent named by each runbook step in order. For each step:
 before spawn:  log_step({ workspace, step_id, agent_type, status: "started" })
                resolve_agent_skills({ agent_name })   → inject preload_prompt
                get_context({ file_paths, include: [...] })  → inject context
-spawn:         Agent({ subagent_type, isolation: "none", prompt })
+spawn:         Agent({ subagent_type, prompt })
 after spawn:   log_step({ workspace, step_id, status: "completed", artifacts_actual })
 ```
 
@@ -110,7 +110,7 @@ When the architect produces `task-dag.yaml`, use it for parallel dispatch instea
 1. Parse `${WORKSPACE}/plans/${slug}/task-dag.yaml`. Validate: no cycles, all `depends_on` refs resolve.
 2. `TeamCreate({ team_name: "canon-{slug}" })`.
 3. For each DAG node: `TaskCreate` with full agent enrichment payload (principles, file context, task plan content, working instructions). For tasks with `depends_on`: `TaskUpdate({ addBlockedBy: [...] })`.
-4. Spawn N workers (one per root task, capped at 5): `Agent({ team_name, subagent_type: "canon:engineer", isolation: "none" })`.
+4. Spawn N workers (one per root task, capped at 5): `Agent({ team_name, subagent_type: "canon:engineer" })`.
 5. Workers claim tasks, create their own worktrees at `{projectDir}/.canon/worktrees/{task_id}` on branch `canon-wave/{task_id}`.
 6. After all tasks complete: `mergeWaveResults` → `cleanupWorktrees` → `TeamDelete`.
 7. Execute remaining tail steps (review, context-sync, ship, learn) sequentially.
@@ -194,7 +194,6 @@ When all implementation steps complete:
 | Tool | Used by |
 |------|---------|
 | `write_plan_index` | architect |
-| `write_design_brief` | architect |
 | `write_implementation_summary` | engineer |
 | `write_review` | reviewer |
 | `write_test_report` | tester |
