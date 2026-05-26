@@ -8,7 +8,7 @@
  * - v6 migration creates error_fixes table with correct columns
  * - v6 migration creates indexes on file_path and principle_id
  * - UNIQUE(file_path, principle_id) constraint is enforced
- * - Fresh DB schema_version is '6'
+ * - Fresh DB schema_version is '7'
  * - runDriftMigrations on a v5 DB upgrades to v6
  * - getErrorFixes([]) returns empty array (define-errors-out-of-existence)
  * - getErrorFixes returns matching rows for given file paths
@@ -58,7 +58,7 @@ function _createV5Db(): ReturnType<typeof initDriftDb> {
 // ---- DRIFT_SCHEMA_VERSION ----
 
 describe("DRIFT_SCHEMA_VERSION", () => {
-  test("is '6' after v6 migration added", () => {
+  test("is '7' after v7 migration added", () => {
     expect(DRIFT_SCHEMA_VERSION).toBe("7");
   });
 });
@@ -66,7 +66,7 @@ describe("DRIFT_SCHEMA_VERSION", () => {
 // ---- v6 migration — fresh database ----
 
 describe("initDriftDb — v6 fresh database", () => {
-  test("meta table has schema_version = '6' after init", () => {
+  test("meta table has schema_version = '7' after init", () => {
     const { db } = makeSignalsDb();
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
@@ -171,7 +171,7 @@ describe("runDriftMigrations — v5 to v6 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v5 DB to v6: updates schema_version to '6'", () => {
+  test("migrates a v5 DB to v6: updates schema_version to '7'", () => {
     const db = initDriftDb(":memory:");
     db.exec(`DROP TABLE IF EXISTS error_fixes`);
     db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);

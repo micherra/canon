@@ -51,8 +51,11 @@ export class OutcomeStore {
   private readonly stmtGetForPrinciple: Database.Statement;
   private readonly stmtGetStats: Database.Statement;
   private readonly stmtGetForFiles: Database.Statement;
+  private readonly filteredStatsCache = new Map<number, Database.Statement>();
+  private readonly db: Database.Database;
 
   constructor(db: Database.Database) {
+    this.db = db;
     // INSERT OR REPLACE gives upsert semantics per (file_path, principle_id, slug) PK
     this.stmtRecordOutcome = db.prepare(`
       INSERT OR REPLACE INTO violation_outcomes (file_path, principle_id, action, slug, timestamp)
@@ -123,22 +126,24 @@ export class OutcomeStore {
     try {
       if (principleIds !== undefined) {
         if (principleIds.length === 0) return [];
-        // Build dynamic IN clause — principleIds is validated above
-        // We re-prepare here because better-sqlite3 doesn't support array bindings.
-        // This is safe: principleIds values are principle IDs (no user-controlled SQL).
-        const placeholders = principleIds.map(() => "?").join(", ");
-        const stmt = (this.stmtGetForPrinciple.database as Database.Database).prepare(`
-          SELECT
-            principle_id,
-            SUM(CASE WHEN action = 'fix' THEN 1 ELSE 0 END)         AS fix_count,
-            SUM(CASE WHEN action = 'acknowledge' THEN 1 ELSE 0 END) AS acknowledge_count,
-            SUM(CASE WHEN action = 'defer' THEN 1 ELSE 0 END)       AS defer_count,
-            COUNT(*)                                                  AS total
-          FROM violation_outcomes
-          WHERE principle_id IN (${placeholders})
-          GROUP BY principle_id
-          ORDER BY total DESC
-        `);
+        const count = principleIds.length;
+        let stmt = this.filteredStatsCache.get(count);
+        if (!stmt) {
+          const placeholders = principleIds.map(() => "?").join(", ");
+          stmt = this.db.prepare(`
+            SELECT
+              principle_id,
+              SUM(CASE WHEN action = 'fix' THEN 1 ELSE 0 END)         AS fix_count,
+              SUM(CASE WHEN action = 'acknowledge' THEN 1 ELSE 0 END) AS acknowledge_count,
+              SUM(CASE WHEN action = 'defer' THEN 1 ELSE 0 END)       AS defer_count,
+              COUNT(*)                                                  AS total
+            FROM violation_outcomes
+            WHERE principle_id IN (${placeholders})
+            GROUP BY principle_id
+            ORDER BY total DESC
+          `);
+          this.filteredStatsCache.set(count, stmt);
+        }
         return stmt.all(...principleIds) as OutcomeStats[];
       }
       return this.stmtGetStats.all() as OutcomeStats[];

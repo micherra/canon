@@ -67,6 +67,7 @@ function buildViolationHistorySignal(
   filePath: string,
   principleId: string,
   signals: ReviewSignalReader,
+  totalReviews: number,
 ): ConfidenceInput {
   try {
     const history = signals
@@ -78,7 +79,7 @@ function buildViolationHistorySignal(
         violationCount > 0
           ? `violated ${violationCount} times in this file`
           : "no prior violations in this file",
-      sample_size: violationCount,
+      sample_size: Math.max(totalReviews, violationCount),
       signal: "violation_history",
       value: Math.min(violationCount / 10, 1.0),
       weight: 0.35,
@@ -176,12 +177,13 @@ export function computeViolationConfidence(
   const filePath = violation.file_path;
 
   const severityInput = buildSeveritySignal(violation.severity);
+  const { input: pathEffectsInput, totalReviews } = buildPathEffectsSignal(filePath, signals);
   const violationHistoryInput = buildViolationHistorySignal(
     filePath,
     violation.principle_id,
     signals,
+    totalReviews,
   );
-  const { input: pathEffectsInput, totalReviews } = buildPathEffectsSignal(filePath, signals);
 
   const baseSampleInput: ConfidenceInput = {
     detail: `${totalReviews} total reviews of this file`,

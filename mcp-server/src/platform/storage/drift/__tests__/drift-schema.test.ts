@@ -166,11 +166,11 @@ describe("columnExists", () => {
 // Fresh DB — schema version 2
 
 describe("initDriftDb — fresh database", () => {
-  test("DRIFT_SCHEMA_VERSION is '6'", () => {
+  test("DRIFT_SCHEMA_VERSION is '7'", () => {
     expect(DRIFT_SCHEMA_VERSION).toBe("7");
   });
 
-  test("meta table has schema_version = '6' after init", () => {
+  test("meta table has schema_version = '7' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
@@ -257,7 +257,7 @@ describe("runDriftMigrations — v1 to v2 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v1 DB to current version: updates schema_version to '6'", () => {
+  test("migrates a v1 DB to current version: updates schema_version to '7'", () => {
     const db = createV1Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
@@ -341,11 +341,11 @@ describe("runDriftMigrations — idempotency", () => {
 // v4 migration — file_violation_history and path_effects tables
 
 describe("initDriftDb — fresh database v4 tables", () => {
-  test("DRIFT_SCHEMA_VERSION is '6'", () => {
+  test("DRIFT_SCHEMA_VERSION is '7'", () => {
     expect(DRIFT_SCHEMA_VERSION).toBe("7");
   });
 
-  test("fresh DB has schema_version = '6' after init", () => {
+  test("fresh DB has schema_version = '7' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
@@ -433,7 +433,7 @@ describe("runDriftMigrations — v3 to v4 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v3 DB to current version: updates schema_version to '6'", () => {
+  test("migrates a v3 DB to current version: updates schema_version to '7'", () => {
     const db = createV3Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
