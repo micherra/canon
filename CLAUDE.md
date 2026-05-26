@@ -365,6 +365,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 ### Completion Checklist
 
 1. `finalize_workspace({ workspace })` — resolve missing steps/artifacts first. Verify `prd.md` exists for non-trivial builds.
+   If `steps_ghost` is non-empty in the response, surface the list to the user as advisory: "Note: {N} steps were planned but never dispatched: {list}."
 2. Context-sync: spawn scribe. Updates CLAUDE.md, context.md, CONVENTIONS.md on build branch before ship.
 3. Ship:
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
