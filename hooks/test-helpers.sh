@@ -88,7 +88,7 @@ run_test_in_dir() {
 # ---------------------------------------------------------------------------
 # run_test_in_dir_with_output <description> <pattern> <hook> <dir> [input_json]
 # ---------------------------------------------------------------------------
-# Runs a hook and checks stdout+stderr contains the given pattern.
+# Runs a hook and checks (a) exit code is 0 and (b) stdout+stderr contains the given pattern.
 run_test_in_dir_with_output() {
   local description="$1"
   local expected_pattern="$2"
@@ -100,13 +100,29 @@ run_test_in_dir_with_output() {
   local actual_exit=0
   output=$(cd "$dir" && echo "$input_json" | bash "$hook" 2>&1) || actual_exit=$?
 
-  if echo "$output" | grep -q "$expected_pattern"; then
+  local exit_ok=true
+  local output_ok=true
+
+  if [[ "$actual_exit" -ne 0 ]]; then
+    exit_ok=false
+  fi
+
+  if ! echo "$output" | grep -q "$expected_pattern"; then
+    output_ok=false
+  fi
+
+  if [[ "$exit_ok" == "true" ]] && [[ "$output_ok" == "true" ]]; then
     echo "  PASS: $description"
     PASS=$((PASS + 1))
   else
     echo "  FAIL: $description"
-    echo "        expected output containing: $expected_pattern"
-    echo "        actual output: $output"
+    if [[ "$exit_ok" == "false" ]]; then
+      echo "        expected exit=0, got exit=$actual_exit"
+    fi
+    if [[ "$output_ok" == "false" ]]; then
+      echo "        expected output containing: $expected_pattern"
+      echo "        actual output: $output"
+    fi
     FAIL=$((FAIL + 1))
   fi
 }
@@ -114,7 +130,7 @@ run_test_in_dir_with_output() {
 # ---------------------------------------------------------------------------
 # run_test_in_dir_no_pattern <description> <no_pattern> <hook> <dir> [input_json]
 # ---------------------------------------------------------------------------
-# Runs a hook and checks stdout+stderr does NOT contain the given pattern.
+# Runs a hook and checks (a) exit code is 0 and (b) stdout+stderr does NOT contain the given pattern.
 run_test_in_dir_no_pattern() {
   local description="$1"
   local no_pattern="$2"
@@ -126,13 +142,29 @@ run_test_in_dir_no_pattern() {
   local actual_exit=0
   output=$(cd "$dir" && echo "$input_json" | bash "$hook" 2>&1) || actual_exit=$?
 
-  if ! echo "$output" | grep -q "$no_pattern"; then
+  local exit_ok=true
+  local output_ok=true
+
+  if [[ "$actual_exit" -ne 0 ]]; then
+    exit_ok=false
+  fi
+
+  if echo "$output" | grep -q "$no_pattern"; then
+    output_ok=false
+  fi
+
+  if [[ "$exit_ok" == "true" ]] && [[ "$output_ok" == "true" ]]; then
     echo "  PASS: $description"
     PASS=$((PASS + 1))
   else
     echo "  FAIL: $description"
-    echo "        expected output NOT to contain: $no_pattern"
-    echo "        actual output: $output"
+    if [[ "$exit_ok" == "false" ]]; then
+      echo "        expected exit=0, got exit=$actual_exit"
+    fi
+    if [[ "$output_ok" == "false" ]]; then
+      echo "        expected output NOT to contain: $no_pattern"
+      echo "        actual output: $output"
+    fi
     FAIL=$((FAIL + 1))
   fi
 }
