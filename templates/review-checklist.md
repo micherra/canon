@@ -27,9 +27,9 @@ ac-criteria-passed: {N}
 
 #### Violations
 <!-- Ordered by impact score (highest first). Omit section if none. -->
-| Principle | Severity | File | Description | Fix |
-|-----------|----------|------|-------------|-----|
-| {id} | {rule/strong-opinion/convention} | `path:line` | {what violates} | {how to fix} |
+| Principle | Severity | Location | Confidence | Description | Fix |
+|-----------|----------|----------|------------|-------------|-----|
+| {id} | {rule/strong-opinion/convention} | `path:line` | {HIGH\|MEDIUM\|LOW\|INSUFFICIENT\|—} | {what violates} | {how to fix} |
 
 #### Honored
 <!-- Brief notes on principles the code follows well. -->

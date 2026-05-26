@@ -201,3 +201,31 @@ describe("LearningProposalSchema — out-of-range confidence", () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe("LearningProposalSchema — confidence_annotation field", () => {
+  test("accepts proposal with confidence_annotation", () => {
+    const result = LearningProposalSchema.safeParse({
+      confidence: 0.7,
+      confidence_annotation: {
+        score: 0.75,
+        tier: "high",
+        basis: [{ signal: "violation_history", weight: 0.5, detail: "10 violations" }],
+        sample_size: 10,
+      },
+      proposal_id: "pp-1",
+      target: "some-principle",
+      type: "convention-graduation",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts proposal without confidence_annotation (backward compat)", () => {
+    const result = LearningProposalSchema.safeParse({
+      confidence: 0.7,
+      proposal_id: "pp-1",
+      target: "some-principle",
+      type: "convention-graduation",
+    });
+    expect(result.success).toBe(true);
+  });
+});
