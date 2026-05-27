@@ -38,7 +38,7 @@ SUMMARY=""
 if command -v jq >/dev/null 2>&1; then
   SUMMARY=$(echo "$INPUT" | jq -r '.compact_summary // empty' 2>/dev/null || true)
 elif command -v python3 >/dev/null 2>&1; then
-  SUMMARY=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('compact_summary',''))" 2>/dev/null || true)
+  SUMMARY=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); v=d.get('compact_summary'); print(v if v else '')" 2>/dev/null || true)
 fi
 
 # Fallback 1: extract from transcript JSONL if compact_summary was absent
@@ -47,7 +47,7 @@ if [[ -z "$SUMMARY" ]]; then
   if command -v jq >/dev/null 2>&1; then
     TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || true)
   elif command -v python3 >/dev/null 2>&1; then
-    TRANSCRIPT_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('transcript_path',''))" 2>/dev/null || true)
+    TRANSCRIPT_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); v=d.get('transcript_path'); print(v if v else '')" 2>/dev/null || true)
   fi
 
   if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
