@@ -19,8 +19,11 @@ export function resolveGitRoot(
   try {
     const result = gitTopLevelFn(["rev-parse", "--show-toplevel"], cwd);
     if (result.ok) return result.stdout.trim();
-  } catch {
-    // git unavailable or not a repo — fall through.
+  } catch (err) {
+    console.error(
+      "[canon] git root resolution failed, using cwd fallback:",
+      err instanceof Error ? err.message : err,
+    );
   }
   return cwd;
 }
@@ -57,8 +60,8 @@ export async function resolveProjectDir(
       console.error(`[canon] project dir from MCP roots: ${dir}`);
       return dir;
     }
-  } catch {
-    // Fall through — client doesn't support roots.
+  } catch (err) {
+    console.error("[canon] MCP roots unavailable:", err instanceof Error ? err.message : err);
   }
 
   // Priority 3: cwd fallback.
