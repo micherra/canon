@@ -1,5 +1,29 @@
 import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ProcessResult } from "@shared/lib/tool-result.ts";
+
+/**
+ * Resolve the git repository root from a given directory.
+ *
+ * Returns the git toplevel path when the directory is inside a git repo;
+ * returns the raw `cwd` when git is unavailable or the directory is not a
+ * git repo.  Accepts an injected `gitTopLevelFn` for testability.
+ *
+ * @param cwd          - Directory to resolve from (usually process.cwd())
+ * @param gitTopLevelFn - Injected function that runs `git rev-parse --show-toplevel`
+ */
+export function resolveGitRoot(
+  cwd: string,
+  gitTopLevelFn: (args: string[], cwd: string) => ProcessResult,
+): string {
+  try {
+    const result = gitTopLevelFn(["rev-parse", "--show-toplevel"], cwd);
+    if (result.ok) return result.stdout.trim();
+  } catch {
+    // git unavailable or not a repo — fall through.
+  }
+  return cwd;
+}
 
 /**
  * Resolve the project directory using the MCP roots priority chain.

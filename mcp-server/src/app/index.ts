@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { getJobManager } from "@platform/jobs/job-manager.ts";
 import { startHttpServer } from "./http-server.ts";
 import { registerArtifactTools } from "./register-artifacts.ts";
 import { registerKnowledgeTools } from "./register-knowledge.ts";
 import { registerOrchestrationTools } from "./register-orchestration.ts";
 import { registerPrincipleTools } from "./register-principles.ts";
-import { resolveProjectDir } from "./resolve-project-dir.ts";
+import { resolveGitRoot, resolveProjectDir } from "./resolve-project-dir.ts";
 import { resolveReady, server, setProjectDir } from "./server-state.ts";
 
 // Register all tool categories
@@ -38,10 +39,16 @@ async function main() {
 
   // Resolve project dir via priority chain (must happen after connect so roots/list works).
   // resolveReady() unblocks every gatedWrapHandler that is awaiting readyPromise.
+  //
+  // For the cwd fallback: prefer the git repo root over the raw process.cwd() so that
+  // runtime state (.canon/ dir) always lands at the repo root even when the MCP server
+  // process starts with cwd set to a subdirectory (e.g. mcp-server/).
+  const cwdFallback = resolveGitRoot(process.cwd(), gitExec);
+
   const resolvedDir = await resolveProjectDir(
     process.env.CANON_PROJECT_DIR,
     () => server.server.listRoots(undefined, { timeout: 1_000 }),
-    process.cwd(),
+    cwdFallback,
   );
   setProjectDir(resolvedDir);
   resolveReady();

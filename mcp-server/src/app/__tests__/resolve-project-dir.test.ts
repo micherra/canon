@@ -9,10 +9,70 @@
  * - Priority 3: cwd fallback when roots list is empty
  * - Priority 3: cwd fallback when listRoots throws
  * - file:// URI is converted to filesystem path
+ *
+ * Also covers resolveGitRoot:
+ * - Returns git toplevel when gitExec succeeds
+ * - Falls back to raw cwd when gitExec returns ok: false
+ * - Falls back to raw cwd when gitExec throws
  */
 
+import type { ProcessResult } from "@shared/lib/tool-result.ts";
 import { describe, expect, it, vi } from "vitest";
-import { resolveProjectDir } from "../resolve-project-dir.ts";
+import { resolveGitRoot, resolveProjectDir } from "../resolve-project-dir.ts";
+
+// Helper: build a minimal ok ProcessResult
+function makeProcessResult(overrides: Partial<ProcessResult> = {}): ProcessResult {
+  return {
+    ok: true,
+    stdout: "",
+    stderr: "",
+    exitCode: 0,
+    timedOut: false,
+    duration_ms: 0,
+    ...overrides,
+  };
+}
+
+describe("resolveGitRoot", () => {
+  const cwd = "/some/subdirectory/mcp-server";
+
+  it("returns git toplevel when gitExec succeeds", () => {
+    const gitFn = vi
+      .fn()
+      .mockReturnValue(makeProcessResult({ ok: true, stdout: "/some/subdirectory\n" }));
+    const result = resolveGitRoot(cwd, gitFn);
+    expect(result).toBe("/some/subdirectory");
+    expect(gitFn).toHaveBeenCalledWith(["rev-parse", "--show-toplevel"], cwd);
+  });
+
+  it("trims trailing newline from git output", () => {
+    const gitFn = vi.fn().mockReturnValue(makeProcessResult({ ok: true, stdout: "/repo/root\n" }));
+    const result = resolveGitRoot(cwd, gitFn);
+    expect(result).toBe("/repo/root");
+  });
+
+  it("falls back to raw cwd when gitExec returns ok: false", () => {
+    const gitFn = vi
+      .fn()
+      .mockReturnValue(makeProcessResult({ ok: false, stdout: "", exitCode: 128 }));
+    const result = resolveGitRoot(cwd, gitFn);
+    expect(result).toBe(cwd);
+  });
+
+  it("falls back to raw cwd when gitExec throws", () => {
+    const gitFn = vi.fn().mockImplementation(() => {
+      throw new Error("git not found");
+    });
+    const result = resolveGitRoot(cwd, gitFn);
+    expect(result).toBe(cwd);
+  });
+
+  it("returns git toplevel even when it equals cwd (already at root)", () => {
+    const gitFn = vi.fn().mockReturnValue(makeProcessResult({ ok: true, stdout: `${cwd}\n` }));
+    const result = resolveGitRoot(cwd, gitFn);
+    expect(result).toBe(cwd);
+  });
+});
 
 describe("resolveProjectDir", () => {
   const cwd = "/fallback/cwd";
