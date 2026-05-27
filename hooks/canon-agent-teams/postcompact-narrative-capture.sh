@@ -5,9 +5,12 @@
 # summary to the active Canon workspace journal so agents can resume without
 # re-discovering completed work.
 #
+# Input: JSON on stdin (Claude Code PostCompact hook format).
+#   Fields used: transcript_path, session_id, trigger.
+#   The compaction summary is read from the transcript JSONL file.
+#
 # Reads:
-#   $CLAUDE_COMPACT_SUMMARY — compaction summary text provided by Claude Code
-#   $CANON_PROJECT_DIR      — project root (defaults to current directory)
+#   $CANON_PROJECT_DIR — project root (defaults to current directory)
 #
 # Writes a step entry to ${WORKSPACE}/journal.json:
 #   step_id:           "compact-narrative"
@@ -18,18 +21,42 @@
 
 set -euo pipefail
 
-# ── 1. Short-circuit when summary is empty ─────────────────────────────────────
-SUMMARY="${CLAUDE_COMPACT_SUMMARY:-}"
-if [[ -z "$SUMMARY" ]]; then
+# ── 1. Read hook input from stdin ─────────────────────────────────────────────
+INPUT=$(cat 2>/dev/null || true)
+if [[ -z "$INPUT" ]]; then
   exit 0
 fi
 
-# ── 2. Require sqlite3 (needed to query active workspace) ─────────────────────
+# ── 2. Extract transcript path and read compaction summary ────────────────────
+# The compaction summary lives in the transcript JSONL as the last assistant
+# message after compaction. We extract it via jq if available.
+TRANSCRIPT_PATH=""
+if command -v jq >/dev/null 2>&1; then
+  TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || true)
+elif command -v python3 >/dev/null 2>&1; then
+  TRANSCRIPT_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('transcript_path',''))" 2>/dev/null || true)
+fi
+
+# Try to extract summary from transcript (last compaction entry)
+SUMMARY=""
+if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
+  if command -v jq >/dev/null 2>&1; then
+    SUMMARY=$(tail -20 "$TRANSCRIPT_PATH" | jq -r 'select(.type == "summary" or .type == "compact") | .summary // .content // empty' 2>/dev/null | tail -1 || true)
+  fi
+fi
+
+# Fallback: build a minimal narrative from the hook input metadata
+if [[ -z "$SUMMARY" ]]; then
+  TRIGGER=$(echo "$INPUT" | jq -r '.trigger // "unknown"' 2>/dev/null || echo "unknown")
+  SUMMARY="Context compacted (trigger: ${TRIGGER}). Prior conversation was summarized. Check transcript for details."
+fi
+
+# ── 3. Require sqlite3 (needed to query active workspace) ─────────────────────
 if ! command -v sqlite3 >/dev/null 2>&1; then
   exit 0
 fi
 
-# ── 3. Resolve workspaces directory ────────────────────────────────────────────
+# ── 4. Resolve workspaces directory ────────────────────────────────────────────
 CANON_DIR="${CANON_PROJECT_DIR:-.}/.canon"
 WORKSPACES_DIR="${CANON_DIR}/workspaces"
 
@@ -37,7 +64,7 @@ if [[ ! -d "$WORKSPACES_DIR" ]]; then
   exit 0
 fi
 
-# ── 4. Find the active workspace by scanning orchestration.db files ────────────
+# ── 5. Find the active workspace by scanning orchestration.db files ────────────
 WORKSPACE_DIR=""
 while IFS= read -r db_path; do
   [[ -f "$db_path" ]] || continue
@@ -53,7 +80,7 @@ if [[ -z "$WORKSPACE_DIR" ]]; then
   exit 0
 fi
 
-# ── 5. Append a compact-narrative entry to journal.json ───────────────────────
+# ── 6. Append a compact-narrative entry to journal.json ───────────────────────
 JOURNAL="${WORKSPACE_DIR}/journal.json"
 if [[ ! -f "$JOURNAL" ]]; then
   exit 0
