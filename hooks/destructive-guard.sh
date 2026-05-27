@@ -99,7 +99,7 @@ if echo "$COMMAND" | grep -qE '\bgit\b.*\bbranch\b.*-D\b'; then
   if [[ -n "$branch_args" ]]; then
     all_canon=true
     while IFS= read -r branch; do
-      if ! echo "$branch" | grep -qE '^canon(-wave)?/'; then
+      if ! echo "$branch" | grep -qE '^canon(-wave|-task)?/'; then
         all_canon=false
         break
       fi
