@@ -154,6 +154,44 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Write call: content field line count over threshold — warns
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- Write call: content field over threshold (should warn) --"
+
+T_WRITE="$TMPDIR_BASE/t_write"
+setup_repo "$T_WRITE"
+
+# Build a content string with 510 newline-separated lines, then JSON-encode it.
+# jq encodes newlines as \n in the string value, which is what the hook parses.
+if command -v jq &>/dev/null; then
+  # Use jq to safely build the JSON payload with proper escaping.
+  WRITE_INPUT=$(jq -n --arg fp "${T_WRITE}/src/newfile.ts" --arg ct "$(seq 1 510 | awk '{print "const w" $1 " = " $1 ";"}')" \
+    '{"file_path": $fp, "content": $ct}')
+else
+  # Fallback: build a content field with 510 literal \n sequences.
+  WRITE_INPUT="{\"file_path\":\"${T_WRITE}/src/newfile.ts\",\"content\":\"$(printf 'line%.0s\\n' {1..510})\"}"
+fi
+
+EXIT_CODE=0
+OUTPUT=$(cd "$T_WRITE" && echo "$WRITE_INPUT" | bash "$HOOK" 2>&1) || EXIT_CODE=$?
+if [[ "$EXIT_CODE" -eq 0 ]]; then
+  echo "  PASS: Write-path large content exits 0 (advisory only)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: Write-path large content should exit 0, got $EXIT_CODE"
+  FAIL=$((FAIL + 1))
+fi
+
+if echo "$OUTPUT" | grep -q "CANON WARNING"; then
+  echo "  PASS: Write-path large content outputs CANON WARNING"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: expected CANON WARNING for Write-path large content, got: $OUTPUT"
+  FAIL=$((FAIL + 1))
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

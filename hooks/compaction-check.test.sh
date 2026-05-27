@@ -34,7 +34,7 @@ echo "-- Non-commit commands (should pass silently) --"
 T_BASE="$TMPDIR_BASE/t_base"
 setup_repo "$T_BASE"
 
-OUTPUT=$(cd "$T_BASE" && echo "$NON_COMMIT_INPUT" | bash "$HOOK" 2>&1) || true
+OUTPUT=$(cd "$T_BASE" && echo "$NON_COMMIT_INPUT" | TMPDIR="$TMPDIR_BASE" bash "$HOOK" 2>&1) || true
 if [[ -z "$OUTPUT" ]]; then
   echo "  PASS: non-commit input is silent"
   PASS=$((PASS + 1))
@@ -52,7 +52,7 @@ echo "-- No .canon files (should pass silently) --"
 T_EMPTY="$TMPDIR_BASE/t_empty"
 setup_repo "$T_EMPTY"
 
-OUTPUT=$(cd "$T_EMPTY" && echo "$COMMIT_INPUT" | bash "$HOOK" 2>&1) || true
+OUTPUT=$(cd "$T_EMPTY" && echo "$COMMIT_INPUT" | TMPDIR="$TMPDIR_BASE" bash "$HOOK" 2>&1) || true
 if [[ -z "$OUTPUT" ]]; then
   echo "  PASS: no .canon files produces no warning"
   PASS=$((PASS + 1))
@@ -76,7 +76,7 @@ mkdir -p "$T_SMALL/.canon"
 # Write 10 entries (well under 500)
 for i in $(seq 1 10); do echo "{\"id\":$i}"; done > "$T_SMALL/.canon/reviews.jsonl"
 
-OUTPUT=$(cd "$T_SMALL" && echo "$SMALL_INPUT" | bash "$HOOK" 2>&1) || true
+OUTPUT=$(cd "$T_SMALL" && echo "$SMALL_INPUT" | TMPDIR="$TMPDIR_BASE" bash "$HOOK" 2>&1) || true
 if [[ -z "$OUTPUT" ]]; then
   echo "  PASS: reviews.jsonl under 500 lines is silent"
   PASS=$((PASS + 1))
@@ -104,7 +104,7 @@ for i in range(510):
 " > "$T_BIG/.canon/reviews.jsonl" 2>/dev/null || seq 1 510 | awk '{print "{\"id\":" $1 "}"}' > "$T_BIG/.canon/reviews.jsonl"
 
 EXIT_CODE=0
-OUTPUT=$(cd "$T_BIG" && echo "$BIG_INPUT" | bash "$HOOK" 2>&1) || EXIT_CODE=$?
+OUTPUT=$(cd "$T_BIG" && echo "$BIG_INPUT" | TMPDIR="$TMPDIR_BASE" bash "$HOOK" 2>&1) || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -eq 0 ]]; then
   echo "  PASS: over-threshold exits 0 (advisory only)"
   PASS=$((PASS + 1))
@@ -139,7 +139,7 @@ for i in $(seq 1 22); do
   echo "- **Convention $i**: description $i" >> "$T_CONV/.canon/CONVENTIONS.md"
 done
 
-OUTPUT=$(cd "$T_CONV" && echo "$CONV_INPUT" | bash "$HOOK" 2>&1) || true
+OUTPUT=$(cd "$T_CONV" && echo "$CONV_INPUT" | TMPDIR="$TMPDIR_BASE" bash "$HOOK" 2>&1) || true
 if echo "$OUTPUT" | grep -q "CANON"; then
   echo "  PASS: CONVENTIONS.md over 20 outputs CANON warning"
   PASS=$((PASS + 1))
@@ -163,9 +163,9 @@ mkdir -p "$T_DEDUP/.canon"
 seq 1 510 | awk '{print "{\"id\":" $1 "}"}' > "$T_DEDUP/.canon/reviews.jsonl"
 
 # First call: should warn
-OUTPUT1=$(cd "$T_DEDUP" && echo "$DEDUP_INPUT" | bash "$HOOK" 2>&1) || true
+OUTPUT1=$(cd "$T_DEDUP" && echo "$DEDUP_INPUT" | TMPDIR="$TMPDIR_BASE" bash "$HOOK" 2>&1) || true
 # Second call with same session: should be silent (dedup)
-OUTPUT2=$(cd "$T_DEDUP" && echo "$DEDUP_INPUT" | bash "$HOOK" 2>&1) || true
+OUTPUT2=$(cd "$T_DEDUP" && echo "$DEDUP_INPUT" | TMPDIR="$TMPDIR_BASE" bash "$HOOK" 2>&1) || true
 
 if [[ -n "$OUTPUT1" ]] && [[ -z "$OUTPUT2" ]]; then
   echo "  PASS: warns once, silent on second call (dedup)"

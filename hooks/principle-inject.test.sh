@@ -73,17 +73,22 @@ echo "-- Worker absent (should exit 0 gracefully) --"
 T_NOWORKER="$TMPDIR_BASE/t_noworker"
 setup_repo "$T_NOWORKER"
 
-# Point CANON_PLUGIN_DIR at an empty directory so the worker is not found
-EMPTY_PLUGIN_DIR="$TMPDIR_BASE/empty_plugin"
-mkdir -p "$EMPTY_PLUGIN_DIR"
+# Copy the hook script into a temp directory that does NOT contain the worker
+# .mjs file. This ensures $HOOK_DIR inside the copied hook resolves to a dir
+# without principle-inject-worker.mjs, actually exercising the [[ ! -f "$WORKER" ]]
+# branch. Simply pointing CANON_PLUGIN_DIR elsewhere is insufficient because the
+# hook resolves $WORKER relative to $HOOK_DIR (the script's own directory).
+HOOK_NOWORKER_DIR="$TMPDIR_BASE/hook_noworker"
+mkdir -p "$HOOK_NOWORKER_DIR"
+cp "$HOOK" "$HOOK_NOWORKER_DIR/principle-inject.sh"
+HOOK_NOWORKER="$HOOK_NOWORKER_DIR/principle-inject.sh"
 
 SESSION_ID="inject-noworker-$$"
 INPUT="{\"session_id\":\"${SESSION_ID}\",\"file_path\":\"src/app.ts\"}"
 
 EXIT_CODE=0
 OUTPUT=$(cd "$T_NOWORKER" && \
-  CANON_PLUGIN_DIR="$EMPTY_PLUGIN_DIR" \
-  bash "$HOOK" <<<"$INPUT" 2>&1) || EXIT_CODE=$?
+  TMPDIR="$TMPDIR_BASE" bash "$HOOK_NOWORKER" <<<"$INPUT" 2>&1) || EXIT_CODE=$?
 if [[ "$EXIT_CODE" -eq 0 ]]; then
   echo "  PASS: missing worker exits 0 gracefully"
   PASS=$((PASS + 1))
@@ -103,17 +108,18 @@ setup_repo "$T_DEDUP"
 SESSION_DEDUP="inject-dedup-$$"
 INPUT_DEDUP="{\"session_id\":\"${SESSION_DEDUP}\",\"file_path\":\"src/app.ts\"}"
 
-# First call (worker absent — will exit 0 with no output, but dedup file created)
-cd "$T_DEDUP" && echo "$INPUT_DEDUP" | CANON_PLUGIN_DIR="$EMPTY_PLUGIN_DIR" bash "$HOOK" >/dev/null 2>&1 || true
+# First call: use the worker-absent copy so we control the hook dir.
+# Will exit 0 with no output, and write the dedup marker file.
+(cd "$T_DEDUP" && echo "$INPUT_DEDUP" | TMPDIR="$TMPDIR_BASE" bash "$HOOK_NOWORKER" >/dev/null 2>&1) || true
 
-# Second call: dedup file exists — should skip immediately
+# Second call: dedup marker exists — should skip immediately with no output
 EXIT_CODE=0
-OUTPUT=$(cd "$T_DEDUP" && echo "$INPUT_DEDUP" | CANON_PLUGIN_DIR="$EMPTY_PLUGIN_DIR" bash "$HOOK" 2>&1) || EXIT_CODE=$?
-if [[ "$EXIT_CODE" -eq 0 ]]; then
-  echo "  PASS: dedup exits 0 on second call"
+OUTPUT=$(cd "$T_DEDUP" && echo "$INPUT_DEDUP" | TMPDIR="$TMPDIR_BASE" bash "$HOOK_NOWORKER" 2>&1) || EXIT_CODE=$?
+if [[ "$EXIT_CODE" -eq 0 ]] && [[ -z "$OUTPUT" ]]; then
+  echo "  PASS: dedup exits 0 silently on second call"
   PASS=$((PASS + 1))
 else
-  echo "  FAIL: dedup should exit 0, got $EXIT_CODE"
+  echo "  FAIL: dedup should exit 0 with no output, got exit=$EXIT_CODE output=$OUTPUT"
   FAIL=$((FAIL + 1))
 fi
 
