@@ -52,16 +52,18 @@ make_transcript() {
   echo "$transcript"
 }
 
-# Build stdin JSON for the hook
+# Build stdin JSON for the hook (matches real Claude Code PostCompact format)
 make_stdin() {
   local transcript_path="${1:-}"
   local trigger="${2:-auto}"
+  local compact_summary="${3:-}"
   jq -n \
     --arg tp "$transcript_path" \
     --arg tr "$trigger" \
     --arg sid "test-session" \
     --arg cwd "/tmp" \
-    '{session_id: $sid, transcript_path: $tp, cwd: $cwd, hook_event_name: "PostCompact", trigger: $tr}'
+    --arg cs "$compact_summary" \
+    '{session_id: $sid, transcript_path: $tp, cwd: $cwd, hook_event_name: "PostCompact", trigger: $tr, compact_summary: (if $cs == "" then null else $cs end)}'
 }
 
 # Run the hook with stdin JSON
@@ -254,5 +256,51 @@ if [[ "$SAVED_NARRATIVE" != *"trigger: auto"* ]]; then
 fi
 rm -rf "$DIR8"
 pass "missing transcript → fallback narrative with trigger metadata"
+
+# ── Test 9: compact_summary in stdin → used as narrative (primary path) ───────
+DIR9=$(make_project_dir 1)
+JOURNAL9="${DIR9}/.canon/workspaces/canon--test-flow/test-task/journal.json"
+COMPACT_SUMMARY9="Session compacted: completed implement step, wrote auth.ts, tests green."
+# Pass compact_summary directly — no transcript needed
+STDIN9=$(make_stdin "" "auto" "$COMPACT_SUMMARY9")
+
+EXIT_CODE=0
+run_hook "$DIR9" "$STDIN9" || EXIT_CODE=$?
+if [[ "$EXIT_CODE" -ne 0 ]]; then
+  fail "test9: compact_summary path should exit 0, got $EXIT_CODE"
+fi
+
+STEP_COUNT=$(jq '.steps | length' "$JOURNAL9" 2>/dev/null || echo "0")
+if [[ "$STEP_COUNT" -lt 1 ]]; then
+  fail "test9: journal should have at least 1 step entry, got $STEP_COUNT"
+fi
+
+SAVED_NARRATIVE=$(jq -r '.steps[-1].outcome.narrative' "$JOURNAL9" 2>/dev/null || echo "")
+if [[ "$SAVED_NARRATIVE" != "$COMPACT_SUMMARY9" ]]; then
+  fail "test9: compact_summary should be used as narrative, got '$SAVED_NARRATIVE'"
+fi
+rm -rf "$DIR9"
+pass "compact_summary in stdin is used as narrative (primary path)"
+
+# ── Test 10: compact_summary absent → transcript fallback still works ──────────
+DIR10=$(make_project_dir 1)
+JOURNAL10="${DIR10}/.canon/workspaces/canon--test-flow/test-task/journal.json"
+TRANSCRIPT_SUMMARY="Transcript fallback summary: step completed."
+TRANSCRIPT10=$(make_transcript "$DIR10" "$TRANSCRIPT_SUMMARY")
+# make_stdin with empty compact_summary → falls back to transcript
+STDIN10=$(make_stdin "$TRANSCRIPT10" "auto" "")
+
+EXIT_CODE=0
+run_hook "$DIR10" "$STDIN10" || EXIT_CODE=$?
+if [[ "$EXIT_CODE" -ne 0 ]]; then
+  fail "test10: transcript fallback should exit 0, got $EXIT_CODE"
+fi
+
+SAVED_NARRATIVE=$(jq -r '.steps[-1].outcome.narrative' "$JOURNAL10" 2>/dev/null || echo "")
+if [[ "$SAVED_NARRATIVE" != "$TRANSCRIPT_SUMMARY" ]]; then
+  fail "test10: transcript summary should be used when compact_summary absent, got '$SAVED_NARRATIVE'"
+fi
+rm -rf "$DIR10"
+pass "compact_summary absent → transcript fallback used"
 
 echo "postcompact-narrative-capture.sh: all tests passed"
