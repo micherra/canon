@@ -6,8 +6,8 @@
 # re-discovering completed work.
 #
 # Input: JSON on stdin (Claude Code PostCompact hook format).
-#   Fields used: transcript_path, session_id, trigger.
-#   The compaction summary is read from the transcript JSONL file.
+#   Fields used: compact_summary (primary), transcript_path (fallback), session_id, trigger.
+#   compact_summary is the direct compaction text provided by Claude Code.
 #
 # Reads:
 #   $CANON_PROJECT_DIR — project root (defaults to current directory)
@@ -27,25 +27,37 @@ if [[ -z "$INPUT" ]]; then
   exit 0
 fi
 
-# ── 2. Extract transcript path and read compaction summary ────────────────────
-# The compaction summary lives in the transcript JSONL as the last assistant
-# message after compaction. We extract it via jq if available.
-TRANSCRIPT_PATH=""
+# ── 2. Extract compaction summary ─────────────────────────────────────────────
+# Priority order:
+#   1. compact_summary field directly from stdin JSON (primary — Claude Code provides this)
+#   2. transcript JSONL file (fallback — legacy extraction path)
+#   3. trigger-based generic message (last resort)
+
+# Primary: read compact_summary directly from stdin JSON
+SUMMARY=""
 if command -v jq >/dev/null 2>&1; then
-  TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || true)
+  SUMMARY=$(echo "$INPUT" | jq -r '.compact_summary // empty' 2>/dev/null || true)
 elif command -v python3 >/dev/null 2>&1; then
-  TRANSCRIPT_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('transcript_path',''))" 2>/dev/null || true)
+  SUMMARY=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); v=d.get('compact_summary'); print(v if v else '')" 2>/dev/null || true)
 fi
 
-# Try to extract summary from transcript (last compaction entry)
-SUMMARY=""
-if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
+# Fallback 1: extract from transcript JSONL if compact_summary was absent
+if [[ -z "$SUMMARY" ]]; then
+  TRANSCRIPT_PATH=""
   if command -v jq >/dev/null 2>&1; then
-    SUMMARY=$(tail -20 "$TRANSCRIPT_PATH" | jq -r 'select(.type == "summary" or .type == "compact") | .summary // .content // empty' 2>/dev/null | tail -1 || true)
+    TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || true)
+  elif command -v python3 >/dev/null 2>&1; then
+    TRANSCRIPT_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); v=d.get('transcript_path'); print(v if v else '')" 2>/dev/null || true)
+  fi
+
+  if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      SUMMARY=$(tail -20 "$TRANSCRIPT_PATH" | jq -r 'select(.type == "summary" or .type == "compact") | .summary // .content // empty' 2>/dev/null | tail -1 || true)
+    fi
   fi
 fi
 
-# Fallback: build a minimal narrative from the hook input metadata
+# Fallback 2: build a minimal narrative from the hook input metadata
 if [[ -z "$SUMMARY" ]]; then
   TRIGGER=$(echo "$INPUT" | jq -r '.trigger // "unknown"' 2>/dev/null || echo "unknown")
   SUMMARY="Context compacted (trigger: ${TRIGGER}). Prior conversation was summarized. Check transcript for details."
