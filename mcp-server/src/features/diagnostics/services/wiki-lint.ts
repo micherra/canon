@@ -89,7 +89,8 @@ function trimToNounPhrase(raw: string): string {
 
 /**
  * Positive imperative patterns: must, should, always, prefer.
- * Non-global — we use matchAll with a re-created regex each call for thread safety.
+ * Module-level global regex (note: /gim flags) — safe to use with matchAll() because
+ * matchAll() creates its own iterator and resets lastIndex internally.
  */
 const POSITIVE_RE_SRC =
   /\b(?:must|should|always|prefer)\s+(?:use\s+|not\s+)?([a-zA-Z_][\w\s-]*?)(?:[.,;]|\s+(?:for|in|on|with|to|from|when|as|at|by|of|and|or|via|unless|into)\b|$)/gim;

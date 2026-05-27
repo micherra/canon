@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 // Mock DriftStore before importing the tool handler
+// Default mock: returns empty reviews (no violations recorded)
 vi.mock("@platform/storage/drift/store.ts", () => ({
   DriftStore: class MockDriftStore {
     async getReviews() {
@@ -155,6 +156,35 @@ describe("wikiLint tool handler", () => {
 
     // Orphan check ran — principle not referenced or violated
     expect(result.orphan_principles.some((f) => f.principle_id === "orphan-principle")).toBe(true);
+  });
+
+  it("orphan check: principle is NOT flagged as orphan when it appears in DriftStore violations", async () => {
+    const tmp = makeTmpDir("driftstore-violated");
+
+    // One principle — not referenced in any text file
+    const principlesDir = join(tmp, "principles", "strong-opinions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "violated-principle");
+
+    // CLAUDE.md that does NOT reference the principle text
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nSome unrelated instructions.\n", "utf8");
+
+    // Override DriftStore mock to return a review with the principle as a violation
+    const { DriftStore } = await import("@platform/storage/drift/store.ts");
+    (DriftStore as { prototype: { getReviews: () => Promise<unknown[]> } }).prototype.getReviews =
+      async () => [
+        {
+          id: "rev-1",
+          violations: [{ principle_id: "violated-principle", file_path: "some/file.ts" }],
+        },
+      ];
+
+    const result = await wikiLint({ checks: ["orphan_principles"] }, tmp, tmp);
+
+    // The violated principle should NOT appear in orphan_principles
+    expect(result.orphan_principles.some((f) => f.principle_id === "violated-principle")).toBe(
+      false,
+    );
   });
 
   it("clean codebase: no findings when everything is valid", async () => {

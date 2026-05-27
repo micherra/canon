@@ -52,37 +52,70 @@ function statEntry(fullPath: string): { isDir: boolean; isFile: boolean } | null
   try {
     const s = statSync(fullPath);
     return { isDir: s.isDirectory(), isFile: s.isFile() };
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[canon] wiki-lint: stat failed for",
+      fullPath,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
     return null;
+  }
+}
+
+type FindFilesCtx = {
+  predicate: (filePath: string, fileName: string) => boolean;
+  results: string[];
+  originalRoot: string;
+};
+
+/** Process one directory entry during recursive scan. */
+function processEntry(fullPath: string, name: string, ctx: FindFilesCtx): void {
+  const info = statEntry(fullPath);
+  if (!info) return;
+  if (info.isDir) {
+    if (!isExcludedDir(fullPath, name, ctx.originalRoot)) {
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      scanDir(fullPath, ctx);
+    }
+  } else if (info.isFile && ctx.predicate(fullPath, name)) {
+    ctx.results.push(fullPath);
+  }
+}
+
+/** Inner scan loop — reads a directory and recurses. */
+function scanDir(currentDir: string, ctx: FindFilesCtx): void {
+  let names: string[];
+  try {
+    names = readdirSync(currentDir, { encoding: "utf8" });
+  } catch (err) {
+    console.warn(
+      "[canon] wiki-lint: readdir failed for",
+      currentDir,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
+    return;
+  }
+  for (const name of names) {
+    processEntry(join(currentDir, name), name, ctx);
   }
 }
 
 /**
  * Recursively find all files matching the predicate under rootDir,
  * skipping excluded directory names.
+ *
+ * `originalRoot` is threaded through all recursive calls so that
+ * `isExcludedDir` always computes relative paths from the scan root,
+ * not from the current recursion depth.
  */
 function findFiles(
   rootDir: string,
   predicate: (filePath: string, fileName: string) => boolean,
   results: string[] = [],
 ): string[] {
-  let names: string[];
-  try {
-    names = readdirSync(rootDir, { encoding: "utf8" });
-  } catch {
-    return results;
-  }
-  for (const name of names) {
-    const fullPath = join(rootDir, name);
-    const info = statEntry(fullPath);
-    if (!info) continue;
-    if (info.isDir) {
-      if (isExcludedDir(fullPath, name, rootDir)) continue;
-      findFiles(fullPath, predicate, results);
-    } else if (info.isFile && predicate(fullPath, name)) {
-      results.push(fullPath);
-    }
-  }
+  scanDir(rootDir, { originalRoot: rootDir, predicate, results });
   return results;
 }
 
@@ -90,7 +123,13 @@ function findFiles(
 function readFileSafe(filePath: string): string | null {
   try {
     return readFileSync(filePath, "utf8");
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[canon] wiki-lint: readFile failed for",
+      filePath,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }
@@ -122,7 +161,11 @@ async function runOrphanCheck(
         violatedIds.add(v.principle_id);
       }
     }
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[canon] wiki-lint: DriftStore.getReviews() failed — orphan check will treat all principles as unviolated:",
+      err instanceof Error ? err.message : err,
+    );
     violatedIds = new Set<string>();
   }
 
