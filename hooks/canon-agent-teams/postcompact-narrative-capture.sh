@@ -64,6 +64,8 @@ TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
 
 # Use jq when available (cleanest); fall back to Python (also widely available).
+# Capture exit codes explicitly — set -e is suppressed inside || expressions
+# so we must check manually to keep the advisory (fail-open) contract intact.
 if command -v jq >/dev/null 2>&1; then
   jq --arg ts "$TIMESTAMP" --arg narrative "$SUMMARY" \
     '.steps += [{
@@ -74,9 +76,9 @@ if command -v jq >/dev/null 2>&1; then
       "started_at": $ts,
       "completed_at": $ts,
       "outcome": { "narrative": $narrative }
-    }]' "$JOURNAL" > "$TMPFILE"
+    }]' "$JOURNAL" > "$TMPFILE" || exit 0
 elif command -v python3 >/dev/null 2>&1; then
-  python3 - "$JOURNAL" "$TIMESTAMP" "$SUMMARY" <<'PYEOF' > "$TMPFILE"
+  python3 - "$JOURNAL" "$TIMESTAMP" "$SUMMARY" <<'PYEOF' > "$TMPFILE" || exit 0
 import json, sys
 journal_path, ts, narrative = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(journal_path) as f:

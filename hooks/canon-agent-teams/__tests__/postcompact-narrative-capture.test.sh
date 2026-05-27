@@ -186,4 +186,25 @@ fi
 rm -rf "$DIR6"
 pass "missing workspaces directory exits 0 silently"
 
+# ── Test 7: Malformed journal.json → no-op (exit 0, fail-open) ───────────────
+DIR7=$(make_project_dir 1)
+WS7="${DIR7}/.canon/workspaces/canon--test-flow/test-task"
+
+# Overwrite the seeded journal with malformed JSON to simulate corruption
+echo "{ invalid json }" > "${WS7}/journal.json"
+BEFORE7=$(cat "${WS7}/journal.json")
+
+EXIT_CODE=0
+run_hook "$DIR7" "Post-compact summary" || EXIT_CODE=$?
+if [[ "$EXIT_CODE" -ne 0 ]]; then
+  fail "test7: malformed journal.json should exit 0 (fail-open), got $EXIT_CODE"
+fi
+AFTER7=$(cat "${WS7}/journal.json")
+# Journal should be unchanged (jq failed gracefully, mv never ran)
+if [[ "$BEFORE7" != "$AFTER7" ]]; then
+  fail "test7: malformed journal.json should be left unchanged when jq fails"
+fi
+rm -rf "$DIR7"
+pass "malformed journal.json exits 0 (fail-open) and leaves journal unchanged"
+
 echo "postcompact-narrative-capture.sh: all tests passed"
