@@ -144,7 +144,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 2. Infer runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps`.
 3. **Pre-spawn check**: `test -d "${worktree_path}"`. If missing, report BLOCKED.
 4. Spawn `canon:engineer` with request, `worktree_path`, `turn_budget: {maxTurns}`.
-5. **Verify journaling**: After engineer returns, check the SUMMARY `### Status` field. If the engineer's SUMMARY reports `DONE` or `DONE_WITH_CONCERNS` AND the build is fix-type (no new contracts, no new exports), log the verify step as skipped: `batch_log_steps([{ step_id: "verify", status: "skipped", skip_reason: "fix-type build, no contract-level changes" }])`. Otherwise, dispatch a separate verify agent (or run `npm run build && npm run lint && npm test` inline) before proceeding to review.
+5. **Verify journaling**: After engineer returns, check the SUMMARY `### Status` field. If the engineer's SUMMARY reports `DONE` or `DONE_WITH_CONCERNS` AND the build is fix-type (no new contracts, no new exports), log the verify step as skipped: `batch_log_steps([{ step_id: "verify", status: "skipped", skip_reason: "fix-type build, no contract-level changes" }])`. Otherwise, dispatch a separate verify agent (or run `npm run build && npm run lint && npm test && bash hooks/lint.sh` inline) before proceeding to review.
 
 **Fast-path enrichment**: For 4+ files or 2+ workstreams, include in engineer's spawn prompt: scope summary, key files with one-line purpose, known gotchas.
 
@@ -357,9 +357,9 @@ MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_
 
 When the review step completes and a tester step follows: extract Stage 5 "Acceptance Criteria Verification" from `${WORKSPACE}/reviews/REVIEW.md` and include it (plus the architect design's Acceptance Criteria section) in the tester's spawn prompt. When runbook ACs include verification method/type columns, the tester MUST run after the review step — it consumes the reviewer's Stage 5 output.
 
-### Step Enforcement Contracts <!-- last-updated: 2026-05-18 -->
+### Step Enforcement Contracts <!-- last-updated: 2026-05-27 -->
 
-**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test`. All three must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL.
+**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL.
 
 **Verify skip**: If `git diff {base_commit}..HEAD --name-only` contains only `.md`/`.txt` files, skip with `skip_reason: "documentation-only diff, verify produces zero signal"`.
 

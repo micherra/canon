@@ -41,14 +41,13 @@ CANON_DIR="${MAIN_ROOT:-.}/.canon"
 WARNINGS=()
 
 # Check .jsonl file sizes
-for JSONL_FILE in "${CANON_DIR}/reviews.jsonl"; do
-  if [[ -f "$JSONL_FILE" ]]; then
-    LINE_COUNT=$(wc -l < "$JSONL_FILE" | tr -d ' ')
-    if [[ $LINE_COUNT -gt 500 ]]; then
-      WARNINGS+=("  - ${JSONL_FILE}: ${LINE_COUNT} entries (expected max 500 — rotation may not be running)")
-    fi
+JSONL_FILE="${CANON_DIR}/reviews.jsonl"
+if [[ -f "$JSONL_FILE" ]]; then
+  LINE_COUNT=$(wc -l < "$JSONL_FILE" | tr -d ' ')
+  if [[ $LINE_COUNT -gt 500 ]]; then
+    WARNINGS+=("  - ${JSONL_FILE}: ${LINE_COUNT} entries (expected max 500 — rotation may not be running)")
   fi
-done
+fi
 
 # Check CONVENTIONS.md size
 CONVENTIONS_FILE="${CANON_DIR}/CONVENTIONS.md"
