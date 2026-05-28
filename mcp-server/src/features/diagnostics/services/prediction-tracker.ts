@@ -138,9 +138,9 @@ export function recordPrediction(
     });
 
     return predictionId;
-  } catch {
-    // Fail-open: prediction recording failures are silently ignored.
-    // Prediction tracking must never prevent signal injection from completing.
+  } catch (err) {
+    // Fail-open: prediction recording failures must never prevent signal injection from completing.
+    console.warn("[canon] prediction recording failed:", err instanceof Error ? err.message : err);
     return undefined;
   }
 }
@@ -155,7 +155,11 @@ function parsePredictionColumns(
     const filePaths = JSON.parse(prediction.file_paths) as string[];
     const principleIds = JSON.parse(prediction.principle_ids) as string[];
     return { filePaths, principleIds };
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[canon] corrupt prediction columns — skipping:",
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }
@@ -232,8 +236,11 @@ export function reconcilePredictions(
         resolved_at: now,
       });
     }
-  } catch {
-    // Fail-open: reconciliation failures are silently ignored.
-    // The review itself was already written successfully.
+  } catch (err) {
+    // Fail-open: reconciliation failures must never prevent the review from completing.
+    console.warn(
+      "[canon] prediction reconciliation failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }

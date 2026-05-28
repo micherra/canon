@@ -13,13 +13,14 @@
  * FN = predicted: false AND actual: true (not applicable — only predicted pairs stored)
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PredictionReader, PrincipleAccuracy } from "../services/prediction-accuracy.ts";
 import {
   ACCURACY_THRESHOLDS,
   buildAccuracySummary,
   computeAccuracy,
   getPriorityMultiplier,
+  parseOutcome,
   shouldPrune,
 } from "../services/prediction-accuracy.ts";
 
@@ -418,5 +419,33 @@ describe("buildAccuracySummary", () => {
     const summary = buildAccuracySummary(map);
     // Should include sample count somewhere
     expect(summary).toContain("10");
+  });
+});
+
+// ---- parseOutcome — observable error on corrupt JSON ----
+
+describe("parseOutcome — observable error on corrupt JSON", () => {
+  it("calls console.warn and returns [] when outcome JSON is invalid", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
+
+    const result = parseOutcome("{ not valid json !!!");
+
+    expect(result).toEqual([]);
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0][0]).toContain("[canon] failed to parse outcome JSON");
+
+    warnSpy.mockRestore();
+  });
+
+  it("returns [] without warning when outcome is null", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
+
+    const result = parseOutcome(null);
+
+    expect(result).toEqual([]);
+    // null short-circuits before JSON.parse — no warn expected
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 });

@@ -97,6 +97,8 @@ async function captureTranscript(input: CaptureInput): Promise<CaptureResult> {
 
 The caller receives a `warning` field and can log it, surface it to the user, or count it as a metric. The failure does not crash the caller — it is still best-effort — but it is no longer invisible.
 
+**I/O helpers in service files**: `pure-io-service-split` separates computation from I/O, but some service files contain I/O helpers alongside pure functions (e.g., `doc-gap-detect.ts` has both `detectDocGaps` (pure) and `scanDirectories` (I/O)). `observable-best-effort` applies to ALL catch blocks that swallow errors silently, regardless of whether the file is in `tools/` or `services/`. When a service file contains filesystem reads, DB queries, or process calls, apply the same `console.warn` discipline as tool handlers.
+
 ## Exceptions
 
 Truly optional cosmetic operations where failure has zero impact on correctness or user experience (e.g., updating a non-critical UI animation hint in a fire-and-forget context). Even then, prefer logging at DEBUG over total silence — it costs nothing and preserves the ability to diagnose future issues.
