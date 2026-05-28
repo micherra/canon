@@ -13,6 +13,7 @@ import {
 } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
+import { wikiLint } from "@features/diagnostics/tools/wiki-lint.ts";
 import type { FileContextOutput } from "@features/file-context/tools/get-file-context.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
 import { codebaseGraph, compactGraph } from "@features/knowledge-graph/tools/codebase-graph.ts";
@@ -440,6 +441,23 @@ function registerDiagnosticsTools(): void {
       },
     },
     gatedWrapHandler(async (input) => getHistory(input)),
+  );
+
+  server.registerTool(
+    "wiki_lint",
+    {
+      description:
+        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, and principles missing examples.",
+      inputSchema: {
+        checks: z
+          .array(z.enum(["contradictions", "orphan_principles", "stale_refs", "missing_examples"]))
+          .optional()
+          .describe(
+            "Checks to run (default: all). Options: contradictions, orphan_principles, stale_refs, missing_examples",
+          ),
+      },
+    },
+    gatedWrapHandler(async (input) => wikiLint(input, projectDir, pluginDir)),
   );
 }
 

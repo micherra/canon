@@ -81,6 +81,21 @@ Read the implementation summaries from `${WORKSPACE}/plans/${slug}/*-SUMMARY.md`
 
 If a FIX-SUMMARY.md exists (from fix-impl), read that too.
 
+### Step 2b: Check for documentation gaps
+
+Before classifying the diff, check whether any directories touched by the build are missing a CLAUDE.md.
+
+For each unique directory in the changed file list:
+1. Check if `{dir}/.claude/CLAUDE.md` or `{dir}/CLAUDE.md` exists.
+2. If the directory has 2+ source files (.ts, .sh, .md agent files) and no CLAUDE.md, note it as a doc gap.
+
+Report doc gaps in the CONTEXT-SYNC.md under a `## Documentation Gaps` section. List each gap as:
+```
+- `{directory}/` — {N} source files, no CLAUDE.md
+```
+
+Doc gaps are informational — they do not change classification or trigger document creation (the scribe uses Edit, not Write). They surface awareness so the orchestrator or user can address them in a follow-up.
+
 ### Step 3: Classify changes
 
 Categorize every changed file into one of:

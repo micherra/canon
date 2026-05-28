@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-05-25 -->
+<!-- last-updated: 2026-05-26 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -21,7 +21,7 @@ src/
 │   ├── messages/         # Flow lifecycle events, event bus, variable substitution (message persistence removed 2026-05-16)
 │   └── workspaces/       # Workspace and execution store (SQLite persistence)
 ├── features/             # Tool implementations grouped by bounded context
-│   ├── diagnostics/      # Drift reports, agent metrics, summary storage
+│   ├── diagnostics/      # Drift reports, agent metrics, summary storage, wiki lint
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
@@ -48,7 +48,7 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-27 (resolveGitRoot added to resolve-project-dir.ts) -->
+<!-- last-updated: 2026-05-27 (resolveGitRoot added to resolve-project-dir.ts; wiki_lint tool added; confidence scoring: ConfidenceAnnotation type, OutcomeStore, drift schema v7, review/drift adapters, write_review/get_compliance updated) -->
 
 **`resolveGitRoot(cwd, gitTopLevelFn)`** (`src/app/resolve-project-dir.ts`) — returns git repo root for `cwd`; falls back to `cwd` when not in a git repo or git is unavailable; errors are logged and swallowed (never throws).
 
@@ -84,6 +84,7 @@ src/
 **`get_drift_report`** — `pr_reviews` field uses `ReviewEntry[]` (unified type); filters by pr_number/branch presence
 **KgQuery** (`src/graph/kg-query.ts`) — `computeImpactScore`, `computeFileInsightMaps` (call once per request), `getFileMetrics`, `getSubgraph`; must call `computeFileInsightMaps` before `getFileMetrics` in loops (see source for full API)
 **Git Intelligence** (`src/features/knowledge-graph/git-intel/`) — pipeline: git log → parse → churn scoring → co-change detection → persist atomically; `ensureGitIntelFresh` is the main entry point (no-op when fresh)
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `assembleWikiLintOutput(AssembleWikiLintInput)`; `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)`; all accept pre-loaded data (no I/O except `scanDirectories`). Added 2026-05-26.
 **Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — `compileSignals(filePaths, driftDbSignals)` reads violation history + path effects, scores by priority, fits within per-file token budget; read-only
 **Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — added 2026-05-22; exports `queryDriftSignalPitfalls(filePaths, signals)`, `queryErrorFixPitfalls(filePaths, signals)`, `formatPitfallsSection(drift, errorFix)`, `countPitfalls(drift, errorFix)`; pure functions (no DB calls); `formatPitfallsSection` returns `""` when both arrays empty
 **Backfill Error Fixes** (`src/features/diagnostics/services/backfill-error-fixes.ts`) — added 2026-05-22; script that mines `file_violation_history` to populate the `error_fixes` table; call once per project to seed historical data
@@ -134,6 +135,7 @@ src/
 | `store_summaries` | Persist file summaries to SQLite KG DB (DB-only since ADR-005 2026-04-01; JSON write path removed) |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
+| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions between CLAUDE.md files, orphan principles, stale file refs, principles missing examples; optional `checks` array selects subset (default: all 4); returns `WikiLintOutput` |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result for drift tracking |
 

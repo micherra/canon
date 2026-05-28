@@ -52,6 +52,18 @@ Cross-session error+fix index and pitfall enrichment. Before agent spawns, the o
 - Auto-demotion: archive principles with 0 violations across 20+ builds
 - Auto-apply policy config: `auto` | `suggest` | `off` (per project)
 
+## What Shipped: Hooks & Confidence Wave (PRs #245–#261)
+
+Between May 24–26, a concentrated wave shipped the top-priority roadmap items plus foundational infrastructure:
+
+- **Tool-loop detection + spawn watchdog** (PR #245) — Thread 3 top items. PostToolUse fingerprinting and wall-clock spawn monitoring.
+- **Shared hook library** (PR #248) — `hooks/lib/canon-hook-lib.sh` extracted from 5+ hooks. Foundation for all subsequent hook work.
+- **DAG dispatch guard** (PR #253) — Advisory hook warns on raw `Agent` spawns during DAG execution, enforcing `TeamCreate`/`TaskCreate`.
+- **Holistic confidence scoring** (PR #259) — Shared `ConfidenceScore` schema, `computeConfidence()` engine, review + drift adapters. Covers Thread 2 (confidence per violation, confidence decay) and Thread 4 (composite health score).
+- **PostCompact narrative capture** (PR #261) — Thread 3 item. PostCompact hook preserves compaction summaries in workspace journal.
+- **Hook hardening** (PRs #254, #255, #257, #260) — SIGPIPE fixes, session-start guards, shared test helpers, verify ghost state handling.
+- **Dead-code cleanup** (PRs #252, #256, #258) — Drift violation fixes, dead workspace dirs, doc corrections.
+
 ## Supervised Build Quality — Feature Backlog
 
 Three threads for making supervised builds faster and higher quality. Features are harvested from prior roadmap docs and prioritized by leverage.
@@ -74,8 +86,8 @@ Make each gate decision faster and more confident.
 
 | Feature | Effort | Leverage | Source |
 |---------|--------|----------|--------|
-| **Confidence per violation** | Small | High | `write_review` gains a `confidence` field (0-100) per violation. Default threshold: 80; findings below suppressed. Reduces noise. |
-| **Confidence decay for drift** | Medium | Medium | Replace binary pass/fail with 0.0-1.0 confidence that decays as commits accumulate without re-review. Sorts drift report by "most overdue." |
+| ~~**Confidence per violation**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #259). Shared `ConfidenceScore` schema + `computeConfidence()` engine. `review-confidence-adapter` scores each violation. |
+| ~~**Confidence decay for drift**~~ | ~~Medium~~ | ~~Medium~~ | Shipped (PR #259). `drift-confidence-adapter` decays confidence by commits-since-review. `get_drift_report` sorts by staleness. |
 | **GitHub-linkable review output** | Small | Medium | Review output includes clickable GitHub line links (`/blob/[sha]/path#L42-L48`). Useful when posting PR comments or sharing findings. |
 
 ### Thread 3: Faster Agent Turns
@@ -84,9 +96,9 @@ Context gathering burns the most agent turns. Reduce wasted work.
 
 | Feature | Effort | Leverage | Source |
 |---------|--------|----------|--------|
-| **Tool-level loop detection** | Small | High | PostToolUse hook fingerprints `(tool + input + output)`. 3 consecutive identical = exit code 2 → HITL. Stops agents spinning on identical failing calls. |
-| **In-flight spawn watchdog** | Small | High | Track start timestamp per spawn. Wall-clock threshold (default: 20 min) surfaces long-running agents with options to wait, cancel, or intervene. |
-| **PostCompact narrative capture** | Tiny | Medium | PostCompact hook appends compaction summary to workspace journal. Prevents re-discovery after context reset. ~50 LOC. |
+| ~~**Tool-level loop detection**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #245). `tool-loop-detector.sh` PostToolUse hook with fingerprinting + exit code 2 → HITL. |
+| ~~**In-flight spawn watchdog**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #245). `spawn-timeout-watchdog.sh` tracks wall-clock per spawn, 20-min default threshold. |
+| ~~**PostCompact narrative capture**~~ | ~~Tiny~~ | ~~Medium~~ | Shipped (PR #261). PostCompact hook appends compaction summary to workspace journal. |
 | **Skill effectiveness tracking** | Medium | Medium | Learner analyzes journal outcomes to recommend: primers that help, `maxTurns` adjustments, skills that need updating. Requires extending `FlowRunEntry` with domain skill counts. |
 | **Effort budgets** | Medium | Medium | Maximum tool calls per state, wall-clock duration limits, max agent spawns per flow. "Focus and wrap up" note injected when approaching limit; pause for approval when hit. |
 
@@ -97,7 +109,7 @@ Canon's own documentation and artifacts accumulate drift. Eat your own dogfood.
 | Feature | Effort | Leverage | Source |
 |---------|--------|----------|--------|
 | **Wiki-lint over Canon's own artifacts** | Medium | High | Lint pass over contradictions between CLAUDE.md files, orphan principles with no usages, stale plans referencing renamed files, principles lacking backing examples. Canon lints code but not its own meta-layer. |
-| **Composite health score** | Small | High | Collapse compliance %, cycle count, hub density, drift trends into an A-F grade in `get_drift_report`. Single summary signal for humans and the learner. |
+| ~~**Composite health score**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #259). `computeConfidence()` engine with shared `ConfidenceScore` schema. Drift report integrates confidence decay. |
 | **Proactive doc gap detection** | Small | Medium | Before classifying a diff, scribe scans for directories that contain source files but no CLAUDE.md. Finds gaps that passive diff-watching never catches. |
 | **Documentation staleness in drift reports** | Medium | Medium | Add a documentation freshness dimension alongside principle compliance. Each CLAUDE.md gets a "commits since last sync" count and decaying confidence score. |
 | **Repo-level `.canon/log.md`** | Tiny | Medium | Global timeline of flow completions, principle additions, and lint passes. Single append at `complete_flow`. Grep-parseable `## [YYYY-MM-DD] type | title` prefix. |
@@ -140,9 +152,12 @@ These were evaluated and explicitly rejected:
 
 | Phase | What | Rationale |
 |-------|------|-----------|
-| **Next** | Tool-level loop detection + spawn watchdog | Small builds, immediate value for agent efficiency. |
-| **Then** | Wiki-lint + composite health score + doc gap detection | Canon eating its own dogfood. Addresses the 57-commit scribe drift problem. |
-| **Then** | Confidence per violation + GitHub-linkable output | Better HITL signal with less noise. Small builds. |
-| **Then** | Short-term area memory + hot-file caution | Compound context for engineers. Data exists, needs injection. |
-| **Later** | Effort budgets, smarter scribe, idea-to-spec, skill tracking, outdated violations | Compound value features that improve over time. |
+| ~~**Done**~~ | ~~Tool-loop detection + spawn watchdog~~ | Shipped PR #245. |
+| ~~**Done**~~ | ~~Confidence scoring + drift decay + composite health~~ | Shipped PR #259. |
+| ~~**Done**~~ | ~~PostCompact narrative capture~~ | Shipped PR #261. |
+| **Next** | Wiki-lint + doc gap detection | Canon eating its own dogfood. Composite health score is now available to surface drift; wiki-lint closes the loop on artifact contradictions. |
+| **Next** | GitHub-linkable review output | Last remaining Thread 2 item. Small build, immediate value for PR workflows. |
+| **Then** | Short-term area memory + hot-file caution | Compound context for engineers. Data exists in `get_file_context`, needs injection into spawn prompts. |
+| **Then** | Effort budgets + skill effectiveness tracking | Last Thread 3 items. Cap runaway agent turns and learn which primers/skills help. |
+| **Later** | Outdated violation detection, smarter scribe, idea-to-spec | Compound value features that improve over time. |
 | **Remaining Epic 6** | Auto-promotion/demotion thresholds, auto-apply policy | Needs sufficient build history to be meaningful. |
