@@ -10,6 +10,12 @@
 #   SC2001 — see if you can use ${var//...} (sed used for regex patterns)
 #   SC2016 — expressions in single quotes (false positive for embedded JS)
 #
+# NOTE for new hook authors: these global suppressions mean the above checks
+# will NOT fire in your script, even if your code legitimately violates them.
+# Review each suppression for your specific script. If the suppressed check
+# would catch a real issue in your code, use an inline disable only where
+# needed (# shellcheck disable=SCXXXX) instead of relying on this global list.
+#
 # Per-file inline suppressions (# shellcheck disable=...) are also honored.
 #
 # Usage: bash hooks/lint.sh
@@ -34,7 +40,7 @@ while IFS= read -r file; do
   if ! shellcheck -e SC1091,SC2001,SC2016 "$file"; then
     FAILED=$(( FAILED + 1 ))
   fi
-done < <(find "$SCRIPT_DIR" -name "*.sh" ! -name "*.test.sh" ! -name "test-helpers.sh" | sort)
+done < <(find "$SCRIPT_DIR" -name "*.sh" ! -name "*.test.sh" ! -name "test-helpers.sh" | sort) # sort: deterministic order for reproducible output across runs
 
 if [[ $FAILED -gt 0 ]]; then
   echo ""
