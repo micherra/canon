@@ -1,5 +1,59 @@
 # Changelog
 
+## 2.3.0 (2026-05-28)
+
+37 commits since v2.2.0. Quality hardening release: shell hygiene, holistic confidence scoring, hook reliability, and continuous learner expansion.
+
+### Highlights
+
+- **Shell hygiene** — `jq`-based JSON extraction replaces grep/sed across all hooks; shellcheck added as a real verify gate for shell scripts (#265, #271, #270, #268)
+- **Holistic confidence scoring** — shared confidence engine (`ConfidenceAnnotation`, `ConfidenceTier`) wired to `write_review`, `get_compliance`, and `get_drift_report`; review and drift adapters compose multi-signal annotations (#259)
+- **Hook reliability** — SIGPIPE elimination, quoted branch args, `canon-wave/` and `canon-task/` branch prefix support in destructive-guard; PostCompact narrative capture for Canon journals (#254, #266, #268, #261, #262)
+- **Learner expansion** — RRR1–RRR4 shared hook test helpers, QQQ1 hook test coverage, WWW1 root-threading convention, WWW2 observable catch blocks (#257, #255, #269)
+- **DAG dispatch enforcement** — dag-dispatch-guard advisory hook + `open_artifact` MCP tool for in-flow HTML inspection (#253)
+
+### Features
+
+- `wiki_lint` MCP tool — lint Canon's own meta-layer artifacts for contradictions, orphan principles, stale refs, and missing examples (#267)
+- Shellcheck as real verify gate for hook shell scripts — `lint-test.sh` fail-closed, shellcheck directives added to all hooks (#265)
+- Holistic confidence scoring across Canon — shared `confidence.ts` engine, per-violation annotations in `write_review`, confidence tiers in `get_drift_report` and `get_compliance` (#259)
+- PostCompact narrative capture — Canon journals retain compact summary across `/compact` events (#261)
+- DAG dispatch guard hook + `open_artifact` MCP tool (#253)
+- 5 Canon improvements inspired by mattpocock/skills: CONTEXT.md glossary, autonomous competition mode, TDD primers, `/diagnose` command, rule-compliance dimension (#251)
+- Tool-loop detection and spawn timeout watchdog in hooks (#245)
+- Conditional GitHub release creation step for shipper agent (#242)
+- Feed-forward pitfall enrichment with cross-session error+fix index (Epic 6) (#239)
+- Learner findings RRR1–RRR4: shared hook test helpers and remaining hook tests (#257)
+- Learner findings QQQ1 hook test coverage and QQQ2 verify ghost state (#255)
+- Learner findings WWW1 root-threading convention + WWW2 observable catch blocks (#269)
+
+### Fixes
+
+- Replace grep/sed JSON extraction with `jq` + context-sync hook (#271)
+- Use `jq` for JSON extraction, fix quoted branch args across hooks (#270)
+- Add `canon-wave/` test case and fix stale comment in hook tests (#268)
+- Allow `canon-task/` branch prefix in destructive-guard regex (#266)
+- Resolve `projectDir` to git repo root in mcp-server (#264)
+- PostCompact reads `compact_summary` from stdin (#262)
+- Address PR #257 review comments on hook tests (#260)
+- Remove 3 dead workspace directories (`research/`, `handoffs/`, `decisions/`) (#258)
+- Remove invalid `isolation:"none"` from Agent spawn docs (#256)
+- Eliminate SIGPIPE in session-start-context hook (#254)
+- Resolve 3 open drift violations in orchestration layer (#252)
+- MMM1 fix-mode SUMMARY obligation and MMM3 principle scope (#250)
+- Extract shared hook helpers, fix worktree-resolution across 5 hooks (#248)
+- Resolve `errors-are-values` and `fail-closed-by-default` violations in canon (#247)
+- Detect and remove orphaned workspaces in janitor agent (#237)
+
+### Documentation and Chores
+
+- Bump all-dependencies group, 6 updates (#246)
+- mcp-server CLAUDE.md 61-commit context sync (#249)
+- Roadmap updates — Epic 6 shipped + 14 features from PR audits (#243)
+- Learner proposals LL1/LL3/LL5 (#241) and KK1/KK5/KK6/KK9 (#240)
+- Remove dead stubs, dependencies, and stale tests (#236, #238)
+- Clean up obsolete roadmaps, add supervised-build-quality direction (#235)
+
 ## 2.2.0 (2026-05-21)
 
 181 commits since v2.1.1. Major release: PM identity, dark factory foundations, interactive HTML artifacts, and continuous learning.
