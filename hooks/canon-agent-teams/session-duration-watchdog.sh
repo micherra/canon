@@ -17,6 +17,7 @@
 set -euo pipefail
 
 # Consume stdin (required by Claude Code hook contract)
+# shellcheck disable=SC2034  # INPUT unused: consumed to satisfy hook stdin contract
 INPUT=$(cat)
 
 THRESHOLD_MINUTES=${CANON_SESSION_WATCHDOG_MINUTES:-120}
