@@ -102,6 +102,15 @@ describe("checkContradictions", () => {
     const findings = checkContradictions(files);
     expect(findings).toHaveLength(0);
   });
+
+  it("does not report contradiction when two files share the same must-not prohibition", () => {
+    const files = [
+      { path: "a/CLAUDE.md", content: "Agents must not mutate state directly." },
+      { path: "b/CLAUDE.md", content: "Agents must not mutate state directly." },
+    ];
+    const result = checkContradictions(files);
+    expect(result).toHaveLength(0);
+  });
 });
 
 // ---- checkOrphanPrinciples ----

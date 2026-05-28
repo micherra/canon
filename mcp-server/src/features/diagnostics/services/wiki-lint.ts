@@ -93,7 +93,7 @@ function trimToNounPhrase(raw: string): string {
  * matchAll() creates its own iterator and resets lastIndex internally.
  */
 const POSITIVE_RE_SRC =
-  /\b(?:must|should|always|prefer)\s+(?:use\s+|not\s+)?([a-zA-Z_][\w\s-]*?)(?:[.,;]|\s+(?:for|in|on|with|to|from|when|as|at|by|of|and|or|via|unless|into)\b|$)/gim;
+  /\b(?:must|should|always|prefer)\s+(?!not\b)(?:use\s+)?([a-zA-Z_][\w\s-]*?)(?:[.,;]|\s+(?:for|in|on|with|to|from|when|as|at|by|of|and|or|via|unless|into)\b|$)/gim;
 
 /**
  * Negative imperative patterns: never, avoid, do not, don't, must not, MUST NOT.
