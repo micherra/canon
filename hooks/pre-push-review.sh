@@ -52,7 +52,7 @@ fi
 
 # Check if the most recent review covers recent work
 # Compare the last review timestamp against the oldest unpushed commit
-LAST_REVIEW_TS=$(tail -1 "$REVIEWS_FILE" 2>/dev/null | grep -o '"timestamp":"[^"]*"' | grep -o '[0-9T:Z.+-]*' | head -1 || echo "")
+LAST_REVIEW_TS=$(tail -1 "$REVIEWS_FILE" 2>/dev/null | jq -r '.timestamp // empty' 2>/dev/null || true)
 
 if [[ -z "$LAST_REVIEW_TS" ]]; then
   cat <<EOF
