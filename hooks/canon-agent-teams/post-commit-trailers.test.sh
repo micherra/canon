@@ -31,7 +31,7 @@ trap 'rm -rf "$SANDBOX"' EXIT
   git config gpg.format openpgp
   echo x > a
   git add a
-  git commit -q -m "$(printf 'subject\n\nCanon-Workflow: test\n')"
+  git commit -q -m "$(printf 'feat: add a thing\n\nSome body text explaining the change.\n\nCanon-Workflow: my-slug\nCanon-Agent: engineer\nCanon-State: implement\n')"
   out=$(bash "$HOOK" <<<'{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"}}' 2>&1) \
     || { echo "hook exited non-zero: $out" >&2; exit 1; }
   if echo "$out" | grep -q 'CANON WARNING'; then

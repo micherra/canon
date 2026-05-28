@@ -7,9 +7,11 @@
 Pre/post tool-use interceptors that enforce policy and prevent mistakes without requiring agent compliance. Hooks run automatically on matched tool invocations.
 
 ## Architecture
-<!-- last-updated: 2026-05-26 -->
+<!-- last-updated: 2026-05-28 -->
 
 `hooks.json` is the single registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode/Agent), `PostToolUse` (after Bash), `SessionStart`, `SubagentStop`, or `PostCompact`. The separate `canon-agent-teams/hooks.json` was merged into this file (2026-04-26); `canon-agent-teams/hooks.json` no longer exists.
+
+`lib/canon-hook-lib.sh` — shared helper library sourced by hooks that need JSON extraction (`jq`-based) or common utilities; all JSON parsing from Claude Code `tool_input` uses `jq` (no `grep`/`sed`).
 
 **Hook scripts:**
 

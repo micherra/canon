@@ -39,7 +39,7 @@ GIT_DIR_ARG=$(canon_git_dir_arg "$COMMAND")
 # shellcheck disable=SC2086
 LAST_MSG=$(git $GIT_DIR_ARG log -1 --format='%B' 2>/dev/null || echo "")
 
-if [[ "$LAST_MSG" == Canon-Workflow:* ]]; then
+if grep -q '^Canon-Workflow:' <<<"$LAST_MSG"; then
   exit 0
 fi
 

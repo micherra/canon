@@ -146,7 +146,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 4. Spawn `canon:engineer` with request, `worktree_path`, `turn_budget: {maxTurns}`.
 5. **Verify journaling**: After engineer returns, check the SUMMARY `### Status` field. If the engineer's SUMMARY reports `DONE` or `DONE_WITH_CONCERNS` AND the build is fix-type (no new contracts, no new exports), log the verify step as skipped: `batch_log_steps([{ step_id: "verify", status: "skipped", skip_reason: "fix-type build, no contract-level changes" }])`. Otherwise, dispatch a separate verify agent (or run `npm run build && npm run lint && npm test && bash hooks/lint.sh` inline) before proceeding to review.
 
-**Fast-path enrichment**: For 4+ files or 2+ workstreams, include in engineer's spawn prompt: scope summary, key files with one-line purpose, known gotchas.
+**Fast-path enrichment**: For 4+ files or 2+ workstreams, include in engineer spawn prompt: scope summary, key files with one-line purpose, known gotchas.
 
 **Learner-proposal enrichment**: When the build addresses learner findings, add to the engineer spawn prompt: "After implementing each proposal, grep the same file and related files in the same directory for existing instances of the violation pattern. Apply the fix retroactively to every instance found. List retroactive fixes in the Criteria Coverage table."
 
@@ -394,7 +394,7 @@ The PostCommit hook validates `Canon-Workflow` trailer presence.
 
 ### Error Handling
 
-See the "Agent Spawn Error Handling" section below. The same retry logic applies to agent-teams orchestration. For transient errors (429, auth, TTL), retry up to 3 times with exponential backoff (4s, 8s, 16s). For agent failures and stuck conditions, use the Auto-Escalation Protocol instead of immediate HITL. If all retries fail, inform the user and pause.
+See Agent Spawn Error Handling below. For transient errors (429, auth, TTL), retry up to 3 times with exponential backoff (4s, 8s, 16s). For agent failures and stuck conditions, use the Auto-Escalation Protocol instead of immediate HITL.
 
 ## Specialist Agents
 
@@ -420,7 +420,7 @@ Agent({
 })
 ```
 
-The agent's spawn prompt MUST include the `worktree_path` so the agent knows where to work. Include it as: `Working directory: {worktree_path}` near the top of the prompt. Also include `turn_budget: {maxTurns}` (from the agent's frontmatter) so the agent can pace its work per the `agent-budget-checkpoint` rule.
+Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`.
 
 **Exceptions (no worktree needed):**
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
@@ -437,7 +437,7 @@ Detect and retry transient failures:
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
 
-**Architect re-spawn tracking**: When the architect requires 2+ spawn attempts before producing expected artifacts, record the reason in the `log_step` outcome `review_verdict` field as `"respawn:{reason}"` (e.g., `"respawn:artifacts_missing"`). Values for `{reason}`: `artifacts_missing` (agent returned without writing design), `rate_limit`, `auth_failure`, `ttl_ordering`, `timeout`. This enables trend tracking across builds. When the `JournalOutcome` schema is extended with a dedicated `respawn_reason` field, migrate to that field.
+**Architect re-spawn tracking**: When architect requires 2+ spawn attempts, record reason in `log_step` outcome `review_verdict` field as `"respawn:{reason}"` (values: `artifacts_missing`, `rate_limit`, `auth_failure`, `ttl_ordering`, `timeout`).
 
 ### Auto-Escalation Protocol
 <!-- last-updated: 2026-05-21 -->
@@ -471,15 +471,16 @@ Re-spawned agents (failure retry, fix-after-review, reviewer re-spawn) MUST rece
 3. **Prior artifacts**: `step_id` + `artifacts_actual` from `journal.json`.
 4. **No-duplicate instruction**: "Do not re-implement completed files. Pick up from where the prior attempt left off."
 
-**Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list (focus only on flagged files). Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
+**Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Project Structure <!-- last-updated: 2026-05-25 -->
+## Project Structure <!-- last-updated: 2026-05-28 -->
 
 ```
 canon/
 ├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (21 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
+│   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, jq wrappers)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/
 │       ├── app/          # Entry point (index.ts), tool registration
@@ -490,10 +491,10 @@ canon/
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
-│       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries
+│       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (63 total: 6 rules, 35 strong-opinions, 22 conventions)
+├── principles/           # Built-in principles (65 total: 6 rules, 35 strong-opinions, 24 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
@@ -501,9 +502,9 @@ canon/
 ├── primers/              # Domain primers — domain reasoning context loaded by agents
 ├── references/           # Orchestrator + agent protocol fragments (canon-orchestrator.md, etc.)
 ├── skills/canon/         # Claude Code skill definition — entry point for Canon activation
-│   ├── commands/         # Slash command definitions (/canon:init, /canon:check, etc.)
+│   ├── commands/         # Slash command definitions (/canon:init, /canon:check, /canon:diagnose, etc.)
 │   └── evals/            # Eval suite for intent classification
-├── templates/            # Artifact templates agents must follow (includes worker-prompt.md for DAG worker spawn)
+├── templates/            # Artifact templates agents must follow (includes prd.md, renderer-*.md, sharpened-request.md, worker-prompt.md)
 └── .canon/               # Runtime data (workspaces, principles, config, JSONL drift store, SQLite DBs)
     └── workspaces/       # Per-branch/task build state
 ```
