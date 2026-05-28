@@ -23,6 +23,20 @@ assert_exit() {
   fi
 }
 
+assert_stderr_contains() {
+  local desc="$1"
+  local expected_pattern="$2"
+  local actual_stderr="$3"
+  if echo "$actual_stderr" | grep -q "$expected_pattern"; then
+    echo "PASS: $desc"
+    PASS=$(( PASS + 1 ))
+  else
+    echo "FAIL: $desc (expected stderr to contain: $expected_pattern)"
+    echo "  actual stderr: $actual_stderr"
+    FAIL=$(( FAIL + 1 ))
+  fi
+}
+
 # ── Test setup ──────────────────────────────────────────────────────────────
 
 # Create a temp directory that lint.sh will scan instead of the real hooks dir
@@ -96,10 +110,15 @@ bash "$TMPDIR_WORK/lint.sh" > /dev/null 2>&1 || actual=$?
 assert_exit "skips test-helpers.sh" 0 "$actual"
 
 # ── Test 5: fails closed when shellcheck is not in PATH ─────────────────────
+# Use a minimal PATH that includes /usr/bin and /bin (so bash, find, dirname,
+# command all resolve) but excludes shellcheck's install directory
+# (typically /opt/homebrew/bin or /usr/local/bin on macOS).
 
 actual=0
-PATH="" bash "$TMPDIR_WORK/lint.sh" > /dev/null 2>&1 || actual=$?
+stderr_output=""
+stderr_output=$(PATH="/usr/bin:/bin" bash "$TMPDIR_WORK/lint.sh" 2>&1 >/dev/null) || actual=$?
 assert_exit "fails closed when shellcheck is not installed" 1 "$actual"
+assert_stderr_contains "fail-closed stderr contains expected message" "shellcheck is not installed" "$stderr_output"
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 
