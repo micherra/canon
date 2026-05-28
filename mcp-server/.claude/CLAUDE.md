@@ -48,7 +48,9 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-25 (confidence scoring: ConfidenceAnnotation type, OutcomeStore, drift schema v7, review/drift adapters, write_review/get_compliance updated) -->
+<!-- last-updated: 2026-05-27 (resolveGitRoot added to resolve-project-dir.ts) -->
+
+**`resolveGitRoot(cwd, gitTopLevelFn)`** (`src/app/resolve-project-dir.ts`) — returns git repo root for `cwd`; falls back to `cwd` when not in a git repo or git is unavailable; errors are logged and swallowed (never throws).
 
 **`present_artifact` MCP tool** — `html` parameter required; serves the provided HTML directly via HTTP server; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
 
@@ -206,7 +208,7 @@ src/
 - `injectSettingsIntoRequests(requests: SpawnRequest[]): Promise<void>` — iterates spawn requests sequentially; calls `injectWorktreeSettings(req.worktree_path, req.tools)` when `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools` are all present; sequential (not `Promise.all`) for error isolation — one failure does not abort others; never throws
 
 ## Invariants
-<!-- last-updated: 2026-04-09 (concurrency invariants added: optimistic locking, SQLITE_BUSY retry, atomic board sync) -->
+<!-- last-updated: 2026-05-27 (cwd fallback now resolves to git root via resolveGitRoot before resolveProjectDir) -->
 
 - **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
@@ -215,7 +217,7 @@ src/
 - All data persists to `.canon/` directory (reviews.jsonl, knowledge-graph.db, orchestration.db, drift.db); `graph-data.json`, `summaries.json`, `reverse-deps.json` no longer written (removed ADR-005 2026-04-01)
 - JSONL files auto-rotate when exceeding size limits
 - Atomic file writes prevent corruption on concurrent access
-- `CANON_PROJECT_DIR` env var sets project root (defaults to `process.cwd()`)
+- `CANON_PROJECT_DIR` env var sets project root; when unset, cwd fallback resolves to the git repo root (`resolveGitRoot`) before being passed to `resolveProjectDir` — ensures `.canon/` lands at the repo root even when the server starts from a subdirectory
 - `CANON_PLUGIN_DIR` env var sets plugin directory (defaults to parent of mcp-server)
 - Workspace subdirectories created by `initWorkspace`: `artifacts/`, `plans/`, `reviews/`, `transcripts/` — `notes/` removed 2026-03-24; `artifacts/` added 2026-05-16; `decisions/`, `handoffs/`, `research/` removed 2026-05-25 (never populated by any tool)
 - `progress.md` is seeded at workspace creation and appended server-side by `report_result` via its `progress_line` parameter; agents treat it as read-only
