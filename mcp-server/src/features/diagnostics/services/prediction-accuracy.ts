@@ -142,7 +142,8 @@ export function parseOutcome(outcomeJson: string | null): PairOutcome[] {
       if (pair !== null) result.push(pair);
     }
     return result;
-  } catch {
+  } catch (err) {
+    console.warn("[canon] failed to parse outcome JSON:", err instanceof Error ? err.message : err);
     return [];
   }
 }

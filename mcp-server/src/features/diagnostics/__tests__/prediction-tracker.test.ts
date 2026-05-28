@@ -271,6 +271,29 @@ describe("recordPrediction — fail-open behavior", () => {
     expect(predictionId).toBeUndefined();
     db.close();
   });
+
+  it("calls console.warn when insertPrediction throws", () => {
+    const db = initDriftDb(":memory:");
+    const driftDbSignals = new DriftDbSignals(db);
+
+    vi.spyOn(driftDbSignals, "insertPrediction").mockImplementation(() => {
+      throw new Error("DB write error");
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
+
+    const input: RecordPredictionInput = {
+      compiledSignals: [makeFileSignalsWithViolation("src/foo.ts", "simplicity-first")],
+      filePaths: ["src/foo.ts"],
+    };
+
+    recordPrediction(input, driftDbSignals);
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0][0]).toContain("[canon] prediction recording failed");
+
+    warnSpy.mockRestore();
+    db.close();
+  });
 });
 
 describe("recordPrediction — per-file file_paths filtering", () => {
