@@ -36,7 +36,7 @@ canon_extract_command() {
   # Try jq first (most robust), fall back to grep/sed.
   if command -v jq >/dev/null 2>&1; then
     local result
-    result=$(printf '%s' "$input" | jq -r '.command // empty' 2>/dev/null || true)
+    result=$(printf '%s' "$input" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true)
     printf '%s' "$result"
   else
     printf '%s' "$input" \

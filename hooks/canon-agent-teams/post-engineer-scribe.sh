@@ -22,7 +22,8 @@ fi
 
 # Look for engineer in the subagent descriptor. Tolerant of field name
 # variation across Claude Code versions: `subagent_type`, `agent`, `agent_type`.
-if ! echo "$INPUT" | grep -qE '"(subagent_type|agent|agent_type)"[[:space:]]*:[[:space:]]*"[^"]*engineer'; then
+AGENT_TYPE=$(echo "$INPUT" | jq -r '(.tool_input.subagent_type // .subagent_type // .tool_input.agent // .agent // .tool_input.agent_type // .agent_type // empty)' 2>/dev/null || true)
+if [[ "$AGENT_TYPE" != *engineer* ]]; then
   exit 0
 fi
 
@@ -30,10 +31,7 @@ fi
 # hook payload. Without one, we have nowhere to queue — exit quietly.
 WORKSPACE="${CANON_WORKSPACE:-}"
 if [[ -z "$WORKSPACE" ]]; then
-  WORKSPACE=$(echo "$INPUT" \
-    | grep -oE '"workspace"[[:space:]]*:[[:space:]]*"[^"]*"' \
-    | head -1 \
-    | sed 's/"workspace"[[:space:]]*:[[:space:]]*"//;s/"$//')
+  WORKSPACE=$(echo "$INPUT" | jq -r '.tool_input.workspace // .workspace // empty' 2>/dev/null || true)
 fi
 
 if [[ -z "$WORKSPACE" || ! -d "$WORKSPACE" ]]; then

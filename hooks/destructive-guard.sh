@@ -15,7 +15,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract the command being run from the tool input
-COMMAND=$(echo "$INPUT" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true)
 
 # If we couldn't extract a command, pass through
 if [[ -z "$COMMAND" ]]; then
@@ -95,7 +95,7 @@ if echo "$COMMAND" | grep -qE '\bgit\b.*\bbranch\b.*-D\b'; then
   # Exception: allow force-deletion of Canon-managed branches.
   # Extract all arguments that appear after -D (strip any flags starting with -).
   # If ALL branch names start with canon/, canon-wave/, or canon-task/, the operation is safe.
-  branch_args=$(echo "$COMMAND" | sed 's/.*-D[[:space:]]*//' | tr ' \t' '\n' | grep -v '^-')
+  branch_args=$(echo "$COMMAND" | sed 's/.*-D[[:space:]]*//' | tr -d '"'"'" | tr ' \t' '\n' | grep -v '^-')
   if [[ -n "$branch_args" ]]; then
     all_canon=true
     while IFS= read -r branch; do

@@ -22,7 +22,8 @@ source "$_HOOK_LIB"
 INPUT=$(cat)
 
 # Only care about Bash calls — non-Bash tools don't produce commits.
-if ! echo "$INPUT" | grep -q '"tool_name"[[:space:]]*:[[:space:]]*"Bash"'; then
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || true)
+if [[ "$TOOL_NAME" != "Bash" ]]; then
   exit 0
 fi
 
@@ -38,7 +39,7 @@ GIT_DIR_ARG=$(canon_git_dir_arg "$COMMAND")
 # shellcheck disable=SC2086
 LAST_MSG=$(git $GIT_DIR_ARG log -1 --format='%B' 2>/dev/null || echo "")
 
-if echo "$LAST_MSG" | grep -q '^Canon-Workflow:'; then
+if [[ "$LAST_MSG" == Canon-Workflow:* ]]; then
   exit 0
 fi
 

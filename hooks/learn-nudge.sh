@@ -19,7 +19,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Only trigger on git commit commands
-if ! echo "$INPUT" | grep -q "git commit"; then
+if [[ "$INPUT" != *"git commit"* ]]; then
   exit 0
 fi
 

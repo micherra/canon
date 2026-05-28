@@ -20,7 +20,7 @@ INPUT=$(cat)
 
 
 # Extract session_id (used to scope state file per session)
-SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 
 # If no session_id, skip detection (can't scope state)
 if [[ -z "$SESSION_ID" ]]; then
@@ -28,12 +28,10 @@ if [[ -z "$SESSION_ID" ]]; then
 fi
 
 # Extract tool_name for fingerprint
-TOOL_NAME=$(echo "$INPUT" | grep -o '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"tool_name"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || true)
 
 # Strip volatile fields before hashing so identical tool calls produce the same fingerprint
-STABLE_INPUT=$(echo "$INPUT" \
-  | sed 's/"session_id"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*,\?//g' \
-  | sed 's/"tool_use_id"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*,\?//g')
+STABLE_INPUT=$(echo "$INPUT" | jq -c 'del(.session_id, .tool_use_id)' 2>/dev/null || echo "$INPUT")
 
 # Fingerprint: tool_name + stable input hashed to 16-char hex
 FINGERPRINT=$(printf '%s\n%s' "$TOOL_NAME" "$STABLE_INPUT" | shasum -a 256 | head -c 16)

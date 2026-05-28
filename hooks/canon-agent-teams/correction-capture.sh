@@ -19,7 +19,7 @@ source "$_HOOK_LIB"
 INPUT=$(cat)
 
 # Only care about Bash calls
-TOOL_NAME=$(echo "$INPUT" | grep -o '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"tool_name"[[:space:]]*:[[:space:]]*"//;s/"$//')
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || true)
 if [[ "$TOOL_NAME" != "Bash" ]]; then
   exit 0
 fi
