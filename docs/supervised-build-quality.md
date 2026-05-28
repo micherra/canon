@@ -64,7 +64,7 @@ Between May 24–26, a concentrated wave shipped the top-priority roadmap items 
 - **Hook hardening** (PRs #254, #255, #257, #260) — SIGPIPE fixes, session-start guards, shared test helpers, verify ghost state handling.
 - **Dead-code cleanup** (PRs #252, #256, #258) — Drift violation fixes, dead workspace dirs, doc corrections.
 
-## What Shipped: Hook Hardening & Learner Wave (PRs #262–#270)
+## What Shipped: Hook Hardening & Learner Wave (May 27–28)
 
 Between May 27–28, a second wave shipped hook quality improvements and learner proposals:
 
