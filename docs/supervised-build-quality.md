@@ -64,6 +64,20 @@ Between May 24–26, a concentrated wave shipped the top-priority roadmap items 
 - **Hook hardening** (PRs #254, #255, #257, #260) — SIGPIPE fixes, session-start guards, shared test helpers, verify ghost state handling.
 - **Dead-code cleanup** (PRs #252, #256, #258) — Drift violation fixes, dead workspace dirs, doc corrections.
 
+## What Shipped: Hook Hardening & Learner Wave (PRs #262–#270)
+
+Between May 27–28, a second wave shipped hook quality improvements and learner proposals:
+
+- **PostCompact stdin fix** (PR #262) — PostCompact hook reads `compact_summary` from stdin instead of a positional arg.
+- **Shellcheck verify gate** (PR #265) — `hooks/lint.sh` now runs shellcheck as a real verify gate on all hook shell scripts.
+- **Destructive-guard regex fix** (PR #266) — Regex updated to allow `canon-task/` branch prefix in addition to `canon/`.
+- **Wiki-lint + proactive doc gap detection** (PR #267) — `wiki_lint` MCP tool scans Canon's own meta-layer for contradictions, orphan principles, and directories missing CLAUDE.md. Ships both Thread 4 items.
+- **Hook test coverage** (PR #268) — Adds `canon-wave/` test case for destructive-guard; fixes stale comment (VVV1, VVV2).
+- **Learner WWW1/WWW2 proposals** (PR #269) — Root-threading convention for wave tasks and observable catch-block pattern.
+- **jq JSON extraction hardening** (PR #270) — Replaces grep/sed JSON extraction with jq across hook scripts; fixes quoted branch args.
+
+**In-flight**: PR #271 (`fix(hooks): replace remaining grep/sed JSON extraction with jq + context-sync`) — hook hardening continuation, not yet merged.
+
 ## Supervised Build Quality — Feature Backlog
 
 Three threads for making supervised builds faster and higher quality. Features are harvested from prior roadmap docs and prioritized by leverage.
@@ -108,9 +122,9 @@ Canon's own documentation and artifacts accumulate drift. Eat your own dogfood.
 
 | Feature | Effort | Leverage | Source |
 |---------|--------|----------|--------|
-| **Wiki-lint over Canon's own artifacts** | Medium | High | Lint pass over contradictions between CLAUDE.md files, orphan principles with no usages, stale plans referencing renamed files, principles lacking backing examples. Canon lints code but not its own meta-layer. |
+| ~~**Wiki-lint over Canon's own artifacts**~~ | ~~Medium~~ | ~~High~~ | Shipped (PR #267). |
 | ~~**Composite health score**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #259). `computeConfidence()` engine with shared `ConfidenceScore` schema. Drift report integrates confidence decay. |
-| **Proactive doc gap detection** | Small | Medium | Before classifying a diff, scribe scans for directories that contain source files but no CLAUDE.md. Finds gaps that passive diff-watching never catches. |
+| ~~**Proactive doc gap detection**~~ | ~~Small~~ | ~~Medium~~ | Shipped (PR #267). |
 | **Documentation staleness in drift reports** | Medium | Medium | Add a documentation freshness dimension alongside principle compliance. Each CLAUDE.md gets a "commits since last sync" count and decaying confidence score. |
 | **Repo-level `.canon/log.md`** | Tiny | Medium | Global timeline of flow completions, principle additions, and lint passes. Single append at `complete_flow`. Grep-parseable `## [YYYY-MM-DD] type | title` prefix. |
 | **Consolidate `write_*` → `write_artifact`** | Small | Low | 5 individual write tools still individually registered. One `write_artifact({ type, workspace, data })` reduces MCP surface. |
@@ -155,7 +169,7 @@ These were evaluated and explicitly rejected:
 | ~~**Done**~~ | ~~Tool-loop detection + spawn watchdog~~ | Shipped PR #245. |
 | ~~**Done**~~ | ~~Confidence scoring + drift decay + composite health~~ | Shipped PR #259. |
 | ~~**Done**~~ | ~~PostCompact narrative capture~~ | Shipped PR #261. |
-| **Next** | Wiki-lint + doc gap detection | Canon eating its own dogfood. Composite health score is now available to surface drift; wiki-lint closes the loop on artifact contradictions. |
+| ~~**Done**~~ | ~~Wiki-lint + doc gap detection~~ | Shipped PR #267. |
 | **Next** | GitHub-linkable review output | Last remaining Thread 2 item. Small build, immediate value for PR workflows. |
 | **Then** | Short-term area memory + hot-file caution | Compound context for engineers. Data exists in `get_file_context`, needs injection into spawn prompts. |
 | **Then** | Effort budgets + skill effectiveness tracking | Last Thread 3 items. Cap runaway agent turns and learn which primers/skills help. |
