@@ -14,7 +14,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract command
-COMMAND=$(echo "$INPUT" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+COMMAND=$(echo "$INPUT" | jq -r '.command // empty' 2>/dev/null || true)
 
 # Only trigger on git push commands
 if ! echo "$COMMAND" | grep -qE '\bgit\b.*\bpush\b'; then

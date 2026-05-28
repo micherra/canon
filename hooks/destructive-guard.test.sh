@@ -152,6 +152,15 @@ run_test "git branch -D canon-task/wave-1 passes" \
 run_test "git branch -D multiple Canon branches passes" \
   0 "$(make_input 'git branch -D canon/a canon-wave/b canon-task/c')" "$NON_WT_PWD"
 
+run_test "git branch -D quoted Canon branches passes" \
+  0 '{"command":"git branch -D \"canon/some-slug\" \"canon/other-slug\""}' "$NON_WT_PWD"
+
+run_test "git branch -D mixed quoted Canon prefixes passes" \
+  0 '{"command":"git branch -D \"canon/a\" \"canon-wave/b\" \"canon-task/c\""}' "$NON_WT_PWD"
+
+run_test "git branch -D quoted non-Canon branch blocks" \
+  2 '{"command":"git branch -D \"feature/my-work\""}' "$NON_WT_PWD"
+
 echo ""
 echo "-- Canon branch -D exemption: non-Canon branches still blocked (exit 2) --"
 
