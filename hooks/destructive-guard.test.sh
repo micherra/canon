@@ -143,11 +143,14 @@ echo "-- Canon branch -D exemption: Canon-prefixed branches allowed (exit 0) --"
 run_test "git branch -D canon/some-slug passes" \
   0 "$(make_input 'git branch -D canon/some-slug')" "$NON_WT_PWD"
 
+run_test "git branch -D canon-wave/task-01 passes" \
+  0 "$(make_input 'git branch -D canon-wave/task-01')" "$NON_WT_PWD"
+
 run_test "git branch -D canon-task/wave-1 passes" \
   0 "$(make_input 'git branch -D canon-task/wave-1')" "$NON_WT_PWD"
 
 run_test "git branch -D multiple Canon branches passes" \
-  0 "$(make_input 'git branch -D canon/a canon/b canon-task/c')" "$NON_WT_PWD"
+  0 "$(make_input 'git branch -D canon/a canon-wave/b canon-task/c')" "$NON_WT_PWD"
 
 echo ""
 echo "-- Canon branch -D exemption: non-Canon branches still blocked (exit 2) --"
