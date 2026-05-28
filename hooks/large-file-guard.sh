@@ -17,7 +17,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract file path from the tool input
-FILE_PATH=$(echo "$INPUT" | jq -r '.file_path // empty' 2>/dev/null || true)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .file_path // empty' 2>/dev/null || true)
 
 # If we couldn't extract a path, pass through
 if [[ -z "$FILE_PATH" ]]; then
@@ -52,9 +52,9 @@ else
 fi
 
 # For Write calls, estimate new size from the content field
-NEW_CONTENT=$(echo "$INPUT" | jq -e '.content // empty | select(. != "")' >/dev/null 2>&1&& echo "yes" || true)
+NEW_CONTENT=$(echo "$INPUT" | jq -e '.tool_input.content // .content // empty | select(. != "")' >/dev/null 2>&1 && echo "yes" || true)
 if [[ -n "$NEW_CONTENT" ]]; then
-  NEWLINE_COUNT=$(echo "$INPUT" | jq -r '.content // empty' 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+  NEWLINE_COUNT=$(echo "$INPUT" | jq -r '.tool_input.content // .content // empty' 2>/dev/null | wc -l | tr -d ' ' || echo "0")
   if [[ $NEWLINE_COUNT -gt $MAX_LINES ]]; then
     cat <<EOF
 CANON WARNING: Writing ~${NEWLINE_COUNT} lines to ${FILE_PATH} (threshold: ${MAX_LINES}). Consider splitting this file into smaller, focused modules. Large files are harder to review, test, and maintain.

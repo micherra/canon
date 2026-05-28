@@ -38,6 +38,11 @@ make_input() {
   printf '{"command":"%s"}' "$cmd"
 }
 
+make_nested_input() {
+  local cmd="$1"
+  printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$cmd"
+}
+
 echo ""
 echo "=== destructive-guard.sh tests ==="
 echo ""
@@ -204,6 +209,27 @@ run_test "chained: worktree path then reset --hard blocks" \
 
 run_test "semicolon-chained: worktree path then checkout blocks" \
   2 "$(make_input 'git -C .canon/worktrees/slug fetch; git checkout -- .')" "$NON_WT_PWD"
+
+echo ""
+echo "-- Nested tool_input format (real Claude Code payload) --"
+
+run_test "nested: git reset --hard blocks" \
+  2 "$(make_nested_input 'git reset --hard HEAD')" "$NON_WT_PWD"
+
+run_test "nested: git clean -f blocks" \
+  2 "$(make_nested_input 'git clean -f')" "$NON_WT_PWD"
+
+run_test "nested: git status passes" \
+  0 "$(make_nested_input 'git status')" "$NON_WT_PWD"
+
+run_test "nested: git branch -D canon/slug passes" \
+  0 "$(make_nested_input 'git branch -D canon/some-slug')" "$NON_WT_PWD"
+
+run_test "nested: git branch -D feature/x blocks" \
+  2 "$(make_nested_input 'git branch -D feature/x')" "$NON_WT_PWD"
+
+run_test "nested: git -C .canon/worktrees/slug reset --hard passes" \
+  0 "$(make_nested_input 'git -C .canon/worktrees/my-slug reset --hard HEAD')" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
 # Summary
