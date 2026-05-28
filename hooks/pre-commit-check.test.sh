@@ -10,8 +10,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK="$SCRIPT_DIR/pre-commit-check.sh"
 
-PASS=0
-FAIL=0
+# shellcheck source=hooks/test-helpers.sh
+source "$SCRIPT_DIR/test-helpers.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers

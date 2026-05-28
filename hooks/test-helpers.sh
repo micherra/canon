@@ -170,6 +170,35 @@ run_test_in_dir_no_pattern() {
 }
 
 # ---------------------------------------------------------------------------
+# run_test_with_output <description> <expected_output_pattern> [input_json] [env_overrides]
+# ---------------------------------------------------------------------------
+# Runs HOOK via `bash "$HOOK"` with optional env overrides.
+# Checks that stdout+stderr contains the expected pattern.
+# Exit code is NOT checked — this helper focuses on output content.
+# env_overrides is a string of KEY=VALUE pairs, e.g. "FOO=bar BAZ=qux".
+run_test_with_output() {
+  local description="$1"
+  local expected_pattern="$2"
+  local input_json="${3:-{}}"
+  local env_overrides="${4:-}"
+
+  local output
+  local actual_exit=0
+  # shellcheck disable=SC2086
+  output=$(echo "$input_json" | env ${env_overrides} bash "$HOOK" 2>&1) || actual_exit=$?
+
+  if echo "$output" | grep -q "$expected_pattern"; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected output containing: $expected_pattern"
+    echo "        actual output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # setup_repo <dir>
 # ---------------------------------------------------------------------------
 # Creates a minimal git repo at <dir> with a tracked file and .gitignore.

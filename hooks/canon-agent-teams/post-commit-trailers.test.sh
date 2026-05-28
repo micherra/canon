@@ -6,7 +6,11 @@
 
 set -euo pipefail
 
-HOOK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/post-commit-trailers.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOK="$SCRIPT_DIR/post-commit-trailers.sh"
+
+# shellcheck source=hooks/test-helpers.sh
+source "$SCRIPT_DIR/../test-helpers.sh"
 
 pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1" >&2; exit 1; }
