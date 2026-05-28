@@ -56,7 +56,7 @@ fi
 LOCK_CONTENT=$(cat "$LOCK_FILE" 2>/dev/null || echo "{}")
 
 # Extract started timestamp from lock
-LOCK_STARTED=$(echo "$LOCK_CONTENT" | grep -o '"started"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"started"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+LOCK_STARTED=$(echo "$LOCK_CONTENT" | jq -r '.started // empty' 2>/dev/null || true)
 
 # Check if lock is stale (>2 hours old)
 if [[ -n "$LOCK_STARTED" ]]; then
@@ -77,8 +77,8 @@ if [[ -n "$LOCK_STARTED" ]]; then
 fi
 
 # Check if the lock belongs to a different session
-SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
-LOCK_SESSION=$(echo "$LOCK_CONTENT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
+LOCK_SESSION=$(echo "$LOCK_CONTENT" | jq -r '.session_id // empty' 2>/dev/null || true)
 
 # If same session or no session info, allow
 if [[ -n "$SESSION_ID" ]] && [[ "$SESSION_ID" == "$LOCK_SESSION" ]]; then

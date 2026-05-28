@@ -26,7 +26,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract session_id for per-session dedup
-SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 
 CANON_DIR="${CANON_PROJECT_DIR:-.}/.canon"
 SPAWN_TS_FILE="${CANON_DIR}/.spawn-start-ts"
@@ -42,7 +42,7 @@ THRESHOLD_MINUTES=${CANON_SPAWN_TIMEOUT_MINUTES:-}
 if [[ -z "$THRESHOLD_MINUTES" ]]; then
   CONFIG_FILE="${CANON_DIR}/config.json"
   if [[ -f "$CONFIG_FILE" ]]; then
-    THRESHOLD_MINUTES=$(grep -o '"spawn_timeout_minutes"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" | grep -o '[0-9]*$' || true)
+    THRESHOLD_MINUTES=$(jq -r '.spawn_timeout_minutes // empty' "$CONFIG_FILE" 2>/dev/null || true)
   fi
 fi
 
@@ -83,7 +83,7 @@ AGENT_TYPE="${CANON_AGENT_TYPE:-unknown}"
 STEP_ID="${CANON_STEP_ID:-unknown}"
 
 # Extract last tool_name from stdin for "last activity"
-LAST_TOOL=$(echo "$INPUT" | grep -o '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"tool_name"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+LAST_TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || true)
 if [[ -z "$LAST_TOOL" ]]; then
   LAST_TOOL="unknown"
 fi

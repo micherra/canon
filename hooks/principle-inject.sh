@@ -14,7 +14,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract file path from the tool input
-FILE_PATH=$(echo "$INPUT" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+FILE_PATH=$(echo "$INPUT" | jq -r '.file_path // empty' 2>/dev/null || true)
 
 # If we couldn't extract a path, pass through
 if [[ -z "$FILE_PATH" ]]; then
@@ -50,7 +50,7 @@ canon_hash_string() {
 
 # Session dedup: skip if we already injected for this file in this session.
 # Prefer hook session_id (stable across invocations); else scope by repo root so dedup is per-project.
-SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 if [[ -n "$SESSION_ID" ]]; then
   DEDUP_SLUG="$SESSION_ID"
 else

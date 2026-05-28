@@ -22,13 +22,13 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Only trigger on git commit commands
-if ! echo "$INPUT" | grep -q "git commit"; then
+if [[ "$INPUT" != *"git commit"* ]]; then
   exit 0
 fi
 
 # Session dedup — only nudge once per session.
 # Use session_id from the hook JSON input (not PID or pwd-based hash).
-SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 NUDGE_FILE="${TMPDIR:-/tmp}/canon-compaction-nudged-${SESSION_ID:-unknown}"
 if [[ -f "$NUDGE_FILE" ]]; then
   exit 0

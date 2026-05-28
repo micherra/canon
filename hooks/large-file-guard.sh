@@ -17,7 +17,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract file path from the tool input
-FILE_PATH=$(echo "$INPUT" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+FILE_PATH=$(echo "$INPUT" | jq -r '.file_path // empty' 2>/dev/null || true)
 
 # If we couldn't extract a path, pass through
 if [[ -z "$FILE_PATH" ]]; then
@@ -37,7 +37,7 @@ CANON_DIR="${MAIN_ROOT:-.}/.canon"
 MAX_LINES=500
 CONFIG_FILE="${CANON_DIR}/config.json"
 if [[ -f "$CONFIG_FILE" ]]; then
-  CONFIGURED=$(grep -o '"max_file_lines"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" | grep -o '[0-9]*' || true)
+  CONFIGURED=$(jq -r '.max_file_lines // empty' "$CONFIG_FILE" 2>/dev/null || true)
   if [[ -n "$CONFIGURED" ]]; then
     MAX_LINES=$CONFIGURED
   fi
@@ -52,16 +52,9 @@ else
 fi
 
 # For Write calls, estimate new size from the content field
-NEW_CONTENT=$(echo "$INPUT" | grep -o '"content"[[:space:]]*:[[:space:]]*"' || true)
+NEW_CONTENT=$(echo "$INPUT" | jq -e '.content // empty | select(. != "")' >/dev/null 2>&1&& echo "yes" || true)
 if [[ -n "$NEW_CONTENT" ]]; then
-  # Count newlines in content value; actual lines = newline_count + 1
-  NEWLINE_COUNT=0
-  if command -v jq &>/dev/null; then
-    NEWLINE_COUNT=$(echo "$INPUT" | jq -r '.content // empty' 2>/dev/null | wc -l | tr -d ' ' || echo "0")
-  else
-    NEWLINE_COUNT=$(echo "$INPUT" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"//p' | grep -o '\\n' | wc -l | tr -d ' ' || echo "0")
-    NEWLINE_COUNT=$((NEWLINE_COUNT + 1))
-  fi
+  NEWLINE_COUNT=$(echo "$INPUT" | jq -r '.content // empty' 2>/dev/null | wc -l | tr -d ' ' || echo "0")
   if [[ $NEWLINE_COUNT -gt $MAX_LINES ]]; then
     cat <<EOF
 CANON WARNING: Writing ~${NEWLINE_COUNT} lines to ${FILE_PATH} (threshold: ${MAX_LINES}). Consider splitting this file into smaller, focused modules. Large files are harder to review, test, and maintain.
