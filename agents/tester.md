@@ -65,7 +65,7 @@ When `role: verify`:
    - If all tests pass: report status `ALL_PASSING`. No table needed.
    - If tests fail: populate the Issues Found table with the same required columns (File, Failing Test, Root Cause, Suggested Fix) and report status `IMPLEMENTATION_ISSUE`.
 4. **Do NOT write any new tests.**
-5. Report `discovered_gates` in the `report_result` call (same as Step 6.5).
+5. Report `discovered_gates` in the test-report artifact and status (same as Step 6.5).
 
 **CRITICAL**: The `### Issues Found` table format is identical to the full process — the orchestrator parses it. Every column is required when reporting failures.
 
@@ -175,7 +175,7 @@ Then review each engineer's test file against its source file:
 
 ### Step 6.5: Report discovered gate commands
 
-After detecting the test framework (Step 4) and running the test suite, report the discovered test and lint commands so the gate runner can use them for automated quality gates. Include these in your `report_result` call:
+After detecting the test framework (Step 4) and running the test suite, report the discovered test and lint commands so the gate runner can use them for automated quality gates. Include these in your test-report artifact and status:
 
 - `discovered_gates`: An array of gate commands you verified work in this project. Only include commands you actually ran successfully. Format: `[{ command: "npm test", source: "tester" }]`
 

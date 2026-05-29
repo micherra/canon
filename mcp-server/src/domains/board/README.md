@@ -7,7 +7,7 @@ Part of the **Orchestration Context** (`features/orchestration/`, `domains/works
 ## What This Context Owns
 
 - **Board mutation logic** — pure functions that take a `Board` value and return a new `Board` value (immutable pattern). This includes state entry creation (`initBoard`), status transitions (`enterState`, `completeState`, `setBlocked`), and wave-level result recording (`recordConsultationResult`, `recordGateResult`).
-- **Board sync** — the `syncBoardToStore` utility that writes a mutated `Board` back to `ExecutionStore` (SQLite). Extracted so that both `drive_flow` and `report_result` can call it without duplicating logic (ADR-009a).
+- **Board sync** — the `syncBoardToStore` utility that writes a mutated `Board` back to `ExecutionStore` (SQLite). Extracted so that orchestration handlers can call it without duplicating logic (ADR-009a).
 
 ---
 

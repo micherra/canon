@@ -1,11 +1,10 @@
-# orchestration/ — Flow Execution Engine
+# orchestration/ — Orchestration Runtime
 
-This bounded context owns Canon's flow state machine runtime and every MCP tool the orchestrator uses to drive a build session. It is the largest feature in the codebase.
+This bounded context owns Canon's orchestration runtime and every MCP tool the orchestrator uses to drive a build session.
 
 ## What this context owns
 
-- **Flow engine** (`engine/`) — state transition evaluation, convergence enforcement, effects, competitive flows, debate protocol, consultation execution
-- **Orchestration tools** (`tools/`) — all harness MCP tools: `drive_flow`, `init_workspace`, `load_flow`, `report_result`, `update_board`, `post_message`, `get_messages`, `inject_wave_event`, `resolve_wave_event`, `resolve_after_consultations`, `record_agent_metrics`, `post_event`, `write_plan_index`, `simulate_flow`, and the artifact-write tools (`write_implementation_summary`, `write_review`, `write_test_report`)
+- **Orchestration tools** (`tools/`) — all harness MCP tools: `init_workspace`, `log_step`, `batch_log_steps`, `capture_transcript`, `get_transcript`, `record_agent_metrics`, `post_event`, `write_plan_index`, `resolve_agent_skills`, `invoke_janitor`, `open_artifact`, `present_artifact`, `report`, and the artifact-write tools (`write_implementation_summary`, `write_review`, `write_test_report`)
 - **Orchestration services** (`services/`) — context budget, prompt enrichment, contract checking, diff clustering, context injection, KG context formatting, learn gate evaluation, scope resolution, wave briefing assembly
 
 ## What this context does NOT own
@@ -22,28 +21,28 @@ This bounded context owns Canon's flow state machine runtime and every MCP tool 
 Key tools exported for registration in `src/app/index.ts`:
 
 ```typescript
-// State machine driver
-import { driveFlow } from "@features/orchestration/tools/drive-flow.ts";
-
 // Workspace lifecycle
 import { initWorkspace } from "@features/orchestration/tools/init-workspace.ts";
-import { loadFlow } from "@features/orchestration/tools/load-flow.ts";
 
-// Agent result recording
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
+// Step journaling
+import { logStep, batchLogSteps } from "@features/orchestration/tools/orchestration-journal.ts";
+
+// Agent metrics and activity
 import { recordAgentMetrics } from "@features/orchestration/tools/record-agent-metrics.ts";
+import { postEvent } from "@features/orchestration/tools/post-event.ts";
 
-// Board mutation
-import { updateBoard } from "@features/orchestration/tools/update-board.ts";
+// Plan and artifact writing
+import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
+import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
+import { writeReview } from "@features/orchestration/tools/write-review.ts";
+import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
 
-// Messaging
-import { postMessage } from "@features/orchestration/tools/post-message.ts";
-import { getMessages } from "@features/orchestration/tools/get-messages.ts";
+// Agent skill resolution
+import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
 
-// Wave events
-import { injectWaveEvent } from "@features/orchestration/tools/inject-wave-event.ts";
-import { resolveWaveEvent } from "@features/orchestration/tools/resolve-wave-event.ts";
-import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
+// Transcript capture
+import { captureTranscript } from "@features/orchestration/tools/capture-transcript.ts";
+import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
 ```
 
 All tool functions return `ToolResult<T>` (see `@shared/lib/tool-result.ts`). Expected errors are never thrown — they are returned as typed `CanonToolError` values.
@@ -67,5 +66,3 @@ The KG import (`@graph/*`) is permitted specifically for the `context-enrichment
 4. Return `ToolResult<T>` for expected errors; never throw for expected conditions.
 5. Register the tool in `src/app/index.ts`.
 6. Add tests in `__tests__/`.
-
-If the tool needs a new effect type, add it to `engine/effects.ts` and the `EffectTypeSchema` in `@domains/flows`. TypeScript's exhaustive switch will catch missing implementations at build time.

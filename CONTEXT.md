@@ -10,7 +10,7 @@ The transitive set of files affected by changing a given file, measured by the k
 
 ## Board
 
-The file `board.json` in the workspace root. Tracks flow state, current step, autonomy tier, and build metadata. The orchestrator's primary state management file — it is read and written by MCP tools (`update_board`, `drive_flow`), not by agents directly.
+The file `board.json` in the workspace root. Tracks flow state, current step, autonomy tier, and build metadata. The orchestrator's primary state management file — seeded by `init_workspace` and finalized by `finalize_workspace`; step progression is journaled via `log_step` / `batch_log_steps`, not written by agents directly.
 
 ## Context Sync
 

@@ -1,6 +1,6 @@
 # Canon MCP Server
 
-TypeScript MCP server providing 24 tools for principle enforcement and build orchestration. This is the runtime core of Canon — it powers principle matching, drift tracking, codebase graph analysis, and the flow state machine that drives multi-agent builds.
+TypeScript MCP server providing tools for principle enforcement and build orchestration. This is the runtime core of Canon — it powers principle matching, drift tracking, codebase graph analysis, and the journal-driven orchestration that drives multi-agent builds.
 
 This document is for contributors and power users. The main project README links here for internals.
 
@@ -18,7 +18,7 @@ src/
 ├── tools/                # One file per MCP tool implementation
 ├── drift/                # JSONL-backed stores: decisions, patterns, reviews
 ├── graph/                # Dependency graph: scanner, import/export parsing, priority scoring
-├── orchestration/        # Flow state machine runtime: board, messaging, variables, gates, effects
+├── orchestration/        # Orchestration runtime: board, messaging, variables, gates, effects
 ├── utils/                # Config loading, path handling, atomic writes, ID generation
 └── __tests__/            # Vitest unit tests
 ```
@@ -31,8 +31,8 @@ src/
 
 **`graph/`** — Dependency graph scanner for JS/TS/Python source files. `scanner.ts` walks the directory tree. `import-parser.ts` and `export-parser.ts` extract dependency edges. `degree.ts` computes in-degree and out-degree for each node. `priority.ts` scores files by graph centrality (used to prioritize review effort). `insights.ts` detects cycles, hub files, and orphaned modules.
 
-**`orchestration/`** — Flow state machine runtime used by the orchestrator agent.
-- `board.ts` — Reads and writes `board.json` (the persistent state machine record for a workspace)
+**`orchestration/`** — Orchestration runtime used by the orchestrator agent.
+- `board.ts` — Reads and writes `board.json` (the workspace board record)
 - `messages.ts` — Unified inter-agent messaging via workspace channels
 - `variables.ts` — Resolves `{{variable}}` substitutions in spawn prompts, pulling values from board state, session, and wave context
 - `gate-runner.ts` — Evaluates between-wave gate conditions before advancing to the next wave
@@ -72,15 +72,15 @@ src/
 |------|-------------|
 | `graph_query` | Query the dependency graph — call trees, blast radius, dead code detection, and entity search. |
 
-### Orchestration harness tools (10)
+### Orchestration harness tools
 
 | Tool | Description |
 |------|-------------|
-| `load_flow` | Load and resolve a Canon flow definition. Returns the resolved flow with fragment resolution, spawn instructions, and a state adjacency graph. |
-| `init_workspace` | Initialize a Canon workspace for flow execution. Creates workspace directory and SQLite `orchestration.db`. Resumes from existing DB if present. |
-| `update_board` | Perform board state mutations. Supports entering, skipping, blocking, unblocking states, completing flow, and setting wave progress. |
-| `drive_flow` | Drive the flow state machine for a single state. Returns a `SpawnRequest` or `HitlBreakpoint` for the orchestrator to process. |
-| `report_result` | Report an agent's result. Normalizes status, evaluates transitions, updates board state, executes drift effects (persist_review), and checks stuck detection. Returns next state and whether HITL is required. |
+| `init_workspace` | Initialize a Canon workspace for flow execution. Creates workspace directory and SQLite `orchestration.db`. Resumes from existing DB if present. Seeds `board.json` and `progress.md`. |
+| `finalize_workspace` | Close a Canon workspace: verify journal completeness, release file claims, aggregate flow metrics. |
+| `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json`. Optionally appends a `progress_line` to `progress.md`. |
+| `batch_log_steps` | Register multiple planned steps in the journal in a single read-modify-write cycle. |
+| `write_plan_index` | Persist architect task/plan data and the affected-file list to `INDEX.md`. |
 | `post_message` | Post a message to a workspace channel for inter-agent communication. Messages are markdown files that agents read at spawn time. |
 | `get_messages` | Read messages from a workspace channel. Returns messages ordered by sequence number. Optionally includes pending wave events. |
 | `inject_wave_event` | Inject a user event into a running wave execution. Allows the user to steer, pause, or redirect agents mid-wave. |
@@ -95,7 +95,7 @@ All runtime data lives under `.canon/` in the project root:
 |------|-----------|---------|
 | `reviews.jsonl` | `report` tool, flow effects | Code review results (violations, scores, verdicts) |
 | `knowledge-graph.db` | `codebase_graph`, `store_summaries` tools | SQLite knowledge graph — dependency graph, file summaries, git-intel hotspots |
-| `workspaces/{slug}/board.json` | `init_workspace`, `update_board` | Flow state machine record |
+| `workspaces/{slug}/board.json` | `init_workspace`, `finalize_workspace` | Workspace board record (seeded by init, finalized on close) |
 | `workspaces/{slug}/orchestration.db` | `init_workspace` | Session metadata, board state, progress (flow, branch, tier) |
 | `workspaces/{slug}/progress.md` | `init_workspace`, orchestrator | Append-only cross-state learnings; injected into spawn prompts via `${progress}` |
 | `workspaces/{slug}/messages/{channel}/*.md` | `post_message` | Inter-agent messages during parallel wave execution |
