@@ -53,7 +53,7 @@ echo ""
 echo "-- Non-destructive commands (should pass) --"
 run_test "git status passes"                          0 "$(make_input 'git status')"
 run_test "git log passes"                             0 "$(make_input 'git log --oneline -5')"
-run_test "git commit passes"                          0 "$(make_input 'git commit -m "fix: thing"')"
+run_test "git commit passes"                          0 '{"command":"git commit -m fix-thing"}'
 run_test "git push passes"                            0 "$(make_input 'git push origin main')"
 run_test "git fetch passes"                           0 "$(make_input 'git fetch --all')"
 run_test "git branch -d passes (safe delete)"         0 "$(make_input 'git branch -d feature/my-branch')"
@@ -230,6 +230,62 @@ run_test "nested: git branch -D feature/x blocks" \
 
 run_test "nested: git -C .canon/worktrees/slug reset --hard passes" \
   0 "$(make_nested_input 'git -C .canon/worktrees/my-slug reset --hard HEAD')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Fail-closed: jq unavailable — destructive command still BLOCKED (exit 2)
+# Shadow jq with a stub that returns 127 so the hook must fall back to
+# grep/sed extraction (via canon_extract_command) and still block.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Fail-closed: jq absent — destructive command still blocked (exit 2) --"
+
+run_test_no_jq() {
+  local description="$1"
+  local expected_exit="$2"
+  local command_json="$3"
+  local custom_pwd="${4:-/home/user/project}"
+
+  local actual_exit=0
+  # Create a temp dir with a fake jq that exits 127 (not found)
+  local fake_bin
+  fake_bin=$(mktemp -d)
+  printf '#!/bin/bash\nexit 127\n' > "$fake_bin/jq"
+  chmod +x "$fake_bin/jq"
+  # Run the hook with the fake jq at the front of PATH
+  echo "$command_json" | CANON_GUARD_CWD="$custom_pwd" PATH="$fake_bin:$PATH" bash "$GUARD" >/dev/null 2>&1 || actual_exit=$?
+  rm -rf "$fake_bin"
+
+  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+run_test_no_jq "jq absent: git reset --hard still blocks (exit 2)" \
+  2 "$(make_input 'git reset --hard')" "$NON_WT_PWD"
+
+run_test_no_jq "jq absent: nested git reset --hard still blocks (exit 2)" \
+  2 "$(make_nested_input 'git reset --hard HEAD')" "$NON_WT_PWD"
+
+run_test_no_jq "jq absent: git clean -f still blocks (exit 2)" \
+  2 "$(make_input 'git clean -f')" "$NON_WT_PWD"
+
+run_test_no_jq "jq absent: git branch -D feature/x still blocks (exit 2)" \
+  2 "$(make_input 'git branch -D feature/x')" "$NON_WT_PWD"
+
+# Fail-closed: payload with no "command" key — should pass (exit 0), not block
+echo ""
+echo "-- Fail-closed: no command field in payload — pass (exit 0) --"
+
+run_test_no_jq "jq absent: payload without command field passes (exit 0)" \
+  0 '{"tool":"Write","tool_input":{"file_path":"/tmp/foo.txt","content":"hello"}}' "$NON_WT_PWD"
+
+run_test "payload without command field passes (exit 0)" \
+  0 '{"tool":"Write","tool_input":{"file_path":"/tmp/foo.txt","content":"hello"}}' "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
 # Summary

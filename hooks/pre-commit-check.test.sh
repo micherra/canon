@@ -378,6 +378,58 @@ run_test_in_dir "git commit --allow-empty with secret — exits 2" 2 \
   '{"command":"git commit --allow-empty -m \"test\""}'
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Fail-closed: jq unavailable — secret commit still BLOCKED (exit 2)
+# Shadow jq so the hook must fall back to grep/sed and still block.
+# Uses all-zeros / EXAMPLE pattern secrets per hooks/.claude/CLAUDE.md.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Fail-closed: jq absent — secret commit still blocked (exit 2) --"
+
+# Helper: run hook with fake jq that exits 127 (absent), inside a repo dir
+run_test_in_dir_no_jq() {
+  local description="$1"
+  local expected_exit="$2"
+  local repo_dir="$3"
+  local stdin_json="$4"
+
+  local fake_bin
+  fake_bin=$(mktemp -d)
+  printf '#!/bin/bash\nexit 127\n' > "$fake_bin/jq"
+  chmod +x "$fake_bin/jq"
+
+  local actual_exit=0
+  (cd "$repo_dir" && echo "$stdin_json" | PATH="$fake_bin:$PATH" bash "$HOOK" >/dev/null 2>&1) || actual_exit=$?
+  rm -rf "$fake_bin"
+
+  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# Repo with a staged AWS key (EXAMPLE-pattern, all-caps suffix — fake)
+REPO_NO_JQ="$MASTER_TMP/no-jq-secret"
+setup_repo "$REPO_NO_JQ"
+stage_file "$REPO_NO_JQ" "deploy.sh" 'AWS_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE123'
+
+run_test_in_dir_no_jq "jq absent: staged AWS key still blocks commit (exit 2)" 2 \
+  "$REPO_NO_JQ" \
+  '{"command":"git commit -m \"deploy\""}'
+
+# Repo with a staged Stripe key (all-zeros suffix — fake)
+REPO_NO_JQ_STRIPE="$MASTER_TMP/no-jq-stripe"
+setup_repo "$REPO_NO_JQ_STRIPE"
+stage_file "$REPO_NO_JQ_STRIPE" "payment.ts" 'const stripeKey = "sk_live_00000000000000000000";'
+
+run_test_in_dir_no_jq "jq absent: staged Stripe key still blocks commit (exit 2)" 2 \
+  "$REPO_NO_JQ_STRIPE" \
+  '{"command":"git commit -m \"payment\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
