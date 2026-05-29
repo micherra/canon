@@ -27,6 +27,7 @@ if [[ -z "$COMMAND" ]]; then
   if [[ -n "$INPUT" ]] && printf '%s' "$INPUT" | grep -qE '"command"[[:space:]]*:[[:space:]]*"[^"]'; then
     echo "CANON WARNING: command extraction failed on a command payload — review check skipped (advisory only)."
   fi
+  # DOCUMENTED FAIL-OPEN: advisory hook — warn but never block
   exit 0
 fi
 

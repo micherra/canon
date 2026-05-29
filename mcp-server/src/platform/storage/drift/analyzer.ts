@@ -205,6 +205,15 @@ function computePrincipleTrend(reviews: ReviewEntry[], principleId: string): Dri
   return "stable";
 }
 
+/**
+ * Compute a craft score (0–100) from holistic reviewer recommendations.
+ *
+ * Formula: `score = max(0, 100 − min(100, holistic_count × 10))`
+ *
+ * Each holistic finding deducts 10 craft points; 10 or more findings floor
+ * the score at 0. Holistic findings signal structural or cross-cutting
+ * concerns (source === "holistic") rather than per-principle violations.
+ */
 export function computeCraftScore(reviews: ReviewEntry[]): {
   score: number;
   holistic_count: number;
@@ -219,6 +228,7 @@ export function computeCraftScore(reviews: ReviewEntry[]): {
     }
   }
 
+  // Each holistic finding costs 10 craft points; 10+ findings floor the score at 0.
   const score = Math.max(0, 100 - Math.min(100, holistic_count * 10));
   return { holistic_count, score };
 }
