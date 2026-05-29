@@ -95,6 +95,7 @@ export async function openArtifact(
   try {
     html = await readFile(resolvedTarget, "utf8");
   } catch {
+    // File does not exist or is unreadable — return descriptive error to caller
     return toolError(
       "INVALID_INPUT",
       `Artifact file not found: "${artifact_name}". Check that the file exists in ${artifactsDir}.`,

@@ -168,6 +168,7 @@ async function scanAllProjectFiles(projectDir: string): Promise<string[]> {
   return dirResults.flat();
 }
 
+/** Mutable accumulator for compliance stats built from DriftStore reviews. */
 type ComplianceAccumulator = {
   violation_count: number;
   last_verdict: string | null;

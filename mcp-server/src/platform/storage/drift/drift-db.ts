@@ -164,6 +164,7 @@ function rowToArchiveManifestEntry(row: ArchiveRow): ArchiveManifestEntry {
   try {
     artifact_types = JSON.parse(row.artifact_types) as string[];
   } catch {
+    // Malformed JSON in artifact_types column — return empty array as fallback
     artifact_types = [];
   }
   return {
@@ -428,6 +429,7 @@ export class DriftDb {
         const honored = JSON.parse(row.honored) as string[];
         return honored.includes(principleId);
       } catch {
+        // Malformed JSON in honored column — exclude row from results
         return false;
       }
     });
