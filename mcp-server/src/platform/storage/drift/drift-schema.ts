@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "7";
+export const DRIFT_SCHEMA_VERSION = "8";
 
 // DDL statements — v1 base tables
 //
@@ -295,6 +295,28 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
     },
     version: "7",
+  },
+  {
+    up: (db) => {
+      // area_observations — short-term area memory for engineer context enrichment
+      // Stores compact observations from reviewers and engineers about a subsystem area.
+      // 7-day expiry is enforced at query time via WHERE created_at > datetime('now', '-7 days').
+      // injected_count and last_injected_at track observation effectiveness for the learner.
+      db.exec(`CREATE TABLE IF NOT EXISTS area_observations (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        subsystem_key    TEXT NOT NULL,
+        content          TEXT NOT NULL,
+        source           TEXT NOT NULL,
+        workflow_slug    TEXT,
+        created_at       TEXT NOT NULL,
+        injected_count   INTEGER NOT NULL DEFAULT 0,
+        last_injected_at TEXT
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ao_subsystem ON area_observations(subsystem_key)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ao_created ON area_observations(created_at)`);
+      db.exec(`UPDATE meta SET value = '8' WHERE key = 'schema_version'`);
+    },
+    version: "8",
   },
 ];
 

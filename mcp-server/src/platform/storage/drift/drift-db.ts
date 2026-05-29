@@ -14,6 +14,7 @@ import { join, resolve } from "node:path";
 import { CANON_DIR } from "@shared/constants.ts";
 import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
+import { AreaMemoryDao } from "./area-memory-dao.ts";
 import type {
   ArchiveManifestEntry,
   ArchiveManifestFilter,
@@ -218,6 +219,9 @@ export class DriftDb {
 
   // ---- Signal DAO (lazy) ----
   private _signals: DriftDbSignals | null = null;
+
+  // ---- Area Memory DAO (lazy) ----
+  private _areaMemory: AreaMemoryDao | null = null;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -693,6 +697,18 @@ export class DriftDb {
       this._signals = new DriftDbSignals(this.db);
     }
     return this._signals;
+  }
+
+  /**
+   * Lazy accessor for area memory DAO methods.
+   * The AreaMemoryDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getAreaMemory(): AreaMemoryDao {
+    if (this._areaMemory === null) {
+      this._areaMemory = new AreaMemoryDao(this.db);
+    }
+    return this._areaMemory;
   }
 
   // Lifecycle
