@@ -288,6 +288,82 @@ run_test "payload without command field passes (exit 0)" \
   0 '{"tool":"Write","tool_input":{"file_path":"/tmp/foo.txt","content":"hello"}}' "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# Fail-closed: truly absent jq (grep/sed fallback) + escaped-quote payload
+#
+# SECURITY: The run_test_no_jq helper prepends a fake jq that exits 127 to
+# PATH — this makes command -v jq SUCCEED, so the jq branch runs (and
+# returns empty on failure → fail-closed via normal path). That does NOT
+# exercise the grep/sed fallback.
+#
+# These tests build a temp bin dir with symlinks to grep/sed/git/bash/etc.
+# but NOT jq, so that command -v jq returns non-zero and the grep/sed
+# branch of canon_extract_command runs.  They assert that an escaped-quote
+# command value does NOT bypass the guard: must block (exit 2).
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Fail-closed: truly absent jq (grep/sed fallback) + escaped-quote payload --"
+
+# Build a minimal PATH: symlinks to needed tools, excluding jq.
+# Use /usr/bin/which to get the real binary path (not a shell function wrapper).
+_DG_TMPBIN=$(mktemp -d)
+for _tool in grep sed awk head bash git printf tr cat echo dirname basename; do
+  _tp=$(/usr/bin/which "$_tool" 2>/dev/null || true)
+  if [[ -n "$_tp" ]]; then
+    ln -sf "$_tp" "$_DG_TMPBIN/$_tool" 2>/dev/null || true
+  fi
+done
+
+run_test_truly_no_jq() {
+  local description="$1"
+  local expected_exit="$2"
+  local command_json="$3"
+  local custom_pwd="${4:-/home/user/project}"
+
+  local actual_exit=0
+  echo "$command_json" | CANON_GUARD_CWD="$custom_pwd" PATH="$_DG_TMPBIN" bash "$GUARD" >/dev/null 2>&1 || actual_exit=$?
+
+  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# Escaped-quote prefix — the canonical bypass payload identified in the security assessment.
+# The command value starts with \" which the grep/sed fallback mis-parses as lone backslash.
+# Must block (exit 2).
+run_test_truly_no_jq \
+  "truly-absent-jq: escaped-quote destructive payload blocks (exit 2)" \
+  2 \
+  '{"tool_input":{"command":"\"git checkout -- ."}}' \
+  "$NON_WT_PWD"
+
+run_test_truly_no_jq \
+  "truly-absent-jq: escaped-quote nested reset --hard blocks (exit 2)" \
+  2 \
+  '{"tool_input":{"command":"\"git clean -fd"}}' \
+  "$NON_WT_PWD"
+
+# Control: a plain (no backslash) destructive command with truly absent jq still blocks.
+run_test_truly_no_jq \
+  "truly-absent-jq: plain destructive command still blocks (exit 2)" \
+  2 \
+  '{"command":"git clean -f"}' \
+  "$NON_WT_PWD"
+
+# Control: a genuine no-command payload (truly absent jq) still passes (no over-block).
+run_test_truly_no_jq \
+  "truly-absent-jq: no command field still passes (exit 0)" \
+  0 \
+  '{"tool":"Write","tool_input":{"file_path":"/tmp/x.txt","content":"ok"}}' \
+  "$NON_WT_PWD"
+
+rm -rf "$_DG_TMPBIN"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""

@@ -83,6 +83,41 @@ assert_eq "empty input — returns empty string" \
   "" \
   "$(canon_extract_command "$EMPTY_INPUT")"
 
+# Escaped-quote value — the grep/sed fallback must NOT return a lone backslash.
+# When jq is present it parses correctly; when jq is absent the fallback must
+# return empty (fail-closed) rather than a garbage partial parse.
+#
+# Build a minimal PATH that includes grep/sed/bash/git/head/awk/printf/tr but
+# NOT jq, so that command -v jq returns non-zero inside the subshell.
+# Use /usr/bin/which to get the real binary path, not a shell function wrapper.
+_LIB_TMPBIN=$(mktemp -d)
+for _tool in grep sed awk head bash git printf tr cat echo dirname basename; do
+  _tp=$(/usr/bin/which "$_tool" 2>/dev/null || true)
+  if [[ -n "$_tp" ]]; then
+    ln -sf "$_tp" "$_LIB_TMPBIN/$_tool" 2>/dev/null || true
+  fi
+done
+NO_JQ_TEST_PATH="$_LIB_TMPBIN"
+# Register cleanup for test dir
+trap 'rm -rf "$_LIB_TMPBIN"' EXIT
+
+ESCAPED_RESULT=$(PATH="$NO_JQ_TEST_PATH" bash -c '
+  source "'"${LIB_DIR}/canon-hook-lib.sh"'"
+  canon_extract_command '"'"'{"tool_input":{"command":"\"git checkout -- ."}}'"'"'
+' 2>/dev/null || true)
+assert_eq "truly-absent-jq: escaped-quote value returns empty (fail-closed)" \
+  "" \
+  "$ESCAPED_RESULT"
+
+# Normal value with truly absent jq — must still extract correctly.
+PLAIN_RESULT=$(PATH="$NO_JQ_TEST_PATH" bash -c '
+  source "'"${LIB_DIR}/canon-hook-lib.sh"'"
+  canon_extract_command '"'"'{"command":"git status"}'"'"'
+' 2>/dev/null || true)
+assert_eq "truly-absent-jq: plain command value extracts correctly" \
+  "git status" \
+  "$PLAIN_RESULT"
+
 # ---------------------------------------------------------------------------
 # canon_git_dir_arg
 # ---------------------------------------------------------------------------

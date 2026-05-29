@@ -39,11 +39,26 @@ canon_extract_command() {
     result=$(printf '%s' "$input" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true)
     printf '%s' "$result"
   else
-    printf '%s' "$input" \
+    # grep/sed fallback: sufficient for plain string values only.
+    # The [^"]* pattern cannot handle JSON escape sequences — it stops at
+    # the first " even when it is preceded by a backslash (\").  When the
+    # extracted value contains a backslash the parse is untrustworthy
+    # (partial match before an escape sequence); return empty so the
+    # caller's fail-closed branch fires rather than passing through garbage.
+    local fallback_result
+    fallback_result=$(printf '%s' "$input" \
       | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' \
       | head -1 \
       | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//' \
-      || true
+      || true)
+    # If the extracted value contains a backslash, the fallback encountered
+    # an escape sequence it cannot decode faithfully.  Emit empty so
+    # downstream fail-closed guards block rather than evaluating garbage.
+    # Use [\\] in the pattern so shellcheck does not misread the escape.
+    if printf '%s' "$fallback_result" | grep -q '[\\]'; then
+      return 0
+    fi
+    printf '%s' "$fallback_result"
   fi
 }
 
