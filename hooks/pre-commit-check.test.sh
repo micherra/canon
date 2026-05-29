@@ -386,7 +386,7 @@ echo "-- jq absent: fail closed (exit 2) --"
 # Mask jq by using an empty PATH — guarantees jq absence on all platforms.
 # This tests the fail-closed guard before any input is read.
 actual_exit=0
-echo '{}' | PATH=/nonexistent bash "$HOOK" >/dev/null 2>&1 || actual_exit=$?
+echo '{}' | PATH=/nonexistent /bin/bash "$HOOK" >/dev/null 2>&1 || actual_exit=$?
 if [[ "$actual_exit" -eq 2 ]]; then
   echo "  PASS: jq absent — exits 2 (fail closed)"
   PASS=$((PASS + 1))
