@@ -35,7 +35,6 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `canon-agent-teams/session-start-timestamp.sh` | SessionStart | Write session start timestamp for duration watchdog |
 | `canon-agent-teams/session-start-context.sh` | SessionStart | Output project pulse (recent builds, drift, convention count) as invisible orchestrator context |
 | `canon-agent-teams/session-duration-watchdog.sh` | PreToolUse (*) | Advisory session duration warning after configurable threshold |
-| `canon-agent-teams/spawn-timeout-watchdog.sh` | PreToolUse (*) | HITL checkpoint when a spawned agent exceeds configurable run time (default 20 min) |
 | `canon-agent-teams/tool-loop-detector.sh` | PostToolUse (*) | Detect 3 consecutive identical tool calls (loop) and exit 2 to surface HITL |
 | `canon-agent-teams/post-engineer-scribe.sh` | SubagentStop | Queue scribe sync after engineer subagent completes |
 | `canon-agent-teams/postcompact-narrative-capture.sh` | PostCompact | Append compaction summary to active workspace journal for agent continuity |

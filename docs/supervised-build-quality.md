@@ -56,7 +56,7 @@ Cross-session error+fix index and pitfall enrichment. Before agent spawns, the o
 
 Between May 24–26, a concentrated wave shipped the top-priority roadmap items plus foundational infrastructure:
 
-- **Tool-loop detection + spawn watchdog** (PR #245) — Thread 3 top items. PostToolUse fingerprinting and wall-clock spawn monitoring.
+- **Tool-loop detection** (PR #245) — Thread 3 top item. PostToolUse fingerprinting detects stuck loops. (Spawn watchdog removed in PR #276 — false positives on main session; turn budgets and auto-escalation cover the gap.)
 - **Shared hook library** (PR #248) — `hooks/lib/canon-hook-lib.sh` extracted from 5+ hooks. Foundation for all subsequent hook work.
 - **DAG dispatch guard** (PR #253) — Advisory hook warns on raw `Agent` spawns during DAG execution, enforcing `TeamCreate`/`TaskCreate`.
 - **Holistic confidence scoring** (PR #259) — Shared `ConfidenceScore` schema, `computeConfidence()` engine, review + drift adapters. Covers Thread 2 (confidence per violation, confidence decay) and Thread 4 (composite health score).
@@ -112,7 +112,7 @@ Context gathering burns the most agent turns. Reduce wasted work.
 | Feature | Effort | Leverage | Source |
 |---------|--------|----------|--------|
 | ~~**Tool-level loop detection**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #245). `tool-loop-detector.sh` PostToolUse hook with fingerprinting + exit code 2 → HITL. |
-| ~~**In-flight spawn watchdog**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #245). `spawn-timeout-watchdog.sh` tracks wall-clock per spawn, 20-min default threshold. |
+| ~~**In-flight spawn watchdog**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #245), removed (PR #276). False positives on main session; turn budgets and auto-escalation protocol cover stuck-agent detection. |
 | ~~**PostCompact narrative capture**~~ | ~~Tiny~~ | ~~Medium~~ | Shipped (PR #261). PostCompact hook appends compaction summary to workspace journal. |
 | **Skill effectiveness tracking** | Medium | Medium | Learner analyzes journal outcomes to recommend: primers that help, `maxTurns` adjustments, skills that need updating. Requires extending `FlowRunEntry` with domain skill counts. |
 | **Effort budgets** | Medium | Medium | Maximum tool calls per state, wall-clock duration limits, max agent spawns per flow. "Focus and wrap up" note injected when approaching limit; pause for approval when hit. |
@@ -222,7 +222,7 @@ These were evaluated and explicitly rejected:
 
 | Phase | What | Rationale |
 |-------|------|-----------|
-| ~~**Done**~~ | ~~Tool-loop detection + spawn watchdog~~ | Shipped PR #245. |
+| ~~**Done**~~ | ~~Tool-loop detection~~ | Shipped PR #245. (Spawn watchdog removed PR #276.) |
 | ~~**Done**~~ | ~~Confidence scoring + drift decay + composite health~~ | Shipped PR #259. |
 | ~~**Done**~~ | ~~PostCompact narrative capture~~ | Shipped PR #261. |
 | ~~**Done**~~ | ~~Wiki-lint + doc gap detection~~ | Shipped PR #267. |
