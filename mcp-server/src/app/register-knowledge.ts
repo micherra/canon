@@ -92,55 +92,50 @@ function queryGraphForFiles(filePaths: string[]): unknown[] | undefined {
   return aggregated.length > 0 ? aggregated : undefined;
 }
 
+// Fail-open helper: compute accuracy data; returns undefined on error.
+function tryComputeAccuracy(
+  driftDbSignals: ReturnType<ReturnType<typeof getDriftDb>["getSignals"]>,
+): AccuracyMap | undefined {
+  try {
+    return computeAccuracy(driftDbSignals);
+  } catch (err) {
+    console.warn(
+      "[canon] get_context: accuracy computation failed:",
+      err instanceof Error ? err.message : err,
+    ); // best-effort
+    return undefined;
+  }
+}
+// Fail-open helper: populate accuracy_summary on output; silences errors.
+function trySetAccuracySummary(accuracyData: AccuracyMap, output: GetContextOutput): void {
+  if (accuracyData.size === 0) return;
+  try {
+    const summary = buildAccuracySummary(accuracyData);
+    if (summary) output.accuracy_summary = summary;
+  } catch (err) {
+    console.warn(
+      "[canon] get_context: accuracy summary generation failed:",
+      err instanceof Error ? err.message : err,
+    ); // best-effort
+  }
+}
+
 /**
  * Populate output.signals and output.accuracy_summary for the signals section.
- * Fail-open: any error (missing drift.db, missing tables) is silently ignored.
- * Signals are optional enrichment — their absence must not prevent get_context from returning.
- *
- * Wave 3: Computes per-principle accuracy data (fail-open) and passes it to
- * compileSignals for weight tuning. Also populates accuracy_summary when data exists.
+ * Fail-open: signals are optional enrichment; errors are silently ignored.
  */
 function resolveSignals(filePaths: string[], output: GetContextOutput): void {
   try {
     const driftDb = getDriftDb(projectDir);
     const driftDbSignals = driftDb.getSignals();
-
-    // Wave 3: Compute accuracy data (fail-open — errors silently ignored)
-    let accuracyData: AccuracyMap | undefined;
-    try {
-      accuracyData = computeAccuracy(driftDbSignals);
-    } catch (err) {
-      // best-effort: accuracy computation is optional tuning; failure = no weight adjustment
-      console.warn(
-        "[canon] get_context: accuracy computation failed:",
-        err instanceof Error ? err.message : err,
-      );
-    }
-
+    const accuracyData = tryComputeAccuracy(driftDbSignals);
     const signals = compileSignals(filePaths, driftDbSignals, { accuracyData });
     if (signals.length > 0) {
       output.signals = signals;
-
-      // Record prediction — fail-open, separate from signal compilation.
-      // If recordPrediction fails, signals are still returned.
+      // Record prediction — fail-open; if recordPrediction fails, signals are still returned.
       recordPrediction({ compiledSignals: signals, filePaths }, driftDbSignals);
     }
-
-    // Wave 3: Include accuracy summary for learner context
-    if (accuracyData && accuracyData.size > 0) {
-      try {
-        const summary = buildAccuracySummary(accuracyData);
-        if (summary) {
-          output.accuracy_summary = summary;
-        }
-      } catch (err) {
-        // best-effort: summary generation is optional enrichment for learner
-        console.warn(
-          "[canon] get_context: accuracy summary generation failed:",
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }
+    if (accuracyData) trySetAccuracySummary(accuracyData, output);
   } catch (err) {
     // best-effort: signals section is optional enrichment; primary output already returned
     console.warn(

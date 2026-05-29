@@ -100,6 +100,34 @@ function capPrinciples(matched: PrincipleEntry[], maxReviewPrinciples: number): 
   return [...rules, ...nonRules.slice(0, budgetForNonRules)];
 }
 
+/** Inject a principle by ID if not already in capped. */
+function maybeInjectPrinciple(
+  id: string,
+  allPrinciples: PrincipleEntry[],
+  capped: PrincipleEntry[],
+  injected: PrincipleEntry[],
+): void {
+  if (capped.some((c) => c.id === id)) return;
+  const found = allPrinciples.find((a) => a.id === id);
+  if (found) injected.push(found);
+}
+
+/** Derive injected principles from graph metrics signals. */
+function deriveInjectedPrinciples(
+  metrics: FileMetrics,
+  allPrinciples: PrincipleEntry[],
+  capped: PrincipleEntry[],
+): PrincipleEntry[] {
+  const injected: PrincipleEntry[] = [];
+  if (metrics.layer_violation_count > 0) {
+    maybeInjectPrinciple("bounded-context-boundaries", allPrinciples, capped, injected);
+  }
+  if (metrics.in_cycle) {
+    maybeInjectPrinciple("architectural-fitness-functions", allPrinciples, capped, injected);
+  }
+  return injected;
+}
+
 /** Load graph context using KgQuery. Returns null graph context when DB is absent. */
 async function loadGraphContext(
   projectDir: string,
@@ -111,9 +139,8 @@ async function loadGraphContext(
   metrics: FileMetrics | null;
   injected: PrincipleEntry[];
 }> {
-  const injected: PrincipleEntry[] = [];
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  if (!existsSync(dbPath)) return { graphContext: undefined, injected, metrics: null };
+  if (!existsSync(dbPath)) return { graphContext: undefined, injected: [], metrics: null };
 
   let db: ReturnType<typeof initDatabase> | undefined;
   try {
@@ -125,7 +152,7 @@ async function loadGraphContext(
       hubPaths: insightMaps.hubPaths,
       layerViolationsByPath: insightMaps.layerViolationsByPath,
     });
-    if (!metrics) return { graphContext: undefined, injected, metrics: null };
+    if (!metrics) return { graphContext: undefined, injected: [], metrics: null };
 
     const graphContext: ReviewGraphContext = {
       impact_score: metrics.impact_score,
@@ -137,18 +164,7 @@ async function loadGraphContext(
       out_degree: metrics.out_degree,
     };
 
-    if (
-      metrics.layer_violation_count > 0 &&
-      !capped.some((c) => c.id === "bounded-context-boundaries")
-    ) {
-      const found = allPrinciples.find((a) => a.id === "bounded-context-boundaries");
-      if (found) injected.push(found);
-    }
-    if (metrics.in_cycle && !capped.some((c) => c.id === "architectural-fitness-functions")) {
-      const found = allPrinciples.find((a) => a.id === "architectural-fitness-functions");
-      if (found) injected.push(found);
-    }
-
+    const injected = deriveInjectedPrinciples(metrics, allPrinciples, capped);
     return { graphContext, injected, metrics };
   } catch (err) {
     // best-effort: graph context is optional KG enrichment; code review works without it
@@ -156,7 +172,7 @@ async function loadGraphContext(
       "[canon] review-code: KG graph context unavailable:",
       err instanceof Error ? err.message : err,
     );
-    return { graphContext: undefined, injected, metrics: null };
+    return { graphContext: undefined, injected: [], metrics: null };
   } finally {
     db?.close();
   }

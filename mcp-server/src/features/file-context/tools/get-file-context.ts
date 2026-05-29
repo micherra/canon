@@ -30,6 +30,7 @@ import {
 import { isNotFound } from "@shared/lib/errors.ts";
 import { loadPathAliases, toPosix } from "@shared/lib/paths.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import type { ReviewEntry } from "@shared/schema.ts";
 import { buildFileContextOutput } from "./file-context-assembler.ts";
 import { applyFileContextDisclosure } from "./file-context-disclosure.ts";
 
@@ -167,6 +168,46 @@ async function scanAllProjectFiles(projectDir: string): Promise<string[]> {
   return dirResults.flat();
 }
 
+type ComplianceAccumulator = {
+  violation_count: number;
+  last_verdict: string | null;
+  violations: FileViolationDetail[];
+  lastReviewedAt: string | null;
+};
+
+/** Extract violations applicable to filePath from a single review entry. */
+function extractFileViolations(review: ReviewEntry, filePath: string): FileViolationDetail[] {
+  const hasPerFile = review.violations.some((v) => v.file_path);
+  const filtered = hasPerFile
+    ? review.violations.filter((v) => v.file_path === filePath)
+    : review.violations;
+  return filtered.map((v) => ({
+    principle_id: v.principle_id,
+    severity: v.severity,
+    ...(v.message !== undefined && { message: v.message }),
+  }));
+}
+
+/** Accumulate compliance stats for one review entry into acc. */
+function accumulateReviewEntry(
+  review: ReviewEntry,
+  filePath: string,
+  acc: ComplianceAccumulator,
+): void {
+  if (!review.files.includes(filePath)) return;
+
+  if (!acc.lastReviewedAt || review.timestamp > acc.lastReviewedAt) {
+    acc.lastReviewedAt = review.timestamp;
+    acc.last_verdict = review.verdict;
+    acc.violations = extractFileViolations(review, filePath);
+  }
+
+  const hasPerFile = review.violations.some((v) => v.file_path);
+  acc.violation_count += hasPerFile
+    ? review.violations.filter((v) => v.file_path === filePath).length
+    : review.violations.length;
+}
+
 /** Load compliance data (violations, verdicts) for a file from DriftStore. */
 async function loadComplianceData(
   projectDir: string,
@@ -176,35 +217,18 @@ async function loadComplianceData(
   last_verdict: string | null;
   violations: FileViolationDetail[];
 }> {
-  let violation_count = 0;
-  let last_verdict: string | null = null;
-  let violations: FileViolationDetail[] = [];
-  let lastReviewedAt: string | null = null;
+  const acc: ComplianceAccumulator = {
+    last_verdict: null,
+    lastReviewedAt: null,
+    violation_count: 0,
+    violations: [],
+  };
 
   try {
     const store = new DriftStore(projectDir);
     const reviews = await store.getReviews();
     for (const review of reviews) {
-      if (!review.files.includes(filePath)) continue;
-
-      if (!lastReviewedAt || review.timestamp > lastReviewedAt) {
-        lastReviewedAt = review.timestamp;
-        last_verdict = review.verdict;
-        const hasPerFile = review.violations.some((v) => v.file_path);
-        const filteredViolations = hasPerFile
-          ? review.violations.filter((v) => v.file_path === filePath)
-          : review.violations;
-        violations = filteredViolations.map((v) => ({
-          principle_id: v.principle_id,
-          severity: v.severity,
-          ...(v.message !== undefined && { message: v.message }),
-        }));
-      }
-
-      const hasPerFile = review.violations.some((v) => v.file_path);
-      violation_count += hasPerFile
-        ? review.violations.filter((v) => v.file_path === filePath).length
-        : review.violations.length;
+      accumulateReviewEntry(review, filePath, acc);
     }
   } catch (err) {
     // best-effort: compliance data is optional enrichment; primary file context still returned
@@ -216,7 +240,11 @@ async function loadComplianceData(
     );
   }
 
-  return { last_verdict, violation_count, violations };
+  return {
+    last_verdict: acc.last_verdict,
+    violation_count: acc.violation_count,
+    violations: acc.violations,
+  };
 }
 
 /** Load git-intel hotspot and co-change data into the result. */
