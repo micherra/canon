@@ -138,6 +138,18 @@ describe("buildLayerInferrer", () => {
       const infer = buildLayerInferrer(DEFAULT_LAYER_MAPPINGS);
       expect(infer("src/shared/lib/config.ts")).toBe("shared");
     });
+
+    it("does NOT classify app/hooks/useThing.ts as hooks layer (anchored to top-level hooks/)", () => {
+      const infer = buildLayerInferrer(DEFAULT_LAYER_MAPPINGS);
+      // A React-style hooks directory nested under app/ must NOT match the guardrail hooks layer.
+      // The DEFAULT_LAYER_MAPPINGS hooks entry must be anchored to the top-level hooks/ directory.
+      expect(infer("app/hooks/useThing.ts")).not.toBe("hooks");
+    });
+
+    it("does NOT classify src/hooks/foo.ts as hooks layer (anchored to top-level hooks/)", () => {
+      const infer = buildLayerInferrer(DEFAULT_LAYER_MAPPINGS);
+      expect(infer("src/hooks/foo.ts")).not.toBe("hooks");
+    });
   });
 });
 
