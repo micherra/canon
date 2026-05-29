@@ -378,6 +378,25 @@ run_test_in_dir "git commit --allow-empty with secret — exits 2" 2 \
   '{"command":"git commit --allow-empty -m \"test\""}'
 
 # ─────────────────────────────────────────────────────────────────────────────
+# YYY4: jq absent — fail closed (exit 2)
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- jq absent: fail closed (exit 2) --"
+
+# Mask jq by using a minimal PATH that excludes the directory containing jq.
+# /bin and /usr/local/bin provide bash, grep, sed, cat but not jq (macOS).
+# This tests the fail-closed guard before any input is read.
+actual_exit=0
+echo '{}' | PATH="/bin:/usr/local/bin" bash "$HOOK" >/dev/null 2>&1 || actual_exit=$?
+if [[ "$actual_exit" -eq 2 ]]; then
+  echo "  PASS: jq absent — exits 2 (fail closed)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: jq absent — expected exit 2, got $actual_exit"
+  FAIL=$((FAIL + 1))
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""

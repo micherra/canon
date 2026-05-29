@@ -211,6 +211,25 @@ run_test "nested: git -C .canon/worktrees/slug reset --hard passes" \
   0 "$(make_nested_input 'git -C .canon/worktrees/my-slug reset --hard HEAD')" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# YYY4: jq absent — fail closed (exit 2)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- jq absent: fail closed (exit 2) --"
+
+# Mask jq by using a minimal PATH that excludes the directory containing jq.
+# /bin and /usr/local/bin provide bash, grep, sed, cat but not jq (macOS).
+# This tests the fail-closed guard before any input is read.
+actual_exit=0
+echo '{}' | PATH="/bin:/usr/local/bin" bash "$HOOK" >/dev/null 2>&1 || actual_exit=$?
+if [[ "$actual_exit" -eq 2 ]]; then
+  echo "  PASS: jq absent — exits 2 (fail closed)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: jq absent — expected exit 2, got $actual_exit"
+  FAIL=$((FAIL + 1))
+fi
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""
