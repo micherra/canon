@@ -20,6 +20,7 @@ function formatOverviewSection(lines: string[], report: DriftReport): void {
   lines.push(
     `Avg score: Rules ${report.avg_score.rules}% | Opinions ${report.avg_score.opinions}% | Conventions ${report.avg_score.conventions}%`,
   );
+  lines.push(`Craft: ${report.craft.score} (${report.craft.holistic_count} holistic findings)`);
   lines.push(`Trend: ${formatTrend(report.trend)}`);
   lines.push("");
 }

@@ -25,6 +25,10 @@ export type DriftReport = {
     opinions: number;
     conventions: number;
   };
+  craft: {
+    score: number;
+    holistic_count: number;
+  };
   most_violated: PrincipleStats[];
   violation_directories: DirectoryStats[];
   never_triggered: string[]; // principle IDs that never appeared in reviews
@@ -201,6 +205,24 @@ function computePrincipleTrend(reviews: ReviewEntry[], principleId: string): Dri
   return "stable";
 }
 
+export function computeCraftScore(reviews: ReviewEntry[]): {
+  score: number;
+  holistic_count: number;
+} {
+  if (reviews.length === 0) return { holistic_count: 0, score: 100 };
+
+  let holistic_count = 0;
+  for (const r of reviews) {
+    if (!r.recommendations) continue;
+    for (const rec of r.recommendations) {
+      if (rec.source === "holistic") holistic_count++;
+    }
+  }
+
+  const score = Math.max(0, 100 - Math.min(100, holistic_count * 10));
+  return { holistic_count, score };
+}
+
 // Main
 
 export function analyzeDrift(
@@ -230,6 +252,7 @@ export function analyzeDrift(
 
   return {
     avg_score: computeAverageScores(filteredReviews),
+    craft: computeCraftScore(filteredReviews),
     most_violated: mostViolated,
     never_triggered: neverTriggered,
     total_reviews: filteredReviews.length,
