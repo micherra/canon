@@ -172,8 +172,8 @@ When all implementation steps complete:
 2. Spawn `shipper` — pushes build branch to origin, creates PR to main. Direct merge only on explicit user request.
 3. Call `finalize_workspace({ workspace })` — verifies all expected steps and artifacts are present, releases file claims.
 4. Verify file claims released.
-6. Evaluate learn gate: run `.canon/learn.sh` if it exists.
-7. Present completion summary: states executed, key artifacts, skipped states, base commit for rollback.
+5. Evaluate learn gate: run `.canon/learn.sh` if it exists.
+6. Present completion summary: states executed, key artifacts, skipped states, base commit for rollback.
 
 ## Tool Scope
 
