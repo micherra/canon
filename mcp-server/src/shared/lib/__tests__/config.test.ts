@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   buildLayerInferrer,
+  DEFAULT_LAYER_MAPPINGS,
   deriveSourceDirsFromLayers,
   loadConfigNumber,
   loadJanitorConfig,
@@ -107,6 +108,35 @@ describe("buildLayerInferrer", () => {
       expect(infer("src/api/handler.ts")).toBe("api");
       expect(infer("agents/implementor.md")).toBe("agents");
       expect(infer("unmatched/file.ts")).toBe("unknown");
+    });
+  });
+
+  describe("DEFAULT_LAYER_MAPPINGS — hooks layer", () => {
+    it("infers hooks for a top-level hooks script", () => {
+      const infer = buildLayerInferrer(DEFAULT_LAYER_MAPPINGS);
+      expect(infer("hooks/destructive-guard.sh")).toBe("hooks");
+    });
+
+    it("infers hooks for hooks/lib/ (ordering: hooks before shared/lib)", () => {
+      const infer = buildLayerInferrer(DEFAULT_LAYER_MAPPINGS);
+      // hooks/lib/canon-hook-lib.sh contains both 'hooks' and 'lib' segments.
+      // The hooks entry must come before shared in DEFAULT_LAYER_MAPPINGS so
+      // the more-specific prefix wins.
+      expect(infer("hooks/lib/canon-hook-lib.sh")).toBe("hooks");
+    });
+
+    it("hooks entry appears before shared entry in DEFAULT_LAYER_MAPPINGS key order", () => {
+      const keys = Object.keys(DEFAULT_LAYER_MAPPINGS);
+      const hooksIdx = keys.indexOf("hooks");
+      const sharedIdx = keys.indexOf("shared");
+      expect(hooksIdx).toBeGreaterThanOrEqual(0); // hooks must exist
+      expect(sharedIdx).toBeGreaterThanOrEqual(0); // shared must exist
+      expect(hooksIdx).toBeLessThan(sharedIdx); // hooks before shared
+    });
+
+    it("shared layer still infers correctly for non-hooks lib paths", () => {
+      const infer = buildLayerInferrer(DEFAULT_LAYER_MAPPINGS);
+      expect(infer("src/shared/lib/config.ts")).toBe("shared");
     });
   });
 });
