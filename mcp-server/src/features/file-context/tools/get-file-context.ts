@@ -206,8 +206,14 @@ async function loadComplianceData(
         ? review.violations.filter((v) => v.file_path === filePath).length
         : review.violations.length;
     }
-  } catch {
-    // no compliance data
+  } catch (err) {
+    // best-effort: compliance data is optional enrichment; primary file context still returned
+    console.warn(
+      "[canon] get-file-context: compliance data unavailable for",
+      filePath,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   return { last_verdict, violation_count, violations };
@@ -326,8 +332,14 @@ export function loadKgData(
     if (projectDir) {
       loadGitIntelData(db, filePath, projectDir, result);
     }
-  } catch {
-    // KG unavailable — skip graph data gracefully
+  } catch (err) {
+    // best-effort: KG graph data is optional enrichment; file context still returned
+    console.warn(
+      "[canon] get-file-context: KG graph data unavailable for",
+      filePath,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
   } finally {
     db?.close();
   }
@@ -382,8 +394,14 @@ function loadEntitiesAndSummary(
   try {
     const summaryRow = store.getSummaryByFile(fileRow.file_id);
     if (summaryRow) result.summary = summaryRow.summary;
-  } catch {
-    /* ignore DB summary errors */
+  } catch (err) {
+    // best-effort: summary is optional enrichment from KG
+    console.warn(
+      "[canon] get-file-context: DB summary lookup failed for",
+      filePath,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 
@@ -446,8 +464,14 @@ async function scanImportedByFallback(
       }),
     );
     return results.filter((f): f is string => f !== null);
-  } catch {
-    /* fallback failed */
+  } catch (err) {
+    // best-effort: imported_by fallback scan is optional enrichment
+    console.warn(
+      "[canon] get-file-context: imported_by fallback scan failed for",
+      filePath,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 }

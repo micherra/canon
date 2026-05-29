@@ -109,8 +109,9 @@ function resolveSignals(filePaths: string[], output: GetContextOutput): void {
     let accuracyData: AccuracyMap | undefined;
     try {
       accuracyData = computeAccuracy(driftDbSignals);
-    } catch {
-      // Fail-open: accuracy computation failure = no tuning
+    } catch (err) {
+      // best-effort: accuracy computation is optional tuning; failure = no weight adjustment
+      console.warn("[canon] get_context: accuracy computation failed:", err instanceof Error ? err.message : err);
     }
 
     const signals = compileSignals(filePaths, driftDbSignals, { accuracyData });
@@ -129,12 +130,14 @@ function resolveSignals(filePaths: string[], output: GetContextOutput): void {
         if (summary) {
           output.accuracy_summary = summary;
         }
-      } catch {
-        // Fail-open: summary generation failure is non-critical
+      } catch (err) {
+        // best-effort: summary generation is optional enrichment for learner
+        console.warn("[canon] get_context: accuracy summary generation failed:", err instanceof Error ? err.message : err);
       }
     }
-  } catch {
-    // Fail-open: signals section is optional enrichment.
+  } catch (err) {
+    // best-effort: signals section is optional enrichment; primary output already returned
+    console.warn("[canon] get_context: signals section failed:", err instanceof Error ? err.message : err);
   }
 }
 

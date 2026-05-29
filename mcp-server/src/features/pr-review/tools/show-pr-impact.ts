@@ -454,8 +454,12 @@ export function computeKgData(
         by_depth: report.by_depth,
         total_affected: report.total_affected,
       };
-    } catch {
-      // KG query failed — continue without blast radius
+    } catch (err) {
+      // best-effort: blast radius is optional KG enrichment; PR review works without it
+      console.warn(
+        "[canon] show-pr-impact: KG blast radius query failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
 
     try {
@@ -466,14 +470,18 @@ export function computeKgData(
         }
       }
       subgraph = buildSubgraph(db, files, blastRadius, violationCountByFile);
-    } catch {
-      // Subgraph build failed — continue with empty subgraph
+    } catch (err) {
+      // best-effort: subgraph is optional visualization data; review works without it
+      console.warn(
+        "[canon] show-pr-impact: subgraph build failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
 
     try {
       co_change_warnings = computeCoChangeWarnings(db, files, projectDir);
     } catch {
-      // Git intel unavailable — skip co-change warnings gracefully
+      // best-effort: git co-change intel is optional; skip gracefully when git unavailable
     }
   } finally {
     db.close();

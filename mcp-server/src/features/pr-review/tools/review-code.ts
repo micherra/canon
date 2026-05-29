@@ -150,7 +150,12 @@ async function loadGraphContext(
     }
 
     return { graphContext, injected, metrics };
-  } catch {
+  } catch (err) {
+    // best-effort: graph context is optional KG enrichment; code review works without it
+    console.warn(
+      "[canon] review-code: KG graph context unavailable:",
+      err instanceof Error ? err.message : err,
+    );
     return { graphContext: undefined, injected, metrics: null };
   } finally {
     db?.close();

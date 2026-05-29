@@ -148,6 +148,7 @@ export function getEvents(stmts: EventStmts, options?: GetEventsOptions): EventO
     try {
       payload = JSON.parse(r.payload) as Record<string, unknown>;
     } catch {
+      // best-effort: corrupt event payload in DB; skip this row and continue collecting others
       continue;
     }
     events.push({

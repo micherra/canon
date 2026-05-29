@@ -88,7 +88,12 @@ function openKgDb(
     const query = new KgQuery(kgDb);
     const freshness = query.getKgFreshnessMs();
     return { kgDb, kgFreshnessMs: freshness ?? undefined };
-  } catch {
+  } catch (err) {
+    // best-effort: KG is optional enrichment; PR review works without graph data
+    console.warn(
+      "[canon] pr-review-data: KG database initialization failed:",
+      err instanceof Error ? err.message : err,
+    );
     kgDb?.close();
     return undefined;
   }
@@ -148,8 +153,12 @@ function enrichWithPriorityScores(
         file.priority_factors = priority.factors;
       }
     }
-  } catch {
-    // Priority computation failed — continue without priority data
+  } catch (err) {
+    // best-effort: priority computation is optional; files shown without priority ordering
+    console.warn(
+      "[canon] pr-review-data: priority score computation failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 
@@ -161,7 +170,12 @@ async function attachViolations(files: PrFileInfo[], driftStore: DriftStore): Pr
     for (const file of files) {
       file.violations = fileViolationMap.get(file.path) ?? [];
     }
-  } catch {
+  } catch (err) {
+    // best-effort: violation data is optional enrichment; files shown without drift history
+    console.warn(
+      "[canon] pr-review-data: drift store unavailable for violation data:",
+      err instanceof Error ? err.message : err,
+    );
     for (const file of files) {
       file.violations = [];
     }
