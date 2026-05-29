@@ -18,6 +18,18 @@ export type DirectoryStats = {
   review_count: number;
 };
 
+/**
+ * Per-doc documentation-freshness entry. Declared here (platform layer) so the
+ * freshness service in features/diagnostics can import it — features may import
+ * platform, but platform must not import features.
+ */
+export type DocFreshness = {
+  doc_path: string;
+  commits_since_sync: number;
+  confidence: ConfidenceAnnotation;
+  warning?: string;
+};
+
 export type DriftReport = {
   total_reviews: number;
   avg_score: {
@@ -29,6 +41,7 @@ export type DriftReport = {
   violation_directories: DirectoryStats[];
   never_triggered: string[]; // principle IDs that never appeared in reviews
   trend: "improving" | "stable" | "declining" | "insufficient_data";
+  doc_freshness: DocFreshness[]; // direction-doc staleness, sorted by staleness descending
 };
 
 function applyFilters(
@@ -206,7 +219,12 @@ function computePrincipleTrend(reviews: ReviewEntry[], principleId: string): Dri
 export function analyzeDrift(
   reviews: ReviewEntry[],
   allPrincipleIds: string[],
-  options?: { lastN?: number; principleId?: string; directory?: string },
+  options?: {
+    lastN?: number;
+    principleId?: string;
+    directory?: string;
+    docFreshness?: DocFreshness[];
+  },
 ): DriftReport {
   const filteredReviews = applyFilters(reviews, options);
   const principleMap = computePrincipleStats(filteredReviews);
@@ -230,6 +248,7 @@ export function analyzeDrift(
 
   return {
     avg_score: computeAverageScores(filteredReviews),
+    doc_freshness: options?.docFreshness ?? [],
     most_violated: mostViolated,
     never_triggered: neverTriggered,
     total_reviews: filteredReviews.length,
