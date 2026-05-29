@@ -6,9 +6,10 @@
  * including v8 (area_observations).
  */
 
+import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import type Database from "better-sqlite3";
 import { describe, expect, test } from "vitest";
-import { AreaMemoryDao, deriveSubsystemKey } from "../area-memory-dao.ts";
+import { AreaMemoryDao } from "../area-memory-dao.ts";
 import { initDriftDb } from "../drift-schema.ts";
 
 // ---- Setup helpers ----

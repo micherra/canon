@@ -13,12 +13,9 @@
  * - errors-are-values: typed return values; no thrown errors for expected conditions
  */
 
-import {
-  type AreaMemoryDao,
-  type AreaObservationRow,
-  deriveSubsystemKey,
-} from "@platform/storage/drift/area-memory-dao.ts";
+import type { AreaMemoryDao, AreaObservationRow } from "@platform/storage/drift/area-memory-dao.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 
 // ---- Query function ----
 
