@@ -8,7 +8,7 @@
  * - missing docs/ dir → [] (no throw)
  */
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
@@ -69,8 +69,7 @@ describe("computeDocFreshness", () => {
     writeFileSync(join(projectDir, "docs", "top.md"), "# top");
     writeFileSync(join(projectDir, "docs", "reference", "canon-reference.md"), "# ref");
 
-    const git = (args: string[]): ProcessResult =>
-      args[0] === "log" ? ok("hash") : ok("3");
+    const git = (args: string[]): ProcessResult => (args[0] === "log" ? ok("hash") : ok("3"));
 
     const result = computeDocFreshness(projectDir, git);
     expect(result.map((d) => d.doc_path)).toEqual(["docs/top.md"]);
@@ -110,8 +109,7 @@ describe("computeDocFreshness", () => {
     mkdirSync(join(projectDir, "docs"));
     writeFileSync(join(projectDir, "docs", "x.md"), "# x");
 
-    const git = (args: string[]): ProcessResult =>
-      args[0] === "log" ? ok("   ") : ok("0");
+    const git = (args: string[]): ProcessResult => (args[0] === "log" ? ok("   ") : ok("0"));
 
     const result = computeDocFreshness(projectDir, git);
     expect(result).toHaveLength(1);
@@ -122,8 +120,7 @@ describe("computeDocFreshness", () => {
     mkdirSync(join(projectDir, "docs"));
     writeFileSync(join(projectDir, "docs", "x.md"), "# x");
 
-    const git = (args: string[]): ProcessResult =>
-      args[0] === "log" ? ok("hash") : ok("0");
+    const git = (args: string[]): ProcessResult => (args[0] === "log" ? ok("hash") : ok("0"));
 
     const result = computeDocFreshness(projectDir, git);
     expect(result[0].commits_since_sync).toBe(0);
@@ -137,8 +134,7 @@ describe("computeDocFreshness", () => {
     writeFileSync(join(projectDir, "docs", "diagram.png"), "binary");
     writeFileSync(join(projectDir, "docs", "notes.txt"), "text");
 
-    const git = (args: string[]): ProcessResult =>
-      args[0] === "log" ? ok("hash") : ok("1");
+    const git = (args: string[]): ProcessResult => (args[0] === "log" ? ok("hash") : ok("1"));
 
     const result = computeDocFreshness(projectDir, git);
     expect(result.map((d) => d.doc_path)).toEqual(["docs/x.md"]);
