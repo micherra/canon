@@ -64,10 +64,19 @@ Between May 24–26, a concentrated wave shipped the top-priority roadmap items 
 - **Hook hardening** (PRs #254, #255, #257, #260) — SIGPIPE fixes, session-start guards, shared test helpers, verify ghost state handling.
 - **Dead-code cleanup** (PRs #252, #256, #258) — Drift violation fixes, dead workspace dirs, doc corrections.
 
-## What Shipped: Wiki-lint & Doc Gap Detection (PR #267)
+## What Shipped: Hook Hardening & Learner Wave (May 27–28)
 
-- **Wiki-lint over Canon's own artifacts** — Lint pass over contradictions between CLAUDE.md files, orphan principles with no usages, stale plans referencing renamed files. Closes the loop on meta-layer drift Canon couldn't catch before.
-- **Proactive doc gap detection** — Scribe scans for directories that contain source files but no CLAUDE.md before classifying a diff.
+Between May 27–28, a second wave shipped hook quality improvements and learner proposals:
+
+- **PostCompact stdin fix** (PR #262) — PostCompact hook reads `compact_summary` from stdin instead of a positional arg.
+- **Shellcheck verify gate** (PR #265) — `hooks/lint.sh` now runs shellcheck as a real verify gate on all hook shell scripts.
+- **Destructive-guard regex fix** (PR #266) — Regex updated to allow `canon-task/` branch prefix in addition to `canon/`.
+- **Wiki-lint + proactive doc gap detection** (PR #267) — `wiki_lint` MCP tool scans Canon's own meta-layer for contradictions, orphan principles, and directories missing CLAUDE.md. Ships both Thread 4 items.
+- **Hook test coverage** (PR #268) — Adds `canon-wave/` test case for destructive-guard; fixes stale comment (VVV1, VVV2).
+- **Learner WWW1/WWW2 proposals** (PR #269) — Root-threading convention for wave tasks and observable catch-block pattern.
+- **jq JSON extraction hardening** (PR #270) — Replaces grep/sed JSON extraction with jq across hook scripts; fixes quoted branch args.
+
+**In-flight**: PR #271 (`fix(hooks): replace remaining grep/sed JSON extraction with jq + context-sync`) — hook hardening continuation, not yet merged.
 
 ## Supervised Build Quality — Feature Backlog
 
