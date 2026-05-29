@@ -52,7 +52,11 @@ else
 fi
 
 # For Write calls, estimate new size from the content field
-NEW_CONTENT=$(echo "$INPUT" | jq -e '.tool_input.content // .content // empty | select(. != "")' >/dev/null 2>&1 && echo "yes" || true)
+if echo "$INPUT" | jq -e '.tool_input.content // .content // empty | select(. != "")' >/dev/null 2>&1; then
+  NEW_CONTENT="yes"
+else
+  NEW_CONTENT=""
+fi
 if [[ -n "$NEW_CONTENT" ]]; then
   NEWLINE_COUNT=$(echo "$INPUT" | jq -r '.tool_input.content // .content // empty' 2>/dev/null | wc -l | tr -d ' ' || echo "0")
   if [[ $NEWLINE_COUNT -gt $MAX_LINES ]]; then
