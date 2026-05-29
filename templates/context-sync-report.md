@@ -34,6 +34,13 @@ timestamp: "{ISO-8601}"
 - **CONVENTIONS.md**: {what added, or "No updates needed"}
 - **README.md**: {sections updated, or "No updates needed" or "Skipped — no structure changes"}
 
+### Direction-Doc Disposition
+| Direction doc | Disposition | Detail |
+|---------------|-------------|--------|
+| `docs/{name}.md` | factual-update | {what fact was synced — status flip, PR ref, checkmark, renamed path} |
+| `docs/{name}.md` | left-untouched | {drift observed but deliberately not edited — editorial/uncertain — with reason} |
+| `docs/{name}.md` | not-relevant | Diff did not touch this doc's domain |
+
 ### Context Budget
 | File | Status | Action Taken |
 |------|--------|--------------|
@@ -56,3 +63,4 @@ _If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync
 4. **Documents Updated section**: List every managed document with what changed. If nothing changed, say "No updates needed" — never omit the line.
 5. **Freshness table**: Only include documents/sections that were actually updated in this sync. Omit the table entirely if status is NO_UPDATES.
 6. **Context Budget table**: Always include this section when any CLAUDE.md file was touched. One row per file touched. If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync." If a file is over budget after all trimming options are exhausted, mark status as "Over budget (unreducible)" — this is a warning, not a failure.
+7. **Direction-Doc Disposition**: List every top-level `docs/*.md` direction doc (excluding `docs/reference/`). For each, give a disposition: `factual-update` (you synced a fact), `left-untouched` (drift observed but deliberately not edited — always state the reason, especially editorial-prose drift), or `not-relevant` (diff did not touch its domain). Omit the section entirely only when status is NO_UPDATES.
