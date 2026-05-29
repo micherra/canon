@@ -1,3 +1,4 @@
+import { computeDocFreshness } from "@features/diagnostics/services/doc-freshness.ts";
 import { analyzeDrift, type DriftReport } from "@platform/storage/drift/analyzer.ts";
 import { formatDriftReport } from "@platform/storage/drift/reporter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
@@ -30,8 +31,11 @@ export async function getDriftReport(
 
   const allIds = principles.map((p) => p.id);
 
+  const docFreshness = computeDocFreshness(projectDir);
+
   const report = analyzeDrift(reviews, allIds, {
     directory: input.directory,
+    docFreshness,
     lastN: input.last_n,
     principleId: input.principle_id,
   });

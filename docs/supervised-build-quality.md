@@ -130,7 +130,7 @@ Canon's own documentation and artifacts accumulate drift. Eat your own dogfood.
 | ~~**Wiki-lint over Canon's own artifacts**~~ | ~~Medium~~ | ~~High~~ | Shipped (PR #267). Lint pass over contradictions between CLAUDE.md files, orphan principles with no usages, stale plans referencing renamed files. |
 | ~~**Composite health score**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #259). `computeConfidence()` engine with shared `ConfidenceScore` schema. Drift report integrates confidence decay. |
 | ~~**Proactive doc gap detection**~~ | ~~Small~~ | ~~Medium~~ | Shipped (PR #267). Scribe scans for directories that contain source files but no CLAUDE.md before classifying a diff. |
-| **Documentation staleness in drift reports** | Medium | Medium | Add a documentation freshness dimension alongside principle compliance. Each CLAUDE.md gets a "commits since last sync" count and decaying confidence score. |
+| ~~**Documentation staleness in drift reports**~~ | ~~Medium~~ | ~~Medium~~ | Shipped (PR #274). `doc_freshness` dimension in `get_drift_report`: `DocFreshness[]` per direction doc with `commits_since_sync` + decaying `ConfidenceAnnotation`, sorted by staleness descending. Scribe also gained elective `docs/*.md` factual-sync in Step 5b (prevention half, addresses `watch_ZZZ1`). |
 | **Repo-level `.canon/log.md`** | Tiny | Medium | Global timeline of flow completions, principle additions, and lint passes. Single append at `complete_flow`. Grep-parseable `## [YYYY-MM-DD] type | title` prefix. |
 | **Consolidate `write_*` → `write_artifact`** | Small | Low | 5 individual write tools still individually registered. One `write_artifact({ type, workspace, data })` reduces MCP surface. |
 

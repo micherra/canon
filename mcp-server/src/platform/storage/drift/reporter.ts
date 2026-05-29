@@ -9,6 +9,7 @@ export function formatDriftReport(report: DriftReport): string {
   formatOverviewSection(lines, report);
   formatMostViolatedSection(lines, report.most_violated);
   formatHotspotsSection(lines, report.violation_directories);
+  formatDocFreshnessSection(lines, report.doc_freshness);
   formatNeverTriggeredSection(lines, report.never_triggered);
   formatRecommendationsSection(lines, report);
 
@@ -50,6 +51,26 @@ function formatHotspotsSection(
   for (const dir of directories) {
     lines.push(
       `${dir.directory} — ${dir.total_violations} violations across ${dir.review_count} reviews`,
+    );
+  }
+  lines.push("");
+}
+
+function formatDocFreshnessSection(
+  lines: string[],
+  docFreshness: DriftReport["doc_freshness"],
+): void {
+  if (docFreshness.length === 0) return;
+  lines.push("### Documentation freshness");
+  lines.push("Commits-since-sync is a repo-wide proxy (no code→doc mapping).");
+  for (const doc of docFreshness) {
+    const warn = doc.warning ? ` (warning: ${doc.warning})` : "";
+    const staleness =
+      doc.commits_since_sync < 0
+        ? "unknown commits since last sync"
+        : `${doc.commits_since_sync} commits since last sync`;
+    lines.push(
+      `${doc.doc_path} — ${staleness} [confidence: ${doc.confidence.tier.toUpperCase()}]${warn}`,
     );
   }
   lines.push("");

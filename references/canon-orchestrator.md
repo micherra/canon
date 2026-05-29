@@ -168,7 +168,7 @@ For requests with genuine design tradeoffs, the architect thinks out loud and st
 
 When all implementation steps complete:
 
-1. Spawn `scribe` (context-sync) — updates CLAUDE.md, context.md, CONVENTIONS.md on build branch.
+1. Spawn `scribe` (context-sync) — updates CLAUDE.md, context.md, CONVENTIONS.md on build branch, and electively factual-syncs docs/*.md direction docs (excludes docs/reference/).
 2. Spawn `shipper` — pushes build branch to origin, creates PR to main. Direct merge only on explicit user request.
 3. Call `finalize_workspace({ workspace })` — verifies all expected steps and artifacts are present.
 4. Call `update_board({ workspace, operation: "complete_flow" })`.
