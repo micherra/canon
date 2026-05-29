@@ -175,6 +175,17 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
       JSON.stringify({ layers: { api: ["src"] } }),
     );
     await writeFile(join(tmpDir, "src", "handler.ts"), `export function handler() {}`);
+    // Prevent real DriftStore from opening SQLite connections in the temp dir.
+    // buildComplianceOverlay calls getDriftDb which caches connections indefinitely,
+    // causing ENOTEMPTY when rm() removes files after the test but before the
+    // still-open SQLite connection has checkpointed its WAL/SHM files.
+    vi.doMock("@platform/storage/drift/store.ts", () => ({
+      DriftStore: class {
+        getReviews() {
+          return Promise.resolve([]);
+        }
+      },
+    }));
   });
 
   afterEach(async () => {
