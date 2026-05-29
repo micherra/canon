@@ -78,7 +78,7 @@ src/
 |------|-------------|
 | `init_workspace` | Initialize a Canon workspace for flow execution. Creates workspace directory and SQLite `orchestration.db`. Resumes from existing DB if present. Seeds `board.json` and `progress.md`. |
 | `finalize_workspace` | Close a Canon workspace: verify journal completeness, release file claims, aggregate flow metrics. |
-| `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json`. Optionally appends a `progress_line` to `progress.md`. |
+| `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json`. |
 | `batch_log_steps` | Register multiple planned steps in the journal in a single read-modify-write cycle. |
 | `write_plan_index` | Persist architect task/plan data and the affected-file list to `INDEX.md`. |
 | `post_message` | Post a message to a workspace channel for inter-agent communication. Messages are markdown files that agents read at spawn time. |
