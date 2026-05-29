@@ -65,8 +65,12 @@ function formatDocFreshnessSection(
   lines.push("Commits-since-sync is a repo-wide proxy (no code→doc mapping).");
   for (const doc of docFreshness) {
     const warn = doc.warning ? ` (warning: ${doc.warning})` : "";
+    const staleness =
+      doc.commits_since_sync < 0
+        ? "unknown commits since last sync"
+        : `${doc.commits_since_sync} commits since last sync`;
     lines.push(
-      `${doc.doc_path} — ${doc.commits_since_sync} commits since last sync [confidence: ${doc.confidence.tier.toUpperCase()}]${warn}`,
+      `${doc.doc_path} — ${staleness} [confidence: ${doc.confidence.tier.toUpperCase()}]${warn}`,
     );
   }
   lines.push("");

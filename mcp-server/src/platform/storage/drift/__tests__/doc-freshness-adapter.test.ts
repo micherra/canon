@@ -58,6 +58,16 @@ describe("computeFreshnessConfidence", () => {
     expect(result.sample_size).toBeGreaterThanOrEqual(5);
   });
 
+  it("negative commit count (-1 sentinel for unknown) is treated as fully stale", () => {
+    const result = computeFreshnessConfidence({
+      commits_since_sync: -1,
+      doc_path: "docs/x.md",
+    });
+    expect(result.tier).toBe("low");
+    expect(result.score).toBe(0);
+    expect(result.sample_size).toBeGreaterThanOrEqual(5);
+  });
+
   it("uses the single staleness signal (no auxiliary decay signals)", () => {
     const result = computeFreshnessConfidence({ commits_since_sync: 0, doc_path: "docs/x.md" });
     const signals = result.basis.map((b) => b.signal);

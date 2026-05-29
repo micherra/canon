@@ -89,7 +89,8 @@ describe("computeDocFreshness", () => {
     expect(result).toHaveLength(1);
     expect(result[0].warning).toBeTruthy();
     expect(result[0].warning?.length).toBeGreaterThan(0);
-    // Still carries a confidence annotation (best-effort), never dropped.
+    expect(result[0].commits_since_sync).toBe(-1);
+    expect(result[0].confidence.tier).toBe("low");
     expect(result[0].confidence).toBeDefined();
   });
 
@@ -103,6 +104,8 @@ describe("computeDocFreshness", () => {
     const result = computeDocFreshness(projectDir, git);
     expect(result).toHaveLength(1);
     expect(result[0].warning).toBeTruthy();
+    expect(result[0].commits_since_sync).toBe(-1);
+    expect(result[0].confidence.tier).toBe("low");
   });
 
   it("treats an empty git log stdout (doc never committed) as a warning", () => {
@@ -114,6 +117,27 @@ describe("computeDocFreshness", () => {
     const result = computeDocFreshness(projectDir, git);
     expect(result).toHaveLength(1);
     expect(result[0].warning).toBeTruthy();
+    expect(result[0].commits_since_sync).toBe(-1);
+  });
+
+  it("unknown docs (-1) sort before all known docs", () => {
+    mkdirSync(join(projectDir, "docs"));
+    writeFileSync(join(projectDir, "docs", "a.md"), "# a");
+    writeFileSync(join(projectDir, "docs", "b.md"), "# b");
+
+    const git = (args: string[]): ProcessResult => {
+      if (args[0] === "log") {
+        const rel = args[args.length - 1];
+        return rel.endsWith("a.md") ? fail("fatal: bad repo") : ok("hashB");
+      }
+      return ok("5");
+    };
+
+    const result = computeDocFreshness(projectDir, git);
+    expect(result[0].doc_path).toBe("docs/a.md");
+    expect(result[0].commits_since_sync).toBe(-1);
+    expect(result[1].doc_path).toBe("docs/b.md");
+    expect(result[1].commits_since_sync).toBe(5);
   });
 
   it("computes commits_since_sync and a fresh-doc high-confidence annotation", () => {

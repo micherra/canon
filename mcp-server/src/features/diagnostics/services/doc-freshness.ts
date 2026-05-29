@@ -60,8 +60,8 @@ export function computeDocFreshness(projectDir: string, git: GitFn = gitExec): D
         `[canon] doc-freshness: git log failed for ${relPath}: ${logRes.stderr || "no commit"}`,
       );
       return {
-        commits_since_sync: 0,
-        confidence: computeFreshnessConfidence({ commits_since_sync: 0, doc_path: relPath }),
+        commits_since_sync: -1,
+        confidence: computeFreshnessConfidence({ commits_since_sync: -1, doc_path: relPath }),
         doc_path: relPath,
         warning: "could not resolve last-sync commit",
       };
@@ -72,8 +72,8 @@ export function computeDocFreshness(projectDir: string, git: GitFn = gitExec): D
     if (!countRes.ok) {
       console.warn(`[canon] doc-freshness: git rev-list failed for ${relPath}: ${countRes.stderr}`);
       return {
-        commits_since_sync: 0,
-        confidence: computeFreshnessConfidence({ commits_since_sync: 0, doc_path: relPath }),
+        commits_since_sync: -1,
+        confidence: computeFreshnessConfidence({ commits_since_sync: -1, doc_path: relPath }),
         doc_path: relPath,
         warning: "could not count commits since last sync",
       };
@@ -88,5 +88,10 @@ export function computeDocFreshness(projectDir: string, git: GitFn = gitExec): D
   });
 
   // Sort by staleness descending (most commits-behind first) — AC4.
-  return results.sort((a, b) => b.commits_since_sync - a.commits_since_sync);
+  // Unknown (-1) sorts before all known values (most urgent).
+  return results.sort((a, b) => {
+    const aKey = a.commits_since_sync < 0 ? Number.MAX_SAFE_INTEGER : a.commits_since_sync;
+    const bKey = b.commits_since_sync < 0 ? Number.MAX_SAFE_INTEGER : b.commits_since_sync;
+    return bKey - aKey;
+  });
 }

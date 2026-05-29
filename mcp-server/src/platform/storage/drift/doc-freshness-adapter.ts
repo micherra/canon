@@ -45,9 +45,9 @@ const FRESHNESS_SAMPLE_SIZE = 10;
 
 export function computeFreshnessConfidence(signals: DocFreshnessSignals): ConfidenceAnnotation {
   // Non-finite or negative inputs are treated as fully stale (conservative).
-  const commits = Number.isFinite(signals.commits_since_sync)
-    ? Math.max(0, signals.commits_since_sync)
-    : STALENESS_SATURATION_COMMITS;
+  const raw = signals.commits_since_sync;
+  const commits =
+    !Number.isFinite(raw) || raw < 0 ? STALENESS_SATURATION_COMMITS : raw;
 
   // DECAY: value falls linearly as commits rise, clamped to [0, 1]. This single
   // value→commits mapping is the entire decay; the shared engine does the rest.
