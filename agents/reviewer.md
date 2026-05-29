@@ -206,6 +206,28 @@ Output format — list findings as advisory items:
 
 **Deduplication rule**: If a gotcha is already flagged as a Stage 1 principle violation (e.g., `explicit-contracts`, `errors-are-values`, `naming-reveals-intent`), do NOT duplicate it here. This axis covers behavior that falls outside loaded principle scope.
 
+#### Test Quality — Interaction-Only Tests
+
+Scan test files in the diff for tests that mock a collaborator and then assert
+ONLY interaction (`toHaveBeenCalled`, `toHaveBeenCalledWith`, `toHaveBeenCalledTimes`)
+on that same mocked collaborator — with no assertion on a real return value,
+output, or state change. Such a test verifies wiring, not behavior: it would pass
+even if the mocked unit produced garbage, because the real implementation never runs.
+
+Flag as advisory when found. **Upgrade to WARNING** when the mocked collaborator is
+the unit whose behavior the test NAME claims to verify (e.g. a test named
+"computes accuracy" that mocks `computeAccuracy` and only asserts it was called) —
+this is the "green but unverified" case (see Canon audit, finding 4:
+register-knowledge-accuracy.test.ts).
+
+Output format — advisory items:
+- `path:line` — `testName`: mocks `collaborator` then asserts only `toHaveBeenCalled*` on it; add a real-path assertion (return value / output / state).
+
+Do NOT flag:
+- Integration tests that mock infrastructure seams (DB, fs, network) and assert on real domain output — the behavioral assertion is present even if the infra call is mocked.
+- Tests where interaction IS the contract under test (e.g. "calls the logger on error" where logging is the behavior being verified, not a collaborator incidentally asserted).
+- Tests that assert call arguments AND a real behavioral outcome (the interaction assertion is supplementary, not the only assertion).
+
 ### Recommendations array
 
 After completing Stages 1 and 2, produce a `recommendations` array for the `store_pr_review` call. This is the top-5 most actionable suggestions, mixing principle violations with holistic observations:
