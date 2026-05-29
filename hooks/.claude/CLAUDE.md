@@ -38,8 +38,13 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `canon-agent-teams/post-engineer-scribe.sh` | SubagentStop | Queue scribe sync after engineer subagent completes |
 | `canon-agent-teams/postcompact-narrative-capture.sh` | PostCompact | Append compaction summary to active workspace journal for agent continuity |
 
+## Invariants
+<!-- last-updated: 2026-05-29 -->
+
+- `destructive-guard.sh` and `pre-commit-check.sh` exit 2 (fail closed) when `jq` is absent from PATH — without jq, command extraction is unreliable and enforcement cannot be guaranteed
+
 ## Conventions
-<!-- last-updated: 2026-05-27 -->
+<!-- last-updated: 2026-05-29 -->
 
 - Hooks are guardrails — they enforce safety without requiring agents to opt in
 - Each hook script must be executable and exit 0 (pass) or non-zero (block)
@@ -48,4 +53,5 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 - `destructive-guard.test.sh` and `install-git-hooks.sh` are utilities, not registered hooks
 - When testing secret-detection hooks, use all-zeros suffixes or EXAMPLE-pattern placeholders for key fixtures — not plausible real-looking values. GitHub push protection scans test files regardless of hook exclusion rules.
 - **Hook test files**: Hooks with 3+ decision branches, runtime state inspection (sqlite queries, filesystem checks), or bypass gate env vars MUST have a corresponding `.test.sh` file. Place it alongside the hook (e.g., `pre-commit-check.test.sh`) or in a `__tests__/` subdirectory. Tests must cover: bypass gate, all silent-pass paths, and all warning/blocking paths. Run with `bash hooks/<name>.test.sh`.
+- **Shared test helpers**: All hook test files source `hooks/test-helpers.sh` for shared utilities (`run_test`, `assert_eq`, etc.); do not define these helpers inline in individual test files.
 - **Shell linting gate**: All hook scripts (excluding `*.test.sh` and `test-helpers.sh`) must pass `shellcheck`. Run `bash hooks/lint.sh` to check. This is part of the verify gate — it runs as the final step after `npm test`. The script fails closed (exits 1) if shellcheck is not installed. Fix all errors and warnings; style-level checks (SC2001, SC2016) and source-path noise (SC1091) are suppressed globally.
