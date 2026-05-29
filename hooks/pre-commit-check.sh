@@ -11,6 +11,10 @@
 
 set -euo pipefail
 
+# Fail closed when jq is not available — without jq, command extraction is
+# unreliable and the guard cannot enforce its invariants.
+command -v jq >/dev/null 2>&1 || { echo "canon: jq is required but not found on PATH" >&2; exit 2; }
+
 # Read the tool input from stdin
 INPUT=$(cat)
 

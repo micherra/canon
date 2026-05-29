@@ -27,7 +27,14 @@ async function findAgentTranscript(agentId: string): Promise<string | null> {
   let sessionDirs: string[];
   try {
     sessionDirs = await readdir(projectsDir);
-  } catch {
+  } catch (err) {
+    // best-effort: Claude projects directory may not exist on all setups
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn(
+        "[canon] capture-transcript: could not read Claude projects dir:",
+        err instanceof Error ? err.message : err,
+      );
+    }
     return null;
   }
   const candidates = sessionDirs.map((s) =>

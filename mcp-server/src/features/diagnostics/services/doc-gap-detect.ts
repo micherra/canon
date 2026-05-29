@@ -115,7 +115,15 @@ async function checkDotClaudeMd(dir: string): Promise<boolean> {
   try {
     const s = await stat(join(dir, ".claude", "CLAUDE.md"));
     return s.isFile();
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error(
+        "[canon] doc-gap-detect: stat(.claude/CLAUDE.md) failed for",
+        dir,
+        ":",
+        err instanceof Error ? err.message : err,
+      );
+    }
     return false;
   }
 }
@@ -153,7 +161,13 @@ async function readDirEntries(
   let names: string[];
   try {
     names = await readdir(currentDir);
-  } catch {
+  } catch (err) {
+    console.error(
+      "[canon] doc-gap-detect: readdir failed for",
+      currentDir,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 
@@ -171,8 +185,13 @@ async function readDirEntries(
         } else {
           files.push(name);
         }
-      } catch {
-        // skip unreadable entries
+      } catch (err) {
+        console.error(
+          "[canon] doc-gap-detect: stat failed for",
+          fullPath,
+          ":",
+          err instanceof Error ? err.message : err,
+        );
       }
     }),
   );

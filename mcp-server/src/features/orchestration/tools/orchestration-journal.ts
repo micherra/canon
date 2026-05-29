@@ -222,8 +222,11 @@ async function readJournal(workspace: string): Promise<Journal> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    // Syntactically invalid JSON (truncated or hand-edited) — return safe default.
+  } catch (err) {
+    console.warn(
+      "[canon] orchestration-journal: journal.json is syntactically invalid (truncated or hand-edited) — resetting to empty:",
+      err instanceof Error ? err.message : err,
+    );
     return { steps: [], version: 1, workspace };
   }
   // Validate at file I/O boundary: journal.json is written by this process but

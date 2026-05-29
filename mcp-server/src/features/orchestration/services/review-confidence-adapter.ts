@@ -85,6 +85,7 @@ function buildViolationHistorySignal(
       weight: 0.35,
     };
   } catch {
+    // DB read failure — return zero-confidence signal; confidence annotation degrades gracefully
     return {
       detail: "could not read violation history",
       sample_size: 0,
@@ -129,6 +130,7 @@ function buildPathEffectsSignal(
       totalReviews,
     };
   } catch {
+    // DB read failure — return neutral path signal; confidence annotation degrades gracefully
     return {
       input: {
         detail: "could not read path effects",

@@ -10,8 +10,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK="$SCRIPT_DIR/pre-commit-check.sh"
 
-PASS=0
-FAIL=0
+# shellcheck source=hooks/test-helpers.sh
+source "$SCRIPT_DIR/test-helpers.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -376,6 +376,24 @@ stage_file "$REPO_FLAGS" "config.env" 'API_KEY = "AKIAIOSFODNN7FLAGSTEST1234"'
 run_test_in_dir "git commit --allow-empty with secret — exits 2" 2 \
   "$REPO_FLAGS" \
   '{"command":"git commit --allow-empty -m \"test\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# YYY4: jq absent — fail closed (exit 2)
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- jq absent: fail closed (exit 2) --"
+
+# Mask jq by using an empty PATH — guarantees jq absence on all platforms.
+# This tests the fail-closed guard before any input is read.
+actual_exit=0
+echo '{}' | PATH=/nonexistent /bin/bash "$HOOK" >/dev/null 2>&1 || actual_exit=$?
+if [[ "$actual_exit" -eq 2 ]]; then
+  echo "  PASS: jq absent — exits 2 (fail closed)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: jq absent — expected exit 2, got $actual_exit"
+  FAIL=$((FAIL + 1))
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary

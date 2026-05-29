@@ -321,9 +321,12 @@ export function updateFileViolationHistory(
       violationCountByFile.set(fp, (violationCountByFile.get(fp) ?? 0) + data.count);
     }
     persistPathEffects(signals, files, violationCountByFile, now);
-  } catch {
-    // Non-blocking: signal persistence failures are silently swallowed.
-    // The review itself was already written successfully.
+  } catch (err) {
+    // best-effort: signal persistence is background telemetry; review already written
+    console.warn(
+      "[canon] write-review: signal persistence failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 

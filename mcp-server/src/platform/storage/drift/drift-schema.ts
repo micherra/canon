@@ -120,6 +120,7 @@ export function columnExists(db: Database.Database, table: string, column: strin
     const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
     return rows.some((row) => row.name === column);
   } catch {
+    // PRAGMA query failure (e.g., table does not exist) — treat column as absent
     return false;
   }
 }

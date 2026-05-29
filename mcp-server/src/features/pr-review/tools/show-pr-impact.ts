@@ -454,8 +454,12 @@ export function computeKgData(
         by_depth: report.by_depth,
         total_affected: report.total_affected,
       };
-    } catch {
-      // KG query failed — continue without blast radius
+    } catch (err) {
+      // best-effort: blast radius is optional KG enrichment; PR review works without it
+      console.warn(
+        "[canon] show-pr-impact: KG blast radius query failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
 
     try {
@@ -466,20 +470,38 @@ export function computeKgData(
         }
       }
       subgraph = buildSubgraph(db, files, blastRadius, violationCountByFile);
-    } catch {
-      // Subgraph build failed — continue with empty subgraph
+    } catch (err) {
+      // best-effort: subgraph is optional visualization data; review works without it
+      console.warn(
+        "[canon] show-pr-impact: subgraph build failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
 
-    try {
-      co_change_warnings = computeCoChangeWarnings(db, files, projectDir);
-    } catch {
-      // Git intel unavailable — skip co-change warnings gracefully
-    }
+    co_change_warnings = safeComputeCoChangeWarnings(db, files, projectDir);
   } finally {
     db.close();
   }
 
   return { blastRadius, co_change_warnings, subgraph };
+}
+
+/** Wrapper that makes co-change computation best-effort; logs on failure. */
+function safeComputeCoChangeWarnings(
+  db: ReturnType<typeof initDatabase>,
+  files: string[],
+  projectDir: string,
+): Array<{ file: string; missing_partner: string; jaccard: number }> {
+  try {
+    return computeCoChangeWarnings(db, files, projectDir);
+  } catch (err) {
+    // best-effort: git co-change intel is optional; skip gracefully when git unavailable
+    console.warn(
+      "[canon] show-pr-impact: co-change warning computation failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
 }
 
 function buildStatusMap(files: Array<{ path: string; status: string }>): Map<string, string> {

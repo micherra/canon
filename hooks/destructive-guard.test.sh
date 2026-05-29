@@ -6,32 +6,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUARD="$SCRIPT_DIR/destructive-guard.sh"
+HOOK="$SCRIPT_DIR/destructive-guard.sh"
+GUARD="$HOOK"  # keep alias for clarity in test descriptions
 
-PASS=0
-FAIL=0
-
-run_test() {
-  local description="$1"
-  local expected_exit="$2"
-  local command_json="$3"
-  local custom_pwd="${4:-}"
-
-  # Use custom_pwd if provided, otherwise a non-worktree default so tests
-  # are deterministic regardless of where the harness runs.
-  local cwd="${custom_pwd:-/home/user/project}"
-  local actual_exit=0
-  echo "$command_json" | CANON_GUARD_CWD="$cwd" bash "$GUARD" >/dev/null 2>&1 || actual_exit=$?
-
-  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
-    echo "  PASS: $description"
-    PASS=$((PASS + 1))
-  else
-    echo "  FAIL: $description"
-    echo "        expected exit=$expected_exit, got exit=$actual_exit"
-    FAIL=$((FAIL + 1))
-  fi
-}
+# shellcheck source=hooks/test-helpers.sh
+source "$SCRIPT_DIR/test-helpers.sh"
 
 make_input() {
   local cmd="$1"
@@ -230,6 +209,24 @@ run_test "nested: git branch -D feature/x blocks" \
 
 run_test "nested: git -C .canon/worktrees/slug reset --hard passes" \
   0 "$(make_nested_input 'git -C .canon/worktrees/my-slug reset --hard HEAD')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# YYY4: jq absent — fail closed (exit 2)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- jq absent: fail closed (exit 2) --"
+
+# Mask jq by using an empty PATH — guarantees jq absence on all platforms.
+# This tests the fail-closed guard before any input is read.
+actual_exit=0
+echo '{}' | PATH=/nonexistent /bin/bash "$HOOK" >/dev/null 2>&1 || actual_exit=$?
+if [[ "$actual_exit" -eq 2 ]]; then
+  echo "  PASS: jq absent — exits 2 (fail closed)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: jq absent — expected exit 2, got $actual_exit"
+  FAIL=$((FAIL + 1))
+fi
 
 # -----------------------------------------------------------------------
 # Summary

@@ -38,8 +38,9 @@ async function loadCanonConfig(projectDir: string): Promise<Record<string, unkno
     configCache = { projectDir, result, tick: currentTick };
     return result;
   } catch {
+    // best-effort: config.json exists but contains invalid JSON; treat as unconfigured
     configCache = { projectDir, result: null, tick: currentTick };
-    return null; // invalid JSON
+    return null;
   }
 }
 
