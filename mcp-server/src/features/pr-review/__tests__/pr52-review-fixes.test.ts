@@ -209,7 +209,10 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
         "/nonexistent",
       ),
     ).resolves.toBeDefined();
-  });
+    // Explicit generous timeout: this test does real filesystem scanning plus KG
+    // SQLite init in a temp dir. Under parallel test load the default 5s testTimeout
+    // is occasionally too tight (CPU/IO contention), producing spurious timeouts.
+  }, 15000);
 
   it("returns graph nodes when diff_base is invalid (graceful fallback, no changed files marked)", async () => {
     vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
@@ -237,7 +240,8 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
     expect(Array.isArray(result.nodes)).toBe(true);
     // No node should be marked as changed
     expect(result.nodes.filter((n) => n.changed)).toHaveLength(0);
-  });
+    // Generous timeout: real FS scan + KG SQLite init; see sibling test above.
+  }, 15000);
 });
 
 // Fix 3: pr-review-data — shell-escaping in runDiffCommand non-git path
