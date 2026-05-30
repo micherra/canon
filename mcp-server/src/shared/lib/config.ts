@@ -49,6 +49,7 @@ export const DEFAULT_LAYER_MAPPINGS: Record<string, string[]> = {
   api: ["api", "routes", "controllers"],
   data: ["db", "data", "repositories", "prisma"],
   domain: ["services", "domain", "models"],
+  hooks: ["hooks/**"],
   infra: ["infra", "deploy", "terraform", "docker"],
   shared: ["utils", "lib", "shared", "types"],
   ui: ["app", "components", "pages", "views"],

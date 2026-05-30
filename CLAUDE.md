@@ -472,7 +472,7 @@ Re-spawned agents (failure retry, fix-after-review, reviewer re-spawn) MUST rece
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Project Structure <!-- last-updated: 2026-05-28 -->
+## Project Structure <!-- last-updated: 2026-05-29 -->
 
 ```
 canon/
@@ -493,7 +493,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (65 total: 6 rules, 35 strong-opinions, 24 conventions)
+├── principles/           # Built-in principles (68 total: 7 rules, 35 strong-opinions, 26 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/

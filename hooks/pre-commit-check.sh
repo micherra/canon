@@ -11,18 +11,24 @@
 
 set -euo pipefail
 
-# Fail closed when jq is not available — without jq, command extraction is
-# unreliable and the guard cannot enforce its invariants.
-command -v jq >/dev/null 2>&1 || { echo "canon: jq is required but not found on PATH" >&2; exit 2; }
+# shellcheck source=lib/canon-hook-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/canon-hook-lib.sh"
 
 # Read the tool input from stdin
 INPUT=$(cat)
 
 # Extract the command being run from the tool input
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true)
+COMMAND=$(canon_extract_command "$INPUT")
 
-# If we couldn't extract a command, pass through
+# If we couldn't extract a command, distinguish two cases:
+#   1. No "command" field in payload, or command value is empty ("") → pass (exit 0)
+#   2. Payload has a "command" key with a non-empty value but extraction yielded
+#      empty (jq unavailable and grep/sed also failed) → fail CLOSED (exit 2)
 if [[ -z "$COMMAND" ]]; then
+  if [[ -n "$INPUT" ]] && printf '%s' "$INPUT" | grep -qE '"command"[[:space:]]*:[[:space:]]*"[^"]'; then
+    echo "CANON: command extraction failed (jq/grep both yielded empty on a command payload) — blocking fail-closed." >&2
+    exit 2
+  fi
   exit 0
 fi
 

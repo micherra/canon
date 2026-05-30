@@ -11,7 +11,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 
 `hooks.json` is the single registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode/Agent), `PostToolUse` (after Bash), `SessionStart`, `SubagentStop`, or `PostCompact`. The separate `canon-agent-teams/hooks.json` was merged into this file (2026-04-26); `canon-agent-teams/hooks.json` no longer exists.
 
-`lib/canon-hook-lib.sh` — shared helper library sourced by hooks that need JSON extraction (`jq`-based) or common utilities; all JSON parsing from Claude Code `tool_input` uses `jq` (no `grep`/`sed`).
+`lib/canon-hook-lib.sh` — shared helper library sourced by hooks that need JSON extraction. `canon_extract_command(input)` uses `jq` when available; falls back to `grep`/`sed`. The fallback fails closed: if the extracted value contains a backslash (escaped-quote sequence), it returns empty so the caller's fail-closed branch fires (exit 2) rather than passing garbage through.
 
 **Hook scripts:**
 
@@ -39,10 +39,12 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `canon-agent-teams/post-engineer-scribe.sh` | SubagentStop | Queue scribe sync after engineer subagent completes |
 | `canon-agent-teams/postcompact-narrative-capture.sh` | PostCompact | Append compaction summary to active workspace journal for agent continuity |
 
-## Invariants
+## Contracts
 <!-- last-updated: 2026-05-29 -->
 
-- `destructive-guard.sh` and `pre-commit-check.sh` exit 2 (fail closed) when `jq` is absent from PATH — without jq, command extraction is unreliable and enforcement cannot be guaranteed
+- **Fail-closed contract** (`destructive-guard.sh`, `pre-commit-check.sh`): safety hooks extract the tool command via `canon_extract_command "$INPUT"`. When extraction returns empty AND the raw `$INPUT` contains a non-empty `"command"` key, hooks exit 2 (blocked). Genuinely empty or absent command fields exit 0. `pre-push-review.sh` is advisory-only: it emits `CANON WARNING:` on extraction failure but always exits 0. Both hooks source `lib/canon-hook-lib.sh`; jq is required and the library fails closed when jq is absent — command extraction is unreliable without jq and enforcement cannot be guaranteed.
+- **Layer** — `hooks/**` (including `hooks/lib/**`) is mapped to the `hooks` layer in `mcp-server/src/shared/lib/config.ts` `DEFAULT_LAYER_MAPPINGS`; entry is ordered before `shared` so `hooks/lib/*.sh` resolves to `hooks`, not `shared`.
+- **Principles scoped to this layer**: `hooks-fail-closed` (rule), `source-shared-hook-helpers` (convention), `hooks-observable-failures` (convention) — all carry `scope.layers: [hooks]` and `scope.file_patterns: ["hooks/**"]`.
 
 ## Conventions
 <!-- last-updated: 2026-05-29 -->
@@ -55,4 +57,4 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 - When testing secret-detection hooks, use all-zeros suffixes or EXAMPLE-pattern placeholders for key fixtures — not plausible real-looking values. GitHub push protection scans test files regardless of hook exclusion rules.
 - **Hook test files**: Hooks with 3+ decision branches, runtime state inspection (sqlite queries, filesystem checks), or bypass gate env vars MUST have a corresponding `.test.sh` file. Place it alongside the hook (e.g., `pre-commit-check.test.sh`) or in a `__tests__/` subdirectory. Tests must cover: bypass gate, all silent-pass paths, and all warning/blocking paths. Run with `bash hooks/<name>.test.sh`.
 - **Shared test helpers**: All hook test files source `hooks/test-helpers.sh` for shared utilities (`run_test`, `assert_eq`, etc.); do not define these helpers inline in individual test files.
-- **Shell linting gate**: All hook scripts (excluding `*.test.sh` and `test-helpers.sh`) must pass `shellcheck`. Run `bash hooks/lint.sh` to check. This is part of the verify gate — it runs as the final step after `npm test`. The script fails closed (exits 1) if shellcheck is not installed. Fix all errors and warnings; style-level checks (SC2001, SC2016) and source-path noise (SC1091) are suppressed globally.
+- **Shell linting gate**: All hook scripts (excluding `*.test.sh` and `test-helpers.sh`) must pass `shellcheck`. Run `bash hooks/lint.sh` to check. This is part of the verify gate — it runs as the final step after `npm test`. The script fails closed (exits 1) if shellcheck is not installed. Fix all errors and warnings; style-level checks (SC2001, SC2016) and source-path noise (SC1091) are suppressed globally. The CI `shell` job (`.github/workflows/ci.yml`) runs `bash hooks/lint.sh` and all `hooks/**/*.test.sh` suites on every push/PR — both gates fail the build on non-zero exit.

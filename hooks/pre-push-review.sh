@@ -10,11 +10,26 @@
 
 set -euo pipefail
 
+# shellcheck source=lib/canon-hook-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/canon-hook-lib.sh"
+
 # Read tool input
 INPUT=$(cat)
 
 # Extract command
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true)
+COMMAND=$(canon_extract_command "$INPUT")
+
+# If extraction yielded empty, distinguish:
+#   1. No "command" field, or command value is empty ("") → pass silently
+#   2. Has "command" key with non-empty value but extraction failed → emit advisory
+#      warning, still exit 0 (pre-push-review is advisory-only; it never blocks)
+if [[ -z "$COMMAND" ]]; then
+  if [[ -n "$INPUT" ]] && printf '%s' "$INPUT" | grep -qE '"command"[[:space:]]*:[[:space:]]*"[^"]'; then
+    echo "CANON WARNING: command extraction failed on a command payload — review check skipped (advisory only)."
+  fi
+  # DOCUMENTED FAIL-OPEN: advisory hook — warn but never block
+  exit 0
+fi
 
 # Only trigger on git push commands
 if ! echo "$COMMAND" | grep -qE '\bgit\b.*\bpush\b'; then

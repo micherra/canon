@@ -48,7 +48,7 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-29 (doc_freshness dimension: DocFreshness type, doc-freshness-adapter, computeDocFreshness service, DriftReport.doc_freshness field, get_drift_report renders Documentation freshness section) -->
+<!-- last-updated: 2026-05-29 (DriftReport.craft + computeCraftScore added; get_drift_report Craft line added; config.ts DEFAULT_LAYER_MAPPINGS hooks entry added; doc_freshness dimension: DocFreshness type, doc-freshness-adapter, computeDocFreshness service, DriftReport.doc_freshness field, get_drift_report renders Documentation freshness section) -->
 
 **`resolveGitRoot(cwd, gitTopLevelFn)`** (`src/app/resolve-project-dir.ts`) — returns git repo root for `cwd`; falls back to `cwd` when not in a git repo or git is unavailable; errors are logged and swallowed (never throws).
 
@@ -105,15 +105,17 @@ src/
 
 **`get_compliance` tool** — updated 2026-05-26: returns `confidence: ConfidenceAnnotation` in response; uses per-principle confidence from `analyzeDrift` when available, falls back to drift confidence adapter (sample_size + trend_stability + rate_stability signals).
 
-**`get_drift_report` tool** — updated 2026-05-29: confidence tier rendered inline as `[confidence: TIER]` per violation; also renders `### Documentation freshness` section (omitted when empty) with commits-since-last-sync and `[confidence: TIER]` per direction doc, sorted by staleness descending.
+**`get_drift_report` tool** — updated 2026-05-25: confidence tier rendered inline as `[confidence: TIER]` per violation in formatted output. Updated 2026-05-29: formatted output includes a `Craft: N (N holistic findings)` line after `Avg score:`, distinct from compliance numbers; also renders `### Documentation freshness` section (omitted when empty) with commits-since-last-sync and `[confidence: TIER]` per direction doc, sorted by staleness descending.
 
-**`DocFreshness` type** (`src/platform/storage/drift/analyzer.ts`) — `{ path: string; commits_since_sync: number; confidence: ConfidenceAnnotation; warning?: string }`; placed in platform so service can import it without platform importing from features. `DriftReport.doc_freshness: DocFreshness[]` added (defaults to `[]`).
+**`DocFreshness` type** (`src/platform/storage/drift/analyzer.ts`) — `{ doc_path: string; commits_since_sync: number; confidence: ConfidenceAnnotation; warning?: string }`; placed in platform so service can import it without platform importing from features. `DriftReport.doc_freshness: DocFreshness[]` added (defaults to `[]`).
 
 **`doc-freshness-adapter.ts`** (`src/platform/storage/drift/`) — pure function `computeFreshnessConfidence(signals)`: maps `commits_since_sync` to a weighted `staleness` `ConfidenceInput` (`value = clamp(1 - commits/40, 0, 1)`) and delegates to `computeConfidenceAnnotation`; `FRESHNESS_SAMPLE_SIZE = 10` prevents `insufficient` masking for clearly-stale docs. Added 2026-05-29.
 
 **`computeDocFreshness`** (`src/features/diagnostics/services/doc-freshness.ts`) — enumerates `docs/*.md` (excludes `docs/reference/`), runs `git log -n 1` + `git rev-list --count` per doc; git seam injectable; every `!ok` path logs WARN and returns `DocFreshness` with `warning?` (never silent-swallow); ENOENT → `[]`. Added 2026-05-29.
 
-**Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs
+**`DriftReport.craft`** (`platform/storage/drift/analyzer.ts`) — added 2026-05-29: `craft: { holistic_count: number; score: number }` field on `DriftReport`; `computeCraftScore(reviews)` uses formula `max(0, 100 − min(100, holistic_count × 10))`; populated by `analyzeDrift` using the same filtered window as `avg_score`; kept DISTINCT from compliance score.
+
+**Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs; `DEFAULT_LAYER_MAPPINGS` includes `hooks: ["hooks"]` entry ordered before `shared` so `hooks/lib/*.sh` resolves to layer `hooks` (added 2026-05-29)
 
 **Composite context tool:**
 
