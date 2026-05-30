@@ -172,8 +172,11 @@ function logDecisionEvents(input: WriteImplementationSummaryInput): void {
         workflow_slug: input.slug,
       });
     }
-  } catch {
-    // Fail-open: execution store may not be initialized in all contexts
+  } catch (err) {
+    console.warn(
+      "[write-impl-summary] decision event logging failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 
@@ -198,8 +201,11 @@ function storeDeviationObservations(
           subsystem_key: key,
           workflow_slug: input.slug,
         });
-      } catch {
-        // Fail-open per observation
+      } catch (err) {
+        console.warn(
+          "[write-impl-summary] deviation observation insert failed:",
+          err instanceof Error ? err.message : err,
+        );
       }
     }
   }
@@ -234,8 +240,11 @@ export async function writeImplementationSummary(
   if (areaMemoryWriter) {
     try {
       storeDeviationObservations(input, areaMemoryWriter);
-    } catch {
-      // Fail-open: area observation extraction failure must not affect summary writing
+    } catch (err) {
+      console.warn(
+        "[write-impl-summary] area observation extraction failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 

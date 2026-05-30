@@ -114,8 +114,11 @@ function extractAndStoreAreaObservations(
         subsystem_key: subsystemKey,
         workflow_slug: input.slug,
       });
-    } catch {
-      // Fail-open: observation write failure must not affect review writing
+    } catch (err) {
+      console.warn(
+        "[write-review] area observation insert failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 }
@@ -464,8 +467,11 @@ export async function writeReview(
 
   try {
     extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter);
-  } catch {
-    // Fail-open: area observation extraction failure must not affect review writing
+  } catch (err) {
+    console.warn(
+      "[write-review] area observation extraction failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   return toolOk({
