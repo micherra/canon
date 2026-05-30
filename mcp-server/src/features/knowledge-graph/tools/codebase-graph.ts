@@ -161,7 +161,12 @@ async function loadLayerConfig(projectDir: string): Promise<{
   let layerMappings: Awaited<ReturnType<typeof loadLayerMappingsStrict>>;
   try {
     layerMappings = await loadLayerMappingsStrict(projectDir);
-  } catch {
+  } catch (err) {
+    // best-effort: strict layer mappings unavailable; falling back to lenient loader
+    console.warn(
+      "[canon] codebase-graph: strict layer mapping load failed, falling back to lenient loader:",
+      err instanceof Error ? err.message : err,
+    );
     layerMappings = await loadLayerMappings(projectDir);
   }
   const layerEntries = Object.keys(layerMappings);
@@ -312,7 +317,12 @@ export async function readGraphFromDb(
       return buildGraphNode(n.id, layer, { changedSet, layerColors, overlay });
     });
     edges = filteredEdges;
-  } catch {
+  } catch (err) {
+    // best-effort: KG DB unavailable; falling back to live filesystem scan
+    console.warn(
+      "[canon] codebase-graph: KG DB unavailable, falling back to legacy scanner:",
+      err instanceof Error ? err.message : err,
+    );
     const { nodes: legacyNodes } = await buildNodes(requestedFilePaths, projectDir, {
       changedSet,
       inferLayer,

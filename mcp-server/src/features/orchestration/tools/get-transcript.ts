@@ -69,6 +69,7 @@ async function resolveTranscriptRealPath(
     }
     return realReadPath;
   } catch {
+    // realpath failed — file does not exist or path is dangling symlink
     return toolError(
       "TRANSCRIPT_NOT_FOUND",
       `Transcript file not found for state in workspace '${workspace}': ${transcriptPath}`,
@@ -122,6 +123,7 @@ export async function getTranscript(
   try {
     raw = await readFile(realPathResult, "utf-8");
   } catch {
+    // File disappeared between realpath check and read — return not-found error
     return toolError(
       "TRANSCRIPT_NOT_FOUND",
       `Transcript file could not be read for state '${input.state_id}' in workspace '${input.workspace}': ${transcriptPath}`,

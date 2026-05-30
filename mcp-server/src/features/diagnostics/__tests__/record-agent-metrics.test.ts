@@ -7,7 +7,7 @@
  * - Returns INVALID_INPUT error when no metric fields provided
  * - Returns appropriate error for non-existent state_id
  * - Calling twice overwrites agent fields but preserves orchestrator fields
- * - MCP metrics schema in report_result accepts the widened fields
+ * - MCP metrics schema in record_agent_metrics accepts the widened fields
  */
 
 import { mkdtempSync, rmSync } from "node:fs";

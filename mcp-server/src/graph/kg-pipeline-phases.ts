@@ -214,6 +214,7 @@ function processEntityCanonLinks(store: KgStore, entityId: number, metadata: str
   try {
     meta = JSON.parse(metadata);
   } catch {
+    // best-effort: entity metadata JSON is malformed; skip Canon link processing for this entity
     return;
   }
 
@@ -275,6 +276,7 @@ export function shouldReindex(store: KgStore, params: ReindexCheckParams): boole
   try {
     stat = statSync(absPath);
   } catch {
+    // best-effort: file may have been deleted between scan and indexing; skip it
     return false;
   }
   const mtimeMs = stat.mtimeMs;
@@ -288,6 +290,7 @@ export function shouldReindex(store: KgStore, params: ReindexCheckParams): boole
   try {
     content = readFileSync(absPath, "utf8");
   } catch {
+    // best-effort: file unreadable between scan and indexing; skip it
     return false;
   }
   const hash = contentHash(content);
@@ -330,6 +333,7 @@ export function parsePhase2(ctx: ParsePhaseContext): void {
     try {
       content = readFileSync(absPath, "utf8");
     } catch {
+      // best-effort: file deleted or unreadable between scan and indexing; skip it
       continue;
     }
 
@@ -337,6 +341,7 @@ export function parsePhase2(ctx: ParsePhaseContext): void {
     try {
       stat = statSync(absPath);
     } catch {
+      // best-effort: file stat failed between read and indexing; skip it
       continue;
     }
     const mtimeMs = stat.mtimeMs;

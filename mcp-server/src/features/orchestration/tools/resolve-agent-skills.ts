@@ -109,6 +109,7 @@ function tryReadSkill(
     const content = readFileSync(path, "utf-8");
     return { content, path };
   } catch {
+    // best-effort: skill file may not exist (e.g. domain primer not installed); caller handles null
     return null;
   }
 }

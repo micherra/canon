@@ -35,7 +35,6 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `canon-agent-teams/session-start-timestamp.sh` | SessionStart | Write session start timestamp for duration watchdog |
 | `canon-agent-teams/session-start-context.sh` | SessionStart | Output project pulse (recent builds, drift, convention count) as invisible orchestrator context |
 | `canon-agent-teams/session-duration-watchdog.sh` | PreToolUse (*) | Advisory session duration warning after configurable threshold |
-| `canon-agent-teams/spawn-timeout-watchdog.sh` | PreToolUse (*) | HITL checkpoint when a spawned agent exceeds configurable run time (default 20 min) |
 | `canon-agent-teams/tool-loop-detector.sh` | PostToolUse (*) | Detect 3 consecutive identical tool calls (loop) and exit 2 to surface HITL |
 | `canon-agent-teams/post-engineer-scribe.sh` | SubagentStop | Queue scribe sync after engineer subagent completes |
 | `canon-agent-teams/postcompact-narrative-capture.sh` | PostCompact | Append compaction summary to active workspace journal for agent continuity |
@@ -43,7 +42,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 ## Contracts
 <!-- last-updated: 2026-05-29 -->
 
-- **Fail-closed contract** (`destructive-guard.sh`, `pre-commit-check.sh`): safety hooks extract the tool command via `canon_extract_command "$INPUT"`. When extraction returns empty AND the raw `$INPUT` contains a non-empty `"command"` key, hooks exit 2 (blocked). Genuinely empty or absent command fields exit 0. `pre-push-review.sh` is advisory-only: it emits `CANON WARNING:` on extraction failure but always exits 0.
+- **Fail-closed contract** (`destructive-guard.sh`, `pre-commit-check.sh`): safety hooks extract the tool command via `canon_extract_command "$INPUT"`. When extraction returns empty AND the raw `$INPUT` contains a non-empty `"command"` key, hooks exit 2 (blocked). Genuinely empty or absent command fields exit 0. `pre-push-review.sh` is advisory-only: it emits `CANON WARNING:` on extraction failure but always exits 0. Both hooks source `lib/canon-hook-lib.sh`; jq is required and the library fails closed when jq is absent — command extraction is unreliable without jq and enforcement cannot be guaranteed.
 - **Layer** — `hooks/**` (including `hooks/lib/**`) is mapped to the `hooks` layer in `mcp-server/src/shared/lib/config.ts` `DEFAULT_LAYER_MAPPINGS`; entry is ordered before `shared` so `hooks/lib/*.sh` resolves to `hooks`, not `shared`.
 - **Principles scoped to this layer**: `hooks-fail-closed` (rule), `source-shared-hook-helpers` (convention), `hooks-observable-failures` (convention) — all carry `scope.layers: [hooks]` and `scope.file_patterns: ["hooks/**"]`.
 
@@ -57,4 +56,5 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 - `destructive-guard.test.sh` and `install-git-hooks.sh` are utilities, not registered hooks
 - When testing secret-detection hooks, use all-zeros suffixes or EXAMPLE-pattern placeholders for key fixtures — not plausible real-looking values. GitHub push protection scans test files regardless of hook exclusion rules.
 - **Hook test files**: Hooks with 3+ decision branches, runtime state inspection (sqlite queries, filesystem checks), or bypass gate env vars MUST have a corresponding `.test.sh` file. Place it alongside the hook (e.g., `pre-commit-check.test.sh`) or in a `__tests__/` subdirectory. Tests must cover: bypass gate, all silent-pass paths, and all warning/blocking paths. Run with `bash hooks/<name>.test.sh`.
+- **Shared test helpers**: All hook test files source `hooks/test-helpers.sh` for shared utilities (`run_test`, `assert_eq`, etc.); do not define these helpers inline in individual test files.
 - **Shell linting gate**: All hook scripts (excluding `*.test.sh` and `test-helpers.sh`) must pass `shellcheck`. Run `bash hooks/lint.sh` to check. This is part of the verify gate — it runs as the final step after `npm test`. The script fails closed (exits 1) if shellcheck is not installed. Fix all errors and warnings; style-level checks (SC2001, SC2016) and source-path noise (SC1091) are suppressed globally. The CI `shell` job (`.github/workflows/ci.yml`) runs `bash hooks/lint.sh` and all `hooks/**/*.test.sh` suites on every push/PR — both gates fail the build on non-zero exit.

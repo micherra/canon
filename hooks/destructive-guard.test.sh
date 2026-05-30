@@ -6,32 +6,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUARD="$SCRIPT_DIR/destructive-guard.sh"
+HOOK="$SCRIPT_DIR/destructive-guard.sh"
+GUARD="$HOOK"  # keep alias for clarity in test descriptions
 
-PASS=0
-FAIL=0
-
-run_test() {
-  local description="$1"
-  local expected_exit="$2"
-  local command_json="$3"
-  local custom_pwd="${4:-}"
-
-  # Use custom_pwd if provided, otherwise a non-worktree default so tests
-  # are deterministic regardless of where the harness runs.
-  local cwd="${custom_pwd:-/home/user/project}"
-  local actual_exit=0
-  echo "$command_json" | CANON_GUARD_CWD="$cwd" bash "$GUARD" >/dev/null 2>&1 || actual_exit=$?
-
-  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
-    echo "  PASS: $description"
-    PASS=$((PASS + 1))
-  else
-    echo "  FAIL: $description"
-    echo "        expected exit=$expected_exit, got exit=$actual_exit"
-    FAIL=$((FAIL + 1))
-  fi
-}
+# shellcheck source=hooks/test-helpers.sh
+source "$SCRIPT_DIR/test-helpers.sh"
 
 make_input() {
   local cmd="$1"

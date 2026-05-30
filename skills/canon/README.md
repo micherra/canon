@@ -16,7 +16,7 @@ Commands are the human interface to Canon. They let developers trigger specific 
 
 The `references/` directory contains reference documents that agents load on demand during execution. These are not injected wholesale — each agent loads only the fragments relevant to its role. The fragments cover:
 
-- **Orchestrator protocol** — how the orchestrator drives the flow state machine and dispatches agents
+- **Orchestrator protocol** — how the orchestrator follows the documented orchestration sequence and dispatches agents
 - **Principle loading** — how and when agents load Canon principles for compliance checking
 - **Workspace logging** — the protocol agents follow for logging activity to the workspace
 - **Status protocol** — the defined status keywords (DONE, BLOCKED, NEEDS_CONTEXT, etc.) and when to use them

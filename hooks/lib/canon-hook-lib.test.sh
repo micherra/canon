@@ -83,6 +83,24 @@ assert_eq "empty input — returns empty string" \
   "" \
   "$(canon_extract_command "$EMPTY_INPUT")"
 
+# YYY2 regression: the real Claude Code payload wraps command under tool_input.
+# This is the extraction path the entire jq migration was built for.
+NESTED_JSON='{"tool_name":"Bash","tool_input":{"command":"git commit -m \"test\""}}'
+assert_eq "nested tool_input.command — extracts command" \
+  'git commit -m "test"' \
+  "$(canon_extract_command "$NESTED_JSON")"
+
+NESTED_NO_CMD='{"tool_name":"Bash","tool_input":{"other":"value"}}'
+assert_eq "nested tool_input without command — returns empty string" \
+  "" \
+  "$(canon_extract_command "$NESTED_NO_CMD")"
+
+# Flat .command takes lower priority; .tool_input.command wins when both present.
+BOTH_JSON='{"command":"flat-cmd","tool_input":{"command":"nested-cmd"}}'
+assert_eq "both command paths — tool_input.command takes precedence" \
+  "nested-cmd" \
+  "$(canon_extract_command "$BOTH_JSON")"
+
 # Escaped-quote value — the grep/sed fallback must NOT return a lone backslash.
 # When jq is present it parses correctly; when jq is absent the fallback must
 # return empty (fail-closed) rather than a garbage partial parse.

@@ -74,6 +74,7 @@ export async function presentReview(
   try {
     html = await readFile(htmlPath, "utf-8");
   } catch {
+    // review.html does not exist — renderer must be run before present_review
     return toolError(
       "INVALID_INPUT",
       `Review HTML not found at ${htmlPath}. Run the renderer before calling present_review.`,

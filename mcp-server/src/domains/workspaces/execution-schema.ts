@@ -152,7 +152,11 @@ export function columnExists(db: Database.Database, table: string, column: strin
   try {
     const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
     return rows.some((row) => row.name === column);
-  } catch {
+  } catch (err) {
+    console.warn(
+      `[canon] columnExists: PRAGMA table_info(${table}) failed:`,
+      err instanceof Error ? err.message : err,
+    );
     return false;
   }
 }
