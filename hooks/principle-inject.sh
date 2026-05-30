@@ -14,7 +14,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract file path from the tool input
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .file_path // empty' 2>/dev/null || true)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .file_path // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty FILE_PATH triggers pass-through at line 20
 
 # If we couldn't extract a path, pass through
 if [[ -z "$FILE_PATH" ]]; then
@@ -30,19 +30,19 @@ canon_hash_string() {
   local input="$1"
   local h=""
   if command -v shasum >/dev/null 2>&1; then
-    h=$(printf '%s' "$input" | shasum 2>/dev/null | awk '{print $1}') || true
+    h=$(printf '%s' "$input" | shasum 2>/dev/null | awk '{print $1}') || true # DOCUMENTED FAIL-OPEN -- hash fallback chain: tries next method on failure
   elif command -v sha1sum >/dev/null 2>&1; then
-    h=$(printf '%s' "$input" | sha1sum 2>/dev/null | awk '{print $1}') || true
+    h=$(printf '%s' "$input" | sha1sum 2>/dev/null | awk '{print $1}') || true # DOCUMENTED FAIL-OPEN -- hash fallback chain: tries next method on failure
   elif command -v md5sum >/dev/null 2>&1; then
-    h=$(printf '%s' "$input" | md5sum 2>/dev/null | awk '{print $1}') || true
+    h=$(printf '%s' "$input" | md5sum 2>/dev/null | awk '{print $1}') || true # DOCUMENTED FAIL-OPEN -- hash fallback chain: tries next method on failure
   fi
   if [[ -z "$h" ]]; then
     # Deterministic fallback when no crypto hash tools are available.
     # Prefer `cksum` (widely available); otherwise normalize separators/whitespace.
     if command -v cksum >/dev/null 2>&1; then
-      h=$(printf '%s' "$input" | cksum | awk '{print $1}') || true
+      h=$(printf '%s' "$input" | cksum | awk '{print $1}') || true # DOCUMENTED FAIL-OPEN -- hash fallback chain: last-resort method
     else
-      h=$(printf '%s' "$input" | awk '{gsub(/[\/[:space:]]/, "_"); print}') || true
+      h=$(printf '%s' "$input" | awk '{gsub(/[\/[:space:]]/, "_"); print}') || true # DOCUMENTED FAIL-OPEN -- hash fallback chain: last-resort method
     fi
   fi
   printf '%s' "$h"
@@ -50,17 +50,17 @@ canon_hash_string() {
 
 # Session dedup: skip if we already injected for this file in this session.
 # Prefer hook session_id (stable across invocations); else scope by repo root so dedup is per-project.
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty SESSION_ID triggers repo-root fallback at line 56
 if [[ -n "$SESSION_ID" ]]; then
   DEDUP_SLUG="$SESSION_ID"
 else
-  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-  REPO_BRANCH="$(git branch --show-current 2>/dev/null || true)"
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { >&2 echo "CANON WARNING: [principle-inject] git rev-parse failed, using pwd"; REPO_ROOT="$(pwd)"; }
+  REPO_BRANCH="$(git branch --show-current 2>/dev/null || true)" # DOCUMENTED FAIL-OPEN -- empty branch expected in detached HEAD state
   REPO_KEY="${REPO_ROOT}:${REPO_BRANCH}"
   DEDUP_SLUG=$(canon_hash_string "$REPO_KEY")
 fi
 DEDUP_DIR="${TMPDIR:-/tmp}/canon-inject-${DEDUP_SLUG}"
-mkdir -p "$DEDUP_DIR" 2>/dev/null || true
+mkdir -p "$DEDUP_DIR" 2>/dev/null || >&2 echo "CANON WARNING: [principle-inject] dedup dir creation failed, injection may repeat"
 HASH=$(canon_hash_string "$FILE_PATH")
 if [[ -z "$HASH" ]]; then
   HASH="nohash_$(printf '%s' "$FILE_PATH" | awk '{gsub(/[\/[:space:]]/, "_"); print}')"
@@ -81,9 +81,10 @@ fi
 
 # Run the worker — pass repo/plugin roots so it can resolve principles correctly.
 # Use the current worktree root (not shared git-common-dir) for project-local lookups.
+# DOCUMENTED FAIL-OPEN -- cascading git fallback to pwd
 PROJECT_ROOT="$(git rev-parse --show-toplevel --path-format=absolute 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)"
 export CANON_PROJECT_DIR="${CANON_PROJECT_DIR:-$PROJECT_ROOT}"
 export CANON_PLUGIN_DIR="${CANON_PLUGIN_DIR:-$(dirname "$HOOK_DIR")}"
-node "$WORKER" "$FILE_PATH" 2>/dev/null || true
+node "$WORKER" "$FILE_PATH" 2>/dev/null || >&2 echo "CANON WARNING: [principle-inject] worker failed for ${FILE_PATH}"
 
 exit 0
