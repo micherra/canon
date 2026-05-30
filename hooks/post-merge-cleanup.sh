@@ -59,7 +59,7 @@ now_iso() {
 # Guard: only run on main / master
 # ---------------------------------------------------------------------------
 
-CURRENT_BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
+CURRENT_BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")" # DOCUMENTED FAIL-OPEN -- empty branch triggers pass-through at line 64
 
 if [[ "$CURRENT_BRANCH" != "main" && "$CURRENT_BRANCH" != "master" ]]; then
   # Not on a primary branch — nothing to do.
@@ -100,7 +100,7 @@ while IFS= read -r branch; do
   fi
 
   MERGED_BRANCHES+=("$branch")
-done < <(git branch --merged 2>/dev/null || true)
+done < <(git branch --merged 2>/dev/null || { >&2 echo "CANON WARNING: [post-merge-cleanup] git branch --merged failed"; true; })
 
 if [[ ${#MERGED_BRANCHES[@]} -eq 0 ]]; then
   # Nothing to clean up.
@@ -146,7 +146,7 @@ for BRANCH in "${MERGED_BRANCHES[@]}"; do
       for DIR_NAME in "${CANONICAL_DIRS[@]}" "${LEGACY_DIRS[@]}"; do
         if [[ -d "${TASK_DIR}${DIR_NAME}" ]]; then
           mkdir -p "${ARCHIVE_DIR}/${DIR_NAME}"
-          cp -r "${TASK_DIR}${DIR_NAME}/." "${ARCHIVE_DIR}/${DIR_NAME}/" 2>/dev/null || true
+          cp -r "${TASK_DIR}${DIR_NAME}/." "${ARCHIVE_DIR}/${DIR_NAME}/" 2>/dev/null || >&2 echo "CANON WARNING: [post-merge-cleanup] failed to archive ${DIR_NAME}"
         fi
       done
     done
@@ -161,7 +161,7 @@ for BRANCH in "${MERGED_BRANCHES[@]}"; do
       STATUS_VAL=""
       CREATED_VAL=""
       if [[ -f "$DB_FILE" ]]; then
-        db_result=$(sqlite3 "$DB_FILE" "SELECT task, status, created FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null || true)
+        db_result=$(sqlite3 "$DB_FILE" "SELECT task, status, created FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null) || { >&2 echo "CANON WARNING: [post-merge-cleanup] sqlite3 read failed for ${DB_FILE}"; db_result=""; }
         TASK_DESC="$(echo "$db_result" | cut -d'|' -f1)"
         STATUS_VAL="$(echo "$db_result" | cut -d'|' -f2)"
         CREATED_VAL="$(echo "$db_result" | cut -d'|' -f3)"
@@ -207,7 +207,7 @@ EOF
         for SLUG in "${TASK_SLUGS[@]}"; do
           DB_FILE="${WORKSPACE_PATH}/${SLUG}/orchestration.db"
           if [[ -f "$DB_FILE" ]]; then
-            summary_result=$(sqlite3 "$DB_FILE" "SELECT task, status FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null || true)
+            summary_result=$(sqlite3 "$DB_FILE" "SELECT task, status FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null) || { >&2 echo "CANON WARNING: [post-merge-cleanup] sqlite3 read failed for ${DB_FILE}"; summary_result=""; }
             TASK_DESC="$(echo "$summary_result" | cut -d'|' -f1)"
             STATUS_VAL="$(echo "$summary_result" | cut -d'|' -f2)"
             echo "- **${SLUG}**: ${TASK_DESC:-unknown} (${STATUS_VAL:-unknown})"
@@ -222,7 +222,7 @@ EOF
       echo "### Preserved Artifacts"
       for DIR_NAME in plans reviews artifacts transcripts decisions handoffs research notes; do
         if [[ -d "${ARCHIVE_DIR}/${DIR_NAME}" ]]; then
-          FILE_COUNT="$(find "${ARCHIVE_DIR}/${DIR_NAME}" -type f 2>/dev/null | wc -l | tr -d ' ')"
+          FILE_COUNT="$(find "${ARCHIVE_DIR}/${DIR_NAME}" -type f 2>/dev/null | wc -l | tr -d ' ')" # DOCUMENTED FAIL-OPEN -- find stderr suppressed for permission noise
           if [[ "$FILE_COUNT" -gt 0 ]]; then
             echo "- ${DIR_NAME^}: ${FILE_COUNT} file(s) → \`.canon/history/${SANITIZED}/${DIR_NAME}/\`"
           fi
@@ -248,7 +248,7 @@ EOF
   # Delete local branch (safe — git refuses if not fully merged)
   # ------------------------------------------------------------------
 
-  if git branch -d "$BRANCH" 2>/dev/null; then
+  if git branch -d "$BRANCH" 2>/dev/null; then # DOCUMENTED FAIL-OPEN -- failure handled by else branch at line 255
     echo "Canon:   branch '${BRANCH}' deleted"
     CLEANED+=("$BRANCH")
   else
