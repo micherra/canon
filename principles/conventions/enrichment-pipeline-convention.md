@@ -40,6 +40,15 @@ Reference implementations:
 - `pitfall-enrichment.ts` + `DriftDbSignals.getErrorFixes` (added 2026-05-22)
 - `hot-file-detection.ts` + `DriftDb` (added 2026-05-29)
 
+## Verification
+
+- [ ] DAO lives in `platform/storage/drift/` with prepared statements and empty-input guard
+- [ ] Service lives in `features/diagnostics/services/` and accepts DAO as a parameter
+- [ ] Fail-open wrapper returns `{ section: string; count: number }` and catch block uses `console.warn`
+- [ ] Integration point added to `resolve-agent-skills.ts` via `buildFeedForwardSections()`
+- [ ] Section order maintained (base → corrections → pitfalls → area memory → hot-file caution → new)
+- [ ] Audit event logged when `count > 0` and `workspace` is present
+
 ## Related
 
 - `dao-parameter-injection-in-diagnostics-services` — specifies the DAO injection mechanism

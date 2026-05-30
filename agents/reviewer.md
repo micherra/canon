@@ -285,7 +285,8 @@ Stage 3 does NOT change the verdict. Discrepancies are addenda for the next revi
 ### Stage 3 check for observable-best-effort
 
 1. When engineer summary claims `console.warn` was added: grep the named files before marking honored. Trust code, not summary.
-2. When diff contains new catch blocks: grep the modified file for `console.warn`. New catch blocks without `console.warn` are violations unless accompanied by a justifying comment per the intentional-bare-catch convention.
+
+**Note — also applies during Stage 1 principle matching**: When the diff introduces new `catch` blocks, match `observable-best-effort` and check for `console.warn` in the same file. New catch blocks without `console.warn` are violations unless the `intentional-bare-catch` convention applies.
 
 ## Early Output Protocol
 
