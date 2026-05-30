@@ -1,11 +1,25 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import type { AreaMemoryWriter } from "./write-review.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
   return value.replace(/\|/g, "&#124;").replace(/\r\n?|\n/g, " ");
 }
+
+/** A structured decision record capturing what was chosen, why, and what influenced it. */
+export type DecisionRecord = {
+  choice: string;
+  rationale: string;
+  alternatives_considered?: string[];
+  informed_by?: Array<{
+    type: "area_memory" | "pitfall" | "principle" | "task_plan" | "codebase_pattern";
+    ref: string;
+  }>;
+};
 
 export type WriteImplementationSummaryInput = {
   workspace: string;
@@ -21,6 +35,7 @@ export type WriteImplementationSummaryInput = {
     reason: string;
   }>;
   tests_added?: string[];
+  decisions?: DecisionRecord[];
 };
 
 export type WriteImplementationSummaryResult = {
@@ -68,6 +83,25 @@ function appendOptionalSection(
   lines.push("");
 }
 
+function buildDecisionsTable(decisions: DecisionRecord[]): string[] {
+  const lines: string[] = [];
+  lines.push("### Decisions", "");
+  lines.push("| # | Choice | Rationale | Informed By |");
+  lines.push("|---|--------|-----------|-------------|");
+  for (let i = 0; i < decisions.length; i++) {
+    const d = decisions[i];
+    const informedBy =
+      d.informed_by && d.informed_by.length > 0
+        ? d.informed_by.map((inf) => `${inf.type}:${escapeMdCell(inf.ref)}`).join(", ")
+        : "—";
+    lines.push(
+      `| ${i + 1} | ${escapeMdCell(d.choice)} | ${escapeMdCell(d.rationale)} | ${informedBy} |`,
+    );
+  }
+  lines.push("");
+  return lines;
+}
+
 function buildSummaryMarkdown(input: WriteImplementationSummaryInput): string {
   const lines: string[] = [];
   lines.push(`## Implementation Summary: ${input.task_id}`, "");
@@ -96,6 +130,10 @@ function buildSummaryMarkdown(input: WriteImplementationSummaryInput): string {
     (test) => `- ${escapeMdCell(test)}`,
   );
 
+  if (input.decisions && input.decisions.length > 0) {
+    lines.push(...buildDecisionsTable(input.decisions));
+  }
+
   return lines.join("\n");
 }
 
@@ -109,11 +147,73 @@ function buildSummaryMeta(input: WriteImplementationSummaryInput): Record<string
   if (input.decisions_applied !== undefined) meta.decisions_applied = input.decisions_applied;
   if (input.deviations !== undefined) meta.deviations = input.deviations;
   if (input.tests_added !== undefined) meta.tests_added = input.tests_added;
+  if (input.decisions !== undefined) meta.decisions = input.decisions;
   return meta;
+}
+
+/**
+ * Log structured decision records as agent_decision events in the execution store.
+ * Fail-open: store errors do not surface to callers.
+ */
+function logDecisionEvents(input: WriteImplementationSummaryInput): void {
+  if (!input.decisions || input.decisions.length === 0) return;
+  try {
+    const store = getExecutionStore(input.workspace);
+    const timestamp = new Date().toISOString();
+    for (const decision of input.decisions) {
+      store.appendEvent("agent_decision", {
+        agent_type: "engineer",
+        alternatives_considered: decision.alternatives_considered ?? [],
+        choice: decision.choice,
+        informed_by: decision.informed_by ?? [],
+        rationale: decision.rationale,
+        step_id: input.task_id,
+        timestamp,
+        workflow_slug: input.slug,
+      });
+    }
+  } catch (err) {
+    console.warn(
+      "[write-impl-summary] decision event logging failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
+ * Extract area observations from engineer deviations and store them.
+ * Maps each deviation to each subsystem touched by the changed files.
+ * Fail-open: observation write errors do not surface to callers.
+ */
+function storeDeviationObservations(
+  input: WriteImplementationSummaryInput,
+  areaMemoryWriter: AreaMemoryWriter,
+): void {
+  if (!input.deviations || input.deviations.length === 0) return;
+  const subsystemKeys = new Set(input.files_changed.map((f) => deriveSubsystemKey(f.path)));
+  for (const dev of input.deviations) {
+    const devContent = `Deviation from ${dev.decision_id}: ${dev.reason}`;
+    for (const key of subsystemKeys) {
+      try {
+        areaMemoryWriter.insertObservation({
+          content: devContent,
+          source: "engineer",
+          subsystem_key: key,
+          workflow_slug: input.slug,
+        });
+      } catch (err) {
+        console.warn(
+          "[write-impl-summary] deviation observation insert failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+  }
 }
 
 export async function writeImplementationSummary(
   input: WriteImplementationSummaryInput,
+  areaMemoryWriter?: AreaMemoryWriter,
 ): Promise<ToolResult<WriteImplementationSummaryResult>> {
   if (!isAbsolute(input.workspace)) {
     return toolError(
@@ -125,15 +225,28 @@ export async function writeImplementationSummary(
   if (validationError) return validationError;
 
   const plansDir = resolve(join(input.workspace, "plans", input.slug));
-  const content = buildSummaryMarkdown(input);
+  const summaryMarkdown = buildSummaryMarkdown(input);
   const meta = buildSummaryMeta(input);
 
   await mkdir(plansDir, { recursive: true });
   const summaryPath = join(plansDir, `${input.task_id}-SUMMARY.md`);
   const metaPath = join(plansDir, `${input.task_id}-SUMMARY.meta.json`);
 
-  await writeFile(summaryPath, content, "utf-8");
+  await writeFile(summaryPath, summaryMarkdown, "utf-8");
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+
+  logDecisionEvents(input);
+
+  if (areaMemoryWriter) {
+    try {
+      storeDeviationObservations(input, areaMemoryWriter);
+    } catch (err) {
+      console.warn(
+        "[write-impl-summary] area observation extraction failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 
   return toolOk({
     files_changed_count: input.files_changed.length,

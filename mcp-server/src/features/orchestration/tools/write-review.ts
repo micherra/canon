@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
+import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 /**
@@ -42,6 +43,85 @@ export type SignalWriter = {
     violation_streak: number;
   }): void;
 };
+
+/**
+ * Structural interface for area memory writes — describes only the method needed
+ * to store area observations. Callers (app layer) provide an AreaMemoryDao instance;
+ * write-review never imports AreaMemoryDao directly.
+ */
+export type AreaMemoryWriter = {
+  insertObservation(input: {
+    subsystem_key: string;
+    content: string;
+    source: string;
+    workflow_slug?: string;
+  }): void;
+};
+
+/** Format a violation description for area observation content. */
+function formatViolationDesc(v: {
+  principle_id: string;
+  severity: string;
+  description?: string;
+}): string {
+  return v.description
+    ? `${v.principle_id}: ${v.description}`
+    : `${v.principle_id} (${v.severity})`;
+}
+
+/** Format a compact content string from a list of violation descriptions. */
+function formatSubsystemContent(violations: string[]): string {
+  if (violations.length === 1) return violations[0];
+  const preview = violations.slice(0, 3).join("; ");
+  const overflow = violations.length > 3 ? ` (+${violations.length - 3} more)` : "";
+  return `${violations.length} violations: ${preview}${overflow}`;
+}
+
+/** Group violations by subsystem key. Violations without file_path are skipped. */
+function groupViolationsBySubsystem(
+  violations: WriteReviewInput["violations"],
+): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  for (const v of violations) {
+    if (!v.file_path) continue;
+    const key = deriveSubsystemKey(v.file_path);
+    const existing = grouped.get(key) ?? [];
+    existing.push(formatViolationDesc(v));
+    grouped.set(key, existing);
+  }
+  return grouped;
+}
+
+/**
+ * Extract area observations from review violations and store them.
+ * Only runs for BLOCKING or WARNING reviews (CLEAN reviews produce no observations).
+ * Groups violations by subsystem to minimize observation count.
+ * Fail-open: errors in observation writes never surface to callers.
+ */
+function extractAndStoreAreaObservations(
+  input: WriteReviewInput,
+  mappedVerdict: string,
+  areaMemoryWriter?: AreaMemoryWriter,
+): void {
+  if (!areaMemoryWriter) return;
+  if (mappedVerdict !== "BLOCKING" && mappedVerdict !== "WARNING") return;
+
+  for (const [subsystemKey, violations] of groupViolationsBySubsystem(input.violations)) {
+    try {
+      areaMemoryWriter.insertObservation({
+        content: formatSubsystemContent(violations),
+        source: "reviewer",
+        subsystem_key: subsystemKey,
+        workflow_slug: input.slug,
+      });
+    } catch (err) {
+      console.warn(
+        "[write-review] area observation insert failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+}
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
@@ -343,6 +423,7 @@ export async function writeReview(
   input: WriteReviewInput,
   signals?: SignalWriter,
   confidenceAdapter?: ConfidenceAdapter,
+  areaMemoryWriter?: AreaMemoryWriter,
 ): Promise<ToolResult<WriteReviewResult>> {
   const validated = validateInput(input);
   if ("ok" in validated && !validated.ok) return validated;
@@ -382,6 +463,15 @@ export async function writeReview(
 
   if (signals) {
     updateFileViolationHistory(signals, input.files, input.violations, mappedVerdict);
+  }
+
+  try {
+    extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter);
+  } catch (err) {
+    console.warn(
+      "[write-review] area observation extraction failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   return toolOk({
