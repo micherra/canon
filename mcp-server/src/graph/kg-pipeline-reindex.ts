@@ -20,12 +20,14 @@ export function readFileForReindex(absPath: string): { content: string; mtimeMs:
   try {
     content = readFileSync(absPath, "utf8");
   } catch {
+    // File unreadable (deleted, permission denied) — skip
     return null;
   }
   let stat: ReturnType<typeof statSync> | null = null;
   try {
     stat = statSync(absPath);
   } catch {
+    // File stat failed after successful read — treat as unindexable
     return null;
   }
   return { content, mtimeMs: stat.mtimeMs };

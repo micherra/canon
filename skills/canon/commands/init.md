@@ -66,7 +66,7 @@ Check if `CLAUDE.md` exists in the project root. If it does, check whether it al
 This project has Canon initialized. **You ARE the orchestrator.** Drive the build pipeline yourself using Canon's MCP harness tools — do NOT spawn a canon-orchestrator subagent. Call MCP tools directly and spawn only specialist agents as leaf workers.
 
 Classify every user message by intent:
-- **build/review/security** → Load flow with `load_flow`, init workspace with `init_workspace`, drive the state machine by calling `drive_flow` → process `SpawnRequest`/`HitlBreakpoint` → spawn specialist agent → `report_result`. Read `references/canon-orchestrator.md` for the full protocol.
+- **build/review/security** → `init_workspace` → follow the documented sequence (spawn specialist agents, journal each step via `log_step`) → present HITL breakpoints at mandatory gates → `finalize_workspace`. Read `references/canon-orchestrator.md` for the full protocol.
 - **question/status** → Spawn `canon:guide`
 - **principle authoring** → Spawn `canon:writer`
 - **learn** → Spawn `canon:learner`

@@ -8,12 +8,11 @@
 canon/
 ├── agents/               # Plugin agent definitions (YAML frontmatter + markdown instructions)
 ├── rules/                # Agent-behavior rules (loaded per agent at runtime)
-├── flows/                # Flow state machine definitions (YAML frontmatter + spawn instructions)
-│   └── fragments/        # Reusable state groups included by flows
+├── flows/                # Retired flow-engine definitions (historical; no flow engine is active)
 ├── hooks/                # Pre/post tool-use interceptor scripts
 ├── mcp-server/           # TypeScript MCP server (Canon harness tools)
 │   └── src/
-│       ├── orchestration/  # Flow runtime: board, messaging, convergence, events, gate-runner, etc.
+│       ├── orchestration/  # Orchestration runtime: journal, init/finalize_workspace, gate-runner, convergence, events, etc.
 │       ├── tools/          # MCP tool implementations (one file per tool)
 │       ├── drift/          # JSONL-backed drift tracking (reviews)
 │       └── graph/          # Dependency graph scanner and priority scoring
@@ -39,34 +38,24 @@ canon/
     └── workspaces/       # Per-branch/task build state (orchestration.db, journal.json, plans/, etc.)
 ```
 
-## Flows
+## Orchestration Sequence
 
-Flows are state machines in `flows/`. Format: YAML frontmatter (states, transitions, constraints) + markdown spawn instructions. See `flows/SCHEMA.md` for the full schema.
+Canon orchestration is CLAUDE.md-prose-driven: the PM classifies intent and follows the documented sequence (implement → verify → review → context-sync → ship → learn) by spawning specialist agents and journaling each step via `log_step` / `batch_log_steps`. There is no separate flow YAML or state-machine driver tool. `init_workspace` seeds the board; `finalize_workspace` closes the flow and releases file claims.
 
-| Flow | Tier | Purpose |
-|------|------|---------|
-| `fast-path` | Small | Single-agent fast path — implement + test + self-review in one pass (1-3 files) |
-| `refactor` | Medium | Behavior-preserving restructuring with continuous test verification |
-| `feature` | Medium | New feature pipeline (4-10 files) |
-| `migrate` | Medium | Staged migration with rollback planning and verification |
-| `epic` | Large | Research → design → wave implementation → test → security → review (10+ files) |
-| `explore` | Research | Investigate a codebase question — no implementation |
-| `test-gap` | Testing | Analyze coverage gaps, write tests, verify, review |
-| `review-only` | Review | Review an existing PR or branch without implementing |
-| `security-audit` | Security | Dedicated security audit |
-| `adopt` | Adoption | Scan for principle violations and auto-fix (invoked by `init` as final step) |
+**Supported intents and their sequences:**
 
-**Flow Fragments** (`flows/fragments/`) — Reusable state groups included into flows via `includes:`:
-`context-sync`, `test-fix-loop`, `review-fix-loop`, `implement-verify`, `verify-fix-loop`, `security-scan`, `user-checkpoint`, `plan-review`, `pattern-check`, `early-scan`, `impl-handoff`, `pre-launch-check`, `ship-done`
-
-**State types**: `single` (one agent), `parallel` (concurrent agents), `wave` (parallel agents in git worktrees with gates between waves), `parallel-per` (fan-out over items from prior state), `terminal`.
-
-**State `effects:` field** — Optional list of drift extraction operations that run automatically after a state completes. Declared on the state definition in fragment or flow YAML, sibling to `transitions:`. Effect types:
-- `persist_review` — stores a reviewer artifact file into drift store; requires `artifact:` field naming the file (active on `review` state, artifact: `REVIEW.md`)
+| Intent | Sequence |
+|--------|----------|
+| build / fix / change | PM triage → architect or engineer → verify → review → context-sync → ship → learn |
+| explore | PM triage → architect (research-only) |
+| test-gap | PM triage → tester → verify → review |
+| review-only | reviewer → (fix loop if needed) → ship |
+| security-audit | security → reviewer → (fix loop if needed) → ship |
+| learn | learner → (proposals surfaced to user) |
 
 ## MCP Tools (Harness)
 
-The Canon MCP server exposes these tools. Orchestrator uses the harness tools to drive flows; specialist agents use the principle and drift tools. Tools with UIs open as MCP Apps in compatible clients (Claude Desktop).
+The Canon MCP server exposes these tools. The orchestrator uses the harness tools to follow the documented orchestration sequence; specialist agents use the principle and drift tools. Tools with UIs open as MCP Apps in compatible clients (Claude Desktop).
 
 **Tools with MCP App UIs:**
 
@@ -100,11 +89,11 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 
 | Tool | Purpose |
 |------|---------|
-| `load_flow` | Load and resolve a flow definition (fragments, spawn instructions, state graph) |
 | `init_workspace` | Create or resume a workspace (SQLite `orchestration.db`, `progress.md`); seeds `progress.md` with task header on creation; runs file claim overlap preflight check (warns if other workflows target the same files) |
-| `drive_flow` | Advance the state machine one step: resolves spawn prompt, checks convergence, enters state; returns `SpawnRequest` or `HitlBreakpoint` |
-| `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress; registers file claims on `set_metadata` with `affected_files`, releases claims on `complete_flow` |
-| `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state`; accepts optional `transcript_path` (best-effort write to execution state) |
+| `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json` |
+| `batch_log_steps` | Register multiple planned steps at once (same as `log_step` but batched) |
+| `finalize_workspace` | Close the flow, verify journal completeness, release file claims |
+| `write_plan_index` | Persist architect task/plan data and affected-file list |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
 | `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
 | `inject_wave_event` | Inject user events into running wave execution |
@@ -227,9 +216,9 @@ Query commits by agent: `git log --grep='Canon-Agent: implementor'`
 
 `.canon/claims.json` tracks which files are targeted by active workflows. This enables early conflict detection when multiple workflows run concurrently.
 
-- **Registration**: Claims are registered automatically when the architect sets `affected_files` metadata via `update_board`
+- **Registration**: Claims are registered via `write_plan_index` (architect's affected-file list) and the `init_workspace` flow
 - **Overlap detection**: `init_workspace` preflight warns about files claimed by other active workflows
-- **Release**: Claims are released when `update_board({ action: "complete_flow" })` is called
+- **Release**: Claims are released by `finalize_workspace({ workspace })`
 - **Staleness**: Claims older than 24 hours are automatically pruned on every read
 - **Advisory only**: Claim overlaps produce warnings, never block workspace creation
 

@@ -17,7 +17,7 @@ export async function loadPathAliases(projectDir: string): Promise<PathAlias[]> 
       return parseTsconfigPaths(paths, tsconfig.compilerOptions.baseUrl);
     }
   } catch {
-    // no tsconfig or invalid
+    // best-effort: tsconfig.json may not exist or may contain non-JSON; return empty aliases
   }
   return [];
 }

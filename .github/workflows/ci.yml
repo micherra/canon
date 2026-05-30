@@ -7,6 +7,28 @@ on:
     branches: [main]
 
 jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install shellcheck and jq
+        run: sudo apt-get update && sudo apt-get install -y shellcheck jq
+      - name: Shellcheck hook scripts
+        run: bash hooks/lint.sh
+      - name: Run hook test suites
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          failed=0
+          for t in hooks/**/*.test.sh; do
+            echo "=== $t ==="
+            bash "$t" || failed=1
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "One or more hook test suites failed." >&2
+            exit 1
+          fi
+
   build:
     runs-on: ubuntu-latest
     defaults:

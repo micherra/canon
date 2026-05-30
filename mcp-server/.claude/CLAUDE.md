@@ -25,7 +25,7 @@ src/
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
-│   ├── orchestration/    # Flow engine, drive_flow, init_workspace, report_result, all orchestration tools
+│   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
 │   └── prompt-pipeline/  # Prompt assembly, context enrichment, consultation pipeline
@@ -44,11 +44,12 @@ src/
 - **Community detection** (`graph/kg-community.ts`) — Louvain algorithm assigns `community_id` to each file in the KG; added 2026-05-02
 - **Tag propagation** (`graph/kg-tags.ts`) — 4-signal pipeline (directory, imports, community, cross-ref) writes computed tags to `file_tags` table; used by `get-principles` and `get-file-context`; added 2026-05-02
 - **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity; OR semantics: matches if layers OR scope.tags intersect (updated 2026-05-02)
-- **Orchestration** (`orchestration/`, `features/orchestration/`) — Flow state machine runtime: board persistence, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
+- **Orchestration** (`orchestration/`, `features/orchestration/`) — Orchestration runtime: board persistence (seeded by `init_workspace`), journal (`log_step`/`batch_log_steps`), gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 
 ## Contracts
-<!-- last-updated: 2026-05-29 (reconcile_workspace tool added; capture_transcript extended with source_path + persist_path params) -->
+<!-- last-updated: 2026-05-30 (reconcile_workspace tool added; capture_transcript extended with source_path + persist_path params; DriftReport.craft + computeCraftScore added; get_drift_report Craft line added; config.ts DEFAULT_LAYER_MAPPINGS hooks entry added; doc_freshness dimension: DocFreshness type, doc-freshness-adapter, computeDocFreshness service, DriftReport.doc_freshness field, get_drift_report renders Documentation freshness section; drift schema v8: area_observations table; AreaMemoryDao; area-memory-enrichment.ts; hot-file-detection.ts; resolve_agent_skills area+hot-file enrichment; write_review/write_implementation_summary area observation extraction; decisions field on write_implementation_summary) -->
+
 
 **`resolveGitRoot(cwd, gitTopLevelFn)`** (`src/app/resolve-project-dir.ts`) — returns git repo root for `cwd`; falls back to `cwd` when not in a git repo or git is unavailable; errors are logged and swallowed (never throws).
 
@@ -72,11 +73,13 @@ src/
 
 **Fragment param syntax** — typed params (`param_name: { type: state_id|string|number|boolean, default? }`) replace null-marker `~`; backward compat retained; `state_id` params validated at load time.
 
-**Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "7"; v4 adds `file_violation_history` + `path_effects` tables; v6 adds `error_fixes` table; v7 adds `violation_outcomes` table (PK: file_path + principle_id + slug; columns: action CHECK('fix','acknowledge','defer'), slug, timestamp); idempotent migrations. Updated 2026-05-26.
+**Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "8"; v4 adds `file_violation_history` + `path_effects` tables; v6 adds `error_fixes` table; v7 adds `violation_outcomes` table; v8 adds `area_observations` table (`id`, `subsystem_key`, `content`, `source`, `workflow_slug`, `created_at`, `injected_count`, `last_injected_at`; indices on `subsystem_key` and `created_at`); idempotent migrations. Updated 2026-05-29.
 
 **OutcomeStore** (`src/platform/storage/drift/outcome-store.ts`) — sync DAO for `violation_outcomes`; methods: `recordOutcome(input: ViolationOutcome)`, `getOutcomesForPrinciple(principleId)`, `getOutcomeStats(principleIds?)`, `getOutcomesForFiles(filePaths)`. Added 2026-05-25, updated 2026-05-26.
 
 **DriftDbSignals DAO** (`src/platform/storage/drift/drift-db-signals.ts`) — sync DAO for `file_violation_history`, `path_effects`, and `error_fixes`; methods: `getFileViolationHistory`, `upsertFileViolation`, `markFixed`, `getPathEffects`, `upsertPathEffect`, `getErrorFixes(filePaths)`, `upsertErrorFix(input)`, `getAllFileViolationHistory()`. `DriftDb.getSignals()` is a lazy cached accessor. Updated 2026-05-22.
+
+**AreaMemoryDao** (`src/platform/storage/drift/area-memory-dao.ts`) — sync DAO for `area_observations`; prepared statements, sync API following DriftDbSignals pattern; methods: `insertObservation(input)`, `getObservationsForSubsystems(keys)` (7-day expiry enforced at query time via SQL WHERE), `markInjected(ids)` (increments `injected_count`, sets `last_injected_at`). `DriftDb.getAreaMemory()` is a lazy cached accessor. `deriveSubsystemKey(filePath)` strips `mcp-server/src/`, `tools/`, `services/`, `__tests__/` to produce stable keys like `features/orchestration`. Added 2026-05-29.
 
 **Drift Store** (`src/platform/storage/drift/store.ts`) — `ReviewEntry` is the unified type for all reviews (principle + PR); `PrStore` deleted 2026-03-25. `DriftStore.getReviews(options?)` AND-filters by principleId/branch/prNumber (see source for full signature).
 
@@ -87,6 +90,8 @@ src/
 **Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `assembleWikiLintOutput(AssembleWikiLintInput)`; `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)`; all accept pre-loaded data (no I/O except `scanDirectories`). Added 2026-05-26.
 **Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — `compileSignals(filePaths, driftDbSignals)` reads violation history + path effects, scores by priority, fits within per-file token budget; read-only
 **Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — added 2026-05-22; exports `queryDriftSignalPitfalls(filePaths, signals)`, `queryErrorFixPitfalls(filePaths, signals)`, `formatPitfallsSection(drift, errorFix)`, `countPitfalls(drift, errorFix)`; pure functions (no DB calls); `formatPitfallsSection` returns `""` when both arrays empty
+**Area Memory Enrichment** (`src/features/diagnostics/services/area-memory-enrichment.ts`) — added 2026-05-29; exports `queryAreaObservations(filePaths, dao)` (derives subsystem keys, deduplicates, caps at 5), `formatAreaMemorySection(obs)`, `buildAreaMemorySection(filePaths, dao)` (fail-open wrapper; calls `markInjected` after querying). Returns `{ section: ""; count: 0 }` on error.
+**Hot-File Detection** (`src/features/diagnostics/services/hot-file-detection.ts`) — added 2026-05-29; `detectHotFiles(filePaths, db)` queries `flow_runs`, parses commits JSON `{ sha, files }` objects, counts per-file run appearances, threshold ≥ 3, cap 3; `formatHotFileSection(hotFiles)`, `buildHotFileSection(filePaths, db)` (fail-open). Helpers: `extractFilesFromRun(commits)`, `computeLookbackCutoff()`.
 **Backfill Error Fixes** (`src/features/diagnostics/services/backfill-error-fixes.ts`) — added 2026-05-22; script that mines `file_violation_history` to populate the `error_fixes` table; call once per project to seed historical data
 **`store-summaries`** — DB-only write path (JSON removed ADR-005); `inferLanguageFromExtension` maps extensions to language strings
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
@@ -101,13 +106,23 @@ src/
 
 **Drift confidence adapter** (`src/platform/storage/drift/drift-confidence-adapter.ts`) — pure compute function; composes sample_size (weight 0.5), trend_stability (weight 0.3), rate_stability (weight 0.2) signals; placed in `platform/storage/drift/` to avoid cross-feature circular imports. Added 2026-05-25.
 
-**`write_review` tool** — updated 2026-05-25: accepts optional `confidence` annotation per violation; when `confidenceAdapter` (injected via `register-orchestration.ts`) is present, auto-annotates violations from drift DB signals; backward compatible when adapter absent.
+**`write_review` tool** — updated 2026-05-29: accepts optional `confidence` annotation per violation; when `confidenceAdapter` present, auto-annotates violations from drift DB signals; extracts area observations from BLOCKING/WARNING reviews and stores in `area_observations` via `areaMemoryWriter` (injected via `register-artifacts.ts`); fail-open when writer absent or throws; no observations extracted for CLEAN reviews.
 
 **`get_compliance` tool** — updated 2026-05-26: returns `confidence: ConfidenceAnnotation` in response; uses per-principle confidence from `analyzeDrift` when available, falls back to drift confidence adapter (sample_size + trend_stability + rate_stability signals).
 
-**`get_drift_report` tool** — updated 2026-05-25: confidence tier rendered inline as `[confidence: TIER]` per violation in formatted output.
+**`write_implementation_summary` tool** — updated 2026-05-29: accepts optional `decisions?: DecisionRecord[]` array; decisions rendered as markdown table in summary and stored in meta JSON; each decision logged as `agent_decision` event in execution store; `DecisionRecord` fields: `choice`, `rationale`, `alternatives_considered`, `informed_by` (refs: area_memory, pitfall, principle, task_plan, codebase_pattern); extracts area observations from `deviations` field and stores in `area_observations` via `areaMemoryWriter`; fail-open throughout.
 
-**Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs
+**`get_drift_report` tool** — updated 2026-05-25: confidence tier rendered inline as `[confidence: TIER]` per violation in formatted output. Updated 2026-05-29: formatted output includes a `Craft: N (N holistic findings)` line after `Avg score:`, distinct from compliance numbers; also renders `### Documentation freshness` section (omitted when empty) with commits-since-last-sync and `[confidence: TIER]` per direction doc, sorted by staleness descending.
+
+**`DocFreshness` type** (`src/platform/storage/drift/analyzer.ts`) — `{ doc_path: string; commits_since_sync: number; confidence: ConfidenceAnnotation; warning?: string }`; placed in platform so service can import it without platform importing from features. `DriftReport.doc_freshness: DocFreshness[]` added (defaults to `[]`).
+
+**`doc-freshness-adapter.ts`** (`src/platform/storage/drift/`) — pure function `computeFreshnessConfidence(signals)`: maps `commits_since_sync` to a weighted `staleness` `ConfidenceInput` (`value = clamp(1 - commits/40, 0, 1)`) and delegates to `computeConfidenceAnnotation`; `FRESHNESS_SAMPLE_SIZE = 10` prevents `insufficient` masking for clearly-stale docs. Added 2026-05-29.
+
+**`computeDocFreshness`** (`src/features/diagnostics/services/doc-freshness.ts`) — enumerates `docs/*.md` (excludes `docs/reference/`), runs `git log -n 1` + `git rev-list --count` per doc; git seam injectable; every `!ok` path logs WARN and returns `DocFreshness` with `warning?` (never silent-swallow); ENOENT → `[]`. Added 2026-05-29.
+
+**`DriftReport.craft`** (`platform/storage/drift/analyzer.ts`) — added 2026-05-29: `craft: { holistic_count: number; score: number }` field on `DriftReport`; `computeCraftScore(reviews)` uses formula `max(0, 100 − min(100, holistic_count × 10))`; populated by `analyzeDrift` using the same filtered window as `avg_score`; kept DISTINCT from compliance score.
+
+**Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs; `DEFAULT_LAYER_MAPPINGS` includes `hooks: ["hooks"]` entry ordered before `shared` so `hooks/lib/*.sh` resolves to layer `hooks` (added 2026-05-29)
 
 **Composite context tool:**
 
@@ -148,10 +163,10 @@ src/
 | `get_cross_run_analysis` | Cross-run meta-analysis for the learner agent |
 
 **Transcript capture** — best-effort; always returns `ok: true`; writes to `{workspace}/transcripts/`; path-traversal guarded
-**Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`; `resolve_agent_skills`: **async** since 2026-05-20; applies progressive disclosure when `projectDir` provided — if `preload_prompt` exceeds 12k chars, full JSON is written to `.canon/artifacts/agent-skills-*.json` and result contains a compact summary + `full_data_path` pointer; accepts optional `options?: { filePaths?: string[]; workspace?: string }` — when `filePaths` provided, appends "Known Pitfalls" section to `preload_prompt` (from drift signals + error_fixes) and logs `pitfall_injected` audit event to execution store. Updated 2026-05-22.
+**Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`; `resolve_agent_skills`: **async** since 2026-05-20; applies progressive disclosure when `projectDir` provided — if `preload_prompt` exceeds 12k chars, full JSON is written to `.canon/artifacts/agent-skills-*.json` and result contains a compact summary + `full_data_path` pointer; accepts optional `options?: { filePaths?: string[]; workspace?: string }` — when `filePaths` provided, appends "Known Pitfalls", "Area Memory", and "Hot-File Caution" sections to `preload_prompt`; logs `pitfall_injected` or `area_enrichment_injected` audit events when data found. Updated 2026-05-29.
 **Gate runner** — `normalizeGates` resolves via 3-tier priority (direct > named > discovered); **fail-closed**: unresolved gate → `{ passed: false }`; `bash_check` denylist: `rm`, `sudo`, `curl`, `wget`, `chmod`, `chown`, `mkfs`, `dd`
 **Flow schema** (`flow-schema.ts`) — `StateDefinitionSchema` is a `z.discriminatedUnion` with 5 type schemas; all new fields MUST be `.optional()`; `WavePolicy` defaults: isolation=worktree, merge=sequential, on_conflict=hitl
-**`report_result`** — accepts quality signals (gate_results, postconditions, violations, tests, files_changed) + discovery fields (accumulated, not replaced); optional roles excluded from aggregation
+**Step journaling** — `log_step` / `batch_log_steps` record step completion (status, artifacts, agent ID) in `journal.json`; quality signals (gate_results, postconditions, violations, tests, files_changed) and discovery fields accumulate across steps (append, not replace)
 **Analytics** — `computeAnalytics(entries)` aggregates flow run metrics; skips entries without gate data
 
 **Orchestration harness tools:**
@@ -160,14 +175,12 @@ src/
 |------|---------|
 | `open_artifact` | Open an HTML artifact from `${workspace}/artifacts/` in browser; reads file, registers with HTTP server, opens fire-and-forget; returns `{ url }`; path traversal blocked; `UNEXPECTED` when HTTP server not running. Added 2026-05-25. |
 | `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; creates build worktree at `{workspace}/worktree` on `canon/{slug}` branch (returned as `worktree_path` and `worktree_branch`); optional `preflight: true` checks git status, stale sessions, and active file claims before creating; when preflight finds issues, returns `workspace: ""` (empty string) and puts the candidate path in `candidate_workspace` — callers must check `preflight_issues` before using `workspace`; claim check is informational (non-blocking); resume checks `{workspace}/worktree` first, then legacy `.canon/worktrees/{slug}` fallback; `tryResumeWorkspace` accepts optional `expectedTask` — when provided and stored `session.task` differs, resume is blocked (returns null) to prevent slug-collision mismatches from `generateSlug` truncation |
-| `load_flow` | Load and resolve a flow definition; throws (hard-blocking) on validation errors since ADR-004; reachability issues emit non-blocking warnings |
 | `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
-| `drive_flow` | Drive the flow state machine for a single state; returns a `SpawnRequest` or `HitlBreakpoint` for the orchestrator to process; `{ action: "done" }` response includes optional `learn_gate_passed?: boolean` (ADR-016, 2026-04-08) — true only when auto-learn gates all pass at flow completion; absent when gate not evaluated or any gate failed |
-| `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress, set_metadata); `set_metadata` with `affected_files` (JSON array string) calls `registerClaims` + stores overlap warnings in board metadata as `claim_warnings`; `complete_flow` releases all file claims for the workflow slug before recording analytics — aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
-| `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
+| `finalize_workspace` | Close the flow: verifies journal completeness, releases file claims for the workflow slug, aggregates gate/postcondition/violation/test metrics into `FlowRunEntry` |
+| `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json` |
 | `inject_wave_event` | Inject user events into running wave execution |
 | `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
-| `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
+| `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `finalize_workspace`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
 | `record_agent_metrics` | Agent-callable tool to record performance counters (`tool_calls`, `orientation_calls`, `turns`) directly into execution state metrics; merges with existing metrics preserving orchestrator fields; returns `INVALID_INPUT` if no fields provided, `WORKSPACE_NOT_FOUND` if state not found — added 2026-04-01 (ADR-003a) |
 | `post_event` | Agent-callable tool for structured activity logging; input: `{ workspace, agent, action: "start"\|"complete", detail, artifacts?: string[] }`; stores `agent_activity` event in execution store's event log via `appendEvent`; returns `{ ok: true; event_type; agent; action; timestamp }` or `WORKSPACE_NOT_FOUND`/`INVALID_INPUT` on error — added 2026-04-07 |
 | `batch_log_steps` | Log multiple steps in a single journal read-modify-write cycle; input: `{ workspace, steps: Array<{ step_id, status, agent_type?, artifacts_expected?, domain_skills_loaded?, outcome?, agent_id? }> }`; validates all entries upfront (fail-closed: entire batch rejected if any `step_id` is empty); runs transcript captures in parallel for completed entries with `agent_id`; returns `{ results: LogStepResult[] }` — added 2026-04-30 |
@@ -223,11 +236,11 @@ src/
 - `CANON_PROJECT_DIR` env var sets project root; when unset, cwd fallback resolves to the git repo root (`resolveGitRoot`) before being passed to `resolveProjectDir` — ensures `.canon/` lands at the repo root even when the server starts from a subdirectory
 - `CANON_PLUGIN_DIR` env var sets plugin directory (defaults to parent of mcp-server)
 - Workspace subdirectories created by `initWorkspace`: `artifacts/`, `plans/`, `reviews/`, `transcripts/` — `notes/` removed 2026-03-24; `artifacts/` added 2026-05-16; `decisions/`, `handoffs/`, `research/` removed 2026-05-25 (never populated by any tool)
-- `progress.md` is seeded at workspace creation and appended server-side by `report_result` via its `progress_line` parameter; agents treat it as read-only
+- `progress.md` is seeded at workspace creation by `init_workspace`; no tool currently appends to it server-side; agents treat it as read-only
 - Gate runner is **fail-closed**: a named gate that cannot be resolved returns `{ passed: false }` — never silently passes (changed from fail-open 2026-03-26)
 - `bash_check` postconditions are filtered against a denylist before shell execution: `rm`, `sudo`, `curl`, `wget`, `chmod`, `chown`, `mkfs`, `dd`; blocked commands return `passed: false`
 - All new schema fields in `flow-schema.ts` MUST be `.optional()` — `BoardSchema.parse()` must not throw on existing workspace `board.json` files
-- `discovered_gates` and `discovered_postconditions` on `BoardStateEntry` accumulate across multiple `report_result` calls (append, not replace)
+- `discovered_gates` and `discovered_postconditions` on `BoardStateEntry` accumulate across multiple step-journal calls (append, not replace)
 - `EffectTypeSchema` switch in `effects.ts` has no `default` case — TypeScript enforces exhaustiveness when new effect types are added
 - **ADR-004 hard-blocking validation**: `loadAndResolveFlow` throws on spawn coverage errors or unresolved refs; callers must not expect an `errors` field on the return value — added 2026-04-01
 - **ADR-004 SQL stuck detection**: `ExecutionStore.recordIterationResult` must be called after each iteration before `isStuck` is queried; `isStuck` returns `false` (not stuck) when fewer than 2 results exist — added 2026-04-01
@@ -236,9 +249,9 @@ src/
 - **ADR-005 computeFileInsightMaps call pattern**: call `computeFileInsightMaps(db)` once per request and pass the `FileInsightMaps` result into `KgQuery.getFileMetrics()`; do not call `getFileMetrics()` in a loop without pre-computing insight maps — added 2026-04-01
 - **worktree_path is the sole isolation signal** (2026-04-08; updated 2026-05-25): `SpawnPromptEntry` no longer carries `isolation`; `resolveToolProfile` permission_mode fallback uses `worktreePath ? "auto" : "prompt"` (not `isolation`); Canon owns the worktree lifecycle; `persistWaveTaskResult` stores the convention branch (`canon-wave/{task_id}`) unconditionally. **Build worktrees** are now created at `{workspace}/worktree` (was `.canon/worktrees/{slug}`); `tryResumeWorkspace` checks new path first with legacy fallback; agent-teams orchestrator passes `worktree_path` to all code-writing agents and omits `isolation` from Agent calls (Claude Code's `isolation` parameter only accepts `"worktree"` — omitting it is the correct way to disable Agent-managed isolation)
 - **auto-approve settings injection** (2026-04-08): `injectSettingsIntoRequests` is called in all three spawn paths (`startNextWave`, `enterWaveState`, `tryEnterSingleState`) before returning `{ action: "spawn" }`; injection is conditional on `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools`; `injectWorktreeSettings` failure returns `false` and never blocks spawn (fail-closed); agents that would have received auto-approve simply fall back to standard prompting
-- **file claims non-blocking** (2026-04-09): all claim operations in `init_workspace`, `update_board`, and `inject-coordination.ts` are wrapped in try/catch; claim failures never block workflow execution; overlap warnings are advisory strings in board metadata (`claim_warnings`), not errors
-- **file claims lifecycle** (2026-04-09): claims are registered by `update_board set_metadata` (when `affected_files` is provided), checked as informational warnings by `init_workspace` preflight, and released by `update_board complete_flow`; do not call `file-claims.ts` functions directly from feature code outside these three integration points
-- **optimistic locking on all board mutations** (2026-04-09): all `update_board` handlers read `version` once at entry via `store.getVersion()` and pass it to `store.updateExecutionVersioned()`; a stale version returns `BOARD_LOCKED` (recoverable: true); do not use `store.updateExecution()` in handler code — use `store.updateExecutionVersioned()` instead
+- **file claims non-blocking** (2026-04-09): all claim operations in `init_workspace`, `finalize_workspace`, and `inject-coordination.ts` are wrapped in try/catch; claim failures never block workflow execution; overlap warnings are advisory strings in board metadata (`claim_warnings`), not errors
+- **file claims lifecycle** (2026-04-09): claims are registered via `write_plan_index` (architect's affected-file list) and the `init_workspace` flow, checked as informational warnings by `init_workspace` preflight, and released by `finalize_workspace`; do not call `file-claims.ts` functions directly from feature code outside these integration points
+- **optimistic locking on all board mutations** (2026-04-09): all board-write paths read `version` once at entry via `store.getVersion()` and pass it to `store.updateExecutionVersioned()`; a stale version returns `BOARD_LOCKED` (recoverable: true); do not use `store.updateExecution()` in handler code — use `store.updateExecutionVersioned()` instead
 - **syncBoardToStore is atomic** (2026-04-09): all writes in `syncBoardToStore` are wrapped in a single `store.transaction()`; partial writes cannot land — a version conflict aborts the entire sync and returns `{ ok: false, error: "version_conflict" }`; callers must check `result.ok`
 - **SQLITE_BUSY is transparent to callers** (2026-04-09): `store.transaction()` internally retries via `withRetry`; callers do not need to handle `SQLITE_BUSY` themselves; `withRetry` does not retry other error codes
 

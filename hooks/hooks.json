@@ -84,11 +84,6 @@
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/session-duration-watchdog.sh",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/spawn-timeout-watchdog.sh",
-            "timeout": 5
           }
         ]
       }

@@ -175,11 +175,22 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
       JSON.stringify({ layers: { api: ["src"] } }),
     );
     await writeFile(join(tmpDir, "src", "handler.ts"), `export function handler() {}`);
+    // Prevent real DriftStore from opening SQLite connections in the temp dir.
+    // buildComplianceOverlay calls getDriftDb which caches connections indefinitely,
+    // causing ENOTEMPTY when rm() removes files after the test but before the
+    // still-open SQLite connection has checkpointed its WAL/SHM files.
+    vi.doMock("@platform/storage/drift/store.ts", () => ({
+      DriftStore: class {
+        getReviews() {
+          return Promise.resolve([]);
+        }
+      },
+    }));
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { force: true, recursive: true });
+    await rm(tmpDir, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it("does not throw when diff_base is invalid and git branch detection is on a feature branch", async () => {
@@ -209,7 +220,10 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
         "/nonexistent",
       ),
     ).resolves.toBeDefined();
-  });
+    // Explicit generous timeout: this test does real filesystem scanning plus KG
+    // SQLite init in a temp dir. Under parallel test load the default 5s testTimeout
+    // is occasionally too tight (CPU/IO contention), producing spurious timeouts.
+  }, 15000);
 
   it("returns graph nodes when diff_base is invalid (graceful fallback, no changed files marked)", async () => {
     vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
@@ -237,7 +251,8 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
     expect(Array.isArray(result.nodes)).toBe(true);
     // No node should be marked as changed
     expect(result.nodes.filter((n) => n.changed)).toHaveLength(0);
-  });
+    // Generous timeout: real FS scan + KG SQLite init; see sibling test above.
+  }, 15000);
 });
 
 // Fix 3: pr-review-data — shell-escaping in runDiffCommand non-git path
@@ -253,7 +268,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { force: true, recursive: true });
+    await rm(tmpDir, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it("shell-escapes args when passed to runShell for non-git command", async () => {

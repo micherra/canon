@@ -26,7 +26,7 @@ describe("codebaseGraph", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { force: true, recursive: true });
+    await rm(tmpDir, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it("scans files and creates nodes with layer inference", async () => {
@@ -106,7 +106,7 @@ describe("codebaseGraph", () => {
     expect(result.nodes).toHaveLength(0);
     expect(result.edges).toHaveLength(0);
 
-    await rm(emptyDir, { force: true, recursive: true });
+    await rm(emptyDir, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it("derives scan dirs from layers in .canon/config.json", async () => {
@@ -287,7 +287,7 @@ describe("codebaseGraph — git adapter integration", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { force: true, recursive: true });
+    await rm(tmpDir, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it("gitCurrentBranch returns null when gitExecAsync returns ok:false — no changed files from git", async () => {

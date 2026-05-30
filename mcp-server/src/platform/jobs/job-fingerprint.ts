@@ -27,7 +27,7 @@ export async function computeJobFingerprint(input: FingerprintInput): Promise<st
   try {
     configContent = await readFile(join(projectDir, CANON_DIR, CANON_FILES.CONFIG), "utf-8");
   } catch {
-    // No config file — use empty string
+    // best-effort: config.json may not exist; fingerprint uses empty string for its contribution
   }
 
   // 3. Compute fingerprint: sha256(HEAD + sha256(config) + sorted sourceDirs)

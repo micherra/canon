@@ -31,7 +31,7 @@ Key exports: `formatCommitTrailers`, `buildCommitMessage`, `TrailerOpts`
 
 Manages `.canon/claims.json` for concurrent workflow coordination. When two workflows plan changes to the same files, `init_workspace` preflight surfaces a warning so the user can decide whether to proceed.
 
-Claims are **advisory only** — they never block workspace creation. They are registered automatically when the architect sets `affected_files` via `update_board`, and released automatically when `update_board` completes a flow.
+Claims are **advisory only** — they never block workspace creation. They are registered via `write_plan_index` (architect's affected-file list) and the `init_workspace` flow, and released automatically by `finalize_workspace`.
 
 Key features:
 - 24-hour TTL: stale claims auto-pruned on read

@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || { echo "Error: must be run from inside a git repository." >&2; exit 1; })"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || { echo "Error: must be run from inside a git repository." >&2; exit 1; })" # DOCUMENTED FAIL-OPEN -- git stderr suppressed; custom error message on failure
 HOOKS_SRC_DIR="${REPO_ROOT}/hooks"
 GIT_HOOKS_DIR="${REPO_ROOT}/.git/hooks"
 
@@ -51,7 +51,7 @@ install_hook() {
   # Resolve symlink for comparison
   local resolved=""
   if [[ -L "$dest" ]]; then
-    resolved="$(readlink "$dest" || true)"
+    resolved="$(readlink "$dest" || true)" # DOCUMENTED FAIL-OPEN -- readlink failure means dest is not a symlink
     # Normalize to absolute path for comparison
     if [[ "$resolved" != /* ]]; then
       resolved="${GIT_HOOKS_DIR}/${resolved}"
@@ -64,7 +64,7 @@ install_hook() {
   fi
 
   # A different hook exists — check if we already appended to it
-  if grep -qF "$canon_marker" "$dest" 2>/dev/null; then
+  if grep -qF "$canon_marker" "$dest" 2>/dev/null; then # DOCUMENTED FAIL-OPEN -- grep failure means Canon marker not present
     echo "Already appended: .git/hooks/${hook_name} already calls Canon hook"
     return
   fi

@@ -306,13 +306,18 @@ function enrichWithKgInsights(base: CodebaseInsights, projectDir?: string): Code
       dead_code_summary: buildDeadCodeSummary(db),
       entity_overview: buildEntityOverview(db, store),
     };
-  } catch {
+  } catch (err) {
+    // best-effort: extended graph insights are optional; base metrics always returned
+    console.warn(
+      "[canon] insights: extended graph insights unavailable:",
+      err instanceof Error ? err.message : err,
+    );
     return base;
   } finally {
     try {
       db?.close();
     } catch {
-      // ignore close errors
+      // best-effort: close errors during cleanup don't affect the returned result
     }
   }
 }
