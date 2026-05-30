@@ -30,6 +30,7 @@ fi
 GIT_DIR_ARG=$(canon_git_dir_arg "$COMMAND")
 
 # Get the current branch (in the target directory if cd was used)
+# DOCUMENTED FAIL-OPEN -- empty branch triggers pass-through at line 35
 # shellcheck disable=SC2086
 BRANCH=$(git $GIT_DIR_ARG branch --show-current 2>/dev/null || echo "")
 if [[ -z "$BRANCH" ]]; then
@@ -44,7 +45,7 @@ fi
 
 # Resolve main repo root for worktree support
 # shellcheck disable=SC2086
-MAIN_ROOT=$(git $GIT_DIR_ARG rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+MAIN_ROOT=$(git $GIT_DIR_ARG rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||') || { >&2 echo "CANON WARNING: [workspace-lock-guard] git root resolution failed"; MAIN_ROOT=""; }
 CANON_DIR="${MAIN_ROOT:-.}/.canon"
 
 LOCK_FILE="${CANON_DIR}/workspaces/${SANITIZED}/.lock"
@@ -53,9 +54,10 @@ if [[ ! -f "$LOCK_FILE" ]]; then
 fi
 
 # Read lock contents
-LOCK_CONTENT=$(cat "$LOCK_FILE" 2>/dev/null || echo "{}")
+LOCK_CONTENT=$(cat "$LOCK_FILE" 2>/dev/null) || { >&2 echo "CANON WARNING: [workspace-lock-guard] could not read lock file"; LOCK_CONTENT="{}"; }
 
 # Extract started timestamp from lock
+# DOCUMENTED FAIL-OPEN -- malformed lock content handled by empty LOCK_STARTED check at line 62
 LOCK_STARTED=$(echo "$LOCK_CONTENT" | jq -r '.started // empty' 2>/dev/null || true)
 
 # Check if lock is stale (>2 hours old)
@@ -77,7 +79,9 @@ if [[ -n "$LOCK_STARTED" ]]; then
 fi
 
 # Check if the lock belongs to a different session
+# DOCUMENTED FAIL-OPEN -- empty SESSION_ID triggers allow-path at line 84
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
+# DOCUMENTED FAIL-OPEN -- empty LOCK_SESSION triggers pass-through at line 88
 LOCK_SESSION=$(echo "$LOCK_CONTENT" | jq -r '.session_id // empty' 2>/dev/null || true)
 
 # If same session or no session info, allow
