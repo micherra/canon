@@ -14,7 +14,7 @@ The `platform/` directory provides concrete infrastructure implementations that 
 ## What this context does NOT own
 
 - **Cross-context interface definitions for drift** — The `IDriftStore` interface (the contract consumers depend on) lives in `domains/drift/`. Cross-context callers must import the interface from there, not the concrete class from here.
-- **Orchestration logic** — Flow state machine, board state, gate evaluation, and convergence logic live in `features/orchestration/` and `domains/`.
+- **Orchestration logic** — Board state, journal, gate evaluation, and convergence logic live in `features/orchestration/` and `domains/`.
 - **Flow schemas** — `ResolvedFlow`, `StateDefinition`, and related types belong to `domains/flows/`.
 - **Knowledge-graph query/scan logic** — `KgStore`, `KgQuery`, and the KG pipeline live under `graph/`. The `graph-worker.ts` in `workers/` is the subprocess entry point that delegates to `graph/kg-pipeline.ts`; it does not own KG logic itself.
 

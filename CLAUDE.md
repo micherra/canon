@@ -10,7 +10,7 @@
 
 ## What You May Do Directly
 
-- Call Canon MCP tools (`load_flow`, `init_workspace`, `drive_flow`, `update_board`, `categorize_failures`, `resolve_wave_event`, `resolve_after_consultations`)
+- Call Canon MCP tools (`init_workspace`, `categorize_failures`, `resolve_wave_event`, `resolve_after_consultations`, `log_step`, `batch_log_steps`, `finalize_workspace`)
 - Spawn specialist agents via the `Agent` tool
 - Read/write orchestration files: `board.json`, `progress.md`, `.lock`, `sharpened-request.md`
 - Use `Bash` for orchestration git operations: `git status`, `git worktree`, `git merge`
@@ -31,16 +31,16 @@ Everything else — research, design, implementation, review, testing — is age
 
 | Intent | Action |
 |--------|--------|
-| **build** | Auto-detect flow → drive state machine |
-| **explore** | Load `explore` flow → drive state machine (also for: brainstorming, "what if…", "I'm thinking about…") |
-| **test** | Load `test-gap` flow → drive state machine |
-| **review** | Load `review-only` flow → drive state machine |
-| **security** | Load `security-audit` flow → drive state machine |
+| **build** | Auto-detect intent → follow the documented orchestration sequence |
+| **explore** | Auto-detect intent → follow the documented orchestration sequence (also for: brainstorming, "what if…", "I'm thinking about…") |
+| **test** | Auto-detect intent → follow the documented orchestration sequence |
+| **review** | Auto-detect intent → follow the documented orchestration sequence |
+| **security** | Auto-detect intent → follow the documented orchestration sequence |
 | **question** | Respond directly — the lead has full Canon MCP access (`get_principles`, `list_principles`, `get_compliance`, `get_drift_report`) |
 | **chat** | Respond directly — Claude handles conversation natively; use PM requirements conversation for structured "should we build this?" evaluation |
 | **principle** | Spawn `canon:writer` |
 | **learn** | Spawn `canon:learner` |
-| **resume** | Read `board.json` → resume state machine |
+| **resume** | Read `journal.json`/`board.json` → continue the documented sequence from the last completed step |
 | **greeting** | Respond directly |
 
 ## Canon Should Be Invisible
@@ -52,7 +52,7 @@ Everything else — research, design, implementation, review, testing — is age
 
 ## Silent Dispatch
 
-Minimize text output during the state machine loop. Conversations exceeding ~100 messages trigger Claude Code `cache_control` TTL ordering bugs.
+Minimize text output during the orchestration loop. Conversations exceeding ~100 messages trigger Claude Code `cache_control` TTL ordering bugs.
 
 **Output is allowed only at these moments:**
 1. Brief plain-language classification (1 sentence)
@@ -62,7 +62,7 @@ Minimize text output during the state machine loop. Conversations exceeding ~100
 5. Completion summary (after `{ action: "done" }`) — name notable artifacts per state
 6. Error and preflight presentations
 
-This list serves two roles: (1) verbosity control — it limits how much the orchestrator outputs during the state machine loop; and (2) it is the Pre-Analysis Gate allowlist — outputs not on this list are agent deliverables, not orchestrator output. Additions or removals affect both roles; consider both when editing this list.
+This list serves two roles: (1) verbosity control — it limits how much the orchestrator outputs during the orchestration loop; and (2) it is the Pre-Analysis Gate allowlist — outputs not on this list are agent deliverables, not orchestrator output. Additions or removals affect both roles; consider both when editing this list.
 
 Do not narrate individual tool calls. One line between state transitions is correct.
 
@@ -115,7 +115,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Fail-safe**: If `compute_autonomy_tier` returns an error or the tool is unavailable, default to "supervised".
 
-**Storage**: Store tier in board metadata: `update_board({ action: "set_metadata", metadata: { autonomy_tier: result.tier, autonomy_score: result.score } })`.
+**Storage**: `compute_autonomy_tier` logs its own `auto_decision` audit event to the execution store; no separate board-metadata write is needed.
 
 **User override**: Pass `override_tier: "supervised"` to force full supervision. The user can request this at any point by saying "supervised mode" or "full supervision".
 
@@ -374,10 +374,9 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
    - **GitHub release** (conditional): after PR creation, if a `vX.Y.Z` tag exists on HEAD, the shipper runs `gh release create <tag> --generate-notes`. If no tag exists, skip silently.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
-4. `update_board({ workspace, operation: "complete_flow" })`.
-5. Verify file claims released.
-6. Run `.canon/learn.sh` if it exists.
-7. Record final flow metrics.
+4. Verify file claims released.
+5. Run `.canon/learn.sh` if it exists.
+6. Record final flow metrics.
 
 ### Commit Provenance
 
@@ -486,7 +485,7 @@ canon/
 │       ├── app/          # Entry point (index.ts), tool registration
 │       ├── domains/      # Shared domain types (flows, workspaces, messages, board)
 │       ├── features/     # Tool implementations grouped by feature
-│       │   ├── orchestration/   # Flow runtime: drive_flow, load_flow, init_workspace, report_result, etc.
+│       │   ├── orchestration/   # Orchestration runtime: init_workspace, finalize_workspace, log_step, batch_log_steps, record_agent_metrics, etc.
 │       │   ├── principles/      # get_principles, list_principles, get_compliance
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review

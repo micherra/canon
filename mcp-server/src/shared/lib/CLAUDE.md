@@ -51,8 +51,8 @@ Manages `.canon/claims.json` — tracks which files are targeted by active workf
 - Atomic writes prevent partial reads under concurrent access
 
 **Integration points (do not call directly — orchestration tools handle this):**
-- `update_board({ action: "set_metadata", metadata: { affected_files: "..." } })` → calls `registerClaims`
-- `update_board({ action: "complete_flow" })` → calls `releaseClaims`
+- `write_plan_index` (architect's affected-file list) and `init_workspace` flow → calls `registerClaims`
+- `finalize_workspace` → calls `releaseClaims`
 - `init_workspace` preflight → calls `checkClaimOverlaps` and surfaces warnings
 
 ---
@@ -78,4 +78,4 @@ Manages `.canon/janitor.lock` — a PID + mtime lock that prevents concurrent ja
 
 ## Not Standalone MCP Tools
 
-These modules are consumed by `features/orchestration/` tools. Agents do not call them via MCP — they are wired into `init_workspace`, `update_board`, and the janitor service automatically.
+These modules are consumed by `features/orchestration/` tools. Agents do not call them via MCP — they are wired into `init_workspace`, `finalize_workspace`, and the janitor service automatically.

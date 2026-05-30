@@ -336,7 +336,7 @@ The `Confidence` column will appear automatically in the Violations table of the
 
 ## Discover Lint/Format Gate Commands
 
-While inspecting the codebase for code quality, note any linting or formatting tools that are configured. Report these as discovered gates so the gate runner can use them for automated quality checks. Include in your `report_result` call:
+While inspecting the codebase for code quality, note any linting or formatting tools that are configured. Report these as discovered gates so the gate runner can use them for automated quality checks. Include in your review summary and status artifact:
 
 - `discovered_gates`: An array of lint/format commands you verified are configured. Only include commands for tools that have configuration files present. Format: `[{ command: "npx eslint .", source: "reviewer" }]`
 
