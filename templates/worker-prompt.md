@@ -22,6 +22,7 @@ and passes the result as the worker's spawn prompt.
 - `${SLUG}` — the build slug
 - `${CANON_PARENT_WORKSPACE}` — relative workspace path under `.canon/workspaces/` (e.g., `main/{slug}`) for L4 hook authorization
 - `${MODEL_TIER}` — the model tier of this worker (e.g., `sonnet`, `haiku`, `opus`)
+- `${BUILD_BASE_COMMIT}` — git commit SHA of the build worktree's HEAD at workspace init time (from `init_workspace` return value)
 
 ## Prompt
 
@@ -45,7 +46,7 @@ If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook
 5. Create your worktree (note: {task_id} is sanitized — non-alphanumeric chars except `.`, `_`, `-` become dashes):
    - Path: ${PROJECT_DIR}/.canon/worktrees/{sanitized_task_id}
    - Branch: canon-task/{sanitized_task_id}
-   - Command: git worktree add {path} -b {branch} HEAD
+   - Command: git worktree add {path} -b {branch} ${BUILD_BASE_COMMIT}
 6. Work in the worktree. Follow the task plan exactly.
 7. Commit with Canon provenance trailers:
    Canon-Workflow: ${SLUG}
@@ -53,8 +54,10 @@ If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook
    Canon-State: implement
    Canon-Task: {task_id}
 8. Mark complete: TaskUpdate({ task_id, status: "completed" }).
-9. Loop back to step 1.
+9. If no task was available on the first TaskList call (step 1), loop back to step 1 to retry. This retry-until-available loop applies only while waiting for your FIRST task.
 10. If TaskList returns empty (all tasks completed), you are done.
+
+**Single-task limit**: You may claim and complete AT MOST ONE task per session invocation. After marking your task complete in step 8, do NOT return to step 1. Report DONE and exit. Remaining tasks in the queue will be claimed by peer workers. The loop (steps 1–9) only applies while waiting for your first available task.
 
 ## Budget Checkpoints (WIP Commits)
 
