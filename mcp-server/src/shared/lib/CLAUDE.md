@@ -76,6 +76,20 @@ Manages `.canon/janitor.lock` — a PID + mtime lock that prevents concurrent ja
 
 ---
 
+## When to Extract to shared/lib/
+
+A pure function belongs in `shared/lib/` when:
+1. It is needed by two or more features in different bounded contexts (e.g., `features/orchestration` AND `features/diagnostics`), AND
+2. No single bounded context can own it without creating a prohibited cross-feature import
+
+**Decision test**: If placing the function in context A requires context B to import from A (violating the no-cross-feature rule), extract to `shared/lib/` with a docblock explaining why.
+
+**Shape requirement**: `shared/lib/` modules must be pure (no I/O, no DB calls, no side effects). If the function requires I/O, use a structural interface (like `AreaMemoryWriter`) instead of extracting the I/O code to shared.
+
+Reference implementations:
+- `subsystem-key.ts` — `deriveSubsystemKey` needed by orchestration AND diagnostics/platform layers
+- `commit-trailers.ts` — commit formatting needed by all code-writing agents
+
 ## Not Standalone MCP Tools
 
 These modules are consumed by `features/orchestration/` tools. Agents do not call them via MCP — they are wired into `init_workspace`, `finalize_workspace`, and the janitor service automatically.

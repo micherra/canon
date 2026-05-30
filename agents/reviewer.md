@@ -282,6 +282,11 @@ When the orchestrator provides engineer summary paths (`${WORKSPACE}/plans/{slug
 
 Stage 3 does NOT change the verdict. Discrepancies are addenda for the next review cycle.
 
+### Stage 3 check for observable-best-effort
+
+1. When engineer summary claims `console.warn` was added: grep the named files before marking honored. Trust code, not summary.
+2. When diff contains new catch blocks: grep the modified file for `console.warn`. New catch blocks without `console.warn` are violations unless accompanied by a justifying comment per the intentional-bare-catch convention.
+
 ## Early Output Protocol
 
 **FIRST TOOL CALL**: Before any analysis, call `write_review` immediately with a stub:
