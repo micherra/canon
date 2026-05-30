@@ -17,6 +17,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract file path from the tool input
+# DOCUMENTED FAIL-OPEN -- empty FILE_PATH triggers pass-through at line 23
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .file_path // empty' 2>/dev/null || true)
 
 # If we couldn't extract a path, pass through
@@ -30,13 +31,14 @@ case "$FILE_PATH" in
 esac
 
 # Resolve main repo root for worktree support
-MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||') || { >&2 echo "CANON WARNING: [large-file-guard] git root resolution failed"; MAIN_ROOT=""; }
 CANON_DIR="${MAIN_ROOT:-.}/.canon"
 
 # Read threshold from .canon/config.json if present, default 500
 MAX_LINES=500
 CONFIG_FILE="${CANON_DIR}/config.json"
 if [[ -f "$CONFIG_FILE" ]]; then
+  # DOCUMENTED FAIL-OPEN -- config read failure uses default MAX_LINES=500
   CONFIGURED=$(jq -r '.max_file_lines // empty' "$CONFIG_FILE" 2>/dev/null || true)
   if [[ -n "$CONFIGURED" ]]; then
     MAX_LINES=$CONFIGURED
@@ -52,8 +54,10 @@ else
 fi
 
 # For Write calls, estimate new size from the content field
+# DOCUMENTED FAIL-OPEN -- jq -e boolean check: no content field means Edit tool, not Write
 NEW_CONTENT=$(echo "$INPUT" | jq -e '.tool_input.content // .content // empty | select(. != "")' >/dev/null 2>&1 && echo "yes" || true)
 if [[ -n "$NEW_CONTENT" ]]; then
+  # DOCUMENTED FAIL-OPEN -- count failure defaults to 0; falls through to existing-file check
   NEWLINE_COUNT=$(echo "$INPUT" | jq -r '.tool_input.content // .content // empty' 2>/dev/null | wc -l | tr -d ' ' || echo "0")
   if [[ $NEWLINE_COUNT -gt $MAX_LINES ]]; then
     cat <<EOF

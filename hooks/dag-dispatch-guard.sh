@@ -49,7 +49,7 @@ while IFS= read -r db_path; do
   fi
 
   # Read execution state from DB
-  row=$(sqlite3 "$db_path" "SELECT slug, current_state, status FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null || true)
+  row=$(sqlite3 "$db_path" "SELECT slug, current_state, status FROM execution WHERE id = 1 LIMIT 1;" 2>/dev/null) || { >&2 echo "CANON WARNING: [dag-dispatch-guard] sqlite3 query failed for $db_path"; row=""; }
   if [[ -z "$row" ]]; then
     continue
   fi
@@ -84,6 +84,7 @@ EOF
   # Advisory only — always exit 0
   exit 0
 
+# DOCUMENTED FAIL-OPEN -- find stderr suppressed for permission noise
 done < <(find "$WORKSPACES_DIR" -name "orchestration.db" -maxdepth 3 2>/dev/null)
 
 exit 0

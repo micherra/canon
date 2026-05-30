@@ -28,6 +28,7 @@ fi
 
 # Session dedup — only nudge once per session.
 # Use session_id from the hook JSON input (not PID or pwd-based hash).
+# DOCUMENTED FAIL-OPEN -- empty SESSION_ID uses fallback "unknown" at line 32
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 NUDGE_FILE="${TMPDIR:-/tmp}/canon-compaction-nudged-${SESSION_ID:-unknown}"
 if [[ -f "$NUDGE_FILE" ]]; then
@@ -35,7 +36,7 @@ if [[ -f "$NUDGE_FILE" ]]; then
 fi
 
 # Resolve main repo root for worktree support
-MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||') || { >&2 echo "CANON WARNING: [compaction-check] git root resolution failed"; MAIN_ROOT=""; }
 CANON_DIR="${MAIN_ROOT:-.}/.canon"
 
 WARNINGS=()
@@ -52,6 +53,7 @@ fi
 # Check CONVENTIONS.md size
 CONVENTIONS_FILE="${CANON_DIR}/CONVENTIONS.md"
 if [[ -f "$CONVENTIONS_FILE" ]]; then
+  # DOCUMENTED FAIL-OPEN -- grep failure defaults to 0; no conventions to warn about
   CONVENTION_COUNT=$(grep -c '^- \*\*' "$CONVENTIONS_FILE" 2>/dev/null || echo "0")
   if [[ $CONVENTION_COUNT -gt 20 ]]; then
     WARNINGS+=("  - CONVENTIONS.md: ${CONVENTION_COUNT} conventions — consider consolidating similar entries")

@@ -39,7 +39,7 @@ if [[ -f "$NUDGE_FILE" ]]; then
 fi
 
 # Resolve main repo root for worktree support
-MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||') || { >&2 echo "CANON WARNING: [learn-nudge] git root resolution failed"; MAIN_ROOT=""; }
 CANON_DIR="${MAIN_ROOT:-.}/.canon"
 
 # Check if reviews.jsonl exists
@@ -53,6 +53,7 @@ REVIEW_COUNT=$(wc -l < "$REVIEWS_FILE" | tr -d ' ')
 # Check when the last learn run happened
 LEARNING_FILE="${CANON_DIR}/learning.jsonl"
 if [[ -f "$LEARNING_FILE" ]]; then
+  # DOCUMENTED FAIL-OPEN -- parse failure defaults to 0; treats as no prior learn run
   LAST_LEARN_REVIEWS=$(tail -1 "$LEARNING_FILE" 2>/dev/null | grep -o '"reviews_analyzed":[0-9]*' | grep -o '[0-9]*' || echo "0")
   REVIEWS_SINCE=$((REVIEW_COUNT - LAST_LEARN_REVIEWS))
 else
