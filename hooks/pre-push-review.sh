@@ -27,8 +27,7 @@ if [[ -z "$COMMAND" ]]; then
   if [[ -n "$INPUT" ]] && printf '%s' "$INPUT" | grep -qE '"command"[[:space:]]*:[[:space:]]*"[^"]'; then
     echo "CANON WARNING: command extraction failed on a command payload — review check skipped (advisory only)."
   fi
-  # DOCUMENTED FAIL-OPEN: advisory hook — warn but never block
-  exit 0
+  exit 0 # DOCUMENTED FAIL-OPEN: advisory hook — warn but never block
 fi
 
 # Only trigger on git push commands
@@ -52,16 +51,13 @@ if [[ -z "$BRANCH" ]]; then
 fi
 
 # Get the remote tracking branch to find unpushed commits
-# DOCUMENTED FAIL-OPEN -- no upstream is normal for new branches
-UPSTREAM=$(git rev-parse --abbrev-ref "@{upstream}" 2>/dev/null || echo "")
+UPSTREAM=$(git rev-parse --abbrev-ref "@{upstream}" 2>/dev/null || echo "") # DOCUMENTED FAIL-OPEN -- no upstream is normal for new branches
 if [[ -n "$UPSTREAM" ]]; then
   # Count commits being pushed
-  # DOCUMENTED FAIL-OPEN -- failure means unknown push count; defaults to 0 (skip check)
-  UNPUSHED=$(git rev-list "$UPSTREAM"..HEAD --count 2>/dev/null || echo "0")
+  UNPUSHED=$(git rev-list "$UPSTREAM"..HEAD --count 2>/dev/null || echo "0") # DOCUMENTED FAIL-OPEN -- failure means unknown push count; defaults to 0 (skip check)
 else
   # No upstream — count commits not reachable from any remote branch
-  # DOCUMENTED FAIL-OPEN -- failure means unknown push count; defaults to 0 (skip check)
-  UNPUSHED=$(git rev-list HEAD --count --not --remotes 2>/dev/null || echo "0")
+  UNPUSHED=$(git rev-list HEAD --count --not --remotes 2>/dev/null || echo "0") # DOCUMENTED FAIL-OPEN -- failure means unknown push count; defaults to 0 (skip check)
 fi
 
 if [[ "$UNPUSHED" == "0" ]]; then
@@ -81,11 +77,9 @@ fi
 
 # Get the oldest unpushed commit timestamp
 if [[ -n "$UPSTREAM" ]]; then
-  # DOCUMENTED FAIL-OPEN -- empty TS triggers pass-through at line 71
-  OLDEST_UNPUSHED_TS=$(git log "$UPSTREAM"..HEAD --format="%aI" --reverse 2>/dev/null | head -1 || echo "")
+  OLDEST_UNPUSHED_TS=$(git log "$UPSTREAM"..HEAD --format="%aI" --reverse 2>/dev/null | head -1 || echo "") # DOCUMENTED FAIL-OPEN -- empty TS triggers pass-through at line 71
 else
-  # DOCUMENTED FAIL-OPEN -- empty TS triggers pass-through at line 71
-  OLDEST_UNPUSHED_TS=$(git log HEAD --not --remotes --format="%aI" --reverse 2>/dev/null | head -1 || echo "")
+  OLDEST_UNPUSHED_TS=$(git log HEAD --not --remotes --format="%aI" --reverse 2>/dev/null | head -1 || echo "") # DOCUMENTED FAIL-OPEN -- empty TS triggers pass-through at line 71
 fi
 
 if [[ -z "$OLDEST_UNPUSHED_TS" ]]; then

@@ -53,8 +53,7 @@ REVIEW_COUNT=$(wc -l < "$REVIEWS_FILE" | tr -d ' ')
 # Check when the last learn run happened
 LEARNING_FILE="${CANON_DIR}/learning.jsonl"
 if [[ -f "$LEARNING_FILE" ]]; then
-  # DOCUMENTED FAIL-OPEN -- parse failure defaults to 0; treats as no prior learn run
-  LAST_LEARN_REVIEWS=$(tail -1 "$LEARNING_FILE" 2>/dev/null | grep -o '"reviews_analyzed":[0-9]*' | grep -o '[0-9]*' || echo "0")
+  LAST_LEARN_REVIEWS=$(tail -1 "$LEARNING_FILE" 2>/dev/null | grep -o '"reviews_analyzed":[0-9]*' | grep -o '[0-9]*' || echo "0") # DOCUMENTED FAIL-OPEN -- parse failure defaults to 0; treats as no prior learn run
   REVIEWS_SINCE=$((REVIEW_COUNT - LAST_LEARN_REVIEWS))
 else
   REVIEWS_SINCE=$REVIEW_COUNT

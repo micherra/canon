@@ -67,7 +67,6 @@ while IFS= read -r file; do
   if [[ -n "$MATCHES" ]]; then
     # Classify the matches for a readable report
     HITS=""
-    # DOCUMENTED FAIL-OPEN -- grep no-match is expected; classifying detected patterns
     printf '%s\n' "$MATCHES" | grep -qEi -- 'AKIA[0-9A-Z]{16}' 2>/dev/null && HITS="${HITS}  - AWS access key pattern detected\n" # DOCUMENTED FAIL-OPEN
     printf '%s\n' "$MATCHES" | grep -qEi -- '-----BEGIN.*PRIVATE KEY' 2>/dev/null && HITS="${HITS}  - Private key detected\n" # DOCUMENTED FAIL-OPEN
     printf '%s\n' "$MATCHES" | grep -qEi -- '(password|secret|api_key|apikey|secret_key|access_key|private_key|auth_token)' 2>/dev/null && HITS="${HITS}  - Hardcoded credential in variable assignment\n" # DOCUMENTED FAIL-OPEN

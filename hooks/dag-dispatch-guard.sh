@@ -84,7 +84,6 @@ EOF
   # Advisory only — always exit 0
   exit 0
 
-# DOCUMENTED FAIL-OPEN -- find stderr suppressed for permission noise
-done < <(find "$WORKSPACES_DIR" -name "orchestration.db" -maxdepth 3 2>/dev/null)
+done < <(find "$WORKSPACES_DIR" -name "orchestration.db" -maxdepth 3 2>/dev/null) # DOCUMENTED FAIL-OPEN -- find stderr suppressed for permission noise
 
 exit 0

@@ -81,8 +81,7 @@ fi
 
 # Run the worker — pass repo/plugin roots so it can resolve principles correctly.
 # Use the current worktree root (not shared git-common-dir) for project-local lookups.
-# DOCUMENTED FAIL-OPEN -- cascading git fallback to pwd
-PROJECT_ROOT="$(git rev-parse --show-toplevel --path-format=absolute 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)"
+PROJECT_ROOT="$(git rev-parse --show-toplevel --path-format=absolute 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)" # DOCUMENTED FAIL-OPEN -- cascading git fallback to pwd
 export CANON_PROJECT_DIR="${CANON_PROJECT_DIR:-$PROJECT_ROOT}"
 export CANON_PLUGIN_DIR="${CANON_PLUGIN_DIR:-$(dirname "$HOOK_DIR")}"
 node "$WORKER" "$FILE_PATH" 2>/dev/null || >&2 echo "CANON WARNING: [principle-inject] worker failed for ${FILE_PATH}"

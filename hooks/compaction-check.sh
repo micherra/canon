@@ -28,8 +28,7 @@ fi
 
 # Session dedup — only nudge once per session.
 # Use session_id from the hook JSON input (not PID or pwd-based hash).
-# DOCUMENTED FAIL-OPEN -- empty SESSION_ID uses fallback "unknown" at line 32
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty SESSION_ID uses fallback "unknown" at line 32
 NUDGE_FILE="${TMPDIR:-/tmp}/canon-compaction-nudged-${SESSION_ID:-unknown}"
 if [[ -f "$NUDGE_FILE" ]]; then
   exit 0
@@ -53,8 +52,7 @@ fi
 # Check CONVENTIONS.md size
 CONVENTIONS_FILE="${CANON_DIR}/CONVENTIONS.md"
 if [[ -f "$CONVENTIONS_FILE" ]]; then
-  # DOCUMENTED FAIL-OPEN -- grep failure defaults to 0; no conventions to warn about
-  CONVENTION_COUNT=$(grep -c '^- \*\*' "$CONVENTIONS_FILE" 2>/dev/null || echo "0")
+  CONVENTION_COUNT=$(grep -c '^- \*\*' "$CONVENTIONS_FILE" 2>/dev/null || echo "0") # DOCUMENTED FAIL-OPEN -- grep failure defaults to 0; no conventions to warn about
   if [[ $CONVENTION_COUNT -gt 20 ]]; then
     WARNINGS+=("  - CONVENTIONS.md: ${CONVENTION_COUNT} conventions — consider consolidating similar entries")
   fi

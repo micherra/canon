@@ -59,8 +59,7 @@ now_iso() {
 # Guard: only run on main / master
 # ---------------------------------------------------------------------------
 
-# DOCUMENTED FAIL-OPEN -- empty branch triggers pass-through at line 64
-CURRENT_BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
+CURRENT_BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")" # DOCUMENTED FAIL-OPEN -- empty branch triggers pass-through at line 64
 
 if [[ "$CURRENT_BRANCH" != "main" && "$CURRENT_BRANCH" != "master" ]]; then
   # Not on a primary branch — nothing to do.
@@ -223,8 +222,7 @@ EOF
       echo "### Preserved Artifacts"
       for DIR_NAME in plans reviews artifacts transcripts decisions handoffs research notes; do
         if [[ -d "${ARCHIVE_DIR}/${DIR_NAME}" ]]; then
-          # DOCUMENTED FAIL-OPEN -- find stderr suppressed for permission noise
-          FILE_COUNT="$(find "${ARCHIVE_DIR}/${DIR_NAME}" -type f 2>/dev/null | wc -l | tr -d ' ')"
+          FILE_COUNT="$(find "${ARCHIVE_DIR}/${DIR_NAME}" -type f 2>/dev/null | wc -l | tr -d ' ')" # DOCUMENTED FAIL-OPEN -- find stderr suppressed for permission noise
           if [[ "$FILE_COUNT" -gt 0 ]]; then
             echo "- ${DIR_NAME^}: ${FILE_COUNT} file(s) → \`.canon/history/${SANITIZED}/${DIR_NAME}/\`"
           fi
@@ -250,8 +248,7 @@ EOF
   # Delete local branch (safe — git refuses if not fully merged)
   # ------------------------------------------------------------------
 
-  # DOCUMENTED FAIL-OPEN -- failure handled by else branch at line 255
-  if git branch -d "$BRANCH" 2>/dev/null; then
+  if git branch -d "$BRANCH" 2>/dev/null; then # DOCUMENTED FAIL-OPEN -- failure handled by else branch at line 255
     echo "Canon:   branch '${BRANCH}' deleted"
     CLEANED+=("$BRANCH")
   else

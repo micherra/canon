@@ -30,9 +30,8 @@ fi
 GIT_DIR_ARG=$(canon_git_dir_arg "$COMMAND")
 
 # Get the current branch (in the target directory if cd was used)
-# DOCUMENTED FAIL-OPEN -- empty branch triggers pass-through at line 35
 # shellcheck disable=SC2086
-BRANCH=$(git $GIT_DIR_ARG branch --show-current 2>/dev/null || echo "")
+BRANCH=$(git $GIT_DIR_ARG branch --show-current 2>/dev/null || echo "") # DOCUMENTED FAIL-OPEN -- empty branch triggers pass-through at line 35
 if [[ -z "$BRANCH" ]]; then
   exit 0
 fi
@@ -57,8 +56,7 @@ fi
 LOCK_CONTENT=$(cat "$LOCK_FILE" 2>/dev/null) || { >&2 echo "CANON WARNING: [workspace-lock-guard] could not read lock file"; LOCK_CONTENT="{}"; }
 
 # Extract started timestamp from lock
-# DOCUMENTED FAIL-OPEN -- malformed lock content handled by empty LOCK_STARTED check at line 62
-LOCK_STARTED=$(echo "$LOCK_CONTENT" | jq -r '.started // empty' 2>/dev/null || true)
+LOCK_STARTED=$(echo "$LOCK_CONTENT" | jq -r '.started // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- malformed lock content handled by empty LOCK_STARTED check at line 62
 
 # Check if lock is stale (>2 hours old)
 if [[ -n "$LOCK_STARTED" ]]; then
@@ -79,10 +77,8 @@ if [[ -n "$LOCK_STARTED" ]]; then
 fi
 
 # Check if the lock belongs to a different session
-# DOCUMENTED FAIL-OPEN -- empty SESSION_ID triggers allow-path at line 84
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
-# DOCUMENTED FAIL-OPEN -- empty LOCK_SESSION triggers pass-through at line 88
-LOCK_SESSION=$(echo "$LOCK_CONTENT" | jq -r '.session_id // empty' 2>/dev/null || true)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty SESSION_ID triggers allow-path at line 84
+LOCK_SESSION=$(echo "$LOCK_CONTENT" | jq -r '.session_id // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty LOCK_SESSION triggers pass-through at line 88
 
 # If same session or no session info, allow
 if [[ -n "$SESSION_ID" ]] && [[ "$SESSION_ID" == "$LOCK_SESSION" ]]; then
