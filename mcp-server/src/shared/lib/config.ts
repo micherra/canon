@@ -38,8 +38,9 @@ async function loadCanonConfig(projectDir: string): Promise<Record<string, unkno
     configCache = { projectDir, result, tick: currentTick };
     return result;
   } catch {
+    // best-effort: config.json exists but contains invalid JSON; treat as unconfigured
     configCache = { projectDir, result: null, tick: currentTick };
-    return null; // invalid JSON
+    return null;
   }
 }
 
@@ -48,6 +49,7 @@ export const DEFAULT_LAYER_MAPPINGS: Record<string, string[]> = {
   api: ["api", "routes", "controllers"],
   data: ["db", "data", "repositories", "prisma"],
   domain: ["services", "domain", "models"],
+  hooks: ["hooks/**"],
   infra: ["infra", "deploy", "terraform", "docker"],
   shared: ["utils", "lib", "shared", "types"],
   ui: ["app", "components", "pages", "views"],

@@ -74,7 +74,7 @@ Low-level utility modules. Each file is a focused helper with no cross-context k
 **`shared/` is not a general dumping ground.** The gravity well failure mode for a shared kernel is accumulating types and logic that belong elsewhere. Apply this rule strictly:
 
 - **If a type is used by only one context, it belongs in that context.** Move it there.
-- **Domain logic does not belong here.** Flow execution, orchestration state machines, drift analytics, graph traversal, and PR review logic all belong in their respective features.
+- **Domain logic does not belong here.** Orchestration journal and workspace lifecycle, drift analytics, graph traversal, and PR review logic all belong in their respective features.
 - **Context-specific schemas do not belong here.** `ReviewEntry` belongs here because it crosses the pr-review/diagnostics/orchestration boundary. A schema used only by the `orchestration` feature belongs in `features/orchestration/`.
 - **Framework glue does not belong here.** MCP SDK integration code, database connection setup, and HTTP client configuration belong in `platform/` or in the feature that owns them.
 

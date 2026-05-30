@@ -96,6 +96,7 @@ export function computeComplianceTrend(
       const honored = JSON.parse(row.honored) as string[];
       return honored.includes(principleId);
     } catch {
+      // Malformed JSON in honored column — exclude row from trend computation
       return false;
     }
   });

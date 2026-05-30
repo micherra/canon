@@ -138,6 +138,7 @@ function readArtifactsFromSubdir(
   try {
     subdirStat = statSync(subdirPath);
   } catch {
+    // Subdir inaccessible — skip
     return [];
   }
   if (!subdirStat.isDirectory()) return [];
@@ -146,6 +147,7 @@ function readArtifactsFromSubdir(
   try {
     entries = readdirSync(subdirPath);
   } catch {
+    // Directory listing failed — skip subdir
     return [];
   }
 
@@ -174,6 +176,7 @@ function readSubdirEntry(
   try {
     fileStat = statSync(filePath);
   } catch {
+    // File disappeared between readdir and stat — skip
     return null;
   }
   if (!fileStat.isFile()) return null;
@@ -204,6 +207,7 @@ function getDefaultArtifactTypes(archivePath: string): string[] {
     }
     return types;
   } catch {
+    // Archive directory unreadable — return empty type list
     return [];
   }
 }
@@ -229,6 +233,7 @@ function readFileSafe(
   try {
     size = statSync(filePath).size;
   } catch {
+    // Stat failed — skip file
     return null;
   }
 
@@ -240,6 +245,7 @@ function readFileSafe(
   try {
     content = readFileSync(filePath, "utf-8");
   } catch {
+    // File read failed — skip artifact
     return null;
   }
 

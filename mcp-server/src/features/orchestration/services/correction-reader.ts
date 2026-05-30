@@ -57,7 +57,13 @@ function parseCorrectionFile(
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[canon] correction-reader: malformed JSON in",
+      filePath,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 

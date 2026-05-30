@@ -6,32 +6,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUARD="$SCRIPT_DIR/destructive-guard.sh"
+HOOK="$SCRIPT_DIR/destructive-guard.sh"
+GUARD="$HOOK"  # keep alias for clarity in test descriptions
 
-PASS=0
-FAIL=0
-
-run_test() {
-  local description="$1"
-  local expected_exit="$2"
-  local command_json="$3"
-  local custom_pwd="${4:-}"
-
-  # Use custom_pwd if provided, otherwise a non-worktree default so tests
-  # are deterministic regardless of where the harness runs.
-  local cwd="${custom_pwd:-/home/user/project}"
-  local actual_exit=0
-  echo "$command_json" | CANON_GUARD_CWD="$cwd" bash "$GUARD" >/dev/null 2>&1 || actual_exit=$?
-
-  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
-    echo "  PASS: $description"
-    PASS=$((PASS + 1))
-  else
-    echo "  FAIL: $description"
-    echo "        expected exit=$expected_exit, got exit=$actual_exit"
-    FAIL=$((FAIL + 1))
-  fi
-}
+# shellcheck source=hooks/test-helpers.sh
+source "$SCRIPT_DIR/test-helpers.sh"
 
 make_input() {
   local cmd="$1"
@@ -53,7 +32,7 @@ echo ""
 echo "-- Non-destructive commands (should pass) --"
 run_test "git status passes"                          0 "$(make_input 'git status')"
 run_test "git log passes"                             0 "$(make_input 'git log --oneline -5')"
-run_test "git commit passes"                          0 "$(make_input 'git commit -m "fix: thing"')"
+run_test "git commit passes"                          0 '{"command":"git commit -m fix-thing"}'
 run_test "git push passes"                            0 "$(make_input 'git push origin main')"
 run_test "git fetch passes"                           0 "$(make_input 'git fetch --all')"
 run_test "git branch -d passes (safe delete)"         0 "$(make_input 'git branch -d feature/my-branch')"
@@ -230,6 +209,138 @@ run_test "nested: git branch -D feature/x blocks" \
 
 run_test "nested: git -C .canon/worktrees/slug reset --hard passes" \
   0 "$(make_nested_input 'git -C .canon/worktrees/my-slug reset --hard HEAD')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Fail-closed: jq unavailable — destructive command still BLOCKED (exit 2)
+# Shadow jq with a stub that returns 127 so the hook must fall back to
+# grep/sed extraction (via canon_extract_command) and still block.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Fail-closed: jq absent — destructive command still blocked (exit 2) --"
+
+run_test_no_jq() {
+  local description="$1"
+  local expected_exit="$2"
+  local command_json="$3"
+  local custom_pwd="${4:-/home/user/project}"
+
+  local actual_exit=0
+  # Create a temp dir with a fake jq that exits 127 (not found)
+  local fake_bin
+  fake_bin=$(mktemp -d)
+  printf '#!/bin/bash\nexit 127\n' > "$fake_bin/jq"
+  chmod +x "$fake_bin/jq"
+  # Run the hook with the fake jq at the front of PATH
+  echo "$command_json" | CANON_GUARD_CWD="$custom_pwd" PATH="$fake_bin:$PATH" bash "$GUARD" >/dev/null 2>&1 || actual_exit=$?
+  rm -rf "$fake_bin"
+
+  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+run_test_no_jq "jq absent: git reset --hard still blocks (exit 2)" \
+  2 "$(make_input 'git reset --hard')" "$NON_WT_PWD"
+
+run_test_no_jq "jq absent: nested git reset --hard still blocks (exit 2)" \
+  2 "$(make_nested_input 'git reset --hard HEAD')" "$NON_WT_PWD"
+
+run_test_no_jq "jq absent: git clean -f still blocks (exit 2)" \
+  2 "$(make_input 'git clean -f')" "$NON_WT_PWD"
+
+run_test_no_jq "jq absent: git branch -D feature/x still blocks (exit 2)" \
+  2 "$(make_input 'git branch -D feature/x')" "$NON_WT_PWD"
+
+# Fail-closed: payload with no "command" key — should pass (exit 0), not block
+echo ""
+echo "-- Fail-closed: no command field in payload — pass (exit 0) --"
+
+run_test_no_jq "jq absent: payload without command field passes (exit 0)" \
+  0 '{"tool":"Write","tool_input":{"file_path":"/tmp/foo.txt","content":"hello"}}' "$NON_WT_PWD"
+
+run_test "payload without command field passes (exit 0)" \
+  0 '{"tool":"Write","tool_input":{"file_path":"/tmp/foo.txt","content":"hello"}}' "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Fail-closed: truly absent jq (grep/sed fallback) + escaped-quote payload
+#
+# SECURITY: The run_test_no_jq helper prepends a fake jq that exits 127 to
+# PATH — this makes command -v jq SUCCEED, so the jq branch runs (and
+# returns empty on failure → fail-closed via normal path). That does NOT
+# exercise the grep/sed fallback.
+#
+# These tests build a temp bin dir with symlinks to grep/sed/git/bash/etc.
+# but NOT jq, so that command -v jq returns non-zero and the grep/sed
+# branch of canon_extract_command runs.  They assert that an escaped-quote
+# command value does NOT bypass the guard: must block (exit 2).
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Fail-closed: truly absent jq (grep/sed fallback) + escaped-quote payload --"
+
+# Build a minimal PATH: symlinks to needed tools, excluding jq.
+# Use /usr/bin/which to get the real binary path (not a shell function wrapper).
+_DG_TMPBIN=$(mktemp -d)
+for _tool in grep sed awk head bash git printf tr cat echo dirname basename; do
+  _tp=$(/usr/bin/which "$_tool" 2>/dev/null || true)
+  if [[ -n "$_tp" ]]; then
+    ln -sf "$_tp" "$_DG_TMPBIN/$_tool" 2>/dev/null || true
+  fi
+done
+
+run_test_truly_no_jq() {
+  local description="$1"
+  local expected_exit="$2"
+  local command_json="$3"
+  local custom_pwd="${4:-/home/user/project}"
+
+  local actual_exit=0
+  echo "$command_json" | CANON_GUARD_CWD="$custom_pwd" PATH="$_DG_TMPBIN" bash "$GUARD" >/dev/null 2>&1 || actual_exit=$?
+
+  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# Escaped-quote prefix — the canonical bypass payload identified in the security assessment.
+# The command value starts with \" which the grep/sed fallback mis-parses as lone backslash.
+# Must block (exit 2).
+run_test_truly_no_jq \
+  "truly-absent-jq: escaped-quote destructive payload blocks (exit 2)" \
+  2 \
+  '{"tool_input":{"command":"\"git checkout -- ."}}' \
+  "$NON_WT_PWD"
+
+run_test_truly_no_jq \
+  "truly-absent-jq: escaped-quote nested reset --hard blocks (exit 2)" \
+  2 \
+  '{"tool_input":{"command":"\"git clean -fd"}}' \
+  "$NON_WT_PWD"
+
+# Control: a plain (no backslash) destructive command with truly absent jq still blocks.
+run_test_truly_no_jq \
+  "truly-absent-jq: plain destructive command still blocks (exit 2)" \
+  2 \
+  '{"command":"git clean -f"}' \
+  "$NON_WT_PWD"
+
+# Control: a genuine no-command payload (truly absent jq) still passes (no over-block).
+run_test_truly_no_jq \
+  "truly-absent-jq: no command field still passes (exit 0)" \
+  0 \
+  '{"tool":"Write","tool_input":{"file_path":"/tmp/x.txt","content":"ok"}}' \
+  "$NON_WT_PWD"
+
+rm -rf "$_DG_TMPBIN"
 
 # -----------------------------------------------------------------------
 # Summary

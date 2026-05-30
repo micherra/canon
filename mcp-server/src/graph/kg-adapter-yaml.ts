@@ -108,8 +108,13 @@ export const yamlAdapter: LanguageAdapter = {
         return { entities: [], importSpecifiers: [], intraFileEdges: [] };
       }
       data = parsed as Record<string, unknown>;
-    } catch {
-      // Return empty result on parse errors
+    } catch (err) {
+      console.warn(
+        "[canon] kg-adapter-yaml: YAML parse failed for",
+        filePath,
+        ":",
+        err instanceof Error ? err.message : err,
+      );
       return { entities: [], importSpecifiers: [], intraFileEdges: [] };
     }
 

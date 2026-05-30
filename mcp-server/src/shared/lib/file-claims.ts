@@ -59,6 +59,7 @@ export const readClaims = (projectDir: string): ClaimsFile => {
   try {
     parsed = JSON.parse(raw);
   } catch {
+    // best-effort: claims.json is corrupt; start fresh (non-blocking claim tracking)
     return emptyFile();
   }
 

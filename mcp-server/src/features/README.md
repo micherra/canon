@@ -11,7 +11,7 @@ features/
 ├── diagnostics/        # Drift analytics — flow runs, compliance rates, drift reports
 ├── file-context/       # File context — structural metrics, imports, blast radius
 ├── knowledge-graph/    # Codebase graph — scanning, KG queries, git intelligence
-├── orchestration/      # Flow execution — state machine runtime and all harness tools
+├── orchestration/      # Orchestration runtime — journal, workspace lifecycle, and all harness tools
 ├── pr-review/          # PR review — change analysis, violations, review persistence
 ├── principles/         # Principles — loading, matching, compliance queries
 └── prompt-pipeline/    # Prompt assembly — worktree settings, spawn enrichment
@@ -33,7 +33,7 @@ Codebase graph construction and querying. Owns `codebase_graph` and `graph_query
 
 ### `orchestration/`
 
-Flow execution engine and all Canon harness tools. The largest feature — owns the state machine engine (`engine/`), every orchestration tool (`tools/`), and the services that support them (`services/`). See `orchestration/README.md` for full details.
+Orchestration runtime and all Canon harness tools. Owns every orchestration tool (`tools/`) — workspace lifecycle, journal (`log_step` / `batch_log_steps`), transcript capture, artifact writing, agent skill resolution — and the services that support them (`services/`). See `orchestration/README.md` for full details.
 
 ### `pr-review/`
 

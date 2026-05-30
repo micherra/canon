@@ -237,6 +237,7 @@ export function readEscalationState(
     const parsed: unknown = JSON.parse(raw);
     return isEscalationState(parsed) ? parsed : null;
   } catch {
+    // Malformed JSON in escalation state metrics — treat as no prior escalation
     return null;
   }
 }

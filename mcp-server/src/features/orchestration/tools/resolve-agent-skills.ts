@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import { buildAreaMemorySection } from "@features/diagnostics/services/area-memory-enrichment.ts";
+import { buildHotFileSection } from "@features/diagnostics/services/hot-file-detection.ts";
 import { buildPitfallsSection } from "@features/diagnostics/services/pitfall-enrichment.ts";
 import {
   formatCorrectionsSection,
@@ -109,6 +111,7 @@ function tryReadSkill(
     const content = readFileSync(path, "utf-8");
     return { content, path };
   } catch {
+    // best-effort: skill file may not exist (e.g. domain primer not installed); caller handles null
     return null;
   }
 }
@@ -150,6 +153,70 @@ function logPitfallAuditEvent(workspace: string, agentName: string, pitfallCount
       err instanceof Error ? err.message : err,
     );
   }
+}
+
+/**
+ * Build area memory and hot-file sections, and log audit event when data found.
+ * Fail-open: individual section errors produce empty strings; audit errors are warned.
+ */
+function buildAreaEnrichmentSections(
+  filePaths: string[],
+  projectDir: string,
+  agentName: string,
+  workspace: string | undefined,
+): { areaMemorySection: string; hotFileSection: string } {
+  const { section: areaMemorySection, count: areaMemoryCount } = buildAreaMemorySection(
+    filePaths,
+    projectDir,
+  );
+  const { section: hotFileSection, count: hotFileCount } = buildHotFileSection(
+    filePaths,
+    projectDir,
+  );
+
+  if ((areaMemoryCount > 0 || hotFileCount > 0) && workspace) {
+    try {
+      const store = getExecutionStore(workspace);
+      store.appendEvent("area_enrichment_injected", {
+        agent: agentName,
+        area_memory_count: areaMemoryCount,
+        hot_file_count: hotFileCount,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn("[area-enrichment] audit log failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  return { areaMemorySection, hotFileSection };
+}
+
+/**
+ * Build all feed-forward enrichment sections (pitfalls + area memory + hot-file caution).
+ * Extracted to reduce cognitive complexity of resolveAgentSkills.
+ */
+function buildFeedForwardSections(
+  filePaths: string[],
+  projectDir: string,
+  agentName: string,
+  workspace: string | undefined,
+): { pitfallsSection: string; areaMemorySection: string; hotFileSection: string } {
+  const { section: pitfallsSection, count: pitfallCount } = buildPitfallsSection(
+    filePaths,
+    projectDir,
+  );
+  if (pitfallsSection && workspace) {
+    logPitfallAuditEvent(workspace, agentName, pitfallCount);
+  }
+
+  const { areaMemorySection, hotFileSection } = buildAreaEnrichmentSections(
+    filePaths,
+    projectDir,
+    agentName,
+    workspace,
+  );
+
+  return { areaMemorySection, hotFileSection, pitfallsSection };
 }
 
 function buildCorrectionsSection(projectDir: string | undefined): string {
@@ -212,20 +279,21 @@ export async function resolveAgentSkills(
   const basePrompt = formatPreloadPrompt(skills);
   const correctionsSection = buildCorrectionsSection(projectDir);
 
-  // Build pitfalls section when filePaths provided (fail-open)
+  // Build feed-forward enrichment sections when filePaths provided (fail-open)
   const filePaths = options?.filePaths ?? [];
-  const { section: pitfallsSection, count: pitfallCount } =
+  const { pitfallsSection, areaMemorySection, hotFileSection } =
     filePaths.length > 0 && projectDir
-      ? buildPitfallsSection(filePaths, projectDir)
-      : { count: 0, section: "" };
+      ? buildFeedForwardSections(filePaths, projectDir, agentName, options?.workspace)
+      : { areaMemorySection: "", hotFileSection: "", pitfallsSection: "" };
 
-  // Audit log when pitfalls found and workspace provided
-  if (pitfallsSection && options?.workspace) {
-    logPitfallAuditEvent(options.workspace, agentName, pitfallCount);
-  }
-
-  // Compose preload_prompt: base → corrections → pitfalls
-  const sections = [basePrompt, correctionsSection, pitfallsSection].filter(Boolean);
+  // Compose preload_prompt: base → corrections → pitfalls → area memory → hot-file caution
+  const sections = [
+    basePrompt,
+    correctionsSection,
+    pitfallsSection,
+    areaMemorySection,
+    hotFileSection,
+  ].filter(Boolean);
   const preload_prompt = sections.join("\n\n");
 
   const result: ResolveAgentSkillsResult = {

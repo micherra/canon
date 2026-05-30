@@ -51,8 +51,8 @@ Manages `.canon/claims.json` — tracks which files are targeted by active workf
 - Atomic writes prevent partial reads under concurrent access
 
 **Integration points (do not call directly — orchestration tools handle this):**
-- `update_board({ action: "set_metadata", metadata: { affected_files: "..." } })` → calls `registerClaims`
-- `update_board({ action: "complete_flow" })` → calls `releaseClaims`
+- `write_plan_index` (architect's affected-file list) and `init_workspace` flow → calls `registerClaims`
+- `finalize_workspace` → calls `releaseClaims`
 - `init_workspace` preflight → calls `checkClaimOverlaps` and surfaces warnings
 
 ---
@@ -76,6 +76,17 @@ Manages `.canon/janitor.lock` — a PID + mtime lock that prevents concurrent ja
 
 ---
 
+---
+
+### `subsystem-key.ts` — Area Memory Subsystem Key Derivation
+
+**Exports:**
+- `deriveSubsystemKey(filePath: string): string` — strips `mcp-server/src/`, `tools/`, `services/`, and `__tests__/` path segments to produce stable subsystem keys like `features/orchestration` or `platform/storage/drift`; used by `AreaMemoryDao` and all write paths that store area observations.
+
+Added 2026-05-29.
+
+---
+
 ## Not Standalone MCP Tools
 
-These modules are consumed by `features/orchestration/` tools. Agents do not call them via MCP — they are wired into `init_workspace`, `update_board`, and the janitor service automatically.
+These modules are consumed by `features/orchestration/` tools. Agents do not call them via MCP — they are wired into `init_workspace`, `finalize_workspace`, and the janitor service automatically.

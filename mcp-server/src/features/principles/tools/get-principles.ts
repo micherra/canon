@@ -72,8 +72,14 @@ function loadKgFileData(dbPath: string, filePath: string): KgFileData {
     const computed_tags = tagRows.length > 0 ? tagRows.map((r) => r.tag) : undefined;
 
     return { computed_tags, graph_context };
-  } catch {
-    // KG unavailable — graceful degradation
+  } catch (err) {
+    // best-effort: KG context is optional tag/graph enrichment; principles still matched
+    console.warn(
+      "[canon] get-principles: KG unavailable for",
+      filePath,
+      ":",
+      err instanceof Error ? err.message : err,
+    );
     return {};
   } finally {
     db?.close();
@@ -175,8 +181,12 @@ function buildContextByFile(
       });
       result[filePath] = metrics ? metricsToContext(metrics) : undefined;
     }
-  } catch {
-    // KG unavailable — all entries remain undefined
+  } catch (err) {
+    // best-effort: batch KG metrics are optional enrichment; principles matched without them
+    console.warn(
+      "[canon] get-principles: batch KG metrics unavailable:",
+      err instanceof Error ? err.message : err,
+    );
   } finally {
     db?.close();
   }

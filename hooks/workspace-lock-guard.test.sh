@@ -7,9 +7,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUARD="$SCRIPT_DIR/workspace-lock-guard.sh"
+HOOK="$GUARD"  # required by test-helpers.sh shared helpers
 
-PASS=0
-FAIL=0
+# shellcheck source=hooks/test-helpers.sh
+source "$SCRIPT_DIR/test-helpers.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers

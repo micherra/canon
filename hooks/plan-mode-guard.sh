@@ -25,7 +25,7 @@ CANON: Planning mode intercepted. Native planning bypasses Canon's orchestration
 
 Route this through Canon instead: classify as a **plan** intent and spawn the architect in interactive mode. The architect will propose approaches, ask for your input, and persist the plan to the workspace where downstream agents can use it.
 
-To proceed: treat the user's request as a plan intent (build with --plan-only). Drive the architect via the normal state machine with HITL loops for user feedback.
+To proceed: treat the user's request as a plan intent (build with --plan-only). Drive the architect via the normal orchestration sequence with HITL loops for user feedback.
 EOF
 
 exit 2

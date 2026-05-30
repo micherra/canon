@@ -159,7 +159,15 @@ async function loadMdFilesFromDir(dir: string): Promise<Principle[]> {
     const mdFiles = files.filter((f) => f.endsWith(".md"));
     const principles = await Promise.all(mdFiles.map((f) => loadPrincipleFile(join(dir, f))));
     return principles.filter((p) => p.id !== "");
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn(
+        "[canon] matcher: failed to load principles from",
+        dir,
+        ":",
+        err instanceof Error ? err.message : err,
+      );
+    }
     return [];
   }
 }
@@ -320,12 +328,21 @@ async function getFileMtimes(dir: string): Promise<string[]> {
           const s = await stat(join(dir, f));
           return `${f}:${s.mtimeMs}`;
         } catch {
+          // best-effort: stat failure for cache key produces a stable placeholder
           return `${f}:0`;
         }
       }),
     );
     return stats;
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn(
+        "[canon] matcher: failed to read directory for cache key computation",
+        dir,
+        ":",
+        err instanceof Error ? err.message : err,
+      );
+    }
     return [];
   }
 }

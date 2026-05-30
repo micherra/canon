@@ -301,6 +301,7 @@ function findPruneCandidates(
     try {
       mtimeMs = statSync(slugPath).mtimeMs;
     } catch {
+      // Directory disappeared or is unreadable — skip this candidate
       continue;
     }
     if (ctx.now - mtimeMs < ctx.abandonedMaxAgeMs) continue;

@@ -45,6 +45,7 @@ export async function scanSourceFiles(
     try {
       return await readdir(dir, { withFileTypes: true });
     } catch {
+      // best-effort: directory may be inaccessible (permissions, deleted); skip it
       return null;
     }
   }
@@ -53,6 +54,7 @@ export async function scanSourceFiles(
     try {
       return await realpath(dir);
     } catch {
+      // best-effort: symlink target may not exist; skip this directory entry
       return null;
     }
   }
