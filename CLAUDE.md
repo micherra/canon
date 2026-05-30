@@ -213,14 +213,19 @@ Run sequentially after all tasks: review → context-sync → ship → learn. Th
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
 **Reconciliation-on-resume (cliff detection + recovery).** Before continuing,
-call `reconcile_workspace({ workspace })`. For each entry in `incomplete_steps`
-(a `started`/`planned` step whose declared artifacts are missing on disk — an
-agent that stopped before producing its artifact):
+call `reconcile_workspace({ workspace })`. Each entry in `incomplete_steps` is a
+`started`/`planned` step that either (a) has a declared artifact missing on disk
+(`missing_artifacts`), or (b) has an artifact present but still a `## Status:
+Partial` / `IN_PROGRESS` skeleton (`partial_artifacts`) — an agent that stopped
+before producing or finishing its artifact. For each entry:
 1. **Harvest** the dead agent's transcript: call `capture_transcript({ workspace,
-   step_id, agent_type, agent_id, source_path?, persist_path: true })`. Use the
-   `agent_id` from the original Agent spawn result if available; otherwise omit
-   it and let `findAgentTranscript` scan. `persist_path: true` makes the
-   recovered transcript findable by `get_transcript`.
+   step_id, agent_type, agent_id?, source_path?, persist_path: true })`. Pass the
+   `agent_id` from the original Agent spawn result (or the journal) when
+   available; if the agent died before its completion was logged, pass
+   `source_path` if known. If neither is available, capture is a best-effort
+   no-op (it returns a warning, never an error) — proceed to re-spawn regardless.
+   `persist_path: true` makes the recovered transcript findable by
+   `get_transcript`.
 2. **Re-spawn** the same agent type using the Re-spawn Enrichment Protocol,
    passing the harvested transcript as prior-artifacts context plus the
    completed-files / no-duplicate instructions.

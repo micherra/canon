@@ -13,8 +13,9 @@ function registerCaptureTranscriptTool(): void {
       inputSchema: {
         agent_id: z
           .string()
+          .optional()
           .describe(
-            "Agent ID from the Agent tool result (e.g. 'a10bf0a3a2543f7b5'). Used to locate the source JSONL file.",
+            "Agent ID from the Agent tool result (e.g. 'a10bf0a3a2543f7b5'). Used to locate the source JSONL via glob scan. Optional: omit it in the cliff-recovery path when no agent_id is available and pass source_path instead. With neither, capture is a best-effort no-op (warning, never an error).",
           ),
         agent_type: z
           .string()

@@ -114,6 +114,106 @@ describe("reconcileWorkspace", () => {
     expect(result.incomplete_steps).toHaveLength(0);
   });
 
+  it("started step with present-but-Partial skeleton => flagged via partial_artifacts", async () => {
+    const workspace = makeTmpDir();
+    mkdirSync(join(workspace, "plans", "slug"), { recursive: true });
+    writeFileSync(
+      join(workspace, "plans", "slug", "DESIGN.md"),
+      "# Design\n\n## Status: Partial\n\n## Approach\n",
+      "utf-8",
+    );
+
+    const journal: Journal = {
+      steps: [
+        {
+          agent_type: "architect",
+          artifacts_expected: ["plans/slug/DESIGN.md"],
+          started_at: new Date().toISOString(),
+          status: "started",
+          step_id: "design",
+        },
+      ],
+      version: 1,
+      workspace,
+    };
+    writeJournal(workspace, journal);
+
+    const result = await reconcileWorkspace({ workspace });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.needs_recovery).toBe(true);
+    expect(result.incomplete_steps).toHaveLength(1);
+    const step = result.incomplete_steps[0];
+    expect(step.step_id).toBe("design");
+    expect(step.missing_artifacts).toHaveLength(0);
+    expect(step.partial_artifacts).toContain("plans/slug/DESIGN.md");
+  });
+
+  it("started step with present IN_PROGRESS reviewer stub => flagged via partial_artifacts", async () => {
+    const workspace = makeTmpDir();
+    mkdirSync(join(workspace, "reviews"), { recursive: true });
+    writeFileSync(
+      join(workspace, "reviews", "REVIEW.md"),
+      "---\nverdict: IN_PROGRESS\n---\n\n## Canon Review — Verdict: IN_PROGRESS\n",
+      "utf-8",
+    );
+
+    const journal: Journal = {
+      steps: [
+        {
+          agent_type: "reviewer",
+          artifacts_expected: ["reviews/REVIEW.md"],
+          started_at: new Date().toISOString(),
+          status: "started",
+          step_id: "review",
+        },
+      ],
+      version: 1,
+      workspace,
+    };
+    writeJournal(workspace, journal);
+
+    const result = await reconcileWorkspace({ workspace });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.needs_recovery).toBe(true);
+    expect(result.incomplete_steps[0]?.partial_artifacts).toContain("reviews/REVIEW.md");
+  });
+
+  it("started step with present, FINAL artifact (no skeleton marker) => NOT flagged", async () => {
+    const workspace = makeTmpDir();
+    mkdirSync(join(workspace, "reviews"), { recursive: true });
+    writeFileSync(
+      join(workspace, "reviews", "REVIEW.md"),
+      "---\nverdict: CLEAN\n---\n\n## Canon Review — Verdict: CLEAN\n\nAll good.\n",
+      "utf-8",
+    );
+
+    const journal: Journal = {
+      steps: [
+        {
+          agent_type: "reviewer",
+          artifacts_expected: ["reviews/REVIEW.md"],
+          started_at: new Date().toISOString(),
+          status: "started",
+          step_id: "review",
+        },
+      ],
+      version: 1,
+      workspace,
+    };
+    writeJournal(workspace, journal);
+
+    const result = await reconcileWorkspace({ workspace });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.needs_recovery).toBe(false);
+    expect(result.incomplete_steps).toHaveLength(0);
+  });
+
   it("planned step with empty artifacts_expected => NOT flagged", async () => {
     const workspace = makeTmpDir();
     const journal: Journal = {

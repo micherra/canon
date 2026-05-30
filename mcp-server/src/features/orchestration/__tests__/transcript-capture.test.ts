@@ -406,4 +406,44 @@ describe("captureTranscript — source_path and persist_path (harvest-02)", () =
       process.env.HOME = originalHome;
     }
   });
+
+  it("agent_id omitted + source_path provided → succeeds (cliff-recovery path)", async () => {
+    const workspace = makeTmpDir();
+    setupWorkspace(workspace, makeMinimalFlow());
+
+    const fakeHome = makeTmpDir();
+    const sourcePath = join(fakeHome, "no-agent-id-source.jsonl");
+    const entries = makeMinimalCCEntries();
+    writeFileSync(sourcePath, entries.map((e) => JSON.stringify(e)).join("\n"), "utf-8");
+
+    // No agent_id at all — source_path alone must drive the capture.
+    const result = await captureTranscript({
+      agent_type: "architect",
+      persist_path: true,
+      source_path: sourcePath,
+      step_id: "design",
+      workspace,
+    });
+
+    assertOk(result);
+    expect(result.warning).toBeUndefined();
+    expect(result.entry_count).toBe(2);
+    expect(result.transcript_path).not.toBe("");
+  });
+
+  it("agent_id and source_path both omitted → best-effort warning, never an error", async () => {
+    const workspace = makeTmpDir();
+    setupWorkspace(workspace, makeMinimalFlow());
+
+    const result = await captureTranscript({
+      agent_type: "architect",
+      step_id: "design",
+      workspace,
+    });
+
+    assertOk(result);
+    expect(result.warning).toContain("no source_path or agent_id provided");
+    expect(result.entry_count).toBe(0);
+    expect(result.transcript_path).toBe("");
+  });
 });
