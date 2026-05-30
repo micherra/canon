@@ -2,6 +2,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import { isPathContained } from "@shared/lib/worktree-guard.ts";
@@ -13,6 +14,14 @@ export type CaptureTranscriptInput = {
   step_id: string;
   agent_type: string;
   agent_id: string;
+  /** Absolute path to the source CC agent JSONL (e.g. the SubagentStop payload's
+   * agent_transcript_path). Used as the primary source; when omitted, the
+   * agent_id glob scan is the fallback. */
+  source_path?: string;
+  /** When true, persist the captured transcript path via setTranscriptPath so
+   * get_transcript can resolve it for a non-completed step. Recovery callers
+   * set this true; the completion path leaves it unset. */
+  persist_path?: boolean;
 };
 
 export type CaptureTranscriptResult = {
@@ -66,7 +75,7 @@ export async function captureTranscript(
 ): Promise<ToolResult<CaptureTranscriptResult>> {
   const { workspace, step_id, agent_type, agent_id } = input;
 
-  const sourcePath = await findAgentTranscript(agent_id);
+  const sourcePath = input.source_path ?? (await findAgentTranscript(agent_id));
   if (!sourcePath) {
     return toolOk({
       entry_count: 0,
@@ -112,6 +121,14 @@ export async function captureTranscript(
       transcript_path: "",
       warning: `Failed to write transcript: ${String(err)}`,
     });
+  }
+
+  if (input.persist_path) {
+    try {
+      getExecutionStore(workspace).setTranscriptPath(step_id, outputPath);
+    } catch {
+      // best-effort — the transcript was written; do not fail capture on persist error. Fail-open.
+    }
   }
 
   return toolOk({

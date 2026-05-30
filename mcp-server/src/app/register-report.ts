@@ -19,6 +19,18 @@ function registerCaptureTranscriptTool(): void {
         agent_type: z
           .string()
           .describe("Agent type label (e.g. 'engineer'). Used in the output filename."),
+        persist_path: z
+          .boolean()
+          .optional()
+          .describe(
+            "When true, persist the captured transcript path via setTranscriptPath so get_transcript can resolve it for a non-completed step. Recovery callers set this true; the completion path leaves it unset.",
+          ),
+        source_path: z
+          .string()
+          .optional()
+          .describe(
+            "Absolute path to the source CC agent JSONL (e.g. the SubagentStop payload's agent_transcript_path). Used as the primary source; when omitted, the agent_id glob scan is the fallback.",
+          ),
         step_id: z.string().describe("Workflow step ID. Used in the output filename."),
         workspace: z.string().describe("Workspace path for this flow execution."),
       },
