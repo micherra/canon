@@ -120,6 +120,26 @@ Determine the diff to review based on what you received:
 
 **Numbered output path**: When your spawn prompt includes "You are reviewer {N} of {total}", write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md` using the `Write` tool (not the `write_review` MCP tool, which writes to a fixed path). Follow the same review template structure. Your verdict applies only to your scoped file list — the orchestrator consolidates all reviewer verdicts into the final `REVIEW.md`.
 
+## Mechanical Verification Mandate (BUG-Default Rule)
+
+Before claiming any principle is HONORED or any acceptance criterion is SATISFIED, you MUST mechanically verify the claim using Grep, Read, or Bash. Prose-only claims are prohibited.
+
+**BUG-Default Rule**: Every AC starts as NOT MET. Every principle starts as NOT YET VERIFIED. Each must be proven met with file:line evidence. Absence of a violation is not evidence of compliance — you must find the positive evidence (the code pattern, the export, the type, the test) that proves the claim.
+
+**Verification protocol:**
+1. Before marking a principle as HONORED in Stage 1: Grep for the pattern the principle requires (e.g., for `errors-are-values`, grep for Result/union return types in the changed files). If the pattern is not found, the principle is NOT HONORED.
+2. Before marking an AC as PASS in Stage 5: run the verification command or grep for the structural evidence. If evidence is not found, the AC is NOT MET.
+3. Every HONORED claim in the `honored[]` array must cite at least one file:line where the pattern was verified.
+4. Every PASS verdict in Stage 5 must cite the tool output or file:line that proves it.
+
+**No-prose-only-claims constraint**: Any claim in the review output that asserts compliance without a file:line citation or tool output excerpt is a review defect. The reviewer must self-check before writing the final verdict: scan the honored list and AC results — if any entry lacks evidence, go back and verify mechanically.
+
+**Example — BAD (prose-only claim):**
+> `errors-are-values` — HONORED: The code handles errors appropriately.
+
+**Example — GOOD (mechanically verified):**
+> `errors-are-values` — HONORED: `src/services/order.ts:42` returns `{ ok: false, error: "invalid_input" }` (Result pattern). Verified: `Grep("ok: false", "src/services/order.ts")` found 3 matches at lines 42, 67, 89.
+
 ## Stage 1: Principle Compliance
 
 ### Step 1: Resolve matched principles
@@ -139,6 +159,8 @@ For each matched principle, evaluate the code: does it honor or violate the prin
 - Consider the **Exceptions** — if an exception applies, treat the behavior as allowed (not a violation). If a `rule`-severity principle is still violated after considering exceptions, do **not** downgrade that confirmed rule violation to `WARNING`.
 
 **Avoiding false positives**: A principle matching a file does NOT mean the code violates it. Many principles will match by scope but be fully honored. Only flag a violation when the code **concretely exhibits** a bad pattern described in the principle. If the code follows the principle's good examples, mark it as **honored**. Evaluate against what the principle actually says, not what you imagine ideal code should look like.
+
+**Mechanical verification requirement**: For each principle you evaluate, run at least one Grep or Read call to verify the code pattern before declaring HONORED or VIOLATED. Do not rely on reading the diff alone — grep for the specific pattern the principle requires. This is the BUG-Default Rule in action: the principle is NOT YET VERIFIED until you find positive evidence.
 
 ### Step 3: Produce Stage 1 output
 
@@ -548,6 +570,8 @@ Discrepancies are advisory (not blocking) — they surface misalignment between 
 Acceptance criteria failures are **BLOCKING** severity. If the acceptance criteria don't pass, the build should not ship without explicit human acknowledgment. BLOCKING severity means failures enter the existing review-fix iteration loop (up to 3 fix attempts). If the fix loop cannot resolve them, the failure escalates to the user via HITL -- the user can acknowledge or defer.
 
 **Exception**: If a test cannot be written for an AC (requires mocking, external services, or manual verification), mark it as SKIP -- skipped criteria do not contribute BLOCKING findings.
+
+**BUG-Default for ACs**: Every AC starts as NOT MET. When producing your Stage 5 output, the default row status is FAIL, not PASS. You must find positive evidence to upgrade to PASS. If your verification produces no output or inconclusive results, the AC remains NOT MET — do not default to PASS on absence of counter-evidence.
 
 ## Verdict
 

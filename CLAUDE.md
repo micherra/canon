@@ -371,6 +371,23 @@ is missing → re-spawn → second-failure HITL) is unchanged.
 ### Post-Step Effects
 
 - **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict.
+- **After engineer (implement)**: Run summary-vs-diff contradiction check before proceeding to review. This is advisory — it does NOT block the build.
+  1. Read the engineer's `*-SUMMARY.md` from `${WORKSPACE}/plans/${slug}/`.
+  2. Run `git diff --name-only ${base_commit}..HEAD` in the worktree to get actual changed files.
+  3. Compare:
+     - **Files claimed vs files changed**: Every file listed in the SUMMARY's `### Files` section should appear in the git diff output. Files in the diff but not in the SUMMARY are "unreported changes." Files in the SUMMARY but not in the diff are "phantom claims."
+     - **Symbols claimed**: For each symbol the SUMMARY claims was added/removed/modified (in `### What Changed`), grep the diff output or the actual file to verify the symbol exists/was removed.
+  4. If discrepancies found, produce a structured advisory warning and present to user:
+     ```
+     Summary-vs-Diff Contradiction Check:
+     - Unreported changes: {files in diff but not in SUMMARY}
+     - Phantom claims: {files in SUMMARY but not in diff}
+     - Unverified symbols: {symbols claimed but not found in diff}
+     ```
+  5. Log the check result in `log_step` outcome as `summary_diff_check: { discrepancies: N, details: [...] }`.
+  6. Proceed to next step regardless of result — this check is advisory only.
+
+  **For multi-task DAG builds**: When multiple `*-SUMMARY.md` files exist, run the check for each summary independently. Aggregate all discrepancies into a single advisory warning.
 - **After architect**: spawn renderer (mandatory) → `${WORKSPACE}/artifacts/design.html`. Open in browser before plan approval HITL.
 - **After scribe**: verify the scribe committed its worktree edits before proceeding to ship. Run `git log --oneline -3` in the worktree and confirm a `docs(context-sync):` commit is present. If absent, recover: `git add -A && git commit -m "docs(context-sync): update CLAUDE.md, context.md, and CONVENTIONS.md" -m "Canon-Workflow: {slug}" -m "Canon-Agent: scribe" -m "Canon-State: context-sync"` in the worktree before proceeding.
 - **After each step**: call `record_agent_metrics` if agent didn't. Pass `agent_id` to `log_step` completion (transcript capture is automatic — no separate call needed).
