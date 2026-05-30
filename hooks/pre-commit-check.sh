@@ -15,7 +15,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract the command being run from the tool input
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty COMMAND triggers pass-through at line 22
 
 # If we couldn't extract a command, pass through
 if [[ -z "$COMMAND" ]]; then
@@ -28,7 +28,7 @@ if ! echo "$COMMAND" | grep -qE '\bgit\b.*\bcommit\b'; then
 fi
 
 # Get staged files
-STAGED_FILES=$(git diff --cached --name-only 2>/dev/null || true)
+STAGED_FILES=$(git diff --cached --name-only 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty STAGED_FILES triggers pass-through at line 34
 if [[ -z "$STAGED_FILES" ]]; then
   exit 0
 fi
@@ -45,23 +45,24 @@ while IFS= read -r file; do
   esac
 
   # Get staged content for this file
-  CONTENT=$(git show ":${file}" 2>/dev/null || true)
+  CONTENT=$(git show ":${file}" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty CONTENT triggers continue at line 51
   if [[ -z "$CONTENT" ]]; then continue; fi
 
   # Single-pass secret detection: check all patterns at once to avoid
   # spawning 5+ grep processes per staged file
   MATCHES=$(printf '%s\n' "$CONTENT" | grep -nEi -- \
     'AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY|(password|secret|api_key|apikey|secret_key|access_key|private_key|auth_token)[[:space:]]*[:=][[:space:]]*"[^"]{16,}"|sk_live_[a-zA-Z0-9]{20,}|(postgres|mysql|mongodb|redis)://[^:]+:[^@]{4,}@' \
-    2>/dev/null || true)
+    2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- grep no-match is expected; absence means no secrets detected
 
   if [[ -n "$MATCHES" ]]; then
     # Classify the matches for a readable report
     HITS=""
-    printf '%s\n' "$MATCHES" | grep -qEi -- 'AKIA[0-9A-Z]{16}' 2>/dev/null && HITS="${HITS}  - AWS access key pattern detected\n"
-    printf '%s\n' "$MATCHES" | grep -qEi -- '-----BEGIN.*PRIVATE KEY' 2>/dev/null && HITS="${HITS}  - Private key detected\n"
-    printf '%s\n' "$MATCHES" | grep -qEi -- '(password|secret|api_key|apikey|secret_key|access_key|private_key|auth_token)' 2>/dev/null && HITS="${HITS}  - Hardcoded credential in variable assignment\n"
-    printf '%s\n' "$MATCHES" | grep -qE -- 'sk_live_' 2>/dev/null && HITS="${HITS}  - Stripe live secret key detected\n"
-    printf '%s\n' "$MATCHES" | grep -qE -- '(postgres|mysql|mongodb|redis)://' 2>/dev/null && HITS="${HITS}  - Connection string with embedded password\n"
+    # DOCUMENTED FAIL-OPEN -- grep no-match is expected; classifying detected patterns
+    printf '%s\n' "$MATCHES" | grep -qEi -- 'AKIA[0-9A-Z]{16}' 2>/dev/null && HITS="${HITS}  - AWS access key pattern detected\n" # DOCUMENTED FAIL-OPEN
+    printf '%s\n' "$MATCHES" | grep -qEi -- '-----BEGIN.*PRIVATE KEY' 2>/dev/null && HITS="${HITS}  - Private key detected\n" # DOCUMENTED FAIL-OPEN
+    printf '%s\n' "$MATCHES" | grep -qEi -- '(password|secret|api_key|apikey|secret_key|access_key|private_key|auth_token)' 2>/dev/null && HITS="${HITS}  - Hardcoded credential in variable assignment\n" # DOCUMENTED FAIL-OPEN
+    printf '%s\n' "$MATCHES" | grep -qE -- 'sk_live_' 2>/dev/null && HITS="${HITS}  - Stripe live secret key detected\n" # DOCUMENTED FAIL-OPEN
+    printf '%s\n' "$MATCHES" | grep -qE -- '(postgres|mysql|mongodb|redis)://' 2>/dev/null && HITS="${HITS}  - Connection string with embedded password\n" # DOCUMENTED FAIL-OPEN
     SECRET_VIOLATIONS="${SECRET_VIOLATIONS}**${file}**:\n${HITS}\n"
   fi
 done <<< "$STAGED_FILES"

@@ -15,7 +15,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract the command being run from the tool input
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty COMMAND triggers pass-through at line 22
 
 # If we couldn't extract a command, pass through
 if [[ -z "$COMMAND" ]]; then
