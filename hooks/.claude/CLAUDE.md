@@ -40,7 +40,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `canon-agent-teams/postcompact-narrative-capture.sh` | PostCompact | Append compaction summary to active workspace journal for agent continuity |
 
 ## Conventions
-<!-- last-updated: 2026-05-27 -->
+<!-- last-updated: 2026-05-29 -->
 
 - Hooks are guardrails — they enforce safety without requiring agents to opt in
 - Each hook script must be executable and exit 0 (pass) or non-zero (block)
@@ -50,3 +50,4 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 - When testing secret-detection hooks, use all-zeros suffixes or EXAMPLE-pattern placeholders for key fixtures — not plausible real-looking values. GitHub push protection scans test files regardless of hook exclusion rules.
 - **Hook test files**: Hooks with 3+ decision branches, runtime state inspection (sqlite queries, filesystem checks), or bypass gate env vars MUST have a corresponding `.test.sh` file. Place it alongside the hook (e.g., `pre-commit-check.test.sh`) or in a `__tests__/` subdirectory. Tests must cover: bypass gate, all silent-pass paths, and all warning/blocking paths. Run with `bash hooks/<name>.test.sh`.
 - **Shell linting gate**: All hook scripts (excluding `*.test.sh` and `test-helpers.sh`) must pass `shellcheck`. Run `bash hooks/lint.sh` to check. This is part of the verify gate — it runs as the final step after `npm test`. The script fails closed (exits 1) if shellcheck is not installed. Fix all errors and warnings; style-level checks (SC2001, SC2016) and source-path noise (SC1091) are suppressed globally.
+- **Observable-failures compliance**: Every `|| true` / `2>/dev/null || true` suppression site in hook scripts must be one of two forms: (1) `# DOCUMENTED FAIL-OPEN -- <reason and downstream handler>` annotation on the preceding line for expected no-match or pass-through paths; (2) converted to `|| { >&2 echo "CANON WARNING: [hook-name] <message>"; VAR=""; }` for genuine failure paths where silent swallowing would hide bugs. No bare `|| true` without annotation is permitted.
