@@ -299,7 +299,19 @@ Spawn N reviewers in parallel via `Agent()`, each with:
 
 #### Phase 3 — Consolidate
 
-After all reviewers complete, read all `REVIEW-{N}.md` files and produce the final `REVIEW.md`: deduplicate violations by `(file_path, principle_id, line_number)`, union honored lists, sum scores, take worst-case verdict (BLOCKING > WARNING > CLEAN). Write using the `write_review` MCP tool.
+After all reviewers complete, read all `REVIEW-{N}.md` files and consolidate into the final `REVIEW.md`:
+
+1. **Deduplicate**: Group violations by `(file_path, principle_id, line_number)`. Violations found by 2+ reviewers are confirmed — include them directly.
+2. **Identify minority findings**: Violations found by only 1 of N reviewers are minority findings. These are NOT dismissed — they get a verification probe.
+3. **Verification probe for minority findings**: For each minority finding:
+   a. Spawn a focused verification reviewer (a single `canon:reviewer` subagent) with ONLY the specific file and the minority finding's description: "Verify whether the following finding is a true positive: {violation description} at {file:line}. Grep for the pattern and report CONFIRMED or DISMISSED with evidence."
+   b. If CONFIRMED: promote to the consolidated `REVIEW.md` as a verified finding. Tag as `[minority-verified]`.
+   c. If DISMISSED: log in the consolidated `REVIEW.md` under a `### Dismissed Minority Findings` section with the dismissal reason. Do NOT silently drop.
+   d. **Scope limit**: If more than 5 minority findings exist, prioritize by severity (BLOCKING > WARNING) and blast radius. Probe the top 5; log the remainder as `[minority-unverified]` in the dismissed section.
+4. **Union**: Merge honored lists from all reviewers.
+5. **Score**: Sum scores across reviewers, adjusting for deduplicated violations.
+6. **Verdict**: Take worst-case verdict across all reviewers (BLOCKING > WARNING > CLEAN). Minority-verified findings count toward the verdict.
+7. Write using the `write_review` MCP tool.
 
 ### Journal Protocol
 
@@ -358,6 +370,12 @@ is missing → re-spawn → second-failure HITL) is unchanged.
 - **Plan approval HTML**: If `${WORKSPACE}/artifacts/design.html` exists, call `present_artifact({ type: "design", slug, html, data: {}, workspace })` before presenting the text runbook for approval.
 - **Architect approval**: Present plan for user approval. If design.html exists, call `present_artifact` first. Architect decides execution strategy.
 - **Review verdict**: Present results. If not CLEAN, spawn engineer fix mode. If `review.html` exists, call `present_artifact({ type: "review", ... })` alongside text verdict.
+- **Adversarial re-review (supervised tier only)**: After an initial CLEAN verdict from the reviewer, optionally run an adversarial re-review pass. This is triggered only when the autonomy tier is `supervised` (check board metadata `autonomy_tier`). The adversarial pass uses a different prompt angle than the original review.
+  1. **Trigger**: After reviewer returns CLEAN and the autonomy tier is `supervised`.
+  2. **Prompt**: Spawn a second reviewer with the same files but a different framing: "You are conducting an adversarial re-review. Assume there are bugs the initial review missed. Your job is to find what was overlooked, not to confirm what was found. Focus on: (a) edge cases in error handling, (b) implicit assumptions about input shapes, (c) concurrency or ordering bugs, (d) security boundary gaps, (e) contract mismatches between producer and consumer. Lower your evidentiary bar — flag anything suspicious even if you cannot prove it is a bug."
+  3. **Verdict handling**: Adversarial findings follow the same BLOCKING/WARNING/CLEAN verdict path as regular findings. If BLOCKING or WARNING, enter the standard review-fix iteration loop. If CLEAN (adversarial pass also finds nothing), proceed.
+  4. **Presentation**: Present adversarial findings to the user as: "Adversarial re-review found {N} additional findings. Review?" The user can acknowledge or request fixes.
+  5. **Skip conditions**: Skip for `autonomous` and `light-touch` tiers. Skip for documentation-only diffs. Skip if the user says "skip adversarial" or the build is a fix-type (no new contracts).
 - **Review-fix iteration loop**: Re-spawn reviewer after each fix to verify ALL flagged violations addressed. Loop until CLEAN or WARNING. Max 3 fix→review iterations, then HITL. When reviewer flags `SUMMARY CORRECTION REQUIRED` discrepancies, include them in fix spawn prompt and instruct engineer to correct `*-SUMMARY.md`. (L1-only enforcement — no automated check.)
 - **Fix-mode SUMMARY obligation**: When a fix agent introduces behavioral changes beyond the original brief (new types, new exports, removed catch blocks, new tests), it must update the implement-step `*-SUMMARY.md`'s "What Changed", "Files", "Coverage Notes", and "Canon Compliance" sections before returning FIXED. The reviewer's `SUMMARY CORRECTION REQUIRED` flag indicates this was missed.
 - **WARNING advisory close-out**: After BLOCKING items resolved (or initial WARNING verdict), present advisory items to user: (a) **fix** — another engineer cycle; (b) **acknowledge** — log as accepted; (c) **defer** — note as follow-up. Occurs between review and ship. Does not apply if verdict is CLEAN.
