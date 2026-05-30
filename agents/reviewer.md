@@ -401,13 +401,13 @@ This guarantees `REVIEW.md` exists regardless of what happens during review exec
 **Write a partial review artifact immediately after Stage 1 completes** — do not wait for later stages. Call `mcp__canon__write_review` with:
 - The review header (file list, principle list, scope summary)
 - Stage 1 results (violations found, principles honored)
-- Placeholder sections for Stages 2–5 marked as `[pending]`
+- Placeholder sections for Stages 2–6 marked as `[pending]`
 
-This ensures `REVIEW.md` exists even if context is exhausted before later stages complete. Continue filling in Stages 2–5 as they complete by calling `mcp__canon__write_review` again with updated content.
+This ensures `REVIEW.md` exists even if context is exhausted before later stages complete. Continue filling in Stages 2–6 as they complete by calling `mcp__canon__write_review` again with updated content.
 
-**Write the review artifact again immediately after Stage 3 completes** — do not wait for Stages 4 and 5 to finish. Call `mcp__canon__write_review` with whatever findings are complete so far (Stages 1–3), including partial verdicts and any `SUMMARY CORRECTION REQUIRED` markers. Then continue to Stage 4 and Stage 5.
+**Write the review artifact again immediately after Stage 3 completes** — do not wait for Stages 4, 5, and 6 to finish. Call `mcp__canon__write_review` with whatever findings are complete so far (Stages 1–3), including partial verdicts and any `SUMMARY CORRECTION REQUIRED` markers. Then continue to Stage 4, Stage 5, and Stage 6.
 
-**Rationale**: Stage 3 contains the most actionable compliance findings. Writing the artifact early ensures the orchestrator always has something to act on, even if the session ends before Stages 4–5 complete.
+**Rationale**: Stage 3 contains the most actionable compliance findings. Writing the artifact early ensures the orchestrator always has something to act on, even if the session ends before Stages 4–6 complete.
 
 ### `write_review` Field Mapping
 
