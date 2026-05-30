@@ -73,7 +73,7 @@ export class AreaMemoryDao {
              injected_count, last_injected_at
       FROM area_observations
       WHERE subsystem_key = ?
-        AND created_at > datetime('now', '-7 days')
+        AND created_at > strftime('%Y-%m-%dT%H:%M:%f', 'now', '-7 days') || 'Z'
       ORDER BY created_at DESC
       LIMIT 10
     `);

@@ -134,6 +134,26 @@ describe("AreaMemoryDao 7-day expiry", () => {
     expect(results[0]!.content).toBe("Recent observation");
     db.close();
   });
+
+  test("filters out observation created exactly 7 days and 1 second ago (boundary regression)", () => {
+    // Regression: datetime('now', '-7 days') produces 'YYYY-MM-DD HH:MM:SS' (space separator),
+    // but created_at is stored as toISOString() with 'T' separator. 'T' > ' ' lexicographically,
+    // so the old WHERE clause would pass expired observations through at boundary.
+    // The fix uses strftime with 'T' separator to match ISO-8601 storage format.
+    const { dao, db } = makeAreaMemoryDb();
+
+    // 7 days + 1 second ago in ISO-8601 format (as stored by insertObservation)
+    const expiredDate = new Date(Date.now() - (7 * 24 * 60 * 60 + 1) * 1000).toISOString();
+
+    db.prepare(`
+      INSERT INTO area_observations (subsystem_key, content, source, created_at, injected_count)
+      VALUES (?, ?, ?, ?, 0)
+    `).run("platform/storage/drift", "Boundary expired observation", "reviewer", expiredDate);
+
+    const results = dao.getObservationsForSubsystems(["platform/storage/drift"]);
+    expect(results).toEqual([]);
+    db.close();
+  });
 });
 
 // ---- markInjected ----
