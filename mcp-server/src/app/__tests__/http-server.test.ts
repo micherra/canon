@@ -246,7 +246,9 @@ describe("PID file helpers", () => {
   it("writePidFile failure (unwritable dir) does not throw and logs to stderr", async () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     // Pass a non-existent/unwritable path
-    await expect(writePidFile("/nonexistent/path/that/does/not/exist", 3141)).resolves.not.toThrow();
+    await expect(
+      writePidFile("/nonexistent/path/that/does/not/exist", 3141),
+    ).resolves.not.toThrow();
     stderrSpy.mockRestore();
   });
 });

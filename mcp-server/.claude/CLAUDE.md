@@ -190,7 +190,7 @@ src/
 | `@modelcontextprotocol/sdk` | MCP server/client implementation |
 | `zod` | Runtime schema validation |
 | `gray-matter` | YAML frontmatter parsing in `parser.ts` |
-| `tsx` | TypeScript execution (dev) |
+| `tsx` | TypeScript execution (runtime dependency — server launched via boot.sh → tsx) |
 | `vitest` | Unit testing (dev) |
 
 **Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — added 2026-04-08: `injectWorktreeSettings(worktreePath, tools)` atomically writes `.claude/settings.local.json`; returns `false` on failure (never throws); idempotent. `profileToAllowRules` filters to `BUILTIN_CLAUDE_TOOLS`. `buildWorktreeSettings` produces `{ permissions: { allow: [] } }` for empty input.
@@ -237,12 +237,12 @@ src/
 **Recursive filesystem scanners — root threading**: Scanners that exclude paths by relative prefix must thread the original scan root through all recursive calls. Never update the root to the current directory. Pattern: `scanFn(currentDir, rootDir)` where `rootDir` never changes. The bug class (root-drift) is silent — exclusion logic passes at depth 0 and silently fails at depth 1+. See `tools/wiki-lint.ts` (`FindFilesCtx.originalRoot`) and `services/doc-gap-detect.ts` (`scanOne(currentDir, rootDir, excludeDirs)`) as reference implementations.
 
 ## Development
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-05-30 -->
 
 ```bash
 npm install          # Install dependencies
-npm run build        # Compile TypeScript (tsc → dist/)
-npm start            # Run server with tsx (hot TypeScript execution)
+npm run build        # Emit TypeScript declarations only (.d.ts via tsc emitDeclarationOnly; no runnable dist/ produced)
+npm start            # Run server via tsx (tsx is a runtime dependency; loaded by boot.sh in production)
 npm test             # Run vitest unit tests
 ```
 
