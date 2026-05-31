@@ -7,7 +7,7 @@
 Pre/post tool-use interceptors that enforce policy and prevent mistakes without requiring agent compliance. Hooks run automatically on matched tool invocations.
 
 ## Architecture
-<!-- last-updated: 2026-05-28 -->
+<!-- last-updated: 2026-05-31 -->
 
 `hooks.json` is the single registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode/Agent), `PostToolUse` (after Bash), `SessionStart`, `SubagentStop`, or `PostCompact`. The separate `canon-agent-teams/hooks.json` was merged into this file (2026-04-26); `canon-agent-teams/hooks.json` no longer exists.
 
@@ -30,6 +30,8 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `learn-nudge.sh` | PostToolUse (Bash) | Suggest principle creation/updates |
 | `compaction-check.sh` | PostToolUse (Bash) | Detect workspace file growth |
 | `canon-agent-teams/post-commit-trailers.sh` | PostToolUse (Bash) | Validate Canon commit trailers after each commit |
+| `canon-agent-teams/session-start-deps-install.sh` | SessionStart | Install mcp-server deps into `${CLAUDE_PLUGIN_DATA}` via compare-manifest pattern; exits 0 always; 120s timeout |
+| `canon-agent-teams/session-start-server-guard.sh` | SessionStart | Reap stale PID-validated tsx process on :3141; health-probe WARN citing `/mcp` on zero-tool state; exits 0 always |
 | `canon-agent-teams/session-start-doc-check.sh` | SessionStart | Nudge on stale documentation at session open |
 | `canon-agent-teams/session-start-kg-check.sh` | SessionStart | Nudge on stale knowledge graph at session open |
 | `canon-agent-teams/session-start-timestamp.sh` | SessionStart | Write session start timestamp for duration watchdog |
