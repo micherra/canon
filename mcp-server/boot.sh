@@ -79,17 +79,19 @@ elif [[ -x "${SERVER_DIR}/node_modules/.bin/tsx" ]]; then
   TSX_BIN="${SERVER_DIR}/node_modules/.bin/tsx"
 fi
 
-if [[ -z "${TSX_BIN}" ]]; then
-  echo "CANON ERROR: tsx not found — SessionStart deps install may not have run" >&2
-  exit 1
-fi
-
 # ---------------------------------------------------------------------------
 # Step 4: Print resolution info for testing / debugging
+# (runs before the tsx-absent error so --print-resolution always produces
+# output even in environments without node_modules installed)
 # ---------------------------------------------------------------------------
 if [[ $PRINT_RESOLUTION -eq 1 ]]; then
   echo "$SERVER_DIR $NODE_PATH $TSX_BIN"
   exit 0
+fi
+
+if [[ -z "${TSX_BIN}" ]]; then
+  echo "CANON ERROR: tsx not found — SessionStart deps install may not have run" >&2
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------

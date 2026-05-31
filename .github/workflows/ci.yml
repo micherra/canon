@@ -28,6 +28,12 @@ jobs:
             echo "One or more hook test suites failed." >&2
             exit 1
           fi
+      - name: Shellcheck mcp-server/boot.sh
+        run: shellcheck mcp-server/boot.sh
+      - name: Run mcp-server boot unit tests
+        run: bash mcp-server/boot.test.sh
+      - name: Run mcp-server boot e2e tests
+        run: bash mcp-server/boot.e2e.test.sh
 
   build:
     runs-on: ubuntu-latest
