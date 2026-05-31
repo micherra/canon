@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 25.8.0
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
       - name: Install shellcheck and jq
         run: sudo apt-get update && sudo apt-get install -y shellcheck jq
       - name: Shellcheck hook scripts
