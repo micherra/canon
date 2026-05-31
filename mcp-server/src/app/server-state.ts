@@ -12,7 +12,7 @@ import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-com
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { installFuzzyValidation } from "@shared/lib/fuzzy-field-validation.ts";
-import { toolError } from "@shared/lib/tool-result.ts";
+import { toToolErrorResponse } from "@shared/lib/wrap-handler.ts";
 
 // ── Per-connection scope registry ─────────────────────────────────────────────
 //
@@ -64,6 +64,7 @@ export function resolveScope(
     if (perSession !== undefined) return perSession;
   }
   // Fall back to the stdio sentinel / global.
+  // TODO(1b): HTTP connections must fail closed when sessionId is unregistered — this fail-open fallback to the daemon cwd is a cross-tenant leak hazard under multi-tenant HTTP.
   return scopeRegistry.get(STDIO_SESSION_ID) ?? projectDir;
 }
 
@@ -158,19 +159,7 @@ export const gatedWrapHandler =
       const result = await handler(input, extra);
       return jsonResponse(result);
     } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      if (detail.includes("directory does not exist")) {
-        console.error(`MCP tool error (workspace not found): ${detail}`);
-        return jsonResponse(
-          toolError("WORKSPACE_NOT_FOUND", "Workspace directory does not exist", false, {
-            detail,
-          }),
-        );
-      }
-      console.error(`MCP tool error (unexpected): ${detail}`);
-      return jsonResponse(
-        toolError("UNEXPECTED", "An unexpected error occurred", false, { detail }),
-      );
+      return toToolErrorResponse(err);
     }
   };
 

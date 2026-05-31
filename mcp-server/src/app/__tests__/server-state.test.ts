@@ -159,6 +159,48 @@ describe("resolveScope: per-connection memoization", () => {
   });
 });
 
+// ── gatedWrapHandler: error branches ─────────────────────────────────────────
+
+describe("gatedWrapHandler: error branches", () => {
+  afterEach(() => {
+    resetForTesting();
+  });
+
+  it("converts a generic throw to an UNEXPECTED error response", async () => {
+    resetForTesting();
+    resolveReady(); // resolve so handler executes
+
+    const wrapped = gatedWrapHandler(async (_input: unknown, _extra: unknown) => {
+      throw new Error("something blew up");
+    });
+
+    const result = await wrapped(null, makeExtra(undefined));
+    const parsed = JSON.parse(result.content[0].text) as {
+      ok: boolean;
+      error_code: string;
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error_code).toBe("UNEXPECTED");
+  });
+
+  it("converts a 'directory does not exist' throw to WORKSPACE_NOT_FOUND", async () => {
+    resetForTesting();
+    resolveReady(); // resolve so handler executes
+
+    const wrapped = gatedWrapHandler(async (_input: unknown, _extra: unknown) => {
+      throw new Error("workspace directory does not exist on disk");
+    });
+
+    const result = await wrapped(null, makeExtra(undefined));
+    const parsed = JSON.parse(result.content[0].text) as {
+      ok: boolean;
+      error_code: string;
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error_code).toBe("WORKSPACE_NOT_FOUND");
+  });
+});
+
 // ── Connection lifecycle helpers ─────────────────────────────────────────────
 
 describe("registerConnectionScope / clearConnectionScope", () => {
