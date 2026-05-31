@@ -6,13 +6,13 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-05-26 -->
+<!-- last-updated: 2026-05-31 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
 ```
 src/
-├── app/                  # Entry point — tool registration (index.ts, register-*.ts, all handlers via wrapHandler)
+├── app/                  # Entry point — tool registration (index.ts, register-*.ts, server-state.ts, all handlers via gatedWrapHandler)
 ├── domains/              # Shared domain types and persistence
 │   ├── board/            # Board mutation logic (pure functions)
 │   ├── drift/            # Drift/review type definitions
@@ -48,15 +48,17 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-29 (DriftReport.craft + computeCraftScore added; get_drift_report Craft line added; config.ts DEFAULT_LAYER_MAPPINGS hooks entry added; doc_freshness dimension: DocFreshness type, doc-freshness-adapter, computeDocFreshness service, DriftReport.doc_freshness field, get_drift_report renders Documentation freshness section; drift schema v8: area_observations table; AreaMemoryDao; area-memory-enrichment.ts; hot-file-detection.ts; resolve_agent_skills area+hot-file enrichment; write_review/write_implementation_summary area observation extraction; decisions field on write_implementation_summary) -->
+<!-- last-updated: 2026-05-31 (per-connection scope registry: resolveScope, registerConnectionScope, clearConnectionScope, STDIO_SESSION_ID, resetForTesting; gatedWrapHandler now passes extra to handlers) -->
 
 **`resolveGitRoot(cwd, gitTopLevelFn)`** (`src/app/resolve-project-dir.ts`) — returns git repo root for `cwd`; falls back to `cwd` when not in a git repo or git is unavailable; errors are logged and swallowed (never throws).
+
+**Per-connection scope** (`src/app/server-state.ts`) — Phase 1 groundwork for HTTP transport. `resolveScope(extra)` returns project dir for the current request: checks per-session registry entry first, then `STDIO_SESSION_ID` sentinel (written by `setProjectDir`), then module global fallback. `registerConnectionScope(sessionId, dir)` / `clearConnectionScope(sessionId)` manage the registry. `STDIO_SESSION_ID = "__stdio__"` is the sentinel used under stdio. `setProjectDir(dir)` now writes to both module global AND `STDIO_SESSION_ID` entry — behavior unchanged under stdio. `resetForTesting()` resets all mutable module state (not called in production). Handlers should obtain scope via `resolveScope(extra)` — migration of register-*.ts boundaries is sub-build 1b.
 
 **`present_artifact` MCP tool** — `html` parameter required; serves the provided HTML directly via HTTP server; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
 
 **`present_review` MCP tool** — thin composition: `showPrImpact` → read pre-rendered `${workspace}/artifacts/review.html` → `presentArtifact`; returns `{ url: string }`; `INVALID_INPUT` when `review.html` missing or `has_review === false`. Added 2026-05-15, updated 2026-05-16.
 
-**Tool error types** (`src/shared/lib/tool-result.ts`) — ADR-002, 2026-03-31: `ToolResult<T>` is a discriminated union `({ ok: true } & T) | CanonToolError`; all tools return this (never throw for expected errors). `CanonErrorCode` has 9 values (see source). `wrapHandler<T>` in `wrap-handler.ts` catches unexpected throws as `UNEXPECTED` errors. All major tool functions updated to return `ToolResult<T>` — see source for signatures.
+**Tool error types** (`src/shared/lib/tool-result.ts`) — ADR-002, 2026-03-31: `ToolResult<T>` is a discriminated union `({ ok: true } & T) | CanonToolError`; all tools return this (never throw for expected errors). `CanonErrorCode` has 9 values (see source). Unexpected throws are caught as `UNEXPECTED` errors by `gatedWrapHandler` (inlined) or `wrapHandler<T>` in `wrap-handler.ts` (non-gated paths).
 
 **Subprocess adapters** (`src/platform/adapters/`) — ADR-002; only files here may import `node:child_process`. Three adapters: `git-adapter.ts` (sync, shell never true, 30s default), `git-adapter-async.ts` (async, never rejects), `process-adapter.ts` (shell: true, 512KB maxBuffer). See source for signatures.
 
@@ -74,11 +76,11 @@ src/
 
 **Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "8"; v4 adds `file_violation_history` + `path_effects` tables; v6 adds `error_fixes` table; v7 adds `violation_outcomes` table; v8 adds `area_observations` table (`id`, `subsystem_key`, `content`, `source`, `workflow_slug`, `created_at`, `injected_count`, `last_injected_at`; indices on `subsystem_key` and `created_at`); idempotent migrations. Updated 2026-05-29.
 
-**OutcomeStore** (`src/platform/storage/drift/outcome-store.ts`) — sync DAO for `violation_outcomes`; methods: `recordOutcome(input: ViolationOutcome)`, `getOutcomesForPrinciple(principleId)`, `getOutcomeStats(principleIds?)`, `getOutcomesForFiles(filePaths)`. Added 2026-05-25, updated 2026-05-26.
+**OutcomeStore** (`src/platform/storage/drift/outcome-store.ts`) — sync DAO for `violation_outcomes`; `recordOutcome`, `getOutcomesForPrinciple`, `getOutcomeStats`, `getOutcomesForFiles`. Added 2026-05-25.
 
-**DriftDbSignals DAO** (`src/platform/storage/drift/drift-db-signals.ts`) — sync DAO for `file_violation_history`, `path_effects`, and `error_fixes`; methods: `getFileViolationHistory`, `upsertFileViolation`, `markFixed`, `getPathEffects`, `upsertPathEffect`, `getErrorFixes(filePaths)`, `upsertErrorFix(input)`, `getAllFileViolationHistory()`. `DriftDb.getSignals()` is a lazy cached accessor. Updated 2026-05-22.
+**DriftDbSignals DAO** (`src/platform/storage/drift/drift-db-signals.ts`) — sync DAO for `file_violation_history`, `path_effects`, `error_fixes`; `DriftDb.getSignals()` lazy accessor. Updated 2026-05-22.
 
-**AreaMemoryDao** (`src/platform/storage/drift/area-memory-dao.ts`) — sync DAO for `area_observations`; prepared statements, sync API following DriftDbSignals pattern; methods: `insertObservation(input)`, `getObservationsForSubsystems(keys)` (7-day expiry enforced at query time via SQL WHERE), `markInjected(ids)` (increments `injected_count`, sets `last_injected_at`). `DriftDb.getAreaMemory()` is a lazy cached accessor. `deriveSubsystemKey(filePath)` strips `mcp-server/src/`, `tools/`, `services/`, `__tests__/` to produce stable keys like `features/orchestration`. Added 2026-05-29.
+**AreaMemoryDao** (`src/platform/storage/drift/area-memory-dao.ts`) — sync DAO for `area_observations`; `insertObservation`, `getObservationsForSubsystems` (7-day expiry via SQL), `markInjected`; `DriftDb.getAreaMemory()` lazy accessor; `deriveSubsystemKey` strips path prefixes to stable keys like `features/orchestration`. Added 2026-05-29.
 
 **Drift Store** (`src/platform/storage/drift/store.ts`) — `ReviewEntry` is the unified type for all reviews (principle + PR); `PrStore` deleted 2026-03-25. `DriftStore.getReviews(options?)` AND-filters by principleId/branch/prNumber (see source for full signature).
 
@@ -88,9 +90,9 @@ src/
 **Git Intelligence** (`src/features/knowledge-graph/git-intel/`) — pipeline: git log → parse → churn scoring → co-change detection → persist atomically; `ensureGitIntelFresh` is the main entry point (no-op when fresh)
 **Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `assembleWikiLintOutput(AssembleWikiLintInput)`; `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)`; all accept pre-loaded data (no I/O except `scanDirectories`). Added 2026-05-26.
 **Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — `compileSignals(filePaths, driftDbSignals)` reads violation history + path effects, scores by priority, fits within per-file token budget; read-only
-**Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — added 2026-05-22; exports `queryDriftSignalPitfalls(filePaths, signals)`, `queryErrorFixPitfalls(filePaths, signals)`, `formatPitfallsSection(drift, errorFix)`, `countPitfalls(drift, errorFix)`; pure functions (no DB calls); `formatPitfallsSection` returns `""` when both arrays empty
-**Area Memory Enrichment** (`src/features/diagnostics/services/area-memory-enrichment.ts`) — added 2026-05-29; exports `queryAreaObservations(filePaths, dao)` (derives subsystem keys, deduplicates, caps at 5), `formatAreaMemorySection(obs)`, `buildAreaMemorySection(filePaths, dao)` (fail-open wrapper; calls `markInjected` after querying). Returns `{ section: ""; count: 0 }` on error.
-**Hot-File Detection** (`src/features/diagnostics/services/hot-file-detection.ts`) — added 2026-05-29; `detectHotFiles(filePaths, db)` queries `flow_runs`, parses commits JSON `{ sha, files }` objects, counts per-file run appearances, threshold ≥ 3, cap 3; `formatHotFileSection(hotFiles)`, `buildHotFileSection(filePaths, db)` (fail-open). Helpers: `extractFilesFromRun(commits)`, `computeLookbackCutoff()`.
+**Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — added 2026-05-22; `queryDriftSignalPitfalls`/`queryErrorFixPitfalls`/`formatPitfallsSection`/`countPitfalls`; pure functions; `formatPitfallsSection` returns `""` when both arrays empty
+**Area Memory Enrichment** (`src/features/diagnostics/services/area-memory-enrichment.ts`) — added 2026-05-29; `queryAreaObservations`/`formatAreaMemorySection`/`buildAreaMemorySection`; fail-open, calls `markInjected` after query; returns `{ section: ""; count: 0 }` on error.
+**Hot-File Detection** (`src/features/diagnostics/services/hot-file-detection.ts`) — added 2026-05-29; `detectHotFiles`/`formatHotFileSection`/`buildHotFileSection`; threshold ≥ 3 appearances, cap 3; fail-open.
 **Backfill Error Fixes** (`src/features/diagnostics/services/backfill-error-fixes.ts`) — added 2026-05-22; script that mines `file_violation_history` to populate the `error_fixes` table; call once per project to seed historical data
 **`store-summaries`** — DB-only write path (JSON removed ADR-005); `inferLanguageFromExtension` maps extensions to language strings
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
@@ -98,12 +100,12 @@ src/
 **`get-principles`** — loads KG computed tags and passes to `matchPrinciples`; tag matching active when KG indexed
 **`get-file-context`** — surfaces `computed_tags`, `hotspot_score`, `co_change_partners`; `shape` derived from graph metrics (see `deriveShape` in source)
 **PR Review Data** (`pr-review-data.ts`) — pure functions: `classifyFile` (bucket assignment), `generateNarrative`, `buildFileViolationMap`, `assembleOutput(AssembleParams): PrReviewDataOutput` (extracted 2026-05-25); `PrFileInfo.bucket` thresholds: needs-attention = violations OR high in_degree; worth-a-look = priority >= 5; `getPrReviewData` returns `{ error }` (not throw) for invalid `pr_number`
-**Correction Reader** (`features/orchestration/services/correction-reader.ts`) — `readCorrections(projectDir, filePaths?, maxAge?): ReadCorrectionsResult`; `ReadCorrectionsResult` = `{ ok: true; records: CorrectionRecord[] } | { ok: false; error: string }`; ENOENT → `ok:true, records:[]`; other I/O errors → `ok:false`; updated 2026-05-25
-**Confidence engine** (`src/shared/lib/confidence.ts`) — exports `ConfidenceAnnotation`, `ConfidenceTier`, `ConfidenceBasis`, `ConfidenceInput` types + `ConfidenceAnnotationSchema` Zod schema; `deriveTier(score, sampleSize): ConfidenceTier` (returns `"insufficient"` for sparse data, never throws); `computeConfidenceAnnotation(inputs: ConfidenceInput[]): ConfidenceAnnotation` (returns zero-confidence annotation for empty inputs). Added 2026-05-25.
+**Correction Reader** (`features/orchestration/services/correction-reader.ts`) — `readCorrections(projectDir, filePaths?, maxAge?)` → `{ ok: true; records[] } | { ok: false; error }`; ENOENT → `ok:true, records:[]`; updated 2026-05-25
+**Confidence engine** (`src/shared/lib/confidence.ts`) — added 2026-05-25; `deriveTier(score, sampleSize)` returns `"insufficient"` for sparse data (never throws); `computeConfidenceAnnotation(inputs[])` returns zero-confidence for empty input.
 
-**Review confidence adapter** (`src/features/orchestration/services/review-confidence-adapter.ts`) — pure compute function; composes severity_tier, violation_history, path_effects, base_sample signals from drift DB; returns `ConfidenceAnnotation`; zero-confidence for undefined file_path. Added 2026-05-25.
+**Review confidence adapter** (`src/features/orchestration/services/review-confidence-adapter.ts`) — composes severity_tier + violation_history + path_effects + base_sample signals; zero-confidence for undefined file_path. Added 2026-05-25.
 
-**Drift confidence adapter** (`src/platform/storage/drift/drift-confidence-adapter.ts`) — pure compute function; composes sample_size (weight 0.5), trend_stability (weight 0.3), rate_stability (weight 0.2) signals; placed in `platform/storage/drift/` to avoid cross-feature circular imports. Added 2026-05-25.
+**Drift confidence adapter** (`src/platform/storage/drift/drift-confidence-adapter.ts`) — composes sample_size (0.5) + trend_stability (0.3) + rate_stability (0.2); in platform/ to avoid circular imports. Added 2026-05-25.
 
 **`write_review` tool** — updated 2026-05-29: accepts optional `confidence` annotation per violation; when `confidenceAdapter` present, auto-annotates violations from drift DB signals; extracts area observations from BLOCKING/WARNING reviews and stores in `area_observations` via `areaMemoryWriter` (injected via `register-artifacts.ts`); fail-open when writer absent or throws; no observations extracted for CLEAN reviews.
 
@@ -115,9 +117,9 @@ src/
 
 **`DocFreshness` type** (`src/platform/storage/drift/analyzer.ts`) — `{ doc_path: string; commits_since_sync: number; confidence: ConfidenceAnnotation; warning?: string }`; placed in platform so service can import it without platform importing from features. `DriftReport.doc_freshness: DocFreshness[]` added (defaults to `[]`).
 
-**`doc-freshness-adapter.ts`** (`src/platform/storage/drift/`) — pure function `computeFreshnessConfidence(signals)`: maps `commits_since_sync` to a weighted `staleness` `ConfidenceInput` (`value = clamp(1 - commits/40, 0, 1)`) and delegates to `computeConfidenceAnnotation`; `FRESHNESS_SAMPLE_SIZE = 10` prevents `insufficient` masking for clearly-stale docs. Added 2026-05-29.
+**`doc-freshness-adapter.ts`** (`src/platform/storage/drift/`) — `computeFreshnessConfidence(signals)`: maps `commits_since_sync` to staleness score, delegates to `computeConfidenceAnnotation`; `FRESHNESS_SAMPLE_SIZE = 10`. Added 2026-05-29.
 
-**`computeDocFreshness`** (`src/features/diagnostics/services/doc-freshness.ts`) — enumerates `docs/*.md` (excludes `docs/reference/`), runs `git log -n 1` + `git rev-list --count` per doc; git seam injectable; every `!ok` path logs WARN and returns `DocFreshness` with `warning?` (never silent-swallow); ENOENT → `[]`. Added 2026-05-29.
+**`computeDocFreshness`** (`src/features/diagnostics/services/doc-freshness.ts`) — enumerates `docs/*.md` (excludes `docs/reference/`), git injectable seam; `!ok` paths log WARN + return `DocFreshness` with `warning?`; ENOENT → `[]`. Added 2026-05-29.
 
 **`DriftReport.craft`** (`platform/storage/drift/analyzer.ts`) — added 2026-05-29: `craft: { holistic_count: number; score: number }` field on `DriftReport`; `computeCraftScore(reviews)` uses formula `max(0, 100 − min(100, holistic_count × 10))`; populated by `analyzeDrift` using the same filtered window as `avg_score`; kept DISTINCT from compliance score.
 
@@ -129,14 +131,7 @@ src/
 |------|---------|
 | `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContext` (per-file), `getDriftReport`, `graphQuery`, `compileSignals` in a single call; `include` param gates sections (default: all 5) |
 
-**`get_context` tool** (`src/app/register-knowledge.ts`) — added 2026-04-30; updated 2026-05-15 (signals section):
-<!-- last-updated: 2026-05-15 (signals section added to get_context) -->
-- Input: `file_paths: string[]` (required), `include?: Array<"principles"|"file_context"|"drift"|"graph"|"signals">` (defaults to all 5 sections)
-- Returns `{ file_paths, include, principles?, file_context?, drift?, graph?, signals? }` — sections present only when included
-- `signals` section: calls `compileSignals(filePaths, driftDb.getSignals())`; fails open (errors skipped, matching graph section behavior); returns `FileSignals[]`
-- `IncludeSection` type union now includes `"signals"`; `ALL_SECTIONS` constant updated
-- `file_context` errors propagated (fail-closed); graph/signals query failures skipped gracefully
-- `GetContextOutput` type exported for test assertions
+**`get_context` tool** (`src/app/register-knowledge.ts`) — added 2026-04-30; updated 2026-05-15: input `file_paths[]` + optional `include` (5 sections: principles, file_context, drift, graph, signals); `file_context` errors propagated (fail-closed); graph/signals fail open; `GetContextOutput` exported for tests.
 
 **Text-only principle/review tools:**
 
@@ -198,34 +193,17 @@ src/
 | `tsx` | TypeScript execution (dev) |
 | `vitest` | Unit testing (dev) |
 
-**Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — added 2026-04-08:
-- `profileToAllowRules(tools: string[]): string[]` — filters tool names to the `BUILTIN_CLAUDE_TOOLS` set (`Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `NotebookEdit`, `WebFetch`); MCP tools are excluded (already covered by project-level `settings.json`)
-- `buildWorktreeSettings(allowRules: string[]): { permissions: { allow: string[] } }` — builds the `settings.local.json` structure; empty rules produce `{ permissions: { allow: [] } }` (no extra permissions)
-- `injectWorktreeSettings(worktreePath: string, tools: string[]): Promise<boolean>` — atomically writes `.claude/settings.local.json` into the worktree (write-to-temp + rename); validates absolute path; returns `false` on any failure without throwing; creates `.claude/` dir if absent; idempotent (second call overwrites first)
+**Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — added 2026-04-08: `injectWorktreeSettings(worktreePath, tools)` atomically writes `.claude/settings.local.json`; returns `false` on failure (never throws); idempotent. `profileToAllowRules` filters to `BUILTIN_CLAUDE_TOOLS`. `buildWorktreeSettings` produces `{ permissions: { allow: [] } }` for empty input.
 
-**Agent Provenance** (`src/shared/lib/commit-trailers.ts`, `src/shared/lib/file-claims.ts`) — added 2026-04-09:
-<!-- last-updated: 2026-04-09 (agent provenance system: commit trailers + file claims) -->
-- `TrailerOpts` — `{ workflow: string; agent: string; state: string; taskId?: string }`
-- `formatCommitTrailers(opts: TrailerOpts): string` — returns trailer block string; returns `""` when any required field is missing
-- `buildCommitMessage(subject, body, trailerOpts): string` — full commit message: subject + optional body + trailers + Co-Authored-By
-- Trailer format: `Canon-Workflow: {slug}` / `Canon-Agent: {agent-type}` / `Canon-State: {state-id}` / `Canon-Task: {task-id}` (wave only)
-- `ClaimsFile` — `{ version: 1; claims: Record<string, ClaimEntry[]> }`; persisted to `.canon/claims.json`
-- `ClaimEntry` — `{ workflow: string; claimed_at: string }` (ISO-8601)
-- `ClaimOverlap` — `{ file_path: string; workflows: string[] }`
-- `readClaims(projectDir): ClaimsFile` — prunes stale entries (>24h TTL); returns empty structure on any error
-- `registerClaims(projectDir, workflow, filePaths): void` — idempotent; duplicate workflow+file pairs are no-ops
-- `releaseClaims(projectDir, workflow): void` — removes all entries for a workflow; no-op for unknown workflows
-- `checkClaimOverlaps(projectDir, workflow, filePaths): ClaimOverlap[]` — returns overlaps from OTHER workflows only
-- Spawn prompts now include a `## Commit Provenance` section (injected by `inject-coordination.ts`) with the pre-formatted trailer block for the agent's state
+**Agent Provenance** (`src/shared/lib/commit-trailers.ts`, `src/shared/lib/file-claims.ts`) — added 2026-04-09: `formatCommitTrailers(TrailerOpts)` / `buildCommitMessage(subject, body, trailerOpts)` produce Canon trailer blocks; `ClaimsFile` persisted to `.canon/claims.json`; `readClaims`/`registerClaims`/`releaseClaims`/`checkClaimOverlaps` manage 24h-TTL file ownership claims; spawn prompts include a `## Commit Provenance` section via `inject-coordination.ts`.
 
-**`injectSettingsIntoRequests`** (`src/features/orchestration/tools/drive-flow.ts`) — exported helper added 2026-04-08:
-- `injectSettingsIntoRequests(requests: SpawnRequest[]): Promise<void>` — iterates spawn requests sequentially; calls `injectWorktreeSettings(req.worktree_path, req.tools)` when `req.permission_mode === "auto"` AND `req.worktree_path` AND `req.tools` are all present; sequential (not `Promise.all`) for error isolation — one failure does not abort others; never throws
+**`injectSettingsIntoRequests`** (`src/features/orchestration/tools/drive-flow.ts`) — iterates spawn requests sequentially, calls `injectWorktreeSettings` when `permission_mode === "auto"` AND `worktree_path` AND `tools` present; never throws.
 
 ## Invariants
 <!-- last-updated: 2026-05-27 (cwd fallback now resolves to git root via resolveGitRoot before resolveProjectDir) -->
 
 - **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
-- **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
+- **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `gatedWrapHandler` (gated handlers) or `wrapHandler` (non-gated paths) and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
 - **ADR-002 security boundary**: `git-adapter.ts` never sets `shell: true`; `process-adapter.ts` sets `shell: true` for arbitrary shell commands; the two adapters must not be interchanged for git operations — added 2026-03-31
 - All subprocess adapters enforce a default 30s timeout; callers may pass an explicit timeout override — added 2026-03-31
 - All data persists to `.canon/` directory (reviews.jsonl, knowledge-graph.db, orchestration.db, drift.db); `graph-data.json`, `summaries.json`, `reverse-deps.json` no longer written (removed ADR-005 2026-04-01)
