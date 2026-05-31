@@ -44,11 +44,12 @@ fi
 # ---------------------------------------------------------------------------
 if ! diff -q "$MCP_DIR/package.json" "$DATA/package.json" >/dev/null 2>&1; then
   echo "CANON NOTE: installing Canon MCP server dependencies into plugin data dir ($DATA)..."
-  ( cd "$DATA" \
-    && cp "$MCP_DIR/package.json" . \
-    && cp "$MCP_DIR/package-lock.json" . 2>/dev/null || true \
-    && npm install --no-audit --no-fund ) \
-    || { echo "CANON WARN: npm install failed; removing stored manifest so next session retries" >&2; rm -f "$DATA/package.json"; }
+  (
+    cd "$DATA" || exit 1
+    cp "$MCP_DIR/package.json" . || exit 1
+    cp "$MCP_DIR/package-lock.json" . 2>/dev/null || true  # DOCUMENTED FAIL-OPEN -- lockfile is optional; npm install falls back to package.json only
+    npm install --no-audit --no-fund
+  ) || { echo "CANON WARN: npm install failed; removing stored manifest so next session retries" >&2; rm -f "$DATA/package.json"; }
 fi
 
 exit 0
