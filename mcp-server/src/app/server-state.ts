@@ -25,8 +25,8 @@ import { toolError } from "@shared/lib/tool-result.ts";
 export const STDIO_SESSION_ID = "__stdio__";
 
 // Map<sessionId, projectDir> — the per-connection memoisation table.
-// Exported for tests; callers outside this file must use the helper functions.
-export const scopeRegistry = new Map<string, string>();
+// Module-private; callers outside this file must use the helper functions.
+const scopeRegistry = new Map<string, string>();
 
 /**
  * Register a resolved project directory for a specific MCP session/connection.
