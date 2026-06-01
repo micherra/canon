@@ -14,7 +14,7 @@ All three must be updated in the same commit. Missing any one causes the plugin 
 - [ ] `mcp-server/package.json` — `"version"` field
 - [ ] `mcp-server/src/app/server-state.ts` — hardcoded `version: "X.Y.Z"` string (~line 122 in the `new McpServer({...})` call)
 
-The `jq`/`sed` updates in `scripts/release.sh` handle all three. If bumping manually, update all three before committing.
+The `jq`/`perl` updates in `scripts/release.sh` handle all three (`jq` for the two JSON files, `perl -i -pe` for the TypeScript file). If bumping manually, update all three before committing.
 
 ## 2. Lockfile regeneration
 
@@ -24,15 +24,19 @@ The `mcp-server/package-lock.json` must reflect the new version. Run from repo r
 (cd mcp-server && npm install --package-lock-only)
 ```
 
-Then assert the version matches before committing:
+Then assert the version matches before committing (replace `X.Y.Z` with the actual version):
 
 ```bash
-LOCK_VERSION=$(jq -r .version mcp-server/package-lock.json)
-if [[ "$LOCK_VERSION" != "$VERSION" ]]; then
-  echo "ERROR: lockfile version ($LOCK_VERSION) does not match release version ($VERSION)" >&2
+VERSION="X.Y.Z"   # set to the version you are releasing
+LOCK_VERSION_TOP=$(jq -r '.version' mcp-server/package-lock.json)
+LOCK_VERSION_PKG=$(jq -r '.packages[""].version' mcp-server/package-lock.json)
+if [[ "$LOCK_VERSION_TOP" != "$VERSION" || "$LOCK_VERSION_PKG" != "$VERSION" ]]; then
+  echo "ERROR: lockfile version mismatch (top: $LOCK_VERSION_TOP, pkg: $LOCK_VERSION_PKG, expected: $VERSION)" >&2
   exit 1
 fi
 ```
+
+Both fields must match — npm writes the version in two places (`.version` and `.packages[""].version`), and a hand-edit that updates only one will cause a mismatch at tag time.
 
 `scripts/release.sh` runs this regeneration and assertion automatically, and adds the lockfile to the release commit. Do NOT touch the root `package-lock.json` — it is an intentional 84-byte workspaces stub.
 

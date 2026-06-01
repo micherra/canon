@@ -19,6 +19,11 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
+command -v perl >/dev/null 2>&1 || {
+  echo "Error: 'perl' is required for the server-state.ts version bump but was not found on PATH." >&2
+  exit 1
+}
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
