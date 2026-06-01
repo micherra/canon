@@ -85,4 +85,25 @@ describe("wrapHandler", () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.error_code).toBe("WORKSPACE_NOT_FOUND");
   });
+
+  it("does NOT throw when extra is omitted and inner handler reads extra.sessionId", async () => {
+    // Regression: before the fix, wrapHandler cast `undefined` as RequestHandlerExtra,
+    // so any handler calling resolveScope(extra) or reading extra.sessionId would throw
+    // "Cannot read properties of undefined".
+    const sessionIds: (string | undefined)[] = [];
+    const wrapped = wrapHandler(
+      async (_input: unknown, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+        // Simulate what resolveScope(extra) does — reads sessionId.
+        sessionIds.push(extra.sessionId);
+        return { ok: true };
+      },
+    );
+
+    // Call without extra — must not throw, must return a normal jsonResponse.
+    const result = await wrapped({});
+    const parsed = JSON.parse(result.content[0].text) as { ok: boolean };
+    expect(parsed.ok).toBe(true);
+    // The stub has sessionId: undefined — resolveScope falls through to the global.
+    expect(sessionIds).toEqual([undefined]);
+  });
 });

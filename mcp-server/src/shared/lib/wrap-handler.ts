@@ -65,10 +65,17 @@ export function wrapHandler<T>(
 ) => Promise<ReturnType<typeof jsonResponse>> {
   return async (input: T, extra?: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
     try {
-      const result = await handler(
-        input,
-        extra as RequestHandlerExtra<ServerRequest, ServerNotification>,
-      );
+      // When extra is absent (e.g. legacy callers, tests without extra), forward a safe stub so
+      // resolveScope(extra) can read extra.sessionId without throwing.  Mirrors the identical
+      // fallback pattern in get-context-handler.ts (handleGetContext).
+      const safeExtra =
+        extra ??
+        ({
+          requestId: "",
+          sessionId: undefined,
+          signal: new AbortController().signal,
+        } as RequestHandlerExtra<ServerRequest, ServerNotification>);
+      const result = await handler(input, safeExtra);
       return jsonResponse(result);
     } catch (err) {
       return toToolErrorResponse(err);
