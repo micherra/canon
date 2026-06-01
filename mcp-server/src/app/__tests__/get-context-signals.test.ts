@@ -7,6 +7,7 @@ vi.mock("@app/server-state.ts", () => ({
   pluginDir: "/mock/plugin",
   projectDir: "/mock/project",
   registerToolWithUi: vi.fn(),
+  resolveScope: () => "/mock/project",
   server: { registerTool: vi.fn() },
 }));
 

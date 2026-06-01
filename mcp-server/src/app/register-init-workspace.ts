@@ -1,6 +1,6 @@
 import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
 import { z } from "zod";
-import { gatedWrapHandler, pluginDir, projectDir, server } from "./server-state.ts";
+import { gatedWrapHandler, pluginDir, resolveScope, server } from "./server-state.ts";
 
 export function registerInitWorkspaceTool(): void {
   server.registerTool(
@@ -36,6 +36,6 @@ export function registerInitWorkspaceTool(): void {
         tier: z.enum(["small", "medium", "large"]),
       },
     },
-    gatedWrapHandler(async (input) => initWorkspaceFlow(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => initWorkspaceFlow(input, resolveScope(extra), pluginDir)),
   );
 }

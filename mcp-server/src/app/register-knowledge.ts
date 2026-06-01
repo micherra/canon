@@ -28,11 +28,13 @@ import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { CANON_DIR } from "@shared/constants.ts";
 import { applyDisclosure } from "@shared/lib/progressive-disclosure.ts";
 import { z } from "zod";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import {
   gatedWrapHandler,
   pluginDir,
-  projectDir,
   registerToolWithUi,
+  resolveScope,
   server,
 } from "./server-state.ts";
 
@@ -82,11 +84,11 @@ const ALL_SECTIONS: IncludeSection[] = ["principles", "file_context", "drift", "
  * Skips files where KG is not indexed or returns a recoverable error.
  * Returns undefined when no results could be collected.
  */
-function queryGraphForFiles(filePaths: string[]): unknown[] | undefined {
+function queryGraphForFiles(filePaths: string[], dir: string): unknown[] | undefined {
   if (filePaths.length === 0) return undefined;
   const aggregated: unknown[] = [];
   for (const target of filePaths) {
-    const result = graphQuery({ query_type: "blast_radius", target }, projectDir);
+    const result = graphQuery({ query_type: "blast_radius", target }, dir);
     if (result.ok) aggregated.push(result);
   }
   return aggregated.length > 0 ? aggregated : undefined;
@@ -124,9 +126,9 @@ function trySetAccuracySummary(accuracyData: AccuracyMap, output: GetContextOutp
  * Populate output.signals and output.accuracy_summary for the signals section.
  * Fail-open: signals are optional enrichment; errors are silently ignored.
  */
-function resolveSignals(filePaths: string[], output: GetContextOutput): void {
+function resolveSignals(filePaths: string[], output: GetContextOutput, dir: string): void {
   try {
-    const driftDb = getDriftDb(projectDir);
+    const driftDb = getDriftDb(dir);
     const driftDbSignals = driftDb.getSignals();
     const accuracyData = tryComputeAccuracy(driftDbSignals);
     const signals = compileSignals(filePaths, driftDbSignals, { accuracyData });
@@ -238,10 +240,10 @@ export function buildSlimmedOutput(
  * Returns the output unchanged when under threshold; returns a slimmed version
  * with a file pointer when over threshold.
  */
-async function applyContextDisclosure(output: GetContextOutput): Promise<GetContextOutput> {
+async function applyContextDisclosure(output: GetContextOutput, dir: string): Promise<GetContextOutput> {
   const disclosure = await applyDisclosure(output, {
     filePrefix: "get-context",
-    outputDir: join(projectDir, CANON_DIR, "artifacts"),
+    outputDir: join(dir, CANON_DIR, "artifacts"),
     summarize: summarizeContextOutput,
   });
   if (disclosure.truncated) {
@@ -253,10 +255,18 @@ async function applyContextDisclosure(output: GetContextOutput): Promise<GetCont
   return output;
 }
 
-async function handleGetContext(input: {
-  file_paths: string[];
-  include?: IncludeSection[];
-}): Promise<GetContextOutput> {
+async function handleGetContext(
+  input: {
+    file_paths: string[];
+    include?: IncludeSection[];
+  },
+  extra?: RequestHandlerExtra<ServerRequest, ServerNotification>,
+): Promise<GetContextOutput> {
+  // When extra is absent (direct call from tests), pass a stub so resolveScope falls through
+  // to the module global via the STDIO sentinel — the absent-extra path is the tested fallback.
+  const dir = resolveScope(
+    (extra ?? { sessionId: undefined, signal: new AbortController().signal, requestId: "" }) as RequestHandlerExtra<ServerRequest, ServerNotification>,
+  );
   const sections: IncludeSection[] = input.include ?? ALL_SECTIONS;
   const output: GetContextOutput = {
     file_paths: input.file_paths,
@@ -270,7 +280,7 @@ async function handleGetContext(input: {
     tasks.push(
       getPrinciplesBatch(
         { file_paths: input.file_paths, summary_only: true },
-        projectDir,
+        dir,
         pluginDir,
       ).then((result) => {
         output.principles = result;
@@ -280,7 +290,7 @@ async function handleGetContext(input: {
 
   if (sections.includes("file_context")) {
     tasks.push(
-      Promise.all(input.file_paths.map((fp) => getFileContext({ file_path: fp }, projectDir))).then(
+      Promise.all(input.file_paths.map((fp) => getFileContext({ file_path: fp }, dir))).then(
         (settled) => {
           const results: FileContextOutput[] = [];
           for (let i = 0; i < settled.length; i++) {
@@ -299,7 +309,7 @@ async function handleGetContext(input: {
 
   if (sections.includes("drift")) {
     tasks.push(
-      getDriftReport({}, projectDir, pluginDir).then((result) => {
+      getDriftReport({}, dir, pluginDir).then((result) => {
         output.drift = result;
       }),
     );
@@ -310,18 +320,18 @@ async function handleGetContext(input: {
     // Query blast_radius for each file and aggregate the results.
     tasks.push(
       Promise.resolve().then(() => {
-        const results = queryGraphForFiles(input.file_paths);
+        const results = queryGraphForFiles(input.file_paths, dir);
         if (results !== undefined) output.graph = results;
       }),
     );
   }
 
   if (sections.includes("signals")) {
-    tasks.push(Promise.resolve().then(() => resolveSignals(input.file_paths, output)));
+    tasks.push(Promise.resolve().then(() => resolveSignals(input.file_paths, output, dir)));
   }
 
   await Promise.all(tasks);
-  return applyContextDisclosure(output);
+  return applyContextDisclosure(output, dir);
 }
 
 export { handleGetContext };
@@ -373,8 +383,8 @@ function registerGraphUiTools(): void {
   registerToolWithUi("codebase_graph", {
     description:
       "Generate a dependency graph of the codebase with Canon compliance overlay. Returns a compact summary (layers, violations, insights).",
-    handler: gatedWrapHandler(async (input) => {
-      const result = await codebaseGraph(input, projectDir, pluginDir);
+    handler: gatedWrapHandler(async (input, extra) => {
+      const result = await codebaseGraph(input, resolveScope(extra), pluginDir);
       return compactGraph(result);
     }),
     htmlFile: "codebase-graph.html",
@@ -386,7 +396,7 @@ function registerGraphUiTools(): void {
   registerToolWithUi("get_file_context", {
     description:
       "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data.",
-    handler: gatedWrapHandler(async (input) => getFileContext(input, projectDir)),
+    handler: gatedWrapHandler(async (input, extra) => getFileContext(input, resolveScope(extra))),
     htmlFile: "file-context.html",
     inputSchema: {
       file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
@@ -413,7 +423,7 @@ function registerDiagnosticsTools(): void {
           .describe("Array of file summaries to store"),
       },
     },
-    gatedWrapHandler(async (input) => storeSummaries(input, projectDir)),
+    gatedWrapHandler(async (input, extra) => storeSummaries(input, resolveScope(extra))),
   );
 
   server.registerTool(
@@ -427,7 +437,7 @@ function registerDiagnosticsTools(): void {
         principle_id: z.string().optional().describe("Filter to a specific principle"),
       },
     },
-    gatedWrapHandler(async (input) => getDriftReport(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => getDriftReport(input, resolveScope(extra), pluginDir)),
   );
 
   server.registerTool(
@@ -464,7 +474,7 @@ function registerDiagnosticsTools(): void {
           ),
       },
     },
-    gatedWrapHandler(async (input) => wikiLint(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => wikiLint(input, resolveScope(extra), pluginDir)),
   );
 }
 
@@ -512,7 +522,7 @@ function registerGraphQueryTool(): void {
           .describe("Target entity name or file path (not needed for dead_code)"),
       },
     },
-    gatedWrapHandler(async (input) => graphQuery(input, projectDir)),
+    gatedWrapHandler(async (input, extra) => graphQuery(input, resolveScope(extra))),
   );
 }
 
@@ -549,7 +559,7 @@ function registerSemanticSearchTool(): void {
           ),
       },
     },
-    gatedWrapHandler(async (input) => semanticSearch(input, projectDir)),
+    gatedWrapHandler(async (input, extra) => semanticSearch(input, resolveScope(extra))),
   );
 }
 
@@ -564,7 +574,7 @@ function registerGraphJobTools(): void {
         force: z.boolean().optional().describe("Skip cache, force new run"),
       },
     },
-    gatedWrapHandler(async (input) => codebaseGraphSubmit(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => codebaseGraphSubmit(input, resolveScope(extra), pluginDir)),
   );
 
   server.registerTool(
@@ -580,8 +590,8 @@ function registerGraphJobTools(): void {
   registerToolWithUi("codebase_graph_materialize", {
     description:
       "Materialize the results of a completed codebase graph job into a visual graph. Job must have status 'complete' (check with codebase_graph_poll first).",
-    handler: gatedWrapHandler(async (input) =>
-      codebaseGraphMaterialize(input, projectDir, pluginDir),
+    handler: gatedWrapHandler(async (input, extra) =>
+      codebaseGraphMaterialize(input, resolveScope(extra), pluginDir),
     ),
     htmlFile: "codebase-graph.html",
     inputSchema: {
