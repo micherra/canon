@@ -48,7 +48,7 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-31 (per-connection scope registry: resolveScope, registerConnectionScope, clearConnectionScope, STDIO_SESSION_ID, resetForTesting; gatedWrapHandler now passes extra to handlers; boot.sh launcher + PID file) -->
+<!-- last-updated: 2026-06-01 (per-connection scope registry; wrapHandler forwards extra; 5 register-*.ts boundaries migrated to resolveScope(extra); get-context-handler.ts extracted) -->
 
 **`boot.sh`** (`mcp-server/boot.sh`) — self-resolving launcher: prefers `${CLAUDE_PLUGIN_ROOT}/mcp-server` as server dir; falls back to its own `BASH_SOURCE` dir; exits 1 with loud stderr if server dir or local `tsx` binary not found; never uses `npx`; `--print-resolution` flag prints resolved paths and exits (for tests). `${CLAUDE_PLUGIN_ROOT}` is the Claude plugin API variable — it is not expanded when `.mcp.json` is loaded as a project config; `BASH_SOURCE` self-resolution is the backstop in that context. Added 2026-05-31.
 
@@ -56,13 +56,15 @@ src/
 
 **`resolveGitRoot(cwd, gitTopLevelFn)`** (`src/app/resolve-project-dir.ts`) — returns git repo root for `cwd`; falls back to `cwd` when not in a git repo or git is unavailable; errors are logged and swallowed (never throws).
 
-**Per-connection scope** (`src/app/server-state.ts`) — Phase 1 groundwork for HTTP transport. `resolveScope(extra)` returns project dir for the current request: checks per-session registry entry first, then `STDIO_SESSION_ID` sentinel (written by `setProjectDir`), then module global fallback. `registerConnectionScope(sessionId, dir)` / `clearConnectionScope(sessionId)` manage the registry. `STDIO_SESSION_ID = "__stdio__"` is the sentinel used under stdio. `setProjectDir(dir)` now writes to both module global AND `STDIO_SESSION_ID` entry — behavior unchanged under stdio. `resetForTesting()` resets all mutable module state (not called in production). Handlers should obtain scope via `resolveScope(extra)` — migration of register-*.ts boundaries is sub-build 1b.
+**Per-connection scope** (`src/app/server-state.ts`) — Phase 1 groundwork for HTTP transport. `resolveScope(extra)` returns project dir for the current request: checks per-session registry entry first, then `STDIO_SESSION_ID` sentinel (written by `setProjectDir`), then module global fallback. `registerConnectionScope(sessionId, dir)` / `clearConnectionScope(sessionId)` manage the registry. `STDIO_SESSION_ID = "__stdio__"` is the sentinel used under stdio. `setProjectDir(dir)` now writes to both module global AND `STDIO_SESSION_ID` entry — behavior unchanged under stdio. `resetForTesting()` resets all mutable module state (not called in production). All five 1b register-*.ts boundaries (`register-artifacts`, `register-init-workspace`, `register-knowledge`, `register-principles`, `register-agent-teams`) resolve project dir via `resolveScope(extra)` per request; `projectDir` module global no longer imported in these files. Sub-builds 1c/1d (global deletion) remain pending.
 
 **`present_artifact` MCP tool** — `html` parameter required; serves the provided HTML directly via HTTP server; returns `{ url: string }` (fire-and-forget; does not block). Updated 2026-05-16.
 
 **`present_review` MCP tool** — thin composition: `showPrImpact` → read pre-rendered `${workspace}/artifacts/review.html` → `presentArtifact`; returns `{ url: string }`; `INVALID_INPUT` when `review.html` missing or `has_review === false`. Added 2026-05-15, updated 2026-05-16.
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — ADR-002, 2026-03-31: `ToolResult<T>` is a discriminated union `({ ok: true } & T) | CanonToolError`; all tools return this (never throw for expected errors). `CanonErrorCode` has 9 values (see source). Unexpected throws are caught as `UNEXPECTED` errors by `gatedWrapHandler` (inlined) or `wrapHandler<T>` in `wrap-handler.ts` (non-gated paths).
+
+**`wrapHandler` extra forwarding** (`src/shared/lib/wrap-handler.ts`) — inner handler optionally receives `extra: RequestHandlerExtra` as second argument; forwarded from the outer function; backward compatible (existing callers omitting `extra` type-check unchanged). Updated 2026-06-01.
 
 **Subprocess adapters** (`src/platform/adapters/`) — ADR-002; only files here may import `node:child_process`. Three adapters: `git-adapter.ts` (sync, shell never true, 30s default), `git-adapter-async.ts` (async, never rejects), `process-adapter.ts` (shell: true, 512KB maxBuffer). See source for signatures.
 
@@ -135,7 +137,7 @@ src/
 |------|---------|
 | `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContext` (per-file), `getDriftReport`, `graphQuery`, `compileSignals` in a single call; `include` param gates sections (default: all 5) |
 
-**`get_context` tool** (`src/app/register-knowledge.ts`) — added 2026-04-30; updated 2026-05-15: input `file_paths[]` + optional `include` (5 sections: principles, file_context, drift, graph, signals); `file_context` errors propagated (fail-closed); graph/signals fail open; `GetContextOutput` exported for tests.
+**`get_context` tool** — implementation in `src/app/get-context-handler.ts` (extracted 2026-06-01 from `register-knowledge.ts`); re-exported from `register-knowledge.ts` so existing test imports remain valid. Input: `file_paths[]` + optional `include` (5 sections: principles, file_context, drift, graph, signals). `file_context` errors fail-closed; graph/signals fail open. Exports: `handleGetContext(input, extra?)`, `buildSlimmedOutput`, `GetContextOutput`.
 
 **Text-only principle/review tools:**
 
