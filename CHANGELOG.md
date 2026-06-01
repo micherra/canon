@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.4.0 (2026-06-01)
+
+14 commits since v2.3.1. HTTP-transport groundwork, MCP-boot durability, area memory, observability, and hook reliability.
+
+### Highlights
+
+- **HTTP-transport groundwork** — per-connection scope registry and `resolveScope(extra)` foundation; 5 tool boundaries migrated to per-request resolution (#288, #290)
+- **MCP-boot durability** — self-resolving `boot.sh` launcher with `PLUGIN_DATA` deps, PID reaper, and `--print-resolution` test flag; eliminates cold-start zero-tool failure (#287)
+- **Area memory + hot-file caution** — engineers receive subsystem observations and hot-file warnings in context; persisted in `area_observations` DB table (#279)
+
+### Features
+
+- Per-connection scope registry: `resolveScope`, `registerConnectionScope`, `clearConnectionScope`, `resetForTesting`; `STDIO_SESSION_ID` sentinel for stdio transport (#288)
+- Migrate 5 tool boundaries (`register-artifacts`, `register-init-workspace`, `register-knowledge`, `register-principles`, `register-agent-teams`) to per-request `resolveScope(extra)` (#290)
+- Area memory enrichment + hot-file detection surfaced in engineer context via `resolve_agent_skills`; `area_observations` table, `AreaMemoryDao`, `detectHotFiles` (#279)
+- Observability improvements: learner proposals YYY1–YYY4, catch-block sweep, `record_agent_metrics` audit events (#275)
+- Doc-freshness drift dimension: `computeDocFreshness`, `DocFreshness` type, `DriftReport.doc_freshness`, freshness confidence adapter; scribe `docs/*.md` scope (#274)
+
+### Fixes
+
+- Durable MCP boot: self-resolving `boot.sh`, PID file lifecycle, reaper on SIGTERM/SIGINT; never uses `npx` (#287)
+- Remediate ~67 hook silent-swallow sites; fix 2 flaky `ENOTEMPTY` tests (#280)
+- Extend quality coverage to guardrail layer; close fail-open security regression (#278)
+- Correct stale references to removed orchestration tooling; pre-existing flaky-test fix (#277)
+
+### Documentation and Chores
+
+- Add file line-count headroom check for architects (sug_IIII1) (#291)
+- Remove spawn-timeout-watchdog hook (#276)
+- Graft harness-primitives themes into supervised-build-quality (#273)
+- Sync supervised-build-quality with merged PRs #262–#270 (#272)
+- Bump version 2.3.0 → 2.3.1
+
 ## 2.3.0 (2026-05-28)
 
 37 commits since v2.2.0. Quality hardening release: shell hygiene, holistic confidence scoring, hook reliability, and continuous learner expansion.
