@@ -1,3 +1,5 @@
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { toolError } from "./tool-result.ts";
 
 /** Standard JSON response wrapper for MCP tool results. */
@@ -34,19 +36,31 @@ export function toToolErrorResponse(err: unknown): ReturnType<typeof jsonRespons
  * Wraps an MCP tool handler to:
  * 1. Pass both ok:true and ok:false ToolResult values through jsonResponse unchanged
  * 2. Catch unexpected throws and convert to typed UNEXPECTED error
+ * 3. Forwards the MCP request context (extra) to the inner handler so
+ *    handlers can use resolveScope(extra) per request
  *
  * Both ok:true and ok:false results pass through jsonResponse unchanged — the
  * caller (MCP client) receives the typed CanonToolError structure and can inspect
  * error_code/message directly. The key value of this wrapper is the catch-all:
  * unexpected throws become typed UNEXPECTED errors instead of opaque MCP SDK
  * error responses.
+ *
+ * The extra parameter is additive — handlers that ignore it are behaviorally
+ * unchanged (the four existing callers in register-journal and register-messaging
+ * are unaffected).
  */
 export function wrapHandler<T>(
-  handler: (input: T) => Promise<unknown>,
-): (input: T) => Promise<ReturnType<typeof jsonResponse>> {
-  return async (input: T) => {
+  handler: (
+    input: T,
+    extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+  ) => Promise<unknown>,
+): (
+  input: T,
+  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+) => Promise<ReturnType<typeof jsonResponse>> {
+  return async (input: T, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
     try {
-      const result = await handler(input);
+      const result = await handler(input, extra);
       return jsonResponse(result);
     } catch (err) {
       return toToolErrorResponse(err);
