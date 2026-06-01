@@ -39,24 +39,38 @@ jq --arg v "$VERSION" '.version = $v' "$PACKAGE_JSON" > "$PACKAGE_JSON.tmp" && m
 
 # Update the hardcoded version string in server-state.ts
 # Matches:   version: "X.Y.Z",
-sed -i '' "s/version: \"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\"/version: \"$VERSION\"/" "$SERVER_STATE_TS"
+perl -i -pe "s/version: \"[0-9]+\.[0-9]+\.[0-9]+\"/version: \"$VERSION\"/" "$SERVER_STATE_TS"
 
 # Regenerate the lockfile so it stays in lockstep with package.json
 echo "Regenerating $LOCK_FILE..."
 (cd "$REPO_ROOT/mcp-server" && npm install --package-lock-only)
 
-# Fail-closed: assert the lockfile's top-level version matches the requested version
-LOCK_VERSION="$(jq -r .version "$LOCK_FILE")"
-if [[ "$LOCK_VERSION" != "$VERSION" ]]; then
+# Fail-closed: assert BOTH version fields in the lockfile match the requested version.
+# npm writes the version in two places: the top-level .version and .packages[""].version.
+# Asserting both catches partial regen where only one field was updated.
+LOCK_VERSION_TOP="$(jq -r '.version' "$LOCK_FILE")"
+LOCK_VERSION_PKG="$(jq -r '.packages[""].version' "$LOCK_FILE")"
+LOCK_OK=1
+if [[ "$LOCK_VERSION_TOP" != "$VERSION" ]]; then
   echo "" >&2
-  echo "ERROR: lockfile version mismatch after regeneration." >&2
+  echo "ERROR: lockfile top-level version mismatch after regeneration." >&2
   echo "  Expected : $VERSION" >&2
-  echo "  Got      : $LOCK_VERSION" >&2
+  echo "  Got      : $LOCK_VERSION_TOP" >&2
+  LOCK_OK=0
+fi
+if [[ "$LOCK_VERSION_PKG" != "$VERSION" ]]; then
+  echo "" >&2
+  echo "ERROR: lockfile packages[\"\"] version mismatch after regeneration." >&2
+  echo "  Expected : $VERSION" >&2
+  echo "  Got      : $LOCK_VERSION_PKG" >&2
+  LOCK_OK=0
+fi
+if [[ "$LOCK_OK" -eq 0 ]]; then
   echo "The lockfile ($LOCK_FILE) was not updated correctly." >&2
   echo "Fix the discrepancy before committing." >&2
   exit 1
 fi
-echo "Lockfile version verified: $LOCK_VERSION"
+echo "Lockfile version verified (top-level: $LOCK_VERSION_TOP, packages[\"\"]: $LOCK_VERSION_PKG)"
 
 echo "Staging files..."
 git -C "$REPO_ROOT" add "$PLUGIN_JSON" "$PACKAGE_JSON" "$SERVER_STATE_TS" "$LOCK_FILE"

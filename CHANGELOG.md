@@ -2,7 +2,7 @@
 
 ## 2.4.0 (2026-06-01)
 
-14 commits since v2.3.1. HTTP-transport groundwork, MCP-boot durability, area memory, observability, and hook reliability.
+14 commits since v2.3.0. HTTP-transport groundwork, MCP-boot durability, area memory, observability, and hook reliability.
 
 ### Highlights
 
