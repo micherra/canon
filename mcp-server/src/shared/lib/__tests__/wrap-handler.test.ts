@@ -13,9 +13,7 @@ import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sd
 import { describe, expect, it } from "vitest";
 import { wrapHandler } from "../wrap-handler.ts";
 
-function makeExtra(
-  sessionId?: string,
-): RequestHandlerExtra<ServerRequest, ServerNotification> {
+function makeExtra(sessionId?: string): RequestHandlerExtra<ServerRequest, ServerNotification> {
   return {
     signal: new AbortController().signal,
     requestId: "test-req-1",
@@ -53,10 +51,7 @@ describe("wrapHandler", () => {
   it("propagates different extra sessions to the handler", async () => {
     const sessionIds: (string | undefined)[] = [];
     const wrapped = wrapHandler(
-      async (
-        _input: unknown,
-        extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
-      ) => {
+      async (_input: unknown, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
         sessionIds.push(extra.sessionId);
         return "ok";
       },

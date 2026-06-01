@@ -20,9 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeExtra(
-  sessionId?: string,
-): RequestHandlerExtra<ServerRequest, ServerNotification> {
+function makeExtra(sessionId?: string): RequestHandlerExtra<ServerRequest, ServerNotification> {
   return {
     signal: new AbortController().signal,
     requestId: "test-req-1",
@@ -37,9 +35,15 @@ function makeExtra(
 function getRegisteredHandler(
   registerToolCalls: unknown[][],
   toolName: string,
-): (input: unknown, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => Promise<unknown> {
+): (
+  input: unknown,
+  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+) => Promise<unknown> {
   const call = registerToolCalls.find((c) => c[0] === toolName);
-  if (!call) throw new Error(`Tool "${toolName}" was not registered. Available: ${registerToolCalls.map((c) => c[0]).join(", ")}`);
+  if (!call)
+    throw new Error(
+      `Tool "${toolName}" was not registered. Available: ${registerToolCalls.map((c) => c[0]).join(", ")}`,
+    );
   return call[2] as (
     input: unknown,
     extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -63,10 +67,7 @@ vi.mock("@app/server-state.ts", async (importOriginal) => {
           extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
         ) => Promise<unknown>,
       ) =>
-      async (
-        input: T,
-        extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
-      ) => {
+      async (input: T, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
         return handler(input, extra);
       },
     server: { registerTool: vi.fn() },
@@ -155,7 +156,9 @@ vi.mock("@platform/storage/drift/drift-db.ts", () => ({
 }));
 
 vi.mock("@features/knowledge-graph/tools/graph-query.ts", () => ({
-  graphQuery: vi.fn().mockReturnValue({ ok: true, count: 0, query_type: "blast_radius", results: [] }),
+  graphQuery: vi
+    .fn()
+    .mockReturnValue({ ok: true, count: 0, query_type: "blast_radius", results: [] }),
 }));
 
 vi.mock("@features/file-context/tools/get-file-context.ts", () => ({
@@ -220,27 +223,25 @@ vi.mock("@features/diagnostics/services/prediction-accuracy.ts", () => ({
 
 // ── Import mocked modules ─────────────────────────────────────────────────────
 
-import {
-  STDIO_SESSION_ID,
-  registerConnectionScope,
-  resetForTesting,
-  setProjectDir,
-} from "../server-state.ts";
-
-import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
-import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
-import { getCompliance } from "@features/principles/tools/get-compliance.ts";
-import { report } from "@features/orchestration/tools/report.ts";
-import { storePrReview } from "@features/pr-review/tools/store-pr-review.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
-
 import * as mockedAppState from "@app/server-state.ts";
 
-import { registerInitWorkspaceTool } from "../register-init-workspace.ts";
-import { registerArtifactTools } from "../register-artifacts.ts";
-import { registerPrincipleTools } from "../register-principles.ts";
+import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
+import { report } from "@features/orchestration/tools/report.ts";
+import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
+import { storePrReview } from "@features/pr-review/tools/store-pr-review.ts";
+import { getCompliance } from "@features/principles/tools/get-compliance.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { registerAgentTeamsTools } from "../register-agent-teams.ts";
+import { registerArtifactTools } from "../register-artifacts.ts";
+import { registerInitWorkspaceTool } from "../register-init-workspace.ts";
 import { handleGetContext } from "../register-knowledge.ts";
+import { registerPrincipleTools } from "../register-principles.ts";
+import {
+  registerConnectionScope,
+  resetForTesting,
+  STDIO_SESSION_ID,
+  setProjectDir,
+} from "../server-state.ts";
 
 // ── Test setup ────────────────────────────────────────────────────────────────
 
@@ -249,7 +250,7 @@ beforeEach(() => {
   resetForTesting();
 
   // Re-register all tools on the fresh mock server
-  const mockServer = mockedAppState.server as { registerTool: ReturnType<typeof vi.fn> };
+  const mockServer = mockedAppState.server as unknown as { registerTool: ReturnType<typeof vi.fn> };
   mockServer.registerTool.mockClear();
 
   registerInitWorkspaceTool();
@@ -263,7 +264,7 @@ afterEach(() => {
 });
 
 function getRegisterToolCalls(): unknown[][] {
-  const mockServer = mockedAppState.server as { registerTool: ReturnType<typeof vi.fn> };
+  const mockServer = mockedAppState.server as unknown as { registerTool: ReturnType<typeof vi.fn> };
   return mockServer.registerTool.mock.calls as unknown[][];
 }
 
@@ -325,7 +326,11 @@ describe("scope migration: register-artifacts.ts — write_review", () => {
   const reviewInput = {
     files: [],
     honored: [],
-    score: { conventions: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, rules: { passed: 0, total: 0 } },
+    score: {
+      conventions: { passed: 0, total: 0 },
+      opinions: { passed: 0, total: 0 },
+      rules: { passed: 0, total: 0 },
+    },
     slug: "test",
     verdict: "approved" as const,
     violations: [],
@@ -403,17 +408,18 @@ describe("scope migration: register-principles.ts — get_compliance, report, st
       {
         files: ["src/foo.ts"],
         honored: [],
-        score: { conventions: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, rules: { passed: 0, total: 0 } },
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 0 },
+        },
         verdict: "CLEAN",
         violations: [],
       },
       makeExtra("session-E"),
     );
 
-    expect(vi.mocked(storePrReview)).toHaveBeenCalledWith(
-      expect.anything(),
-      "/project/E",
-    );
+    expect(vi.mocked(storePrReview)).toHaveBeenCalledWith(expect.anything(), "/project/E");
   });
 });
 

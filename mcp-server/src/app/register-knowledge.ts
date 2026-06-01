@@ -24,12 +24,12 @@ import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
 import type { GetPrinciplesBatchOutput } from "@features/principles/tools/get-principles.ts";
 import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { CANON_DIR } from "@shared/constants.ts";
 import { applyDisclosure } from "@shared/lib/progressive-disclosure.ts";
 import { z } from "zod";
-import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import {
   gatedWrapHandler,
   pluginDir,
@@ -240,7 +240,10 @@ export function buildSlimmedOutput(
  * Returns the output unchanged when under threshold; returns a slimmed version
  * with a file pointer when over threshold.
  */
-async function applyContextDisclosure(output: GetContextOutput, dir: string): Promise<GetContextOutput> {
+async function applyContextDisclosure(
+  output: GetContextOutput,
+  dir: string,
+): Promise<GetContextOutput> {
   const disclosure = await applyDisclosure(output, {
     filePrefix: "get-context",
     outputDir: join(dir, CANON_DIR, "artifacts"),
@@ -265,7 +268,11 @@ async function handleGetContext(
   // When extra is absent (direct call from tests), pass a stub so resolveScope falls through
   // to the module global via the STDIO sentinel — the absent-extra path is the tested fallback.
   const dir = resolveScope(
-    (extra ?? { sessionId: undefined, signal: new AbortController().signal, requestId: "" }) as RequestHandlerExtra<ServerRequest, ServerNotification>,
+    (extra ?? {
+      requestId: "",
+      sessionId: undefined,
+      signal: new AbortController().signal,
+    }) as RequestHandlerExtra<ServerRequest, ServerNotification>,
   );
   const sections: IncludeSection[] = input.include ?? ALL_SECTIONS;
   const output: GetContextOutput = {
@@ -278,13 +285,11 @@ async function handleGetContext(
 
   if (sections.includes("principles")) {
     tasks.push(
-      getPrinciplesBatch(
-        { file_paths: input.file_paths, summary_only: true },
-        dir,
-        pluginDir,
-      ).then((result) => {
-        output.principles = result;
-      }),
+      getPrinciplesBatch({ file_paths: input.file_paths, summary_only: true }, dir, pluginDir).then(
+        (result) => {
+          output.principles = result;
+        },
+      ),
     );
   }
 
@@ -574,7 +579,9 @@ function registerGraphJobTools(): void {
         force: z.boolean().optional().describe("Skip cache, force new run"),
       },
     },
-    gatedWrapHandler(async (input, extra) => codebaseGraphSubmit(input, resolveScope(extra), pluginDir)),
+    gatedWrapHandler(async (input, extra) =>
+      codebaseGraphSubmit(input, resolveScope(extra), pluginDir),
+    ),
   );
 
   server.registerTool(

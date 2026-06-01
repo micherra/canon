@@ -45,9 +45,14 @@ export function toToolErrorResponse(err: unknown): ReturnType<typeof jsonRespons
  * unexpected throws become typed UNEXPECTED errors instead of opaque MCP SDK
  * error responses.
  *
- * The extra parameter is additive — handlers that ignore it are behaviorally
- * unchanged (the four existing callers in register-journal and register-messaging
- * are unaffected).
+ * The extra parameter is additive — handlers that do not declare extra in their
+ * signature are behaviorally unchanged (the four existing callers in
+ * register-journal and register-messaging silently ignore the extra arg).
+ * Handlers that DO declare extra receive the full RequestHandlerExtra context,
+ * enabling per-request scope resolution via resolveScope(extra).
+ *
+ * The returned function accepts extra as optional so existing tests that call
+ * `handler(input)` without extra continue to type-check.
  */
 export function wrapHandler<T>(
   handler: (
@@ -56,11 +61,14 @@ export function wrapHandler<T>(
   ) => Promise<unknown>,
 ): (
   input: T,
-  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+  extra?: RequestHandlerExtra<ServerRequest, ServerNotification>,
 ) => Promise<ReturnType<typeof jsonResponse>> {
-  return async (input: T, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+  return async (input: T, extra?: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
     try {
-      const result = await handler(input, extra);
+      const result = await handler(
+        input,
+        extra as RequestHandlerExtra<ServerRequest, ServerNotification>,
+      );
       return jsonResponse(result);
     } catch (err) {
       return toToolErrorResponse(err);

@@ -36,6 +36,8 @@ export function registerInitWorkspaceTool(): void {
         tier: z.enum(["small", "medium", "large"]),
       },
     },
-    gatedWrapHandler(async (input, extra) => initWorkspaceFlow(input, resolveScope(extra), pluginDir)),
+    gatedWrapHandler(async (input, extra) =>
+      initWorkspaceFlow(input, resolveScope(extra), pluginDir),
+    ),
   );
 }
