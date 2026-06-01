@@ -7,7 +7,7 @@ import { writeTestReport } from "@features/orchestration/tools/write-test-report
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { z } from "zod";
-import { gatedWrapHandler, projectDir, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
 
 /** Decision record schema for write_implementation_summary */
 const DecisionRecordSchema = z.object({
@@ -125,8 +125,9 @@ function registerWriteReviewTool(): void {
         workspace: z.string(),
       },
     },
-    gatedWrapHandler(async (input) => {
-      const driftDb = projectDir ? getDriftDb(projectDir) : undefined;
+    gatedWrapHandler(async (input, extra) => {
+      const dir = resolveScope(extra);
+      const driftDb = dir ? getDriftDb(dir) : undefined;
       const signals = driftDb?.getSignals();
       const adapter: ConfidenceAdapter | undefined = signals
         ? { computeViolationConfidence: (v) => computeViolationConfidence(v, signals) }
@@ -172,10 +173,11 @@ function registerWriteImplementationSummaryTool(): void {
         workspace: z.string(),
       },
     },
-    gatedWrapHandler(async (input) => {
+    gatedWrapHandler(async (input, extra) => {
+      const dir = resolveScope(extra);
       const areaMemoryWriter = (() => {
         try {
-          return projectDir ? getDriftDb(projectDir).getAreaMemory() : undefined;
+          return dir ? getDriftDb(dir).getAreaMemory() : undefined;
         } catch {
           return undefined;
         }

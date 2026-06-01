@@ -12,8 +12,8 @@ import { z } from "zod";
 import {
   gatedWrapHandler,
   pluginDir,
-  projectDir,
   registerToolWithUi,
+  resolveScope,
   server,
 } from "./server-state.ts";
 
@@ -21,8 +21,8 @@ function registerPrImpactTool(): void {
   registerToolWithUi("show_pr_impact", {
     description:
       "Opens the PR Review view — change analysis, impact assessment, and review violations for a pull request or branch.",
-    handler: gatedWrapHandler(async (input) => {
-      return showPrImpact(projectDir, {
+    handler: gatedWrapHandler(async (input, extra) => {
+      return showPrImpact(resolveScope(extra), {
         branch: input.branch,
         diff_base: input.diff_base,
         incremental: input.incremental,
@@ -71,7 +71,7 @@ function registerPrincipleQueryTools(): void {
         task_description: z.string().optional().describe("Brief description of the task"),
       },
     },
-    gatedWrapHandler(async (input) => getPrinciples(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => getPrinciples(input, resolveScope(extra), pluginDir)),
   );
 
   server.registerTool(
@@ -92,7 +92,7 @@ function registerPrincipleQueryTools(): void {
           .describe("Include archived principles in results (default: false)"),
       },
     },
-    gatedWrapHandler(async (input) => listPrinciples(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => listPrinciples(input, resolveScope(extra), pluginDir)),
   );
 }
 
@@ -114,7 +114,7 @@ function registerCodeReviewTools(): void {
           ),
       },
     },
-    gatedWrapHandler(async (input) => reviewCode(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => reviewCode(input, resolveScope(extra), pluginDir)),
   );
 
   server.registerTool(
@@ -126,7 +126,7 @@ function registerCodeReviewTools(): void {
         principle_id: z.string().describe("ID of the principle to check compliance for"),
       },
     },
-    gatedWrapHandler(async (input) => getCompliance(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => getCompliance(input, resolveScope(extra), pluginDir)),
   );
 
   // Tool: report (unified — decisions, patterns, and reviews)
@@ -137,9 +137,10 @@ function registerCodeReviewTools(): void {
         "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
       inputSchema: reportInputSchema,
     },
-    gatedWrapHandler(async (input) => {
-      const signals = projectDir ? getDriftDb(projectDir).getSignals() : undefined;
-      return report(input, projectDir, signals);
+    gatedWrapHandler(async (input, extra) => {
+      const dir = resolveScope(extra);
+      const signals = dir ? getDriftDb(dir).getSignals() : undefined;
+      return report(input, dir, signals);
     }),
   );
 }
@@ -199,7 +200,7 @@ function registerStorePrReviewTool(): void {
           .describe("Principle violations found"),
       },
     },
-    gatedWrapHandler(async (input) => storePrReview(input, projectDir)),
+    gatedWrapHandler(async (input, extra) => storePrReview(input, resolveScope(extra))),
   );
 }
 
@@ -216,7 +217,7 @@ function registerPresentReviewTool(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    gatedWrapHandler(async (input) =>
+    gatedWrapHandler(async (input, extra) =>
       presentReview(
         {
           branch: input.branch,
@@ -224,7 +225,7 @@ function registerPresentReviewTool(): void {
           slug: input.slug,
           workspace: input.workspace,
         },
-        projectDir,
+        resolveScope(extra),
       ),
     ),
   );
