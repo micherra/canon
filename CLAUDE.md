@@ -373,6 +373,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 3. Ship:
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
    - **GitHub release** (conditional): after PR creation, if a `vX.Y.Z` tag exists on HEAD, the shipper runs `gh release create <tag> --generate-notes`. If no tag exists, skip silently.
+   - **Canon release procedure**: version must be bumped in all three lockstep locations (`.claude-plugin/plugin.json`, `mcp-server/package.json`, `mcp-server/src/app/server-state.ts`). Use `scripts/release.sh <version>` — it bumps all three, regenerates the lockfile with fail-closed assertions, commits, and tags. Full sequence: `docs/reference/release-checklist.md`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
 4. Verify file claims released.
 5. Run `.canon/learn.sh` if it exists.
@@ -508,6 +509,7 @@ canon/
     └── workspaces/       # Per-branch/task build state
 ```
 
-## Reference
+## Reference <!-- last-updated: 2026-06-01 -->
 
 Full MCP tool tables, flow schema, hooks, and principles guide: `docs/reference/canon-reference.md`.
+Release procedure (three-location version lockstep, lockfile regen, tag-push sequence, marketplace reconcile): `docs/reference/release-checklist.md`.
