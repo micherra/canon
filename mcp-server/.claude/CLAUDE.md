@@ -48,7 +48,11 @@ src/
 
 
 ## Contracts
-<!-- last-updated: 2026-05-31 (per-connection scope registry: resolveScope, registerConnectionScope, clearConnectionScope, STDIO_SESSION_ID, resetForTesting; gatedWrapHandler now passes extra to handlers) -->
+<!-- last-updated: 2026-05-31 (per-connection scope registry: resolveScope, registerConnectionScope, clearConnectionScope, STDIO_SESSION_ID, resetForTesting; gatedWrapHandler now passes extra to handlers; boot.sh launcher + PID file) -->
+
+**`boot.sh`** (`mcp-server/boot.sh`) — self-resolving launcher: prefers `${CLAUDE_PLUGIN_ROOT}/mcp-server` as server dir; falls back to its own `BASH_SOURCE` dir; exits 1 with loud stderr if server dir or local `tsx` binary not found; never uses `npx`; `--print-resolution` flag prints resolved paths and exits (for tests). `${CLAUDE_PLUGIN_ROOT}` is the Claude plugin API variable — it is not expanded when `.mcp.json` is loaded as a project config; `BASH_SOURCE` self-resolution is the backstop in that context. Added 2026-05-31.
+
+**`http-server.ts` PID file** (`src/app/http-server.ts`) — `writePidFile(pidDir?)` writes `{pid}:{port}\n` to `{CLAUDE_PLUGIN_DATA}/.canon/mcp-server.pid` (or `.canon/mcp-server.pid` fallback) on successful bind; `removePidFile(pidDir?)` removes only if stored PID matches current process; failures logged as WARN, never thrown; skipped in VITEST context. Added 2026-05-31.
 
 **`resolveGitRoot(cwd, gitTopLevelFn)`** (`src/app/resolve-project-dir.ts`) — returns git repo root for `cwd`; falls back to `cwd` when not in a git repo or git is unavailable; errors are logged and swallowed (never throws).
 
@@ -190,7 +194,7 @@ src/
 | `@modelcontextprotocol/sdk` | MCP server/client implementation |
 | `zod` | Runtime schema validation |
 | `gray-matter` | YAML frontmatter parsing in `parser.ts` |
-| `tsx` | TypeScript execution (dev) |
+| `tsx` | TypeScript execution (runtime dependency — server launched via boot.sh → tsx) |
 | `vitest` | Unit testing (dev) |
 
 **Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — added 2026-04-08: `injectWorktreeSettings(worktreePath, tools)` atomically writes `.claude/settings.local.json`; returns `false` on failure (never throws); idempotent. `profileToAllowRules` filters to `BUILTIN_CLAUDE_TOOLS`. `buildWorktreeSettings` produces `{ permissions: { allow: [] } }` for empty input.
@@ -200,7 +204,7 @@ src/
 **`injectSettingsIntoRequests`** (`src/features/orchestration/tools/drive-flow.ts`) — iterates spawn requests sequentially, calls `injectWorktreeSettings` when `permission_mode === "auto"` AND `worktree_path` AND `tools` present; never throws.
 
 ## Invariants
-<!-- last-updated: 2026-05-27 (cwd fallback now resolves to git root via resolveGitRoot before resolveProjectDir) -->
+<!-- last-updated: 2026-05-27 -->
 
 - **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `gatedWrapHandler` (gated handlers) or `wrapHandler` (non-gated paths) and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
@@ -237,12 +241,12 @@ src/
 **Recursive filesystem scanners — root threading**: Scanners that exclude paths by relative prefix must thread the original scan root through all recursive calls. Never update the root to the current directory. Pattern: `scanFn(currentDir, rootDir)` where `rootDir` never changes. The bug class (root-drift) is silent — exclusion logic passes at depth 0 and silently fails at depth 1+. See `tools/wiki-lint.ts` (`FindFilesCtx.originalRoot`) and `services/doc-gap-detect.ts` (`scanOne(currentDir, rootDir, excludeDirs)`) as reference implementations.
 
 ## Development
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-05-30 -->
 
 ```bash
 npm install          # Install dependencies
-npm run build        # Compile TypeScript (tsc → dist/)
-npm start            # Run server with tsx (hot TypeScript execution)
+npm run build        # Emit TypeScript declarations only (.d.ts via tsc emitDeclarationOnly; no runnable dist/ produced)
+npm start            # Run server via tsx (tsx is a runtime dependency; loaded by boot.sh in production)
 npm test             # Run vitest unit tests
 ```
 
