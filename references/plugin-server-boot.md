@@ -36,7 +36,7 @@ rm -f "$DATA/package.json"
 
 **Always exit 0**: SessionStart hooks are advisory. An install failure must not block the session.
 
-Canon's implementation: `mcp-server/session-start-deps-install.sh`
+Canon's implementation: `hooks/canon-agent-teams/session-start-deps-install.sh`
 
 ---
 
@@ -201,6 +201,6 @@ boot.sh
 ## See also
 
 - `mcp-server/boot.sh` — implementation
-- `mcp-server/session-start-deps-install.sh` — SessionStart install hook
+- `hooks/canon-agent-teams/session-start-deps-install.sh` — SessionStart install hook
 - `mcp-server/.claude/CLAUDE.md` §Contracts `boot.sh` entry — contract-level summary
 - https://code.claude.com/docs/en/plugins-reference §"Persistent data directory" — official recipe
