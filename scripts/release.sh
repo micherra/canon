@@ -35,7 +35,7 @@ echo "Bumping version to $VERSION in:"
 echo "  $PLUGIN_JSON"
 echo "  $PACKAGE_JSON"
 echo "  $SERVER_STATE_TS"
-echo "  $PACKAGE_LOCK (regenerated via npm install)"
+echo "  $PACKAGE_LOCK (regenerated via npm install --package-lock-only)"
 
 # Update .claude-plugin/plugin.json
 jq --arg v "$VERSION" '.version = $v' "$PLUGIN_JSON" > "$PLUGIN_JSON.tmp" && mv "$PLUGIN_JSON.tmp" "$PLUGIN_JSON"
@@ -49,8 +49,9 @@ sed -i '' "s/version: \"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\"/version: \"$VERS
 
 # Regenerate the lockfile so both .version and .packages[""].version are correct.
 # This prevents the lockfile-drift failure that occurred 3/3 times with the old process.
-echo "Regenerating mcp-server/package-lock.json via npm install..."
-(cd "$REPO_ROOT/mcp-server" && npm install)
+# --package-lock-only: updates the lockfile without touching node_modules (faster, deterministic).
+echo "Regenerating mcp-server/package-lock.json via npm install --package-lock-only..."
+(cd "$REPO_ROOT/mcp-server" && npm install --package-lock-only)
 
 # Verify both lockfile version fields are updated
 LOCK_ROOT_VER="$(jq -r '.version' "$PACKAGE_LOCK")"
