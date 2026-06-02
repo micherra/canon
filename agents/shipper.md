@@ -140,35 +140,22 @@ If push/PR creation fails, save the PR description to `${WORKSPACE}/plans/${slug
 4. If clean merge: `git branch -d canon/{slug}`. Do NOT run `git worktree remove` — worktree cleanup is handled after `finalize_workspace` completes.
 5. Report success.
 
-### Step 4.5: Create GitHub release (conditional)
+### Step 4.5: GitHub releases — release-please owns this
 
-After the PR is created, check whether a release tag exists on HEAD:
+**Do NOT create tags or run `gh release create`.** Releases are now cut by release-please:
 
-```sh
-git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | head -1
+- When the release-please release PR is merged to `main`, release-please automatically creates the `vX.Y.Z` tag and GitHub release. No shipper action required.
+- The shipper's job ends at the normal feature/build PR created in Step 4.
+
+**Post-release manual step (not the shipper's job — note it in the PR description):**
+
+After the release-please release PR is merged and the GitHub release is created, a human must reconcile the directory-marketplace cache:
+
+```
+claude plugin update canon
 ```
 
-If a matching tag is found (e.g., `v1.2.3`):
-
-1. Push the tag to the remote first:
-
-   ```sh
-   git push origin <tag>
-   ```
-
-   If the tag push fails, note it in the PR description under "Build Notes" and report `DONE_WITH_CONCERNS` with the exact error. Do not proceed to release creation.
-
-2. Create a GitHub release with auto-generated release notes, using `--verify-tag` to ensure the remote tag exists rather than auto-creating from the wrong commit:
-
-   ```sh
-   gh release create <tag> --generate-notes --verify-tag
-   ```
-
-   If the command succeeds, include the release URL in your status report alongside the PR URL.
-
-   If the command fails (e.g., release already exists, auth error), note it in the PR description under "Build Notes" and report `DONE_WITH_CONCERNS` with the exact error. Do not block shipping over a failed release creation.
-
-If no matching tag exists on HEAD, skip this step silently.
+Then restart Claude Code. See `docs/reference/release-checklist.md` for the full release flow.
 
 ### Step 5: Log activity
 

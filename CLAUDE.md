@@ -372,8 +372,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 2. Context-sync: spawn scribe. Updates CLAUDE.md, context.md, CONVENTIONS.md on build branch before ship, and electively factual-syncs docs/*.md direction docs.
 3. Ship:
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
-   - **GitHub release** (primary path): release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases from the release PR. The shipper's `gh release create` below is the fallback only (used when a tag already exists on HEAD from a non-release-please source). See `docs/reference/release-checklist.md`.
-   - **GitHub release** (fallback — shipper): after PR creation, if a `vX.Y.Z` tag exists on HEAD, the shipper runs `gh release create <tag> --generate-notes`. If no tag exists, skip silently.
+   - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`. See `docs/reference/release-checklist.md`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
 4. Verify file claims released.
 5. Run `.canon/learn.sh` if it exists.
