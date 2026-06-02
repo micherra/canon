@@ -9,12 +9,12 @@ release-please is the **primary** release mechanism. This checklist documents th
    The action runs automatically on every push to `main`.
 
 2. **release-please opens (or updates) a release PR.**
-   The PR bumps the version in all 4 locations:
+   The PR updates 4 version locations plus the changelog:
    - `.claude-plugin/plugin.json` — marketplace version
    - `mcp-server/package.json` — npm package version
    - `mcp-server/src/app/server-state.ts` — MCP server version string
    - `mcp-server/package-lock.json` (both `.version` and `.packages[""].version`)
-   - `CHANGELOG.md` — auto-generated from commit history
+   - `CHANGELOG.md` — auto-generated from commit history (not a version location)
 
 3. **Review the release PR.**
    - Confirm the computed version bump is correct (feat → minor, fix → patch, BREAKING → major).

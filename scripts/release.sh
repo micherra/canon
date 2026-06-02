@@ -43,9 +43,9 @@ jq --arg v "$VERSION" '.version = $v' "$PLUGIN_JSON" > "$PLUGIN_JSON.tmp" && mv 
 # Update mcp-server/package.json
 jq --arg v "$VERSION" '.version = $v' "$PACKAGE_JSON" > "$PACKAGE_JSON.tmp" && mv "$PACKAGE_JSON.tmp" "$PACKAGE_JSON"
 
-# Update the hardcoded version string in server-state.ts
-# Matches:   version: "X.Y.Z",
-sed -i '' "s/version: \"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\"/version: \"$VERSION\"/" "$SERVER_STATE_TS"
+# Update the hardcoded version string in server-state.ts.
+# Matches:   version: "X.Y.Z",   preserving any trailing comment (e.g. // x-release-please-version).
+perl -i -pe "s/version: \"[0-9]+\.[0-9]+\.[0-9]+\"/version: \"$VERSION\"/" "$SERVER_STATE_TS"
 
 # Regenerate the lockfile so both .version and .packages[""].version are correct.
 # This prevents the lockfile-drift failure that occurred 3/3 times with the old process.
