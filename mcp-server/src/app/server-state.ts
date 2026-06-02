@@ -119,6 +119,7 @@ export const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || dirname(mcpServ
 
 export const server = new McpServer({
   name: "canon",
+  // x-release-please-version
   version: "2.3.1",
 });
 

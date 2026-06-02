@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "separate-pull-requests": false,
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "component": "canon",
+      "extra-files": [
+        { "type": "json", "path": ".claude-plugin/plugin.json", "jsonpath": "$.version" },
+        { "type": "generic", "path": "mcp-server/src/app/server-state.ts" },
+        { "type": "json", "path": "mcp-server/package-lock.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "mcp-server/package-lock.json", "jsonpath": "$[\"packages\"][\"\"][\"version\"]" }
+      ]
+    },
+    "mcp-server": {
+      "release-type": "node",
+      "component": "mcp-server"
+    }
+  }
+}
