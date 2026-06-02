@@ -112,6 +112,151 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Test 7: Race-recovery — empty DATA dir; background process drops tsx after
+# a short delay; boot recovers and resolves tsx (does not exit 1).
+# Uses CANON_BOOT_DEPS_TIMEOUT=5 CANON_BOOT_DEPS_INTERVAL=0.2 for fast test.
+# tsx stub exits 0 immediately so boot completes without launching a real server.
+# ---------------------------------------------------------------------------
+RACE_SERVER=$(mktemp -d)
+RACE_DATA=$(mktemp -d)
+mkdir -p "$RACE_SERVER/src/app"
+touch "$RACE_SERVER/src/app/index.ts"
+mkdir -p "$RACE_DATA/node_modules/.bin"
+# Launch a background job that drops a fake tsx after a short sleep
+(
+  sleep 0.5
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$RACE_DATA/node_modules/.bin/tsx"
+  chmod +x "$RACE_DATA/node_modules/.bin/tsx"
+) &
+BG_PID=$!
+# Run boot without --print-resolution so it goes through the real wait loop.
+# tsx stub exits 0 immediately; boot exit code is its exit code.
+RACE_EXIT=0
+CLAUDE_PLUGIN_ROOT="" \
+  CLAUDE_PLUGIN_DATA="$RACE_DATA" \
+  CANON_BOOT_DEPS_TIMEOUT=5 \
+  CANON_BOOT_DEPS_INTERVAL=0.2 \
+  bash "$BOOT_SH" --force-dir "$RACE_SERVER" 2>/dev/null || RACE_EXIT=$?
+wait "$BG_PID" 2>/dev/null || true
+rm -rf "$RACE_SERVER" "$RACE_DATA"
+if [[ "$RACE_EXIT" -eq 0 ]]; then
+  pass "Race-recovery: boot resolved tsx after background install"
+else
+  fail "Race-recovery: boot exited $RACE_EXIT — did not recover after background install"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 8: Timeout — empty DATA, tsx never lands;
+# CANON_BOOT_DEPS_TIMEOUT=2 CANON_BOOT_DEPS_INTERVAL=0.2;
+# assert non-zero exit + "tsx not found" on stderr.
+# ---------------------------------------------------------------------------
+TIMEOUT_SERVER=$(mktemp -d)
+TIMEOUT_DATA=$(mktemp -d)
+mkdir -p "$TIMEOUT_SERVER/src/app"
+touch "$TIMEOUT_SERVER/src/app/index.ts"
+mkdir -p "$TIMEOUT_DATA/node_modules"
+# No .bin/tsx created — let it time out
+TIMEOUT_STDERR=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  CLAUDE_PLUGIN_DATA="$TIMEOUT_DATA" \
+  CANON_BOOT_DEPS_TIMEOUT=2 \
+  CANON_BOOT_DEPS_INTERVAL=0.2 \
+  bash "$BOOT_SH" --force-dir "$TIMEOUT_SERVER" 2>&1 >/dev/null
+) || TIMEOUT_EXIT=$?
+rm -rf "$TIMEOUT_SERVER" "$TIMEOUT_DATA"
+if [[ "${TIMEOUT_EXIT:-0}" -ne 0 ]] && echo "$TIMEOUT_STDERR" | grep -q "tsx not found"; then
+  pass "Timeout: exits non-zero with 'tsx not found' when deps never land"
+else
+  fail "Timeout: expected non-zero exit + 'tsx not found'; got exit=${TIMEOUT_EXIT:-0}, stderr=${TIMEOUT_STDERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 9: Never-clobber — $SERVER_DIR/node_modules is a real directory;
+# boot must NOT replace it with a symlink.
+# ---------------------------------------------------------------------------
+NOCLOBBER_SERVER=$(mktemp -d)
+NOCLOBBER_DATA=$(mktemp -d)
+mkdir -p "$NOCLOBBER_SERVER/src/app"
+touch "$NOCLOBBER_SERVER/src/app/index.ts"
+# Real node_modules with tsx already inside (dev working-tree case)
+mkdir -p "$NOCLOBBER_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\n' > "$NOCLOBBER_SERVER/node_modules/.bin/tsx"
+chmod +x "$NOCLOBBER_SERVER/node_modules/.bin/tsx"
+# DATA also has tsx (but should not be used to clobber)
+mkdir -p "$NOCLOBBER_DATA/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-from-data"\n' > "$NOCLOBBER_DATA/node_modules/.bin/tsx"
+chmod +x "$NOCLOBBER_DATA/node_modules/.bin/tsx"
+CLAUDE_PLUGIN_ROOT="" \
+  CLAUDE_PLUGIN_DATA="$NOCLOBBER_DATA" \
+  CANON_BOOT_DEPS_TIMEOUT=2 \
+  CANON_BOOT_DEPS_INTERVAL=0.2 \
+  bash "$BOOT_SH" --force-dir "$NOCLOBBER_SERVER" --print-resolution >/dev/null 2>&1 || true
+# Check it is still a real directory (not a symlink)
+if [[ -d "$NOCLOBBER_SERVER/node_modules" ]] && [[ ! -L "$NOCLOBBER_SERVER/node_modules" ]]; then
+  pass "Never-clobber: real node_modules dir left untouched by boot"
+else
+  fail "Never-clobber: boot clobbered real node_modules dir with a symlink"
+fi
+rm -rf "$NOCLOBBER_SERVER" "$NOCLOBBER_DATA"
+
+# ---------------------------------------------------------------------------
+# Test 10: Dangling-symlink guard — $SERVER_DIR/node_modules is a symlink
+# pointing at a non-existent dir; boot must exit non-zero with a loud
+# "does not resolve to a real dir" message (no 30s hang).
+# Scenario: DATA dir has no tsx (wait times out, fall-through) but a pre-existing
+# dangling symlink is already in SERVER_DIR/node_modules from a prior boot (wiped cache).
+# The dangling-link guard must fire before the tsx-absent exit.
+# ---------------------------------------------------------------------------
+DANGLE_SERVER=$(mktemp -d)
+DANGLE_DATA=$(mktemp -d)
+mkdir -p "$DANGLE_SERVER/src/app"
+touch "$DANGLE_SERVER/src/app/index.ts"
+# DATA dir exists but has no tsx — simulates a wiped cache (node_modules gone)
+mkdir -p "$DANGLE_DATA/node_modules"
+# Pre-create a dangling symlink in SERVER_DIR/node_modules (points at a ghost target)
+GHOST_TARGET="${DANGLE_SERVER}/ghost-does-not-exist"
+ln -s "$GHOST_TARGET" "$DANGLE_SERVER/node_modules"
+DANGLE_STDERR=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  CLAUDE_PLUGIN_DATA="$DANGLE_DATA" \
+  CANON_BOOT_DEPS_TIMEOUT=1 \
+  CANON_BOOT_DEPS_INTERVAL=0.2 \
+  bash "$BOOT_SH" --force-dir "$DANGLE_SERVER" 2>&1 >/dev/null
+) || DANGLE_EXIT=$?
+rm -rf "$DANGLE_SERVER" "$DANGLE_DATA"
+if [[ "${DANGLE_EXIT:-0}" -ne 0 ]] && echo "$DANGLE_STDERR" | grep -q "does not resolve to a real dir"; then
+  pass "Dangling-symlink guard: exits non-zero with loud CANON ERROR"
+else
+  fail "Dangling-symlink guard: expected non-zero + error msg; got exit=${DANGLE_EXIT:-0}, stderr=${DANGLE_STDERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 11: --print-resolution is instant (skips wait + dangling-link guard)
+# even when DATA is empty and there is no tsx anywhere.
+# ---------------------------------------------------------------------------
+INSTANT_SERVER=$(mktemp -d)
+INSTANT_DATA=$(mktemp -d)
+mkdir -p "$INSTANT_SERVER/src/app"
+touch "$INSTANT_SERVER/src/app/index.ts"
+mkdir -p "$INSTANT_DATA/node_modules"
+# No .bin/tsx in DATA (would trigger wait if not --print-resolution)
+START_TIME=$SECONDS
+INSTANT_OUT=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  CLAUDE_PLUGIN_DATA="$INSTANT_DATA" \
+  CANON_BOOT_DEPS_TIMEOUT=30 \
+  CANON_BOOT_DEPS_INTERVAL=1 \
+  bash "$BOOT_SH" --force-dir "$INSTANT_SERVER" --print-resolution 2>/dev/null
+) || true
+ELAPSED_TIME=$(( SECONDS - START_TIME ))
+rm -rf "$INSTANT_SERVER" "$INSTANT_DATA"
+if [[ "$ELAPSED_TIME" -lt 5 ]]; then
+  pass "--print-resolution is instant (elapsed=${ELAPSED_TIME}s, skips wait)"
+else
+  fail "--print-resolution was not instant (elapsed=${ELAPSED_TIME}s, wait was not skipped)"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
