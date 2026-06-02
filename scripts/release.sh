@@ -8,7 +8,7 @@ set -euo pipefail
 # Bumps the version in all 4 locations, regenerates the lockfile, and commits.
 # NOTE: Tagging is normally release-please's responsibility. This script does NOT
 # create a tag automatically. After running, create the tag and release manually:
-#   git tag vX.Y.Z && git push && git push origin vX.Y.Z
+#   git tag vX.Y.Z && git push origin vX.Y.Z
 #   gh release create vX.Y.Z --generate-notes
 
 VERSION="${1:-}"
@@ -76,6 +76,5 @@ echo ""
 echo "Done. Committed v$VERSION."
 echo "Next steps (normally release-please handles these automatically):"
 echo "  git tag v$VERSION"
-echo "  git push && git push origin v$VERSION"
+echo "  git push origin v$VERSION"
 echo "  gh release create v$VERSION --generate-notes"
-echo "  claude plugin update canon   # reconcile directory-marketplace cache"
