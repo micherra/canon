@@ -166,8 +166,7 @@ canon/                                    # plugin root (git root)
 │   └── workspace-lock-guard.sh
 │
 ├── scripts/                              # hook and utility scripts
-│   ├── baseline-orientation-metrics.sh
-│   └── release.sh
+│   └── baseline-orientation-metrics.sh
 │
 ├── bin/                                  # plugin executables added to Bash PATH
 │   └── (future: CLI tools for Canon)     #   invokable as bare commands when plugin is enabled
