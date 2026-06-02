@@ -66,7 +66,7 @@ If the release-please workflow cannot run (Actions disabled, quota exhausted, et
 | File | Field | Mechanism |
 |------|-------|-----------|
 | `.claude-plugin/plugin.json` | `$.version` | release-please `extra-files` json updater |
-| `mcp-server/package.json` | `$.version` | release-please native node component |
+| `mcp-server/package.json` | `$.version` | release-please `extra-files` json updater (root `"."` component) |
 | `mcp-server/src/app/server-state.ts` | `version:` string | release-please `extra-files` generic updater (via `// x-release-please-version` annotation) |
 | `mcp-server/package-lock.json` | `$.version` | release-please `extra-files` json updater |
 | `mcp-server/package-lock.json` | `$.packages[""].version` | release-please `extra-files` json updater |
