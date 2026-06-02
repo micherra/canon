@@ -140,23 +140,6 @@ If push/PR creation fails, save the PR description to `${WORKSPACE}/plans/${slug
 4. If clean merge: `git branch -d canon/{slug}`. Do NOT run `git worktree remove` — worktree cleanup is handled after `finalize_workspace` completes.
 5. Report success.
 
-### Step 4.5: GitHub releases — release-please owns this
-
-**Do NOT create tags or run `gh release create`.** Releases are now cut by release-please:
-
-- When the release-please release PR is merged to `main`, release-please automatically creates the `vX.Y.Z` tag and GitHub release. No shipper action required.
-- The shipper's job ends at the normal feature/build PR created in Step 4.
-
-**Post-release manual step (not the shipper's job — note it in the PR description):**
-
-After the release-please release PR is merged and the GitHub release is created, a human must reconcile the directory-marketplace cache:
-
-```
-claude plugin update canon
-```
-
-Then restart Claude Code. See `docs/reference/release-checklist.md` for the full release flow.
-
 ### Step 5: Log activity
 
 Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
