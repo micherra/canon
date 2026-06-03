@@ -15,6 +15,7 @@ import { CANON_DIR } from "@shared/constants.ts";
 import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
 import { AreaMemoryDao } from "./area-memory-dao.ts";
+import { CraftProfileDao } from "./craft-profile-dao.ts";
 import type {
   ArchiveManifestEntry,
   ArchiveManifestFilter,
@@ -222,6 +223,9 @@ export class DriftDb {
 
   // ---- Area Memory DAO (lazy) ----
   private _areaMemory: AreaMemoryDao | null = null;
+
+  // ---- Craft Profiles DAO (lazy) ----
+  private _craftProfiles: CraftProfileDao | null = null;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -709,6 +713,18 @@ export class DriftDb {
       this._areaMemory = new AreaMemoryDao(this.db);
     }
     return this._areaMemory;
+  }
+
+  /**
+   * Lazy accessor for craft profile DAO methods.
+   * The CraftProfileDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getCraftProfiles(): CraftProfileDao {
+    if (this._craftProfiles === null) {
+      this._craftProfiles = new CraftProfileDao(this.db);
+    }
+    return this._craftProfiles;
   }
 
   // Lifecycle

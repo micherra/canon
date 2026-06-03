@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "8";
+export const DRIFT_SCHEMA_VERSION = "9";
 
 // DDL statements — v1 base tables
 //
@@ -317,6 +317,33 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '8' WHERE key = 'schema_version'`);
     },
     version: "8",
+  },
+  {
+    up: (db) => {
+      // craft_profiles — area-keyed craft score history
+      // Stores CraftDimensionRating[] snapshots from reviewers ('review') and
+      // periodic audits ('audit'). flow/run_id are review-only (nullable).
+      // rollup is a derived display value (nullable). ratings stores
+      // a JSON-encoded CraftDimensionRating[].
+      db.exec(`CREATE TABLE IF NOT EXISTS craft_profiles (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        subsystem_key TEXT NOT NULL,
+        source        TEXT NOT NULL,
+        flow          TEXT,
+        run_id        TEXT,
+        ratings       TEXT NOT NULL,
+        rollup        REAL,
+        created_at    TEXT NOT NULL
+      )`);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_craft_subsystem ON craft_profiles(subsystem_key)`,
+      );
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_craft_created ON craft_profiles(created_at)`,
+      );
+      db.exec(`UPDATE meta SET value = '9' WHERE key = 'schema_version'`);
+    },
+    version: "9",
   },
 ];
 
