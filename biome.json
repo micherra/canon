@@ -191,19 +191,6 @@
           }
         }
       }
-    },
-    {
-      "includes": ["mcp-server/src/features/orchestration/tools/orchestration-journal.ts"],
-      "linter": {
-        "rules": {
-          "nursery": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": { "maxLines": 650 }
-            }
-          }
-        }
-      }
     }
   ],
 
