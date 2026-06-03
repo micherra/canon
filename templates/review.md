@@ -6,7 +6,7 @@ read-by: [shipper]
 output-path: ${WORKSPACE}/reviews/
 ---
 
-# Template: Review Checklist
+# Template: Review
 
 Use this template when producing review reports for the workspace.
 
