@@ -14,7 +14,7 @@ import type { JournalStep } from "../tools/orchestration-journal.ts";
 // directory-scoped *-SUMMARY.md glob so artifactExists can discover the real
 // slug/task_id-named summary. null for globs and non-SUMMARY stems (fixed-stem
 // artifacts must exact-match to keep the safety property).
-export function summaryGlobFallback(artifact: string): string | null {
+export function computeSummaryGlobFallback(artifact: string): string | null {
   if (artifact.includes("*") || !/-SUMMARY\.md$/.test(artifact)) return null;
   const slash = artifact.lastIndexOf("/");
   return `${slash === -1 ? "" : artifact.slice(0, slash + 1)}*-SUMMARY.md`;
@@ -23,14 +23,14 @@ export function summaryGlobFallback(artifact: string): string | null {
 /**
  * True when `artifact` (plain path or glob) exists under `workspace` or its
  * `worktree/` subdir. For a literal *-SUMMARY.md expectation that misses,
- * retries once with a directory-scoped glob (via summaryGlobFallback) to
+ * retries once with a directory-scoped glob (via computeSummaryGlobFallback) to
  * discover the real auto-named summary without relaxing fixed-stem checks.
  */
 export function artifactExists(workspace: string, artifact: string): boolean {
   if (globSync(artifact, { cwd: workspace }).length > 0) return true;
   const worktreePath = join(workspace, "worktree");
   if (globSync(artifact, { cwd: worktreePath }).length > 0) return true;
-  const fallback = summaryGlobFallback(artifact);
+  const fallback = computeSummaryGlobFallback(artifact);
   if (fallback) {
     if (globSync(fallback, { cwd: workspace }).length > 0) return true;
     if (globSync(fallback, { cwd: worktreePath }).length > 0) return true;

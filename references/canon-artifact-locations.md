@@ -8,7 +8,7 @@ read-by: [orchestrator]
 
 This is the authoritative reference for every file Canon creates during a build, where it is written, and how it is named. Callers registering `artifacts_expected` paths must derive them from this spec — not from memory or guesswork.
 
-**Key fact**: the implementation summary is the **only** Canon artifact with a caller-unpredictable (task-id-variable) filename. Everything else is a fixed name under a predictable directory.
+**Key fact**: most Canon artifacts use fixed filenames under predictable directories. Three categories have variable-component filenames: implementation summaries (task-id stem), task plans (task-id stem), and decisions (decision-id stem). Transcripts also vary by step-id/agent/timestamp. See the quick reference table at the bottom for the full breakdown.
 
 ---
 
@@ -43,7 +43,7 @@ All paths are workspace-relative unless marked **repo-relative** or **external**
 | Task DAG | `plans/<slug>/task-dag.yaml` | fixed | architect | Optional; absent for single-task builds |
 | Task conventions | `plans/<slug>/CONVENTIONS.md` | fixed | architect | |
 | Task plans | `plans/<slug>/<task-id>-PLAN.md` | **task-id variable** | architect | One per DAG node |
-| **Implementation summary** | `plans/<slug>/<task_id>-SUMMARY.md` | **task_id variable — stem matches `task_id` if set, else `slug`** | `write_implementation_summary` | **Only variable-stem artifact. Use `result.path` or the glob `plans/<slug>/*-SUMMARY.md`. See §Registering `artifacts_expected` below.** |
+| **Implementation summary** | `plans/<slug>/<task_id>-SUMMARY.md` | **task_id variable — stem always matches the `task_id` passed to `write_implementation_summary`** | `write_implementation_summary` | Variable-stem artifact. Use `result.path` or the glob `plans/<slug>/*-SUMMARY.md`. When the caller passes `task_id = slug`, the stem is the slug — but there is no separate slug fallback. See §Registering `artifacts_expected` below. |
 | Implementation summary sidecar | `plans/<slug>/<task_id>-SUMMARY.meta.json` | same stem as SUMMARY | `write_implementation_summary` | Machine-readable sidecar |
 | Test report | `plans/<slug>/TEST-REPORT.md` | fixed | `write_test_report` / tester agent | |
 | Test report sidecar | `plans/<slug>/TEST-REPORT.meta.json` | fixed | `write_test_report` | |
@@ -74,7 +74,7 @@ When calling `log_step` with `artifacts_expected`, use the following patterns:
 
 ### Why the summary is special
 
-`write_implementation_summary` uses the task's `task_id` field as the filename stem when present, falling back to the build `slug`. The orchestrator cannot reliably predict which value will be used before the engineer runs — it depends on what the engineer passes. The glob `plans/<slug>/*-SUMMARY.md` matches any summary in the slug's plan directory. The harness also has a narrow auto-discovery fallback: a literal expectation ending in `-SUMMARY.md` that does not match exactly is retried with a `<dir>/*-SUMMARY.md` glob. This fallback is scoped to SUMMARY-shaped names only; all other artifact misses are still reported as failures.
+`write_implementation_summary` always uses the `task_id` field as the filename stem — there is no fallback to slug. However, the orchestrator cannot reliably predict the exact `task_id` value the engineer will pass before the engineer runs (it may be the slug, or a DAG task ID like `task-01`). Use the glob `plans/<slug>/*-SUMMARY.md` to match any summary in the slug's plan directory. The harness also has a narrow auto-discovery fallback: a literal expectation ending in `-SUMMARY.md` that does not match exactly is retried with a `<dir>/*-SUMMARY.md` glob. This fallback is scoped to SUMMARY-shaped names only; all other artifact misses are still reported as failures.
 
 ### Backward compatibility guarantee
 
@@ -84,11 +84,11 @@ Exact-path registrations and glob registrations for all other artifacts (DESIGN.
 
 ## Variable vs fixed names — quick reference
 
-Only three artifact categories have variable-component filenames:
+Four artifact categories have variable-component filenames:
 
 | Category | Variable component | Example |
 |----------|--------------------|---------|
-| Implementation summary | `<task_id>` or `<slug>` | `plans/<slug>/<task-id>-SUMMARY.md` |
+| Implementation summary | `<task_id>` (required; equals slug when caller passes `task_id=slug`) | `plans/<slug>/<task-id>-SUMMARY.md` |
 | Task plans | `<task-id>` | `plans/<slug>/<task-id>-PLAN.md` |
 | Decisions | `<decision-id>` | `decisions/<decision-id>.md` |
 | Transcripts | `<step_id>`, `<agent_type>`, `<iso>` | `transcripts/implement--canon:engineer--2026-06-02T21-00-00-000Z.jsonl` |

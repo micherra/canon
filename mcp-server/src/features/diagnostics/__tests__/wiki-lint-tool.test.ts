@@ -207,6 +207,39 @@ describe("wikiLint tool handler", () => {
     expect(Array.isArray(result.cited_paths)).toBe(true);
   });
 
+  it("selective checks: cited_paths-only runs only that check and detects non-resolving paths", async () => {
+    const tmp = makeTmpDir("cited-paths-selective");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "some-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+
+    // references/ dir with a non-resolving path — only cited_paths should detect this
+    const refsDir = join(tmp, "references");
+    mkdirSync(refsDir, { recursive: true });
+    writeFileSync(
+      join(refsDir, "doc.md"),
+      "See `mcp-server/src/nonexistent/file.ts` for details.\n",
+      "utf8",
+    );
+
+    // Pass checks: ["cited_paths"] — verifies the value is accepted (not rejected by schema)
+    // and that only cited_paths runs while all other checks return empty arrays.
+    const result = await wikiLint({ checks: ["cited_paths"] }, tmp, tmp);
+
+    // Non-requested checks must be empty
+    expect(result.contradictions).toEqual([]);
+    expect(result.orphan_principles).toEqual([]);
+    expect(result.stale_refs).toEqual([]);
+    expect(result.missing_examples).toEqual([]);
+
+    // cited_paths ran and detected the non-resolving path
+    expect(result.cited_paths.length).toBeGreaterThan(0);
+    expect(result.cited_paths[0].cited_path).toContain("nonexistent");
+  });
+
   it("checks filter: contradictions-only omits cited_paths", async () => {
     const tmp = makeTmpDir("filter-contradictions");
 

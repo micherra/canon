@@ -45,7 +45,7 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `"missing_examples"` | Principles lacking usage examples |
 | `"cited_paths"` | File paths cited in `references/**/*.md` that do not resolve from repo root |
 
-**`cited_paths` check** (added 2026-06-02): scans every `references/**/*.md` file. A path string is a finding when it contains a `/` (bare filenames exempt), does not start with `http`/`#`, is not a template variable (`${...}`, `<...>`, `{...}`), and is not inside a fenced block labeled `example`, `hypothetical`, or `template`. Correct 1-based line numbers reported. Conservative by design — false positives are worse than misses.
+**`cited_paths` check** (added 2026-06-02): scans every `references/**/*.md` file. A candidate is only considered when it is a backtick-quoted token matching the pattern `` `<alpha><word-chars/dots/slashes/hyphens>.<ext>` `` where `<ext>` is one of `sh|ts|js|md|json|yaml|yml`. It is excluded (not flagged) when: it contains `${`, `<`, `>`, `{`, or `}` (template variables / placeholders); starts with `http://` or `https://`; starts with `#`; has no `/` (bare filename); or appears inside a fenced block whose opening line is labeled `example`, `hypothetical`, or `template`. A non-excluded candidate that does not resolve from the repo root is reported as a finding with its 1-based line number. Conservative by design — false positives are worse than misses.
 
 **`assembleWikiLintOutput(input: AssembleWikiLintInput)`** — `total_findings` includes the `cited_paths` count.
 
@@ -56,6 +56,6 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 - `checkCitedPaths` scans `references/**/*.md` only; does not scan other directories
 
 ## Conventions
-<!-- last-updated: 2026-06-02 -->
-- Pure check functions export their helpers (`isExcludedCitedPath`, `stripIllustrativeFences`) for direct testing
+<!-- last-updated: 2026-06-03 -->
+- Pure check functions export their helpers (`isExcludedCitedPath`) for direct testing; fence-skip logic is inline in `collectCitedPathsInFile` (not exported) since 2026-06-02
 - Recursive scanners thread `originalRoot` through all recursive calls (root-drift bug class prevention)
