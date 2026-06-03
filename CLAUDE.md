@@ -303,6 +303,10 @@ Accepted values: `"fix-type build, no contract-level changes"` | `"markdown-only
 
 An empty `skip_reason` is a protocol violation. If no accepted value fits, the step should not be skipped — run it or report BLOCKED.
 
+### Journal Protocol — implementation summary path
+
+Derive the implementation-summary path from `write_implementation_summary`'s returned `path` field (or register the `plans/${slug}/*-SUMMARY.md` glob when pre-registering before the engineer runs); never a guessed stem. See `references/canon-artifact-locations.md` for the full naming rule and the rationale.
+
 ### Post-Subagent Artifact Check
 
 After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL.
@@ -314,6 +318,8 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 | Reviewer | `reviews/REVIEW.md` |
 | Tester | `plans/${slug}/TEST-REPORT.md` |
 | Scribe | `plans/${slug}/CONTEXT-SYNC.md` |
+
+> Authoritative source for every Canon artifact path and naming rule: `references/canon-artifact-locations.md`.
 
 ### HITL Patterns <!-- last-updated: 2026-05-17 -->
 
