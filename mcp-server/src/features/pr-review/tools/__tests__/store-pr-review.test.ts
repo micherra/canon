@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DriftStore } from "@platform/storage/drift/store.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { DriftStore } from "@platform/storage/drift/store.ts";
 import type { CraftProfile } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { storePrReview } from "../store-pr-review.ts";

@@ -15,15 +15,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import type { CraftProfileRow } from "../../../platform/storage/drift/craft-profile-dao.ts";
 import { DriftDb } from "../../../platform/storage/drift/drift-db.ts";
 import { initDriftDb } from "../../../platform/storage/drift/drift-schema.ts";
-import type { CraftProfileRow } from "../../../platform/storage/drift/craft-profile-dao.ts";
 import type { CraftDimensionRating } from "../../../shared/schema.ts";
 import type { RunSummary } from "../history-types.ts";
-import {
-  analyzeCrossRunPatterns,
-  computeCraftDrift,
-} from "../services/cross-run-analyzer.ts";
+import { analyzeCrossRunPatterns, computeCraftDrift } from "../services/cross-run-analyzer.ts";
 
 // ---- Helpers ----
 
@@ -91,11 +88,7 @@ describe("computeCraftDrift", () => {
 
     test("single profile → stable direction, profile_count=1, no throw", () => {
       const profiles = [
-        makeProfile(
-          "features/auth",
-          [{ dimension: "simplicity", band: "strong" }],
-          ts(0),
-        ),
+        makeProfile("features/auth", [{ dimension: "simplicity", band: "strong" }], ts(0)),
       ];
       const result = computeCraftDrift(profiles);
       expect(result.profile_count).toBe(1);

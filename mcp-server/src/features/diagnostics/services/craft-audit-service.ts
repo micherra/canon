@@ -11,10 +11,10 @@
  * - define-errors-out-of-existence: empty input → empty output; unknown areas → keyed+stored
  */
 
+import type { CraftProfileDao } from "@platform/storage/drift/craft-profile-dao.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import type { CraftDimensionRating } from "@shared/schema.ts";
 import { CraftProfileSchema } from "@shared/schema.ts";
-import type { CraftProfileDao } from "@platform/storage/drift/craft-profile-dao.ts";
 
 // ---- Types ----
 
@@ -113,18 +113,15 @@ export function selectAuditAreas(opts: SelectAuditAreasOpts): string[] {
  * @param input - subsystem key, ratings, optional rollup
  * @param dao - CraftProfileDao instance (caller provides for testability)
  */
-export function persistAuditProfile(
-  input: PersistAuditProfileInput,
-  dao: CraftProfileDao,
-): void {
+export function persistAuditProfile(input: PersistAuditProfileInput, dao: CraftProfileDao): void {
   // Validate before write — throws ZodError on invalid input
   CraftProfileSchema.parse({ ratings: input.ratings, rollup: input.rollup });
 
   dao.insertProfile({
-    subsystem_key: input.subsystem_key,
-    source: "audit",
     ratings: input.ratings,
     rollup: input.rollup,
+    source: "audit",
+    subsystem_key: input.subsystem_key,
     // flow and run_id explicitly not set (undefined → null in DAO)
   });
 }

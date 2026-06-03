@@ -12,14 +12,11 @@
  * - empty input → no rows, no throw
  */
 
-import type { CraftDimensionRating } from "@shared/schema.ts";
-import { beforeEach, describe, expect, it } from "vitest";
 import { CraftProfileDao } from "@platform/storage/drift/craft-profile-dao.ts";
 import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
-import {
-  selectAuditAreas,
-  persistAuditProfile,
-} from "../craft-audit-service.ts";
+import type { CraftDimensionRating } from "@shared/schema.ts";
+import { beforeEach, describe, expect, it } from "vitest";
+import { persistAuditProfile, selectAuditAreas } from "../craft-audit-service.ts";
 
 function makeDb() {
   return initDriftDb(":memory:");
@@ -105,10 +102,7 @@ describe("persistAuditProfile", () => {
       { dimension: "naming", band: "strong" },
     ];
 
-    persistAuditProfile(
-      { subsystem_key: "features/diagnostics", ratings },
-      dao,
-    );
+    persistAuditProfile({ subsystem_key: "features/diagnostics", ratings }, dao);
 
     const rows = dao.getProfilesForSubsystems(["features/diagnostics"]);
     expect(rows).toHaveLength(1);
@@ -122,14 +116,9 @@ describe("persistAuditProfile", () => {
   });
 
   it("accepts optional rollup value", () => {
-    const ratings: CraftDimensionRating[] = [
-      { dimension: "cohesion", band: "strong" },
-    ];
+    const ratings: CraftDimensionRating[] = [{ dimension: "cohesion", band: "strong" }];
 
-    persistAuditProfile(
-      { subsystem_key: "features/orchestration", ratings, rollup: 0.9 },
-      dao,
-    );
+    persistAuditProfile({ subsystem_key: "features/orchestration", ratings, rollup: 0.9 }, dao);
 
     const rows = dao.getProfilesForSubsystems(["features/orchestration"]);
     expect(rows).toHaveLength(1);
@@ -185,10 +174,7 @@ describe("persistAuditProfile", () => {
       { dimension: "predictability", band: "n-a" },
     ];
 
-    persistAuditProfile(
-      { subsystem_key: "features/principles", ratings, rollup: 0.75 },
-      dao,
-    );
+    persistAuditProfile({ subsystem_key: "features/principles", ratings, rollup: 0.75 }, dao);
 
     const rows = dao.getProfilesForSubsystems(["features/principles"]);
     expect(rows).toHaveLength(1);

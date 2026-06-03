@@ -2,11 +2,7 @@ import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
-import {
-  CraftProfileSchema,
-  type ReportInput,
-  type ReviewEntry,
-} from "@shared/schema.ts";
+import { CraftProfileSchema, type ReportInput, type ReviewEntry } from "@shared/schema.ts";
 import { type SignalWriter, updateFileViolationHistory } from "./write-review.ts";
 
 export type ReportOutput = {
@@ -80,9 +76,9 @@ async function recordReview(
 
     for (const subsystem_key of distinctKeys) {
       craftDao.insertProfile({
-        subsystem_key,
-        source: "review",
         ratings: profile.ratings,
+        source: "review",
+        subsystem_key,
         ...(profile.rollup !== undefined ? { rollup: profile.rollup } : {}),
       });
     }

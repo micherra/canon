@@ -335,12 +335,8 @@ const MIGRATIONS: Migration[] = [
         rollup        REAL,
         created_at    TEXT NOT NULL
       )`);
-      db.exec(
-        `CREATE INDEX IF NOT EXISTS idx_craft_subsystem ON craft_profiles(subsystem_key)`,
-      );
-      db.exec(
-        `CREATE INDEX IF NOT EXISTS idx_craft_created ON craft_profiles(created_at)`,
-      );
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_craft_subsystem ON craft_profiles(subsystem_key)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_craft_created ON craft_profiles(created_at)`);
       db.exec(`UPDATE meta SET value = '9' WHERE key = 'schema_version'`);
     },
     version: "9",

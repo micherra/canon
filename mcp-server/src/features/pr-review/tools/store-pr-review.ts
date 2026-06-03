@@ -59,19 +59,15 @@ function validateCraftProfile(craft_profile: CraftProfile | undefined): CraftPro
  * craft comes ONLY from the structured craft_profile field (Decision craft-v2-04):
  * never re-derived from recommendations. Empty files → no rows, no error.
  */
-function persistCraftRows(
-  profile: CraftProfile,
-  files: string[],
-  projectDir: string,
-): void {
+function persistCraftRows(profile: CraftProfile, files: string[], projectDir: string): void {
   if (files.length === 0) return;
   const distinctKeys = new Set(files.map(deriveSubsystemKey));
   const craftDao = getDriftDb(projectDir).getCraftProfiles();
   for (const subsystem_key of distinctKeys) {
     craftDao.insertProfile({
-      subsystem_key,
-      source: "review",
       ratings: profile.ratings,
+      source: "review",
+      subsystem_key,
       ...(profile.rollup !== undefined ? { rollup: profile.rollup } : {}),
     });
   }
