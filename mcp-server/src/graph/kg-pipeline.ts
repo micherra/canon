@@ -245,6 +245,34 @@ function pruneOrphanFiles(store: KgStore, scannedRelPaths: string[]): void {
   });
 }
 
+/**
+ * Stamp the graph with its build commit and assemble the PipelineResult.
+ * Called only after all phases succeed (decision kg-marker-01). The marker is
+ * written even on a no-op pass so a read at an unchanged HEAD becomes a no-op;
+ * it is skipped when git is unavailable (head null) so the next read retries.
+ */
+function stampAndBuildResult(
+  store: KgStore,
+  projectDir: string,
+  phases: PhaseResult,
+  meta: { startMs: number; relPathsCount: number; filesUpdated: number },
+): PipelineResult {
+  const head = getCurrentHead(projectDir);
+  if (head) store.setMeta("graph_head_commit", head);
+
+  const stats = store.getStats();
+  return {
+    communitiesDetected: phases.communityResult.communityCount,
+    durationMs: Date.now() - meta.startMs,
+    edgesTotal: stats.edges + stats.fileEdges,
+    embeddingsGenerated: phases.embedResult.entitiesEmbedded + phases.embedResult.summariesEmbedded,
+    entitiesTotal: stats.entities,
+    filesScanned: meta.relPathsCount,
+    filesUpdated: meta.filesUpdated,
+    tagsComputed: phases.tagResult.totalTags,
+  };
+}
+
 export async function runPipeline(
   projectDir: string,
   options?: PipelineOptions,
@@ -298,30 +326,13 @@ export async function runPipeline(
     });
 
     // Phases 5-7: Community detection, tag propagation, embedding
-    const { communityResult, tagResult, embedResult } = await runEnrichmentPhases(
-      db,
-      store,
-      progress,
-    );
+    const phases = await runEnrichmentPhases(db, store, progress);
 
-    // Stamp the graph with the commit it was computed at, AFTER all phases
-    // succeed (decision kg-marker-01). Written even on no-op passes so a read
-    // at an unchanged HEAD becomes a no-op. Skip when git is unavailable
-    // (head null) — leave the old marker so the next read retries.
-    const head = getCurrentHead(projectDir);
-    if (head) store.setMeta("graph_head_commit", head);
-
-    const stats = store.getStats();
-    return {
-      communitiesDetected: communityResult.communityCount,
-      durationMs: Date.now() - startMs,
-      edgesTotal: stats.edges + stats.fileEdges,
-      embeddingsGenerated: embedResult.entitiesEmbedded + embedResult.summariesEmbedded,
-      entitiesTotal: stats.entities,
-      filesScanned: relPaths.length,
+    return stampAndBuildResult(store, projectDir, phases, {
       filesUpdated,
-      tagsComputed: tagResult.totalTags,
-    };
+      relPathsCount: relPaths.length,
+      startMs,
+    });
   } finally {
     store.close();
   }

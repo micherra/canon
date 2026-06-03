@@ -10,20 +10,20 @@
  * used so the DB-exists guard and meta reads exercise real code.
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
-import { mkdirSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // --- Mocks -----------------------------------------------------------------
 
-const runPipelineMock = vi.fn(async () => ({}) as never);
+type RunPipelineArgs = [projectDir: string, opts?: { sourceDirs?: string[]; dbPath?: string }];
+const runPipelineMock = vi.fn<(...args: RunPipelineArgs) => Promise<unknown>>(async () => ({}));
 vi.mock("@graph/kg-pipeline.ts", () => ({
-  runPipeline: (...args: unknown[]) => runPipelineMock(...args),
+  runPipeline: (...args: RunPipelineArgs) => runPipelineMock(...args),
 }));
 
 const getCurrentHeadMock = vi.fn<(cwd: string) => string | null>();
@@ -140,7 +140,7 @@ describe("ensureGraphFresh", () => {
     await ensureGraphFresh(projectDir, { sourceDirs: ["src", "lib"] });
 
     expect(runPipelineMock).toHaveBeenCalledTimes(1);
-    const [, opts] = runPipelineMock.mock.calls[0] as [string, { sourceDirs?: string[] }];
-    expect(opts.sourceDirs).toEqual(["src", "lib"]);
+    const [, opts] = runPipelineMock.mock.calls[0];
+    expect(opts?.sourceDirs).toEqual(["src", "lib"]);
   });
 });

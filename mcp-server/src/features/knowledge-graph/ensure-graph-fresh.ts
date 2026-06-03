@@ -20,9 +20,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentHead } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
 import { runPipeline } from "@graph/kg-pipeline.ts";
-import { initDatabase } from "@graph/kg-schema.ts";
-import { KgStore } from "@graph/kg-store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import Database from "better-sqlite3";
 
 export type EnsureGraphFreshOptions = {
   /** Limit the refresh scan to these subdirectories (passed to runPipeline). */
@@ -31,13 +30,22 @@ export type EnsureGraphFreshOptions = {
 
 /**
  * Read the stored graph marker without leaving the DB handle open.
- * Returns undefined when the marker is absent.
+ * Returns undefined when the marker is absent or the meta table is missing.
+ *
+ * Opens the DB read-only with a plain handle (no sqlite-vec load, no DDL, no
+ * migrations) — the freshness check must be cheap because it runs on every KG
+ * read. The full pipeline (when stale) opens its own initialized handle.
  */
 function readStoredMarker(dbPath: string): string | undefined {
-  const db = initDatabase(dbPath);
+  const db = new Database(dbPath, { readonly: true });
   try {
-    const store = new KgStore(db);
-    return store.getMeta("graph_head_commit");
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'graph_head_commit'").get() as
+      | { value: string }
+      | undefined;
+    return row?.value;
+  } catch {
+    // meta table absent (un-indexed DB) → treat marker as absent.
+    return undefined;
   } finally {
     db.close();
   }
