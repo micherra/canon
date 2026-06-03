@@ -206,8 +206,8 @@ function buildGraphOutput(
   const insights = generateInsights(
     nodes.map((n) => ({ id: n.id, layer: n.layer })),
     edges.map((e) => ({ source: e.source, target: e.target })),
-    undefined,        // layerRules (unchanged)
-    projectDir,       // explicit scope — was implicitly process.cwd()
+    undefined, // layerRules (unchanged)
+    projectDir, // explicit scope — was implicitly process.cwd()
   );
   enrichNodesWithInsights(nodes, insights, structuralIds);
 

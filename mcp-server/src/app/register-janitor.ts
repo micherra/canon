@@ -12,7 +12,9 @@ export function registerJanitorTool(): void {
         project_dir: z
           .string()
           .optional()
-          .describe("Project root directory override (defaults to the per-connection resolved scope)"),
+          .describe(
+            "Project root directory override (defaults to the per-connection resolved scope)",
+          ),
       },
     },
     gatedWrapHandler(async (input, extra) => invokeJanitor(input, resolveScope(extra))),

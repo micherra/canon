@@ -6,9 +6,7 @@
  *   No call to process.cwd() or process.env.CANON_PROJECT_DIR.
  */
 
-import { join } from "node:path";
-import { type JanitorResult } from "@features/orchestration/services/janitor.ts";
-import type { ToolResult } from "@shared/lib/tool-result.ts";
+import type { JanitorResult } from "@features/orchestration/services/janitor.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // We mock runJanitor so no real filesystem work happens.
@@ -22,10 +20,10 @@ import { invokeJanitor } from "../tools/invoke-janitor.ts";
 const mockRunJanitor = vi.mocked(runJanitor);
 
 const FAKE_JANITOR_RESULT: JanitorResult = {
-  elapsed_ms: 0,
-  gate_reason: null,
-  ran: false,
-  tasks: [],
+  gate_passed: false,
+  needs_prune: false,
+  reason: "janitor disabled",
+  tasks: {},
 };
 
 describe("invokeJanitor — explicit scope", () => {
