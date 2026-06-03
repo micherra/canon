@@ -82,13 +82,14 @@ Create `$SERVER_DIR/node_modules → $CLAUDE_PLUGIN_DATA/node_modules` on every 
 ```bash
 if [[ -n "${DATA_DIR:-}" ]] && [[ -x "${DATA_DIR}/.bin/tsx" ]]; then
   if [[ ! -e "${SERVER_DIR}/node_modules" ]] || [[ -L "${SERVER_DIR}/node_modules" ]]; then
-    ln -sfn "$DATA_DIR" "${SERVER_DIR}/node_modules"
+    rm -f "${SERVER_DIR}/node_modules"
+    ln -s "$DATA_DIR" "${SERVER_DIR}/node_modules"
   fi
 fi
 ```
 
 Key properties:
-- `ln -sfn` is **idempotent** — recreating an existing symlink is a no-op; the link survives cache wipes.
+- **Portable `rm -f` + `ln -s` is idempotent** — `rm -f` removes only a symlink or absent path (never a real directory); `ln -s` then creates a fresh link. Survives cache wipes. Avoids the GNU/BSD `ln -sfn`/`-n` divergence and the foot-gun where `ln -sf` follows an existing symlink-to-directory and nests the new link inside the target instead of replacing it.
 - The `[[ ! -e ]] || [[ -L ]]` guard **never clobbers a real `node_modules` directory** (dev working tree). It replaces only absent entries or existing symlinks.
 - `ln` failure emits `CANON WARNING` and degrades gracefully (ESM imports may fail, but boot does not exit 1 — the dangling-symlink guard below handles the fatal case).
 
@@ -99,6 +100,12 @@ Key properties:
 ## 5. Deps-ready poll and dangling-symlink guard
 
 *Snippets below are illustrative — see `mcp-server/boot.sh` for the runnable, fully-guarded form (variable init, `--print-resolution` short-circuit).*
+
+### Pre-poll stale-link clear (step 5 in boot sequence)
+
+A prior boot may have left `$SERVER_DIR/node_modules` as a symlink to `DATA_DIR`. If the cache was subsequently wiped, that symlink now dangles (the target no longer exists). Without clearing it first, the deps-ready poll below would stall for the full timeout even though both the link and DATA_DIR are missing tsx — the poll watches `DATA_DIR/.bin/tsx` directly, but the stale dangling link would be re-evaluated by the fail-closed guard only after the wait, producing a confusing full-timeout delay before the loud exit.
+
+Guard condition: `[[ -L $SERVER_DIR/node_modules ]] && [[ ! -d $SERVER_DIR/node_modules ]] → rm -f`. Real `node_modules` directories (`-L` is false) and absent paths are untouched. Skipped under `--print-resolution` (keep that instant and side-effect-free).
 
 ### Deps-ready poll
 
@@ -154,14 +161,15 @@ boot.sh
   2. Resolve SERVER_DIR (CLAUDE_PLUGIN_ROOT → BASH_SOURCE fallback)
   3. Sanity-check: SERVER_DIR/src/app/index.ts must exist
   4. Compute DATA_DIR = ${CLAUDE_PLUGIN_DATA}/node_modules
-  5. Deps-ready poll (skip if co-located tsx already present, or --print-resolution)
-  6. ESM co-location symlink: ln -sfn DATA_DIR SERVER_DIR/node_modules
- 6b. Dangling-symlink guard: exit 1 if symlink does not resolve
-  7. Resolve NODE_PATH (PLUGIN_DATA first, co-located fallback)
-  8. Resolve TSX_BIN
-  9. --print-resolution: print "SERVER_DIR NODE_PATH TSX_BIN", exit 0
- 10. tsx-absent fail-closed: exit 1 with loud message
- 11. Observability log + exec TSX_BIN src/app/index.ts
+  5. Clear stale dangling symlink (rm -f if SERVER_DIR/node_modules is a dangling link; skip under --print-resolution)
+  6. Deps-ready poll (skip if co-located tsx already present, or --print-resolution)
+  7. ESM co-location symlink: rm -f + ln -s DATA_DIR SERVER_DIR/node_modules
+  8. Dangling-symlink guard: exit 1 if symlink does not resolve
+  9. Resolve NODE_PATH (PLUGIN_DATA first, co-located fallback)
+ 10. Resolve TSX_BIN
+ 11. --print-resolution: print "SERVER_DIR NODE_PATH TSX_BIN", exit 0
+ 12. tsx-absent fail-closed: exit 1 with loud message
+ 13. Observability log + exec TSX_BIN src/app/index.ts
 ```
 
 ---
@@ -190,7 +198,7 @@ boot.sh
 
 **Symptom**: Boot fails on first launch with "tsx not found", then succeeds on second launch after deps have installed.
 
-**Cause**: `boot.sh` launched before the SessionStart install completed. The deps-ready poll (step 5) closes this race. If `CANON_BOOT_DEPS_TIMEOUT` is too short, increase it.
+**Cause**: `boot.sh` launched before the SessionStart install completed. The deps-ready poll (step 6) closes this race. If `CANON_BOOT_DEPS_TIMEOUT` is too short, increase it.
 
 ### Dangling symlink after PLUGIN_DATA wipe
 
@@ -198,7 +206,7 @@ boot.sh
 
 **Cause**: `PLUGIN_DATA` was cleared (plugin reinstall, manual cache wipe) but the symlink in `SERVER_DIR` still points to the old location.
 
-**Fix**: The next SessionStart install recreates `PLUGIN_DATA/node_modules`, after which `boot.sh`'s `ln -sfn` step recreates a valid symlink.
+**Fix**: The next SessionStart install recreates `PLUGIN_DATA/node_modules`, after which `boot.sh`'s `rm -f` + `ln -s` step (step 7) recreates a valid symlink.
 
 ---
 
