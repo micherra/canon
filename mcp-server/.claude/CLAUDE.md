@@ -94,7 +94,7 @@ src/
 **`get_drift_report`** — `pr_reviews` field uses `ReviewEntry[]` (unified type); filters by pr_number/branch presence
 **KgQuery** (`src/graph/kg-query.ts`) — `computeImpactScore`, `computeFileInsightMaps` (call once per request), `getFileMetrics`, `getSubgraph`; must call `computeFileInsightMaps` before `getFileMetrics` in loops (see source for full API)
 **Git Intelligence** (`src/features/knowledge-graph/git-intel/`) — pipeline: git log → parse → churn scoring → co-change detection → persist atomically; `ensureGitIntelFresh` is the main entry point (no-op when fresh)
-**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `assembleWikiLintOutput(AssembleWikiLintInput)`; `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)`; all accept pre-loaded data (no I/O except `scanDirectories`). Added 2026-05-26.
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths` (added 2026-06-02 — flags non-resolving paths in `references/**/*.md`; see `CheckName` in `tools/wiki-lint.ts`), `assembleWikiLintOutput(AssembleWikiLintInput)`; `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)`; all accept pre-loaded data (no I/O except `scanDirectories` and `checkCitedPaths`). Added 2026-05-26.
 **Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — `compileSignals(filePaths, driftDbSignals)` reads violation history + path effects, scores by priority, fits within per-file token budget; read-only
 **Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — added 2026-05-22; `queryDriftSignalPitfalls`/`queryErrorFixPitfalls`/`formatPitfallsSection`/`countPitfalls`; pure functions; `formatPitfallsSection` returns `""` when both arrays empty
 **Area Memory Enrichment** (`src/features/diagnostics/services/area-memory-enrichment.ts`) — added 2026-05-29; `queryAreaObservations`/`formatAreaMemorySection`/`buildAreaMemorySection`; fail-open, calls `markInjected` after query; returns `{ section: ""; count: 0 }` on error.
@@ -150,7 +150,7 @@ src/
 | `store_summaries` | Persist file summaries to SQLite KG DB (DB-only since ADR-005 2026-04-01; JSON write path removed) |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
-| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions between CLAUDE.md files, orphan principles, stale file refs, principles missing examples; optional `checks` array selects subset (default: all 4); returns `WikiLintOutput` |
+| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions between CLAUDE.md files, orphan principles, stale file refs, principles missing examples, cited-path accuracy in `references/**/*.md`; optional `checks` array selects subset (default: all 5); returns `WikiLintOutput` |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result for drift tracking |
 
