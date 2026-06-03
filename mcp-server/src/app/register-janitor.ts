@@ -1,6 +1,6 @@
 import { invokeJanitor } from "@features/orchestration/tools/invoke-janitor.ts";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
 
 export function registerJanitorTool(): void {
   server.registerTool(
@@ -12,9 +12,9 @@ export function registerJanitorTool(): void {
         project_dir: z
           .string()
           .optional()
-          .describe("Project root directory (defaults to CANON_PROJECT_DIR env or cwd)"),
+          .describe("Project root directory override (defaults to the per-connection resolved scope)"),
       },
     },
-    gatedWrapHandler(async (input) => invokeJanitor(input)),
+    gatedWrapHandler(async (input, extra) => invokeJanitor(input, resolveScope(extra))),
   );
 }

@@ -186,6 +186,7 @@ type BuildGraphOutputOptions = {
   layerEntries: string[];
   layerColors: Record<string, string>;
   allPrinciples: Awaited<ReturnType<typeof loadAllPrinciples>>;
+  projectDir: string;
 };
 
 /** Build the final graph output from nodes, edges, principles, and insights. */
@@ -194,7 +195,7 @@ function buildGraphOutput(
   edges: GraphEdge[],
   options: BuildGraphOutputOptions,
 ): CodebaseGraphOutput {
-  const { layerEntries, layerColors, allPrinciples } = options;
+  const { layerEntries, layerColors, allPrinciples, projectDir } = options;
   const structuralIds = {
     circularDep:
       allPrinciples.find((p) => p.tags.includes("architecture"))?.id ?? "circular-dependency",
@@ -205,6 +206,8 @@ function buildGraphOutput(
   const insights = generateInsights(
     nodes.map((n) => ({ id: n.id, layer: n.layer })),
     edges.map((e) => ({ source: e.source, target: e.target })),
+    undefined,        // layerRules (unchanged)
+    projectDir,       // explicit scope — was implicitly process.cwd()
   );
   enrichNodesWithInsights(nodes, insights, structuralIds);
 
@@ -282,7 +285,7 @@ export async function codebaseGraph(
   }
 
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
-  return buildGraphOutput(nodes, edges, { allPrinciples, layerColors, layerEntries });
+  return buildGraphOutput(nodes, edges, { allPrinciples, layerColors, layerEntries, projectDir });
 }
 
 /**
@@ -348,7 +351,7 @@ export async function readGraphFromDb(
 
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
 
-  return buildGraphOutput(nodes, edges, { allPrinciples, layerColors, layerEntries });
+  return buildGraphOutput(nodes, edges, { allPrinciples, layerColors, layerEntries, projectDir });
 }
 
 /** Build supplemental edges from legacy scanners (aliases, composition, markdown). */
