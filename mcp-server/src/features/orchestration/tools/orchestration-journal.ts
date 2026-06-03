@@ -511,21 +511,29 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   return toolOk(result);
 }
 
-/**
- * Resolve an artifact path (possibly with a glob) against the workspace.
- * Plain paths and glob patterns are both handled by node:fs globSync —
- * returns true when at least one file matches. `${var}` template fragments
- * are handled upstream in scanArtifacts and never reach this function.
- *
- * Falls back to searching under `{workspace}/worktree/` when the workspace-
- * root search returns no results. Code-writing agents produce artifacts
- * in the worktree (e.g. src/ files), while orchestration artifacts (reviews,
- * plans) land at the workspace root — checking both avoids false negatives.
- */
+// Pure compute: for a literal *-SUMMARY.md path (no glob *), return the
+// directory-scoped *-SUMMARY.md glob so artifactExists can discover the real
+// slug/task_id-named summary. null for globs and non-SUMMARY stems (fixed-stem
+// artifacts must exact-match to keep the safety property).
+function summaryGlobFallback(artifact: string): string | null {
+  if (artifact.includes("*") || !/-SUMMARY\.md$/.test(artifact)) return null;
+  const slash = artifact.lastIndexOf("/");
+  return `${slash === -1 ? "" : artifact.slice(0, slash + 1)}*-SUMMARY.md`;
+}
+// Resolves an artifact path (plain or glob) against workspace root and worktree/.
+// For a literal *-SUMMARY.md expectation that misses, retries once via
+// summaryGlobFallback to discover the real auto-named summary without relaxing
+// fixed-stem (DESIGN.md, REVIEW.md) checks.
 function artifactExists(workspace: string, artifact: string): boolean {
   if (globSync(artifact, { cwd: workspace }).length > 0) return true;
   const worktreePath = join(workspace, "worktree");
-  return globSync(artifact, { cwd: worktreePath }).length > 0;
+  if (globSync(artifact, { cwd: worktreePath }).length > 0) return true;
+  const fallback = summaryGlobFallback(artifact);
+  if (fallback) {
+    if (globSync(fallback, { cwd: workspace }).length > 0) return true;
+    if (globSync(fallback, { cwd: worktreePath }).length > 0) return true;
+  }
+  return false;
 }
 
 /**
