@@ -16,8 +16,8 @@
  * - backward-compatible-schema-changes: nullable columns; conditional-assign reads
  */
 
-import type Database from "better-sqlite3";
 import type { CraftDimensionRating } from "@shared/schema.ts";
+import type Database from "better-sqlite3";
 
 // ---- Types ----
 
@@ -71,11 +71,11 @@ type CraftProfileDbRow = {
  */
 function rowToCraftProfileRow(row: CraftProfileDbRow): CraftProfileRow {
   const entry: CraftProfileRow = {
-    id: row.id,
-    subsystem_key: row.subsystem_key,
-    source: row.source as "review" | "audit",
-    ratings: JSON.parse(row.ratings) as CraftDimensionRating[],
     created_at: row.created_at,
+    id: row.id,
+    ratings: JSON.parse(row.ratings) as CraftDimensionRating[],
+    source: row.source as "review" | "audit",
+    subsystem_key: row.subsystem_key,
   };
   if (row.flow !== null) entry.flow = row.flow;
   if (row.run_id !== null) entry.run_id = row.run_id;
@@ -128,13 +128,13 @@ export class CraftProfileDao {
    */
   insertProfile(input: InsertCraftProfileInput): void {
     this.stmtInsertProfile.run({
-      subsystem_key: input.subsystem_key,
-      source: input.source,
+      created_at: new Date().toISOString(),
       flow: input.flow ?? null,
-      run_id: input.run_id ?? null,
       ratings: JSON.stringify(input.ratings),
       rollup: input.rollup ?? null,
-      created_at: new Date().toISOString(),
+      run_id: input.run_id ?? null,
+      source: input.source,
+      subsystem_key: input.subsystem_key,
     });
   }
 

@@ -13,8 +13,8 @@
  * - ratings JSON multi-rating round-trip equal
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
 import type { CraftDimensionRating } from "@shared/schema.ts";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CraftProfileDao } from "../craft-profile-dao.ts";
 import { initDriftDb } from "../drift-schema.ts";
 
@@ -34,7 +34,7 @@ describe("CraftProfileDao", () => {
   describe("insertProfile + getProfilesForSubsystems", () => {
     it("audit profile (no flow/run_id/rollup) round-trips with those fields omitted", () => {
       const ratings: CraftDimensionRating[] = [
-        { dimension: "test-coverage", band: "developing", evidence: "no tests" },
+        { dimension: "cohesion", band: "weak", evidence: "no tests" },
       ];
 
       dao.insertProfile({
@@ -58,8 +58,8 @@ describe("CraftProfileDao", () => {
 
     it("review profile (flow+run_id+rollup) round-trips all fields", () => {
       const ratings: CraftDimensionRating[] = [
-        { dimension: "naming", band: "solid" },
-        { dimension: "error-handling", band: "exemplary", evidence: "errors-are-values" },
+        { dimension: "naming", band: "adequate" },
+        { dimension: "predictability", band: "strong", evidence: "errors-are-values" },
       ];
 
       dao.insertProfile({
@@ -89,7 +89,7 @@ describe("CraftProfileDao", () => {
       dao.insertProfile({
         subsystem_key: "features/orchestration",
         source: "audit",
-        ratings: [{ dimension: "test-coverage", band: "developing" }],
+        ratings: [{ dimension: "cohesion", band: "weak" }],
       });
 
       const result = dao.getProfilesForSubsystems([]);
@@ -100,7 +100,7 @@ describe("CraftProfileDao", () => {
       dao.insertProfile({
         subsystem_key: "features/orchestration",
         source: "audit",
-        ratings: [{ dimension: "test-coverage", band: "developing" }],
+        ratings: [{ dimension: "cohesion", band: "weak" }],
       });
 
       const result = dao.getProfilesForSubsystems(["nonexistent/area"]);
@@ -111,14 +111,14 @@ describe("CraftProfileDao", () => {
       dao.insertProfile({
         subsystem_key: "area-a",
         source: "audit",
-        ratings: [{ dimension: "naming", band: "solid" }],
+        ratings: [{ dimension: "naming", band: "adequate" }],
       });
       dao.insertProfile({
         subsystem_key: "area-b",
         source: "review",
         flow: "flow-1",
         run_id: "run-1",
-        ratings: [{ dimension: "error-handling", band: "exemplary" }],
+        ratings: [{ dimension: "predictability", band: "strong" }],
       });
 
       const result = dao.getProfilesForSubsystems(["area-a", "area-b"]);
@@ -135,18 +135,20 @@ describe("CraftProfileDao", () => {
       dao.insertProfile({
         subsystem_key: "area-x",
         source: "audit",
-        ratings: [{ dimension: "test-coverage", band: "developing" }],
+        ratings: [{ dimension: "cohesion", band: "weak" }],
       });
       // Small sleep to ensure different timestamps in SQLite
       const now = Date.now();
-      while (Date.now() - now < 10) { /* busy wait */ }
+      while (Date.now() - now < 10) {
+        /* busy wait */
+      }
 
       dao.insertProfile({
         subsystem_key: "area-y",
         source: "review",
         flow: "f",
         run_id: "r",
-        ratings: [{ dimension: "naming", band: "solid" }],
+        ratings: [{ dimension: "naming", band: "adequate" }],
       });
 
       const all = dao.getRecentProfiles(10);
@@ -163,7 +165,7 @@ describe("CraftProfileDao", () => {
         dao.insertProfile({
           subsystem_key: `area-${i}`,
           source: "audit",
-          ratings: [{ dimension: "test-coverage", band: "developing" }],
+          ratings: [{ dimension: "cohesion", band: "weak" }],
         });
       }
 
@@ -187,7 +189,7 @@ describe("CraftProfileDao", () => {
         dao2.insertProfile({
           subsystem_key: "test",
           source: "audit",
-          ratings: [{ dimension: "naming", band: "solid" }],
+          ratings: [{ dimension: "naming", band: "adequate" }],
         });
         const rows = dao2.getProfilesForSubsystems(["test"]);
         expect(rows).toHaveLength(1);
@@ -208,24 +210,24 @@ describe("CraftProfileDao", () => {
     it("multi-rating profile round-trips equal CraftDimensionRating[]", () => {
       const ratings: CraftDimensionRating[] = [
         {
-          dimension: "test-coverage",
-          band: "developing",
+          dimension: "cohesion",
+          band: "weak",
           evidence: "minimal coverage",
           principle_refs: ["agent-tdd-required"],
         },
         {
           dimension: "naming",
-          band: "solid",
+          band: "adequate",
         },
         {
-          dimension: "error-handling",
-          band: "exemplary",
+          dimension: "predictability",
+          band: "strong",
           evidence: "errors-are-values throughout",
           principle_refs: ["errors-are-values", "define-errors-out-of-existence"],
         },
         {
           dimension: "simplicity",
-          band: "developing",
+          band: "weak",
         },
       ];
 
