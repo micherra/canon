@@ -43,9 +43,7 @@ export function craftBandOrdinal(band: CraftBand): number | null {
  * /canon:craft-audit command. All producers MUST use this helper so the scale stays
  * coherent across the system.
  */
-export function craftRollup(
-  ratings: ReadonlyArray<{ band: CraftBand }>,
-): number | undefined {
+export function craftRollup(ratings: ReadonlyArray<{ band: CraftBand }>): number | undefined {
   const ordinals = ratings
     .map((r) => craftBandOrdinal(r.band))
     .filter((v): v is number => v !== null);

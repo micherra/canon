@@ -221,9 +221,7 @@ describe("report()", () => {
           type: "review",
           violations: [],
           craft_profile: {
-            ratings: [
-              { dimension: "simplicity", band: "excellent" as never },
-            ],
+            ratings: [{ dimension: "simplicity", band: "excellent" as never }],
           },
         },
         tmpDir,

@@ -26,21 +26,13 @@ function principleFileExists(principleId: string): boolean {
 describe("craftRollup", () => {
   it("returns mean of band ordinals on the 1–3 scale", () => {
     // strong=3, adequate=2, weak=1 → mean = 2
-    const result = craftRollup([
-      { band: "strong" },
-      { band: "adequate" },
-      { band: "weak" },
-    ]);
+    const result = craftRollup([{ band: "strong" }, { band: "adequate" }, { band: "weak" }]);
     expect(result).toBe(2);
   });
 
   it("excludes n-a from the mean", () => {
     // strong=3, n-a excluded, adequate=2 → mean = (3+2)/2 = 2.5
-    const result = craftRollup([
-      { band: "strong" },
-      { band: "n-a" },
-      { band: "adequate" },
-    ]);
+    const result = craftRollup([{ band: "strong" }, { band: "n-a" }, { band: "adequate" }]);
     expect(result).toBe(2.5);
   });
 
