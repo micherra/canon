@@ -88,9 +88,9 @@ Only three artifact categories have variable-component filenames:
 
 | Category | Variable component | Example |
 |----------|--------------------|---------|
-| Implementation summary | `<task_id>` or `<slug>` | `plans/my-slug/my-task-id-SUMMARY.md` |
-| Task plans | `<task-id>` | `plans/my-slug/task-01-PLAN.md` |
-| Decisions | `<decision-id>` | `decisions/spec-location-01.md` |
+| Implementation summary | `<task_id>` or `<slug>` | `plans/<slug>/<task-id>-SUMMARY.md` |
+| Task plans | `<task-id>` | `plans/<slug>/<task-id>-PLAN.md` |
+| Decisions | `<decision-id>` | `decisions/<decision-id>.md` |
 | Transcripts | `<step_id>`, `<agent_type>`, `<iso>` | `transcripts/implement--canon:engineer--2026-06-02T21-00-00-000Z.jsonl` |
 
 Everything else uses a fixed filename and is safe to register as an exact path.

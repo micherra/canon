@@ -351,43 +351,6 @@ export function checkMissingExamples(principles: Principle[]): MissingExampleFin
 const CITED_PATH_RE = /`([a-zA-Z][\w./-]*\.(?:sh|ts|js|md|json|yaml|yml))`/g;
 
 /**
- * Strip fenced code blocks whose opening-fence line contains "example",
- * "hypothetical", or "template" (case-insensitive), replacing the block contents
- * with blank lines so that line numbers of surrounding text are preserved.
- *
- * All other fenced blocks are left intact.
- */
-export function stripIllustrativeFences(content: string): string {
-  const lines = content.split("\n");
-  const result: string[] = [];
-  let inIllustrativeFence = false;
-
-  for (const line of lines) {
-    if (!inIllustrativeFence) {
-      // Check if this is an opening fence of an illustrative block
-      if (/^```/.test(line) && /example|hypothetical|template/i.test(line)) {
-        inIllustrativeFence = true;
-        // Keep the fence line itself (so line numbers shift minimally); blank the content
-        result.push(line);
-      } else {
-        result.push(line);
-      }
-    } else {
-      // We're inside an illustrative fence
-      if (/^```/.test(line)) {
-        inIllustrativeFence = false;
-        result.push(line);
-      } else {
-        // Replace content with blank line to preserve offsets
-        result.push("");
-      }
-    }
-  }
-
-  return result.join("\n");
-}
-
-/**
  * Return true if the candidate path should be excluded from cited-path checking.
  *
  * Conservative exclusions — false positives are worse than misses:

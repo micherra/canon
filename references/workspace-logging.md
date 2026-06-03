@@ -34,7 +34,7 @@ post_event({
 
 ## Artifact Paths
 
-Report artifact paths **relative to `${WORKSPACE}`** (e.g., `plans/add-auth/DESIGN.md`, not the full absolute path). The orchestrator resolves them by prepending the workspace path.
+Report artifact paths **relative to `${WORKSPACE}`** (e.g., `plans/<slug>/DESIGN.md`, not the full absolute path). The orchestrator resolves them by prepending the workspace path.
 
 ## When `${WORKSPACE}` Is Not Provided
 
