@@ -34,3 +34,21 @@ export function craftBandOrdinal(band: CraftBand): number | null {
       return null;
   }
 }
+
+/**
+ * Compute rollup = mean of rated dimensions' band ordinals (1–3, n-a excluded).
+ * Returns undefined when all dimensions are n-a (no rated data to average).
+ *
+ * This is the canonical rollup definition used by both the reviewer agent and the
+ * /canon:craft-audit command. All producers MUST use this helper so the scale stays
+ * coherent across the system.
+ */
+export function craftRollup(
+  ratings: ReadonlyArray<{ band: CraftBand }>,
+): number | undefined {
+  const ordinals = ratings
+    .map((r) => craftBandOrdinal(r.band))
+    .filter((v): v is number => v !== null);
+  if (ordinals.length === 0) return undefined;
+  return ordinals.reduce((sum, v) => sum + v, 0) / ordinals.length;
+}

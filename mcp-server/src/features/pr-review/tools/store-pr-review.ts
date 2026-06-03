@@ -42,6 +42,8 @@ export type StorePrReviewOutput = {
  * Validate craft_profile at the trust boundary and throw on invalid input.
  * Returns the validated profile unchanged (or undefined when absent).
  * validate-at-trust-boundaries: reject malformed input before any write.
+ *
+ * Used internally and by report.ts to share a single validation path.
  */
 function validateCraftProfile(craft_profile: CraftProfile | undefined): CraftProfile | undefined {
   if (craft_profile === undefined) return undefined;
@@ -58,6 +60,8 @@ function validateCraftProfile(craft_profile: CraftProfile | undefined): CraftPro
  * Persist one craft_profiles row per distinct subsystem area derived from files.
  * craft comes ONLY from the structured craft_profile field (Decision craft-v2-04):
  * never re-derived from recommendations. Empty files → no rows, no error.
+ *
+ * Used internally and by report.ts to share a single persist path.
  */
 function persistCraftRows(profile: CraftProfile, files: string[], projectDir: string): void {
   if (files.length === 0) return;
@@ -73,13 +77,26 @@ function persistCraftRows(profile: CraftProfile, files: string[], projectDir: st
   }
 }
 
+/**
+ * Shared helper: validate then persist craft profile rows.
+ * Throws on invalid profile; silently no-ops when profile is undefined or files is empty.
+ * Used by both store-pr-review.ts and report.ts so the validate+persist contract is defined once.
+ */
+export function validateAndPersistCraftProfile(
+  craft_profile: CraftProfile | undefined,
+  files: string[],
+  projectDir: string,
+): void {
+  const profile = validateCraftProfile(craft_profile);
+  if (profile !== undefined) {
+    persistCraftRows(profile, files, projectDir);
+  }
+}
+
 export async function storePrReview(
   input: StorePrReviewInput,
   projectDir: string,
 ): Promise<StorePrReviewOutput> {
-  // validate-at-trust-boundaries: validate before any write
-  const profile = validateCraftProfile(input.craft_profile);
-
   const store = new DriftStore(projectDir);
   const review_id = generateId("rev");
   const timestamp = new Date().toISOString();
@@ -101,9 +118,8 @@ export async function storePrReview(
     ...(input.recommendations !== undefined ? { recommendations: input.recommendations } : {}),
   });
 
-  if (profile !== undefined) {
-    persistCraftRows(profile, input.files, projectDir);
-  }
+  // validate-at-trust-boundaries + persist craft rows via shared helper
+  validateAndPersistCraftProfile(input.craft_profile, input.files, projectDir);
 
   return { recorded: true, review_id };
 }

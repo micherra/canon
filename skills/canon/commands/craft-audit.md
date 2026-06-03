@@ -52,7 +52,7 @@ For each dimension, assign:
 - **evidence**: 1–2 sentences citing specific code patterns, function names, or structural observations
 - **principle_refs**: relevant Canon principle IDs (e.g., `"simplicity-first"`, `"information-hiding"`)
 
-Compute an optional **rollup score** (0–1) as the mean of rated dimensions (ordinal: strong=1.0, adequate=0.67, weak=0.33, n-a excluded).
+Compute an optional **rollup score** (1–3 ordinal mean) as the mean of rated dimensions' band ordinals (strong=3, adequate=2, weak=1, n-a excluded). Omit the rollup when all dimensions are n-a. This matches the scale used by `craftBandOrdinal` in craft-rubric.ts and the reviewer agent.
 
 ### Step 4: Persist each area's profile
 
@@ -89,7 +89,7 @@ Audited N area(s) — {timestamp}
 | locality | strong | ... |
 | predictability | adequate | ... |
 
-**Rollup score**: 0.72
+**Rollup score**: 2.33
 
 **Top finding**: {one-sentence summary of the most important craft observation}
 **Suggested follow-up**: {one actionable improvement, or "none identified"}

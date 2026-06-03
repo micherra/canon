@@ -2,7 +2,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { CraftProfileSchema } from "../../schema.ts";
-import { CRAFT_DIMENSION_PRINCIPLES, CRAFT_DIMENSIONS, craftBandOrdinal } from "../craft-rubric.ts";
+import {
+  CRAFT_DIMENSION_PRINCIPLES,
+  CRAFT_DIMENSIONS,
+  craftBandOrdinal,
+  craftRollup,
+} from "../craft-rubric.ts";
 
 // Resolve principles directory relative to the repo root.
 // Path from __tests__: lib/ → shared/ → src/ → mcp-server/ → repo-root → principles/
@@ -17,6 +22,59 @@ function principleFileExists(principleId: string): boolean {
     return fs.existsSync(filePath);
   });
 }
+
+describe("craftRollup", () => {
+  it("returns mean of band ordinals on the 1–3 scale", () => {
+    // strong=3, adequate=2, weak=1 → mean = 2
+    const result = craftRollup([
+      { band: "strong" },
+      { band: "adequate" },
+      { band: "weak" },
+    ]);
+    expect(result).toBe(2);
+  });
+
+  it("excludes n-a from the mean", () => {
+    // strong=3, n-a excluded, adequate=2 → mean = (3+2)/2 = 2.5
+    const result = craftRollup([
+      { band: "strong" },
+      { band: "n-a" },
+      { band: "adequate" },
+    ]);
+    expect(result).toBe(2.5);
+  });
+
+  it("returns undefined when all bands are n-a", () => {
+    const result = craftRollup([{ band: "n-a" }, { band: "n-a" }]);
+    expect(result).toBeUndefined();
+  });
+
+  it("returns undefined for empty ratings array", () => {
+    const result = craftRollup([]);
+    expect(result).toBeUndefined();
+  });
+
+  it("returns 3 for a single strong rating", () => {
+    expect(craftRollup([{ band: "strong" }])).toBe(3);
+  });
+
+  it("returns 1 for a single weak rating", () => {
+    expect(craftRollup([{ band: "weak" }])).toBe(1);
+  });
+
+  it("computes fractional mean correctly for 6 ratings", () => {
+    // strong(3) + adequate(2) + strong(3) + adequate(2) + weak(1) + adequate(2) = 13/6 ≈ 2.1667
+    const result = craftRollup([
+      { band: "strong" },
+      { band: "adequate" },
+      { band: "strong" },
+      { band: "adequate" },
+      { band: "weak" },
+      { band: "adequate" },
+    ]);
+    expect(result).toBeCloseTo(13 / 6, 10);
+  });
+});
 
 describe("craftBandOrdinal", () => {
   it("returns 3 for strong", () => {

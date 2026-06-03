@@ -14,7 +14,13 @@ export type CraftDimensionRating = {
 
 export type CraftProfile = {
   ratings: CraftDimensionRating[];
-  rollup?: number; // derived-for-display only; never the primitive
+  /**
+   * rollup = mean of rated dimensions' band ordinals (1–3, n-a excluded);
+   * derived-for-display only, never a stored primitive.
+   * Canonical scale: strong=3 / adequate=2 / weak=1.
+   * Use craftRollup() from shared/lib/craft-rubric.ts to compute.
+   */
+  rollup?: number;
 };
 
 export const CraftProfileSchema = z.object({

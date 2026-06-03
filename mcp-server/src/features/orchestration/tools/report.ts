@@ -1,8 +1,7 @@
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
-import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
-import { CraftProfileSchema, type ReportInput, type ReviewEntry } from "@shared/schema.ts";
+import type { ReportInput, ReviewEntry } from "@shared/schema.ts";
+import { validateAndPersistCraftProfile } from "@features/pr-review/tools/store-pr-review.ts";
 import { type SignalWriter, updateFileViolationHistory } from "./write-review.ts";
 
 export type ReportOutput = {
@@ -34,16 +33,6 @@ async function recordReview(
   store: DriftStore,
   signals: SignalWriter | undefined,
 ): Promise<ReportOutput> {
-  // validate-at-trust-boundaries: validate craft_profile before any write
-  if (review.craft_profile !== undefined) {
-    const parsed = CraftProfileSchema.safeParse(review.craft_profile);
-    if (!parsed.success) {
-      throw new Error(
-        `Invalid craft_profile: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
-      );
-    }
-  }
-
   const violatedIds = new Set(review.violations.map((v) => v.principle_id));
   const cleanHonored = review.honored.filter((id) => !violatedIds.has(id));
   const id = generateId("rev");
@@ -65,24 +54,10 @@ async function recordReview(
     updateFileViolationHistory(signals, review.files, review.violations, entry.verdict);
   }
 
-  // Persist craft profile rows — one per distinct subsystem area.
+  // Persist craft profile rows via shared helper (validate-at-trust-boundaries + persist).
   // craft comes ONLY from the structured craft_profile field (Decision craft-v2-04):
   // never re-derived from recommendations. Absent → zero craft rows.
-  if (review.craft_profile !== undefined && review.files.length > 0) {
-    const profile = review.craft_profile;
-    const distinctKeys = new Set(review.files.map(deriveSubsystemKey));
-    const db = getDriftDb(projectDir);
-    const craftDao = db.getCraftProfiles();
-
-    for (const subsystem_key of distinctKeys) {
-      craftDao.insertProfile({
-        ratings: profile.ratings,
-        source: "review",
-        subsystem_key,
-        ...(profile.rollup !== undefined ? { rollup: profile.rollup } : {}),
-      });
-    }
-  }
+  validateAndPersistCraftProfile(review.craft_profile, review.files, projectDir);
 
   return {
     id,

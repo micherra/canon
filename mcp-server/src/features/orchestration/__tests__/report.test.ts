@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -141,5 +142,96 @@ describe("report()", () => {
     const store = new DriftStore(tmpDir);
     const entries = await store.getReviews();
     expect(entries[0].verdict).toBe("WARNING");
+  });
+
+  // --- Craft profile path tests ---
+
+  it("persists N area rows (source:review) when craft_profile is provided", async () => {
+    const result = await report(
+      {
+        files: [
+          "mcp-server/src/features/orchestration/tools/report.ts",
+          "mcp-server/src/features/pr-review/tools/store-pr-review.ts",
+        ],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 0 },
+        },
+        type: "review",
+        violations: [],
+        craft_profile: {
+          ratings: [
+            { dimension: "simplicity", band: "strong" },
+            { dimension: "cohesion", band: "adequate" },
+          ],
+          rollup: 2.5,
+        },
+      },
+      tmpDir,
+    );
+
+    expect(result.recorded).toBe(true);
+
+    // files map to 2 distinct subsystem keys:
+    //   "features/orchestration" and "features/pr-review"
+    const dao = getDriftDb(tmpDir).getCraftProfiles();
+    const rows = dao.getRecentProfiles(10);
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    const sources = rows.map((r) => r.source);
+    expect(sources.every((s) => s === "review")).toBe(true);
+    const rollups = rows.map((r) => r.rollup);
+    expect(rollups.every((r) => r === 2.5)).toBe(true);
+  });
+
+  it("writes zero craft rows when craft_profile is absent", async () => {
+    await report(
+      {
+        files: ["mcp-server/src/features/orchestration/tools/report.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 0 },
+        },
+        type: "review",
+        violations: [],
+        // no craft_profile
+      },
+      tmpDir,
+    );
+
+    const dao = getDriftDb(tmpDir).getCraftProfiles();
+    const rows = dao.getRecentProfiles(10);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("throws and writes zero craft rows when craft_profile has an invalid band", async () => {
+    await expect(
+      report(
+        {
+          files: ["mcp-server/src/features/orchestration/tools/report.ts"],
+          honored: [],
+          score: {
+            conventions: { passed: 0, total: 0 },
+            opinions: { passed: 0, total: 0 },
+            rules: { passed: 0, total: 0 },
+          },
+          type: "review",
+          violations: [],
+          craft_profile: {
+            ratings: [
+              { dimension: "simplicity", band: "excellent" as never },
+            ],
+          },
+        },
+        tmpDir,
+      ),
+    ).rejects.toThrow("Invalid craft_profile");
+
+    const dao = getDriftDb(tmpDir).getCraftProfiles();
+    const rows = dao.getRecentProfiles(10);
+    expect(rows).toHaveLength(0);
   });
 });
