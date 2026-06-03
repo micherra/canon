@@ -187,11 +187,11 @@ For simple tasks, propose one approach with clear rationale.
 
 When two or more design candidates are both plausible and have non-obvious tradeoffs — or when one has a potential silent failure mode — build and probe both before recommending. Do not argue from first principles when a probe is cheaper.
 
-**Empirical candidate comparison**: Implement each candidate enough to exercise it at the real integration boundary (e.g., the MCP handshake, not just a successful compile). Report measured data — latency, resource use, tool counts, failure modes — in a "Feasibility Study" section of DESIGN.md. A probe table with actual measurements is the deliverable, not a prose argument.
+**Empirical candidate comparison**: Implement each candidate enough to exercise it at the real integration boundary (e.g., the MCP handshake, not just a successful compile). Report measured data — latency, resource use, tool counts, failure modes — in the **External Evidence** section of DESIGN.md (as an empirical probe table). A probe table with actual measurements is the deliverable, not a prose argument.
 
 **Silent failure detection**: A build step or tool that exits 0 can still produce a non-running artifact. Exercise each candidate at its actual integration boundary to surface silent failures empirically, not as theoretical risks.
 
-**Close the decision loop**: If measurements make one candidate clearly superior, state the recommendation directly and mark `HAS_QUESTIONS: false`. A measured recommendation eliminates a HITL round-trip and produces an auditable decision record.
+**Close the decision loop**: If measurements make one candidate clearly superior, state the recommendation directly and do not raise `HAS_QUESTIONS`. A measured recommendation eliminates a HITL round-trip and produces an auditable decision record.
 
 **Scope**: This guidance covers design alternative evaluation — comparing two approaches with different tradeoff profiles. It is distinct from the `measure-before-optimizing` principle, which governs performance optimization (measure the hot path before changing code for speed). Apply this step when choosing between candidates, not when tuning a chosen approach.
 

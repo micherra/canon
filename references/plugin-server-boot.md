@@ -98,6 +98,8 @@ Key properties:
 
 ## 5. Deps-ready poll and dangling-symlink guard
 
+*Snippets below are illustrative — see `mcp-server/boot.sh` for the runnable, fully-guarded form (variable init, `--print-resolution` short-circuit).*
+
 ### Deps-ready poll
 
 The SessionStart install script runs asynchronously. On a clean profile, `boot.sh` may launch before deps are installed (~26s gap). The poll closes this race:
