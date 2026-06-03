@@ -39,7 +39,7 @@ Canon splits every build into two directories. Orient yourself at spawn time:
 
 | Location | Variable | What lives here |
 |----------|----------|-----------------|
-| Workspace root | `${WORKSPACE}` | Orchestration artifacts — `reviews/REVIEW.md`, `plans/${slug}/`, `context-sync-report.md`, `artifacts/`, transcripts |
+| Workspace root | `${WORKSPACE}` | Orchestration artifacts — `reviews/REVIEW.md`, `plans/${slug}/`, `plans/${slug}/CONTEXT-SYNC.md`, `artifacts/`, transcripts |
 | Worktree | working directory | Source code — the git repo, committed changes, branches |
 
 **Key rules:**

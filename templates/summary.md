@@ -1,5 +1,5 @@
 ---
-template: implementation-log
+template: summary
 description: Structured format for implementor task summaries
 used-by: [implementor, fixer]
 read-by: [tester, reviewer, scribe, shipper]

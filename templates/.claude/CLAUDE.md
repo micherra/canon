@@ -16,12 +16,12 @@ Each template is a markdown file with placeholder sections that agents fill in.
 |----------|---------|---------|
 | `claudemd-template.md` | scribe | CLAUDE.md structure |
 | `design-decision.md` | architect | Architecture decisions with tradeoffs |
-| `implementation-log.md` | engineer | Task implementation summary — required `#### Criteria Coverage` table maps every task-plan acceptance criterion to a disposition (`covered`, `descoped`, `partial`); reviewer checks this in Stage 3 compliance cross-check |
-| `review-checklist.md` | reviewer | Code review output with violations |
+| `summary.md` | engineer | Task implementation summary — required `#### Criteria Coverage` table maps every task-plan acceptance criterion to a disposition (`covered`, `descoped`, `partial`); reviewer checks this in Stage 3 compliance cross-check |
+| `review.md` | reviewer | Code review output with violations |
 | `security-assessment.md` | security | Vulnerability findings and remediation |
 | `session-context.md` | orchestrator | Session-level context and blockers |
 | `test-report.md` | tester | Test coverage and results |
-| `context-sync-report.md` | scribe | Cross-iteration context sync |
+| `context-sync.md` | scribe | Cross-iteration context sync |
 | `design-document.md` | architect | Technical design with Canon alignment |
 | `task-plan.md` | architect | Atomic task plan for engineers — required `### Brief Coverage` table maps every runbook requirement to a task element with disposition (`covered`, `descoped`, `partial`); missing or empty table is a plan defect that blocks progression |
 | `plan-index.md` | architect | Index of all task plans for a build |
@@ -48,9 +48,10 @@ Spawn-prompt templates are structurally distinct from artifact-output templates.
 **Reading protocol**: The orchestrator reads the template, fills `## Variables` placeholders, and passes the `## Prompt` section content to the `Agent()` call. See `principles/conventions/spawn-prompt-template-structure.md` for the full convention.
 
 ## Conventions
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-06-02 -->
 
 - Templates ensure downstream agents can reliably parse upstream output
 - Never modify template structure without updating all consuming agents
 - Templates use markdown with clear section headers and placeholder text
 - Some templates now include optional evidence sections (`External Evidence`, `Evidence URLs`, `Verified Facts`, `Assumptions`) that downstream readers should preserve and tolerate when absent
+- **Template filenames must match their output artifact stem in lowercase-kebab form.** A template that produces `CONTEXT-SYNC.md` is named `context-sync.md`; one that produces `REVIEW.md` is named `review.md`; one that produces `*-SUMMARY.md` is named `summary.md`. This lets the orchestrator derive the output filename from the template name mechanically. (sug_KKKK1 Fix C)

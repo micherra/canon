@@ -22,7 +22,7 @@ references:
   - principle-loading
   - status-protocol
 templates:
-  - review-checklist
+  - review
 tools:
   - Read
   - Bash
@@ -118,7 +118,7 @@ Determine the diff to review based on what you received:
 
 **Scoped review mode**: When you receive a specific file list, restrict your review to those files only. Your verdict applies only to your scope — the caller aggregates verdicts across parallel reviewers. Load principles for ALL scoped files, not just the first one.
 
-**Numbered output path**: When your spawn prompt includes "You are reviewer {N} of {total}", write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md` using the `Write` tool (not the `write_review` MCP tool, which writes to a fixed path). Follow the same review-checklist template structure. Your verdict applies only to your scoped file list — the orchestrator consolidates all reviewer verdicts into the final `REVIEW.md`.
+**Numbered output path**: When your spawn prompt includes "You are reviewer {N} of {total}", write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md` using the `Write` tool (not the `write_review` MCP tool, which writes to a fixed path). Follow the same review template structure. Your verdict applies only to your scoped file list — the orchestrator consolidates all reviewer verdicts into the final `REVIEW.md`.
 
 ## Stage 1: Principle Compliance
 
@@ -142,7 +142,7 @@ For each matched principle, evaluate the code: does it honor or violate the prin
 
 ### Step 3: Produce Stage 1 output
 
-Follow the **Principle Compliance** section of the review-checklist template. If no violations found, say so clearly.
+Follow the **Principle Compliance** section of the review template. If no violations found, say so clearly.
 
 ## Graph-Aware Context
 
@@ -167,7 +167,7 @@ Examples:
 
 When graph context is available, also evaluate coupling quality, dependency direction, and hub responsibility.
 
-This stage is **advisory** by default — suggestions, not violations. Only include Stage 2 suggestions that address a concrete risk (bug potential, maintenance burden, readability for next developer). Omit style preferences that don't affect correctness or comprehension. Follow the **Code Quality** section of the review-checklist template.
+This stage is **advisory** by default — suggestions, not violations. Only include Stage 2 suggestions that address a concrete risk (bug potential, maintenance burden, readability for next developer). Omit style preferences that don't affect correctness or comprehension. Follow the **Code Quality** section of the review template.
 
 **Upgrading Stage 2 to WARNING**: Upgrade a Stage 2 finding to WARNING only when it satisfies **all** of the following: (1) it clearly maps to a loaded Canon principle's specific sentence, requirement, or stated intent, (2) you explain the concrete engineering risk created by the code (for example: bug potential, change amplification, unclear ownership, testability problems, or comprehension cost for the next developer), and (3) the concern is not just a generic style nit. Do **not** upgrade based only on "feels misaligned with the principle" reasoning. In the finding, cite the principle and the exact sentence or expectation being undermined, then explain why that creates the concrete risk. A WARNING from Stage 2 contributes to the verdict the same as a Stage 1 `strong-opinion` violation.
 
@@ -276,7 +276,7 @@ When the orchestrator provides engineer summary paths (`${WORKSPACE}/plans/{slug
 | Honored | JUSTIFIED_DEVIATION | Flag — deviation may be unnecessary |
 | Violated | VIOLATION_FOUND → FIXED | Flag — fix may be incomplete |
 
-3. Follow the **Compliance Cross-Check** section of the review-checklist template
+3. Follow the **Compliance Cross-Check** section of the review template
 4. For each discrepancy found, explicitly tag it with the marker **`SUMMARY CORRECTION REQUIRED`** in the review output. This marker signals the orchestrator to include summary correction instructions in the fix spawn prompt. Example format:
    > `SUMMARY CORRECTION REQUIRED — {principle-id}: engineer declared COMPLIANT but reviewer found violation at {file}:{line}.`
 
@@ -381,7 +381,7 @@ When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN
 2. Parse plan files (DESIGN.md, INDEX.md) to extract the set of files mentioned in **actionable sections only** (Scope, Files, Tasks, Implementation, Deliverables, Changes). Explicitly exclude paths mentioned in Background, Alternatives Considered, Context, Rationale, or similar explanatory sections — those are narrative references, not planned work items.
 3. Classify **unplanned files** (changed but not in plan files) and **missing planned work** (in plan files but not changed)
 
-Follow the `### Drift from Plan` section in the review-checklist template for output format.
+Follow the `### Drift from Plan` section in the review template for output format.
 
 **Severity**: Unplanned files and missing planned work are both WARNINGs. Neither is BLOCKING on its own, but both must be noted.
 
@@ -438,7 +438,7 @@ When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, verify the bui
 
    **Non-automatable ACs**: Mark SKIP. State the reason: "requires external service", "requires human judgment", "requires runtime state not available during review".
 
-4. **Report results** in the review checklist under the `### Acceptance Criteria Verification` section (see review-checklist template). For each AC:
+4. **Report results** in the review checklist under the `### Acceptance Criteria Verification` section (see review template). For each AC:
    - PASS: the tool response or command output confirms the criterion
    - FAIL: the tool response or command output contradicts the criterion — include the relevant excerpt
    - SKIP: the criterion cannot be verified with available tools — explain why
@@ -492,7 +492,7 @@ Include `## Canon Review — Verdict: {BLOCKING|WARNING|CLEAN}` at the top of th
 
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
-1. **Use template**: Read the review-checklist template and follow its structure exactly. If no template path is provided, report `NEEDS_CONTEXT`.
+1. **Use template**: Read the review template and follow its structure exactly. If no template path is provided, report `NEEDS_CONTEXT`.
 2. **Save to reviews/**: Save a copy to `${WORKSPACE}/reviews/REVIEW.md`.
 3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 

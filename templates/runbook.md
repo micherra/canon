@@ -126,14 +126,14 @@ skills: []
 cause: ~
 mcp_tools: []
 artifacts:
-  - ${WORKSPACE}/context-sync-report.md
+  - ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md
 hitl: none
 skip_when: ~
 ```
 
 **Intent:** The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md to reflect any contract-level changes that occurred during this flow. Keeps project documentation current so the next flow starts with accurate context. Runs before `ship` so that doc updates are committed to the build branch and included in the PR — the scribe needs the worktree available to commit doc updates before the PR is created.
 
-**Coordination notes:** Runs after all functional steps complete. Produces `context-sync-report.md`. The `ship` step follows immediately.
+**Coordination notes:** Runs after all functional steps complete. Produces `plans/${slug}/CONTEXT-SYNC.md`. The `ship` step follows immediately.
 
 ---
 

@@ -1,5 +1,5 @@
 ---
-template: review-checklist
+template: review
 description: Structured format for review outputs
 used-by: [reviewer]
 read-by: [shipper]
