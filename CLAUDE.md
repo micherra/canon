@@ -119,8 +119,6 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **User override**: Pass `override_tier: "supervised"` to force full supervision. The user can request this at any point by saying "supervised mode" or "full supervision".
 
-**Logging**: The tool logs auto_decision events automatically. No additional orchestrator logging needed.
-
 ### Per-Message Re-Classification (L1)
 
 **Re-classify every user message.** Intent is per message, not session. Chat/question history does not make a subsequent build request "chat." Apply PM triage to every build request regardless of prior conversation flow.
@@ -218,8 +216,6 @@ Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include r
 
 ### MCP Tool Composition
 
-Table of which Canon MCP tools to call before spawning each step type:
-
 | Step type | MCP tools to call |
 |-----------|------------------|
 | Any step before spawn | `resolve_agent_skills` (preloaded rules + references injected into the spawn prompt) |
@@ -229,7 +225,7 @@ Table of which Canon MCP tools to call before spawning each step type:
 | Test | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 | Security | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 
-`get_context` is a composite tool that batches multiple lookups into a single MCP round-trip. Include results in the spawn prompt. Agents also have direct MCP access and will self-serve missing context (via `agent-context-check` skill).
+`get_context` batches multiple lookups in one MCP round-trip. Include results in the spawn prompt. Agents self-serve missing context via `agent-context-check` skill.
 
 ### Dispatch Framework
 
@@ -244,7 +240,7 @@ Table of which Canon MCP tools to call before spawning each step type:
 
 ### Team Dispatch Protocol
 
-Team dispatch follows a three-phase loop. The reviewer is the concrete implementation; security, tester, and architect teams follow the same pattern with different partitioning strategies (to be implemented later).
+Three-phase loop: partition → spawn → consolidate. Reviewer is the concrete implementation; other team types follow the same pattern.
 
 #### Phase 1 — Partition
 
@@ -303,13 +299,9 @@ Accepted values: `"fix-type build, no contract-level changes"` | `"markdown-only
 
 An empty `skip_reason` is a protocol violation. If no accepted value fits, the step should not be skipped — run it or report BLOCKED.
 
-### Journal Protocol — implementation summary path
-
-Derive the implementation-summary path from `write_implementation_summary`'s returned `path` field (or register the `plans/${slug}/*-SUMMARY.md` glob when pre-registering before the engineer runs); never a guessed stem. See `references/canon-artifact-locations.md` for the full naming rule and the rationale.
-
 ### Post-Subagent Artifact Check
 
-After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL.
+After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL. Derive the implement-summary path from `write_implementation_summary`'s returned `path` field; never a guessed stem.
 
 | Agent | Expected artifact |
 |-------|------------------|
@@ -319,7 +311,7 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 | Tester | `plans/${slug}/TEST-REPORT.md` |
 | Scribe | `plans/${slug}/CONTEXT-SYNC.md` |
 
-> Authoritative source for every Canon artifact path and naming rule: `references/canon-artifact-locations.md`.
+> Authoritative artifact path and naming rules: `references/canon-artifact-locations.md`.
 
 ### HITL Patterns <!-- last-updated: 2026-05-17 -->
 
@@ -417,15 +409,7 @@ See Agent Spawn Error Handling below. For transient errors (429, auth, TTL), ret
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
-**Spawn pattern for code-writing agents:**
-```
-Agent({
-  subagent_type: "canon:engineer",
-  prompt: "... Working directory: {worktree_path}\nturn_budget: {maxTurns} ..."
-})
-```
-
-Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`.
+**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`.
 
 **Exceptions (no worktree needed):**
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
@@ -440,7 +424,7 @@ Detect and retry transient failures:
 | Auth failure ("Not logged in", 401) | Parallel agents corrupting session credentials |
 | TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache ordering bug |
 
-Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
+Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only failed ones. If all retries fail, pause and inform the user.
 
 **Architect re-spawn tracking**: When architect requires 2+ spawn attempts, record reason in `log_step` outcome `review_verdict` field as `"respawn:{reason}"` (values: `artifacts_missing`, `rate_limit`, `auth_failure`, `ttl_ordering`, `timeout`).
 
@@ -448,8 +432,6 @@ Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful resu
 <!-- last-updated: 2026-05-21 -->
 
 When an agent failure or stuck condition is detected (`isStuck` returns true, agent returns error, or retry fails), call `get_next_escalation_strategy({ workspace, step_id, flow_config? })` BEFORE escalating to HITL.
-
-**Strategy application:**
 
 | Strategy | How to apply |
 |----------|-------------|
@@ -467,9 +449,7 @@ When an agent failure or stuck condition is detected (`isStuck` returns true, ag
 
 ## Re-spawn Enrichment Protocol
 
-Re-spawned agents (failure retry, fix-after-review, reviewer re-spawn) MUST receive prior progress context to avoid duplicating completed work.
-
-**Include in every re-spawn prompt:**
+Re-spawned agents MUST receive prior progress context. **Include in every re-spawn prompt:**
 
 1. **Uncommitted work**: `git diff --name-only` in worktree → instruct agent to commit with `wip(recovery): save prior agent work` first.
 2. **Completed files**: `git diff --name-only {base_commit}..HEAD` → explicit list: "These files do NOT need re-implementation: [list]."
