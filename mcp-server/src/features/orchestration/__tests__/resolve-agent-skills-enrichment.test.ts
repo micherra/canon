@@ -34,17 +34,6 @@ vi.mock("@domains/workspaces/execution-store-cache.ts", () => ({
 
 // ---- Helpers ----
 
-/**
- * Return an ISO timestamp that is guaranteed to fall within the hot-file
- * detection 14-day lookback window (always 1 day ago).  Using a dynamic
- * date prevents the test from silently breaking as calendar time advances.
- */
-function recentIso(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString();
-}
-
 async function ok(
   result: ReturnType<typeof resolveAgentSkills>,
 ): Promise<{ ok: true } & ResolveAgentSkillsResult> {
@@ -117,6 +106,15 @@ function makeMockDriftDb({
   };
 }
 
+// A recent ISO timestamp that is always within the 14-day hot-file lookback window.
+// Using Date.now() - 1 day avoids the stale-date flakiness that occurs when a
+// hardcoded date drifts outside the window after 14 days.
+const RECENT_COMPLETED = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString();
+})();
+
 // ---- Tests ----
 
 describe("resolveAgentSkills — area memory and hot-file enrichment", () => {
@@ -178,12 +176,11 @@ describe("resolveAgentSkills — area memory and hot-file enrichment", () => {
   it("preload_prompt includes Hot-File Caution section when files appear in 3+ builds", async () => {
     const targetFile = "mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts";
 
-    // Seed 3 runs, each containing the target file.
-    // Use recentIso() so the runs always fall within the 14-day lookback window.
+    // Seed 3 runs, each containing the target file
     const runs = Array.from({ length: 3 }, (_, i) => ({
       run_id: `run-${i + 1}`,
       flow: `build-${i + 1}`,
-      completed: recentIso(),
+      completed: RECENT_COMPLETED,
       commits: [JSON.stringify({ sha: `abc${i}`, files: [targetFile] })],
     }));
 
@@ -204,11 +201,11 @@ describe("resolveAgentSkills — area memory and hot-file enrichment", () => {
   it("preload_prompt does NOT include Hot-File Caution when file appears in fewer than 3 builds", async () => {
     const targetFile = "mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts";
 
-    // Only 2 runs — use recentIso() to keep within the 14-day lookback window.
+    // Only 2 runs
     const runs = Array.from({ length: 2 }, (_, i) => ({
       run_id: `run-${i + 1}`,
       flow: `build-${i + 1}`,
-      completed: recentIso(),
+      completed: RECENT_COMPLETED,
       commits: [JSON.stringify({ sha: `abc${i}`, files: [targetFile] })],
     }));
 
@@ -340,11 +337,10 @@ describe("resolveAgentSkills — area memory and hot-file enrichment", () => {
     vi.mocked(getExecutionStore).mockReturnValue({ appendEvent: mockAppendEvent } as never);
 
     const targetFile = "mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts";
-    // Use recentIso() so runs fall within the 14-day lookback window.
     const runs = Array.from({ length: 3 }, (_, i) => ({
       run_id: `run-${i + 1}`,
       flow: `build-${i + 1}`,
-      completed: recentIso(),
+      completed: RECENT_COMPLETED,
       commits: [JSON.stringify({ sha: `abc${i}`, files: [targetFile] })],
     }));
 

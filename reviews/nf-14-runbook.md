@@ -212,14 +212,14 @@ skills: []
 cause: ~
 mcp_tools: []
 artifacts:
-  - ${WORKSPACE}/context-sync-report.md
+  - ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md
 hitl: none
 skip_when: ~
 ```
 
 **Intent:** The scribe updates CLAUDE.md files to reflect: the two new rules, the researcher's updated tool profile, the engineer/tester/scribe worktree orientation instructions, and the `log_step` artifact verification behavior. The `agents/.claude/CLAUDE.md` and `rules/.claude/CLAUDE.md` may need updating to reflect new rules and changed agent capabilities.
 
-**Coordination notes:** Runs after review completes. Produces `context-sync-report.md`. The `learn` step follows immediately.
+**Coordination notes:** Runs after review completes. Produces `plans/${slug}/CONTEXT-SYNC.md`. The `learn` step follows immediately.
 
 ---
 

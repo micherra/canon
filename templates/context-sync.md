@@ -1,5 +1,5 @@
 ---
-template: context-sync-report
+template: context-sync
 description: >-
   Standardized output for the scribe agent. Records which files
   were classified, which documents were updated, and freshness stamps.

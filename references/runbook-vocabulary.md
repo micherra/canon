@@ -2,7 +2,7 @@
 
 The canonical set of step IDs Canon knows. Every synthesized runbook uses only these IDs. Adding a new ID is a versioned change — deliberate and reviewed, never a per-run decision.
 
-This file is the single source of truth. The synthesis skill (`references/runbook-synthesis.md`) validates every generated runbook against this vocabulary at synthesis time. Unresolvable step IDs are synthesis errors.
+This file is the single source of truth. The architect's runbook synthesis validates every generated runbook against this vocabulary at synthesis time. Unresolvable step IDs are synthesis errors.
 
 **Version: 1.1**
 

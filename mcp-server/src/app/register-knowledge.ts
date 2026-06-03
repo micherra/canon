@@ -152,18 +152,28 @@ function registerDiagnosticsTools(): void {
     },
     gatedWrapHandler(async (input) => getHistory(input)),
   );
+}
 
+function registerWikiLintTool(): void {
   server.registerTool(
     "wiki_lint",
     {
       description:
-        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, and principles missing examples.",
+        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, and cited paths in references/ that do not resolve.",
       inputSchema: {
         checks: z
-          .array(z.enum(["contradictions", "orphan_principles", "stale_refs", "missing_examples"]))
+          .array(
+            z.enum([
+              "contradictions",
+              "orphan_principles",
+              "stale_refs",
+              "missing_examples",
+              "cited_paths",
+            ]),
+          )
           .optional()
           .describe(
-            "Checks to run (default: all). Options: contradictions, orphan_principles, stale_refs, missing_examples",
+            "Checks to run (default: all 5). Options: contradictions, orphan_principles, stale_refs, missing_examples, cited_paths",
           ),
       },
     },
@@ -312,6 +322,7 @@ function registerGraphJobTools(): void {
 export function registerKnowledgeTools(): void {
   registerGraphUiTools();
   registerDiagnosticsTools();
+  registerWikiLintTool();
   registerGraphQueryTool();
   registerSemanticSearchTool();
   registerGraphJobTools();

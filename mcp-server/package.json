@@ -1,6 +1,6 @@
 {
   "name": "@canon/mcp-server",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "MCP server for Canon engineering principles",
   "type": "module",
   "main": "src/app/index.ts",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
-    "@modelcontextprotocol/ext-apps": "^1.7.2",
+    "@modelcontextprotocol/ext-apps": "^1.7.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.10.0",
     "graphology": "^0.26",
@@ -25,7 +25,7 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "sqlite-vec": "^0.1.9",
-    "tsx": "^4.22.3",
+    "tsx": "^4.22.4",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
     "web-tree-sitter": "^0.26.9",
@@ -33,13 +33,13 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.15",
+    "@biomejs/biome": "2.4.16",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.1",
-    "dependency-cruiser": "^17.4.2",
+    "dependency-cruiser": "^17.4.3",
     "typescript": "^6.0.3",
-    "vite": "^8.0.14",
+    "vite": "^8.0.16",
     "vite-plugin-singlefile": "^2.3.3",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.8"
   }
 }
