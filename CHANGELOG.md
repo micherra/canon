@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.1](https://github.com/micherra/canon/compare/v2.4.0...v2.4.1) (2026-06-03)
+
+
+### Bug Fixes
+
+* **artifact-validation:** harden SUMMARY path validation + authoritative artifact-location spec ([#298](https://github.com/micherra/canon/issues/298)) ([e4b1cea](https://github.com/micherra/canon/commit/e4b1ceaecc637652f13bef4cf122f4a3e3db319d))
+* **mcp-boot:** ESM dep reachability + bounded deps-ready wait for clean installs ([#296](https://github.com/micherra/canon/issues/296)) ([bd452f9](https://github.com/micherra/canon/commit/bd452f9e3d65537cb78b2f55f5b5ab7aa4a2817d))
+
 ## [2.4.0](https://github.com/micherra/canon/compare/v2.3.0...v2.4.0) (2026-06-02)
 
 
