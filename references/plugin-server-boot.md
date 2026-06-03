@@ -14,8 +14,10 @@ The marketplace cache (`${CLAUDE_PLUGIN_ROOT}`) is version-keyed and ephemeral â
 `${CLAUDE_PLUGIN_DATA}` is the persistent data directory. It survives plugin updates. This is the correct install target.
 
 ```bash
-DATA="${CLAUDE_PLUGIN_DATA}/node_modules"
+DATA="${CLAUDE_PLUGIN_DATA}"
 ```
+
+`npm install` in `$DATA` creates `$DATA/node_modules`; boot.sh references that path as `DATA_DIR`.
 
 ---
 
