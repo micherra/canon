@@ -60,10 +60,11 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
       status: "completed",
       step_id: "design",
       workspace,
-    });
+
+      projectDir: process.cwd(),    });
 
     // Act: finalizeWorkspace with complete: true triggers archiveAndDeleteWorkspace
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
 
@@ -98,10 +99,11 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
       status: "completed",
       step_id: "design",
       workspace,
-    });
+
+      projectDir: process.cwd(),    });
 
     // Act
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
 
@@ -124,10 +126,11 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
       status: "completed",
       step_id: "design",
       workspace,
-    });
+
+      projectDir: process.cwd(),    });
 
     // Act
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
 

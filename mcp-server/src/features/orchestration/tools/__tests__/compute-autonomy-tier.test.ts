@@ -125,7 +125,8 @@ describe("computeAutonomyTier — happy path", () => {
     const result = await computeAutonomyTier({
       file_paths: ["src/foo.ts"],
       workspace: MOCK_WORKSPACE,
-    });
+
+      projectDir: process.cwd(),    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
@@ -145,7 +146,8 @@ describe("computeAutonomyTier — fail-safe", () => {
     const result = await computeAutonomyTier({
       file_paths: ["src/foo.ts"],
       workspace: MOCK_WORKSPACE,
-    });
+
+      projectDir: process.cwd(),    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
@@ -162,7 +164,8 @@ describe("computeAutonomyTier — fail-safe", () => {
     const result = await computeAutonomyTier({
       file_paths: ["src/foo.ts"],
       workspace: MOCK_WORKSPACE,
-    });
+
+      projectDir: process.cwd(),    });
 
     // graphQuery failure is non-fatal inside gatherBlastRadiusSignals (try/catch)
     // so the tool should still return a valid result (not the fail-safe supervised)
@@ -178,7 +181,8 @@ describe("computeAutonomyTier — auto_decision event logging", () => {
     const result = await computeAutonomyTier({
       file_paths: ["src/foo.ts"],
       workspace: MOCK_WORKSPACE,
-    });
+
+      projectDir: process.cwd(),    });
 
     expect(result.ok).toBe(true);
 
@@ -199,7 +203,8 @@ describe("computeAutonomyTier — auto_decision event logging", () => {
     const result = await computeAutonomyTier({
       file_paths: ["src/foo.ts"],
       workspace: "relative/path/to/workspace",
-    });
+
+      projectDir: process.cwd(),    });
 
     // Tool still succeeds (logging is best-effort)
     expect(result.ok).toBe(true);
@@ -224,7 +229,8 @@ describe("computeAutonomyTier — override_tier passthrough", () => {
       file_paths: ["src/foo.ts"],
       override_tier: "supervised",
       workspace: MOCK_WORKSPACE,
-    });
+
+      projectDir: process.cwd(),    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
@@ -241,7 +247,8 @@ describe("computeAutonomyTier — override_tier passthrough", () => {
       file_paths: ["src/foo.ts"],
       override_tier: "autonomous",
       workspace: MOCK_WORKSPACE,
-    });
+
+      projectDir: process.cwd(),    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");

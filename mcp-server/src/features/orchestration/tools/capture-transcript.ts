@@ -5,7 +5,6 @@ import { createInterface } from "node:readline";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import { isPathContained } from "@shared/lib/worktree-guard.ts";
-import { projectDir } from "../../../app/server-state.ts";
 import { transformClaudeCodeTranscript } from "../services/transcript-transformer.ts";
 
 export type CaptureTranscriptInput = {
@@ -13,6 +12,8 @@ export type CaptureTranscriptInput = {
   step_id: string;
   agent_type: string;
   agent_id: string;
+  /** Project directory — used to locate the Claude Code projects directory. */
+  projectDir: string;
 };
 
 export type CaptureTranscriptResult = {
@@ -21,7 +22,7 @@ export type CaptureTranscriptResult = {
   warning?: string;
 };
 
-async function findAgentTranscript(agentId: string): Promise<string | null> {
+async function findAgentTranscript(agentId: string, projectDir: string): Promise<string | null> {
   const home = process.env.HOME ?? "/tmp";
   const projectsDir = join(home, ".claude", "projects", projectDir.replace(/\//g, "-"));
   let sessionDirs: string[];
@@ -71,9 +72,9 @@ async function readJsonlFile(filePath: string): Promise<unknown[]> {
 export async function captureTranscript(
   input: CaptureTranscriptInput,
 ): Promise<ToolResult<CaptureTranscriptResult>> {
-  const { workspace, step_id, agent_type, agent_id } = input;
+  const { workspace, step_id, agent_type, agent_id, projectDir } = input;
 
-  const sourcePath = await findAgentTranscript(agent_id);
+  const sourcePath = await findAgentTranscript(agent_id, projectDir);
   if (!sourcePath) {
     return toolOk({
       entry_count: 0,

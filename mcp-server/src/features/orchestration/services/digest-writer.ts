@@ -22,7 +22,6 @@
 import { existsSync, globSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { projectDir } from "@app/server-state.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import {
   parsePlanningBrief,
@@ -292,7 +291,7 @@ export function formatMemoryIndexEntry(data: DigestData): string {
  * error — including missing auto-memory dir, malformed workspace data, or
  * filesystem write failures. Never throws.
  */
-export async function tryWriteBuildDigest(workspace: string): Promise<boolean> {
+export async function tryWriteBuildDigest(workspace: string, projectDir: string): Promise<boolean> {
   try {
     // 1. Extract digest data from workspace
     const data = extractDigestData(workspace);

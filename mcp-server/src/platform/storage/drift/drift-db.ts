@@ -741,3 +741,27 @@ export function getDriftDb(projectDir: string): DriftDb {
   cache.set(key, store);
   return store;
 }
+
+/**
+ * Close and evict the DriftDb instance for the given projectDir.
+ *
+ * The drift-db cache is keyed directly by resolve(projectDir), so this is an
+ * exact-key close+delete. No-op when the scope is not in the cache.
+ *
+ * Called from the connection-end handler (Phase 2). Under stdio the single
+ * connection never ends before process exit, so this is never called — a true
+ * behavioral no-op.
+ *
+ * // Phase 2: call evictStoresForScope/evictDriftDbForScope from the connection-end handler
+ */
+export function evictDriftDbForScope(projectDir: string): void {
+  const key = resolve(projectDir);
+  const db = cache.get(key);
+  if (db === undefined) return; // no-op for unknown scope
+  try {
+    db.close();
+  } catch {
+    /* ignore close errors */
+  }
+  cache.delete(key);
+}

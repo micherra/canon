@@ -240,7 +240,6 @@ import {
   registerConnectionScope,
   resetForTesting,
   STDIO_SESSION_ID,
-  setProjectDir,
 } from "../server-state.ts";
 
 // ── Test setup ────────────────────────────────────────────────────────────────
@@ -288,7 +287,7 @@ describe("scope migration: register-init-workspace.ts — init_workspace", () =>
   });
 
   it("(b) STDIO fallback: resolves global dir when no sessionId", async () => {
-    setProjectDir("/global/project");
+    registerConnectionScope(STDIO_SESSION_ID, "/global/project");
 
     const handler = getRegisteredHandler(getRegisterToolCalls(), "init_workspace");
     await handler(
@@ -304,7 +303,7 @@ describe("scope migration: register-init-workspace.ts — init_workspace", () =>
   });
 
   it("(b) STDIO sentinel: resolves global dir via STDIO_SESSION_ID", async () => {
-    setProjectDir("/stdio/project");
+    registerConnectionScope(STDIO_SESSION_ID, "/stdio/project");
 
     const handler = getRegisteredHandler(getRegisterToolCalls(), "init_workspace");
     await handler(
@@ -347,7 +346,7 @@ describe("scope migration: register-artifacts.ts — write_review", () => {
   });
 
   it("(b) STDIO fallback: resolves global dir for getDriftDb when no sessionId", async () => {
-    setProjectDir("/global/artifacts");
+    registerConnectionScope(STDIO_SESSION_ID, "/global/artifacts");
 
     const handler = getRegisteredHandler(getRegisterToolCalls(), "write_review");
     await handler(reviewInput, makeExtra(undefined));
@@ -373,7 +372,7 @@ describe("scope migration: register-principles.ts — get_compliance, report, st
   });
 
   it("(b) STDIO fallback: get_compliance resolves global dir when no sessionId", async () => {
-    setProjectDir("/global/principles");
+    registerConnectionScope(STDIO_SESSION_ID, "/global/principles");
 
     const handler = getRegisteredHandler(getRegisterToolCalls(), "get_compliance");
     await handler({ principle_id: "simplicity-first" }, makeExtra(undefined));
@@ -441,7 +440,7 @@ describe("scope migration: register-agent-teams.ts — resolve_agent_skills", ()
   });
 
   it("(b) STDIO fallback: resolves global dir when no sessionId", async () => {
-    setProjectDir("/global/teams");
+    registerConnectionScope(STDIO_SESSION_ID, "/global/teams");
 
     const handler = getRegisteredHandler(getRegisterToolCalls(), "resolve_agent_skills");
     await handler({ agent_name: "engineer" }, makeExtra(undefined));
@@ -460,7 +459,7 @@ describe("scope migration: register-agent-teams.ts — resolve_agent_skills", ()
 describe("scope migration: register-knowledge.ts — handleGetContext", () => {
   it("(a) per-session: handleGetContext resolves the registered session dir for signals", async () => {
     registerConnectionScope("session-G", "/project/G");
-    setProjectDir("/global/knowledge");
+    registerConnectionScope(STDIO_SESSION_ID, "/global/knowledge");
 
     await handleGetContext(
       { file_paths: ["src/foo.ts"], include: ["signals"] },
@@ -471,7 +470,7 @@ describe("scope migration: register-knowledge.ts — handleGetContext", () => {
   });
 
   it("(b) STDIO fallback: handleGetContext with no extra resolves the global dir", async () => {
-    setProjectDir("/global/knowledge");
+    registerConnectionScope(STDIO_SESSION_ID, "/global/knowledge");
 
     await handleGetContext(
       { file_paths: ["src/bar.ts"], include: ["signals"] },
@@ -482,7 +481,7 @@ describe("scope migration: register-knowledge.ts — handleGetContext", () => {
   });
 
   it("(b) STDIO sentinel: handleGetContext with STDIO session resolves global dir", async () => {
-    setProjectDir("/stdio/knowledge");
+    registerConnectionScope(STDIO_SESSION_ID, "/stdio/knowledge");
 
     await handleGetContext(
       { file_paths: ["src/baz.ts"], include: ["signals"] },

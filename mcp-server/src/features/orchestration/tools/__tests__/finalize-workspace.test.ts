@@ -46,7 +46,7 @@ describe("finalizeWorkspace — rename and backward compat", () => {
 
   test("FinalizeWorkspaceInput and FinalizeWorkspaceResult types are exported", () => {
     // Type-level test: if these imports compile, the types are exported.
-    const input: FinalizeWorkspaceInput = { workspace };
+    const input: FinalizeWorkspaceInput = { workspace, projectDir: process.cwd() };
     expect(input.workspace).toBe(workspace);
     // FinalizeWorkspaceResult is a type — we verify it compiles by asserting the result shape.
     void (null as unknown as FinalizeWorkspaceResult);
@@ -60,16 +60,17 @@ describe("finalizeWorkspace — core completion logic", () => {
       status: "completed",
       step_id: "step-a",
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
     expect(result.steps_missing).toEqual([]);
   });
 
   test("returns complete: false when steps are missing", async () => {
-    await logStep({ status: "started", step_id: "step-a", workspace });
-    const result = await finalizeWorkspace({ workspace });
+    await logStep({ projectDir: process.cwd(), status: "started", step_id: "step-a", workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_missing).toHaveLength(1);
@@ -77,7 +78,7 @@ describe("finalizeWorkspace — core completion logic", () => {
 
   test("returns WORKSPACE_NOT_FOUND when no journal exists", async () => {
     const ghost = await mkdtemp(join(tmpdir(), "canon-finalize-ghost-"));
-    const result = await finalizeWorkspace({ workspace: ghost });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace: ghost });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
       expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
@@ -86,7 +87,7 @@ describe("finalizeWorkspace — core completion logic", () => {
   });
 
   test("returns INVALID_INPUT for empty workspace string", async () => {
-    const result = await finalizeWorkspace({ workspace: "" });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace: "" });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
       expect(result.error_code).toBe("INVALID_INPUT");
@@ -101,8 +102,9 @@ describe("finalizeWorkspace — absorbed claims_released field", () => {
       status: "completed",
       step_id: "step-a",
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
     // claims_released must be present when complete is true
@@ -116,8 +118,9 @@ describe("finalizeWorkspace — absorbed claims_released field", () => {
       status: "completed",
       step_id: "step-b",
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     // Without a real execution store session, releaseClaims is best-effort
     // and claims_released reflects whether it ran without error
@@ -126,8 +129,8 @@ describe("finalizeWorkspace — absorbed claims_released field", () => {
   });
 
   test("claims_released is absent when complete is false", async () => {
-    await logStep({ status: "started", step_id: "step-incomplete", workspace });
-    const result = await finalizeWorkspace({ workspace });
+    await logStep({ projectDir: process.cwd(), status: "started", step_id: "step-incomplete", workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     // claims_released should not be present when incomplete
@@ -142,8 +145,9 @@ describe("finalizeWorkspace — absorbed analytics_recorded field", () => {
       status: "completed",
       step_id: "step-a",
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
     expect("analytics_recorded" in result).toBe(true);
@@ -151,8 +155,8 @@ describe("finalizeWorkspace — absorbed analytics_recorded field", () => {
   });
 
   test("analytics_recorded is absent when complete is false", async () => {
-    await logStep({ status: "started", step_id: "step-incomplete", workspace });
-    const result = await finalizeWorkspace({ workspace });
+    await logStep({ projectDir: process.cwd(), status: "started", step_id: "step-incomplete", workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect("analytics_recorded" in result).toBe(false);
@@ -166,8 +170,9 @@ describe("finalizeWorkspace — digest_written field", () => {
       status: "completed",
       step_id: "step-a",
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
     // digest_written must be present when complete is true
@@ -176,8 +181,8 @@ describe("finalizeWorkspace — digest_written field", () => {
   });
 
   test("digest_written is absent when complete is false", async () => {
-    await logStep({ status: "started", step_id: "step-incomplete", workspace });
-    const result = await finalizeWorkspace({ workspace });
+    await logStep({ projectDir: process.cwd(), status: "started", step_id: "step-incomplete", workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     // digest_written should not be present when incomplete
@@ -201,14 +206,16 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       status: "skipped",
       step_id: "context-sync",
       workspace,
-    });
+
+      projectDir: process.cwd(),    });
     await logStep({
       agent_id: "test-agent-l4-pass",
       status: "completed",
       step_id: "implement",
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
     expect(result.steps_missing_skip_reason).toEqual([]);
@@ -236,8 +243,9 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       ],
       version: 1,
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_missing_skip_reason).toEqual(["learn"]);
@@ -256,8 +264,9 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       ],
       version: 1,
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_missing_skip_reason).toEqual(["context-sync"]);
@@ -289,8 +298,9 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       ],
       version: 1,
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     // context-sync (no skip_reason) and learn (whitespace-only) are violations
@@ -314,8 +324,9 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       ],
       version: 1,
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     // Still not complete (no completed steps) but no skip_reason violations
     expect(result.steps_missing_skip_reason).toEqual([]);
@@ -338,9 +349,9 @@ describe("finalizeWorkspace — corrupted journal handling (validate-at-trust-bo
     // An empty journal has 0 steps logged — it does not produce missing-step errors.
     writeFileSync(
       join(workspace, "journal.json"),
-      JSON.stringify({ steps: "not-an-array", version: 1, workspace }),
+      JSON.stringify({ steps: "not-an-array", version: 1, workspace, projectDir: process.cwd() }),
     );
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.steps_logged).toBe(0);
     expect(result.steps_missing).toHaveLength(0);
@@ -349,7 +360,7 @@ describe("finalizeWorkspace — corrupted journal handling (validate-at-trust-bo
 
   test("treats journal.json with a JSON primitive as empty journal", async () => {
     writeFileSync(join(workspace, "journal.json"), JSON.stringify(42));
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.steps_logged).toBe(0);
   });
@@ -372,8 +383,9 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
       status: "completed",
       step_id: "implement",
       workspace,
-    });
-    const result = await finalizeWorkspace({ workspace });
+
+      projectDir: process.cwd(),    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(Array.isArray(result.steps_ghost)).toBe(true);
     expect(result.steps_ghost).toEqual([]);
@@ -402,9 +414,10 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
         ],
         version: 1,
         workspace,
-      }),
+
+        projectDir: process.cwd(),      }),
     );
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.steps_ghost).toEqual(["context-sync"]);
   });
@@ -437,9 +450,10 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
         ],
         version: 1,
         workspace,
-      }),
+
+        projectDir: process.cwd(),      }),
     );
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.steps_ghost).toHaveLength(2);
     expect(result.steps_ghost).toContain("context-sync");
@@ -467,9 +481,10 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
         ],
         version: 1,
         workspace,
-      }),
+
+        projectDir: process.cwd(),      }),
     );
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     // Only "planned" steps are ghosts; "started" steps are in steps_missing, not steps_ghost
     expect(result.steps_ghost).toEqual(["ghost-step"]);
@@ -493,9 +508,10 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
         ],
         version: 1,
         workspace,
-      }),
+
+        projectDir: process.cwd(),      }),
     );
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_ghost).toEqual(["never-started"]);
@@ -504,9 +520,9 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
   test("steps_ghost is empty for empty journal", async () => {
     writeFileSync(
       join(workspace, "journal.json"),
-      JSON.stringify({ steps: [], version: 1, workspace }),
+      JSON.stringify({ steps: [], version: 1, workspace, projectDir: process.cwd() }),
     );
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.steps_ghost).toEqual([]);
   });

@@ -2,7 +2,7 @@ import { recordAgentMetrics } from "@features/diagnostics/tools/record-agent-met
 import { captureTranscript } from "@features/orchestration/tools/capture-transcript.ts";
 import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
 
 function registerCaptureTranscriptTool(): void {
   server.registerTool(
@@ -23,7 +23,9 @@ function registerCaptureTranscriptTool(): void {
         workspace: z.string().describe("Workspace path for this flow execution."),
       },
     },
-    gatedWrapHandler(async (input) => captureTranscript(input)),
+    gatedWrapHandler(async (input, extra) =>
+      captureTranscript({ ...input, projectDir: resolveScope(extra) }),
+    ),
   );
 }
 
