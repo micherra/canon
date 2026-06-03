@@ -11,6 +11,7 @@
  */
 
 import path from "node:path";
+import { getCurrentHead } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import type { Database } from "better-sqlite3";
 
@@ -226,6 +227,24 @@ async function scanAndFilterPhase(
   return { fileHashCache, relPaths, toIndex };
 }
 
+/**
+ * Self-healing orphan prune: delete file rows present in the store but absent
+ * from the on-disk scan. Relies on ON DELETE CASCADE to drop each orphan's
+ * edges (including inbound edges from dependents), so dependents' blast-radius
+ * and in_degree correct automatically — no dependent reparse required.
+ */
+function pruneOrphanFiles(store: KgStore, scannedRelPaths: string[]): void {
+  const scanned = new Set(scannedRelPaths);
+  const storedPaths = store.getAllFilePaths();
+  const orphans = storedPaths.filter((p) => !scanned.has(p));
+  if (orphans.length === 0) return;
+  store.transaction(() => {
+    for (const p of orphans) {
+      store.deleteFileAndDependents(p);
+    }
+  });
+}
+
 export async function runPipeline(
   projectDir: string,
   options?: PipelineOptions,
@@ -250,6 +269,10 @@ export async function runPipeline(
       sourceDirs: options?.sourceDirs,
     });
     const filesUpdated = toIndex.length;
+
+    // Self-healing prune: remove stored files no longer on disk (set-diff).
+    // CASCADE drops dependents' inbound edges automatically (decision kg-prune-04).
+    pruneOrphanFiles(store, relPaths);
 
     // Phase 2: Parse + extract
     progress("parse", 0, filesUpdated);
@@ -280,6 +303,13 @@ export async function runPipeline(
       store,
       progress,
     );
+
+    // Stamp the graph with the commit it was computed at, AFTER all phases
+    // succeed (decision kg-marker-01). Written even on no-op passes so a read
+    // at an unchanged HEAD becomes a no-op. Skip when git is unavailable
+    // (head null) — leave the old marker so the next read retries.
+    const head = getCurrentHead(projectDir);
+    if (head) store.setMeta("graph_head_commit", head);
 
     const stats = store.getStats();
     return {

@@ -8,6 +8,7 @@
  * mock that returns random 384-dim vectors (no model download needed).
  */
 
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -197,6 +198,131 @@ describe("runPipeline", () => {
 
     expect(fileRow).toBeDefined();
     expect(fileRow?.language).toBe("markdown");
+  });
+});
+
+// Freshness marker + orphan prune tests
+
+/** Initialise a git repo in dir and create one commit so HEAD resolves. */
+function initGitRepo(dir: string): string {
+  const run = (args: string[]) => execFileSync("git", args, { cwd: dir, stdio: "pipe" });
+  run(["init", "-q"]);
+  run(["config", "user.email", "test@example.com"]);
+  run(["config", "user.name", "Test"]);
+  run(["commit", "--allow-empty", "-q", "-m", "init"]);
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir }).toString().trim();
+}
+
+describe("runPipeline freshness marker", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = makeTempProject();
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { force: true, recursive: true });
+  });
+
+  test("stamps meta.graph_head_commit with HEAD SHA on success", async () => {
+    const head = initGitRepo(projectDir);
+    writeFile(projectDir, "src/foo.ts", "export const x = 1;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    const marker = store.getMeta("graph_head_commit");
+    db.close();
+
+    expect(marker).toBe(head);
+  });
+
+  test("writes marker even on a no-op incremental pass (filesUpdated === 0)", async () => {
+    const head = initGitRepo(projectDir);
+    writeFile(projectDir, "src/foo.ts", "export const x = 1;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    // First pass indexes the file.
+    await runPipeline(projectDir, { dbPath, incremental: false });
+    // Second incremental pass: nothing changed, filesUpdated should be 0.
+    const second = await runPipeline(projectDir, { dbPath, incremental: true });
+    expect(second.filesUpdated).toBe(0);
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    const marker = store.getMeta("graph_head_commit");
+    db.close();
+
+    expect(marker).toBe(head);
+  });
+
+  test("does not write marker when git is unavailable (HEAD null)", async () => {
+    // projectDir is NOT a git repo → getCurrentHead returns null.
+    writeFile(projectDir, "src/foo.ts", "export const x = 1;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    const marker = store.getMeta("graph_head_commit");
+    db.close();
+
+    expect(marker).toBeUndefined();
+  });
+});
+
+describe("runPipeline orphan prune", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = makeTempProject();
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { force: true, recursive: true });
+  });
+
+  test("prunes a file removed from disk and corrects a dependent's in_degree via CASCADE", async () => {
+    // B imports A → file_edge B → A. Deleting A on disk should prune A's row
+    // AND (via ON DELETE CASCADE) remove the inbound B → A edge, so B's
+    // in_degree (file edges pointing AT it) and A's absence are both correct.
+    writeFile(projectDir, "src/a.ts", "export const a = 1;");
+    writeFile(projectDir, "src/b.ts", "import { a } from './a.ts';\nexport const b = a + 1;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    // Sanity: both files indexed, and the B → A edge exists.
+    {
+      const db = new Database(dbPath);
+      const store = new KgStore(db);
+      const a = store.getFile("src/a.ts");
+      const b = store.getFile("src/b.ts");
+      expect(a).toBeDefined();
+      expect(b).toBeDefined();
+      // A is imported by B → A has an inbound file edge.
+      expect(store.getFileEdgesTo(a!.file_id as number).length).toBeGreaterThan(0);
+      db.close();
+    }
+
+    // Delete A from disk and run an incremental pass → triggers orphan prune.
+    rmSync(path.join(projectDir, "src/a.ts"));
+    await runPipeline(projectDir, { dbPath, incremental: true });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    const a = store.getFile("src/a.ts");
+    const b = store.getFile("src/b.ts");
+    // A's node is gone.
+    expect(a).toBeUndefined();
+    // B remains, and B's outbound edges to A are gone (CASCADE removed them).
+    expect(b).toBeDefined();
+    const bOutbound = store.getFileEdgesFrom(b!.file_id as number);
+    expect(bOutbound.length).toBe(0);
+    db.close();
   });
 });
 
