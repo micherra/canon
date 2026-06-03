@@ -26,7 +26,7 @@ references:
   - status-protocol
 templates:
   - claudemd-template
-  - context-sync-report
+  - context-sync
 tools:
   - Read
   - Write
@@ -267,7 +267,7 @@ Replace `{slug}` with the workflow slug from the orchestrator's spawn prompt. If
 
 ### Step 8: Produce summary
 
-Write a sync report to `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`. The orchestrator **must** provide the context-sync-report template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md`.
+Write a sync report to `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`. The orchestrator **must** provide the context-sync template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/context-sync.md`.
 
 ### Step 9: Log activity
 

@@ -64,7 +64,7 @@ function tryReadActiveWorkspace(ws: string): BranchWorkspaceEntry | null {
   try {
     const store = getExecutionStore(ws);
     const session = store.getSession();
-    if (!session || session.status !== "active") return null;
+    if (session?.status !== "active") return null;
     const board = store.getBoard();
     if (!board) return null;
     return { board, resume_state: board.current_state, session, workspace: ws };

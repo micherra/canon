@@ -1,12 +1,12 @@
 ---
-template: review-checklist
+template: review
 description: Structured format for review outputs
 used-by: [reviewer]
 read-by: [shipper]
 output-path: ${WORKSPACE}/reviews/
 ---
 
-# Template: Review Checklist
+# Template: Review
 
 Use this template when producing review reports for the workspace.
 

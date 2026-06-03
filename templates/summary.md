@@ -1,12 +1,12 @@
 ---
-template: implementation-log
+template: summary
 description: Structured format for implementor task summaries
 used-by: [implementor, fixer]
 read-by: [tester, reviewer, scribe, shipper]
 output-path: ${WORKSPACE}/plans/${slug}/{task_id}-SUMMARY.md
 ---
 
-# Template: Implementation Log
+# Template: Implementation Summary
 
 Use this template when producing the task summary after implementation. The output file name follows the `{task_id}-SUMMARY.md` convention (e.g., `my-task-01-SUMMARY.md`).
 

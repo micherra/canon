@@ -42,13 +42,13 @@ When spawned as part of a content flow (see `references/content-flow.md`), the w
 ### What changes in content-flow context
 
 - The spawn prompt includes `WORKSPACE=<path>` and `SLUG=<slug>`.
-- After completing the principle edit (any mode), produce an `implementation-log.md` at `${WORKSPACE}/plans/${SLUG}/implementation-log.md`.
-- The log must document: which file(s) were edited, what changed (summary of additions/modifications/removals), and the Status line (DONE / DONE_WITH_CONCERNS / BLOCKED).
+- After completing the principle edit (any mode), produce a `*-SUMMARY.md` at `${WORKSPACE}/plans/${SLUG}/${SLUG}-SUMMARY.md`.
+- The summary must document: which file(s) were edited, what changed (summary of additions/modifications/removals), and the Status line (DONE / DONE_WITH_CONCERNS / BLOCKED).
 
-### implementation-log.md template
+### Summary template
 
 ```markdown
-## Implementation Log — <slug>
+## Summary — <slug>
 
 ### Files changed
 - `<path>`: <one-line description of the change>
@@ -62,4 +62,4 @@ DONE
 
 ### When workspace path is absent
 
-If the spawn prompt does not include a workspace path, the writer is operating in standalone mode (legacy, pre-content-flow). Continue with the existing mode behavior — no `implementation-log.md` is required.
+If the spawn prompt does not include a workspace path, the writer is operating in standalone mode (legacy, pre-content-flow). Continue with the existing mode behavior — no `*-SUMMARY.md` is required.
