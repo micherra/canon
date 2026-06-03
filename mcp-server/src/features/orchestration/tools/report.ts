@@ -1,6 +1,12 @@
+import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
-import type { ReportInput, ReviewEntry } from "@shared/schema.ts";
+import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
+import {
+  CraftProfileSchema,
+  type ReportInput,
+  type ReviewEntry,
+} from "@shared/schema.ts";
 import { type SignalWriter, updateFileViolationHistory } from "./write-review.ts";
 
 export type ReportOutput = {
@@ -18,7 +24,7 @@ export async function report(
 
   switch (input.type) {
     case "review":
-      return recordReview(input, store, signals);
+      return recordReview(input, projectDir, store, signals);
     default: {
       const _exhaustive: never = input.type;
       throw new Error(`Unknown report type: ${_exhaustive}`);
@@ -28,9 +34,20 @@ export async function report(
 
 async function recordReview(
   review: Extract<ReportInput, { type: "review" }>,
+  projectDir: string,
   store: DriftStore,
   signals: SignalWriter | undefined,
 ): Promise<ReportOutput> {
+  // validate-at-trust-boundaries: validate craft_profile before any write
+  if (review.craft_profile !== undefined) {
+    const parsed = CraftProfileSchema.safeParse(review.craft_profile);
+    if (!parsed.success) {
+      throw new Error(
+        `Invalid craft_profile: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+      );
+    }
+  }
+
   const violatedIds = new Set(review.violations.map((v) => v.principle_id));
   const cleanHonored = review.honored.filter((id) => !violatedIds.has(id));
   const id = generateId("rev");
@@ -50,6 +67,25 @@ async function recordReview(
   // Persist path effects to signal tables (non-blocking)
   if (signals) {
     updateFileViolationHistory(signals, review.files, review.violations, entry.verdict);
+  }
+
+  // Persist craft profile rows — one per distinct subsystem area.
+  // craft comes ONLY from the structured craft_profile field (Decision craft-v2-04):
+  // never re-derived from recommendations. Absent → zero craft rows.
+  if (review.craft_profile !== undefined && review.files.length > 0) {
+    const profile = review.craft_profile;
+    const distinctKeys = new Set(review.files.map(deriveSubsystemKey));
+    const db = getDriftDb(projectDir);
+    const craftDao = db.getCraftProfiles();
+
+    for (const subsystem_key of distinctKeys) {
+      craftDao.insertProfile({
+        subsystem_key,
+        source: "review",
+        ratings: profile.ratings,
+        ...(profile.rollup !== undefined ? { rollup: profile.rollup } : {}),
+      });
+    }
   }
 
   return {

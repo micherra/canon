@@ -2,10 +2,41 @@ import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { CRAFT_BANDS, CRAFT_DIMENSIONS } from "@shared/lib/craft-rubric.ts";
 import { z } from "zod";
 
+// --- Craft profile types + Zod validator ---
+// Declared before reportInputSchema so CraftProfile is available for ReviewEntry.
+
+export type CraftDimensionRating = {
+  dimension: (typeof CRAFT_DIMENSIONS)[number];
+  band: (typeof CRAFT_BANDS)[number];
+  evidence?: string;
+  principle_refs?: string[];
+};
+
+export type CraftProfile = {
+  ratings: CraftDimensionRating[];
+  rollup?: number; // derived-for-display only; never the primitive
+};
+
+export const CraftProfileSchema = z.object({
+  ratings: z.array(
+    z.object({
+      band: z.enum(CRAFT_BANDS),
+      dimension: z.enum(CRAFT_DIMENSIONS),
+      evidence: z.string().optional(),
+      principle_refs: z.array(z.string()).optional(),
+    }),
+  ),
+  rollup: z.number().optional(),
+});
+
 // --- Report input: review only ---
 
 export const reportInputSchema = z.discriminatedUnion("type", [
   z.object({
+    craft_profile: CraftProfileSchema.optional().describe(
+      "Optional craft quality profile emitted by the reviewer. When present and valid, " +
+        "one craft_profiles row is persisted per distinct subsystem area.",
+    ),
     files: z.array(z.string()).max(1000).describe("File paths that were reviewed"),
     honored: z.array(z.string()).max(1000).describe("IDs of principles honored"),
     score: z.object({
@@ -56,32 +87,7 @@ export type ReviewEntry = Omit<ReviewInput, "type" | "verdict"> & {
     message: string;
     source: "principle" | "holistic";
   }>;
+  craft_profile?: CraftProfile;
 };
 
 export type ReviewViolation = ReviewEntry["violations"][number];
-
-// --- Craft profile types + Zod validator ---
-
-export type CraftDimensionRating = {
-  dimension: (typeof CRAFT_DIMENSIONS)[number];
-  band: (typeof CRAFT_BANDS)[number];
-  evidence?: string;
-  principle_refs?: string[];
-};
-
-export type CraftProfile = {
-  ratings: CraftDimensionRating[];
-  rollup?: number; // derived-for-display only; never the primitive
-};
-
-export const CraftProfileSchema = z.object({
-  ratings: z.array(
-    z.object({
-      band: z.enum(CRAFT_BANDS),
-      dimension: z.enum(CRAFT_DIMENSIONS),
-      evidence: z.string().optional(),
-      principle_refs: z.array(z.string()).optional(),
-    }),
-  ),
-  rollup: z.number().optional(),
-});
