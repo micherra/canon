@@ -438,9 +438,7 @@ function collectOrdinalPoints(
  * Rising mean ordinal > 10% → "improving" (higher = better craft).
  * Falling > 10% → "degrading". Flat or sparse → "stable".
  */
-function classifyCraftTrend(
-  points: OrdinalPoint[],
-): "improving" | "stable" | "degrading" {
+function classifyCraftTrend(points: OrdinalPoint[]): "improving" | "stable" | "degrading" {
   const n = points.length;
   if (n < MIN_CRAFT_PROFILES) return "stable";
 
@@ -479,8 +477,7 @@ function computeDimensionDrifts(profiles: CraftProfileRow[]): CraftDimensionDrif
     const points = collectOrdinalPoints(profiles, dimension);
     if (points.length === 0) continue; // no graded data for this dimension
 
-    const avg_band_ordinal =
-      points.reduce((sum, p) => sum + p.ordinal, 0) / points.length;
+    const avg_band_ordinal = points.reduce((sum, p) => sum + p.ordinal, 0) / points.length;
     const direction = classifyCraftTrend(points);
 
     result.push({
@@ -569,7 +566,15 @@ export function analyzeCrossRunPatterns(
   }
 
   // Fetch craft profiles and apply since filter (ISO string comparison is lexicographic)
-  let craftProfiles = driftDb.getCraftProfiles().getRecentProfiles(limit ?? 200);
+  // Guard: getCraftProfiles is an additive signal; degrade gracefully if unavailable.
+  let craftProfiles: CraftProfileRow[] = [];
+  try {
+    if (typeof (driftDb as { getCraftProfiles?: unknown }).getCraftProfiles === "function") {
+      craftProfiles = driftDb.getCraftProfiles().getRecentProfiles(limit ?? 200);
+    }
+  } catch {
+    // craft-profile store unavailable — craft_drift will be the empty result
+  }
   if (since !== undefined) {
     craftProfiles = craftProfiles.filter((p) => p.created_at >= since);
   }
