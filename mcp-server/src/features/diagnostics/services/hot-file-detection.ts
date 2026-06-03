@@ -13,7 +13,7 @@
  * - errors-are-values: typed return values; no thrown errors for expected conditions
  */
 
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 
 // ---- Types ----
 

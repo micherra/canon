@@ -61,7 +61,8 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
       step_id: "design",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     // Act: finalizeWorkspace with complete: true triggers archiveAndDeleteWorkspace
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
@@ -100,7 +101,8 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
       step_id: "design",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     // Act
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
@@ -127,7 +129,8 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
       step_id: "design",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     // Act
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });

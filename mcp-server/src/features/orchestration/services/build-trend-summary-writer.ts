@@ -22,7 +22,7 @@
 
 import { join } from "node:path";
 import type { FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { RecurringViolation } from "@shared/lib/violation-patterns.ts";
 import { findRecurringViolations } from "@shared/lib/violation-patterns.ts";

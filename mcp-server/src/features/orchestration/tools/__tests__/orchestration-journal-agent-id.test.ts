@@ -55,7 +55,8 @@ describe("logStep — agent_id enforcement", () => {
       step_id: "some-step",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     expect(isToolError(rejected)).toBe(true);
     if (isToolError(rejected)) {
       expect(rejected.error_code).toBe("INVALID_INPUT");
@@ -67,7 +68,8 @@ describe("logStep — agent_id enforcement", () => {
       step_id: "inline-fix",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     expect(isToolError(inlineFix)).toBe(false);
     if (!isToolError(inlineFix)) {
       expect(inlineFix.step_id).toBe("inline-fix");
@@ -81,7 +83,8 @@ describe("logStep — agent_id enforcement", () => {
       step_id: "skipped-step",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     expect(isToolError(skipped)).toBe(false);
     if (!isToolError(skipped)) {
       expect(skipped.step_id).toBe("skipped-step");
@@ -102,14 +105,16 @@ describe("logStep — agent_id enforcement", () => {
         step_id: "enforce-step",
         workspace,
 
-        projectDir: process.cwd(),      });
+        projectDir: process.cwd(),
+      });
 
       await logStep({
         status: "started",
         step_id: "enforce-step",
         workspace,
 
-        projectDir: process.cwd(),      });
+        projectDir: process.cwd(),
+      });
 
       // Step 3: completed with agent_id — triggers transcript capture
       const result = await logStep({
@@ -118,7 +123,8 @@ describe("logStep — agent_id enforcement", () => {
         step_id: "enforce-step",
         workspace,
 
-        projectDir: process.cwd(),      });
+        projectDir: process.cwd(),
+      });
 
       // logStep must succeed
       assertOk(result);
@@ -166,7 +172,8 @@ describe("logStep — agent_id enforcement", () => {
         step_id: "bogus-step",
         workspace,
 
-        projectDir: process.cwd(),      });
+        projectDir: process.cwd(),
+      });
 
       const result = await logStep({
         agent_id: "bogus-agent-no-file-xyz",
@@ -174,7 +181,8 @@ describe("logStep — agent_id enforcement", () => {
         step_id: "bogus-step",
         workspace,
 
-        projectDir: process.cwd(),      });
+        projectDir: process.cwd(),
+      });
 
       // Call must succeed — agent_id IS provided, missing source is a warning not an error
       assertOk(result);

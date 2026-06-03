@@ -10,7 +10,7 @@
  *  6. Includes most-retried states sorted by total iterations
  *
  * Mock strategy:
- *  - Mock `@platform/storage/drift/drift-db.ts` to control getDriftDb
+ *  - Mock `@platform/storage/drift/drift-db-cache.ts` to control getDriftDb
  *  - Mock `@app/server-state.ts` to control projectDir
  *  - Use real temp dirs for filesystem tests
  */
@@ -30,7 +30,7 @@ vi.mock("@app/server-state.ts", () => ({
 const mockGetAllFlowRuns = vi.fn();
 const mockGetReviews = vi.fn();
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn(() => ({
     getAllFlowRuns: mockGetAllFlowRuns,
     getReviews: mockGetReviews,

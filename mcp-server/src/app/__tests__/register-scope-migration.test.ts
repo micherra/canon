@@ -148,7 +148,7 @@ vi.mock("@features/orchestration/tools/report.ts", () => ({
   report: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn().mockReturnValue({
     getAreaMemory: vi.fn().mockReturnValue(undefined),
     getSignals: vi.fn().mockReturnValue(undefined),
@@ -230,17 +230,13 @@ import { report } from "@features/orchestration/tools/report.ts";
 import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { storePrReview } from "@features/pr-review/tools/store-pr-review.ts";
 import { getCompliance } from "@features/principles/tools/get-compliance.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { registerAgentTeamsTools } from "../register-agent-teams.ts";
 import { registerArtifactTools } from "../register-artifacts.ts";
 import { registerInitWorkspaceTool } from "../register-init-workspace.ts";
 import { handleGetContext } from "../register-knowledge.ts";
 import { registerPrincipleTools } from "../register-principles.ts";
-import {
-  registerConnectionScope,
-  resetForTesting,
-  STDIO_SESSION_ID,
-} from "../server-state.ts";
+import { registerConnectionScope, resetForTesting, STDIO_SESSION_ID } from "../server-state.ts";
 
 // ── Test setup ────────────────────────────────────────────────────────────────
 

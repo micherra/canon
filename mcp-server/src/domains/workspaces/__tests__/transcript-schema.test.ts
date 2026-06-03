@@ -523,7 +523,12 @@ describe("logStep — ExecutionStore transcript persistence", () => {
 
     try {
       // Register the step first (completed requires a prior plan/start or inline-fix)
-      await logStep({ projectDir: process.cwd(), status: "planned", step_id: "store-step", workspace });
+      await logStep({
+        projectDir: process.cwd(),
+        status: "planned",
+        step_id: "store-step",
+        workspace,
+      });
 
       const result = await logStep({
         agent_id: AGENT_ID,
@@ -531,7 +536,8 @@ describe("logStep — ExecutionStore transcript persistence", () => {
         step_id: "store-step",
         workspace,
 
-        projectDir: process.cwd(),      });
+        projectDir: process.cwd(),
+      });
 
       // The result must not be an error and must include a transcript_path
       expect((result as { ok: boolean }).ok).toBe(true);

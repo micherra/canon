@@ -52,7 +52,8 @@ describe("readJournal — invalid JSON (trust-boundary fix 1)", () => {
       step_id: "new-step",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -68,7 +69,8 @@ describe("readJournal — invalid JSON (trust-boundary fix 1)", () => {
       step_id: "step-after-corrupt",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -107,7 +109,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     writeRawJournal(workspace, corrupt);
 
     // Adding a new step should work — real-step is retained, nulls dropped
@@ -116,7 +119,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       step_id: "another-step",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
   });
@@ -132,7 +136,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     writeRawJournal(workspace, corrupt);
 
     const result = await logStep({
@@ -140,7 +145,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       step_id: "valid-step",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
     // Should have updated valid-step to started
@@ -156,7 +162,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     writeRawJournal(workspace, corrupt);
 
     const result = await logStep({
@@ -164,7 +171,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       step_id: "fresh-step",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
     if (result.ok) {

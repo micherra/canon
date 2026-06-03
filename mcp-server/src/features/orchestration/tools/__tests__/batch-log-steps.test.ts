@@ -59,7 +59,12 @@ describe("batchLogSteps", () => {
   });
 
   test("empty steps array returns { results: [] } and does not corrupt the journal", async () => {
-    await logStep({ projectDir: process.cwd(), status: "planned", step_id: "pre-existing", workspace });
+    await logStep({
+      projectDir: process.cwd(),
+      status: "planned",
+      step_id: "pre-existing",
+      workspace,
+    });
 
     const result = await batchLogSteps({ projectDir: process.cwd(), steps: [], workspace });
     assertOk(result);
@@ -79,7 +84,8 @@ describe("batchLogSteps", () => {
       ],
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
@@ -100,7 +106,8 @@ describe("batchLogSteps", () => {
       ],
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
@@ -128,7 +135,8 @@ describe("batchLogSteps", () => {
       ],
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     assertOk(result);
     expect(result.results).toHaveLength(1);
@@ -155,7 +163,8 @@ describe("batchLogSteps", () => {
       ],
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     assertOk(result);
     expect(result.results).toHaveLength(2);
@@ -186,7 +195,8 @@ describe("batchLogSteps", () => {
       ],
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {

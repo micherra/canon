@@ -17,7 +17,7 @@ import type { ArchiveManifestEntry } from "../../../platform/storage/drift/drift
 
 const mockGetArchiveById = vi.fn<(id: string) => ArchiveManifestEntry | null>();
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn(() => ({
     getArchiveById: mockGetArchiveById,
   })),

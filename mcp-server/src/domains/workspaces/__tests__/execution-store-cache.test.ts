@@ -81,7 +81,7 @@ describe("evictStoresForScope", () => {
     const wsA = makeTempWorkspace(dirA, "slug-a");
     const wsB = makeTempWorkspace(dirB, "slug-b");
 
-    const storeA = getExecutionStore(wsA);
+    getExecutionStore(wsA); // warm the cache for dirA
     const storeB = getExecutionStore(wsB);
 
     // Evict only dirA

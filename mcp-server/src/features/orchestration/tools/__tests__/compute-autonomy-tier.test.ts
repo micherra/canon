@@ -23,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // vi.mock is hoisted before variable declarations. Factories must use only
 // vi.fn() inline — no references to outer let/const variables.
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn(() => ({
     getAllFlowRuns: vi.fn(() => []),
     getSignals: vi.fn(() => ({
@@ -61,7 +61,7 @@ vi.mock("@domains/workspaces/execution-store-cache.ts", () => {
 // Import mocked modules to set up spy return values per test
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 
 // Import subject under test (after all mocks)
 import { computeAutonomyTier } from "../compute-autonomy-tier.ts";
@@ -126,7 +126,8 @@ describe("computeAutonomyTier — happy path", () => {
       file_paths: ["src/foo.ts"],
       workspace: MOCK_WORKSPACE,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
@@ -147,7 +148,8 @@ describe("computeAutonomyTier — fail-safe", () => {
       file_paths: ["src/foo.ts"],
       workspace: MOCK_WORKSPACE,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
@@ -165,7 +167,8 @@ describe("computeAutonomyTier — fail-safe", () => {
       file_paths: ["src/foo.ts"],
       workspace: MOCK_WORKSPACE,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     // graphQuery failure is non-fatal inside gatherBlastRadiusSignals (try/catch)
     // so the tool should still return a valid result (not the fail-safe supervised)
@@ -182,7 +185,8 @@ describe("computeAutonomyTier — auto_decision event logging", () => {
       file_paths: ["src/foo.ts"],
       workspace: MOCK_WORKSPACE,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
 
@@ -204,7 +208,8 @@ describe("computeAutonomyTier — auto_decision event logging", () => {
       file_paths: ["src/foo.ts"],
       workspace: "relative/path/to/workspace",
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     // Tool still succeeds (logging is best-effort)
     expect(result.ok).toBe(true);
@@ -230,7 +235,8 @@ describe("computeAutonomyTier — override_tier passthrough", () => {
       override_tier: "supervised",
       workspace: MOCK_WORKSPACE,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
@@ -248,7 +254,8 @@ describe("computeAutonomyTier — override_tier passthrough", () => {
       override_tier: "autonomous",
       workspace: MOCK_WORKSPACE,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");

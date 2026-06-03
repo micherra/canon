@@ -4,7 +4,7 @@ import { writeImplementationSummary } from "@features/orchestration/tools/write-
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
 import { type ConfidenceAdapter, writeReview } from "@features/orchestration/tools/write-review.ts";
 import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { z } from "zod";
 import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";

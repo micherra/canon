@@ -61,7 +61,8 @@ describe("finalizeWorkspace — core completion logic", () => {
       step_id: "step-a",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
@@ -103,7 +104,8 @@ describe("finalizeWorkspace — absorbed claims_released field", () => {
       step_id: "step-a",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
@@ -119,7 +121,8 @@ describe("finalizeWorkspace — absorbed claims_released field", () => {
       step_id: "step-b",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     // Without a real execution store session, releaseClaims is best-effort
@@ -129,7 +132,12 @@ describe("finalizeWorkspace — absorbed claims_released field", () => {
   });
 
   test("claims_released is absent when complete is false", async () => {
-    await logStep({ projectDir: process.cwd(), status: "started", step_id: "step-incomplete", workspace });
+    await logStep({
+      projectDir: process.cwd(),
+      status: "started",
+      step_id: "step-incomplete",
+      workspace,
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
@@ -146,7 +154,8 @@ describe("finalizeWorkspace — absorbed analytics_recorded field", () => {
       step_id: "step-a",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
@@ -155,7 +164,12 @@ describe("finalizeWorkspace — absorbed analytics_recorded field", () => {
   });
 
   test("analytics_recorded is absent when complete is false", async () => {
-    await logStep({ projectDir: process.cwd(), status: "started", step_id: "step-incomplete", workspace });
+    await logStep({
+      projectDir: process.cwd(),
+      status: "started",
+      step_id: "step-incomplete",
+      workspace,
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
@@ -171,7 +185,8 @@ describe("finalizeWorkspace — digest_written field", () => {
       step_id: "step-a",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
@@ -181,7 +196,12 @@ describe("finalizeWorkspace — digest_written field", () => {
   });
 
   test("digest_written is absent when complete is false", async () => {
-    await logStep({ projectDir: process.cwd(), status: "started", step_id: "step-incomplete", workspace });
+    await logStep({
+      projectDir: process.cwd(),
+      status: "started",
+      step_id: "step-incomplete",
+      workspace,
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
@@ -207,14 +227,16 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       step_id: "context-sync",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     await logStep({
       agent_id: "test-agent-l4-pass",
       status: "completed",
       step_id: "implement",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
@@ -244,7 +266,8 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
@@ -265,7 +288,8 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
@@ -299,7 +323,8 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
@@ -325,7 +350,8 @@ describe("finalizeWorkspace — L4 skip_reason enforcement", () => {
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     // Still not complete (no completed steps) but no skip_reason violations
@@ -384,7 +410,8 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
       step_id: "implement",
       workspace,
 
-      projectDir: process.cwd(),    });
+      projectDir: process.cwd(),
+    });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(Array.isArray(result.steps_ghost)).toBe(true);
@@ -415,7 +442,8 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
         version: 1,
         workspace,
 
-        projectDir: process.cwd(),      }),
+        projectDir: process.cwd(),
+      }),
     );
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
@@ -451,7 +479,8 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
         version: 1,
         workspace,
 
-        projectDir: process.cwd(),      }),
+        projectDir: process.cwd(),
+      }),
     );
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
@@ -482,7 +511,8 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
         version: 1,
         workspace,
 
-        projectDir: process.cwd(),      }),
+        projectDir: process.cwd(),
+      }),
     );
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
@@ -509,7 +539,8 @@ describe("finalizeWorkspace — steps_ghost field (planned-but-never-started ste
         version: 1,
         workspace,
 
-        projectDir: process.cwd(),      }),
+        projectDir: process.cwd(),
+      }),
     );
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);

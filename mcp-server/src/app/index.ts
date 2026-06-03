@@ -9,7 +9,7 @@ import { registerKnowledgeTools } from "./register-knowledge.ts";
 import { registerOrchestrationTools } from "./register-orchestration.ts";
 import { registerPrincipleTools } from "./register-principles.ts";
 import { resolveGitRoot, resolveProjectDir } from "./resolve-project-dir.ts";
-import { registerConnectionScope, resolveReady, server, STDIO_SESSION_ID } from "./server-state.ts";
+import { registerConnectionScope, resolveReady, STDIO_SESSION_ID, server } from "./server-state.ts";
 
 // Register all tool categories
 registerOrchestrationTools();

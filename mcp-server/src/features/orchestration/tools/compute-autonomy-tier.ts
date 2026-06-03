@@ -11,7 +11,7 @@
 
 import { isAbsolute } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import {

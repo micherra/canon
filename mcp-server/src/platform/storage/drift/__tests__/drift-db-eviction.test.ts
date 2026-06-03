@@ -10,7 +10,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { evictDriftDbForScope, getDriftDb } from "../drift-db.ts";
+import { evictDriftDbForScope, getDriftDb } from "../drift-db-cache.ts";
 
 let tempRoots: string[] = [];
 
