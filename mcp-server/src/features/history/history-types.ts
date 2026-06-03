@@ -10,11 +10,15 @@
  * consumers that only need to import from this module), history-only types stay here.
  */
 
+import type { CraftDimension } from "../../shared/lib/craft-rubric.ts";
+
 // Re-export shared types so consumers can import from one place
 export type {
   ArchiveManifestEntry,
   ArchiveManifestFilter,
 } from "../../platform/storage/drift/drift-analytics-types.ts";
+
+export type { CraftDimension };
 
 // --- Result shapes for tools ---
 
@@ -164,12 +168,39 @@ export type PlannerPatternAnalysis = {
   value_distribution: { value: string; count: number }[];
 };
 
+// --- Craft drift types ---
+
+/**
+ * Per-dimension craft movement direction across recent profiles.
+ * Higher band ordinal = better craft (strong=3, adequate=2, weak=1).
+ * n-a bands are excluded from avg_band_ordinal calculation.
+ */
+export type CraftDimensionDrift = {
+  dimension: CraftDimension;
+  direction: "improving" | "stable" | "degrading";
+  /** Mean of band ordinals across profiles (n-a excluded). */
+  avg_band_ordinal: number;
+  sample_count: number;
+};
+
+/**
+ * Craft drift analysis across recent profiles.
+ * by_dimension: global rollup across all areas.
+ * by_area: per-subsystem breakdown, only for areas with ≥ MIN_CRAFT_PROFILES profiles.
+ */
+export type CraftDrift = {
+  by_dimension: CraftDimensionDrift[];
+  by_area?: Array<{ subsystem_key: string; by_dimension: CraftDimensionDrift[] }>;
+  profile_count: number;
+};
+
 /** Full cross-run analysis result. */
 export type CrossRunAnalysisResult = {
   recurring_violations: RecurringViolation[];
   fix_cycle_patterns: FixCyclePattern[];
   agent_performance_trends: AgentPerformanceTrend[];
   planner_patterns: PlannerPatternAnalysis;
+  craft_drift: CraftDrift;
   total_archived_runs: number;
   analysis_window: { from: string; to: string };
 };
