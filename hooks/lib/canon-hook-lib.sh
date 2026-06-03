@@ -174,3 +174,103 @@ canon_is_git_cmd() {
     return $?
   done
 }
+
+# ---------------------------------------------------------------------------
+# canon_git_subcommand <command_segment>
+# ---------------------------------------------------------------------------
+# Resolves the REAL git subcommand of a single command segment, accounting
+# for git's global options. Prints the subcommand token on stdout.
+# Returns 0 if a git invocation with a resolvable subcommand was found;
+# returns 1 (printing nothing) otherwise.
+#
+# This is the git-global-option-aware corrected version of the token-walk in
+# canon_is_git_cmd: instead of assuming EVERY -flag consumes the next token
+# (which fails-OPEN when a self-contained global like -p / --no-pager / a
+# `=`-form precedes the subcommand), it classifies each global option:
+#
+#   VALUE-CONSUMING (skip the flag AND the next token), ONLY as a separate
+#   token (no '=' in the token):
+#     -C  -c  --git-dir  --work-tree  --namespace  --exec-path  --super-prefix
+#
+#   SELF-CONTAINED (skip the flag only):
+#     -p  -P  --paginate  --no-pager  --bare  --no-replace-objects
+#     --literal-pathspecs  --icase-pathspecs  --no-optional-locks
+#     --no-lazy-fetch, and ANY token containing '=' (e.g. --git-dir=/x, -c k=v)
+#
+#   UNKNOWN -flag → treated as SELF-CONTAINED (skip only). Consuming the next
+#   token for an unknown flag risks skipping the real subcommand → fail-OPEN;
+#   for a fail-closed safety hook we never consume an unknown flag's "value".
+#
+# The FIRST bare (non-'-'-prefixed) token after the global options is the
+# subcommand. Strips a leading "cd <dir> &&" prefix like canon_is_git_cmd.
+# Uses [[:space:]] throughout for POSIX/BSD (macOS) compatibility.
+canon_git_subcommand() {
+  local command="$1"
+  local stripped
+
+  # Strip a leading "cd <dir> &&" prefix so compound segments are handled.
+  stripped=$(printf '%s' "$command" \
+    | sed 's/^[[:space:]]*cd[[:space:]]*[^;&|]*&&[[:space:]]*//' \
+    || true) # DOCUMENTED FAIL-OPEN -- sed no-match means no cd prefix to strip
+  if [[ -z "$stripped" ]]; then
+    stripped="$command"
+  fi
+
+  # Drop everything up to and including the "git" keyword. If there is no
+  # "git" token, this is not a git invocation → return 1.
+  local after_git
+  after_git=$(printf '%s' "$stripped" \
+    | sed -E 's/(^|[[:space:]])git[[:space:]]+//' \
+    || true) # DOCUMENTED FAIL-OPEN -- sed no-match means "git" keyword not found
+  # sed prints the line unchanged when it does not match; detect "no git token".
+  if [[ "$after_git" == "$stripped" ]] \
+     && ! printf '%s' "$stripped" | grep -qE '(^|[[:space:]])git([[:space:]]|$)'; then
+    return 1
+  fi
+
+  local remaining="$after_git"
+  local expect_value=0
+
+  while true; do
+    local first
+    first=$(printf '%s' "$remaining" | awk '{print $1}')
+    if [[ -z "$first" ]]; then
+      # Ran out of tokens before finding a subcommand → unresolved.
+      return 1
+    fi
+
+    if [[ "$expect_value" -eq 1 ]]; then
+      # This token is the value argument for a value-consuming global; skip it.
+      expect_value=0
+      remaining=$(printf '%s' "$remaining" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//' || true) # DOCUMENTED FAIL-OPEN -- advancing past token in word-by-word parser
+      continue
+    fi
+
+    if [[ "$first" == -* ]]; then
+      # A '-'-prefixed global option. Classify it.
+      if [[ "$first" == *=* ]]; then
+        # =-form (e.g. --git-dir=/x, -c k=v) is always self-contained.
+        : # skip flag only
+      else
+        case "$first" in
+          -C|-c|--git-dir|--work-tree|--namespace|--exec-path|--super-prefix)
+            # Value-consuming global: skip this flag and the next token.
+            expect_value=1
+            ;;
+          *)
+            # Self-contained global (-p, --no-pager, …) OR an unknown -flag.
+            # Skip ONLY this flag — never consume the next token, so a real
+            # subcommand is never skipped past (fail-closed posture).
+            : # skip flag only
+            ;;
+        esac
+      fi
+      remaining=$(printf '%s' "$remaining" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//' || true) # DOCUMENTED FAIL-OPEN -- advancing past token in word-by-word parser
+      continue
+    fi
+
+    # First bare (non-'-') token — this is the subcommand.
+    printf '%s' "$first"
+    return 0
+  done
+}
