@@ -113,7 +113,60 @@ fi
 rm -rf "$FAKE_PLUGIN" "$FAKE_DATA"
 
 # ---------------------------------------------------------------------------
-# Test 4: git status is clean after the above (no working-tree churn)
+# Test 4: ESM symlink created — fresh-cache fixture with no co-located
+# node_modules. Run boot --print-resolution, assert $SERVER_DIR/node_modules
+# is a symlink pointing at $DATA/node_modules (readlink match).
+# ---------------------------------------------------------------------------
+SYM_PLUGIN=$(mktemp -d)
+SYM_DATA=$(mktemp -d)
+mkdir -p "$SYM_PLUGIN/mcp-server/src/app"
+touch "$SYM_PLUGIN/mcp-server/src/app/index.ts"
+cp "$BOOT_SH" "$SYM_PLUGIN/mcp-server/boot.sh"
+chmod +x "$SYM_PLUGIN/mcp-server/boot.sh"
+# Stub tsx in DATA so deps are "ready"
+mkdir -p "$SYM_DATA/node_modules/.bin"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$SYM_DATA/node_modules/.bin/tsx"
+chmod +x "$SYM_DATA/node_modules/.bin/tsx"
+
+CLAUDE_PLUGIN_ROOT="$SYM_PLUGIN" CLAUDE_PLUGIN_DATA="$SYM_DATA" \
+  bash "$SYM_PLUGIN/mcp-server/boot.sh" --print-resolution >/dev/null 2>&1 || true
+
+SYM_LINK="$SYM_PLUGIN/mcp-server/node_modules"
+if [[ -L "$SYM_LINK" ]]; then
+  LINK_TARGET="$(readlink "$SYM_LINK")"
+  EXPECTED_TARGET="$SYM_DATA/node_modules"
+  if [[ "$LINK_TARGET" == "$EXPECTED_TARGET" ]]; then
+    pass "ESM symlink created: node_modules → PLUGIN_DATA/node_modules"
+  else
+    fail "ESM symlink target mismatch: expected $EXPECTED_TARGET, got $LINK_TARGET"
+  fi
+else
+  fail "ESM symlink not created: $SYM_LINK is not a symlink"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 5: Cache-wipe survival — delete the symlink, re-run boot --print-resolution,
+# assert it is recreated and points at DATA.
+# ---------------------------------------------------------------------------
+rm -f "$SYM_LINK"
+CLAUDE_PLUGIN_ROOT="$SYM_PLUGIN" CLAUDE_PLUGIN_DATA="$SYM_DATA" \
+  bash "$SYM_PLUGIN/mcp-server/boot.sh" --print-resolution >/dev/null 2>&1 || true
+
+if [[ -L "$SYM_LINK" ]]; then
+  LINK_TARGET2="$(readlink "$SYM_LINK")"
+  if [[ "$LINK_TARGET2" == "$SYM_DATA/node_modules" ]]; then
+    pass "Cache-wipe survival: symlink recreated after deletion"
+  else
+    fail "Cache-wipe survival: symlink target mismatch after recreation: $LINK_TARGET2"
+  fi
+else
+  fail "Cache-wipe survival: symlink not recreated after deletion"
+fi
+
+rm -rf "$SYM_PLUGIN" "$SYM_DATA"
+
+# ---------------------------------------------------------------------------
+# Test 6: git status is clean after the above (no working-tree churn)
 # ---------------------------------------------------------------------------
 STATUS=$(git -C "$REPO_ROOT" status --short 2>/dev/null)
 # We only care about tracked files in the working tree
