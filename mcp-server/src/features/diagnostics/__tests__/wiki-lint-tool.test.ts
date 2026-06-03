@@ -187,6 +187,49 @@ describe("wikiLint tool handler", () => {
     );
   });
 
+  it("cited_paths key is present in WikiLintOutput", async () => {
+    const tmp = makeTmpDir("cited-paths-key");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "some-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+
+    // Empty references dir — no cited path findings
+    const refsDir = join(tmp, "references");
+    mkdirSync(refsDir, { recursive: true });
+    writeFileSync(join(refsDir, "empty.md"), "# Empty\nNo paths here.\n", "utf8");
+
+    const result = await wikiLint({}, tmp, tmp);
+
+    expect(result).toHaveProperty("cited_paths");
+    expect(Array.isArray(result.cited_paths)).toBe(true);
+  });
+
+  it("checks filter: contradictions-only omits cited_paths", async () => {
+    const tmp = makeTmpDir("filter-contradictions");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "some-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+
+    const refsDir = join(tmp, "references");
+    mkdirSync(refsDir, { recursive: true });
+    writeFileSync(
+      join(refsDir, "doc.md"),
+      "See `src/nonexistent/path.ts` for details.\n",
+      "utf8",
+    );
+
+    // Only run contradictions — cited_paths should be empty (check not run)
+    const result = await wikiLint({ checks: ["contradictions"] }, tmp, tmp);
+
+    expect(result.cited_paths).toEqual([]);
+  });
+
   it("clean codebase: no findings when everything is valid", async () => {
     const tmp = makeTmpDir("clean");
 

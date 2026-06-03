@@ -18,6 +18,7 @@ import { loadAllPrinciples } from "@shared/matcher.ts";
 import type { Principle } from "@shared/parser.ts";
 import {
   assembleWikiLintOutput,
+  checkCitedPaths,
   checkContradictions,
   checkMissingExamples,
   checkOrphanPrinciples,
@@ -27,7 +28,12 @@ import {
 
 // ---- Types ----
 
-type CheckName = "contradictions" | "orphan_principles" | "stale_refs" | "missing_examples";
+type CheckName =
+  | "contradictions"
+  | "orphan_principles"
+  | "stale_refs"
+  | "missing_examples"
+  | "cited_paths";
 
 export type WikiLintInput = {
   checks?: CheckName[];
@@ -193,6 +199,16 @@ function runStaleRefCheck(
   return checkStaleRefs(allFiles, existsOnDisk);
 }
 
+function runCitedPathCheck(
+  projectDir: string,
+): ReturnType<typeof checkCitedPaths> {
+  const referencesDir = join(projectDir, "references");
+  const refPaths = findFiles(referencesDir, (_fp, name) => name.endsWith(".md"));
+  const refFiles = loadFileRecords(refPaths);
+  const existsOnDisk = (refPath: string): boolean => existsSync(join(projectDir, refPath));
+  return checkCitedPaths(refFiles, existsOnDisk);
+}
+
 // ---- Main tool function ----
 
 /**
@@ -212,6 +228,7 @@ export async function wikiLint(
     "orphan_principles",
     "stale_refs",
     "missing_examples",
+    "cited_paths",
   ];
   const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
 
@@ -228,8 +245,10 @@ export async function wikiLint(
     : [];
   const staleRefs = enabled.has("stale_refs") ? runStaleRefCheck(projectDir, claudeMdFiles) : [];
   const missingExamples = enabled.has("missing_examples") ? checkMissingExamples(principles) : [];
+  const citedPaths = enabled.has("cited_paths") ? runCitedPathCheck(projectDir) : [];
 
   return assembleWikiLintOutput({
+    citedPaths,
     contradictions,
     filesScanned: claudeMdFiles.length + agentFiles.length,
     missingExamples,
