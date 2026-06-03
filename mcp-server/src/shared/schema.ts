@@ -1,4 +1,5 @@
 import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
+import { CRAFT_BANDS, CRAFT_DIMENSIONS } from "@shared/lib/craft-rubric.ts";
 import { z } from "zod";
 
 // --- Report input: review only ---
@@ -58,3 +59,29 @@ export type ReviewEntry = Omit<ReviewInput, "type" | "verdict"> & {
 };
 
 export type ReviewViolation = ReviewEntry["violations"][number];
+
+// --- Craft profile types + Zod validator ---
+
+export type CraftDimensionRating = {
+  dimension: (typeof CRAFT_DIMENSIONS)[number];
+  band: (typeof CRAFT_BANDS)[number];
+  evidence?: string;
+  principle_refs?: string[];
+};
+
+export type CraftProfile = {
+  ratings: CraftDimensionRating[];
+  rollup?: number; // derived-for-display only; never the primitive
+};
+
+export const CraftProfileSchema = z.object({
+  ratings: z.array(
+    z.object({
+      band: z.enum(CRAFT_BANDS),
+      dimension: z.enum(CRAFT_DIMENSIONS),
+      evidence: z.string().optional(),
+      principle_refs: z.array(z.string()).optional(),
+    }),
+  ),
+  rollup: z.number().optional(),
+});
