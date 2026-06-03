@@ -119,15 +119,13 @@ src/
 
 **`write_implementation_summary` tool** — updated 2026-05-29: accepts optional `decisions?: DecisionRecord[]` array; decisions rendered as markdown table in summary and stored in meta JSON; each decision logged as `agent_decision` event in execution store; `DecisionRecord` fields: `choice`, `rationale`, `alternatives_considered`, `informed_by` (refs: area_memory, pitfall, principle, task_plan, codebase_pattern); extracts area observations from `deviations` field and stores in `area_observations` via `areaMemoryWriter`; fail-open throughout.
 
-**`get_drift_report` tool** — updated 2026-05-25: confidence tier rendered inline as `[confidence: TIER]` per violation in formatted output. Updated 2026-05-29: formatted output includes a `Craft: N (N holistic findings)` line after `Avg score:`, distinct from compliance numbers; also renders `### Documentation freshness` section (omitted when empty) with commits-since-last-sync and `[confidence: TIER]` per direction doc, sorted by staleness descending.
+**`get_drift_report` tool** — updated 2026-05-25: confidence tier rendered inline as `[confidence: TIER]` per violation in formatted output. Updated 2026-05-29: formatted output also renders `### Documentation freshness` section (omitted when empty) with commits-since-last-sync and `[confidence: TIER]` per direction doc, sorted by staleness descending.
 
 **`DocFreshness` type** (`src/platform/storage/drift/analyzer.ts`) — `{ doc_path: string; commits_since_sync: number; confidence: ConfidenceAnnotation; warning?: string }`; placed in platform so service can import it without platform importing from features. `DriftReport.doc_freshness: DocFreshness[]` added (defaults to `[]`).
 
 **`doc-freshness-adapter.ts`** (`src/platform/storage/drift/`) — `computeFreshnessConfidence(signals)`: maps `commits_since_sync` to staleness score, delegates to `computeConfidenceAnnotation`; `FRESHNESS_SAMPLE_SIZE = 10`. Added 2026-05-29.
 
 **`computeDocFreshness`** (`src/features/diagnostics/services/doc-freshness.ts`) — enumerates `docs/*.md` (excludes `docs/reference/`), git injectable seam; `!ok` paths log WARN + return `DocFreshness` with `warning?`; ENOENT → `[]`. Added 2026-05-29.
-
-**`DriftReport.craft`** (`platform/storage/drift/analyzer.ts`) — added 2026-05-29: `craft: { holistic_count: number; score: number }` field on `DriftReport`; `computeCraftScore(reviews)` uses formula `max(0, 100 − min(100, holistic_count × 10))`; populated by `analyzeDrift` using the same filtered window as `avg_score`; kept DISTINCT from compliance score.
 
 **Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs; `DEFAULT_LAYER_MAPPINGS` includes `hooks: ["hooks"]` entry ordered before `shared` so `hooks/lib/*.sh` resolves to layer `hooks` (added 2026-05-29)
 
