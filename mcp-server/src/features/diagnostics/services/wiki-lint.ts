@@ -406,15 +406,70 @@ export function isExcludedCitedPath(candidate: string): boolean {
   return false;
 }
 
+/** True if a line is the opening of an illustrative fenced block. */
+function isIllustrativeFenceOpen(line: string): boolean {
+  return /^```/.test(line) && /example|hypothetical|template/i.test(line);
+}
+
+/** True if a line closes a fenced block. */
+function isFenceClose(line: string): boolean {
+  return /^```/.test(line);
+}
+
+type CitedPathScanCtx = {
+  sourceFile: string;
+  existsOnDisk: (path: string) => boolean;
+  findings: CitedPathFinding[];
+};
+
+/** Scan a single non-fence line for non-resolving cited paths. */
+function scanLineForCitedPaths(line: string, lineNumber: number, ctx: CitedPathScanCtx): void {
+  CITED_PATH_RE.lastIndex = 0;
+  for (const m of line.matchAll(CITED_PATH_RE)) {
+    const candidate = m[1] ?? "";
+    if (isExcludedCitedPath(candidate)) continue;
+    if (!ctx.existsOnDisk(candidate)) {
+      ctx.findings.push({
+        cited_path: candidate,
+        line_number: lineNumber,
+        source_file: ctx.sourceFile,
+      });
+    }
+  }
+}
+
+/** Collect cited-path findings for one file, skipping illustrative fenced blocks. */
+function collectCitedPathsInFile(
+  file: { path: string; content: string },
+  existsOnDisk: (path: string) => boolean,
+): CitedPathFinding[] {
+  const ctx: CitedPathScanCtx = { existsOnDisk, findings: [], sourceFile: file.path };
+  const originalLines = file.content.split("\n");
+  let inIllustrativeFence = false;
+
+  for (let i = 0; i < originalLines.length; i++) {
+    const line = originalLines[i];
+    if (!inIllustrativeFence) {
+      if (isIllustrativeFenceOpen(line)) {
+        inIllustrativeFence = true;
+      } else {
+        scanLineForCitedPaths(line, i + 1, ctx);
+      }
+    } else if (isFenceClose(line)) {
+      inIllustrativeFence = false;
+    }
+  }
+
+  return ctx.findings;
+}
+
 /**
  * Check for cited-path findings in a set of files.
  *
- * Per file: strips illustrative fences, then scans line-by-line for backtick-quoted
- * paths (CITED_PATH_RE). Excluded paths are skipped. Non-resolving paths produce a
- * CitedPathFinding with the 1-based line number from the ORIGINAL content.
- *
- * Line numbers are computed against the original content by scanning line-by-line,
- * skipping lines inside illustrative fences so that offsets remain correct.
+ * Per file: scans line-by-line for backtick-quoted paths matching CITED_PATH_RE,
+ * skipping lines inside illustrative fenced blocks (labeled example/hypothetical/template).
+ * Excluded paths are skipped. Non-resolving paths produce a CitedPathFinding with the
+ * 1-based line number from the original content.
  *
  * Pure: existsOnDisk is the only effect seam.
  */
@@ -422,46 +477,7 @@ export function checkCitedPaths(
   files: Array<{ path: string; content: string }>,
   existsOnDisk: (path: string) => boolean,
 ): CitedPathFinding[] {
-  const findings: CitedPathFinding[] = [];
-
-  for (const file of files) {
-    const originalLines = file.content.split("\n");
-    let inIllustrativeFence = false;
-
-    for (let i = 0; i < originalLines.length; i++) {
-      const line = originalLines[i];
-      const lineNumber = i + 1; // 1-based
-
-      // Track illustrative fence boundaries (same logic as stripIllustrativeFences)
-      if (!inIllustrativeFence) {
-        if (/^```/.test(line) && /example|hypothetical|template/i.test(line)) {
-          inIllustrativeFence = true;
-          continue; // Skip the fence opening line itself (no paths expected there)
-        }
-      } else {
-        if (/^```/.test(line)) {
-          inIllustrativeFence = false;
-        }
-        continue; // Skip all lines inside illustrative fences
-      }
-
-      // Scan the line for backtick-quoted paths
-      CITED_PATH_RE.lastIndex = 0;
-      for (const m of line.matchAll(CITED_PATH_RE)) {
-        const candidate = m[1] ?? "";
-        if (isExcludedCitedPath(candidate)) continue;
-        if (!existsOnDisk(candidate)) {
-          findings.push({
-            cited_path: candidate,
-            line_number: lineNumber,
-            source_file: file.path,
-          });
-        }
-      }
-    }
-  }
-
-  return findings;
+  return files.flatMap((f) => collectCitedPathsInFile(f, existsOnDisk));
 }
 
 // ---- Assembler ----

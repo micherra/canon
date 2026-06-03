@@ -199,9 +199,7 @@ function runStaleRefCheck(
   return checkStaleRefs(allFiles, existsOnDisk);
 }
 
-function runCitedPathCheck(
-  projectDir: string,
-): ReturnType<typeof checkCitedPaths> {
+function runCitedPathCheck(projectDir: string): ReturnType<typeof checkCitedPaths> {
   const referencesDir = join(projectDir, "references");
   const refPaths = findFiles(referencesDir, (_fp, name) => name.endsWith(".md"));
   const refFiles = loadFileRecords(refPaths);

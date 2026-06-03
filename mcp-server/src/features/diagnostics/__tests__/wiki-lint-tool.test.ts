@@ -218,11 +218,7 @@ describe("wikiLint tool handler", () => {
 
     const refsDir = join(tmp, "references");
     mkdirSync(refsDir, { recursive: true });
-    writeFileSync(
-      join(refsDir, "doc.md"),
-      "See `src/nonexistent/path.ts` for details.\n",
-      "utf8",
-    );
+    writeFileSync(join(refsDir, "doc.md"), "See `src/nonexistent/path.ts` for details.\n", "utf8");
 
     // Only run contradictions — cited_paths should be empty (check not run)
     const result = await wikiLint({ checks: ["contradictions"] }, tmp, tmp);
