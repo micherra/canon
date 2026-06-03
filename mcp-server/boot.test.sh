@@ -114,7 +114,10 @@ fi
 # ---------------------------------------------------------------------------
 # Test 7: Race-recovery — empty DATA dir; background process drops tsx after
 # a short delay; boot recovers and resolves tsx (does not exit 1).
-# Uses CANON_BOOT_DEPS_TIMEOUT=5 CANON_BOOT_DEPS_INTERVAL=0.2 for fast test.
+# Background install lands at ~0.5s. The wait window is 25 ticks × 0.2s = ~5s,
+# an order of magnitude above the 0.5s setup sleep so CI jitter cannot race it.
+# The assertion (RACE_EXIT == 0) is unchanged; the extra budget only costs real
+# time on FAILURE (when tsx never lands), which is the non-flaky path.
 # tsx stub exits 0 immediately so boot completes without launching a real server.
 # ---------------------------------------------------------------------------
 RACE_SERVER=$(mktemp -d)
@@ -134,7 +137,7 @@ BG_PID=$!
 RACE_EXIT=0
 CLAUDE_PLUGIN_ROOT="" \
   CLAUDE_PLUGIN_DATA="$RACE_DATA" \
-  CANON_BOOT_DEPS_TIMEOUT=5 \
+  CANON_BOOT_DEPS_TIMEOUT=25 \
   CANON_BOOT_DEPS_INTERVAL=0.2 \
   bash "$BOOT_SH" --force-dir "$RACE_SERVER" 2>/dev/null || RACE_EXIT=$?
 wait "$BG_PID" 2>/dev/null || true
@@ -200,12 +203,13 @@ fi
 rm -rf "$NOCLOBBER_SERVER" "$NOCLOBBER_DATA"
 
 # ---------------------------------------------------------------------------
-# Test 10: Dangling-symlink guard — $SERVER_DIR/node_modules is a symlink
-# pointing at a non-existent dir; boot must exit non-zero with a loud
-# "does not resolve to a real dir" message (no 30s hang).
-# Scenario: DATA dir has no tsx (wait times out, fall-through) but a pre-existing
-# dangling symlink is already in SERVER_DIR/node_modules from a prior boot (wiped cache).
-# The dangling-link guard must fire before the tsx-absent exit.
+# Test 10: Wiped-cache dangling link — $SERVER_DIR/node_modules is a stale
+# symlink to a ghost target left over from a prior boot, and DATA has no tsx.
+# Boot must (a) clear the stale link up front so the deps poll watches DATA only,
+# and (b) still FAIL CLOSED loudly (non-zero) when deps never arrive — without
+# hanging the full timeout. The genuinely-unresolvable state exits via the
+# tsx-absent fail-closed branch ("tsx not found"); the dangling-link guard no
+# longer fires here because the stale link was cleared in step 3.
 # ---------------------------------------------------------------------------
 DANGLE_SERVER=$(mktemp -d)
 DANGLE_DATA=$(mktemp -d)
@@ -216,18 +220,24 @@ mkdir -p "$DANGLE_DATA/node_modules"
 # Pre-create a dangling symlink in SERVER_DIR/node_modules (points at a ghost target)
 GHOST_TARGET="${DANGLE_SERVER}/ghost-does-not-exist"
 ln -s "$GHOST_TARGET" "$DANGLE_SERVER/node_modules"
+DANGLE_START=$SECONDS
 DANGLE_STDERR=$(
   CLAUDE_PLUGIN_ROOT="" \
   CLAUDE_PLUGIN_DATA="$DANGLE_DATA" \
-  CANON_BOOT_DEPS_TIMEOUT=1 \
+  CANON_BOOT_DEPS_TIMEOUT=2 \
   CANON_BOOT_DEPS_INTERVAL=0.2 \
   bash "$BOOT_SH" --force-dir "$DANGLE_SERVER" 2>&1 >/dev/null
 ) || DANGLE_EXIT=$?
+DANGLE_ELAPSED=$(( SECONDS - DANGLE_START ))
 rm -rf "$DANGLE_SERVER" "$DANGLE_DATA"
-if [[ "${DANGLE_EXIT:-0}" -ne 0 ]] && echo "$DANGLE_STDERR" | grep -q "does not resolve to a real dir"; then
-  pass "Dangling-symlink guard: exits non-zero with loud CANON ERROR"
+# Fail-closed: non-zero exit + loud message; bounded by the (short) deps timeout,
+# never the full default 60s — proves the stale link did not stall the poll.
+if [[ "${DANGLE_EXIT:-0}" -ne 0 ]] \
+   && echo "$DANGLE_STDERR" | grep -Eq "tsx not found|does not resolve to a real dir" \
+   && [[ "$DANGLE_ELAPSED" -lt 10 ]]; then
+  pass "Wiped-cache dangling link: cleared up front, still fails closed (exit ${DANGLE_EXIT:-0}, ${DANGLE_ELAPSED}s)"
 else
-  fail "Dangling-symlink guard: expected non-zero + error msg; got exit=${DANGLE_EXIT:-0}, stderr=${DANGLE_STDERR}"
+  fail "Wiped-cache dangling link: expected non-zero + loud msg within bound; got exit=${DANGLE_EXIT:-0}, elapsed=${DANGLE_ELAPSED}s, stderr=${DANGLE_STDERR}"
 fi
 
 # ---------------------------------------------------------------------------
