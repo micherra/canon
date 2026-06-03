@@ -17,7 +17,7 @@ import { toToolErrorResponse } from "@shared/lib/wrap-handler.ts";
 // ── Per-connection scope registry ─────────────────────────────────────────────
 //
 // Sentinel session ID used for the single stdio connection.  Under stdio there
-// is exactly one connection so setProjectDir() writes here and resolveScope()
+// is exactly one connection so registerConnectionScope(STDIO_SESSION_ID, ...) writes here and resolveScope()
 // reads back the same value — behaviorally identical to the old module global.
 //
 // Under HTTP (Phase 2) each connection will have its own sessionId and will

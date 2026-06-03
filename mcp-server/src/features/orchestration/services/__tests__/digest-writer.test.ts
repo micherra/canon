@@ -469,7 +469,7 @@ describe("tryWriteBuildDigest", () => {
     await mkdir(plansDir, { recursive: true });
     await writeFile(join(plansDir, "planning-brief.md"), FIXTURE_PLANNING_BRIEF, "utf-8");
 
-    const result = await tryWriteBuildDigest(workspace, process.cwd());
+    const result = await tryWriteBuildDigest(workspace, "/Users/mock/project");
 
     expect(result).toBe(true);
 
@@ -494,7 +494,7 @@ describe("tryWriteBuildDigest", () => {
       "- [some-prior-entry.md](some-prior-entry.md) -- prior build: CLEAN, 10m\n";
     await writeFile(join(memoryDir, "MEMORY.md"), existingEntry, "utf-8");
 
-    const result = await tryWriteBuildDigest(workspace, process.cwd());
+    const result = await tryWriteBuildDigest(workspace, "/Users/mock/project");
     expect(result).toBe(true);
 
     const content = await readFile(join(memoryDir, "MEMORY.md"), "utf-8");
@@ -506,11 +506,11 @@ describe("tryWriteBuildDigest", () => {
     await writeFile(join(workspace, "journal.json"), FIXTURE_JOURNAL, "utf-8");
 
     // First call — creates digest and appends entry
-    const result1 = await tryWriteBuildDigest(workspace, process.cwd());
+    const result1 = await tryWriteBuildDigest(workspace, "/Users/mock/project");
     expect(result1).toBe(true);
 
     // Second call — same slug/date, same filename
-    const result2 = await tryWriteBuildDigest(workspace, process.cwd());
+    const result2 = await tryWriteBuildDigest(workspace, "/Users/mock/project");
     expect(result2).toBe(true);
 
     const content = await readFile(join(memoryDir, "MEMORY.md"), "utf-8");
@@ -526,7 +526,7 @@ describe("tryWriteBuildDigest", () => {
     vi.mocked(homedir).mockReturnValue("/nonexistent-home-xyz");
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(vi.fn());
-    const result = await tryWriteBuildDigest(workspace, process.cwd());
+    const result = await tryWriteBuildDigest(workspace, "/Users/mock/project");
     expect(result).toBe(false);
     // Should not throw
     warnSpy.mockRestore();
@@ -536,7 +536,7 @@ describe("tryWriteBuildDigest", () => {
     await writeFile(join(workspace, "journal.json"), "this is not valid json {{{", "utf-8");
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(vi.fn());
-    const result = await tryWriteBuildDigest(workspace, process.cwd());
+    const result = await tryWriteBuildDigest(workspace, "/Users/mock/project");
     expect(result).toBe(false);
     warnSpy.mockRestore();
   });
@@ -545,7 +545,7 @@ describe("tryWriteBuildDigest", () => {
     // Empty workspace — no journal.json. readJournalSteps returns [] when file is absent,
     // so extractDigestData still produces valid DigestData with zero steps.
     // The function succeeds as long as the auto-memory directory exists.
-    const result = await tryWriteBuildDigest(workspace, process.cwd());
+    const result = await tryWriteBuildDigest(workspace, "/Users/mock/project");
     expect(result).toBe(true);
   });
 });
