@@ -432,8 +432,11 @@ HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`).
 
 Each node uses `id: filePath` — this is the key used to link click events to the file card `<details>` elements below.
 
-The subgraph Canvas script (see Step 6 CSS + script section) reads this attribute, runs a force
-simulation (100 iterations), draws nodes and edges, and adds click/hover handling.
+The subgraph renders via the shared `mcp-server/src/ui/snippets/force-graph.html` engine
+(`renderForceGraph`, see Step 6 CSS + script section): it runs the force simulation (100 iterations),
+normalizes the settled layout to fill the canvas, de-collides the filename labels, then draws
+nodes/edges with click + hover handling. Review supplies its options (arrow edges, blue changed-node
+fill, violation ring, and click-a-node → expand+scroll the matching file card).
 
 ### Changed files list
 
@@ -553,194 +556,70 @@ details[open] > .file-expandable-summary .file-expand-arrow { transform: rotate(
 
 Include before `</body>` (in this order):
 1. The `<script>` block from `file-detail-card.html` (Canvas graph initialization for detail cards)
-2. The subgraph Canvas script (copy verbatim):
+2. The shared force-directed-graph engine, then the subgraph init call:
+
+**2a. Emit the shared engine snippet `<script>` verbatim (ONCE).** Read
+`mcp-server/src/ui/snippets/force-graph.html` and include its `<script>` block verbatim exactly
+once, immediately after the `file-detail-card.html` script and before `</body>`. Do NOT re-implement
+the force-simulation math inline — it now lives only in `force-graph.html`. Mirror how the
+`file-detail-card.html` snippet `<script>` is already emitted (read the snippet, paste its `<script>`
+verbatim, do not edit it). If `force-graph.html` has a `<style>` block, include it once in the page
+`<style>` tag as well.
+
+**2b. Emit the subgraph init script** that adapts the already-built subgraph data to the engine and
+calls `renderForceGraph` with review's options (copy verbatim):
 
 ```javascript
 (function () {
   // ── Design token mapping (Canvas 2D cannot use CSS custom properties) ──
   // The hex values below correspond to DESIGN-SYSTEM.md Section A tokens:
-  //   #6c8cff  → var(--accent)      — changed file nodes
-  //   #ff6b6b  → var(--danger)      — violation ring stroke on nodes
-  //   #888780  → (no direct token)  — edge lines and arrowheads; visually between --text-muted and --text
-  //   #b4b8c8  → var(--text)        — node label text color
-  //   #1e2030  → var(--bg)          — tooltip background (slightly lighter variant)
-  //   #3a3d52  → var(--border)      — tooltip border (opaque variant of --border rgba)
-  //   #e8eaf0  → var(--text-bright) — tooltip text color
-  // When design tokens change, update these hex values to match.
-
+  //   #6c8cff  → var(--accent)  — changed file nodes (review's nodeFill)
+  // The remaining Canvas colors (edges, labels, violation ring, tooltip) live in the
+  // shared force-graph.html engine and carry their own /* --token */ comments there.
   var canvas = document.getElementById('review-subgraph-canvas');
   if (!canvas) return;
+  // The subgraph data may be provided via the data-subgraph attribute or as an inline
+  // object; read whichever the page emitted. Node `id` keys are file paths — the same
+  // keys onNodeClick uses to find the matching <details id="file-card-{encodedId}"> card.
   var raw = canvas.getAttribute('data-subgraph');
-  if (!raw) return;
   var data;
-  try { data = JSON.parse(raw); } catch (e) { return; }
-  var nodes = (data.nodes || []).map(function (n) {
-    return { id: n.id, layer: n.layer, violation_count: n.violation_count || 0,
-             x: 0, y: 0, vx: 0, vy: 0 };
-  });
+  try { data = raw ? JSON.parse(raw) : { nodes: [], edges: [] }; } catch (e) { return; }
+  var nodes = data.nodes || [];
   var edges = data.edges || [];
   if (nodes.length === 0) return;
-  var dpr = window.devicePixelRatio || 1;
-  var W = canvas.offsetWidth || 600;
-  var H = 300;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.height = H + 'px';
-  var ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  var PAD = 40;
-  for (var i = 0; i < nodes.length; i++) {
-    nodes[i].x = PAD + Math.random() * (W - PAD * 2);
-    nodes[i].y = PAD + Math.random() * (H - PAD * 2);
-  }
-  var K_REPEL = 3000, K_SPRING = 0.015, REST_LENGTH = 40;
-  var K_GRAVITY = 0.4, DAMPING = 0.85, MAX_FORCE = 8, ITERATIONS = 100;
-  var CX = W / 2, CY = H / 2;
-  for (var iter = 0; iter < ITERATIONS; iter++) {
-    var forces = nodes.map(function () { return { fx: 0, fy: 0 }; });
-    for (var a = 0; a < nodes.length; a++) {
-      for (var b = a + 1; b < nodes.length; b++) {
-        var dx = nodes[a].x - nodes[b].x;
-        var dy = nodes[a].y - nodes[b].y;
-        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        var f = Math.min(K_REPEL / (dist * dist), MAX_FORCE);
-        var fx = (dx / dist) * f, fy = (dy / dist) * f;
-        forces[a].fx += fx; forces[a].fy += fy;
-        forces[b].fx -= fx; forces[b].fy -= fy;
+
+  renderForceGraph(
+    canvas,
+    { nodes: nodes, edges: edges },
+    {
+      height: 300,
+      iterations: 100,
+      edgeStyle: 'arrow',
+      drawLabels: true,
+      showViolationRing: true,
+      nodeFill: function (n) { return /* --accent */ '#6c8cff'; },
+      onNodeClick: function (n) {
+        var encodedId = n.id.replace(/[^a-zA-Z0-9]/g, function (c) { return '-' + c.charCodeAt(0) + '-'; });
+        var cardEl = document.getElementById('file-card-' + encodedId);
+        if (cardEl) {
+          cardEl.open = true;
+          cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       }
     }
-    for (var e = 0; e < edges.length; e++) {
-      var si = -1, ti = -1;
-      for (var k = 0; k < nodes.length; k++) {
-        if (nodes[k].id === edges[e].source) si = k;
-        if (nodes[k].id === edges[e].target) ti = k;
-      }
-      if (si < 0 || ti < 0) continue;
-      var edx = nodes[ti].x - nodes[si].x;
-      var edy = nodes[ti].y - nodes[si].y;
-      var edist = Math.sqrt(edx * edx + edy * edy) || 1;
-      var sf = Math.min(K_SPRING * (edist - REST_LENGTH), MAX_FORCE);
-      var sfx = (edx / edist) * sf, sfy = (edy / edist) * sf;
-      forces[si].fx += sfx; forces[si].fy += sfy;
-      forces[ti].fx -= sfx; forces[ti].fy -= sfy;
-    }
-    for (var g = 0; g < nodes.length; g++) {
-      var gdx = CX - nodes[g].x, gdy = CY - nodes[g].y;
-      var gdist = Math.sqrt(gdx * gdx + gdy * gdy) || 1;
-      forces[g].fx += K_GRAVITY * gdx / gdist * Math.min(gdist, 100);
-      forces[g].fy += K_GRAVITY * gdy / gdist * Math.min(gdist, 100);
-    }
-    for (var n = 0; n < nodes.length; n++) {
-      nodes[n].vx = (nodes[n].vx + forces[n].fx) * DAMPING;
-      nodes[n].vy = (nodes[n].vy + forces[n].fy) * DAMPING;
-      nodes[n].x = Math.max(PAD, Math.min(W - PAD, nodes[n].x + nodes[n].vx));
-      nodes[n].y = Math.max(PAD, Math.min(H - PAD, nodes[n].y + nodes[n].vy));
-    }
-  }
-  ctx.clearRect(0, 0, W, H);
-  var NODE_R = 7;
-  for (var de = 0; de < edges.length; de++) {
-    var dsi = -1, dti = -1;
-    for (var dk = 0; dk < nodes.length; dk++) {
-      if (nodes[dk].id === edges[de].source) dsi = dk;
-      if (nodes[dk].id === edges[de].target) dti = dk;
-    }
-    if (dsi < 0 || dti < 0) continue;
-    var ax = nodes[dsi].x, ay = nodes[dsi].y;
-    var bx = nodes[dti].x, by = nodes[dti].y;
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(bx, by);
-    ctx.strokeStyle = '#888780';
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.35;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    var angle = Math.atan2(by - ay, bx - ax);
-    var tipX = bx - Math.cos(angle) * NODE_R;
-    var tipY = by - Math.sin(angle) * NODE_R;
-    var AL = 7, AW = Math.PI / 6;
-    ctx.beginPath();
-    ctx.moveTo(tipX, tipY);
-    ctx.lineTo(tipX - AL * Math.cos(angle - AW), tipY - AL * Math.sin(angle - AW));
-    ctx.lineTo(tipX - AL * Math.cos(angle + AW), tipY - AL * Math.sin(angle + AW));
-    ctx.closePath();
-    ctx.fillStyle = '#888780';
-    ctx.globalAlpha = 0.5;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  for (var dn = 0; dn < nodes.length; dn++) {
-    var nd = nodes[dn];
-    ctx.beginPath();
-    ctx.arc(nd.x, nd.y, NODE_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#6c8cff';
-    ctx.fill();
-    if (nd.violation_count > 0) {
-      ctx.strokeStyle = '#ff6b6b';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-    var label = nd.id.split('/').pop() || nd.id;
-    if (label.length > 20) label = label.slice(0, 18) + '...';
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#b4b8c8';
-    ctx.textAlign = 'center';
-    ctx.fillText(label, nd.x, nd.y + NODE_R + 11);
-  }
-  var tooltip = document.createElement('div');
-  tooltip.style.cssText = 'position:fixed;pointer-events:none;background:#1e2030;border:1px solid #3a3d52;' +
-    'color:#e8eaf0;padding:4px 8px;border-radius:4px;font-size:11px;font-family:monospace;' +
-    'display:none;z-index:9999;max-width:400px;word-break:break-all;';
-  document.body.appendChild(tooltip);
-  function getNodeAt(mx, my) {
-    for (var k = 0; k < nodes.length; k++) {
-      var dx = mx - nodes[k].x, dy = my - nodes[k].y;
-      if (Math.sqrt(dx * dx + dy * dy) <= NODE_R + 4) return nodes[k];
-    }
-    return null;
-  }
-  canvas.addEventListener('mousemove', function (evt) {
-    var rect = canvas.getBoundingClientRect();
-    var mx = (evt.clientX - rect.left) * (W / rect.width);
-    var my = (evt.clientY - rect.top) * (H / rect.height);
-    var hit = getNodeAt(mx, my);
-    if (hit) {
-      tooltip.textContent = hit.id;
-      tooltip.style.display = 'block';
-      tooltip.style.left = (evt.clientX + 12) + 'px';
-      tooltip.style.top = (evt.clientY - 8) + 'px';
-      canvas.style.cursor = 'pointer';
-    } else {
-      tooltip.style.display = 'none';
-      canvas.style.cursor = 'default';
-    }
-  });
-  canvas.addEventListener('mouseleave', function () {
-    tooltip.style.display = 'none';
-    canvas.style.cursor = 'default';
-  });
-  canvas.addEventListener('click', function (evt) {
-    var rect = canvas.getBoundingClientRect();
-    var mx = (evt.clientX - rect.left) * (W / rect.width);
-    var my = (evt.clientY - rect.top) * (H / rect.height);
-    var hit = getNodeAt(mx, my);
-    if (!hit) return;
-    var encodedId = hit.id.replace(/[^a-zA-Z0-9]/g, function(c) { return '-' + c.charCodeAt(0) + '-'; });
-    var cardEl = document.getElementById('file-card-' + encodedId);
-    if (cardEl) {
-      cardEl.open = true;
-      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  });
+  );
 })();
 ```
 
-IMPORTANT: Canvas 2D does not support CSS variables. Every hex color value in the
-Canvas script MUST be preceded by a comment naming the design token it maps to:
-  ctx.fillStyle = /* --accent */ '#6c8cff';
-  ctx.strokeStyle = /* --danger */ '#ff6b6b';
-This satisfies the design-tokens-as-style-contract convention for Canvas contexts.
+This preserves review's existing behaviors — blue changed-node fill, violation red ring, straight
+arrow edges, and click-a-node → expand+scroll the matching `<details id="file-card-{encodedId}">` —
+while inheriting the engine's balanced gravity, normalize-to-fit framing, and label de-collision.
+
+IMPORTANT: Canvas 2D does not support CSS variables. Every hex color value in any Canvas script
+MUST be preceded by a comment naming the design token it maps to:
+  nodeFill: function (n) { return /* --accent */ '#6c8cff'; };
+This satisfies the design-tokens-as-style-contract convention for Canvas contexts. The shared
+`force-graph.html` engine already annotates all of its own Canvas hex literals.
 
 ## Step 7 — Security
 
