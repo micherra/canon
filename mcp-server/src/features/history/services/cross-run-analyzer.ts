@@ -485,18 +485,6 @@ function buildPrincipleToSummaries(summaries: RunSummary[]): Map<string, RunSumm
 }
 
 /**
- * Enrich recurring violations with weighted_instance_count.
- *
- * For each recurring violation, collects all summaries that contain a matching
- * review result for the principle_id, maps each to OutcomeSignals, and sums
- * computeOutcomeWeight. Drift-only violations (no matching summary) default
- * to neutral-weight per raw count (Σ 1.0 per occurrence).
- *
- * Neutral fallback preserves backward-compatibility: patterns with no summary
- * data get weighted_instance_count === occurrence_count (same as raw count).
- */
-
-/**
  * Compute the weighted_instance_count for a single violation given its matching summaries.
  */
 function computeWeightedCount(
@@ -518,6 +506,17 @@ function computeWeightedCount(
   return weightedInstanceCount(observations);
 }
 
+/**
+ * Enrich recurring violations with weighted_instance_count.
+ *
+ * For each recurring violation, collects all summaries that contain a matching
+ * review result for the principle_id, maps each to OutcomeSignals, and sums
+ * computeOutcomeWeight. Drift-only violations (no matching summary) default
+ * to neutral-weight per raw count (Σ 1.0 per occurrence).
+ *
+ * Neutral fallback preserves backward-compatibility: patterns with no summary
+ * data get weighted_instance_count === occurrence_count (same as raw count).
+ */
 function enrichWithWeightedCounts(
   violations: RecurringViolation[],
   summaries: RunSummary[],

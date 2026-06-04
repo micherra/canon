@@ -191,7 +191,7 @@ Suggest: {update convention to match current practice | remove convention | inve
 
 1. For each watch file, extract `days_since_last_instance` and `confirming_instances` (from the file's frontmatter or structured fields).
 2. Construct a `WatchStalenessSignals` object and call `computeWatchConfidence(signals)` (`mcp-server/src/platform/storage/drift/watch-staleness-adapter.ts`) to get a `ConfidenceAnnotation`. This function delegates to the shared `computeConfidenceAnnotation` engine — there is no second decay implementation.
-3. Pass the annotation and the watch's current `status` to `decideWatchDisposition(annotation, status)` (`mcp-server/src/features/history/services/consolidate-policy.ts`). The function returns one of four `WatchDisposition` values:
+3. Pass the `WatchState` and the `ConfidenceAnnotation` to `decideWatchDisposition(watch, confidence)` (`mcp-server/src/features/history/services/consolidate-policy.ts`). `watch` is a `WatchState` object (with `status`, `days_since_last_instance`, `confirming_instances`); `confidence` is the `ConfidenceAnnotation` returned by `computeWatchConfidence`. The function returns one of four `WatchDisposition` values:
    - `"exempt"` — status is `promoted` or `confirmed`; item is never decayed. No write needed.
    - `"reinforce"` — recent confirming instance detected; annotate with reinforcement note.
    - `"decay"` — confidence has fallen; annotate the watch file with reduced confidence marker.

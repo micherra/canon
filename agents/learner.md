@@ -92,7 +92,7 @@ This behavior is surfaced through the existing `get_cross_run_analysis` path —
 At every `learn` step, after running dimension analyses and before writing the final report, run the CONSOLIDATE pass over `.canon/proposed-learnings/`:
 
 1. For each watch file, extract staleness signals and call `computeWatchConfidence` (`mcp-server/src/platform/storage/drift/watch-staleness-adapter.ts`) to get a confidence annotation via the shared `computeConfidenceAnnotation` engine.
-2. Call `decideWatchDisposition(annotation, status)` (`mcp-server/src/features/history/services/consolidate-policy.ts`) to obtain a disposition: `exempt` | `reinforce` | `decay` | `archive`.
+2. Call `decideWatchDisposition(watch, confidence)` (`mcp-server/src/features/history/services/consolidate-policy.ts`) — `watch` is a `WatchState` object, `confidence` is the `ConfidenceAnnotation` from step 1 — to obtain a disposition: `exempt` | `reinforce` | `decay` | `archive`.
 3. Write the disposition back to the watch file in `.canon/proposed-learnings/`. Items with `exempt` disposition (status `promoted` or `confirmed`) are never decayed.
 
 **Scope: `.canon/proposed-learnings/` only. Never write to `~/.claude/MEMORY.md` or any user memory store.**
