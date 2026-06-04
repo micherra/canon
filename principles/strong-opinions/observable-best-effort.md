@@ -99,6 +99,29 @@ The caller receives a `warning` field and can log it, surface it to the user, or
 
 **I/O helpers in service files**: `pure-io-service-split` separates computation from I/O, but some service files contain I/O helpers alongside pure functions (e.g., `doc-gap-detect.ts` has both `detectDocGaps` (pure) and `scanDirectories` (I/O)). `observable-best-effort` applies to ALL catch blocks that swallow errors silently, regardless of whether the file is in `tools/` or `services/`. When a service file contains filesystem reads, DB queries, or process calls, apply the same `console.warn` discipline as tool handlers.
 
+### Fail-Open Pattern
+
+A "fail-open" wrapper (one that catches errors and returns a degraded result rather than propagating the error) is the correct pattern for non-critical operations. However, the catch block MUST emit `console.warn` — a comment-only catch body is a violation.
+
+Bad — comment documents intent but produces no signal:
+```typescript
+} catch {
+  // Fail-open: enrichment never blocks spawn.
+}
+```
+
+Good — fail-open with observable catch:
+```typescript
+} catch (err) {
+  console.warn("[area-memory-enrichment] buildAreaMemorySection failed:",
+    err instanceof Error ? err.message : err);
+  return { count: 0, section: "" };
+}
+```
+
+The bracketed subsystem tag (`[service-name]`) enables log grep filtering in production.
+The `err instanceof Error ? err.message : err` pattern extracts the message safely without assuming error type.
+
 ## Exceptions
 
 Truly optional cosmetic operations where failure has zero impact on correctness or user experience (e.g., updating a non-critical UI animation hint in a fire-and-forget context). Even then, prefer logging at DEBUG over total silence — it costs nothing and preserves the ability to diagnose future issues.
