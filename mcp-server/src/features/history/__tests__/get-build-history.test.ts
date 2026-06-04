@@ -14,7 +14,7 @@ const mockGetArchiveManifests =
   vi.fn<(filter?: { branch?: string; flow?: string; limit?: number }) => ArchiveManifestEntry[]>();
 const mockCountArchives = vi.fn<() => number>();
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn(() => ({
     countArchives: mockCountArchives,
     getArchiveManifests: mockGetArchiveManifests,

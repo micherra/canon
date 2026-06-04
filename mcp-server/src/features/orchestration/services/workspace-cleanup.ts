@@ -6,12 +6,11 @@ import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
 import { releaseClaims } from "@shared/lib/file-claims.ts";
 import { generateId } from "@shared/lib/id.ts";
-import { projectDir } from "../../../app/server-state.ts";
 import type { JournalStep } from "../tools/orchestration-journal.ts";
 import { computeFlowOutcome } from "../tools/orchestration-journal.ts";
 
 /** Best-effort branch delete after worktree removal. Never throws. */
-function tryDeleteBranch(slug: string): void {
+function tryDeleteBranch(slug: string, projectDir: string): void {
   try {
     const r = gitExec(["branch", "-D", `canon/${slug}`], projectDir);
     if (!r.ok) console.warn(`[canon] branch -D failed for ${slug}:`, r.stderr.trim());
@@ -24,7 +23,7 @@ function tryDeleteBranch(slug: string): void {
  * Deregister the worktree at `{workspace}/worktree` from git before deletion.
  * Best-effort — never throws. Warns on failure so the caller can still proceed.
  */
-function tryDeregisterWorktree(workspace: string, slug: string): void {
+function tryDeregisterWorktree(workspace: string, slug: string, projectDir: string): void {
   const worktreeSubPath = join(workspace, "worktree");
   if (!existsSync(worktreeSubPath)) return;
   try {
@@ -35,7 +34,7 @@ function tryDeregisterWorktree(workspace: string, slug: string): void {
         result.stderr.trim(),
       );
     } else {
-      tryDeleteBranch(slug);
+      tryDeleteBranch(slug, projectDir);
     }
   } catch (err: unknown) {
     console.warn(
@@ -47,6 +46,7 @@ function tryDeregisterWorktree(workspace: string, slug: string): void {
 
 export async function archiveAndDeleteWorkspace(
   workspace: string,
+  projectDir: string,
 ): Promise<{ archived: boolean; deleted: boolean }> {
   const session = getExecutionStore(workspace).getSession();
   const slug = session?.slug ?? basename(workspace);
@@ -67,7 +67,7 @@ export async function archiveAndDeleteWorkspace(
 
   let deleted = false;
   try {
-    tryDeregisterWorktree(workspace, slug);
+    tryDeregisterWorktree(workspace, slug, projectDir);
     rmSync(workspace, { force: true, recursive: true });
     deleted = true;
   } catch (err: unknown) {
@@ -81,7 +81,7 @@ export async function archiveAndDeleteWorkspace(
  * Release file claims for this workspace's slug. Best-effort — never throws.
  * Returns true when claims were released successfully, false when skipped or failed.
  */
-export async function tryReleaseClaims(workspace: string): Promise<boolean> {
+export async function tryReleaseClaims(workspace: string, projectDir: string): Promise<boolean> {
   try {
     const session = getExecutionStore(workspace).getSession();
     if (!session) return false;
@@ -103,6 +103,7 @@ export async function tryReleaseClaims(workspace: string): Promise<boolean> {
 export async function tryAppendAnalytics(
   workspace: string,
   steps: readonly JournalStep[],
+  projectDir: string,
 ): Promise<boolean> {
   try {
     const session = getExecutionStore(workspace).getSession();
@@ -135,7 +136,7 @@ export async function tryAppendAnalytics(
 /**
  * Run the janitor for background housekeeping. Best-effort — never throws.
  */
-export async function tryRunJanitor(): Promise<void> {
+export async function tryRunJanitor(projectDir: string): Promise<void> {
   try {
     const { runJanitor } = await import("../services/janitor.ts");
     await runJanitor(projectDir);

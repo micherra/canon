@@ -4,9 +4,8 @@ import {
   logStep,
 } from "@features/orchestration/tools/orchestration-journal.ts";
 import { reconcileWorkspace } from "@features/orchestration/tools/reconcile-workspace.ts";
-import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { z } from "zod";
-import { server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
 
 const stepOutcomeSchema = z
   .object({
@@ -86,7 +85,9 @@ function registerLogStep(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    wrapHandler(async (input) => logStep(input)),
+    gatedWrapHandler(async (input, extra) =>
+      logStep({ ...input, projectDir: resolveScope(extra) }),
+    ),
   );
 }
 
@@ -101,7 +102,9 @@ function registerBatchLogSteps(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    wrapHandler(async (input) => batchLogSteps(input)),
+    gatedWrapHandler(async (input, extra) =>
+      batchLogSteps({ ...input, projectDir: resolveScope(extra) }),
+    ),
   );
 }
 
@@ -115,7 +118,9 @@ function registerFinalizeWorkspace(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    wrapHandler(async (input) => finalizeWorkspace(input)),
+    gatedWrapHandler(async (input, extra) =>
+      finalizeWorkspace({ ...input, projectDir: resolveScope(extra) }),
+    ),
   );
 }
 
@@ -139,7 +144,7 @@ function registerReconcileWorkspace(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    wrapHandler(async (input) => reconcileWorkspace(input)),
+    gatedWrapHandler(async (input) => reconcileWorkspace(input)),
   );
 }
 

@@ -1,7 +1,7 @@
 import { computeAutonomyTier } from "@features/orchestration/tools/compute-autonomy-tier.ts";
 import { getNextEscalationStrategy } from "@features/orchestration/tools/get-next-escalation-strategy.ts";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
 
 /**
  * Confidence and escalation tool registrations.
@@ -24,7 +24,9 @@ export function registerConfidenceTools(): void {
         workspace: z.string().describe("Workspace path"),
       },
     },
-    gatedWrapHandler(async (input) => computeAutonomyTier(input)),
+    gatedWrapHandler(async (input, extra) =>
+      computeAutonomyTier({ ...input, projectDir: resolveScope(extra) }),
+    ),
   );
 
   server.registerTool(
