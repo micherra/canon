@@ -112,7 +112,7 @@ When the architect produces `task-dag.yaml`, use it for parallel dispatch instea
 3. For each DAG node: `TaskCreate` with full agent enrichment payload (principles, file context, task plan content, working instructions). For tasks with `depends_on`: `TaskUpdate({ addBlockedBy: [...] })`.
 4. Spawn N workers (one per root task, capped at 5): `Agent({ team_name, subagent_type: "canon:engineer" })`.
 5. Workers claim tasks, create their own worktrees at `{projectDir}/.canon/worktrees/{task_id}` on branch `canon-wave/{task_id}`.
-6. After all tasks complete: `mergeWaveResults` → `cleanupWorktrees` → `TeamDelete`.
+6. After all tasks complete: merge each `canon-wave/{task_id}` branch in alphabetical order (`git merge --no-ff`), remove each worktree (`git worktree remove`) and delete its branch (`git branch -d canon-wave/{task_id}`), then `TeamDelete`. (The removed `mergeWaveResults` / `cleanupWorktrees` helpers are not available — run these as explicit git operations.)
 7. Execute remaining tail steps (review, context-sync, ship, learn) sequentially.
 
 ### Post-Step Artifact Check

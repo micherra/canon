@@ -349,34 +349,6 @@ If during your codebase research you discover that the PM's requirements summary
 
 This is the fallback for cases where the PM conversation was insufficient. Most requests should arrive with clear enough requirements that you can proceed directly to design.
 
-## Event Resolution Mode
-
-When spawned by the orchestrator to resolve a wave event (instead of the normal design flow), your spawn prompt will include the event details. Handle based on event type:
-
-### `add_task` events
-
-The user wants to add a new task to the current build's plan. You receive the event's detail text describing what to add.
-
-1. Read the existing plan index at `${WORKSPACE}/plans/${slug}/INDEX.md`
-2. Read the existing design at `${WORKSPACE}/plans/${slug}/DESIGN.md` for context on the overall approach
-3. Break down the new task into one or more plan files following the same format as existing plans in the directory
-4. Assign wave numbers: slot the new task(s) into the earliest wave where their dependencies are satisfied. If the next wave hasn't started yet, prefer adding to it. If dependencies require a later wave, create one.
-5. Update `INDEX.md` with the new task(s)
-6. Report DONE with a summary of what was added and where it was slotted
-
-### `reprioritize` events
-
-The user wants to change the execution order of upcoming tasks.
-
-1. Read the existing plan index at `${WORKSPACE}/plans/${slug}/INDEX.md`
-2. Read the event's detail text for the requested reordering
-3. Validate that the new ordering respects dependency constraints (no task in Wave N depends on output from Wave N+1)
-4. If the reordering violates dependencies, report the conflict and propose an alternative ordering
-5. Update `INDEX.md` with the new wave assignments
-6. Report DONE with a summary of what changed
-
-In both cases, you do NOT produce a full design document — only plan files and an updated index. Keep the scope minimal.
-
 ## Workspace Integration
 
 When the orchestrator provides a workspace path (`${WORKSPACE}`):

@@ -1,6 +1,7 @@
 import type { ReviewEntry } from "@shared/schema.ts";
 import { describe, expect, it } from "vitest";
 import { analyzeDrift } from "../analyzer.ts";
+import { formatDriftReport } from "../reporter.ts";
 
 function makeReview(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {
@@ -193,126 +194,42 @@ describe("analyzeDrift", () => {
   });
 });
 
-describe("computeCraftScore (via analyzeDrift)", () => {
-  it("returns score 100 and holistic_count 0 for empty reviews", () => {
+describe("v1 craft field removed", () => {
+  it("analyzeDrift returns a DriftReport without a craft field", () => {
     const report = analyzeDrift([], []);
-    expect(report.craft.score).toBe(100);
-    expect(report.craft.holistic_count).toBe(0);
+    expect((report as Record<string, unknown>).craft).toBeUndefined();
   });
 
-  it("returns score 100 and holistic_count 0 when no holistic recommendations", () => {
+  it("analyzeDrift returns no craft field even with holistic recommendations present", () => {
     const reviews = [
       makeReview({
-        recommendations: [{ title: "Fix p1", message: "Fix this", source: "principle" }],
-      }),
-      makeReview({
-        recommendations: [{ title: "Fix p2", message: "Fix that", source: "principle" }],
-      }),
-    ];
-    const report = analyzeDrift(reviews, []);
-    expect(report.craft.score).toBe(100);
-    expect(report.craft.holistic_count).toBe(0);
-  });
-
-  it("N>1 reviews with known holistic counts → exact score and holistic_count", () => {
-    // 3 reviews: 1 holistic + 0 holistic + 1 holistic = count 2, score = 100 - min(100, 2*10) = 80
-    const reviews = [
-      makeReview({
-        review_id: "rev_a",
         recommendations: [
-          { title: "H1", message: "msg", source: "holistic" },
-          { title: "P1", message: "msg", source: "principle" },
-        ],
-      }),
-      makeReview({
-        review_id: "rev_b",
-        recommendations: [{ title: "P2", message: "msg", source: "principle" }],
-      }),
-      makeReview({
-        review_id: "rev_c",
-        recommendations: [{ title: "H2", message: "msg", source: "holistic" }],
-      }),
-    ];
-    const report = analyzeDrift(reviews, []);
-    expect(report.craft.holistic_count).toBe(2);
-    expect(report.craft.score).toBe(80);
-  });
-
-  it("≥10 holistic findings → score clamped to 0", () => {
-    // 10 holistic findings across 2 reviews: count=10, score = max(0, 100 - min(100, 100)) = 0
-    const reviews = [
-      makeReview({
-        review_id: "rev_a",
-        recommendations: Array.from({ length: 5 }, (_, i) => ({
-          title: `H${i}`,
-          message: "msg",
-          source: "holistic" as const,
-        })),
-      }),
-      makeReview({
-        review_id: "rev_b",
-        recommendations: Array.from({ length: 5 }, (_, i) => ({
-          title: `H${i + 5}`,
-          message: "msg",
-          source: "holistic" as const,
-        })),
-      }),
-    ];
-    const report = analyzeDrift(reviews, []);
-    expect(report.craft.holistic_count).toBe(10);
-    expect(report.craft.score).toBe(0);
-  });
-
-  it(">10 holistic findings → score still clamped to 0 (not negative)", () => {
-    const reviews = [
-      makeReview({
-        recommendations: Array.from({ length: 15 }, (_, i) => ({
-          title: `H${i}`,
-          message: "msg",
-          source: "holistic" as const,
-        })),
-      }),
-    ];
-    const report = analyzeDrift(reviews, []);
-    expect(report.craft.holistic_count).toBe(15);
-    expect(report.craft.score).toBe(0);
-  });
-
-  it("review with recommendations undefined contributes 0 holistic (no throw)", () => {
-    const reviews = [
-      makeReview({ review_id: "rev_a" }), // no recommendations field
-      makeReview({
-        review_id: "rev_b",
-        recommendations: [{ title: "H1", message: "msg", source: "holistic" }],
-      }),
-    ];
-    const report = analyzeDrift(reviews, []);
-    expect(report.craft.holistic_count).toBe(1);
-    expect(report.craft.score).toBe(90);
-  });
-
-  it("craft and avg_score are independent fields (not blended)", () => {
-    const reviews = [
-      makeReview({
-        score: {
-          rules: { passed: 1, total: 2 },
-          opinions: { passed: 1, total: 2 },
-          conventions: { passed: 1, total: 2 },
-        },
-        recommendations: [
-          { title: "H1", message: "msg", source: "holistic" },
-          { title: "H2", message: "msg", source: "holistic" },
-          { title: "H3", message: "msg", source: "holistic" },
+          { title: "H1", message: "msg", source: "holistic" as const },
+          { title: "P1", message: "msg", source: "principle" as const },
         ],
       }),
     ];
     const report = analyzeDrift(reviews, []);
-    // craft is count-based from holistic recommendations
-    expect(report.craft.score).toBe(70);
-    expect(report.craft.holistic_count).toBe(3);
-    // avg_score is compliance-based — independent of craft
-    expect(report.avg_score.rules).toBe(50);
-    expect(report.avg_score.opinions).toBe(50);
-    expect(report.avg_score.conventions).toBe(50);
+    expect((report as Record<string, unknown>).craft).toBeUndefined();
+    // avg_score is still present and correct
+    expect(report.avg_score).toBeDefined();
+  });
+
+  it("formatDriftReport output contains no 'Craft:' line", () => {
+    const report = analyzeDrift([], []);
+    const output = formatDriftReport(report);
+    expect(output).not.toContain("Craft:");
+  });
+
+  it("formatDriftReport with holistic recommendations still contains no 'Craft:' line", () => {
+    const reviews = [
+      makeReview({
+        recommendations: [{ title: "H1", message: "msg", source: "holistic" as const }],
+      }),
+    ];
+    const report = analyzeDrift(reviews, []);
+    const output = formatDriftReport(report);
+    expect(output).not.toContain("Craft:");
+    expect(output).toContain("Avg score:");
   });
 });
