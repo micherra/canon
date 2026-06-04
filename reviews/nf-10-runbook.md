@@ -54,7 +54,7 @@ skip_when: ~
 
 **Intent:** Audit the full template and agent landscape to ensure the implement step has complete scope. Three research dimensions:
 
-1. **Template audit**: Read every template in `templates/` and identify each handoff boundary (where one agent's output becomes another agent's input). For each boundary, assess whether a coverage map exists, is needed, or is not applicable. The known candidates are `task-plan.md` (architect -> engineer) and `implementation-log.md` (engineer -> reviewer), but the audit must confirm no others are missed -- particularly `design-document.md`, `plan-index.md`, `wave-briefing.md`, `wave-report.md`, `research-finding.md`, and `context-sync-report.md`.
+1. **Template audit**: Read every template in `templates/` and identify each handoff boundary (where one agent's output becomes another agent's input). For each boundary, assess whether a coverage map exists, is needed, or is not applicable. The known candidates are `task-plan.md` (architect -> engineer) and `summary.md` (engineer -> reviewer), but the audit must confirm no others are missed -- particularly `design-document.md`, `plan-index.md`, `wave-briefing.md`, `wave-report.md`, `research-finding.md`, and `context-sync.md`.
 
 2. **Agent cross-reference**: Read agent definitions in `agents/` and map which agents produce which templates (`used-by` frontmatter) and which agents consume them (`read-by` frontmatter). Verify that every producer/consumer pair with a scope-narrowing risk has been identified.
 
@@ -83,7 +83,7 @@ skip_when: ~
 
 Baseline edits:
 - For `templates/task-plan.md`: add a "Brief Coverage" section after the "Done when" section with a table mapping each runbook requirement to a task element or explicit out-of-scope rationale.
-- For `templates/implementation-log.md`: add a "Criteria Coverage" section after "Risk Mitigation Tests" (within Coverage Notes) with a table mapping each task plan acceptance criterion to what was implemented or explicit deferral rationale.
+- For `templates/summary.md`: add a "Criteria Coverage" section after "Risk Mitigation Tests" (within Coverage Notes) with a table mapping each task plan acceptance criterion to what was implemented or explicit deferral rationale.
 - For `agents/architect.md`: add instructions in Step 7 (break into atomic task plans) requiring the architect to populate the Brief Coverage section.
 - For `agents/engineer.md`: add instructions in Step 10 (produce summary) requiring the engineer to populate the Criteria Coverage section.
 
@@ -128,14 +128,14 @@ skills: []
 cause: ~
 mcp_tools: []
 artifacts:
-  - ${WORKSPACE}/context-sync-report.md
+  - ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md
 hitl: none
 skip_when: ~
 ```
 
 **Intent:** The scribe updates CLAUDE.md, context.md, and CONVENTIONS.md to reflect the new coverage map sections in the template and agent files. If the research step identified documentation gaps (e.g., the coverage map pattern is undocumented in references/), the scribe should address those as well.
 
-**Coordination notes:** Runs after review completes. Produces `context-sync-report.md`. The `learn` step follows immediately.
+**Coordination notes:** Runs after review completes. Produces `plans/${slug}/CONTEXT-SYNC.md`. The `learn` step follows immediately.
 
 ---
 

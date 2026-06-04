@@ -1,7 +1,7 @@
 import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { z } from "zod";
-import { pluginDir, projectDir, server } from "./server-state.ts";
+import { pluginDir, resolveScope, server } from "./server-state.ts";
 
 /**
  * Agent-teams tool registrations.
@@ -33,8 +33,8 @@ export function registerAgentTeamsTools(): void {
           ),
       },
     },
-    wrapHandler(async (input) =>
-      resolveAgentSkills({ agent_name: input.agent_name }, pluginDir, projectDir, {
+    wrapHandler(async (input, extra) =>
+      resolveAgentSkills({ agent_name: input.agent_name }, pluginDir, resolveScope(extra), {
         filePaths: input.file_paths,
         workspace: input.workspace,
       }),

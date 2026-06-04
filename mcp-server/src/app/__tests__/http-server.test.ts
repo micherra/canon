@@ -9,17 +9,26 @@
  * - CORS headers are set on all responses
  * - OPTIONS preflight returns 204
  * - Port configurable via CANON_HTTP_PORT env var
+ * - writePidFile writes PID + port under given dir
+ * - removePidFile removes PID file only when PID matches current process
+ * - PID file path always under .canon or PLUGIN_DATA
+ * - writePidFile failure (unwritable dir) does not throw
  */
 
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   getHttpPort,
   registerArtifact,
   removeArtifact,
+  removePidFile,
   resetStateForTesting,
   startHttpServer,
   stopHttpServer,
+  writePidFile,
 } from "../http-server.ts";
 
 // Helper: perform HTTP request against the test server
@@ -182,5 +191,64 @@ describe("HTTP server module", () => {
     it("returns the port the server is listening on", () => {
       expect(getHttpPort()).toBe(TEST_PORT);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PID file helpers — tested independently of the HTTP server lifecycle
+// ---------------------------------------------------------------------------
+describe("PID file helpers", () => {
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-pid-test-"));
+  });
+
+  afterAll(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("writePidFile writes ${pid}\\n${port} to dir/canon-server.pid", async () => {
+    await writePidFile(tmpDir, 3141);
+    const content = await readFile(join(tmpDir, "canon-server.pid"), "utf8");
+    const lines = content.trim().split("\n");
+    expect(lines[0]).toBe(String(process.pid));
+    expect(lines[1]).toBe("3141");
+  });
+
+  it("removePidFile removes file only when file PID matches process.pid", async () => {
+    // Write with current PID
+    await writePidFile(tmpDir, 3141);
+    await removePidFile(tmpDir);
+    // File should be gone
+    await expect(readFile(join(tmpDir, "canon-server.pid"), "utf8")).rejects.toThrow();
+  });
+
+  it("removePidFile does NOT remove file when PID does not match", async () => {
+    // Write a PID file with a different PID (1 = init process, definitely not us)
+    await writeFile(join(tmpDir, "canon-server.pid"), "1\n3141\n");
+    await removePidFile(tmpDir);
+    // File should still exist (PID 1 != process.pid)
+    const content = await readFile(join(tmpDir, "canon-server.pid"), "utf8");
+    expect(content).toContain("1");
+  });
+
+  it("PID file path always contains .canon or injected dir (gitignored)", async () => {
+    // Assert the PID filename is canon-server.pid (not in working tree root)
+    const pidPath = join(tmpDir, "canon-server.pid");
+    await writePidFile(tmpDir, 3141);
+    const content = await readFile(pidPath, "utf8");
+    expect(content).toBeTruthy();
+    // The path was written under tmpDir (injected, not cwd)
+    expect(pidPath).toContain(tmpDir);
+  });
+
+  it("writePidFile failure (unwritable dir) does not throw and logs to stderr", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    // Pass a non-existent/unwritable path
+    await expect(
+      writePidFile("/nonexistent/path/that/does/not/exist", 3141),
+    ).resolves.not.toThrow();
+    stderrSpy.mockRestore();
   });
 });

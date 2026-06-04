@@ -106,6 +106,15 @@ function makeMockDriftDb({
   };
 }
 
+// A recent ISO timestamp that is always within the 14-day hot-file lookback window.
+// Using Date.now() - 1 day avoids the stale-date flakiness that occurs when a
+// hardcoded date drifts outside the window after 14 days.
+const RECENT_COMPLETED = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString();
+})();
+
 // ---- Tests ----
 
 describe("resolveAgentSkills — area memory and hot-file enrichment", () => {
@@ -171,7 +180,7 @@ describe("resolveAgentSkills — area memory and hot-file enrichment", () => {
     const runs = Array.from({ length: 3 }, (_, i) => ({
       run_id: `run-${i + 1}`,
       flow: `build-${i + 1}`,
-      completed: "2026-05-20T10:00:00.000Z",
+      completed: RECENT_COMPLETED,
       commits: [JSON.stringify({ sha: `abc${i}`, files: [targetFile] })],
     }));
 
@@ -196,7 +205,7 @@ describe("resolveAgentSkills — area memory and hot-file enrichment", () => {
     const runs = Array.from({ length: 2 }, (_, i) => ({
       run_id: `run-${i + 1}`,
       flow: `build-${i + 1}`,
-      completed: "2026-05-20T10:00:00.000Z",
+      completed: RECENT_COMPLETED,
       commits: [JSON.stringify({ sha: `abc${i}`, files: [targetFile] })],
     }));
 
@@ -331,7 +340,7 @@ describe("resolveAgentSkills — area memory and hot-file enrichment", () => {
     const runs = Array.from({ length: 3 }, (_, i) => ({
       run_id: `run-${i + 1}`,
       flow: `build-${i + 1}`,
-      completed: "2026-05-20T10:00:00.000Z",
+      completed: RECENT_COMPLETED,
       commits: [JSON.stringify({ sha: `abc${i}`, files: [targetFile] })],
     }));
 

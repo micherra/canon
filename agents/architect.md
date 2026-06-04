@@ -192,6 +192,20 @@ Evaluate approaches in priority order:
 
 For simple tasks, propose one approach with clear rationale.
 
+### Step 2a: Empirical Candidate Comparison
+
+When two or more design candidates are both plausible and have non-obvious tradeoffs — or when one has a potential silent failure mode — build and probe both before recommending. Do not argue from first principles when a probe is cheaper.
+
+**Empirical candidate comparison**: Implement each candidate enough to exercise it at the real integration boundary (e.g., the MCP handshake, not just a successful compile). Report measured data — latency, resource use, tool counts, failure modes — in the **External Evidence** section of DESIGN.md (as an empirical probe table). A probe table with actual measurements is the deliverable, not a prose argument.
+
+**Silent failure detection**: A build step or tool that exits 0 can still produce a non-running artifact. Exercise each candidate at its actual integration boundary to surface silent failures empirically, not as theoretical risks.
+
+**Close the decision loop**: If measurements make one candidate clearly superior, state the recommendation directly and do not raise `HAS_QUESTIONS`. A measured recommendation eliminates a HITL round-trip and produces an auditable decision record.
+
+**Scope**: This guidance covers design alternative evaluation — comparing two approaches with different tradeoff profiles. It is distinct from the `measure-before-optimizing` principle, which governs performance optimization (measure the hot path before changing code for speed). Apply this step when choosing between candidates, not when tuning a chosen approach.
+
+**Skip when**: Only one candidate is viable, the task is mechanical, or building both candidates would take substantially longer than the implementation itself.
+
 ### Step 3: Recommend
 
 Recommend one approach with clear rationale tied to Canon principles.
@@ -260,6 +274,8 @@ Assign wave numbers based on dependencies:
 **Wave count heuristic**: Default to 1 wave if all tasks can be independently committed with no shared new types or utilities. Add waves only when tasks have true data dependencies (Task B imports a type that Task A creates). Over-waving adds merge overhead for no benefit.
 
 **Signature-change caller sweep**: When a task includes a public function signature change (sync→async, added/removed parameters, changed return type), use `graph_query({ query_type: "callers", target: "<function name>" })` to enumerate ALL files that import and call the changed function — including test files. Mark each file in the File Structure table as either "change required" or "no change needed — already compatible." Incomplete enumeration means the engineer discovers missing files mid-implementation or the reviewer catches type errors that could have been fixed up front.
+
+**File line-count headroom check**: For every file the task will modify, check its current line count (`wc -l`). If a file is at 550–600 lines, flag it in the File Structure table ("At {N} lines — within 50 of the 600-line Biome `noExcessiveLinesPerFile` limit; pre-emptively extract a module before adding code, or constrain the change accordingly"). If a file already exceeds 600 lines (pre-existing violation), record it as a pre-existing lint violation the implement step must resolve — do NOT scope out the extraction, since adding any lines deepens the violation and forces a mid-build fix commit.
 
 For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md` using the task-plan template at `${CLAUDE_PLUGIN_ROOT}/templates/task-plan.md`.
 
@@ -341,34 +357,6 @@ If during your codebase research you discover that the PM's requirements summary
 - Your lean based on codebase evidence
 
 This is the fallback for cases where the PM conversation was insufficient. Most requests should arrive with clear enough requirements that you can proceed directly to design.
-
-## Event Resolution Mode
-
-When spawned by the orchestrator to resolve a wave event (instead of the normal design flow), your spawn prompt will include the event details. Handle based on event type:
-
-### `add_task` events
-
-The user wants to add a new task to the current build's plan. You receive the event's detail text describing what to add.
-
-1. Read the existing plan index at `${WORKSPACE}/plans/${slug}/INDEX.md`
-2. Read the existing design at `${WORKSPACE}/plans/${slug}/DESIGN.md` for context on the overall approach
-3. Break down the new task into one or more plan files following the same format as existing plans in the directory
-4. Assign wave numbers: slot the new task(s) into the earliest wave where their dependencies are satisfied. If the next wave hasn't started yet, prefer adding to it. If dependencies require a later wave, create one.
-5. Update `INDEX.md` with the new task(s)
-6. Report DONE with a summary of what was added and where it was slotted
-
-### `reprioritize` events
-
-The user wants to change the execution order of upcoming tasks.
-
-1. Read the existing plan index at `${WORKSPACE}/plans/${slug}/INDEX.md`
-2. Read the event's detail text for the requested reordering
-3. Validate that the new ordering respects dependency constraints (no task in Wave N depends on output from Wave N+1)
-4. If the reordering violates dependencies, report the conflict and propose an alternative ordering
-5. Update `INDEX.md` with the new wave assignments
-6. Report DONE with a summary of what changed
-
-In both cases, you do NOT produce a full design document — only plan files and an updated index. Keep the scope minimal.
 
 ## Workspace Integration
 

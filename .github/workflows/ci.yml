@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 25.8.0
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
       - name: Install shellcheck and jq
         run: sudo apt-get update && sudo apt-get install -y shellcheck jq
       - name: Shellcheck hook scripts
@@ -28,6 +33,12 @@ jobs:
             echo "One or more hook test suites failed." >&2
             exit 1
           fi
+      - name: Shellcheck mcp-server/boot.sh
+        run: shellcheck mcp-server/boot.sh
+      - name: Run mcp-server boot unit tests
+        run: bash mcp-server/boot.test.sh
+      - name: Run mcp-server boot e2e tests
+        run: bash mcp-server/boot.e2e.test.sh
 
   build:
     runs-on: ubuntu-latest

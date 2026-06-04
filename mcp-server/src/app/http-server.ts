@@ -14,11 +14,20 @@
  * - GET  /health                — liveness check
  * - GET  /artifact/:type/:slug — serve registered HTML artifact
  * - OPTIONS *                  — CORS preflight
+ *
+ * ## PID file
+ * On successful bind, `startHttpServer` writes a PID file under
+ * `${CLAUDE_PLUGIN_DATA}` or `${CANON_PROJECT_DIR}/.canon/`.
+ * `stopHttpServer` calls `removePidFile` to clean up on graceful shutdown.
+ * Both operations are best-effort: failures are logged but never throw.
  */
 
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { join } from "node:path";
 
 const DEFAULT_PORT = 3141;
+const PID_FILENAME = "canon-server.pid";
 
 /** Stored artifact data keyed by `"${type}/${slug}"`. */
 const artifacts = new Map<string, { html: string; data: unknown }>();
@@ -32,6 +41,60 @@ let serverPort = DEFAULT_PORT;
  */
 export function getHttpPort(): number {
   return serverPort;
+}
+
+/**
+ * Resolves the directory where the PID file should be written.
+ * Prefer CLAUDE_PLUGIN_DATA; fall back to CANON_PROJECT_DIR/.canon or cwd/.canon.
+ * Exported for testing.
+ */
+export function resolvePidDir(): string {
+  const pluginData = process.env.CLAUDE_PLUGIN_DATA;
+  if (pluginData) return pluginData;
+  const projectDir = process.env.CANON_PROJECT_DIR ?? process.cwd();
+  return join(projectDir, ".canon");
+}
+
+/**
+ * Writes a PID file containing `${process.pid}\n${port}\n` to `${dir}/canon-server.pid`.
+ * Best-effort: logs WARN to stderr on failure, never throws.
+ * VITEST guard: if process.env.VITEST is set, callers should pass an explicit dir
+ * (tests inject a tmp dir directly — the VITEST guard is on the integration call site).
+ *
+ * @param dir - Directory to write the PID file into (must already exist or be creatable).
+ * @param port - The port the server is bound to.
+ */
+export async function writePidFile(dir: string, port: number): Promise<void> {
+  try {
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, PID_FILENAME), `${process.pid}\n${port}\n`, "utf8");
+  } catch (err) {
+    process.stderr.write(
+      `Canon HTTP server WARN: could not write PID file to ${dir}: ${String(err)}\n`,
+    );
+  }
+}
+
+/**
+ * Removes the PID file from `${dir}/canon-server.pid` if and only if its first
+ * line matches `process.pid`. This guards against removing another process's PID file
+ * in the case of orphaned files from a prior run.
+ * Best-effort: failures are logged but never throw.
+ *
+ * @param dir - Directory containing the PID file.
+ */
+export async function removePidFile(dir: string): Promise<void> {
+  const pidPath = join(dir, PID_FILENAME);
+  try {
+    const content = await readFile(pidPath, "utf8");
+    const storedPid = Number.parseInt(content.split("\n")[0] ?? "", 10);
+    if (storedPid === process.pid) {
+      await rm(pidPath, { force: true });
+    }
+  } catch {
+    // File absent or unreadable — intentional best-effort; nothing to clean up.
+    // DOCUMENTED FAIL-OPEN -- PID file may not exist (normal on first boot or already removed)
+  }
 }
 
 /**
@@ -72,6 +135,11 @@ export function startHttpServer(port?: number): Promise<void> {
     httpServer.listen(serverPort, "127.0.0.1", () => {
       if (!process.env.VITEST) {
         process.stderr.write(`Canon HTTP server listening on http://127.0.0.1:${serverPort}\n`);
+        // Write PID file for the SessionStart reaper. Best-effort.
+        writePidFile(resolvePidDir(), serverPort).catch(() => {
+          // Already logged inside writePidFile; no double-logging needed.
+          // DOCUMENTED FAIL-OPEN -- PID file failure is non-fatal; server continues.
+        });
       }
       resolve();
     });
@@ -109,6 +177,10 @@ export function stopHttpServer(): Promise<void> {
     }
     const server = httpServer;
     httpServer = null;
+    // Remove PID file on graceful shutdown. Best-effort.
+    removePidFile(resolvePidDir()).catch(() => {
+      // DOCUMENTED FAIL-OPEN -- PID removal failure is non-fatal during shutdown.
+    });
     // Destroy all active/keep-alive connections so close() resolves promptly.
     server.closeAllConnections();
     server.close(() => {

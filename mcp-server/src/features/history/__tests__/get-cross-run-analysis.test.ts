@@ -26,6 +26,7 @@ vi.mock("@platform/storage/drift/drift-db.ts", () => ({
     getAllFlowRuns: mockGetAllFlowRuns,
     getArchiveManifests: mockGetArchiveManifests,
     getReviews: mockGetReviews,
+    getCraftProfiles: () => ({ getRecentProfiles: () => [] }),
   })),
 }));
 

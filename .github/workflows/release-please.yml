@@ -1,0 +1,26 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          # Default GITHUB_TOKEN. Note: PRs opened with GITHUB_TOKEN do NOT trigger
+          # ci.yml on the release PR (by design — prevents recursive runs). This is
+          # acceptable: the release PR is mechanical (version strings only) and the
+          # underlying code was already CI-validated on its contributing PRs.
+          # To run CI on the release PR, mint a PAT/App secret and set:
+          #   token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

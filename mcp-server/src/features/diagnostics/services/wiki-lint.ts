@@ -48,11 +48,18 @@ export type MissingExampleFinding = {
   file_path: string;
 };
 
+export type CitedPathFinding = {
+  source_file: string;
+  cited_path: string;
+  line_number: number;
+};
+
 export type WikiLintOutput = {
   contradictions: ContradictionFinding[];
   orphan_principles: OrphanPrincipleFinding[];
   stale_refs: StaleRefFinding[];
   missing_examples: MissingExampleFinding[];
+  cited_paths: CitedPathFinding[];
   summary: {
     total_findings: number;
     files_scanned: number;
@@ -65,6 +72,7 @@ export type AssembleWikiLintInput = {
   orphans: OrphanPrincipleFinding[];
   staleRefs: StaleRefFinding[];
   missingExamples: MissingExampleFinding[];
+  citedPaths: CitedPathFinding[];
   filesScanned: number;
   principlesChecked: number;
 };
@@ -332,15 +340,126 @@ export function checkMissingExamples(principles: Principle[]): MissingExampleFin
     .map((p) => ({ file_path: p.filePath, principle_id: p.id, severity: p.severity }));
 }
 
+// ---- Cited Paths ----
+
+/**
+ * Pattern for backtick-quoted strings that look like file paths in reference docs.
+ * Matches a leading alpha char, then word chars / dots / slashes / hyphens, with a
+ * recognized file extension. Requires at least one slash (enforced by isExcludedCitedPath).
+ * Group 1: the path string inside backticks.
+ */
+const CITED_PATH_RE = /`([a-zA-Z][\w./-]*\.(?:sh|ts|js|md|json|yaml|yml))`/g;
+
+/**
+ * Return true if the candidate path should be excluded from cited-path checking.
+ *
+ * Conservative exclusions — false positives are worse than misses:
+ * - Contains template variables: ${...}
+ * - Contains placeholder chars: < > { }
+ * - Starts with http:// or https://
+ * - Starts with # (anchor)
+ * - Has no slash (bare filename)
+ */
+export function isExcludedCitedPath(candidate: string): boolean {
+  if (candidate.includes("${")) return true;
+  if (/[<>{}]/.test(candidate)) return true;
+  if (candidate.startsWith("http://") || candidate.startsWith("https://")) return true;
+  if (candidate.startsWith("#")) return true;
+  if (!candidate.includes("/")) return true;
+  return false;
+}
+
+/** True if a line is the opening of an illustrative fenced block. */
+function isIllustrativeFenceOpen(line: string): boolean {
+  return /^```/.test(line) && /example|hypothetical|template/i.test(line);
+}
+
+/** True if a line closes a fenced block. */
+function isFenceClose(line: string): boolean {
+  return /^```/.test(line);
+}
+
+type CitedPathScanCtx = {
+  sourceFile: string;
+  existsOnDisk: (path: string) => boolean;
+  findings: CitedPathFinding[];
+};
+
+/** Scan a single non-fence line for non-resolving cited paths. */
+function scanLineForCitedPaths(line: string, lineNumber: number, ctx: CitedPathScanCtx): void {
+  CITED_PATH_RE.lastIndex = 0;
+  for (const m of line.matchAll(CITED_PATH_RE)) {
+    const candidate = m[1] ?? "";
+    if (isExcludedCitedPath(candidate)) continue;
+    if (!ctx.existsOnDisk(candidate)) {
+      ctx.findings.push({
+        cited_path: candidate,
+        line_number: lineNumber,
+        source_file: ctx.sourceFile,
+      });
+    }
+  }
+}
+
+/** Collect cited-path findings for one file, skipping illustrative fenced blocks. */
+function collectCitedPathsInFile(
+  file: { path: string; content: string },
+  existsOnDisk: (path: string) => boolean,
+): CitedPathFinding[] {
+  const ctx: CitedPathScanCtx = { existsOnDisk, findings: [], sourceFile: file.path };
+  const originalLines = file.content.split("\n");
+  let inIllustrativeFence = false;
+
+  for (let i = 0; i < originalLines.length; i++) {
+    const line = originalLines[i];
+    if (!inIllustrativeFence) {
+      if (isIllustrativeFenceOpen(line)) {
+        inIllustrativeFence = true;
+      } else {
+        scanLineForCitedPaths(line, i + 1, ctx);
+      }
+    } else if (isFenceClose(line)) {
+      inIllustrativeFence = false;
+    }
+  }
+
+  return ctx.findings;
+}
+
+/**
+ * Check for cited-path findings in a set of files.
+ *
+ * Per file: scans line-by-line for backtick-quoted paths matching CITED_PATH_RE,
+ * skipping lines inside illustrative fenced blocks (labeled example/hypothetical/template).
+ * Excluded paths are skipped. Non-resolving paths produce a CitedPathFinding with the
+ * 1-based line number from the original content.
+ *
+ * Pure: existsOnDisk is the only effect seam.
+ */
+export function checkCitedPaths(
+  files: Array<{ path: string; content: string }>,
+  existsOnDisk: (path: string) => boolean,
+): CitedPathFinding[] {
+  return files.flatMap((f) => collectCitedPathsInFile(f, existsOnDisk));
+}
+
 // ---- Assembler ----
 
 /**
  * Assemble all lint findings into a WikiLintOutput with summary counts.
  */
 export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOutput {
-  const { contradictions, orphans, staleRefs, missingExamples, filesScanned, principlesChecked } =
-    input;
+  const {
+    contradictions,
+    orphans,
+    staleRefs,
+    missingExamples,
+    citedPaths,
+    filesScanned,
+    principlesChecked,
+  } = input;
   return {
+    cited_paths: citedPaths,
     contradictions,
     missing_examples: missingExamples,
     orphan_principles: orphans,
@@ -349,7 +468,11 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
       files_scanned: filesScanned,
       principles_checked: principlesChecked,
       total_findings:
-        contradictions.length + orphans.length + staleRefs.length + missingExamples.length,
+        contradictions.length +
+        orphans.length +
+        staleRefs.length +
+        missingExamples.length +
+        citedPaths.length,
     },
   };
 }

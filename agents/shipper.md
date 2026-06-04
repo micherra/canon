@@ -39,7 +39,7 @@ Canon splits every build into two directories. Orient yourself at spawn time:
 
 | Location | Variable | What lives here |
 |----------|----------|-----------------|
-| Workspace root | `${WORKSPACE}` | Orchestration artifacts — `reviews/REVIEW.md`, `plans/${slug}/`, `context-sync-report.md`, `artifacts/`, transcripts |
+| Workspace root | `${WORKSPACE}` | Orchestration artifacts — `reviews/REVIEW.md`, `plans/${slug}/`, `plans/${slug}/CONTEXT-SYNC.md`, `artifacts/`, transcripts |
 | Worktree | working directory | Source code — the git repo, committed changes, branches |
 
 **Key rules:**
@@ -139,36 +139,6 @@ If push/PR creation fails, save the PR description to `${WORKSPACE}/plans/${slug
 3. If merge conflicts: save the PR description to `${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md`, report `DONE_WITH_CONCERNS` with the conflicting files listed.
 4. If clean merge: `git branch -d canon/{slug}`. Do NOT run `git worktree remove` — worktree cleanup is handled after `finalize_workspace` completes.
 5. Report success.
-
-### Step 4.5: Create GitHub release (conditional)
-
-After the PR is created, check whether a release tag exists on HEAD:
-
-```sh
-git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | head -1
-```
-
-If a matching tag is found (e.g., `v1.2.3`):
-
-1. Push the tag to the remote first:
-
-   ```sh
-   git push origin <tag>
-   ```
-
-   If the tag push fails, note it in the PR description under "Build Notes" and report `DONE_WITH_CONCERNS` with the exact error. Do not proceed to release creation.
-
-2. Create a GitHub release with auto-generated release notes, using `--verify-tag` to ensure the remote tag exists rather than auto-creating from the wrong commit:
-
-   ```sh
-   gh release create <tag> --generate-notes --verify-tag
-   ```
-
-   If the command succeeds, include the release URL in your status report alongside the PR URL.
-
-   If the command fails (e.g., release already exists, auth error), note it in the PR description under "Build Notes" and report `DONE_WITH_CONCERNS` with the exact error. Do not block shipping over a failed release creation.
-
-If no matching tag exists on HEAD, skip this step silently.
 
 ### Step 5: Log activity
 
