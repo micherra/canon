@@ -49,6 +49,8 @@ src/
 
 ## Contracts
 <!-- last-updated: 2026-06-03 (HTTP Phase 1 complete: projectDir global deleted, resolveScope(extra) sole accessor, fail-closed for unregistered sessions, eviction hooks present-but-unwired; drift-db.ts split into drift-db-cache.ts + drift-db-rows.ts) -->
+<!-- last-updated: 2026-06-02 (boot.sh ESM dep-resolution: NODE_PATH → symlink + deps-ready poll + dangling-symlink guard; per-connection scope registry; wrapHandler forwards extra; 5 register-*.ts boundaries migrated to resolveScope(extra); get-context-handler.ts extracted) -->
+<!-- last-updated: 2026-06-03 (craft-v2: craft_profiles table DRIFT_SCHEMA_VERSION=9; CraftProfileDao; drift-db-rows.ts split; craft-rubric.ts; craft-audit-service; store_pr_review craft_profile; get_cross_run_analysis craft_drift) -->
 
 **`boot.sh`** (`mcp-server/boot.sh`) — self-resolving launcher; prefers `${CLAUDE_PLUGIN_ROOT}/mcp-server`, falls back to `BASH_SOURCE` dir; never uses `npx`. Boot sequence: (1) resolve SERVER_DIR; (2) compute `DATA_DIR=${CLAUDE_PLUGIN_DATA}/node_modules`; (3) clear stale dangling symlink (`SERVER_DIR/node_modules` symlink not resolving to real dir) with `rm -f` before poll — skipped under `--print-resolution`, real-dir and absent cases untouched; (4) deps-ready poll — polls `DATA_DIR/.bin/tsx` up to `CANON_BOOT_DEPS_TIMEOUT` ticks (default 60, interval `CANON_BOOT_DEPS_INTERVAL` default 1s) when `CLAUDE_PLUGIN_DATA` set; timeout → loud `exit 1`; (5) ESM co-location symlink — `rm -f` + `ln -s DATA_DIR SERVER_DIR/node_modules` when DATA deps exist and `SERVER_DIR/node_modules` is not a real dir; idempotent; `ln` failure emits `CANON WARNING` and degrades; (6) dangling-symlink guard — if symlink still does not resolve, emits `CANON ERROR` and exits 1; skipped under `--print-resolution`; (7) resolve `NODE_PATH` and `tsx` binary; (8) `--print-resolution` prints `SERVER_DIR NODE_PATH TSX_BIN` and exits 0. `CLAUDE_PLUGIN_ROOT` not expanded when `.mcp.json` loads as project config; `BASH_SOURCE` is the backstop. **ESM/NODE_PATH pitfall**: `NODE_PATH` is CJS-only — ESM ignores it and uses the co-located symlink (step 5). A missing or dangling symlink produces `ERR_MODULE_NOT_FOUND` at the MCP `initialize` handshake (~4s after `boot.sh` exits cleanly). See `references/plugin-server-boot.md` for full guide.
 
@@ -80,7 +82,7 @@ src/
 
 **Fragment param syntax** — typed params (`param_name: { type: state_id|string|number|boolean, default? }`) replace null-marker `~`; backward compat retained; `state_id` params validated at load time.
 
-**Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "8"; v4 adds `file_violation_history` + `path_effects` tables; v6 adds `error_fixes` table; v7 adds `violation_outcomes` table; v8 adds `area_observations` table (`id`, `subsystem_key`, `content`, `source`, `workflow_slug`, `created_at`, `injected_count`, `last_injected_at`; indices on `subsystem_key` and `created_at`); idempotent migrations. Updated 2026-05-29.
+**Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "9"; v4 adds `file_violation_history` + `path_effects` tables; v6 adds `error_fixes` table; v7 adds `violation_outcomes` table; v8 adds `area_observations` table; v9 adds `craft_profiles` table (`id`, `flow_slug`, `run_id`, `subsystem_key`, `ratings` (JSON array), `rollup` (REAL NULL), `source` (`"review"` or `"audit"`), `created_at`; index on `subsystem_key`); idempotent migrations. Updated 2026-06-03.
 
 **OutcomeStore** (`src/platform/storage/drift/outcome-store.ts`) — sync DAO for `violation_outcomes`; `recordOutcome`, `getOutcomesForPrinciple`, `getOutcomeStats`, `getOutcomesForFiles`. Added 2026-05-25.
 
@@ -90,12 +92,20 @@ src/
 
 **AreaMemoryDao** (`src/platform/storage/drift/area-memory-dao.ts`) — sync DAO for `area_observations`; `insertObservation`, `getObservationsForSubsystems` (7-day expiry via SQL), `markInjected`; `DriftDb.getAreaMemory()` lazy accessor; `deriveSubsystemKey` strips path prefixes to stable keys like `features/orchestration`. Added 2026-05-29.
 
+**CraftProfileDao** (`src/platform/storage/drift/craft-profile-dao.ts`) — sync DAO for `craft_profiles`; `insertProfile(CraftProfileRow)`, `getRecentProfiles({ subsystemKeys?, source?, limit? })` (order by `created_at DESC`); `DriftDb.getCraftProfiles()` lazy accessor; `source` discriminates `"review"` vs `"audit"` profiles. Added 2026-06-03.
+
+**drift-db-rows.ts** (`src/platform/storage/drift/drift-db-rows.ts`) — private row types and pure deserializer functions extracted from `drift-db.ts` to keep `drift-db.ts` under the 600-line lint cap; public API of `DriftDb` is unchanged. Added 2026-06-03.
+
 **Drift Store** (`src/platform/storage/drift/store.ts`) — `ReviewEntry` is the unified type for all reviews (principle + PR); `PrStore` deleted 2026-03-25. `DriftStore.getReviews(options?)` AND-filters by principleId/branch/prNumber (see source for full signature).
 
 **`show_pr_impact`** — unified PR analysis tool; returns `UnifiedPrOutput` with `has_review` boolean; `status` always `"ok"`; resource URI: `ui://canon/pr-review`
 **`get_drift_report`** — `pr_reviews` field uses `ReviewEntry[]` (unified type); filters by pr_number/branch presence
 **KgQuery** (`src/graph/kg-query.ts`) — `computeImpactScore`, `computeFileInsightMaps` (call once per request), `getFileMetrics`, `getSubgraph`; must call `computeFileInsightMaps` before `getFileMetrics` in loops (see source for full API)
 **Git Intelligence** (`src/features/knowledge-graph/git-intel/`) — pipeline: git log → parse → churn scoring → co-change detection → persist atomically; `ensureGitIntelFresh` is the main entry point (no-op when fresh)
+**Craft rubric** (`src/shared/lib/craft-rubric.ts`) — exports `CRAFT_DIMENSIONS` (6 strings), `CRAFT_BANDS` (strong/adequate/weak/n-a), `CRAFT_DIMENSION_PRINCIPLES` (dimension→principle-ID mapping), `craftBandOrdinal(band)` (returns 3/2/1/null), `craftRollup(ratings)` (ordinal mean 1–3, undefined when all n-a); `CraftDimension`/`CraftBand`/`CraftDimensionRating`/`CraftProfile`/`CraftProfileSchema` exported from `src/shared/schema.ts`. Added 2026-06-03.
+
+**Craft audit service** (`src/features/diagnostics/services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` (pure, bounded by `limit` default 5); `persistAuditProfile(areas, ratings, dao)` (writes `source:"audit"` rows via injected `CraftProfileDao`); reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
+
 **Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths` (added 2026-06-02 — flags non-resolving paths in `references/**/*.md`; see `CheckName` in `tools/wiki-lint.ts`), `assembleWikiLintOutput(AssembleWikiLintInput)`; `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)`; all accept pre-loaded data (no I/O except `scanDirectories` and `checkCitedPaths`). Added 2026-05-26.
 **Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — `compileSignals(filePaths, driftDbSignals)` reads violation history + path effects, scores by priority, fits within per-file token budget; read-only
 **Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — added 2026-05-22; `queryDriftSignalPitfalls`/`queryErrorFixPitfalls`/`formatPitfallsSection`/`countPitfalls`; pure functions; `formatPitfallsSection` returns `""` when both arrays empty
@@ -121,15 +131,13 @@ src/
 
 **`write_implementation_summary` tool** — updated 2026-05-29: accepts optional `decisions?: DecisionRecord[]` array; decisions rendered as markdown table in summary and stored in meta JSON; each decision logged as `agent_decision` event in execution store; `DecisionRecord` fields: `choice`, `rationale`, `alternatives_considered`, `informed_by` (refs: area_memory, pitfall, principle, task_plan, codebase_pattern); extracts area observations from `deviations` field and stores in `area_observations` via `areaMemoryWriter`; fail-open throughout.
 
-**`get_drift_report` tool** — updated 2026-05-25: confidence tier rendered inline as `[confidence: TIER]` per violation in formatted output. Updated 2026-05-29: formatted output includes a `Craft: N (N holistic findings)` line after `Avg score:`, distinct from compliance numbers; also renders `### Documentation freshness` section (omitted when empty) with commits-since-last-sync and `[confidence: TIER]` per direction doc, sorted by staleness descending.
+**`get_drift_report` tool** — updated 2026-05-25: confidence tier rendered inline as `[confidence: TIER]` per violation in formatted output. Updated 2026-05-29: formatted output also renders `### Documentation freshness` section (omitted when empty) with commits-since-last-sync and `[confidence: TIER]` per direction doc, sorted by staleness descending.
 
 **`DocFreshness` type** (`src/platform/storage/drift/analyzer.ts`) — `{ doc_path: string; commits_since_sync: number; confidence: ConfidenceAnnotation; warning?: string }`; placed in platform so service can import it without platform importing from features. `DriftReport.doc_freshness: DocFreshness[]` added (defaults to `[]`).
 
 **`doc-freshness-adapter.ts`** (`src/platform/storage/drift/`) — `computeFreshnessConfidence(signals)`: maps `commits_since_sync` to staleness score, delegates to `computeConfidenceAnnotation`; `FRESHNESS_SAMPLE_SIZE = 10`. Added 2026-05-29.
 
 **`computeDocFreshness`** (`src/features/diagnostics/services/doc-freshness.ts`) — enumerates `docs/*.md` (excludes `docs/reference/`), git injectable seam; `!ok` paths log WARN + return `DocFreshness` with `warning?`; ENOENT → `[]`. Added 2026-05-29.
-
-**`DriftReport.craft`** (`platform/storage/drift/analyzer.ts`) — added 2026-05-29: `craft: { holistic_count: number; score: number }` field on `DriftReport`; `computeCraftScore(reviews)` uses formula `max(0, 100 − min(100, holistic_count × 10))`; populated by `analyzeDrift` using the same filtered window as `avg_score`; kept DISTINCT from compliance score.
 
 **Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs; `DEFAULT_LAYER_MAPPINGS` includes `hooks: ["hooks"]` entry ordered before `shared` so `hooks/lib/*.sh` resolves to layer `hooks` (added 2026-05-29)
 
@@ -154,7 +162,7 @@ src/
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
 | `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions between CLAUDE.md files, orphan principles, stale file refs, principles missing examples, cited-path accuracy in `references/**/*.md`; optional `checks` array selects subset (default: all 5); returns `WikiLintOutput` |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
-| `store_pr_review` | Store a PR review result for drift tracking |
+| `store_pr_review` | Store a PR review result for drift tracking; accepts optional `craft_profile` (validated via `CraftProfileSchema`; persists one row per distinct subsystem area to `craft_profiles` with `source:"review"`) |
 
 **History tools** (`src/features/history/`):
 
@@ -162,10 +170,10 @@ src/
 |------|---------|
 | `get_build_history` | List archived build runs with metadata |
 | `get_historical_artifacts` | Retrieve archived artifacts from a previous build |
-| `get_cross_run_analysis` | Cross-run meta-analysis for the learner agent |
+| `get_cross_run_analysis` | Cross-run meta-analysis for the learner agent; result includes `craft_drift: CraftDrift` (`by_dimension[]`, `by_area[]`, `profile_count`) computed by `computeCraftDrift` in `cross-run-analyzer.ts`; higher band ordinal = better; sparse areas (< 4 profiles) yield `"stable"` direction; n-a bands excluded from ordinal math |
 
 **Transcript capture** — best-effort; always returns `ok: true`; writes to `{workspace}/transcripts/`; path-traversal guarded
-**Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`; `resolve_agent_skills`: **async** since 2026-05-20; progressive disclosure when `projectDir` provided (>12k chars → compact summary + `full_data_path`); optional `options?: { filePaths?, workspace? }` — when `filePaths` provided, appends pitfalls/area-memory/hot-file sections; logs `pitfall_injected` / `area_enrichment_injected` audit events. Updated 2026-05-29.
+**Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`; `resolve_agent_skills`: **async** since 2026-05-20; applies progressive disclosure when `projectDir` provided — if `preload_prompt` exceeds 12k chars, full JSON is written to `.canon/artifacts/agent-skills-*.json` and result contains a compact summary + `full_data_path` pointer; accepts optional `options?: { filePaths?: string[]; workspace?: string }` — when `filePaths` provided, appends "Known Pitfalls", "Area Memory", and "Hot-File Caution" sections to `preload_prompt`; logs `pitfall_injected` or `area_enrichment_injected` audit events when data found. Updated 2026-05-29.
 **Gate runner** — `normalizeGates` resolves via 3-tier priority (direct > named > discovered); **fail-closed**: unresolved gate → `{ passed: false }`; `bash_check` denylist: `rm`, `sudo`, `curl`, `wget`, `chmod`, `chown`, `mkfs`, `dd`
 **Flow schema** (`flow-schema.ts`) — `StateDefinitionSchema` is a `z.discriminatedUnion` with 5 type schemas; all new fields MUST be `.optional()`; `WavePolicy` defaults: isolation=worktree, merge=sequential, on_conflict=hitl
 **Step journaling** — `log_step` / `batch_log_steps` record step completion (status, artifacts, agent ID) in `journal.json`; quality signals (gate_results, postconditions, violations, tests, files_changed) and discovery fields accumulate across steps (append, not replace)
@@ -180,13 +188,10 @@ src/
 | `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
 | `finalize_workspace` | Close the flow: verifies journal completeness, releases file claims for the workflow slug, aggregates gate/postcondition/violation/test metrics into `FlowRunEntry` |
 | `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json` |
-| `inject_wave_event` | Inject user events into running wave execution |
-| `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
-| `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `finalize_workspace`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
 | `record_agent_metrics` | Agent-callable tool to record performance counters (`tool_calls`, `orientation_calls`, `turns`) directly into execution state metrics; merges with existing metrics preserving orchestrator fields; returns `INVALID_INPUT` if no fields provided, `WORKSPACE_NOT_FOUND` if state not found — added 2026-04-01 (ADR-003a) |
-| `post_event` | Agent-callable tool for structured activity logging; input: `{ workspace, agent, action: "start"\|"complete", detail, artifacts?: string[] }`; stores `agent_activity` event in execution store's event log via `appendEvent`; returns `{ ok: true; event_type; agent; action; timestamp }` or `WORKSPACE_NOT_FOUND`/`INVALID_INPUT` on error — added 2026-04-07 |
-| `batch_log_steps` | Log multiple steps in a single journal read-modify-write cycle; input: `{ workspace, steps: Array<{ step_id, status, agent_type?, artifacts_expected?, domain_skills_loaded?, outcome?, agent_id? }> }`; validates all entries upfront (fail-closed: entire batch rejected if any `step_id` is empty); runs transcript captures in parallel for completed entries with `agent_id`; returns `{ results: LogStepResult[] }` — added 2026-04-30 |
-| `capture_transcript` | Best-effort transcript capture; input: `{ workspace, step_id, agent_type, agent_id, session_id?, project_id? }`; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon `TranscriptEntry[]`, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; output: `{ transcript_path, entry_count, warning? }`; returns warning (never error) when source not found; `project_id` defaults to `CANON_PROJECT_DIR`-derived value; `session_id` defaults to `CLAUDE_SESSION_ID` env var — added 2026-04-26 (NF-12) |
+| `post_event` | Structured activity logging; stores `agent_activity` event via `appendEvent`; returns `{ ok: true }` or `WORKSPACE_NOT_FOUND`/`INVALID_INPUT` — added 2026-04-07 |
+| `batch_log_steps` | Log multiple steps in one journal read-modify-write; fail-closed (batch rejected if any `step_id` empty); parallel transcript capture for completed entries with `agent_id` — added 2026-04-30 |
+| `capture_transcript` | Best-effort transcript capture; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/…`, writes `TranscriptEntry[]` to `{workspace}/transcripts/`; returns warning (never error) when source not found — added 2026-04-26 |
 | `compute_autonomy_tier` | Compute autonomy tier (autonomous/light-touch/supervised) from build history, blast radius, compliance signals; returns `ComputeAutonomyTierResult` with `tier`, `score`, `reasoning`, `signals_used`; fail-safe: defaults to supervised on any signal-gathering error; logs `auto_decision` event to execution store |
 | `get_next_escalation_strategy` | Get next fallback strategy when agent failure/stuck detected; reads/writes escalation state in execution_states.metrics; returns `EscalationResult` with `strategy`, `reasoning`, `attempts_so_far`, `time_elapsed_ms`, `is_terminal`; cascade sequence: add_primer → increase_budget → escalate_model → narrow_scope → hitl; 2-minute cumulative timeout; per-flow config via `skip_strategies`; logs `auto_decision` event |
 

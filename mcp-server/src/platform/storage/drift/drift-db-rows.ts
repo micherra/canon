@@ -161,3 +161,20 @@ export function rowToArchiveManifestEntry(row: ArchiveRow): ArchiveManifestEntry
     tier: row.tier,
   };
 }
+
+/** Build the parameter object for the reviews INSERT statement. Pure function — no class state. */
+export function buildReviewParams(entry: ReviewEntry): Record<string, unknown> {
+  return {
+    branch: entry.branch ?? null,
+    file_priorities: entry.file_priorities != null ? JSON.stringify(entry.file_priorities) : null,
+    files: JSON.stringify(entry.files),
+    honored: JSON.stringify(entry.honored),
+    last_reviewed_sha: entry.last_reviewed_sha ?? null,
+    pr_number: entry.pr_number ?? null,
+    recommendations: entry.recommendations != null ? JSON.stringify(entry.recommendations) : null,
+    review_id: entry.review_id,
+    score: JSON.stringify(entry.score),
+    timestamp: entry.timestamp,
+    verdict: entry.verdict,
+  };
+}

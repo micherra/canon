@@ -12,6 +12,7 @@
 import type { ReviewEntry } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
 import { AreaMemoryDao } from "./area-memory-dao.ts";
+import { CraftProfileDao } from "./craft-profile-dao.ts";
 import type {
   ArchiveManifestEntry,
   ArchiveManifestFilter,
@@ -24,15 +25,18 @@ import {
   computeFlowAnalytics,
   rowToFlowRunEntry,
 } from "./drift-db-queries.ts";
+import type {
+  ArchiveRow,
+  DecisionRow,
+  FlowRunRow,
+  ReviewRow,
+  ViolationRow,
+} from "./drift-db-rows.ts";
 import {
-  type ArchiveRow,
-  type DecisionRow,
-  type FlowRunRow,
-  type ReviewRow,
+  buildReviewParams,
   rowToArchiveManifestEntry,
   rowToDecisionEntry,
   rowToReviewEntry,
-  type ViolationRow,
 } from "./drift-db-rows.ts";
 import { DriftDbSignals } from "./drift-db-signals.ts";
 
@@ -77,6 +81,9 @@ export class DriftDb {
 
   // ---- Area Memory DAO (lazy) ----
   private _areaMemory: AreaMemoryDao | null = null;
+
+  // ---- Craft Profiles DAO (lazy) ----
+  private _craftProfiles: CraftProfileDao | null = null;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -200,28 +207,11 @@ export class DriftDb {
    */
   appendReview(entry: ReviewEntry): void {
     const insertReviewAndViolations = this.db.transaction(() => {
-      this.stmtInsertReview.run(this.buildReviewParams(entry));
+      this.stmtInsertReview.run(buildReviewParams(entry));
       this.insertViolations(entry.review_id, entry.violations ?? []);
     });
 
     insertReviewAndViolations();
-  }
-
-  /** Build the parameter object for stmtInsertReview. */
-  private buildReviewParams(entry: ReviewEntry): Record<string, unknown> {
-    return {
-      branch: entry.branch ?? null,
-      file_priorities: entry.file_priorities != null ? JSON.stringify(entry.file_priorities) : null,
-      files: JSON.stringify(entry.files),
-      honored: JSON.stringify(entry.honored),
-      last_reviewed_sha: entry.last_reviewed_sha ?? null,
-      pr_number: entry.pr_number ?? null,
-      recommendations: entry.recommendations != null ? JSON.stringify(entry.recommendations) : null,
-      review_id: entry.review_id,
-      score: JSON.stringify(entry.score),
-      timestamp: entry.timestamp,
-      verdict: entry.verdict,
-    };
   }
 
   /** Insert violation rows for a review. */
@@ -564,6 +554,18 @@ export class DriftDb {
       this._areaMemory = new AreaMemoryDao(this.db);
     }
     return this._areaMemory;
+  }
+
+  /**
+   * Lazy accessor for craft profile DAO methods.
+   * The CraftProfileDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getCraftProfiles(): CraftProfileDao {
+    if (this._craftProfiles === null) {
+      this._craftProfiles = new CraftProfileDao(this.db);
+    }
+    return this._craftProfiles;
   }
 
   // Lifecycle

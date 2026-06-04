@@ -258,6 +258,77 @@ Example recommendations array:
 ]
 ```
 
+### Craft profile
+
+After Stages 1 and 2, rate the CHANGED code across the 6 craft dimensions. This produces a `craft_profile` that is included in the `store_pr_review` call and persisted to the craft store for trend analysis.
+
+**Dimensions** (from the Canon craft rubric):
+- `simplicity` — absence of unnecessary complexity; code is as simple as the problem allows
+- `cohesion` — functions and modules do one thing; command/query separation honored
+- `interface-depth` — modules hide implementation; callers need to know as little as possible
+- `naming` — identifiers reveal intent; ubiquitous language used consistently
+- `locality` — changes are self-contained; no surprising distant side effects
+- `predictability` — behavior is deterministic and unsurprising; no hidden state or coupling
+
+**Bands** (ABSOLUTE — judge the code as-is, do NOT normalize to change size):
+- `strong` — clearly excellent; exceeds expectations for this dimension
+- `adequate` — meets the bar; no significant concerns
+- `weak` — falls short; concrete issue present
+- `n-a` — dimension does not apply to this change (e.g., no new interface → `interface-depth: n-a`; no new identifiers in diff → `naming: n-a`)
+
+**Selection rules**:
+- Rate all 6 dimensions for the CHANGED code only (not the whole file)
+- Use `n-a` freely when a dimension genuinely doesn't apply — do not force a rating
+- Evidence is required for `strong` and `weak` ratings; optional for `adequate`
+- `principle_refs` is optional; include principle IDs that informed the rating when relevant
+
+**Emit the `craft_profile` in your `store_pr_review` call** alongside `violations`, `honored`, `score`, and `recommendations`. The server persists one `craft_profiles` row per distinct subsystem area in the changed files.
+
+Example craft profile:
+```json
+{
+  "craft_profile": {
+    "ratings": [
+      {
+        "dimension": "simplicity",
+        "band": "strong",
+        "evidence": "Single-purpose functions; no premature abstractions",
+        "principle_refs": ["simplicity-first"]
+      },
+      {
+        "dimension": "cohesion",
+        "band": "adequate",
+        "evidence": "Functions mostly single-purpose; one handler mixes validation and persistence"
+      },
+      {
+        "dimension": "interface-depth",
+        "band": "weak",
+        "evidence": "Caller must know internal field names to use the API correctly",
+        "principle_refs": ["information-hiding"]
+      },
+      {
+        "dimension": "naming",
+        "band": "adequate"
+      },
+      {
+        "dimension": "locality",
+        "band": "n-a"
+      },
+      {
+        "dimension": "predictability",
+        "band": "strong",
+        "evidence": "No hidden state; all side effects are explicit parameters"
+      }
+    ],
+    "rollup": 2.25
+  }
+}
+```
+
+**`rollup` field**: optional numeric summary (average ordinal of non-`n-a` bands: strong=3, adequate=2, weak=1). Omit if you prefer not to compute it.
+
+**Important**: craft comes ONLY from this structured `craft_profile` field — never re-derived from `recommendations`. A review with holistic recommendations but no `craft_profile` writes zero craft rows.
+
 ## Stage 3: Compliance Cross-Check (Build Pipeline Only)
 
 When the orchestrator provides engineer summary paths (`${WORKSPACE}/plans/{slug}/*-SUMMARY.md`), cross-check engineer self-declared compliance against your Stage 1 findings. Skip for standalone reviews.
