@@ -3,6 +3,7 @@ import {
   finalizeWorkspace,
   logStep,
 } from "@features/orchestration/tools/orchestration-journal.ts";
+import { reconcileWorkspace } from "@features/orchestration/tools/reconcile-workspace.ts";
 import { z } from "zod";
 import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
 
@@ -123,8 +124,21 @@ function registerFinalizeWorkspace(): void {
   );
 }
 
+function registerReconcileWorkspace(): void {
+  server.registerTool(
+    "reconcile_workspace",
+    {
+      description:
+        "Read-only reconciliation: return started/planned steps whose declared artifacts are missing on disk (cliff detection). Call on resume/turn-start to detect agents that stopped before producing their artifacts. Does NOT mutate or archive.",
+      inputSchema: { workspace: z.string().describe("Workspace directory path") },
+    },
+    gatedWrapHandler(async (input) => reconcileWorkspace(input)),
+  );
+}
+
 export function registerJournalTools(): void {
   registerLogStep();
   registerBatchLogSteps();
   registerFinalizeWorkspace();
+  registerReconcileWorkspace();
 }

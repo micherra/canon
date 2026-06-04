@@ -212,6 +212,30 @@ Run sequentially after all tasks: review → context-sync → ship → learn. Th
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
+**Reconciliation-on-resume (cliff detection + recovery).** Before continuing,
+call `reconcile_workspace({ workspace })`. Each entry in `incomplete_steps` is a
+`started`/`planned` step that either (a) has a declared artifact missing on disk
+(`missing_artifacts`), or (b) has an artifact present but still a `## Status:
+Partial` / `IN_PROGRESS` skeleton (`partial_artifacts`) — an agent that stopped
+before producing or finishing its artifact. For each entry:
+1. **Harvest** the dead agent's transcript: call `capture_transcript({ workspace,
+   step_id, agent_type, agent_id?, source_path?, persist_path: true })`. Pass the
+   `agent_id` from the original Agent spawn result (or the journal) when
+   available; if the agent died before its completion was logged, pass
+   `source_path` if known. If neither is available, capture is a best-effort
+   no-op (it returns a warning, never an error) — proceed to re-spawn regardless.
+   `persist_path: true` makes the recovered transcript findable by
+   `get_transcript`.
+2. **Re-spawn** the same agent type using the Re-spawn Enrichment Protocol,
+   passing the harvested transcript as prior-artifacts context plus the
+   completed-files / no-duplicate instructions.
+3. On a SECOND failure of the same step, escalate to HITL (do not loop) — reuse
+   the Auto-Escalation Protocol shape. (The full auto-escalation loop is Phase 2;
+   Phase 1 does detect → harvest → one re-spawn → HITL-on-second-failure.)
+
+Reconciliation runs against the BUILD journal. It is advisory and read-only — a
+`reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
+
 ### Skill Preloading
 
 Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include returned `preload_prompt` verbatim at top of spawn prompt. For task-specific domain primers, name them in the spawn prompt body: `"Relevant domain primers: <name>. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`

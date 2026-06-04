@@ -82,3 +82,25 @@ For complex artifacts (design documents, reviews, test reports), write a skeleto
 3. Final pass: polish and verify completeness
 
 This ensures the artifact exists on disk even if you exhaust context mid-execution. The `enforceArtifacts` gate in `logStep` will catch a completely missing artifact, but it cannot catch an artifact you never started writing.
+
+## Single-Artifact Agents: Mandatory Step-1 Skeleton
+
+Single-artifact agents — **security, reviewer, architect** — produce one
+terminal document whose entire value is lost if the agent is killed before its
+final write. For these agents the early-write pattern is NOT advisory: it is a
+hard step-1 obligation.
+
+**Step 1 (before any deep analysis):** immediately after orientation, write a
+skeleton to your declared artifact path containing a `## Status: Partial`
+heading and the section headings your final document will use. Then refine the
+artifact in place as you complete each stage.
+
+This shrinks the failure window from the entire run to the first few turns: an
+external kill after step 1 leaves a recoverable partial artifact on disk instead
+of nothing. The `## Status: Partial` heading signals downstream consumers (and
+the SubagentStop reconcile hook) that the artifact is incomplete — they must not
+treat a `Partial` artifact as final.
+
+The reviewer already implements this via its Early Output Protocol (write an
+`IN_PROGRESS` stub before Stage 1) — that is the reference pattern; security and
+architect must adopt the equivalent for their assessment / design documents.

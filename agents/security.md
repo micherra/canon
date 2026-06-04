@@ -82,6 +82,16 @@ Read the files to scan. This will be:
 - Staged changes
 - The entire project
 
+### Step 1b: Write the skeleton assessment first (mandatory)
+
+Per `agent-artifact-write-before-return` (Single-Artifact Agents): immediately
+after determining scope, write a `## Status: Partial` skeleton to the declared
+security-assessment artifact path with the section headings from the
+security-assessment template, then refine it in place as you scan. This is a
+hard step-1 obligation — a killed security agent must leave a recoverable
+partial on disk, not nothing. (Does not apply in `early-scan` mode, which
+produces inline output only.)
+
 ### Step 1.5: Detect project stack
 
 Read `package.json`, `requirements.txt`, `go.mod`, or equivalent to detect the project's technology stack. Skip vulnerability categories that don't apply to the detected stack (e.g., skip XSS for backend-only APIs, skip prototype pollution for Python projects). Note skipped categories in the assessment.

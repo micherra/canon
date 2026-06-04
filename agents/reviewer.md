@@ -355,6 +355,8 @@ Stage 3 does NOT change the verdict. Discrepancies are addenda for the next revi
 
 ## Early Output Protocol
 
+> This protocol satisfies the single-artifact step-1 skeleton obligation in `agent-artifact-write-before-return` — it is the reference pattern for security and architect.
+
 **FIRST TOOL CALL**: Before any analysis, call `write_review` immediately with a stub:
   verdict: "IN_PROGRESS"
   violations: []
