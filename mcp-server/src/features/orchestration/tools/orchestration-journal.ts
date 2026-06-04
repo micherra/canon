@@ -627,4 +627,5 @@ export async function finalizeWorkspace(
 
 // Re-export for registration layer.
 export const journalFilename = "journal.json";
-export { journalPath as _journalPath };
+// Export internals needed by reconcile-workspace.ts (same module family, no barrel).
+export { journalPath as _journalPath, readJournal, scanArtifactList };

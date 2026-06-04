@@ -112,6 +112,15 @@ Capture your research findings in the DESIGN.md's "Research" section (replaces t
 
 Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use full body (not `summary_only`) — you need examples and exceptions for design decisions.
 
+**Mandatory step-1 skeleton (single-artifact obligation):** per
+`agent-artifact-write-before-return` (Single-Artifact Agents), immediately after
+reading inputs and before deep design work, write a `## Status: Partial`
+skeleton DESIGN.md to the declared path with the design-document template's
+section headings, then refine in place. The architect is a single-artifact-style
+long-running producer; an early kill must leave a recoverable partial design on
+disk. (This session's own architect run demonstrated the value — a 529 mid-run
+left a survivable doc because it had been written early.)
+
 ### Step 1a: Design Conversation
 
 Before committing to design approaches, evaluate whether genuine design tradeoffs exist.
