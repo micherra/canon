@@ -19,8 +19,10 @@ import type {
   CrossRunAnalysisResult,
   FixCyclePattern,
   PlannerPatternAnalysis,
+  RecurringViolation,
   RunSummary,
 } from "../history-types.ts";
+import { computeOutcomeWeight, type OutcomeSignals } from "./judge-weight.ts";
 
 // ---- Helpers ----
 
@@ -395,6 +397,139 @@ function computeValueDistribution(
   return [...valueCounts.entries()].map(([value, count]) => ({ count, value }));
 }
 
+// ---- Outcome weighting helpers ----
+
+/**
+ * Map a RunSummary (and optional matching FlowRunEntry) to OutcomeSignals.
+ *
+ * Pure — operates only on already-loaded data, no I/O.
+ * - review_verdict: first verdict from summary.review_results (if any).
+ * - test_pass_rate: derived from matchingRun.total_test_results when present.
+ * - fix_iterations: not surfaced at RunSummary level; left undefined so
+ *   computeOutcomeWeight applies neutral fallback. Can be provided via matchingRun
+ *   when state_iterations data is available.
+ *
+ * @param summary - RunSummary for the build instance.
+ * @param matchingRun - Optional FlowRunEntry for the same build (same flow+started key).
+ */
+export function summaryToOutcomeSignals(
+  summary: RunSummary,
+  matchingRun?: FlowRunEntry,
+): OutcomeSignals {
+  // review_verdict: first review result verdict (if any)
+  const firstReview = summary.review_results[0];
+  const review_verdict = firstReview?.verdict;
+
+  // test_pass_rate: from FlowRunEntry.total_test_results
+  let test_pass_rate: number | undefined;
+  if (matchingRun?.total_test_results !== undefined) {
+    const { failed, passed, skipped } = matchingRun.total_test_results;
+    const total = passed + failed + skipped;
+    test_pass_rate = total > 0 ? passed / total : undefined;
+  }
+
+  return { review_verdict, test_pass_rate };
+}
+
+/**
+ * Compute the sum of outcome weights across a set of OutcomeSignals observations.
+ * Σ computeOutcomeWeight(obs) for each observation.
+ *
+ * Pure — no I/O. Empty array → 0.
+ */
+export function weightedInstanceCount(observations: OutcomeSignals[]): number {
+  return observations.reduce((sum, obs) => sum + computeOutcomeWeight(obs), 0);
+}
+
+/**
+ * Build a lookup from (flow + started) key → FlowRunEntry for dedup-free join.
+ * Used to enrich summary observations with FlowRunEntry test results.
+ */
+function buildRunLookup(runs: FlowRunEntry[]): Map<string, FlowRunEntry> {
+  const lookup = new Map<string, FlowRunEntry>();
+  for (const run of runs) {
+    lookup.set(`${run.flow}\0${run.started}`, run);
+  }
+  return lookup;
+}
+
+/**
+ * Register a summary under each principle_id it violates (deduplicates by identity).
+ */
+function indexSummaryByPrinciples(
+  index: Map<string, RunSummary[]>,
+  summary: RunSummary,
+  principleIds: string[],
+): void {
+  for (const pid of principleIds) {
+    const existing = index.get(pid);
+    if (existing === undefined) {
+      index.set(pid, [summary]);
+    } else if (!existing.includes(summary)) {
+      existing.push(summary);
+    }
+  }
+}
+
+/**
+ * Build an index from principle_id → unique RunSummary entries that contain
+ * a review result violation for that principle.
+ */
+function buildPrincipleToSummaries(summaries: RunSummary[]): Map<string, RunSummary[]> {
+  const index = new Map<string, RunSummary[]>();
+  for (const summary of summaries) {
+    const pids = summary.review_results.flatMap((r) => r.violations.map((v) => v.principle_id));
+    indexSummaryByPrinciples(index, summary, pids);
+  }
+  return index;
+}
+
+/**
+ * Enrich recurring violations with weighted_instance_count.
+ *
+ * For each recurring violation, collects all summaries that contain a matching
+ * review result for the principle_id, maps each to OutcomeSignals, and sums
+ * computeOutcomeWeight. Drift-only violations (no matching summary) default
+ * to neutral-weight per raw count (Σ 1.0 per occurrence).
+ *
+ * Neutral fallback preserves backward-compatibility: patterns with no summary
+ * data get weighted_instance_count === occurrence_count (same as raw count).
+ */
+
+/**
+ * Compute the weighted_instance_count for a single violation given its matching summaries.
+ */
+function computeWeightedCount(
+  v: RecurringViolation,
+  matchingSummaries: RunSummary[],
+  runLookup: Map<string, FlowRunEntry>,
+): number {
+  if (matchingSummaries.length === 0) {
+    return v.occurrence_count * 1.0;
+  }
+  const observations: OutcomeSignals[] = matchingSummaries.map((s) => {
+    const key = `${s.run_metadata.flow}\0${s.run_metadata.started_at ?? s.run_metadata.archived_at}`;
+    return summaryToOutcomeSignals(s, runLookup.get(key));
+  });
+  const uncoveredCount = v.occurrence_count - matchingSummaries.length;
+  for (let i = 0; i < uncoveredCount; i++) {
+    observations.push({});
+  }
+  return weightedInstanceCount(observations);
+}
+
+function enrichWithWeightedCounts(
+  violations: RecurringViolation[],
+  summaries: RunSummary[],
+  runLookup: Map<string, FlowRunEntry>,
+): RecurringViolation[] {
+  const principleToSummaries = buildPrincipleToSummaries(summaries);
+  return violations.map((v) => {
+    const matchingSummaries = principleToSummaries.get(v.principle_id) ?? [];
+    return { ...v, weighted_instance_count: computeWeightedCount(v, matchingSummaries, runLookup) };
+  });
+}
+
 /**
  * Analyze cross-run patterns by integrating all sub-analyses.
  *
@@ -427,7 +562,16 @@ export function analyzeCrossRunPatterns(
   const summaryViolations = violationsFromSummaries(summaries);
 
   // Run sub-analyses
-  const recurring_violations = findRecurringViolations(summaryViolations, allReviews);
+  const rawRecurringViolations = findRecurringViolations(summaryViolations, allReviews);
+
+  // Enrich recurring violations with weighted_instance_count
+  const runLookup = buildRunLookup(allFlowRuns);
+  const recurring_violations = enrichWithWeightedCounts(
+    rawRecurringViolations,
+    summaries,
+    runLookup,
+  );
+
   const fix_cycle_patterns = computeFixCyclePatterns(summaryViolations, allReviews);
   const agent_performance_trends = computePerformanceTrends(summaries, allFlowRuns, limit);
   const planner_patterns = analyzePlannerPatterns(summaries);

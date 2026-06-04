@@ -133,6 +133,12 @@ export type RecurringViolation = {
   affected_files: string[];
   first_seen: string;
   last_seen: string;
+  /**
+   * Sum of computeOutcomeWeight() across all observed instances.
+   * Reflects build quality: CLEAN builds contribute > 1.0, BLOCKING < 1.0.
+   * Optional — absent when no outcome signals are available for matching runs.
+   */
+  weighted_instance_count?: number;
 };
 
 /** Pattern of how long it takes to fix a recurring violation. */
