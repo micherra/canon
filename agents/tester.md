@@ -65,7 +65,7 @@ When `role: verify`:
    - If all tests pass: report status `ALL_PASSING`. No table needed.
    - If tests fail: populate the Issues Found table with the same required columns (File, Failing Test, Root Cause, Suggested Fix) and report status `IMPLEMENTATION_ISSUE`.
 4. **Do NOT write any new tests.**
-5. Report `discovered_gates` in the test-report artifact and status (same as Step 6.5).
+5. Report `discovered_gates` in the test-report artifact and status (same as Step 6.6).
 
 **CRITICAL**: The `### Issues Found` table format is identical to the full process — the orchestrator parses it. Every column is required when reporting failures.
 
@@ -173,7 +173,46 @@ Then review each engineer's test file against its source file:
 - Missing boundary condition tests (empty arrays, null values, max values)
 - Missing validation tests for input boundaries
 
-### Step 6.5: Report discovered gate commands
+### Step 6.5: Defensive Pattern Forensics
+
+After filling coverage gaps (Step 6), scan the changed files for defensive coding patterns and generate test hypotheses that exercise the failure paths those guards protect.
+
+**Defensive patterns to scan for** (use Grep on each changed source file):
+
+| Pattern | Grep target | Test hypothesis |
+|---------|------------|-----------------|
+| try/catch blocks | `catch` | "What happens if the try-body throws an unexpected error type?" |
+| Null/undefined checks | `!= null`, `!== null`, `?? `, `?.` | "What happens if this value IS null/undefined — does the fallback behave correctly?" |
+| Retry loops | `retry`, `attempt`, `maxRetries` | "What happens when all retries are exhausted?" |
+| Guard clauses / early returns | `if (!`, `if (.*) return`, `if (.*) throw` | "What happens if this guard condition is not met — does the code after the guard handle it?" |
+| Sentinel values | `= -1`, `= ""`, `DEFAULT_`, `FALLBACK_` | "What happens when the sentinel value propagates past its intended boundary?" |
+| Timeout handling | `setTimeout`, `AbortController`, `signal` | "What happens when the timeout fires mid-operation?" |
+
+**Process:**
+
+1. For each changed source file (not test files), grep for the patterns above.
+2. For each match, formulate the test hypothesis by inverting the guard: "If this guard were removed, what would break?"
+3. Check if the engineer's existing tests already cover the failure path. If yes, skip. If no, write a test.
+4. Prioritize: try/catch and null checks first (highest bug density), then retries and timeouts, then sentinels.
+
+**Test naming convention**: `it('should handle {failure condition} when {guard pattern} fails', ...)`
+
+**Scope limit**: Cap at 5 defensive-pattern tests per build. If more than 5 patterns are found, prioritize by:
+1. Patterns in files with high `in_degree` (more callers = higher blast radius if guard fails)
+2. Patterns in error-handling code paths (catch blocks, error callbacks)
+3. Patterns in newly added code over modified code
+
+**Output**: Include a subsection in the test report:
+
+```markdown
+### Defensive Pattern Forensics
+
+| # | File | Pattern | Guard Location | Test Hypothesis | Test Written? | Test File |
+|---|------|---------|---------------|-----------------|---------------|-----------|
+| 1 | {file} | {pattern type} | {file:line} | {hypothesis} | {yes/no — if no, explain} | {test file path} |
+```
+
+### Step 6.6: Report discovered gate commands
 
 After detecting the test framework (Step 4) and running the test suite, report the discovered test and lint commands so the gate runner can use them for automated quality gates. Include these in your test-report artifact and status:
 
@@ -197,7 +236,7 @@ Run the complete test suite (engineer tests + your new tests). If tests fail:
 - If test bug: fix the test and re-run (max 2 retries)
 - If implementation bug: include a structured entry in the `### Issues found` section of your test report (see format below) and report `IMPLEMENTATION_ISSUE` to the orchestrator
 
-After the test suite passes, run the project's lint command (discovered in Step 6.5). If no lint command exists in the project, skip this step and note it in your report.
+After the test suite passes, run the project's lint command (discovered in Step 6.6). If no lint command exists in the project, skip this step and note it in your report.
 
 If lint fails:
 - Include a structured entry in the `### Issues found` table with `IMPLEMENTATION_ISSUE` severity
