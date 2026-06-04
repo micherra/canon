@@ -47,6 +47,10 @@ Spawn-prompt templates are structurally distinct from artifact-output templates.
 
 **Reading protocol**: The orchestrator reads the template, fills `## Variables` placeholders, and passes the `## Prompt` section content to the `Agent()` call. See `principles/conventions/spawn-prompt-template-structure.md` for the full convention.
 
+## Renderer Helper Convention <!-- last-updated: 2026-06-04 -->
+
+All `renderer-*.md` templates source `escapeHtml` and `markdownToHtml` from `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` **Section E** — never re-inline these definitions. Each template instructs the renderer agent to copy the Section E definitions verbatim into its build-time rendering script.
+
 ## Conventions
 <!-- last-updated: 2026-06-02 -->
 
