@@ -34,6 +34,8 @@ describe("logStep — skip_reason validation (Fix 1)", () => {
       status: "skipped",
       step_id: "learn",
       workspace,
+
+      projectDir: process.cwd(),
     });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
@@ -48,6 +50,8 @@ describe("logStep — skip_reason validation (Fix 1)", () => {
       status: "skipped",
       step_id: "context-sync",
       workspace,
+
+      projectDir: process.cwd(),
     });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
@@ -62,6 +66,8 @@ describe("logStep — skip_reason validation (Fix 1)", () => {
       status: "skipped",
       step_id: "context-sync",
       workspace,
+
+      projectDir: process.cwd(),
     });
     assertOk(result);
     expect(result.step_id).toBe("context-sync");
@@ -76,6 +82,8 @@ describe("logStep — skip_reason validation (Fix 1)", () => {
       status: "planned",
       step_id: "ship",
       workspace,
+
+      projectDir: process.cwd(),
     });
     assertOk(planned);
 
@@ -83,6 +91,8 @@ describe("logStep — skip_reason validation (Fix 1)", () => {
       status: "started",
       step_id: "ship",
       workspace,
+
+      projectDir: process.cwd(),
     });
     assertOk(started);
   });
@@ -91,7 +101,7 @@ describe("logStep — skip_reason validation (Fix 1)", () => {
 describe("logStep — skip_reason cleared on non-skipped terminal state (Fix 5)", () => {
   test("skip_reason is cleared when step transitions from skipped to completed", async () => {
     // Step 1: plan the step
-    await logStep({ status: "planned", step_id: "learn", workspace });
+    await logStep({ projectDir: process.cwd(), status: "planned", step_id: "learn", workspace });
 
     // Step 2: mark as skipped with a reason
     await logStep({
@@ -99,6 +109,8 @@ describe("logStep — skip_reason cleared on non-skipped terminal state (Fix 5)"
       status: "skipped",
       step_id: "learn",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     let journal = await readJournalFile(workspace);
@@ -113,6 +125,8 @@ describe("logStep — skip_reason cleared on non-skipped terminal state (Fix 5)"
       status: "completed",
       step_id: "learn",
       workspace,
+
+      projectDir: process.cwd(),
     });
     assertOk(result);
 
@@ -129,6 +143,8 @@ describe("logStep — skip_reason cleared on non-skipped terminal state (Fix 5)"
       status: "skipped",
       step_id: "context-sync",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     // Re-log as skipped with same reason — skip_reason should still be there
@@ -137,6 +153,8 @@ describe("logStep — skip_reason cleared on non-skipped terminal state (Fix 5)"
       status: "skipped",
       step_id: "context-sync",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const journal = await readJournalFile(workspace);
@@ -150,6 +168,8 @@ describe("batchLogSteps — skip_reason validation (defense-in-depth)", () => {
     const result = await batchLogSteps({
       steps: [{ status: "skipped", step_id: "learn" }],
       workspace,
+
+      projectDir: process.cwd(),
     });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
@@ -162,6 +182,8 @@ describe("batchLogSteps — skip_reason validation (defense-in-depth)", () => {
     const result = await batchLogSteps({
       steps: [{ skip_reason: "   ", status: "skipped", step_id: "context-sync" }],
       workspace,
+
+      projectDir: process.cwd(),
     });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
@@ -177,6 +199,8 @@ describe("batchLogSteps — skip_reason validation (defense-in-depth)", () => {
         { status: "skipped", step_id: "learn" }, // missing skip_reason
       ],
       workspace,
+
+      projectDir: process.cwd(),
     });
     expect(isToolError(result)).toBe(true);
     // The valid step must not have been written either
@@ -195,6 +219,8 @@ describe("batchLogSteps — skip_reason validation (defense-in-depth)", () => {
         },
       ],
       workspace,
+
+      projectDir: process.cwd(),
     });
     assertOk(result);
     expect(result.results).toHaveLength(1);
@@ -212,6 +238,8 @@ describe("batchLogSteps — skip_reason validation (defense-in-depth)", () => {
         { status: "started", step_id: "implement" },
       ],
       workspace,
+
+      projectDir: process.cwd(),
     });
     assertOk(result);
     expect(result.results).toHaveLength(2);

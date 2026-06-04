@@ -166,8 +166,8 @@ function detectLayerViolations(
 export function generateInsights(
   nodes: NodeLike[],
   edges: EdgeLike[],
-  layerRules?: Record<string, string[]>,
-  projectDir?: string,
+  layerRules: Record<string, string[]> | undefined,
+  projectDir: string,
 ): CodebaseInsights {
   const rules = layerRules || DEFAULT_LAYER_RULES;
 
@@ -287,9 +287,8 @@ function buildBlastRadiusHotspots(
   }));
 }
 
-function enrichWithKgInsights(base: CodebaseInsights, projectDir?: string): CodebaseInsights {
-  const root = projectDir ?? (process.env.CANON_PROJECT_DIR || process.cwd());
-  const dbPath = path.join(root, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+function enrichWithKgInsights(base: CodebaseInsights, projectDir: string): CodebaseInsights {
+  const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
 
   if (!existsSync(dbPath)) {
     return base;

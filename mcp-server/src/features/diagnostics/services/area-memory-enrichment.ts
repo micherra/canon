@@ -14,7 +14,7 @@
  */
 
 import type { AreaMemoryDao, AreaObservationRow } from "@platform/storage/drift/area-memory-dao.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 
 // ---- Query function ----

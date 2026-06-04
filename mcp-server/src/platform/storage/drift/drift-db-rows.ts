@@ -1,9 +1,9 @@
 /**
- * drift-db-rows.ts
+ * drift-db-rows — internal SQLite row types and deserializers for DriftDb.
  *
- * Internal SQLite row types and row-to-domain-object deserializer functions for DriftDb.
- * Extracted from drift-db.ts to keep that file under the line-count limit.
- * All types are internal (not exported from the public drift-db API).
+ * Extracted from drift-db.ts to keep that file under the 600-line limit.
+ * These types and functions are private to the drift-db layer — only
+ * drift-db.ts imports from here.
  */
 
 import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
@@ -86,7 +86,7 @@ export type ArchiveRow = {
   source_run_id: string | null;
 };
 
-// ---- Row deserializers ----
+// ---- Deserializers ----
 
 /** Deserialize a ReviewRow + ViolationRow[] into a ReviewEntry. */
 export function rowToReviewEntry(row: ReviewRow, violations: ViolationRow[]): ReviewEntry {

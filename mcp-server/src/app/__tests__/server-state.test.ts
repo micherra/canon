@@ -1,21 +1,21 @@
 /**
- * Tests for server-state — module-global project dir + gated handler machinery.
+ * Tests for server-state — per-connection scope registry + gated handler machinery.
  *
- * Covers existing behavior (characterization) BEFORE the 1a refactor so these
- * become the no-op-regression guard:
- *
- *   Characterization (pre-refactor invariants):
- *   - projectDir starts as process.cwd()
- *   - setProjectDir mutates the global
+ * Covers:
+ *   Characterization (post-1d invariants):
  *   - readyPromise is pending until resolveReady() is called
  *   - gatedWrapHandler blocks until readyPromise resolves
  *
  *   1a additions:
- *   - resolveScope falls back to global projectDir when no session is active
  *   - resolveScope returns per-session value when session is registered
  *   - Two sessions get independent scopes
  *   - registerConnectionScope stores scope; clearConnectionScope removes it
- *   - setProjectDir updates both the global AND the stdio sentinel scope
+ *
+ *   1d additions:
+ *   - stdio sentinel preserves old global behavior: undefined/unregistered sessionId
+ *     returns the sentinel value after registerConnectionScope(STDIO_SESSION_ID, dir)
+ *   - resolveScope throws for a fully-unregistered session (fail-closed)
+ *   - resetForTesting clears the registry (sentinel is gone)
  *
  * NOTE: server-state.ts is a module singleton — some tests reach into internals
  * via exported helpers rather than re-requiring the module.  We reset
@@ -33,7 +33,6 @@ import {
   resolveReady,
   resolveScope,
   STDIO_SESSION_ID,
-  setProjectDir,
 } from "../server-state.ts";
 
 // Helper: create a minimal RequestHandlerExtra-compatible object.
@@ -49,18 +48,13 @@ function makeExtra(sessionId?: string): RequestHandlerExtra<ServerRequest, Serve
 // ── Characterization tests ────────────────────────────────────────────────────
 
 describe("server-state: characterization (existing invariants)", () => {
-  // These tests use a fresh module state via resetForTesting().
-  // We do NOT check the exact initial value of projectDir (it's process.cwd() which
-  // varies by environment); instead we verify the mutation semantics.
-
   afterEach(() => {
     resetForTesting();
   });
 
-  it("setProjectDir updates the exported projectDir binding", () => {
-    setProjectDir("/test/project/alpha");
-    // Can't re-import the binding but the value is accessible through the module's live binding.
-    // We test this indirectly through resolveScope (no sessionId → returns global).
+  it("registerConnectionScope(STDIO_SESSION_ID) seeds scope accessible via resolveScope", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/test/project/alpha");
+    // No sessionId → returns sentinel value (stdio behavior)
     expect(resolveScope(makeExtra(undefined))).toBe("/test/project/alpha");
   });
 
@@ -108,24 +102,24 @@ describe("resolveScope: per-connection memoization", () => {
     resetForTesting();
   });
 
-  it("returns the global projectDir when extra.sessionId is undefined", () => {
-    setProjectDir("/global/project");
+  it("returns the sentinel value when extra.sessionId is undefined (stdio behavior)", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/global/project");
     expect(resolveScope(makeExtra(undefined))).toBe("/global/project");
   });
 
-  it("returns the global projectDir when extra.sessionId is the stdio sentinel", () => {
-    setProjectDir("/global/project");
+  it("returns the sentinel value when extra.sessionId is the stdio sentinel ID", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/global/project");
     expect(resolveScope(makeExtra(STDIO_SESSION_ID))).toBe("/global/project");
   });
 
-  it("returns per-session value for a registered session", () => {
-    setProjectDir("/global/project");
+  it("returns per-session value for a registered session (over sentinel)", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/global/project");
     registerConnectionScope("session-A", "/project/A");
     expect(resolveScope(makeExtra("session-A"))).toBe("/project/A");
   });
 
-  it("returns global when session is not registered", () => {
-    setProjectDir("/global/project");
+  it("falls back to sentinel when session is not registered but sentinel exists", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/global/project");
     expect(resolveScope(makeExtra("unknown-session"))).toBe("/global/project");
   });
 
@@ -136,25 +130,25 @@ describe("resolveScope: per-connection memoization", () => {
     expect(resolveScope(makeExtra("session-B"))).toBe("/project/B");
   });
 
-  it("clearConnectionScope removes a registered session", () => {
-    setProjectDir("/global/project");
+  it("clearConnectionScope removes a registered session, falls back to sentinel", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/global/project");
     registerConnectionScope("session-A", "/project/A");
     clearConnectionScope("session-A");
-    // Falls back to global after removal
+    // Falls back to sentinel after removal
     expect(resolveScope(makeExtra("session-A"))).toBe("/global/project");
   });
 
-  it("setProjectDir updates the stdio sentinel scope", () => {
-    setProjectDir("/new/project");
+  it("registerConnectionScope(STDIO_SESSION_ID) updates the stdio sentinel scope", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/new/project");
     expect(resolveScope(makeExtra(STDIO_SESSION_ID))).toBe("/new/project");
   });
 
-  it("setProjectDir does not override an explicitly registered non-stdio session", () => {
+  it("re-registering STDIO_SESSION_ID does not override an explicitly registered non-stdio session", () => {
     registerConnectionScope("http-session", "/project/http");
-    setProjectDir("/stdio/project");
+    registerConnectionScope(STDIO_SESSION_ID, "/stdio/project");
     // http-session should keep its own value
     expect(resolveScope(makeExtra("http-session"))).toBe("/project/http");
-    // stdio sentinel should reflect the new global
+    // stdio sentinel should reflect the new value
     expect(resolveScope(makeExtra(STDIO_SESSION_ID))).toBe("/stdio/project");
   });
 });
@@ -217,5 +211,57 @@ describe("registerConnectionScope / clearConnectionScope", () => {
   it("clearConnectionScope is a no-op for unknown session IDs", () => {
     // Should not throw
     expect(() => clearConnectionScope("no-such-session")).not.toThrow();
+  });
+});
+
+// ── 1d: stdio sentinel no-op + fail-closed behavior ─────────────────────────
+//
+// After deleting the projectDir global and setProjectDir, the only way to seed
+// scope is registerConnectionScope(STDIO_SESSION_ID, dir). These tests verify:
+//   1. After seeding the sentinel, resolveScope with undefined OR an unregistered
+//      sessionId BOTH return the sentinel value (behavioral no-op under stdio).
+//   2. resolveScope throws for a fully-unregistered session (no per-session entry,
+//      no sentinel) — fail-closed behavior replacing the old ?? projectDir fallback.
+//   3. resetForTesting() clears the registry so the sentinel is gone.
+
+describe("1d: stdio sentinel no-op + fail-closed resolveScope", () => {
+  afterEach(() => {
+    resetForTesting();
+  });
+
+  it("after registerConnectionScope(STDIO_SESSION_ID), resolveScope with undefined sessionId returns sentinel value", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/sentinel/project");
+    expect(resolveScope(makeExtra(undefined))).toBe("/sentinel/project");
+  });
+
+  it("after registerConnectionScope(STDIO_SESSION_ID), resolveScope with an unregistered sessionId returns sentinel value", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/sentinel/project");
+    expect(resolveScope(makeExtra("unregistered-http-session"))).toBe("/sentinel/project");
+  });
+
+  it("resolveScope throws when no sentinel AND no per-session entry exists", () => {
+    // resetForTesting() clears registry — no sentinel, no per-session entry
+    expect(() => resolveScope(makeExtra(undefined))).toThrow(
+      /resolveScope: no project scope for session/,
+    );
+  });
+
+  it("resolveScope throw message includes the session ID when provided", () => {
+    expect(() => resolveScope(makeExtra("orphan-session"))).toThrow(/orphan-session/);
+  });
+
+  it("resolveScope throw message mentions (none) when sessionId is undefined", () => {
+    expect(() => resolveScope(makeExtra(undefined))).toThrow(/\(none\)/);
+  });
+
+  it("resolveScope does NOT throw after the sentinel is registered", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/ok");
+    expect(() => resolveScope(makeExtra(undefined))).not.toThrow();
+  });
+
+  it("resetForTesting clears the registry so the sentinel is gone", () => {
+    registerConnectionScope(STDIO_SESSION_ID, "/before-reset");
+    resetForTesting();
+    expect(() => resolveScope(makeExtra(undefined))).toThrow(/resolveScope: no project scope/);
   });
 });

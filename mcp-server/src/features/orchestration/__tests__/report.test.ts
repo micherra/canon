@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
