@@ -21,6 +21,7 @@ vi.mock("@app/server-state.ts", () => ({
   pluginDir: "/mock/plugin",
   projectDir: "/mock/project",
   registerToolWithUi: vi.fn(),
+  resolveScope: () => "/mock/project",
   server: { registerTool: vi.fn() },
 }));
 
@@ -78,7 +79,7 @@ vi.mock("@features/diagnostics/services/prediction-accuracy.ts", () => ({
   computeAccuracy: vi.fn(),
 }));
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn(),
 }));
 
@@ -109,7 +110,7 @@ import {
   computeAccuracy,
 } from "@features/diagnostics/services/prediction-accuracy.ts";
 import { compileSignals } from "@features/diagnostics/services/signal-compiler.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 
 // ---- Shared fixtures ----
 

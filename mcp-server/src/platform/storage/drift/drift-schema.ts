@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "7";
+export const DRIFT_SCHEMA_VERSION = "9";
 
 // DDL statements — v1 base tables
 //
@@ -295,6 +295,51 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
     },
     version: "7",
+  },
+  {
+    up: (db) => {
+      // area_observations — short-term area memory for engineer context enrichment
+      // Stores compact observations from reviewers and engineers about a subsystem area.
+      // 7-day expiry is enforced at query time via WHERE created_at > datetime('now', '-7 days').
+      // injected_count and last_injected_at track observation effectiveness for the learner.
+      db.exec(`CREATE TABLE IF NOT EXISTS area_observations (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        subsystem_key    TEXT NOT NULL,
+        content          TEXT NOT NULL,
+        source           TEXT NOT NULL,
+        workflow_slug    TEXT,
+        created_at       TEXT NOT NULL,
+        injected_count   INTEGER NOT NULL DEFAULT 0,
+        last_injected_at TEXT
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ao_subsystem ON area_observations(subsystem_key)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ao_created ON area_observations(created_at)`);
+      db.exec(`UPDATE meta SET value = '8' WHERE key = 'schema_version'`);
+    },
+    version: "8",
+  },
+  {
+    up: (db) => {
+      // craft_profiles — area-keyed craft score history
+      // Stores CraftDimensionRating[] snapshots from reviewers ('review') and
+      // periodic audits ('audit'). flow/run_id are review-only (nullable).
+      // rollup is a derived display value (nullable). ratings stores
+      // a JSON-encoded CraftDimensionRating[].
+      db.exec(`CREATE TABLE IF NOT EXISTS craft_profiles (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        subsystem_key TEXT NOT NULL,
+        source        TEXT NOT NULL,
+        flow          TEXT,
+        run_id        TEXT,
+        ratings       TEXT NOT NULL,
+        rollup        REAL,
+        created_at    TEXT NOT NULL
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_craft_subsystem ON craft_profiles(subsystem_key)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_craft_created ON craft_profiles(created_at)`);
+      db.exec(`UPDATE meta SET value = '9' WHERE key = 'schema_version'`);
+    },
+    version: "9",
   },
 ];
 

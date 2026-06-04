@@ -1,3 +1,4 @@
+import { validateAndPersistCraftProfile } from "@features/pr-review/tools/store-pr-review.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ReportInput, ReviewEntry } from "@shared/schema.ts";
@@ -18,7 +19,7 @@ export async function report(
 
   switch (input.type) {
     case "review":
-      return recordReview(input, store, signals);
+      return recordReview(input, projectDir, store, signals);
     default: {
       const _exhaustive: never = input.type;
       throw new Error(`Unknown report type: ${_exhaustive}`);
@@ -28,6 +29,7 @@ export async function report(
 
 async function recordReview(
   review: Extract<ReportInput, { type: "review" }>,
+  projectDir: string,
   store: DriftStore,
   signals: SignalWriter | undefined,
 ): Promise<ReportOutput> {
@@ -51,6 +53,11 @@ async function recordReview(
   if (signals) {
     updateFileViolationHistory(signals, review.files, review.violations, entry.verdict);
   }
+
+  // Persist craft profile rows via shared helper (validate-at-trust-boundaries + persist).
+  // craft comes ONLY from the structured craft_profile field (Decision craft-v2-04):
+  // never re-derived from recommendations. Absent → zero craft rows.
+  validateAndPersistCraftProfile(review.craft_profile, review.files, projectDir);
 
   return {
     id,

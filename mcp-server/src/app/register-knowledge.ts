@@ -1,20 +1,7 @@
-import { join } from "node:path";
-import type { AccuracyMap } from "@features/diagnostics/services/prediction-accuracy.ts";
-import {
-  buildAccuracySummary,
-  computeAccuracy,
-} from "@features/diagnostics/services/prediction-accuracy.ts";
-import { recordPrediction } from "@features/diagnostics/services/prediction-tracker.ts";
-import type { FileSignals } from "@features/diagnostics/services/signal-compiler.ts";
-import { compileSignals } from "@features/diagnostics/services/signal-compiler.ts";
-import {
-  type DriftReportOutput,
-  getDriftReport,
-} from "@features/diagnostics/tools/get-drift-report.ts";
+import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
 import { wikiLint } from "@features/diagnostics/tools/wiki-lint.ts";
-import type { FileContextOutput } from "@features/file-context/tools/get-file-context.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
 import { codebaseGraph, compactGraph } from "@features/knowledge-graph/tools/codebase-graph.ts";
 import { codebaseGraphMaterialize } from "@features/knowledge-graph/tools/codebase-graph-materialize.ts";
@@ -22,309 +9,25 @@ import { codebaseGraphPoll } from "@features/knowledge-graph/tools/codebase-grap
 import { codebaseGraphSubmit } from "@features/knowledge-graph/tools/codebase-graph-submit.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
-import type { GetPrinciplesBatchOutput } from "@features/principles/tools/get-principles.ts";
-import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
-import { CANON_DIR } from "@shared/constants.ts";
-import { applyDisclosure } from "@shared/lib/progressive-disclosure.ts";
 import { z } from "zod";
+import {
+  buildSlimmedOutput,
+  type GetContextOutput,
+  getContextInputSchema,
+  handleGetContext,
+  type SlimmedDriftOutput,
+} from "./get-context-handler.ts";
 import {
   gatedWrapHandler,
   pluginDir,
-  projectDir,
   registerToolWithUi,
+  resolveScope,
   server,
 } from "./server-state.ts";
 
-// --- get_context composite tool ---
-
-type IncludeSection = "principles" | "file_context" | "drift" | "graph" | "signals";
-
-/**
- * Compact drift section returned when the full get_context response is truncated.
- * Only preserves the pre-formatted summary string; full data is available at full_data_path.
- */
-export type SlimmedDriftOutput = {
-  formatted: string;
-  truncated: true;
-};
-
-export type GetContextOutput = {
-  file_paths: string[];
-  include: IncludeSection[];
-  principles?: GetPrinciplesBatchOutput;
-  file_context?: FileContextOutput[];
-  drift?: DriftReportOutput | SlimmedDriftOutput;
-  graph?: unknown;
-  signals?: FileSignals[];
-  /** Wave 3: Per-principle accuracy summary for learner agent consumption. */
-  accuracy_summary?: string;
-  /** When true, response was truncated due to size. Full data at full_data_path. */
-  truncated?: boolean;
-  /** Absolute path to full response JSON when truncated is true. */
-  full_data_path?: string;
-  /** Compact overview of the response content when truncated is true. */
-  disclosure_summary?: string;
-};
-
-const getContextInputSchema = {
-  file_paths: z.array(z.string()).describe("File paths to get context for"),
-  include: z
-    .array(z.enum(["principles", "file_context", "drift", "graph", "signals"]))
-    .optional()
-    .describe("Sections to include (default: all)"),
-};
-
-const ALL_SECTIONS: IncludeSection[] = ["principles", "file_context", "drift", "graph", "signals"];
-
-/**
- * Query blast_radius for each file path and return the aggregate results.
- * Skips files where KG is not indexed or returns a recoverable error.
- * Returns undefined when no results could be collected.
- */
-function queryGraphForFiles(filePaths: string[]): unknown[] | undefined {
-  if (filePaths.length === 0) return undefined;
-  const aggregated: unknown[] = [];
-  for (const target of filePaths) {
-    const result = graphQuery({ query_type: "blast_radius", target }, projectDir);
-    if (result.ok) aggregated.push(result);
-  }
-  return aggregated.length > 0 ? aggregated : undefined;
-}
-
-// Fail-open helper: compute accuracy data; returns undefined on error.
-function tryComputeAccuracy(
-  driftDbSignals: ReturnType<ReturnType<typeof getDriftDb>["getSignals"]>,
-): AccuracyMap | undefined {
-  try {
-    return computeAccuracy(driftDbSignals);
-  } catch (err) {
-    console.warn(
-      "[canon] get_context: accuracy computation failed:",
-      err instanceof Error ? err.message : err,
-    ); // best-effort
-    return undefined;
-  }
-}
-// Fail-open helper: populate accuracy_summary on output; silences errors.
-function trySetAccuracySummary(accuracyData: AccuracyMap, output: GetContextOutput): void {
-  if (accuracyData.size === 0) return;
-  try {
-    const summary = buildAccuracySummary(accuracyData);
-    if (summary) output.accuracy_summary = summary;
-  } catch (err) {
-    console.warn(
-      "[canon] get_context: accuracy summary generation failed:",
-      err instanceof Error ? err.message : err,
-    ); // best-effort
-  }
-}
-
-/**
- * Populate output.signals and output.accuracy_summary for the signals section.
- * Fail-open: signals are optional enrichment; errors are silently ignored.
- */
-function resolveSignals(filePaths: string[], output: GetContextOutput): void {
-  try {
-    const driftDb = getDriftDb(projectDir);
-    const driftDbSignals = driftDb.getSignals();
-    const accuracyData = tryComputeAccuracy(driftDbSignals);
-    const signals = compileSignals(filePaths, driftDbSignals, { accuracyData });
-    if (signals.length > 0) {
-      output.signals = signals;
-      // Record prediction — fail-open; if recordPrediction fails, signals are still returned.
-      recordPrediction({ compiledSignals: signals, filePaths }, driftDbSignals);
-    }
-    if (accuracyData) trySetAccuracySummary(accuracyData, output);
-  } catch (err) {
-    // best-effort: signals section is optional enrichment; primary output already returned
-    console.warn(
-      "[canon] get_context: signals section failed:",
-      err instanceof Error ? err.message : err,
-    );
-  }
-}
-
-/**
- * Produce a compact summary string for a GetContextOutput for disclosure logging.
- * Reports section presence and counts without including full payloads.
- */
-function summarizeContextOutput(data: GetContextOutput): string {
-  const parts: string[] = [
-    `Files: ${data.file_paths.join(", ")}`,
-    `Sections: ${data.include.join(", ")}`,
-  ];
-  if (data.principles) {
-    const count = Array.isArray(data.principles.principles)
-      ? data.principles.principles.length
-      : "batch";
-    parts.push(`Principles: ${count} matched`);
-  }
-  if (data.file_context) parts.push(`File contexts: ${data.file_context.length} files`);
-  if (data.drift) parts.push("Drift: included");
-  if (data.graph) parts.push("Graph: included");
-  if (data.signals) parts.push(`Signals: ${data.signals.length} files`);
-  return parts.join("\n");
-}
-
-/**
- * Build a slimmed GetContextOutput for truncated responses.
- * Preserves routing metadata but strips large payloads (bodies, content, dependency lists).
- */
-export function buildSlimmedOutput(
-  output: GetContextOutput,
-  fullDataPath: string,
-): GetContextOutput {
-  const slimmed: GetContextOutput = {
-    file_paths: output.file_paths,
-    full_data_path: fullDataPath,
-    include: output.include,
-    truncated: true,
-  };
-  if (output.principles) {
-    slimmed.principles = {
-      ...output.principles,
-      principles: output.principles.principles.map((p) => ({ ...p, body: "" })),
-    };
-  }
-  if (output.file_context) {
-    slimmed.file_context = output.file_context.map((fc) => ({
-      blast_radius: undefined,
-      co_change_partners: undefined,
-      content: "",
-      entities: undefined,
-      exports: [],
-      file_path: fc.file_path,
-      graph_metrics: fc.graph_metrics,
-      hotspot_score: undefined,
-      imported_by: [],
-      imported_by_layer: {},
-      imports: [],
-      imports_by_layer: {},
-      last_verdict: fc.last_verdict,
-      layer: fc.layer,
-      layer_stack: fc.layer_stack,
-      project_max_impact: fc.project_max_impact,
-      role: fc.role,
-      shape: fc.shape,
-      summary: fc.summary,
-      violation_count: fc.violation_count,
-      violations: [],
-    }));
-  }
-  if (output.drift !== undefined) {
-    const slimmedDrift: SlimmedDriftOutput = {
-      formatted: output.drift.formatted ?? "See full data file.",
-      truncated: true,
-    };
-    slimmed.drift = slimmedDrift;
-  }
-  if (output.graph !== undefined) {
-    const graphArr = Array.isArray(output.graph) ? output.graph : [];
-    slimmed.graph = {
-      file_count: graphArr.length,
-      note: "See full data file for blast radius details.",
-    };
-  }
-  if (output.signals !== undefined) {
-    slimmed.signals = output.signals.map((s) => ({ ...s, signals: [] }));
-  }
-  if (output.accuracy_summary !== undefined) slimmed.accuracy_summary = output.accuracy_summary;
-  return slimmed;
-}
-
-/**
- * Apply progressive disclosure to the assembled GetContextOutput.
- * Returns the output unchanged when under threshold; returns a slimmed version
- * with a file pointer when over threshold.
- */
-async function applyContextDisclosure(output: GetContextOutput): Promise<GetContextOutput> {
-  const disclosure = await applyDisclosure(output, {
-    filePrefix: "get-context",
-    outputDir: join(projectDir, CANON_DIR, "artifacts"),
-    summarize: summarizeContextOutput,
-  });
-  if (disclosure.truncated) {
-    const slimmed = buildSlimmedOutput(output, disclosure.full_data_path);
-    // Include the disclosure summary so callers get a useful overview without reading the full file.
-    slimmed.disclosure_summary = disclosure.summary;
-    return slimmed;
-  }
-  return output;
-}
-
-async function handleGetContext(input: {
-  file_paths: string[];
-  include?: IncludeSection[];
-}): Promise<GetContextOutput> {
-  const sections: IncludeSection[] = input.include ?? ALL_SECTIONS;
-  const output: GetContextOutput = {
-    file_paths: input.file_paths,
-    include: sections,
-  };
-
-  // Collect promises for sections that can run in parallel
-  const tasks: Promise<void>[] = [];
-
-  if (sections.includes("principles")) {
-    tasks.push(
-      getPrinciplesBatch(
-        { file_paths: input.file_paths, summary_only: true },
-        projectDir,
-        pluginDir,
-      ).then((result) => {
-        output.principles = result;
-      }),
-    );
-  }
-
-  if (sections.includes("file_context")) {
-    tasks.push(
-      Promise.all(input.file_paths.map((fp) => getFileContext({ file_path: fp }, projectDir))).then(
-        (settled) => {
-          const results: FileContextOutput[] = [];
-          for (let i = 0; i < settled.length; i++) {
-            const result = settled[i];
-            if (!result.ok) {
-              throw new Error(`file_context error (${result.error_code}): ${result.message}`);
-            }
-            const { ok, ...data } = result;
-            results.push(data as FileContextOutput);
-          }
-          output.file_context = results;
-        },
-      ),
-    );
-  }
-
-  if (sections.includes("drift")) {
-    tasks.push(
-      getDriftReport({}, projectDir, pluginDir).then((result) => {
-        output.drift = result;
-      }),
-    );
-  }
-
-  if (sections.includes("graph")) {
-    // graph section: skip gracefully when KG is not indexed.
-    // Query blast_radius for each file and aggregate the results.
-    tasks.push(
-      Promise.resolve().then(() => {
-        const results = queryGraphForFiles(input.file_paths);
-        if (results !== undefined) output.graph = results;
-      }),
-    );
-  }
-
-  if (sections.includes("signals")) {
-    tasks.push(Promise.resolve().then(() => resolveSignals(input.file_paths, output)));
-  }
-
-  await Promise.all(tasks);
-  return applyContextDisclosure(output);
-}
-
-export { handleGetContext };
+// Re-export for test compatibility — existing tests import these from register-knowledge.ts
+export type { GetContextOutput, SlimmedDriftOutput };
+export { buildSlimmedOutput, handleGetContext };
 
 function registerCompositeContextTool(): void {
   server.registerTool(
@@ -373,8 +76,8 @@ function registerGraphUiTools(): void {
   registerToolWithUi("codebase_graph", {
     description:
       "Generate a dependency graph of the codebase with Canon compliance overlay. Returns a compact summary (layers, violations, insights).",
-    handler: gatedWrapHandler(async (input) => {
-      const result = await codebaseGraph(input, projectDir, pluginDir);
+    handler: gatedWrapHandler(async (input, extra) => {
+      const result = await codebaseGraph(input, resolveScope(extra), pluginDir);
       return compactGraph(result);
     }),
     htmlFile: "codebase-graph.html",
@@ -386,7 +89,7 @@ function registerGraphUiTools(): void {
   registerToolWithUi("get_file_context", {
     description:
       "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data.",
-    handler: gatedWrapHandler(async (input) => getFileContext(input, projectDir)),
+    handler: gatedWrapHandler(async (input, extra) => getFileContext(input, resolveScope(extra))),
     htmlFile: "file-context.html",
     inputSchema: {
       file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
@@ -413,7 +116,7 @@ function registerDiagnosticsTools(): void {
           .describe("Array of file summaries to store"),
       },
     },
-    gatedWrapHandler(async (input) => storeSummaries(input, projectDir)),
+    gatedWrapHandler(async (input, extra) => storeSummaries(input, resolveScope(extra))),
   );
 
   server.registerTool(
@@ -427,7 +130,7 @@ function registerDiagnosticsTools(): void {
         principle_id: z.string().optional().describe("Filter to a specific principle"),
       },
     },
-    gatedWrapHandler(async (input) => getDriftReport(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => getDriftReport(input, resolveScope(extra), pluginDir)),
   );
 
   server.registerTool(
@@ -449,22 +152,32 @@ function registerDiagnosticsTools(): void {
     },
     gatedWrapHandler(async (input) => getHistory(input)),
   );
+}
 
+function registerWikiLintTool(): void {
   server.registerTool(
     "wiki_lint",
     {
       description:
-        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, and principles missing examples.",
+        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, and cited paths in references/ that do not resolve.",
       inputSchema: {
         checks: z
-          .array(z.enum(["contradictions", "orphan_principles", "stale_refs", "missing_examples"]))
+          .array(
+            z.enum([
+              "contradictions",
+              "orphan_principles",
+              "stale_refs",
+              "missing_examples",
+              "cited_paths",
+            ]),
+          )
           .optional()
           .describe(
-            "Checks to run (default: all). Options: contradictions, orphan_principles, stale_refs, missing_examples",
+            "Checks to run (default: all 5). Options: contradictions, orphan_principles, stale_refs, missing_examples, cited_paths",
           ),
       },
     },
-    gatedWrapHandler(async (input) => wikiLint(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) => wikiLint(input, resolveScope(extra), pluginDir)),
   );
 }
 
@@ -512,7 +225,7 @@ function registerGraphQueryTool(): void {
           .describe("Target entity name or file path (not needed for dead_code)"),
       },
     },
-    gatedWrapHandler(async (input) => graphQuery(input, projectDir)),
+    gatedWrapHandler(async (input, extra) => graphQuery(input, resolveScope(extra))),
   );
 }
 
@@ -549,7 +262,7 @@ function registerSemanticSearchTool(): void {
           ),
       },
     },
-    gatedWrapHandler(async (input) => semanticSearch(input, projectDir)),
+    gatedWrapHandler(async (input, extra) => semanticSearch(input, resolveScope(extra))),
   );
 }
 
@@ -564,7 +277,9 @@ function registerGraphJobTools(): void {
         force: z.boolean().optional().describe("Skip cache, force new run"),
       },
     },
-    gatedWrapHandler(async (input) => codebaseGraphSubmit(input, projectDir, pluginDir)),
+    gatedWrapHandler(async (input, extra) =>
+      codebaseGraphSubmit(input, resolveScope(extra), pluginDir),
+    ),
   );
 
   server.registerTool(
@@ -580,8 +295,8 @@ function registerGraphJobTools(): void {
   registerToolWithUi("codebase_graph_materialize", {
     description:
       "Materialize the results of a completed codebase graph job into a visual graph. Job must have status 'complete' (check with codebase_graph_poll first).",
-    handler: gatedWrapHandler(async (input) =>
-      codebaseGraphMaterialize(input, projectDir, pluginDir),
+    handler: gatedWrapHandler(async (input, extra) =>
+      codebaseGraphMaterialize(input, resolveScope(extra), pluginDir),
     ),
     htmlFile: "codebase-graph.html",
     inputSchema: {
@@ -607,6 +322,7 @@ function registerGraphJobTools(): void {
 export function registerKnowledgeTools(): void {
   registerGraphUiTools();
   registerDiagnosticsTools();
+  registerWikiLintTool();
   registerGraphQueryTool();
   registerSemanticSearchTool();
   registerGraphJobTools();

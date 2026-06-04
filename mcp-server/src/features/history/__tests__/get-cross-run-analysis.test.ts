@@ -21,11 +21,12 @@ const mockGetArchiveManifests =
 const mockGetReviews = vi.fn(() => []);
 const mockGetAllFlowRuns = vi.fn(() => []);
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn(() => ({
     getAllFlowRuns: mockGetAllFlowRuns,
     getArchiveManifests: mockGetArchiveManifests,
     getReviews: mockGetReviews,
+    getCraftProfiles: () => ({ getRecentProfiles: () => [] }),
   })),
 }));
 

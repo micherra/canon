@@ -178,14 +178,6 @@ const opinionsTotal = /* strong-opinions checked */;
 const conventionsPassed = /* conventions checked - convention violations */;
 const conventionsTotal = /* conventions checked */;
 
-// Craft score — derived from holistic recommendations in the drift report.
-// Call get_drift_report to obtain this value, or count recommendations with
-// source === "holistic" directly from REVIEW.md if the report is unavailable.
-// These fields come from DriftReport.craft (analyzer.ts computeCraftScore).
-// NOTE: craft score is DISTINCT from compliance — do not blend them.
-const craftScore = /* report.craft.score — integer 0–100 */;
-const craftHolisticCount = /* report.craft.holistic_count — integer */;
-
 // Layer chart data
 const layerData = /* from show_pr_impact layers or from fileContextMap */;
 
@@ -216,24 +208,12 @@ Assemble in this order:
 
 1. **Verdict banner** (Section F.3) — full-width, no container
 2. **Reviewer narrative panel** — full-width card immediately after the verdict banner (see below)
-3. **Stats row** (Section F.4) — 4 stat cards. The fourth stat card should display the craft score
-   alongside the compliance number, e.g.:
-   ```
-   Compliance 94% · Craft 80 (2 holistic findings)
-   ```
-   Use distinct labeling so the user sees craft SEPARATE from compliance. If `craftScore` is 100
-   and `craftHolisticCount` is 0, display "Craft 100 (no holistic findings)". Use a neutral color
-   (e.g., `var(--accent)`) for craft — do NOT reuse the verdict accent color. The craft value
-   comes from `DriftReport.craft` (via `get_drift_report`) or a direct count of
-   `recommendations[].source === "holistic"` from REVIEW.md when the drift report is unavailable.
+3. **Stats row** (Section F.4) — 3 stat cards (files changed, violations, blast radius).
 4. **Dashboard grid** (Section F.5) — 2-column grid, conditional cards:
    - Row 1 left: "Fix Before Merge" (Section F.6) — **omit entirely if 0 violations**; instead
      render a compact "No violations — looking good." success banner below the stats row
    - Row 1 right: "Violations by Principle" (Section F.7) + "Compliance Score" (Section F.8)
-     stacked — **omit "Violations by Principle" if 0 violations**; the "Compliance Score" card
-     must include a separate "Craft Score" sub-row (e.g., "Craft: 80 — 2 holistic findings")
-     placed immediately after the compliance bars, using a distinct label and neutral color so
-     it is never mistaken for a compliance measurement
+     stacked — **omit "Violations by Principle" if 0 violations**
    - Row 2 left: "Highest Blast Radius" (Section F.9) — **omit entirely if blast radius data
      is empty** (all files are leaf nodes with 0 downstream deps; `blastFiles` is empty or all
      have depCount === 0)
@@ -783,10 +763,6 @@ Return when the file is written. Do not modify the worktree.
 - Variable substitution is the orchestrator's responsibility before passing to Agent()
 - This is the ONLY renderer template that requires MCP tool calls (show_pr_impact, get_context)
 - The reviewer narrative is NOT optional — the template explicitly marks it as REQUIRED
-- Craft score is DISTINCT from compliance — never blend `craft.score` with `avg_score` or
-  compliance percentages; they measure different dimensions (holistic quality vs. principle compliance)
-- Craft score source: `DriftReport.craft.score` and `DriftReport.craft.holistic_count` (from
-  `get_drift_report`); fallback: count `recommendations[].source === "holistic"` in REVIEW.md
 - The reviewer narrative appears immediately after the verdict banner (before stats row)
 - Read Sections F and G from DESIGN-SYSTEM.md; do not reconstruct patterns from memory
 - Read `file-detail-card.html` and `blast-radius-tree.html` for snippet HTML/CSS — do NOT write your own card markup

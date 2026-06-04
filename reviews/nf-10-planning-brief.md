@@ -10,7 +10,7 @@
 ## ASSUMPTIONS
 
 1. The task-plan template (`templates/task-plan.md`) is the correct target for the architect-to-engineer coverage map. The architect produces one task plan per implementation task; each plan should trace back to specific runbook requirements to prevent narrowing during decomposition.
-2. The implementation-log template (`templates/implementation-log.md`) is the correct target for the engineer-to-reviewer coverage map. This is the engineer's output artifact that the reviewer reads in Stage 3 (compliance cross-check).
+2. The summary template (`templates/summary.md`) is the correct target for the engineer-to-reviewer coverage map. This is the engineer's output artifact that the reviewer reads in Stage 3 (compliance cross-check).
 3. No TypeScript code changes are needed -- the coverage maps are instruction-layer markdown that agents follow via `agent-template-required`. The existing template-loading infrastructure does not parse these sections programmatically; they are consumed by agents as structured text.
 4. The design-document template (`templates/design-document.md`) does NOT need a coverage map because the architect's design document is a different artifact from the task plan. The design doc captures the approach; the task plans capture the decomposition. The narrowing risk lives in the decomposition step (design -> task plans), not in the approach selection step.
 5. The reviewer agent definition (`agents/reviewer.md`) already has Stage 3 (compliance cross-check) and Stage 4 (drift-from-plan) -- the new "Criteria Coverage" section in the implementation log gives the reviewer better input for those existing stages, but the reviewer template and agent instructions do not need changes.
@@ -22,7 +22,7 @@ When requirements flow through the Canon build pipeline, each handoff point is a
 1. **Runbook requirements -> Task plans**: The architect decomposes the approved runbook into atomic task plans. Requirements can be dropped or narrowed during decomposition with no structured mechanism to detect the loss.
 2. **Task plan acceptance criteria -> Implementation**: The engineer implements a task plan and produces a summary. Acceptance criteria from the plan can be silently omitted from the implementation with no structured traceability back to what was required.
 
-- **Evidence**: NF-8 was resolved in soak run 5 by adding the Requirement Coverage Map to `templates/planning-brief.md` (lines 67-87). The pattern is proven. The two downstream handoff points currently have no equivalent traceability mechanism -- confirmed by reading `templates/task-plan.md` (no coverage section) and `templates/implementation-log.md` (no criteria coverage section).
+- **Evidence**: NF-8 was resolved in soak run 5 by adding the Requirement Coverage Map to `templates/planning-brief.md` (lines 67-87). The pattern is proven. The two downstream handoff points currently have no equivalent traceability mechanism -- confirmed by reading `templates/task-plan.md` (no coverage section) and `templates/summary.md` (no criteria coverage section).
 
 ## Target Users
 
@@ -34,7 +34,7 @@ When requirements flow through the Canon build pipeline, each handoff point is a
 
 - [ ] Research audit completed: every template in `templates/` assessed for handoff boundaries and coverage map applicability; agent definitions in `agents/` cross-referenced to confirm producer/consumer relationships; documentation in `docs/` and `references/` checked for coverage map pattern descriptions that need updating
 - [ ] `templates/task-plan.md` contains a "Brief Coverage" section with a table mapping each runbook requirement to a task plan element (or explicitly marking it out-of-scope with rationale)
-- [ ] `templates/implementation-log.md` contains a "Criteria Coverage" section with a table mapping each acceptance criterion from the task plan to what was implemented (or explicitly marking it deferred with rationale)
+- [ ] `templates/summary.md` contains a "Criteria Coverage" section with a table mapping each acceptance criterion from the task plan to what was implemented (or explicitly marking it deferred with rationale)
 - [ ] Both new sections follow the same disposition pattern as the planning brief's Requirement Coverage Map: `covered | descoped | partial` with required rationale for non-covered items
 - [ ] Template frontmatter `read-by` fields are updated if downstream consumers change (verify current values are still accurate)
 - [ ] The architect agent definition (`agents/architect.md`) references the new "Brief Coverage" section in its Step 7 (break into atomic task plans) instructions
@@ -46,7 +46,7 @@ When requirements flow through the Canon build pipeline, each handoff point is a
 | # | Requirement (from original request) | Disposition | Runbook step or rationale |
 |---|-------------------------------------|-------------|--------------------------|
 | 1 | Add "Brief Coverage" section to task-plan.md template mapping runbook requirements to tasks | covered | Step 2: implement |
-| 2 | Add "Criteria Coverage" section to implementation-log.md template mapping acceptance criteria to implementation | covered | Step 2: implement |
+| 2 | Add "Criteria Coverage" section to summary.md template mapping acceptance criteria to implementation | covered | Step 2: implement |
 | 3 | Use same disposition pattern as NF-8 (covered/descoped/partial with rationale) | covered | Step 2: implement -- both tables use the identical disposition vocabulary |
 | 4 | Instruction-layer-only change, no TypeScript | covered | Entire runbook is template + agent markdown edits only |
 | 5 | Update architect agent instructions to reference the new section | covered | Step 2: implement |
@@ -72,9 +72,9 @@ When requirements flow through the Canon build pipeline, each handoff point is a
 
 ## Recommended Approach
 
-- **Approach**: Add structured coverage map sections to both `templates/task-plan.md` and `templates/implementation-log.md`, following the identical disposition pattern from the planning brief's Requirement Coverage Map. Update the architect and engineer agent definitions to reference the new sections in their respective output steps. This is the same pattern that resolved NF-8, applied to two additional handoff points.
+- **Approach**: Add structured coverage map sections to both `templates/task-plan.md` and `templates/summary.md`, following the identical disposition pattern from the planning brief's Requirement Coverage Map. Update the architect and engineer agent definitions to reference the new sections in their respective output steps. This is the same pattern that resolved NF-8, applied to two additional handoff points.
 - **Why this one**: Proven pattern (NF-8), minimal effort, proportional to risk. The instruction-layer approach is sufficient because `agent-template-required` already enforces template compliance, and the explicit agent instructions ensure the sections are treated as mandatory rather than decorative.
-- **Scope boundaries**: In scope: template edits to `task-plan.md` and `implementation-log.md`, agent instruction edits to `architect.md` and `engineer.md`. Out of scope: TypeScript validation, reviewer agent changes, design-document template changes, orchestrator-level enforcement of the new maps.
+- **Scope boundaries**: In scope: template edits to `task-plan.md` and `templates/summary.md`, agent instruction edits to `architect.md` and `engineer.md`. Out of scope: TypeScript validation, reviewer agent changes, design-document template changes, orchestrator-level enforcement of the new maps.
 - **Runbook steps**: research -> implement -> review -> context-sync -> learn
 
 ## Open Questions

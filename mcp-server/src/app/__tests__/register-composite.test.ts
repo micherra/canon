@@ -7,6 +7,7 @@ vi.mock("@app/server-state.ts", () => ({
   pluginDir: "/mock/plugin",
   projectDir: "/mock/project",
   registerToolWithUi: vi.fn(),
+  resolveScope: () => "/mock/project",
   server: { registerTool: vi.fn() },
 }));
 
@@ -50,7 +51,7 @@ vi.mock("@features/diagnostics/services/signal-compiler.ts", () => ({
   compileSignals: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn().mockReturnValue({ getSignals: vi.fn().mockReturnValue({}) }),
 }));
 

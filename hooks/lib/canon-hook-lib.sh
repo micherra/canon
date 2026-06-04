@@ -36,7 +36,7 @@ canon_extract_command() {
   # Try jq first (most robust), fall back to grep/sed.
   if command -v jq >/dev/null 2>&1; then
     local result
-    result=$(printf '%s' "$input" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true)
+    result=$(printf '%s' "$input" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty result triggers caller's pass-through guard
     printf '%s' "$result"
   else
     # grep/sed fallback: sufficient for plain string values only.
@@ -86,7 +86,7 @@ canon_git_dir_arg() {
     | grep -oE '^[[:space:]]*cd[[:space:]]+[^;&|]+' \
     | sed 's/^[[:space:]]*cd[[:space:]]*//' \
     | sed 's/[[:space:]]*$//' \
-    || true)
+    || true) # DOCUMENTED FAIL-OPEN -- no cd prefix in command is the normal case
 
   if [[ -n "$cd_target" ]] && [[ -d "$cd_target" ]]; then
     printf '%s' "-C $cd_target"
@@ -122,7 +122,7 @@ canon_is_git_cmd() {
   # Strip a leading "cd <dir> &&" prefix so compound commands are handled.
   stripped=$(printf '%s' "$command" \
     | sed 's/^[[:space:]]*cd[[:space:]]*[^;&|]*&&[[:space:]]*//' \
-    || true)
+    || true) # DOCUMENTED FAIL-OPEN -- sed no-match means no cd prefix to strip
   # If sed produced nothing (no match), keep the original.
   if [[ -z "$stripped" ]]; then
     stripped="$command"
@@ -141,7 +141,7 @@ canon_is_git_cmd() {
   local after_git
   after_git=$(printf '%s' "$stripped" \
     | sed -E 's/(^|[[:space:]])git[[:space:]]+//' \
-    || true)
+    || true) # DOCUMENTED FAIL-OPEN -- sed no-match means "git" keyword not found
 
   local remaining="$after_git"
   local expect_value=0
@@ -158,14 +158,14 @@ canon_is_git_cmd() {
     if [[ "$expect_value" -eq 1 ]]; then
       # This token is the value argument for the previous "-flag", skip it
       expect_value=0
-      remaining=$(printf '%s' "$remaining" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//' || true)
+      remaining=$(printf '%s' "$remaining" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//' || true) # DOCUMENTED FAIL-OPEN -- advancing past token in word-by-word parser
       continue
     fi
 
     if [[ "$first" == -* ]]; then
       # Flag token — skip it; the next token is its value argument
       expect_value=1
-      remaining=$(printf '%s' "$remaining" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//' || true)
+      remaining=$(printf '%s' "$remaining" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//' || true) # DOCUMENTED FAIL-OPEN -- advancing past token in word-by-word parser
       continue
     fi
 

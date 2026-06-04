@@ -16,7 +16,7 @@ When an agent declares templates in its `templates:` frontmatter field, each lis
 
 ## Why
 
-Templates exist so downstream agents can reliably parse upstream output. When an engineer skips the implementation-log template, the tester can't find the `### Tests Written` section. Consistency across the team is more valuable than any individual agent's formatting preference.
+Templates exist so downstream agents can reliably parse upstream output. When an engineer skips the summary template, the tester can't find the `### Tests Written` section. Consistency across the team is more valuable than any individual agent's formatting preference.
 
 Preloading these templates into the spawn prompt (phase1-08.6) replaces the earlier pattern of "orchestrator provides a template path, agent reads it first." Preloaded means the agent already has the template content at turn zero — no Read call, no path to pass, no forgetting. The agent is responsible for producing output matching the preloaded shape.
 
@@ -27,10 +27,10 @@ Each agent's `templates:` frontmatter lists the specific templates it produces. 
 | Agent | templates: |
 |-------|-----------|
 | architect | design-document, task-plan, design-decision, session-context, runbook |
-| engineer | implementation-log |
+| engineer | summary |
 | pm-orchestrator | sharpened-request |
-| reviewer | review-checklist |
-| scribe | claudemd-template, context-sync-report |
+| reviewer | review |
+| scribe | claudemd-template, context-sync |
 | security | security-assessment |
 | shipper | pr-description |
 | tester | test-report |
@@ -39,4 +39,4 @@ The resolver confirms every declared template resolves at boot time (integration
 
 ## Exceptions
 
-**engineer (fix mode)**: The engineer in fix mode produces a structured status report (FIXED / PARTIAL_FIX / CANNOT_FIX with commit hash, change description, and behavior preservation confirmation) rather than a full artifact document. Its output is consumed only by the orchestrator for transition decisions, not parsed by downstream agents. The engineer in fix mode is exempt from the implementation-log template requirement — no `NEEDS_CONTEXT` report for the missing shape.
+**engineer (fix mode)**: The engineer in fix mode produces a structured status report (FIXED / PARTIAL_FIX / CANNOT_FIX with commit hash, change description, and behavior preservation confirmation) rather than a full artifact document. Its output is consumed only by the orchestrator for transition decisions, not parsed by downstream agents. The engineer in fix mode is exempt from the summary template requirement — no `NEEDS_CONTEXT` report for the missing shape.

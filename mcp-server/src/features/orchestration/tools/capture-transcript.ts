@@ -2,17 +2,33 @@ import { createReadStream } from "node:fs";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import { isPathContained } from "@shared/lib/worktree-guard.ts";
-import { projectDir } from "../../../app/server-state.ts";
 import { transformClaudeCodeTranscript } from "../services/transcript-transformer.ts";
 
 export type CaptureTranscriptInput = {
   workspace: string;
   step_id: string;
   agent_type: string;
-  agent_id: string;
+  /** Agent ID from the Agent tool result. Used to locate the source JSONL via
+   * glob scan. Optional: in the cliff-recovery path the orchestrator may not
+   * have an agent_id (the agent died before completion was logged), in which
+   * case `source_path` is the source and this is omitted. When both are absent,
+   * capture is a best-effort no-op (returns a warning, never an error). */
+  agent_id?: string;
+  /** Absolute path to the source CC agent JSONL (e.g. the SubagentStop payload's
+   * agent_transcript_path). Used as the primary source; when omitted, the
+   * agent_id glob scan is the fallback. */
+  source_path?: string;
+  /** When true, persist the captured transcript path via setTranscriptPath so
+   * get_transcript can resolve it for a non-completed step. Recovery callers
+   * set this true; the completion path leaves it unset. */
+  persist_path?: boolean;
+  /** Project directory — used to locate the Claude Code projects directory.
+   * Required: callers must pass an explicit projectDir (no cwd fallback). */
+  projectDir: string;
 };
 
 export type CaptureTranscriptResult = {
@@ -21,7 +37,7 @@ export type CaptureTranscriptResult = {
   warning?: string;
 };
 
-async function findAgentTranscript(agentId: string): Promise<string | null> {
+async function findAgentTranscript(agentId: string, projectDir: string): Promise<string | null> {
   const home = process.env.HOME ?? "/tmp";
   const projectsDir = join(home, ".claude", "projects", projectDir.replace(/\//g, "-"));
   let sessionDirs: string[];
@@ -71,14 +87,20 @@ async function readJsonlFile(filePath: string): Promise<unknown[]> {
 export async function captureTranscript(
   input: CaptureTranscriptInput,
 ): Promise<ToolResult<CaptureTranscriptResult>> {
-  const { workspace, step_id, agent_type, agent_id } = input;
+  const { workspace, step_id, agent_type, agent_id, projectDir } = input;
 
-  const sourcePath = await findAgentTranscript(agent_id);
+  // source_path takes priority; fall back to an agent_id glob scan only when an
+  // agent_id is present. With neither, there is nothing to locate — return a
+  // best-effort warning rather than erroring, so a resuming orchestrator can
+  // proceed to re-spawn regardless.
+  const sourcePath =
+    input.source_path ?? (agent_id ? await findAgentTranscript(agent_id, projectDir) : null);
   if (!sourcePath) {
+    const detail = agent_id ? `for agent ${agent_id}` : "(no source_path or agent_id provided)";
     return toolOk({
       entry_count: 0,
       transcript_path: "",
-      warning: `Source transcript not found for agent ${agent_id}`,
+      warning: `Source transcript not found ${detail}`,
     });
   }
 
@@ -119,6 +141,14 @@ export async function captureTranscript(
       transcript_path: "",
       warning: `Failed to write transcript: ${String(err)}`,
     });
+  }
+
+  if (input.persist_path) {
+    try {
+      getExecutionStore(workspace).setTranscriptPath(step_id, outputPath);
+    } catch {
+      // best-effort — the transcript was written; do not fail capture on persist error. Fail-open.
+    }
   }
 
   return toolOk({

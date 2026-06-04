@@ -10,7 +10,7 @@
 
 ## What You May Do Directly
 
-- Call Canon MCP tools (`init_workspace`, `categorize_failures`, `resolve_wave_event`, `resolve_after_consultations`, `log_step`, `batch_log_steps`, `finalize_workspace`)
+- Call Canon MCP tools (`init_workspace`, `categorize_failures`, `log_step`, `batch_log_steps`, `finalize_workspace`)
 - Spawn specialist agents via the `Agent` tool
 - Read/write orchestration files: `board.json`, `progress.md`, `.lock`, `sharpened-request.md`
 - Use `Bash` for orchestration git operations: `git status`, `git worktree`, `git merge`
@@ -119,8 +119,6 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **User override**: Pass `override_tier: "supervised"` to force full supervision. The user can request this at any point by saying "supervised mode" or "full supervision".
 
-**Logging**: The tool logs auto_decision events automatically. No additional orchestrator logging needed.
-
 ### Per-Message Re-Classification (L1)
 
 **Re-classify every user message.** Intent is per message, not session. Chat/question history does not make a subsequent build request "chat." Apply PM triage to every build request regardless of prior conversation flow.
@@ -167,6 +165,8 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch via agent teams. Each entry has `task_id`, `depends_on: []`, `files: []`. If absent, fall back to sequential execution.
 
+> **Supported execution model (current).** The live, exercised path is **single-worktree sequential execution**: `init_workspace` creates one `{workspace}/worktree` and all code-writing agents share it. The worktree-per-task parallel-wave path described below (per-task `canon-wave/{task_id}` worktrees + sequential merge) is documented as the intended shape but is **not currently backed by automated tooling** — the wave-lifecycle helpers (`createWaveWorktrees`/`mergeWaveResults`/`cleanupWorktrees`) were removed in PR #167. Until they are deliberately rebuilt (see `docs/explore/adaptive-queen.md` revisit trigger), run the merge steps below as explicit git operations, or prefer sequential execution. Do not reintroduce calls to the removed helpers.
+
 **Validate DAG** (via `dag-validator.ts` in `mcp-server/src/shared/lib/`): no cycles, all `depends_on` refs resolve, no self-references. On failure: present errors, re-spawn architect.
 
 #### Task Queue Setup
@@ -187,10 +187,10 @@ When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch vi
 
 After `TaskList` is empty (all done):
 
-1. `mergeWaveResults(worktreeResults, buildWorktreePath, "sequential")` — alphabetical `task_id` order.
+1. In alphabetical `task_id` order, merge each completed task branch into the build worktree: `git merge --no-ff canon-wave/{task_id}` (run from `buildWorktreePath`).
 2. **Post-merge verification**: For each task, `git diff {base_commit} -- {file}` for every declared file. Empty diff = no committed changes = task failed → retry (one retry, then HITL).
 3. Conflict: `git merge --abort` auto-runs → HITL: `"Merge conflict in task {task_id} affecting files: {files}."`.
-4. Success: `cleanupWorktrees(worktreeResults, projectDir)` then `TeamDelete({ team_name: "canon-{slug}" })`.
+4. Remove each task worktree (`git worktree remove {projectDir}/.canon/worktrees/{task_id}`) and delete its branch (`git branch -d canon-wave/{task_id}`), then `TeamDelete({ team_name: "canon-{slug}" })`.
 
 **Key asymmetry**: merges target `buildWorktreePath`; cleanup uses `projectDir`.
 
@@ -212,13 +212,35 @@ Run sequentially after all tasks: review → context-sync → ship → learn. Th
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
+**Reconciliation-on-resume (cliff detection + recovery).** Before continuing,
+call `reconcile_workspace({ workspace })`. Each entry in `incomplete_steps` is a
+`started`/`planned` step that either (a) has a declared artifact missing on disk
+(`missing_artifacts`), or (b) has an artifact present but still a `## Status:
+Partial` / `IN_PROGRESS` skeleton (`partial_artifacts`) — an agent that stopped
+before producing or finishing its artifact. For each entry:
+1. **Harvest** the dead agent's transcript: call `capture_transcript({ workspace,
+   step_id, agent_type, agent_id?, source_path?, persist_path: true })`. Pass the
+   `agent_id` from the original Agent spawn result (or the journal) when
+   available; if the agent died before its completion was logged, pass
+   `source_path` if known. If neither is available, capture is a best-effort
+   no-op (it returns a warning, never an error) — proceed to re-spawn regardless.
+   `persist_path: true` makes the recovered transcript findable by
+   `get_transcript`.
+2. **Re-spawn** the same agent type using the Re-spawn Enrichment Protocol,
+   passing the harvested transcript as prior-artifacts context plus the
+   completed-files / no-duplicate instructions.
+3. On a SECOND failure of the same step, escalate to HITL (do not loop) — reuse
+   the Auto-Escalation Protocol shape. (The full auto-escalation loop is Phase 2;
+   Phase 1 does detect → harvest → one re-spawn → HITL-on-second-failure.)
+
+Reconciliation runs against the BUILD journal. It is advisory and read-only — a
+`reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
+
 ### Skill Preloading
 
 Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include returned `preload_prompt` verbatim at top of spawn prompt. For task-specific domain primers, name them in the spawn prompt body: `"Relevant domain primers: <name>. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
 
 ### MCP Tool Composition
-
-Table of which Canon MCP tools to call before spawning each step type:
 
 | Step type | MCP tools to call |
 |-----------|------------------|
@@ -229,7 +251,7 @@ Table of which Canon MCP tools to call before spawning each step type:
 | Test | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 | Security | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 
-`get_context` is a composite tool that batches multiple lookups into a single MCP round-trip. Include results in the spawn prompt. Agents also have direct MCP access and will self-serve missing context (via `agent-context-check` skill).
+`get_context` batches multiple lookups in one MCP round-trip. Include results in the spawn prompt. Agents self-serve missing context via `agent-context-check` skill.
 
 ### Dispatch Framework
 
@@ -244,7 +266,7 @@ Table of which Canon MCP tools to call before spawning each step type:
 
 ### Team Dispatch Protocol
 
-Team dispatch follows a three-phase loop. The reviewer is the concrete implementation; security, tester, and architect teams follow the same pattern with different partitioning strategies (to be implemented later).
+Three-phase loop: partition → spawn → consolidate. Reviewer is the concrete implementation; other team types follow the same pattern.
 
 #### Phase 1 — Partition
 
@@ -305,7 +327,7 @@ An empty `skip_reason` is a protocol violation. If no accepted value fits, the s
 
 ### Post-Subagent Artifact Check
 
-After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL.
+After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL. Derive the implement-summary path from `write_implementation_summary`'s returned `path` field; never a guessed stem.
 
 | Agent | Expected artifact |
 |-------|------------------|
@@ -314,6 +336,8 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 | Reviewer | `reviews/REVIEW.md` |
 | Tester | `plans/${slug}/TEST-REPORT.md` |
 | Scribe | `plans/${slug}/CONTEXT-SYNC.md` |
+
+> Authoritative artifact path and naming rules: `references/canon-artifact-locations.md`.
 
 ### HITL Patterns <!-- last-updated: 2026-05-17 -->
 
@@ -372,7 +396,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 2. Context-sync: spawn scribe. Updates CLAUDE.md, context.md, CONVENTIONS.md on build branch before ship, and electively factual-syncs docs/*.md direction docs.
 3. Ship:
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
-   - **GitHub release** (conditional): after PR creation, if a `vX.Y.Z` tag exists on HEAD, the shipper runs `gh release create <tag> --generate-notes`. If no tag exists, skip silently.
+   - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
 4. Verify file claims released.
 5. Run `.canon/learn.sh` if it exists.
@@ -411,15 +435,7 @@ See Agent Spawn Error Handling below. For transient errors (429, auth, TTL), ret
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
-**Spawn pattern for code-writing agents:**
-```
-Agent({
-  subagent_type: "canon:engineer",
-  prompt: "... Working directory: {worktree_path}\nturn_budget: {maxTurns} ..."
-})
-```
-
-Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`.
+**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`.
 
 **Exceptions (no worktree needed):**
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
@@ -434,7 +450,7 @@ Detect and retry transient failures:
 | Auth failure ("Not logged in", 401) | Parallel agents corrupting session credentials |
 | TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache ordering bug |
 
-Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only the failed ones. If all retries fail, inform the user and pause.
+Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only failed ones. If all retries fail, pause and inform the user.
 
 **Architect re-spawn tracking**: When architect requires 2+ spawn attempts, record reason in `log_step` outcome `review_verdict` field as `"respawn:{reason}"` (values: `artifacts_missing`, `rate_limit`, `auth_failure`, `ttl_ordering`, `timeout`).
 
@@ -442,8 +458,6 @@ Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful resu
 <!-- last-updated: 2026-05-21 -->
 
 When an agent failure or stuck condition is detected (`isStuck` returns true, agent returns error, or retry fails), call `get_next_escalation_strategy({ workspace, step_id, flow_config? })` BEFORE escalating to HITL.
-
-**Strategy application:**
 
 | Strategy | How to apply |
 |----------|-------------|
@@ -461,9 +475,7 @@ When an agent failure or stuck condition is detected (`isStuck` returns true, ag
 
 ## Re-spawn Enrichment Protocol
 
-Re-spawned agents (failure retry, fix-after-review, reviewer re-spawn) MUST receive prior progress context to avoid duplicating completed work.
-
-**Include in every re-spawn prompt:**
+Re-spawned agents MUST receive prior progress context. **Include in every re-spawn prompt:**
 
 1. **Uncommitted work**: `git diff --name-only` in worktree → instruct agent to commit with `wip(recovery): save prior agent work` first.
 2. **Completed files**: `git diff --name-only {base_commit}..HEAD` → explicit list: "These files do NOT need re-implementation: [list]."

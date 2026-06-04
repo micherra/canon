@@ -17,7 +17,7 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract file path from the tool input
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .file_path // empty' 2>/dev/null || true)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .file_path // empty' 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty FILE_PATH triggers pass-through at line 23
 
 # If we couldn't extract a path, pass through
 if [[ -z "$FILE_PATH" ]]; then
@@ -30,14 +30,14 @@ case "$FILE_PATH" in
 esac
 
 # Resolve main repo root for worktree support
-MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||') || { >&2 echo "CANON WARNING: [large-file-guard] git root resolution failed"; MAIN_ROOT=""; }
 CANON_DIR="${MAIN_ROOT:-.}/.canon"
 
 # Read threshold from .canon/config.json if present, default 500
 MAX_LINES=500
 CONFIG_FILE="${CANON_DIR}/config.json"
 if [[ -f "$CONFIG_FILE" ]]; then
-  CONFIGURED=$(jq -r '.max_file_lines // empty' "$CONFIG_FILE" 2>/dev/null || true)
+  CONFIGURED=$(jq -r '.max_file_lines // empty' "$CONFIG_FILE" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- config read failure uses default MAX_LINES=500
   if [[ -n "$CONFIGURED" ]]; then
     MAX_LINES=$CONFIGURED
   fi
@@ -58,7 +58,7 @@ else
   NEW_CONTENT=""
 fi
 if [[ -n "$NEW_CONTENT" ]]; then
-  NEWLINE_COUNT=$(echo "$INPUT" | jq -r '.tool_input.content // .content // empty' 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+  NEWLINE_COUNT=$(echo "$INPUT" | jq -r '.tool_input.content // .content // empty' 2>/dev/null | wc -l | tr -d ' ' || echo "0") # DOCUMENTED FAIL-OPEN -- count failure defaults to 0; falls through to existing-file check
   if [[ $NEWLINE_COUNT -gt $MAX_LINES ]]; then
     cat <<EOF
 CANON WARNING: Writing ~${NEWLINE_COUNT} lines to ${FILE_PATH} (threshold: ${MAX_LINES}). Consider splitting this file into smaller, focused modules. Large files are harder to review, test, and maintain.

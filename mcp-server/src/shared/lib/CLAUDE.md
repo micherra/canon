@@ -76,6 +76,15 @@ Manages `.canon/janitor.lock` — a PID + mtime lock that prevents concurrent ja
 
 ---
 
+### `subsystem-key.ts` — Area Memory Subsystem Key Derivation
+
+**Exports:**
+- `deriveSubsystemKey(filePath: string): string` — strips `mcp-server/src/`, `tools/`, `services/`, and `__tests__/` path segments to produce stable subsystem keys like `features/orchestration` or `platform/storage/drift`; used by `AreaMemoryDao` and all write paths that store area observations.
+
+Added 2026-05-29.
+
+---
+
 ## When to Extract to shared/lib/
 
 A pure function belongs in `shared/lib/` when:

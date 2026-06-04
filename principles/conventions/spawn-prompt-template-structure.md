@@ -62,4 +62,4 @@ This is bad because: no Variables section (orchestrator doesn't know what to fil
 
 ## Exceptions
 
-None. All spawn-prompt templates follow this structure. Artifact-output templates (design-document.md, task-plan.md, implementation-log.md, etc.) use a different structure and are NOT subject to this convention.
+None. All spawn-prompt templates follow this structure. Artifact-output templates (design-document.md, task-plan.md, summary.md, etc.) use a different structure and are NOT subject to this convention.

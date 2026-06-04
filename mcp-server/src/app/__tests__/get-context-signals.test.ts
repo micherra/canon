@@ -7,6 +7,7 @@ vi.mock("@app/server-state.ts", () => ({
   pluginDir: "/mock/plugin",
   projectDir: "/mock/project",
   registerToolWithUi: vi.fn(),
+  resolveScope: () => "/mock/project",
   server: { registerTool: vi.fn() },
 }));
 
@@ -40,7 +41,7 @@ vi.mock("@features/diagnostics/services/prediction-accuracy.ts", () => ({
   computeAccuracy: vi.fn().mockReturnValue(new Map()),
 }));
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn(),
 }));
 
@@ -72,7 +73,7 @@ import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts"
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 
 const mockSignalsForFoo: FileSignals = {
   file_path: "src/foo.ts",

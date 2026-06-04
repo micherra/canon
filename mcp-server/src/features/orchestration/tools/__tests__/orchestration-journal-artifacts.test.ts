@@ -35,6 +35,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -42,6 +44,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -66,6 +70,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -73,6 +79,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -90,6 +98,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -97,6 +107,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -113,6 +125,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -120,6 +134,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -132,6 +148,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -139,6 +157,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -151,6 +171,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -158,6 +180,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -180,6 +204,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -187,6 +213,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -204,6 +232,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -211,6 +241,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -223,6 +255,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "planned",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -230,6 +264,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -245,6 +281,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "s1",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -253,6 +291,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "s1",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -274,6 +314,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
           status,
           step_id: `step-${status}`,
           workspace,
+
+          projectDir: process.cwd(),
         }),
       ),
     );
@@ -289,6 +331,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "skipped",
       step_id: "step-skipped",
       workspace,
+
+      projectDir: process.cwd(),
     });
     assertOk(skippedResult);
     expect(skippedResult.artifacts_missing).toBeUndefined();
@@ -303,6 +347,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "review",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -310,6 +356,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "review",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -326,6 +374,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -333,6 +383,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -351,6 +403,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "mixed",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -358,6 +412,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "mixed",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -373,6 +429,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -380,12 +438,140 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
       expect(result.error_code).toBe("INVALID_INPUT");
       expect(result.context?.artifacts_missing).toEqual(["src/missing-file.ts"]);
+    }
+  });
+});
+
+describe("logStep artifact scanning — SUMMARY auto-discovery fallback", () => {
+  // dc-01 / AC#1: wrong SUMMARY stem registered, real SUMMARY exists → matches via fallback
+  test("dc-01: guessed SUMMARY stem validates when real slug-named SUMMARY exists", async () => {
+    const slug = "my-slug";
+    mkdirSync(join(workspace, "plans", slug), { recursive: true });
+    // Register wrong stem (docs-SUMMARY.md), write real stem (slug-SUMMARY.md)
+    writeFileSync(join(workspace, "plans", slug, `${slug}-SUMMARY.md`), "# Summary\n");
+
+    await logStep({
+      artifacts_expected: [`plans/${slug}/docs-SUMMARY.md`],
+      status: "started",
+      step_id: "implement",
+      workspace,
+
+      projectDir: process.cwd(),
+    });
+
+    const result = await logStep({
+      agent_id: "test-agent-dc-01",
+      status: "completed",
+      step_id: "implement",
+      workspace,
+
+      projectDir: process.cwd(),
+    });
+
+    assertOk(result);
+    expect(result.status).toBe("completed");
+    expect(result.artifacts_missing).toBeUndefined();
+  });
+
+  // dc-02 / AC#2 (safety): registered SUMMARY, nothing on disk → still missing
+  test("dc-02: genuinely missing SUMMARY still fails validation (safety property)", async () => {
+    const slug = "my-slug";
+    mkdirSync(join(workspace, "plans", slug), { recursive: true });
+    // Write nothing — no SUMMARY file at all
+
+    await logStep({
+      artifacts_expected: [`plans/${slug}/anything-SUMMARY.md`],
+      status: "started",
+      step_id: "implement",
+      workspace,
+
+      projectDir: process.cwd(),
+    });
+
+    const result = await logStep({
+      agent_id: "test-agent-dc-02",
+      status: "completed",
+      step_id: "implement",
+      workspace,
+
+      projectDir: process.cwd(),
+    });
+
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.context?.artifacts_missing).toContain(`plans/${slug}/anything-SUMMARY.md`);
+    }
+
+    const journal = await readJournalFile(workspace);
+    const step = journal.steps.find((s) => s.step_id === "implement");
+    expect(step?.status).toBe("started");
+  });
+
+  // AC#3: explicit *-SUMMARY.md glob still works (lock in pre-existing behavior)
+  test("AC#3: explicit glob plans/<slug>/*-SUMMARY.md matches when summary present", async () => {
+    const slug = "my-slug";
+    mkdirSync(join(workspace, "plans", slug), { recursive: true });
+    writeFileSync(join(workspace, "plans", slug, `${slug}-SUMMARY.md`), "# Summary\n");
+
+    await logStep({
+      artifacts_expected: [`plans/${slug}/*-SUMMARY.md`],
+      status: "started",
+      step_id: "implement",
+      workspace,
+
+      projectDir: process.cwd(),
+    });
+
+    const result = await logStep({
+      agent_id: "test-agent-ac3",
+      status: "completed",
+      step_id: "implement",
+      workspace,
+
+      projectDir: process.cwd(),
+    });
+
+    assertOk(result);
+    expect(result.status).toBe("completed");
+    expect(result.artifacts_missing).toBeUndefined();
+  });
+
+  // AC#6: fallback does NOT fire for fixed-stem artifacts (DESIGN.md, etc.)
+  test("AC#6: fixed-stem missing artifact still reported — fallback is SUMMARY-only", async () => {
+    mkdirSync(join(workspace, "plans"), { recursive: true });
+    // Do NOT write plans/DESIGN.md — ensure it is still reported missing
+
+    await logStep({
+      artifacts_expected: ["plans/DESIGN.md"],
+      status: "started",
+      step_id: "design",
+      workspace,
+
+      projectDir: process.cwd(),
+    });
+
+    const result = await logStep({
+      agent_id: "test-agent-ac6",
+      status: "completed",
+      step_id: "design",
+      workspace,
+
+      projectDir: process.cwd(),
+    });
+
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.context?.artifacts_missing).toContain("plans/DESIGN.md");
     }
   });
 });

@@ -37,6 +37,7 @@ import type { Principle } from "@shared/parser.ts";
 import { describe, expect, it } from "vitest";
 import {
   assembleWikiLintOutput,
+  checkCitedPaths,
   checkContradictions,
   checkMissingExamples,
   checkOrphanPrinciples,
@@ -236,6 +237,164 @@ describe("checkMissingExamples", () => {
   });
 });
 
+// ---- checkCitedPaths (dc-06) ----
+
+describe("checkCitedPaths", () => {
+  it("dc-06a: flags a non-resolving cited path", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: "Run `mcp-server/src/features/diagnostics/tools/wiki-lint.ts` to check.",
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].cited_path).toBe("mcp-server/src/features/diagnostics/tools/wiki-lint.ts");
+    expect(findings[0].source_file).toBe("references/test.md");
+  });
+
+  it("dc-06b: passes a resolving cited path (no findings)", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: "See `mcp-server/src/features/diagnostics/services/wiki-lint.ts` for details.",
+      },
+    ];
+    const existsOnDisk = (_p: string) => true;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("dc-06c: excludes ${WORKSPACE}/x.ts (template variable)", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: "Write to `${WORKSPACE}/plans/x.ts` in the workspace.",
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("dc-06c: excludes <stem>-SUMMARY.md placeholder", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: "The summary is written to `<stem>-SUMMARY.md`.",
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("dc-06c: excludes {slug}-SUMMARY.md brace placeholder", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: "The agent writes `{slug}-SUMMARY.md` to the workspace.",
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("dc-06d: ignores a path inside a fenced block labeled 'example'", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: [
+          "Normal text.",
+          "```bash # example",
+          "run mcp-server/src/missing-file.ts",
+          "```",
+          "End of doc.",
+        ].join("\n"),
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("dc-06d: ignores a path inside a fenced block labeled 'hypothetical'", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: [
+          "Some prose.",
+          "```typescript # hypothetical",
+          "// This references `src/missing.ts`",
+          "```",
+          "End.",
+        ].join("\n"),
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("dc-06d: does NOT strip regular fenced blocks (only illustrative ones)", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: [
+          "Real content:",
+          "```typescript",
+          "// import from `src/actually-missing.ts`",
+          "```",
+        ].join("\n"),
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    // Regular fenced blocks are NOT stripped, so the backtick path inside is scanned
+    expect(findings).toHaveLength(1);
+    expect(findings[0].cited_path).toBe("src/actually-missing.ts");
+  });
+
+  it("dc-06e: reports the correct 1-based line_number", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: "Line 1.\nLine 2.\nSee `src/features/missing.ts` on line 3.",
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].line_number).toBe(3);
+  });
+
+  it("dc-06: excludes bare filenames (no slash)", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: "Use `package.json` in the root.",
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("dc-06: excludes http:// URLs", () => {
+    const files = [
+      {
+        path: "references/test.md",
+        content: "See `http://example.com/foo.ts` for info.",
+      },
+    ];
+    const existsOnDisk = (_p: string) => false;
+    const findings = checkCitedPaths(files, existsOnDisk);
+    expect(findings).toHaveLength(0);
+  });
+});
+
 // ---- assembleWikiLintOutput ----
 
 describe("assembleWikiLintOutput", () => {
@@ -260,11 +419,18 @@ describe("assembleWikiLintOutput", () => {
       file_path: "bar.md",
     };
 
+    const citedPath = {
+      source_file: "references/test.md",
+      cited_path: "src/missing.ts",
+      line_number: 1,
+    };
+
     const output = assembleWikiLintOutput({
       contradictions: [contradiction],
       orphans: [orphan],
       staleRefs: [staleRef],
       missingExamples: [missingExample],
+      citedPaths: [citedPath],
       filesScanned: 10,
       principlesChecked: 20,
     });
@@ -273,7 +439,8 @@ describe("assembleWikiLintOutput", () => {
     expect(output.orphan_principles).toHaveLength(1);
     expect(output.stale_refs).toHaveLength(1);
     expect(output.missing_examples).toHaveLength(1);
-    expect(output.summary.total_findings).toBe(4);
+    expect(output.cited_paths).toHaveLength(1);
+    expect(output.summary.total_findings).toBe(5);
     expect(output.summary.files_scanned).toBe(10);
     expect(output.summary.principles_checked).toBe(20);
   });

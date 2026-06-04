@@ -16,7 +16,7 @@ Before starting work, check your spawn prompt for context:
 
 3. **Domain skills**: If your spawn prompt includes a `Relevant domain skills:` list, Read each named skill file from `references/` before starting work.
 
-4. **Template**: If your spawn prompt names a template (e.g., `Use template: implementation-log`), Read it from `templates/` before producing output.
+4. **Template**: If your spawn prompt names a template (e.g., `Use template: summary`), Read it from `templates/` before producing output.
 
 5. **Retrieval strategy**: If your task involves searching the codebase, Read `primers/retrieval-strategy.md` for guidance on tool selection (Grep vs semantic_search vs graph_query). If you are running as a Sonnet or Haiku model, prefer Grep/Glob over semantic_search for identifier lookups.
 

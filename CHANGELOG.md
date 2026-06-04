@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.4.1](https://github.com/micherra/canon/compare/v2.4.0...v2.4.1) (2026-06-03)
+
+
+### Bug Fixes
+
+* **artifact-validation:** harden SUMMARY path validation + authoritative artifact-location spec ([#298](https://github.com/micherra/canon/issues/298)) ([e4b1cea](https://github.com/micherra/canon/commit/e4b1ceaecc637652f13bef4cf122f4a3e3db319d))
+* **mcp-boot:** ESM dep reachability + bounded deps-ready wait for clean installs ([#296](https://github.com/micherra/canon/issues/296)) ([bd452f9](https://github.com/micherra/canon/commit/bd452f9e3d65537cb78b2f55f5b5ab7aa4a2817d))
+
+## [2.4.0](https://github.com/micherra/canon/compare/v2.3.0...v2.4.0) (2026-06-02)
+
+
+### Features
+
+* **diagnostics:** doc-freshness drift dimension + scribe docs/*.md scope (watch_ZZZ1) ([#274](https://github.com/micherra/canon/issues/274)) ([9432ce9](https://github.com/micherra/canon/commit/9432ce97f26800e862d0fc671f28a04e78dc80c2))
+* **http-epic-1a:** per-connection scope registry + resolveScope ([#288](https://github.com/micherra/canon/issues/288)) ([a52a4e9](https://github.com/micherra/canon/commit/a52a4e967d5622a5b935998123def1fa29c43b1a))
+* **http-epic-1b:** migrate 5 tool boundaries to per-request resolveScope(extra) ([#290](https://github.com/micherra/canon/issues/290)) ([62e4cce](https://github.com/micherra/canon/commit/62e4cce2bb7fec3f5cee58ecfd2cacf6066e5419))
+* **memory:** area memory + hot-file caution for engineers ([#279](https://github.com/micherra/canon/issues/279)) ([222c0fe](https://github.com/micherra/canon/commit/222c0fefee55ae5f451e355b54866fbf95b57d1f))
+* **observability:** address learner proposals YYY1-YYY4 + catch-block sweep ([#275](https://github.com/micherra/canon/issues/275)) ([a7cbe3b](https://github.com/micherra/canon/commit/a7cbe3bf4c66f048a4ea1d8b5192e1e8f82f8e6a))
+* **release:** adopt release-please for automated Canon releases ([#293](https://github.com/micherra/canon/issues/293)) ([8d1f1ed](https://github.com/micherra/canon/commit/8d1f1edb33d6b7cba7d23c0b66564b4f5151ea7c))
+
+
+### Bug Fixes
+
+* extend Canon quality coverage to guardrail layer + close fail-open security regression ([#278](https://github.com/micherra/canon/issues/278)) ([25d1cc8](https://github.com/micherra/canon/commit/25d1cc860ae86adbf0df36a39caacdabe22349e8))
+* **hooks:** remediate ~67 silent-swallow sites + fix 2 flaky tests ([#280](https://github.com/micherra/canon/issues/280)) ([a6a653c](https://github.com/micherra/canon/commit/a6a653c3441105bd7d77958cee8a777e584a2e18))
+* **mcp-boot:** durable boot via self-resolving launcher + PLUGIN_DATA deps + PID reaper ([#287](https://github.com/micherra/canon/issues/287)) ([16585e6](https://github.com/micherra/canon/commit/16585e6478d2418df67a07ce1e14f9121e08a0a2))
+
 ## 2.3.0 (2026-05-28)
 
 37 commits since v2.2.0. Quality hardening release: shell hygiene, holistic confidence scoring, hook reliability, and continuous learner expansion.

@@ -6,7 +6,7 @@
  *   - bounded-context-boundaries: imports from shared kernel and history-types only
  */
 
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";

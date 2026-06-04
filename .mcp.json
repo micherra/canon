@@ -1,11 +1,10 @@
 {
   "mcpServers": {
     "canon": {
-      "command": "sh",
-      "args": ["-c", "cd \"$CANON_PLUGIN_DIR/mcp-server\" && npx tsx src/app/index.ts"],
+      "command": "bash",
+      "args": ["${CLAUDE_PLUGIN_ROOT:-.}/mcp-server/boot.sh"],
       "env": {
-        "CANON_PLUGIN_DIR": "${CLAUDE_PLUGIN_ROOT}",
-        "CANON_PROJECT_DIR": "${CLAUDE_PLUGIN_ROOT}"
+        "CANON_PROJECT_DIR": "${CLAUDE_PROJECT_DIR:-.}"
       }
     }
   }

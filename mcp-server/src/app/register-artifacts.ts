@@ -4,10 +4,26 @@ import { writeImplementationSummary } from "@features/orchestration/tools/write-
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
 import { type ConfidenceAdapter, writeReview } from "@features/orchestration/tools/write-review.ts";
 import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { z } from "zod";
-import { gatedWrapHandler, projectDir, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
+
+/** Decision record schema for write_implementation_summary */
+const DecisionRecordSchema = z.object({
+  alternatives_considered: z.array(z.string()).optional(),
+  choice: z.string().describe("What was decided"),
+  informed_by: z
+    .array(
+      z.object({
+        ref: z.string().describe("Identifier — principle ID, pitfall text, observation ID, etc."),
+        type: z.enum(["area_memory", "pitfall", "principle", "task_plan", "codebase_pattern"]),
+      }),
+    )
+    .optional()
+    .describe("Context inputs that influenced this decision"),
+  rationale: z.string().describe("Why this approach was chosen"),
+});
 
 function registerPlanTools(): void {
   server.registerTool(
@@ -71,7 +87,7 @@ function registerPlanTools(): void {
   );
 }
 
-function registerReviewArtifactTools(): void {
+function registerWriteReviewTool(): void {
   server.registerTool(
     "write_review",
     {
@@ -109,12 +125,21 @@ function registerReviewArtifactTools(): void {
         workspace: z.string(),
       },
     },
-    gatedWrapHandler(async (input) => {
-      const signals = projectDir ? getDriftDb(projectDir).getSignals() : undefined;
+    gatedWrapHandler(async (input, extra) => {
+      const dir = resolveScope(extra);
+      const driftDb = dir ? getDriftDb(dir) : undefined;
+      const signals = driftDb?.getSignals();
       const adapter: ConfidenceAdapter | undefined = signals
         ? { computeViolationConfidence: (v) => computeViolationConfidence(v, signals) }
         : undefined;
-      const result = await writeReview(input, signals, adapter);
+      const areaMemoryWriter = (() => {
+        try {
+          return driftDb?.getAreaMemory();
+        } catch {
+          return undefined;
+        }
+      })();
+      const result = await writeReview(input, signals, adapter, areaMemoryWriter);
       // Reconcile predictions after review is persisted (non-blocking; app layer owns this)
       if (result.ok && signals) {
         reconcilePredictions({ reviewedFiles: input.files, violations: input.violations }, signals);
@@ -122,13 +147,21 @@ function registerReviewArtifactTools(): void {
       return result;
     }),
   );
+}
 
+function registerWriteImplementationSummaryTool(): void {
   server.registerTool(
     "write_implementation_summary",
     {
       description:
         "Write a structured implementation summary. Accepts typed file changes, decisions applied, deviations, and tests. Produces {task_id}-SUMMARY.md + .meta.json sidecar.",
       inputSchema: {
+        decisions: z
+          .array(DecisionRecordSchema)
+          .optional()
+          .describe(
+            "Structured decision records — what was chosen, why, and what influenced the choice",
+          ),
         decisions_applied: z.array(z.string()).optional(),
         deviations: z.array(z.object({ decision_id: z.string(), reason: z.string() })).optional(),
         files_changed: z.array(
@@ -140,11 +173,22 @@ function registerReviewArtifactTools(): void {
         workspace: z.string(),
       },
     },
-    gatedWrapHandler(async (input) => writeImplementationSummary(input)),
+    gatedWrapHandler(async (input, extra) => {
+      const dir = resolveScope(extra);
+      const areaMemoryWriter = (() => {
+        try {
+          return dir ? getDriftDb(dir).getAreaMemory() : undefined;
+        } catch {
+          return undefined;
+        }
+      })();
+      return writeImplementationSummary(input, areaMemoryWriter);
+    }),
   );
 }
 
 export function registerArtifactTools(): void {
   registerPlanTools();
-  registerReviewArtifactTools();
+  registerWriteReviewTool();
+  registerWriteImplementationSummaryTool();
 }

@@ -190,7 +190,7 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { force: true, recursive: true });
+    await rm(tmpDir, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it("does not throw when diff_base is invalid and git branch detection is on a feature branch", async () => {
@@ -268,7 +268,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { force: true, recursive: true });
+    await rm(tmpDir, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it("shell-escapes args when passed to runShell for non-git command", async () => {

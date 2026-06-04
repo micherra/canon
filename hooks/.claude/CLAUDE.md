@@ -7,7 +7,7 @@
 Pre/post tool-use interceptors that enforce policy and prevent mistakes without requiring agent compliance. Hooks run automatically on matched tool invocations.
 
 ## Architecture
-<!-- last-updated: 2026-05-28 -->
+<!-- last-updated: 2026-05-31 -->
 
 `hooks.json` is the single registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode/Agent), `PostToolUse` (after Bash), `SessionStart`, `SubagentStop`, or `PostCompact`. The separate `canon-agent-teams/hooks.json` was merged into this file (2026-04-26); `canon-agent-teams/hooks.json` no longer exists.
 
@@ -30,6 +30,8 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `learn-nudge.sh` | PostToolUse (Bash) | Suggest principle creation/updates |
 | `compaction-check.sh` | PostToolUse (Bash) | Detect workspace file growth |
 | `canon-agent-teams/post-commit-trailers.sh` | PostToolUse (Bash) | Validate Canon commit trailers after each commit |
+| `canon-agent-teams/session-start-deps-install.sh` | SessionStart | Install mcp-server deps into `${CLAUDE_PLUGIN_DATA}` via compare-manifest pattern; exits 0 always; 120s timeout |
+| `canon-agent-teams/session-start-server-guard.sh` | SessionStart | Reap stale PID-validated tsx process on :3141; health-probe WARN citing `/mcp` on zero-tool state; exits 0 always |
 | `canon-agent-teams/session-start-doc-check.sh` | SessionStart | Nudge on stale documentation at session open |
 | `canon-agent-teams/session-start-kg-check.sh` | SessionStart | Nudge on stale knowledge graph at session open |
 | `canon-agent-teams/session-start-timestamp.sh` | SessionStart | Write session start timestamp for duration watchdog |
@@ -58,3 +60,4 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 - **Hook test files**: Hooks with 3+ decision branches, runtime state inspection (sqlite queries, filesystem checks), or bypass gate env vars MUST have a corresponding `.test.sh` file. Place it alongside the hook (e.g., `pre-commit-check.test.sh`) or in a `__tests__/` subdirectory. Tests must cover: bypass gate, all silent-pass paths, and all warning/blocking paths. Run with `bash hooks/<name>.test.sh`.
 - **Shared test helpers**: All hook test files source `hooks/test-helpers.sh` for shared utilities (`run_test`, `assert_eq`, etc.); do not define these helpers inline in individual test files.
 - **Shell linting gate**: All hook scripts (excluding `*.test.sh` and `test-helpers.sh`) must pass `shellcheck`. Run `bash hooks/lint.sh` to check. This is part of the verify gate — it runs as the final step after `npm test`. The script fails closed (exits 1) if shellcheck is not installed. Fix all errors and warnings; style-level checks (SC2001, SC2016) and source-path noise (SC1091) are suppressed globally. The CI `shell` job (`.github/workflows/ci.yml`) runs `bash hooks/lint.sh` and all `hooks/**/*.test.sh` suites on every push/PR — both gates fail the build on non-zero exit.
+- **Observable-failures compliance**: Every `|| true` / `2>/dev/null || true` suppression site in hook scripts must be one of two forms: (1) `# DOCUMENTED FAIL-OPEN -- <reason and downstream handler>` inline annotation on the same line as the suppression code for expected no-match or pass-through paths; (2) converted to `|| { >&2 echo "CANON WARNING: [hook-name] <message>"; VAR=""; }` for genuine failure paths where silent swallowing would hide bugs. No bare `|| true` without annotation is permitted.
