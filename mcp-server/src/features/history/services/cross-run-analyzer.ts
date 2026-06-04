@@ -437,8 +437,7 @@ export function summaryToOutcomeSignals(
     clean: 1,
     approve: 1,
   };
-  const verdictSeverity = (v: string): number =>
-    VERDICT_SEVERITY[v.toLowerCase().trim()] ?? 0;
+  const verdictSeverity = (v: string): number => VERDICT_SEVERITY[v.toLowerCase().trim()] ?? 0;
 
   let review_verdict: string | undefined;
   const matchingReviews = summary.review_results.filter((r) =>
@@ -468,10 +467,7 @@ export function summaryToOutcomeSignals(
   // We sum all values to get total rework across the build.
   let fix_iterations: number | undefined;
   if (matchingRun?.state_iterations !== undefined) {
-    const total = Object.values(matchingRun.state_iterations).reduce(
-      (sum, n) => sum + n,
-      0,
-    );
+    const total = Object.values(matchingRun.state_iterations).reduce((sum, n) => sum + n, 0);
     fix_iterations = total > 0 ? total : undefined;
   }
 
@@ -747,7 +743,13 @@ export function analyzeCrossRunPatterns(
   let craftProfiles: CraftProfileRow[] = [];
   try {
     if (typeof (driftDb as { getCraftProfiles?: unknown }).getCraftProfiles === "function") {
-      craftProfiles = (driftDb as unknown as { getCraftProfiles(): { getRecentProfiles(n: number): CraftProfileRow[] } }).getCraftProfiles().getRecentProfiles(limit ?? 200);
+      craftProfiles = (
+        driftDb as unknown as {
+          getCraftProfiles(): { getRecentProfiles(n: number): CraftProfileRow[] };
+        }
+      )
+        .getCraftProfiles()
+        .getRecentProfiles(limit ?? 200);
     }
   } catch {
     // craft-profile store unavailable — craft_drift will be the empty result
