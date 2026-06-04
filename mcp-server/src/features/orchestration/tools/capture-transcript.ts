@@ -27,9 +27,8 @@ export type CaptureTranscriptInput = {
    * set this true; the completion path leaves it unset. */
   persist_path?: boolean;
   /** Project directory — used to locate the Claude Code projects directory.
-   * Optional for callers that provide source_path directly (e.g. tests, cliff-recovery).
-   * When omitted and agent_id is present, falls back to process.cwd(). */
-  projectDir?: string;
+   * Required: callers must pass an explicit projectDir (no cwd fallback). */
+  projectDir: string;
 };
 
 export type CaptureTranscriptResult = {
@@ -88,8 +87,7 @@ async function readJsonlFile(filePath: string): Promise<unknown[]> {
 export async function captureTranscript(
   input: CaptureTranscriptInput,
 ): Promise<ToolResult<CaptureTranscriptResult>> {
-  const { workspace, step_id, agent_type, agent_id } = input;
-  const projectDir = input.projectDir ?? process.cwd();
+  const { workspace, step_id, agent_type, agent_id, projectDir } = input;
 
   // source_path takes priority; fall back to an agent_id glob scan only when an
   // agent_id is present. With neither, there is nothing to locate — return a

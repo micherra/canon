@@ -271,6 +271,7 @@ describe("captureTranscript — source_path and persist_path (harvest-02)", () =
       const result = await captureTranscript({
         agent_id: "bogus-agent-id-that-does-not-exist",
         agent_type: "engineer",
+        projectDir: workspace,
         source_path: sourcePath,
         step_id: "build",
         workspace,
@@ -305,6 +306,7 @@ describe("captureTranscript — source_path and persist_path (harvest-02)", () =
         agent_id: "recovery-agent",
         agent_type: "engineer",
         persist_path: true,
+        projectDir: workspace,
         source_path: sourcePath,
         step_id: "build",
         workspace,
@@ -342,6 +344,7 @@ describe("captureTranscript — source_path and persist_path (harvest-02)", () =
       const result = await captureTranscript({
         agent_id: AGENT_ID,
         agent_type: "engineer",
+        projectDir: process.cwd(),
         step_id: "build",
         // persist_path intentionally omitted
         workspace,
@@ -379,6 +382,7 @@ describe("captureTranscript — source_path and persist_path (harvest-02)", () =
         agent_id: "any-agent",
         agent_type: "engineer",
         persist_path: true,
+        projectDir: workspace,
         source_path: sourcePath,
         step_id: "build",
         workspace,
@@ -409,6 +413,7 @@ describe("captureTranscript — source_path and persist_path (harvest-02)", () =
     const result = await captureTranscript({
       agent_type: "architect",
       persist_path: true,
+      projectDir: workspace,
       source_path: sourcePath,
       step_id: "design",
       workspace,
@@ -426,6 +431,7 @@ describe("captureTranscript — source_path and persist_path (harvest-02)", () =
 
     const result = await captureTranscript({
       agent_type: "architect",
+      projectDir: workspace,
       step_id: "design",
       workspace,
     });
