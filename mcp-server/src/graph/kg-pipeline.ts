@@ -12,7 +12,7 @@
 
 import path from "node:path";
 import { getCurrentHead } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
-import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { CANON_DIR, CANON_FILES, GRAPH_HEAD_COMMIT_KEY } from "@shared/constants.ts";
 import type { Database } from "better-sqlite3";
 
 // biome-ignore lint/performance/noBarrelFile: intentional re-export — kg-pipeline is the single entry point for both bulk pipeline and incremental reindex; consumers should not need to know about the internal split
@@ -248,17 +248,20 @@ function pruneOrphanFiles(store: KgStore, scannedRelPaths: string[]): void {
 /**
  * Stamp the graph with its build commit and assemble the PipelineResult.
  * Called only after all phases succeed (decision kg-marker-01). The marker is
- * written even on a no-op pass so a read at an unchanged HEAD becomes a no-op;
- * it is skipped when git is unavailable (head null) so the next read retries.
+ * stamped only on full-project runs (`meta.isFullRun === true`) — scoped runs
+ * must not advance the marker because they only processed a subset of the tree,
+ * so a later full `ensureGraphFresh` would see a fresh marker and skip rebuilding
+ * the parts it missed (decision kg-sync-fix-01). It is skipped when git is
+ * unavailable (head null) so the next read retries.
  */
 function stampAndBuildResult(
   store: KgStore,
   projectDir: string,
   phases: PhaseResult,
-  meta: { startMs: number; relPathsCount: number; filesUpdated: number },
+  meta: { startMs: number; relPathsCount: number; filesUpdated: number; isFullRun: boolean },
 ): PipelineResult {
   const head = getCurrentHead(projectDir);
-  if (head) store.setMeta("graph_head_commit", head);
+  if (head && meta.isFullRun) store.setMeta(GRAPH_HEAD_COMMIT_KEY, head);
 
   const stats = store.getStats();
   return {
@@ -287,6 +290,13 @@ export async function runPipeline(
       /* noop */
     });
 
+  // A full run owns the entire project tree: prune orphans + stamp the HEAD marker.
+  // Scoped runs target a subset (sourceDirs provided) and must do neither — they
+  // only see a portion of the tree, so pruning would delete out-of-scope rows, and
+  // stamping the marker would trick ensureGraphFresh into skipping the next full
+  // refresh (decision kg-sync-fix-01).
+  const isFullRun = options?.sourceDirs == null || options.sourceDirs.length === 0;
+
   const db = initDatabase(dbPath);
   const store = new KgStore(db);
 
@@ -300,7 +310,8 @@ export async function runPipeline(
 
     // Self-healing prune: remove stored files no longer on disk (set-diff).
     // CASCADE drops dependents' inbound edges automatically (decision kg-prune-04).
-    pruneOrphanFiles(store, relPaths);
+    // Scoped runs skip this to avoid deleting out-of-scope rows (decision kg-sync-fix-01).
+    if (isFullRun) pruneOrphanFiles(store, relPaths);
 
     // Phase 2: Parse + extract
     progress("parse", 0, filesUpdated);
@@ -330,6 +341,7 @@ export async function runPipeline(
 
     return stampAndBuildResult(store, projectDir, phases, {
       filesUpdated,
+      isFullRun,
       relPathsCount: relPaths.length,
       startMs,
     });

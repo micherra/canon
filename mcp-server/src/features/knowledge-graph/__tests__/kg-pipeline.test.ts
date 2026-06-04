@@ -17,6 +17,7 @@ import { reindexFile } from "@graph/kg-pipeline-reindex.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import { KgVectorStore } from "@graph/kg-vector-store.ts";
+import { GRAPH_HEAD_COMMIT_KEY } from "@shared/constants.ts";
 import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -411,6 +412,107 @@ describe("runPipeline embed phase", () => {
       filesScanned: expect.any(Number),
       filesUpdated: expect.any(Number),
     });
+  });
+});
+
+// Scope-aware prune + marker (Codex P1 + P2) -- TDD: write tests first
+
+/** Initialise a git repo (shared helper for scope-aware tests). */
+function initGitRepoForScope(dir: string): string {
+  const run = (args: string[]) => execFileSync("git", args, { cwd: dir, stdio: "pipe" });
+  run(["init", "-q"]);
+  run(["config", "user.email", "test@example.com"]);
+  run(["config", "user.name", "Test"]);
+  run(["commit", "--allow-empty", "-q", "-m", "init"]);
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir }).toString().trim();
+}
+
+describe("scope-aware prune + marker", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = makeTempProject();
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { force: true, recursive: true });
+  });
+
+  test("scoped run preserves out-of-scope rows", async () => {
+    // Seed files in two subdirs: src/ and docs/
+    writeFile(projectDir, "src/index.ts", "export const x = 1;");
+    writeFile(projectDir, "docs/guide.md", "# Guide");
+
+    const dbPath = path.join(projectDir, "test.db");
+
+    // Full run — indexes everything including docs/guide.md
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    // Verify docs/guide.md is indexed
+    {
+      const db = new Database(dbPath);
+      const store = new KgStore(db);
+      expect(store.getAllFilePaths()).toContain("docs/guide.md");
+      db.close();
+    }
+
+    // Scoped run targeting only src/ — must NOT prune docs/guide.md
+    await runPipeline(projectDir, { dbPath, incremental: true, sourceDirs: ["src"] });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    expect(store.getAllFilePaths()).toContain("docs/guide.md");
+    db.close();
+  });
+
+  test("scoped run does not stamp the marker", async () => {
+    initGitRepoForScope(projectDir);
+    writeFile(projectDir, "src/index.ts", "export const x = 1;");
+    writeFile(projectDir, "docs/guide.md", "# Guide");
+
+    const dbPath = path.join(projectDir, "test.db");
+
+    // Full run — stamps the marker
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    // Record marker value after full run
+    {
+      const db = new Database(dbPath);
+      const store = new KgStore(db);
+      const beforeMarker = store.getMeta(GRAPH_HEAD_COMMIT_KEY);
+      db.close();
+      expect(beforeMarker).toBeDefined();
+
+      // Scoped run — must NOT change the marker
+      await runPipeline(projectDir, { dbPath, incremental: true, sourceDirs: ["src"] });
+
+      const db2 = new Database(dbPath);
+      const store2 = new KgStore(db2);
+      const afterMarker = store2.getMeta(GRAPH_HEAD_COMMIT_KEY);
+      db2.close();
+      expect(afterMarker).toBe(beforeMarker);
+    }
+  });
+
+  test("full run prunes deleted files and stamps marker", async () => {
+    const head = initGitRepoForScope(projectDir);
+    writeFile(projectDir, "src/a.ts", "export const a = 1;");
+    writeFile(projectDir, "src/b.ts", "export const b = 2;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    // Delete a.ts and run full pipeline
+    rmSync(path.join(projectDir, "src/a.ts"));
+    await runPipeline(projectDir, { dbPath, incremental: true });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    // Deleted file pruned
+    expect(store.getAllFilePaths()).not.toContain("src/a.ts");
+    // Marker stamped to HEAD
+    expect(store.getMeta(GRAPH_HEAD_COMMIT_KEY)).toBe(head);
+    db.close();
   });
 });
 
