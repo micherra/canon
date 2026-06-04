@@ -114,15 +114,17 @@ This dimension merges three analyses:
 1. Read all task convention files
 2. Extract each convention line (bullets starting with `- **`)
 3. Group semantically similar conventions (same category and similar pattern)
-4. Count how many distinct builds each pattern appeared in
+4. Count the **weighted instance count** for each pattern using the cross-run analyzer's `weighted_instance_count` field on `RecurringViolation`, which sums `computeOutcomeWeight(OutcomeSignals)` across all observed instances (`mcp-server/src/features/history/services/judge-weight.ts`).
 
-**Suggestion rule**: Pattern must appear in >= 3 distinct builds to suggest promotion. Cross-check against `.canon/CONVENTIONS.md` and principle index before suggesting.
+**Weighting semantics**: Builds with CLEAN or low-fix-iteration outcomes contribute confirming signal above neutral weight (> 1.0). Builds with BLOCKING verdicts or high rework contribute below neutral weight (< 1.0). WARNING outcomes approximate neutral. When outcome signals are absent (drift-only entries with no `RunSummary`), the weight falls back to **1.0** (neutral) — preserving the existing count-based behavior.
 
-**Minimum threshold**: 3 builds. Below → note "Skipped: convention promotion — requires 3 builds, have {current}."
+**Suggestion rule**: Pattern must reach a **weighted instance count >= 3** to suggest promotion. Cross-check against `.canon/CONVENTIONS.md` and principle index before suggesting.
+
+**Minimum threshold**: Weighted count >= 3. Below → note "Skipped: convention promotion — weighted instance count {current} < 3."
 
 **Output per suggestion**:
 ```
-**{Pattern category}** (appeared in {N} builds)
+**{Pattern category}** (weighted instance count: {W}, raw builds: {N})
 Pattern: "{the convention text}"
 Builds: {slug-1}, {slug-2}, {slug-3}
 Suggest: Add to CONVENTIONS.md — "{convention text}"
@@ -175,6 +177,37 @@ Proposed severity: {convention or strong-opinion based on whether it affects cor
 Current adherence: {N}% across {M} files
 Competing pattern: {what the codebase actually does now, if applicable}
 Suggest: {update convention to match current practice | remove convention | investigate divergence}
+```
+
+### Sub-analysis D: CONSOLIDATE (staleness decay + archival) <!-- last-updated: 2026-06-04 -->
+
+**Goal**: Decay confidence on stale watch proposals; flag archival candidates; reinforce and exempt confirmed/promoted items. Runs as part of every per-build `learn` step — incremental and cheap.
+
+**Scope: `.canon/proposed-learnings/` only. This pass NEVER reads or writes `~/.claude/MEMORY.md` or any user memory store.**
+
+**Data source**: Each watch file under `.canon/proposed-learnings/`.
+
+**Algorithm**:
+
+1. For each watch file, extract `days_since_last_instance` and `confirming_instances` (from the file's frontmatter or structured fields).
+2. Construct a `WatchStalenessSignals` object and call `computeWatchConfidence(signals)` (`mcp-server/src/platform/storage/drift/watch-staleness-adapter.ts`) to get a `ConfidenceAnnotation`. This function delegates to the shared `computeConfidenceAnnotation` engine — there is no second decay implementation.
+3. Pass the annotation and the watch's current `status` to `decideWatchDisposition(annotation, status)` (`mcp-server/src/features/history/services/consolidate-policy.ts`). The function returns one of four `WatchDisposition` values:
+   - `"exempt"` — status is `promoted` or `confirmed`; item is never decayed. No write needed.
+   - `"reinforce"` — recent confirming instance detected; annotate with reinforcement note.
+   - `"decay"` — confidence has fallen; annotate the watch file with reduced confidence marker.
+   - `"archive"` — confidence is below archive threshold; mark the watch file for removal.
+4. Write the disposition result back into the watch file in `.canon/proposed-learnings/`. No writes outside `.canon/`.
+
+**Fail-safe**: Non-finite or negative `days_since_last_instance` values are treated as maximally stale (conservative guard). Status comparison is case-insensitive so `"Promoted"`, `"PROMOTED"`, and `"promoted"` all resolve to `exempt`.
+
+**Runs inside the per-build `learn` step**: no separate scheduler; no parallel decay engine.
+
+**Output per watch processed**:
+```
+**{watch-id}** → disposition: {exempt|reinforce|decay|archive}
+days_since_last_instance: {D}, confirming_instances: {C}
+confidence: {score:.2f} ({label})
+Action: {no write needed | annotated with reinforcement | annotated with decay marker | marked for archival}
 ```
 
 ---

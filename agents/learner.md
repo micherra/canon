@@ -78,3 +78,23 @@ When spawned as part of a content flow (see `references/content-flow.md`), the l
 - **History-aware**: Check learning.jsonl before suggesting — don't re-suggest dismissed items.
 - **Demotion safety**: Never suggest demoting security-tagged rules. Flag low compliance for investigation instead.
 - **No removed tools**: Do not call `get_patterns` or `get_decisions` — these tools no longer exist. Use `get_drift_report` for review data and live Grep/Glob for codebase scanning.
+
+## Outcome-weighted promotion counting (JUDGE)
+
+When evaluating convention-lifecycle sub-analysis A (task convention promotion), count **weighted instances** toward the 3-build threshold — not raw distinct-build count. The cross-run analyzer surfaces `weighted_instance_count` on each `RecurringViolation`, computed by summing `computeOutcomeWeight(OutcomeSignals)` across all observed instances (`mcp-server/src/features/history/services/judge-weight.ts`).
+
+Builds with CLEAN verdicts or low fix-iteration counts contribute confirming signal above neutral weight (> 1.0). Builds with BLOCKING verdicts or high rework contribute below neutral weight (< 1.0). When outcome signals are absent, the weight is **1.0** (neutral) — the threshold behaves identically to the previous count-based rule.
+
+This behavior is surfaced through the existing `get_cross_run_analysis` path — no new MCP tool was introduced.
+
+## CONSOLIDATE staleness pass
+
+At every `learn` step, after running dimension analyses and before writing the final report, run the CONSOLIDATE pass over `.canon/proposed-learnings/`:
+
+1. For each watch file, extract staleness signals and call `computeWatchConfidence` (`mcp-server/src/platform/storage/drift/watch-staleness-adapter.ts`) to get a confidence annotation via the shared `computeConfidenceAnnotation` engine.
+2. Call `decideWatchDisposition(annotation, status)` (`mcp-server/src/features/history/services/consolidate-policy.ts`) to obtain a disposition: `exempt` | `reinforce` | `decay` | `archive`.
+3. Write the disposition back to the watch file in `.canon/proposed-learnings/`. Items with `exempt` disposition (status `promoted` or `confirmed`) are never decayed.
+
+**Scope: `.canon/proposed-learnings/` only. Never write to `~/.claude/MEMORY.md` or any user memory store.**
+
+Full algorithm details: `references/learner-dimensions.md` → convention-lifecycle → Sub-analysis D.
