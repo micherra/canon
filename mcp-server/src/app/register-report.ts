@@ -2,7 +2,7 @@ import { recordAgentMetrics } from "@features/diagnostics/tools/record-agent-met
 import { captureTranscript } from "@features/orchestration/tools/capture-transcript.ts";
 import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
 
 function registerCaptureTranscriptTool(): void {
   server.registerTool(
@@ -13,17 +13,32 @@ function registerCaptureTranscriptTool(): void {
       inputSchema: {
         agent_id: z
           .string()
+          .optional()
           .describe(
-            "Agent ID from the Agent tool result (e.g. 'a10bf0a3a2543f7b5'). Used to locate the source JSONL file.",
+            "Agent ID from the Agent tool result (e.g. 'a10bf0a3a2543f7b5'). Used to locate the source JSONL via glob scan. Optional: omit it in the cliff-recovery path when no agent_id is available and pass source_path instead. With neither, capture is a best-effort no-op (warning, never an error).",
           ),
         agent_type: z
           .string()
           .describe("Agent type label (e.g. 'engineer'). Used in the output filename."),
+        persist_path: z
+          .boolean()
+          .optional()
+          .describe(
+            "When true, persist the captured transcript path via setTranscriptPath so get_transcript can resolve it for a non-completed step. Recovery callers set this true; the completion path leaves it unset.",
+          ),
+        source_path: z
+          .string()
+          .optional()
+          .describe(
+            "Absolute path to the source CC agent JSONL (e.g. the SubagentStop payload's agent_transcript_path). Used as the primary source; when omitted, the agent_id glob scan is the fallback.",
+          ),
         step_id: z.string().describe("Workflow step ID. Used in the output filename."),
         workspace: z.string().describe("Workspace path for this flow execution."),
       },
     },
-    gatedWrapHandler(async (input) => captureTranscript(input)),
+    gatedWrapHandler(async (input, extra) =>
+      captureTranscript({ ...input, projectDir: resolveScope(extra) }),
+    ),
   );
 }
 

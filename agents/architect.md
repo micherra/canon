@@ -112,6 +112,15 @@ Capture your research findings in the DESIGN.md's "Research" section (replaces t
 
 Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use full body (not `summary_only`) — you need examples and exceptions for design decisions.
 
+**Mandatory step-1 skeleton (single-artifact obligation):** per
+`agent-artifact-write-before-return` (Single-Artifact Agents), immediately after
+reading inputs and before deep design work, write a `## Status: Partial`
+skeleton DESIGN.md to the declared path with the design-document template's
+section headings, then refine in place. The architect is a single-artifact-style
+long-running producer; an early kill must leave a recoverable partial design on
+disk. (This session's own architect run demonstrated the value — a 529 mid-run
+left a survivable doc because it had been written early.)
+
 ### Step 1a: Design Conversation
 
 Before committing to design approaches, evaluate whether genuine design tradeoffs exist.
@@ -348,34 +357,6 @@ If during your codebase research you discover that the PM's requirements summary
 - Your lean based on codebase evidence
 
 This is the fallback for cases where the PM conversation was insufficient. Most requests should arrive with clear enough requirements that you can proceed directly to design.
-
-## Event Resolution Mode
-
-When spawned by the orchestrator to resolve a wave event (instead of the normal design flow), your spawn prompt will include the event details. Handle based on event type:
-
-### `add_task` events
-
-The user wants to add a new task to the current build's plan. You receive the event's detail text describing what to add.
-
-1. Read the existing plan index at `${WORKSPACE}/plans/${slug}/INDEX.md`
-2. Read the existing design at `${WORKSPACE}/plans/${slug}/DESIGN.md` for context on the overall approach
-3. Break down the new task into one or more plan files following the same format as existing plans in the directory
-4. Assign wave numbers: slot the new task(s) into the earliest wave where their dependencies are satisfied. If the next wave hasn't started yet, prefer adding to it. If dependencies require a later wave, create one.
-5. Update `INDEX.md` with the new task(s)
-6. Report DONE with a summary of what was added and where it was slotted
-
-### `reprioritize` events
-
-The user wants to change the execution order of upcoming tasks.
-
-1. Read the existing plan index at `${WORKSPACE}/plans/${slug}/INDEX.md`
-2. Read the event's detail text for the requested reordering
-3. Validate that the new ordering respects dependency constraints (no task in Wave N depends on output from Wave N+1)
-4. If the reordering violates dependencies, report the conflict and propose an alternative ordering
-5. Update `INDEX.md` with the new wave assignments
-6. Report DONE with a summary of what changed
-
-In both cases, you do NOT produce a full design document — only plan files and an updated index. Keep the scope minimal.
 
 ## Workspace Integration
 

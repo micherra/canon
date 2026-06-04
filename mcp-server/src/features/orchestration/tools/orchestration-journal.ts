@@ -81,6 +81,8 @@ export type LogStepInput = {
   status: JournalStepStatus;
   step_id: string;
   workspace: string;
+  /** Project directory — threaded from resolveScope(extra) in register-journal.ts. */
+  projectDir: string;
 };
 
 export type LogStepResult = {
@@ -102,6 +104,8 @@ export type LogStepResult = {
 
 export type FinalizeWorkspaceInput = {
   workspace: string;
+  /** Project directory — threaded from resolveScope(extra) in register-journal.ts. */
+  projectDir: string;
 };
 
 export type FinalizeWorkspaceResult = {
@@ -319,6 +323,7 @@ async function tryTranscriptCapture(
   const captureResult = await captureTranscript({
     agent_id: input.agent_id,
     agent_type: step.agent_type ?? "unknown",
+    projectDir: input.projectDir,
     step_id: input.step_id,
     workspace: input.workspace,
   });
@@ -340,6 +345,8 @@ async function tryTranscriptCapture(
 
 export type BatchLogStepsInput = {
   workspace: string;
+  /** Project directory — threaded from resolveScope(extra) in register-journal.ts. */
+  projectDir: string;
   steps: Array<{
     step_id: string;
     status: JournalStepStatus;
@@ -372,6 +379,7 @@ function processEntries(
       artifacts_expected: entry.artifacts_expected,
       domain_skills_loaded: entry.domain_skills_loaded,
       outcome: entry.outcome,
+      projectDir: input.projectDir,
       skip_reason: entry.skip_reason,
       status: entry.status,
       step_id: entry.step_id,
@@ -559,19 +567,23 @@ function getStepsMissingSkipReason(skipped: readonly JournalStep[]): string[] {
 
 // Best-effort side effects on workspace completion: digest, analytics, trend summary, claims.
 // digest MUST run before archiveAndDeleteWorkspace — it reads workspace files that archive deletes.
-async function runCompletionSideEffects(workspace: string, steps: JournalStep[]) {
-  const digest_written = await tryWriteBuildDigest(workspace);
-  const analytics_recorded = await tryAppendAnalytics(workspace, steps);
-  const trend_summary_written = await tryWriteBuildTrendSummary(workspace);
-  const claims_released = await tryReleaseClaims(workspace);
-  await tryRunJanitor();
+async function runCompletionSideEffects(
+  workspace: string,
+  steps: JournalStep[],
+  projectDir: string,
+) {
+  const digest_written = await tryWriteBuildDigest(workspace, projectDir);
+  const analytics_recorded = await tryAppendAnalytics(workspace, steps, projectDir);
+  const trend_summary_written = await tryWriteBuildTrendSummary(workspace, projectDir);
+  const claims_released = await tryReleaseClaims(workspace, projectDir);
+  await tryRunJanitor(projectDir);
   return { analytics_recorded, claims_released, digest_written, trend_summary_written };
 }
 
 export async function finalizeWorkspace(
   input: FinalizeWorkspaceInput,
 ): Promise<ToolResult<FinalizeWorkspaceResult>> {
-  const { workspace } = input;
+  const { workspace, projectDir } = input;
 
   if (!workspace) {
     return toolError("INVALID_INPUT", "workspace must be a non-empty string", false);
@@ -603,8 +615,10 @@ export async function finalizeWorkspace(
     stepsMissingSkipReason.length === 0 &&
     artifacts.missing.length === 0;
 
-  const sideEffects = complete ? await runCompletionSideEffects(workspace, steps) : undefined;
-  const cleanup = complete ? await archiveAndDeleteWorkspace(workspace) : undefined;
+  const sideEffects = complete
+    ? await runCompletionSideEffects(workspace, steps, projectDir)
+    : undefined;
+  const cleanup = complete ? await archiveAndDeleteWorkspace(workspace, projectDir) : undefined;
 
   return toolOk({
     artifacts_expected: artifacts.expected,
@@ -627,4 +641,5 @@ export async function finalizeWorkspace(
 
 // Re-export for registration layer.
 export const journalFilename = "journal.json";
-export { journalPath as _journalPath };
+// Export internals needed by reconcile-workspace.ts (same module family, no barrel).
+export { journalPath as _journalPath, readJournal, scanArtifactList };

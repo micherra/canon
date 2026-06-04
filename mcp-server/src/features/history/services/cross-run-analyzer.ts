@@ -9,13 +9,18 @@
  * history-types bounded context. No cross-feature imports.
  */
 
+import type { CraftProfileRow } from "@platform/storage/drift/craft-profile-dao.ts";
 import type { FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
 import type { DriftDb } from "@platform/storage/drift/drift-db.ts";
+import type { CraftDimension } from "@shared/lib/craft-rubric.ts";
+import { craftBandOrdinal } from "@shared/lib/craft-rubric.ts";
 import type { NormalizedViolation } from "@shared/lib/violation-patterns.ts";
 import { findRecurringViolations } from "@shared/lib/violation-patterns.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import type {
   AgentPerformanceTrend,
+  CraftDimensionDrift,
+  CraftDrift,
   CrossRunAnalysisResult,
   FixCyclePattern,
   PlannerPatternAnalysis,
@@ -400,25 +405,54 @@ function computeValueDistribution(
 // ---- Outcome weighting helpers ----
 
 /**
- * Map a RunSummary (and optional matching FlowRunEntry) to OutcomeSignals.
+ * Map a RunSummary (and optional matching FlowRunEntry) to OutcomeSignals for
+ * a specific principle_id.
  *
  * Pure — operates only on already-loaded data, no I/O.
- * - review_verdict: first verdict from summary.review_results (if any).
+ * - review_verdict: from the review_result that contains a violation for
+ *   principleId. If multiple reviews hold the violation, we pick the one with
+ *   the worst verdict (BLOCKING > WARNING > CLEAN/approve) — deterministic and
+ *   conservative (avoids rewarding quality from the wrong review). Falls back to
+ *   the first review when principleId is absent from all reviews (e.g. drift-only
+ *   violations passed through without a matching summary).
  * - test_pass_rate: derived from matchingRun.total_test_results when present.
- * - fix_iterations: not surfaced at RunSummary level; left undefined so
- *   computeOutcomeWeight applies neutral fallback. Can be provided via matchingRun
- *   when state_iterations data is available.
+ * - fix_iterations: total retries across all states from
+ *   matchingRun.state_iterations (sum of values). Absent when no matchingRun.
  *
  * @param summary - RunSummary for the build instance.
+ * @param principleId - The principle whose violation we are weighting.
  * @param matchingRun - Optional FlowRunEntry for the same build (same flow+started key).
  */
 export function summaryToOutcomeSignals(
   summary: RunSummary,
+  principleId: string,
   matchingRun?: FlowRunEntry,
 ): OutcomeSignals {
-  // review_verdict: first review result verdict (if any)
-  const firstReview = summary.review_results[0];
-  const review_verdict = firstReview?.verdict;
+  // review_verdict: find the review_result that contains this principleId.
+  // If multiple reviews contain it, pick the worst (most penalizing) verdict.
+  // Verdict severity order (worst first): blocking > warning > clean/approve/other.
+  const VERDICT_SEVERITY: Record<string, number> = {
+    blocking: 3,
+    warning: 2,
+    clean: 1,
+    approve: 1,
+  };
+  const verdictSeverity = (v: string): number =>
+    VERDICT_SEVERITY[v.toLowerCase().trim()] ?? 0;
+
+  let review_verdict: string | undefined;
+  const matchingReviews = summary.review_results.filter((r) =>
+    r.violations.some((v) => v.principle_id === principleId),
+  );
+  if (matchingReviews.length > 0) {
+    // Pick the worst verdict among reviews that hold this violation
+    review_verdict = matchingReviews.reduce((worst, r) =>
+      verdictSeverity(r.verdict) > verdictSeverity(worst.verdict) ? r : worst,
+    ).verdict;
+  } else {
+    // Fallback: no review contains this principleId — use first review if available
+    review_verdict = summary.review_results[0]?.verdict;
+  }
 
   // test_pass_rate: from FlowRunEntry.total_test_results
   let test_pass_rate: number | undefined;
@@ -428,7 +462,20 @@ export function summaryToOutcomeSignals(
     test_pass_rate = total > 0 ? passed / total : undefined;
   }
 
-  return { review_verdict, test_pass_rate };
+  // fix_iterations: total retries across all states from state_iterations.
+  // state_iterations is a Record<string, number> where each value is the
+  // number of extra iterations for that state (0 = ran once, 1 = retried once).
+  // We sum all values to get total rework across the build.
+  let fix_iterations: number | undefined;
+  if (matchingRun?.state_iterations !== undefined) {
+    const total = Object.values(matchingRun.state_iterations).reduce(
+      (sum, n) => sum + n,
+      0,
+    );
+    fix_iterations = total > 0 ? total : undefined;
+  }
+
+  return { fix_iterations, review_verdict, test_pass_rate };
 }
 
 /**
@@ -486,6 +533,7 @@ function buildPrincipleToSummaries(summaries: RunSummary[]): Map<string, RunSumm
 
 /**
  * Compute the weighted_instance_count for a single violation given its matching summaries.
+ * Passes principleId to summaryToOutcomeSignals so it picks the correct review_result.
  */
 function computeWeightedCount(
   v: RecurringViolation,
@@ -497,7 +545,7 @@ function computeWeightedCount(
   }
   const observations: OutcomeSignals[] = matchingSummaries.map((s) => {
     const key = `${s.run_metadata.flow}\0${s.run_metadata.started_at ?? s.run_metadata.archived_at}`;
-    return summaryToOutcomeSignals(s, runLookup.get(key));
+    return summaryToOutcomeSignals(s, v.principle_id, runLookup.get(key));
   });
   const uncoveredCount = v.occurrence_count - matchingSummaries.length;
   for (let i = 0; i < uncoveredCount; i++) {
@@ -529,6 +577,143 @@ function enrichWithWeightedCounts(
   });
 }
 
+// ---- Craft drift computation ----
+
+/** Minimum number of profiles per dimension (or area) to classify a trend direction. */
+const MIN_CRAFT_PROFILES = 4;
+
+/**
+ * Ordinal data point for a single profile's rating of a given dimension.
+ * Only graded (non-n-a) ratings are included.
+ */
+type OrdinalPoint = { created_at: string; ordinal: number };
+
+/**
+ * Collect ordinal data points for a specific dimension from a set of profiles,
+ * sorted chronologically. Excludes profiles where the dimension is rated n-a.
+ */
+function collectOrdinalPoints(
+  profiles: CraftProfileRow[],
+  dimension: CraftDimension,
+): OrdinalPoint[] {
+  const points: OrdinalPoint[] = [];
+  for (const profile of profiles) {
+    for (const rating of profile.ratings) {
+      if (rating.dimension !== dimension) continue;
+      const ordinal = craftBandOrdinal(rating.band);
+      if (ordinal === null) continue; // n-a excluded
+      points.push({ created_at: profile.created_at, ordinal });
+    }
+  }
+  points.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return points;
+}
+
+/**
+ * Classify trend direction by comparing recent half vs prior half.
+ * Mirrors the classifyTrend logic used for performance trends.
+ * Rising mean ordinal > 10% → "improving" (higher = better craft).
+ * Falling > 10% → "degrading". Flat or sparse → "stable".
+ */
+function classifyCraftTrend(points: OrdinalPoint[]): "improving" | "stable" | "degrading" {
+  const n = points.length;
+  if (n < MIN_CRAFT_PROFILES) return "stable";
+
+  const half = Math.floor(n / 2);
+  const priorHalf = points.slice(0, half);
+  const recentHalf = points.slice(n - half);
+
+  const priorAvg = priorHalf.reduce((sum, p) => sum + p.ordinal, 0) / half;
+  const recentAvg = recentHalf.reduce((sum, p) => sum + p.ordinal, 0) / half;
+
+  if (priorAvg <= 0) return "stable";
+
+  const changePct = (recentAvg - priorAvg) / priorAvg;
+  // Higher ordinal = better craft (non-inverted)
+  if (changePct > 0.1) return "improving";
+  if (changePct < -0.1) return "degrading";
+  return "stable";
+}
+
+/**
+ * Compute CraftDimensionDrift entries for a given set of profiles.
+ * Handles all 6 dimensions; skips dimensions where all ratings are n-a.
+ */
+function computeDimensionDrifts(profiles: CraftProfileRow[]): CraftDimensionDrift[] {
+  const dimensions: CraftDimension[] = [
+    "simplicity",
+    "cohesion",
+    "interface-depth",
+    "naming",
+    "locality",
+    "predictability",
+  ];
+
+  const result: CraftDimensionDrift[] = [];
+  for (const dimension of dimensions) {
+    const points = collectOrdinalPoints(profiles, dimension);
+    if (points.length === 0) continue; // no graded data for this dimension
+
+    const avg_band_ordinal = points.reduce((sum, p) => sum + p.ordinal, 0) / points.length;
+    const direction = classifyCraftTrend(points);
+
+    result.push({
+      avg_band_ordinal,
+      dimension,
+      direction,
+      sample_count: points.length,
+    });
+  }
+  return result;
+}
+
+/**
+ * Compute craft drift across a set of craft profiles.
+ *
+ * Pure function — no I/O. The caller is responsible for fetching profiles
+ * from the DAO before calling this function (command-query-separation).
+ *
+ * Empty/sparse inputs return "stable" direction and empty collections —
+ * never null, never throw (define-errors-out-of-existence).
+ *
+ * @param profiles - CraftProfileRow records from both review and audit sources
+ * @returns CraftDrift with global by_dimension rollup and optional by_area breakdown
+ */
+export function computeCraftDrift(profiles: CraftProfileRow[]): CraftDrift {
+  if (profiles.length === 0) {
+    return { by_dimension: [], profile_count: 0 };
+  }
+
+  // Global rollup across all areas
+  const by_dimension = computeDimensionDrifts(profiles);
+
+  // Per-area breakdown: group profiles by subsystem_key
+  const byArea = new Map<string, CraftProfileRow[]>();
+  for (const profile of profiles) {
+    const existing = byArea.get(profile.subsystem_key);
+    if (existing === undefined) {
+      byArea.set(profile.subsystem_key, [profile]);
+    } else {
+      existing.push(profile);
+    }
+  }
+
+  // Only include areas with enough profiles to be meaningful
+  const by_area: Array<{ subsystem_key: string; by_dimension: CraftDimensionDrift[] }> = [];
+  for (const [subsystem_key, areaProfiles] of byArea) {
+    if (areaProfiles.length < MIN_CRAFT_PROFILES) continue;
+    const areaDimensions = computeDimensionDrifts(areaProfiles);
+    if (areaDimensions.length === 0) continue;
+    by_area.push({ by_dimension: areaDimensions, subsystem_key });
+  }
+
+  return {
+    by_area: by_area.length > 0 ? by_area : undefined,
+    by_dimension,
+    profile_count: profiles.length,
+  };
+}
+
 /**
  * Analyze cross-run patterns by integrating all sub-analyses.
  *
@@ -557,6 +742,20 @@ export function analyzeCrossRunPatterns(
     allFlowRuns = allFlowRuns.filter((r) => r.started >= since);
   }
 
+  // Fetch craft profiles and apply since filter (ISO string comparison is lexicographic)
+  // Guard: getCraftProfiles is an additive signal; degrade gracefully if unavailable.
+  let craftProfiles: CraftProfileRow[] = [];
+  try {
+    if (typeof (driftDb as { getCraftProfiles?: unknown }).getCraftProfiles === "function") {
+      craftProfiles = (driftDb as unknown as { getCraftProfiles(): { getRecentProfiles(n: number): CraftProfileRow[] } }).getCraftProfiles().getRecentProfiles(limit ?? 200);
+    }
+  } catch {
+    // craft-profile store unavailable — craft_drift will be the empty result
+  }
+  if (since !== undefined) {
+    craftProfiles = craftProfiles.filter((p) => p.created_at >= since);
+  }
+
   // Collect violations from summaries
   const summaryViolations = violationsFromSummaries(summaries);
 
@@ -574,6 +773,7 @@ export function analyzeCrossRunPatterns(
   const fix_cycle_patterns = computeFixCyclePatterns(summaryViolations, allReviews);
   const agent_performance_trends = computePerformanceTrends(summaries, allFlowRuns, limit);
   const planner_patterns = analyzePlannerPatterns(summaries);
+  const craft_drift = computeCraftDrift(craftProfiles);
 
   // Compute analysis window from all available timestamps
   const allTimestamps: (string | null | undefined)[] = [
@@ -594,6 +794,7 @@ export function analyzeCrossRunPatterns(
   return {
     agent_performance_trends,
     analysis_window,
+    craft_drift,
     fix_cycle_patterns,
     planner_patterns,
     recurring_violations,

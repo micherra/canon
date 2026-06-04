@@ -83,9 +83,6 @@ src/
 | `write_plan_index` | Persist architect task/plan data and the affected-file list to `INDEX.md`. |
 | `post_message` | Post a message to a workspace channel for inter-agent communication. Messages are markdown files that agents read at spawn time. |
 | `get_messages` | Read messages from a workspace channel. Returns messages ordered by sequence number. Optionally includes pending wave events. |
-| `inject_wave_event` | Inject a user event into a running wave execution. Allows the user to steer, pause, or redirect agents mid-wave. |
-| `resolve_wave_event` | Resolve a pending injected wave event (`apply`/`reject`) and return orchestrator routing hints. |
-| `resolve_after_consultations` | Resolve and return `after` consultation prompts for a state after final wave completion. |
 
 ## Data persistence
 

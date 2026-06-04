@@ -37,10 +37,6 @@ export type DriftReport = {
     opinions: number;
     conventions: number;
   };
-  craft: {
-    score: number;
-    holistic_count: number;
-  };
   most_violated: PrincipleStats[];
   violation_directories: DirectoryStats[];
   never_triggered: string[]; // principle IDs that never appeared in reviews
@@ -218,34 +214,6 @@ function computePrincipleTrend(reviews: ReviewEntry[], principleId: string): Dri
   return "stable";
 }
 
-/**
- * Compute a craft score (0–100) from holistic reviewer recommendations.
- *
- * Formula: `score = max(0, 100 − min(100, holistic_count × 10))`
- *
- * Each holistic finding deducts 10 craft points; 10 or more findings floor
- * the score at 0. Holistic findings signal structural or cross-cutting
- * concerns (source === "holistic") rather than per-principle violations.
- */
-export function computeCraftScore(reviews: ReviewEntry[]): {
-  score: number;
-  holistic_count: number;
-} {
-  if (reviews.length === 0) return { holistic_count: 0, score: 100 };
-
-  let holistic_count = 0;
-  for (const r of reviews) {
-    if (!r.recommendations) continue;
-    for (const rec of r.recommendations) {
-      if (rec.source === "holistic") holistic_count++;
-    }
-  }
-
-  // Each holistic finding costs 10 craft points; 10+ findings floor the score at 0.
-  const score = Math.max(0, 100 - Math.min(100, holistic_count * 10));
-  return { holistic_count, score };
-}
-
 // Main
 
 export function analyzeDrift(
@@ -280,7 +248,6 @@ export function analyzeDrift(
 
   return {
     avg_score: computeAverageScores(filteredReviews),
-    craft: computeCraftScore(filteredReviews),
     doc_freshness: options?.docFreshness ?? [],
     most_violated: mostViolated,
     never_triggered: neverTriggered,

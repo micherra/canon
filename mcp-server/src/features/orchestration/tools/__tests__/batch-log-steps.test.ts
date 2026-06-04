@@ -34,7 +34,7 @@ describe("batchLogSteps", () => {
       { status: "planned" as const, step_id: "ship" },
     ];
 
-    const result = await batchLogSteps({ steps, workspace });
+    const result = await batchLogSteps({ projectDir: process.cwd(), steps, workspace });
     assertOk(result);
     expect(result.results).toHaveLength(5);
 
@@ -59,9 +59,14 @@ describe("batchLogSteps", () => {
   });
 
   test("empty steps array returns { results: [] } and does not corrupt the journal", async () => {
-    await logStep({ status: "planned", step_id: "pre-existing", workspace });
+    await logStep({
+      projectDir: process.cwd(),
+      status: "planned",
+      step_id: "pre-existing",
+      workspace,
+    });
 
-    const result = await batchLogSteps({ steps: [], workspace });
+    const result = await batchLogSteps({ projectDir: process.cwd(), steps: [], workspace });
     assertOk(result);
     expect(result.results).toEqual([]);
 
@@ -78,6 +83,8 @@ describe("batchLogSteps", () => {
         { status: "planned" as const, step_id: "another-valid" },
       ],
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -98,6 +105,8 @@ describe("batchLogSteps", () => {
         },
       ],
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -125,6 +134,8 @@ describe("batchLogSteps", () => {
         },
       ],
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -151,6 +162,8 @@ describe("batchLogSteps", () => {
         },
       ],
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -181,6 +194,8 @@ describe("batchLogSteps", () => {
         },
       ],
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);

@@ -171,6 +171,75 @@ Harden the invariant parts of the orchestration loop into deterministic substrat
 
 ---
 
+## New Epic — Memory Integrity & Honest Signal
+
+Source: the 2026-06-04 ruflo (ruvnet/ruflo) re-audit — a 30-agent workflow (facet research → adversarial claim verification → 5-subsystem Canon audit → multi-lens synthesis). The audit's highest-ROI output was not a ruflo feature to copy but ruflo's own self-audit (ADR-074/095) applied inward: ruflo documented a "reported success but persisted nothing queryable" failure class — typed infrastructure built, tested, then never wired to the path the system executes. Canon was verified to have the same defect class live. This epic closes those gaps and hardens the honesty of Canon's own measurement layer. Every item is identity-central (auditability, determinism) — none introduces autonomy, consensus, or learned routing.
+
+**Precondition — fix the journal write race first.** `log_step`'s read-modify-write on `journal.json` is unlocked; DAG workers calling `log_step` can race the orchestrator and silently drop entries. Every "wire the dead data" and reachability-lint item below depends on trustworthy journal/store writes, so this precondition lands before them. (Highest-severity orchestration correctness gap; previously deferred to v2.1b.)
+
+**Sequencing caution.** The in-flight slate-B learner build (verdict-weight learner inputs by build outcome) depends on these same inputs being real — `OutcomeStore` is unconsumed, `get_cross_run_analysis` is unreachable by the learner, `decision_summaries` is empty. Sequence slate-B behind Tier 1 below, or it will weight phantom signals.
+
+### Tier 1 — Wire the dead data (correctness; XS–S)
+
+| Feature | Effort | Leverage | Source / Note |
+|---------|--------|----------|---------------|
+| **Wire OutcomeStore to the WARNING close-out HITL** | Small | Very high | `outcome-store.ts` (recordOutcome/getOutcomeStats/getOutcomesForFiles) has zero production consumers — only the test file calls it. The WARNING-advisory close-out gate (fix/acknowledge/defer) discards the user's disposition, Canon's highest-value human signal. One `recordOutcome` call at that decision point captures it. |
+| **Reconnect the learner to cross-run analysis** | Tiny | High | `learner.md`'s frontmatter tool list has `get_history`/`get_build_history` but **not** `get_cross_run_analysis` — so the cross-run substrate (populated across the run-summary archives) is structurally unreachable by the agent meant to consume it. One-line frontmatter fix. |
+| **Fix the always-empty / unthreaded fields** | Small | Medium | `decision_summaries` is hardcoded `[]` (`history-types.ts:126`) across every archive; `task_description` is accepted by `get-principles.ts` but never threaded into the matcher. Both are accepted-but-ignored inputs. |
+| **Tier-vocabulary mismatch** | Tiny | Medium | `CLAUDE.md` instructs `tier: "trivial"` but `init-workspace.ts` accepts only `small\|medium\|large` — an XS correctness bug on the path every build hits (confirmed live: init rejected `"trivial"`). Reconcile the vocabulary in one place. |
+| **De-alias `unintentional_violations`** | Tiny | Low | Increments in lockstep with `total_violations` (`analyzer.ts:85`) — dead data shown in drift reports as if meaningful. Compute it for real or stop surfacing it. |
+
+### Tier 2 — Type the one stringly boundary (S, high)
+
+| Feature | Effort | Leverage | Source / Note |
+|---------|--------|----------|---------------|
+| **Typed agent status return** | Small | High | `status-protocol.md` confirms the orchestrator **regex-scans agent prose** for `DONE`/`BLOCKED`/`FIXED` — the only decision-critical signal still crossing the agent→orchestrator boundary as unvalidated text, while the rest of the spine is rigorously typed (`ToolResult` unions; `write_review`/`write_test_report`/`write_implementation_summary` as typed terminal writes). Fold a required `status` enum into those terminal-write tools (or add a thin `report_status`) so the orchestrator reads a validated enum from the store; keep the free-text scan as graceful-degradation fallback. Ruflo's hardest-won lesson ("wire the typed layer to the real path") aimed inward. |
+
+### Tier 3 — Self-applied auditability + honest metrics (M)
+
+| Feature | Effort | Leverage | Source / Note |
+|---------|--------|----------|---------------|
+| **Self-hollowness lint (generalize step-ghost → DATA)** | Medium | High | `finalize_workspace` already detects step-ghosts (planned-but-never-dispatched STEPS). Generalize to DATA: assert every drift.db table with a DAO has ≥1 production read-caller; flag RunSummary fields constant across all archives (`decision_summaries=[]`) and counters that never diverge from a sibling (`unintentional` vs `total`). Subsumes the Tier-1 reachability checks as the durable enforcement layer — build once, here. Canon's auditability self-applied. |
+| **Honest-metric discipline** | Medium | Medium | Two live fiction-metrics: (1) craft v2 = `max(0, 100 − holistic_count*10)` — a raw volume count, not density-normalized by code changed, not intent-filtered (praise/nits count like defects); `docs/explore/automatic-craft-prerequisites-scoping.md` already concedes this. (2) The cognitive-load tier baselines in `learner-dimensions.md` are hardcoded placeholders ("update as data accumulates") with no service deriving them from the archived `flow_runs`. Adopt the baseline-derivation (pure determinism, data exists); prototype the craft density+intent redesign behind a measured A/B. Generalize: any scoring constant annotated "update as data accumulates" is a latent fiction-metric — surface it in the drift report until a real-data derivation replaces it. No LLM judge inside any metric (`no-llm-calls-in-mcp-tools`). |
+
+### Identity guardrail (XS, durable)
+
+| Feature | Effort | Leverage | Source / Note |
+|---------|--------|----------|---------------|
+| **Single-coordinator / no-orchestration-theater invariant** | Tiny | High | Codify in CLAUDE.md the rationale already applied ad-hoc to reject ruflo's slate C/E/F: *"Canon has exactly one coordinator. No consensus voting, no topology selection, no learned router, no neural branding, no inter-agent message bus, no federation. Any proposal to add multi-coordinator/consensus machinery must show a functional branch that changes behavior, not a config knob."* Every impressive ruflo subsystem verified as config-only theater (`reachConsensus()` = `Math.random()`; topology has no functional branch; "150×" HNSW measured 1.9×; LoRA never reaches inference). Turns three correct ad-hoc rejections into one citable guardrail so future swarm/consensus/federation temptations are auto-rejected, not re-litigated. Cross-reference `docs/explore/adaptive-queen.md` and the slate-E/F decisions. |
+
+**Grafts onto existing threads/epics** (design kernels from the same audit — extracted without ruflo's hollow execution):
+
+- **Slate-A model router → per-DAG-node hints (Deterministic Spine).** Sharpen the parked complexity-tiered model router from a single init-time tier to a per-`task-dag.yaml`-node `model_hint` the architect emits from a **deterministic** bucketing function over KG blast-radius signals Canon already computes (`impact_score`/`in_degree`), and add the missing **downgrade** path (`escalate_model` only upgrades; trivial fix node → haiku). Fits the G1–G9 runbook-enrichment seam and the existing inert `"codemod"` ModelTier stub. **Reject** ruflo's Thompson-sampling/Q-learning bandit half (needs multi-session reward loops; reintroduces non-determinism).
+- **Outcome-weighted *semantic* trajectory retrieval → Thread 1 + Epic 6.** Canon's feed-forward retrieves by **exact key only** (file_path, principle_id); a conceptually-identical build touching new files gets zero feed-forward. Add a build-trajectory vector index at `finalize_workspace` (embed sharpened-request + flow_name + touched-subsystem tags + outcome), top-K cosine recall injected at architect/engineer spawn — the "RETRIEVE" half the keyed signal-compiler can't express. **Gate:** the sqlite-vec embedder does **not** currently ship offline (first-use 22MB download, no FTS5 fallback — verified); confirm offline bundling first. Could null-result against key-exact recall — prototype, don't commit.
+- **Pure-projection MergePlan service → Deterministic Spine (wave-merge).** `mergeWaveResults`/`cleanupWorktrees` have **zero TS implementation** — the highest-blast-radius destructive step is purely behavioral Bash with no atomic merge-or-abort and no structured result. A small service returns a typed `MergePlan` (ordered merges + diff-verification + abort plan) executed step-by-step with a structured `MergeResult`. **Blocked on** the open per-task-worktree vs. shared-worktree decision (#302 kept the model the 2026-05-30 decision said to delete). Distinct from D′/#302, which excised dead refs but left the merge step as prose.
+- **Deterministic Tier-1 codemods → existing `"codemod"` ModelTier seam (Deterministic Spine).** TS-compiler-API, format-preserving text-range edits (the mechanical "script bulk edits" cases) — the audit's "most practically sound" planning-facet idea; determinism over LLM, identity-aligned. Lands on the already-documented zero-LLM Tier-1 seam from the model-router design.
+- **MCP tool-group gating → Thread 3 (context economy).** Ruflo's ADR-035 `MCP_GROUP_*` env gates suppress tool/context flooding. Relevant given Canon's ~30KB CLAUDE.md and large preload prompts; complements X2 (skill progressive activation) and T1 (deferred-load cold tools).
+- **Per-build cost/token accounting → Thread 3 / Thread 7.** Canon's turn budgets are behavioral-only with no per-build token attribution. A finalize-time token/cost rollup per `flow_run` feeds Effort budgets (Thread 3) and closes the loop with M1/N1 (Thread 7).
+
+**Explicitly not adopting** (verified ruflo theater): Byzantine/Raft/Gossip consensus, topology selection, federation/cross-host transport, trust-tiering + PII egress gates (slate E/F), multi-provider LLM routing, learned/ML routers (MoE/Thompson/Q-learning), SONA/LoRA "neural" branding, the HNSW "150×" framing, GOAP as a *runtime* autonomy engine, and the named-but-unimplemented background-worker roster. Each is decorative or downstream of a multi-machine/untrusted/multi-provider threat model Canon does not have. (The deterministic, gate-fired *replanner* kernel — re-deriving the runbook only at deterministic gates and re-presenting at the existing approval HITL — is a possible future prototype but lower-value: the convergence rule already names the fix-introduces-new-violation case; the real gap is the `same_violations` set-comparison mechanism.)
+
+---
+
+## Infrastructure Epic — HTTP-Transport / Per-Project-State
+
+Parallel infra track to the build-quality threads. Removes the MCP server's process-global state so the server can serve multiple project scopes per connection — the prerequisite for an HTTP daemon that fixes the zero-tool cold-start boot bug (npx/tsx cold start + `${CLAUDE_PLUGIN_ROOT}` token-expansion failure). It is also shared substrate for several Memory-Integrity kernels: the semantic-trajectory index, MergePlan service, typed-status tool, and any new drift.db table all touch the per-project-state surface this epic hardens, so they sequence cleanly after Phase 1 lands.
+
+| Phase | What | Status |
+|-------|------|--------|
+| **1a** | Per-connection scope foundation | Shipped (PR #288) |
+| **1b** | Migrate consumers to connection scope | Shipped (PR #290) |
+| **1c + 1d** | Eliminate `process.cwd()` implicit-scope sites; delete the `projectDir`/`setProjectDir` global; add (unwired) `evictStoresForScope`/`evictDriftDbForScope` eviction hooks; split `drift-db.ts` into siblings | **In-flight — PR #304 OPEN** (CLEAN review, 0 fix iterations; behavioral no-op under stdio) |
+| **2** | HTTP daemon: auto-reconnect kills the silent zero-tool cold start; `url` config sidesteps the `${CLAUDE_PLUGIN_ROOT}` token-expansion failure; wire the eviction hooks to connection-end | Not started — unblocked by #304 |
+
+**Sequencing notes:**
+
+- **#304 is a prerequisite gate for the MCP-touching Memory-Integrity kernels.** Wiring OutcomeStore, adding a trajectory-index table, and the typed-status store-write all extend per-project-state surfaces that #304 just made connection-scoped; landing them on top of the old `projectDir` global would create rework. Sequence the dead-wire fixes after #304 merges.
+- **Known residual** (fold into Phase 2): `http-server.ts:54` still reads `process.env.CANON_PROJECT_DIR ?? process.cwd()` for the artifact server's own directory — same implicit-scope class 1c/1d eliminated, tagged `[baseline]` in #304's review.
+- **Live tooling caveat** (same family, observed during this build): `resolve_agent_skills` resolved `projectDir` to `mcp-server/` instead of the repo root and failed to find `agents/engineer.md` — a `CANON_PROJECT_DIR`/cwd resolution defect worth confirming the per-connection resolver fixes.
+
+---
+
 ### Thread 6: Background Maintenance
 
 Canon has zero background maintenance today. The "86 commits since last scribe sync" signal comes from a poll at session start (`session-start-doc-check.sh`), not a scheduled job. Convert the polls to true background jobs that produce draft PRs / notifications — never silent merges.
@@ -227,6 +296,11 @@ These were evaluated and explicitly rejected:
 | ~~**Done**~~ | ~~PostCompact narrative capture~~ | Shipped PR #261. |
 | ~~**Done**~~ | ~~Wiki-lint + doc gap detection~~ | Shipped PR #267. |
 | **Next** | GitHub-linkable review output | Last remaining Thread 2 item. Small build, immediate value for PR workflows. |
+| **Prerequisite** | Merge PR #304 (HTTP Phase 1) + fix the journal `log_step` write race | Unblocks the MCP-touching Memory-Integrity kernels and guarantees journal/store writes don't silently drop — the floor every dead-wire fix stands on. |
+| **Then (high ROI)** | Memory-Integrity Tier 1 — wire OutcomeStore, reconnect learner to `get_cross_run_analysis`, fix `decision_summaries`/`task_description`, tier-enum, `unintentional_violations` | XS–S correctness fixes dead-center in auditability identity; best ROI on the new slate. After #304. Re-sequence the in-flight slate-B learner build behind this. |
+| **Then** | Typed agent status return (Memory-Integrity Tier 2) | Removes the largest behavioral-only fragility (regex-scan of agent prose) for minimal cost; reuses the typed terminal-write tools. |
+| **Then** | Self-hollowness lint + single-coordinator invariant | Generalized reachability enforcement (subsumes the Tier-1 reachability checks) + the XS identity guardrail that auto-rejects swarm/consensus scope creep. |
+| **Later** | Honest-metric discipline + audit design-kernel grafts (per-node model hints, semantic trajectory retrieval, MergePlan, codemods, tool-group gating, cost accounting) | Prototype-gated; several depend on prior decisions (worktree model for MergePlan, offline embedder for retrieval) or on accumulated data. |
 | **Then** | Stop-hook tail enforcement (X4) | Deterministic Spine — cheapest, highest-leverage reliability win. Zero dependencies, no philosophy conflict, reuses `canon-hook-lib.sh`. Guarantees the user's strongest standing rules by construction. |
 | **Then** | Scheduled / triggered KG re-index (C2) | Thread 6 — fixes a live correctness bug (stale KG hit during exploration). No dependencies. "Not Doing" entry already narrowed in this doc. |
 | **Then** | Shipper waits on CI + notify (M1 + N1) | Thread 7 — highest user-visible payoff ("merged, green, pinged"). N1 also establishes the OS-push plumbing that unblocks Thread 6's digest and C4 surfacing. Opt-in to preserve "invisible." |

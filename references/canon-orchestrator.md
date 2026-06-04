@@ -112,12 +112,21 @@ When the architect produces `task-dag.yaml`, use it for parallel dispatch instea
 3. For each DAG node: `TaskCreate` with full agent enrichment payload (principles, file context, task plan content, working instructions). For tasks with `depends_on`: `TaskUpdate({ addBlockedBy: [...] })`.
 4. Spawn N workers (one per root task, capped at 5): `Agent({ team_name, subagent_type: "canon:engineer" })`.
 5. Workers claim tasks, create their own worktrees at `{projectDir}/.canon/worktrees/{task_id}` on branch `canon-wave/{task_id}`.
-6. After all tasks complete: `mergeWaveResults` → `cleanupWorktrees` → `TeamDelete`.
+6. After all tasks complete: merge each `canon-wave/{task_id}` branch in alphabetical order (`git merge --no-ff`), remove each worktree (`git worktree remove`) and delete its branch (`git branch -d canon-wave/{task_id}`), then `TeamDelete`. (The removed `mergeWaveResults` / `cleanupWorktrees` helpers are not available — run these as explicit git operations.)
 7. Execute remaining tail steps (review, context-sync, ship, learn) sequentially.
 
-### Post-Step Artifact Check
+### Post-Step Artifact Check <!-- last-updated: 2026-06-04 -->
 
 After each agent returns, verify expected artifacts exist (paths from runbook's `artifacts` field) before proceeding.
+
+**Cliff-detection pass (observe → surface, no auto re-spawn).** After each
+code-writing subagent returns AND the normal artifact check completes, also call
+`reconcile_workspace({ workspace, emit_telemetry: true, source: "post_subagent"
+})` to catch steps that started but died before finishing their declared artifact
+— a write-cliff the simple presence check can miss for `started`/`planned` steps.
+On `needs_recovery: true`, surface via the "Incomplete-step surfacing (cliff
+detected)" HITL pattern; no automatic re-spawn. This pass is additive and
+surfacing-only: the normal completed-step missing-artifact path is unchanged.
 
 ### Agent Spawn Error Handling
 
@@ -129,9 +138,13 @@ After each agent returns, verify expected artifacts exist (paths from runbook's 
 
 Retry with exponential backoff: 4s → 8s → 16s (max 3 retries). After 3 failures, HITL.
 
-## Concern 4: HITL Patterns
+## Concern 4: HITL Patterns <!-- last-updated: 2026-06-04 -->
 
 Use `AskUserQuestion` for all closed-choice HITL gates.
+
+### Incomplete-step surfacing (cliff detected)
+
+When `reconcile_workspace` returns `needs_recovery: true` (on resume or post-subagent), present the incomplete steps to the user: for each, the `step_id`, `agent_type`, its `missing_artifacts` / `partial_artifacts`, and (on the resume path) the harvested transcript path from `capture_transcript` when available. Offer user-driven options via `AskUserQuestion`: (a) **resume** — re-run that step (user-initiated, standard step dispatch); (b) **abandon** — mark the step skipped and continue; (c) **inspect** — show the partial artifact / harvested transcript path. **No automatic re-spawn is performed** — surfacing only. A `cliff_detected` telemetry event has already been recorded by `reconcile_workspace`. This pattern does NOT apply to normal completed-step artifact misses, which keep their existing re-spawn → second-failure HITL path.
 
 ### Review verdict (BLOCKING)
 
@@ -226,7 +239,7 @@ When all implementation steps complete:
 You own: `board.json`, `progress.md`, `journal.json`.
 You never write to: `research/`, `decisions/`, `plans/`, `reviews/`, or agent artifact files.
 
-## Resume Protocol
+## Resume Protocol <!-- last-updated: 2026-06-04 -->
 
 When resuming a session or the user says "continue" / "resume":
 
@@ -234,6 +247,29 @@ When resuming a session or the user says "continue" / "resume":
 2. Identify the last step with `status: "completed"`.
 3. Read workspace artifacts produced by completed steps for context.
 4. Continue from the first step with `status: "started"` or the next unstarted step.
+
+**Reconciliation-on-resume (cliff detection → observe → surface).** Before
+continuing, call `reconcile_workspace({ workspace, emit_telemetry: true, source:
+"resume" })`. This both detects the cliff and (via `emit_telemetry: true`) records
+the `cliff_detected` telemetry automatically. Each entry in `incomplete_steps` is
+a `started`/`planned` step that either has a declared artifact missing on disk
+(`missing_artifacts`) or has an artifact present but still a `## Status: Partial` /
+`IN_PROGRESS` skeleton (`partial_artifacts`). For each entry:
+1. **Harvest** the dead agent's transcript (read-only, best-effort observation —
+   NOT recovery): call `capture_transcript({ workspace, step_id, agent_type,
+   agent_id?, source_path?, persist_path: true })`. Pass `agent_id` from the
+   original Agent spawn result (or the journal) when available; if the agent died
+   before its completion was logged, pass `source_path` if known. If neither is
+   available, capture is a best-effort no-op (it returns a warning, never an
+   error) — proceed regardless. `persist_path: true` makes the recovered
+   transcript findable by `get_transcript` so the user can inspect it.
+2. If `needs_recovery: true`, **surface** the incomplete steps to the user via the
+   "Incomplete-step surfacing (cliff detected)" HITL pattern and STOP. **Do NOT
+   automatically re-spawn** — the user decides whether to manually re-run the
+   step, abandon it, or inspect the harvested transcript.
+
+Reconciliation runs against the BUILD journal. It is advisory and read-only — a
+`reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
 
 ## Commit Provenance
 

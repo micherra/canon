@@ -64,7 +64,10 @@ export async function resolveProjectDir(
     console.error("[canon] MCP roots unavailable:", err instanceof Error ? err.message : err);
   }
 
-  // Priority 3: cwd fallback.
-  console.error(`[canon] project dir from cwd (roots unavailable): ${cwdFallback}`);
+  // Priority 3: cwd fallback — loudly log so HTTP-mode scope leaks are observable.
+  console.warn(
+    `[canon] project scope fell back to cwd-derived git root: ${cwdFallback} — ` +
+      `no CANON_PROJECT_DIR and roots/list returned no usable root`,
+  );
   return cwdFallback;
 }

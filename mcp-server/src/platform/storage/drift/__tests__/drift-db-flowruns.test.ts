@@ -10,7 +10,8 @@ import type { ReviewEntry } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { DecisionEntry, FlowRunEntry } from "../drift-analytics-types.ts";
-import { DriftDb, getDriftDb } from "../drift-db.ts";
+import { DriftDb } from "../drift-db.ts";
+import { getDriftDb } from "../drift-db-cache.ts";
 import { initDriftDb } from "../drift-schema.ts";
 
 function makeReviewEntry(overrides: Partial<ReviewEntry> = {}): ReviewEntry {

@@ -54,6 +54,8 @@ describe("logStep — agent_id enforcement", () => {
       status: "completed",
       step_id: "some-step",
       workspace,
+
+      projectDir: process.cwd(),
     });
     expect(isToolError(rejected)).toBe(true);
     if (isToolError(rejected)) {
@@ -65,6 +67,8 @@ describe("logStep — agent_id enforcement", () => {
       status: "completed",
       step_id: "inline-fix",
       workspace,
+
+      projectDir: process.cwd(),
     });
     expect(isToolError(inlineFix)).toBe(false);
     if (!isToolError(inlineFix)) {
@@ -78,6 +82,8 @@ describe("logStep — agent_id enforcement", () => {
       status: "skipped",
       step_id: "skipped-step",
       workspace,
+
+      projectDir: process.cwd(),
     });
     expect(isToolError(skipped)).toBe(false);
     if (!isToolError(skipped)) {
@@ -98,12 +104,16 @@ describe("logStep — agent_id enforcement", () => {
         status: "planned",
         step_id: "enforce-step",
         workspace,
+
+        projectDir: process.cwd(),
       });
 
       await logStep({
         status: "started",
         step_id: "enforce-step",
         workspace,
+
+        projectDir: process.cwd(),
       });
 
       // Step 3: completed with agent_id — triggers transcript capture
@@ -112,6 +122,8 @@ describe("logStep — agent_id enforcement", () => {
         status: "completed",
         step_id: "enforce-step",
         workspace,
+
+        projectDir: process.cwd(),
       });
 
       // logStep must succeed
@@ -159,6 +171,8 @@ describe("logStep — agent_id enforcement", () => {
         status: "planned",
         step_id: "bogus-step",
         workspace,
+
+        projectDir: process.cwd(),
       });
 
       const result = await logStep({
@@ -166,6 +180,8 @@ describe("logStep — agent_id enforcement", () => {
         status: "completed",
         step_id: "bogus-step",
         workspace,
+
+        projectDir: process.cwd(),
       });
 
       // Call must succeed — agent_id IS provided, missing source is a warning not an error

@@ -10,7 +10,7 @@
 
 ## What You May Do Directly
 
-- Call Canon MCP tools (`init_workspace`, `categorize_failures`, `resolve_wave_event`, `resolve_after_consultations`, `log_step`, `batch_log_steps`, `finalize_workspace`)
+- Call Canon MCP tools (`init_workspace`, `categorize_failures`, `log_step`, `batch_log_steps`, `finalize_workspace`)
 - Spawn specialist agents via the `Agent` tool
 - Read/write orchestration files: `board.json`, `progress.md`, `.lock`, `sharpened-request.md`
 - Use `Bash` for orchestration git operations: `git status`, `git worktree`, `git merge`
@@ -165,6 +165,8 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch via agent teams. Each entry has `task_id`, `depends_on: []`, `files: []`. If absent, fall back to sequential execution.
 
+> **Supported execution model (current).** The live, exercised path is **single-worktree sequential execution**: `init_workspace` creates one `{workspace}/worktree` and all code-writing agents share it. The worktree-per-task parallel-wave path described below (per-task `canon-wave/{task_id}` worktrees + sequential merge) is documented as the intended shape but is **not currently backed by automated tooling** — the wave-lifecycle helpers (`createWaveWorktrees`/`mergeWaveResults`/`cleanupWorktrees`) were removed in PR #167. Until they are deliberately rebuilt (see `docs/explore/adaptive-queen.md` revisit trigger), run the merge steps below as explicit git operations, or prefer sequential execution. Do not reintroduce calls to the removed helpers.
+
 **Validate DAG** (via `dag-validator.ts` in `mcp-server/src/shared/lib/`): no cycles, all `depends_on` refs resolve, no self-references. On failure: present errors, re-spawn architect.
 
 #### Task Queue Setup
@@ -185,10 +187,10 @@ When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch vi
 
 After `TaskList` is empty (all done):
 
-1. `mergeWaveResults(worktreeResults, buildWorktreePath, "sequential")` — alphabetical `task_id` order.
+1. In alphabetical `task_id` order, merge each completed task branch into the build worktree: `git merge --no-ff canon-wave/{task_id}` (run from `buildWorktreePath`).
 2. **Post-merge verification**: For each task, `git diff {base_commit} -- {file}` for every declared file. Empty diff = no committed changes = task failed → retry (one retry, then HITL).
 3. Conflict: `git merge --abort` auto-runs → HITL: `"Merge conflict in task {task_id} affecting files: {files}."`.
-4. Success: `cleanupWorktrees(worktreeResults, projectDir)` then `TeamDelete({ team_name: "canon-{slug}" })`.
+4. Remove each task worktree (`git worktree remove {projectDir}/.canon/worktrees/{task_id}`) and delete its branch (`git branch -d canon-wave/{task_id}`), then `TeamDelete({ team_name: "canon-{slug}" })`.
 
 **Key asymmetry**: merges target `buildWorktreePath`; cleanup uses `projectDir`.
 
@@ -209,6 +211,31 @@ Run sequentially after all tasks: review → context-sync → ship → learn. Th
 ### Resume Protocol
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
+
+**Reconciliation-on-resume (cliff detection → observe → surface).** Before
+continuing, call `reconcile_workspace({ workspace, emit_telemetry: true, source:
+"resume" })`. This both detects the cliff and (via `emit_telemetry: true`)
+records the `cliff_detected` telemetry automatically — mechanical enforcement, no
+separate logging instruction. Each entry in `incomplete_steps` is a
+`started`/`planned` step that either (a) has a declared artifact missing on disk
+(`missing_artifacts`), or (b) has an artifact present but still a `## Status:
+Partial` / `IN_PROGRESS` skeleton (`partial_artifacts`) — an agent that stopped
+before producing or finishing its artifact. For each entry:
+1. **Harvest** the dead agent's transcript (read-only, best-effort observation —
+   NOT recovery): call `capture_transcript({ workspace, step_id, agent_type,
+   agent_id?, source_path?, persist_path: true })`. Pass the `agent_id` from the
+   original Agent spawn result (or the journal) when available; if the agent died
+   before its completion was logged, pass `source_path` if known. If neither is
+   available, capture is a best-effort no-op (it returns a warning, never an
+   error) — proceed regardless. `persist_path: true` makes the recovered
+   transcript findable by `get_transcript` so the user can inspect it.
+2. If `needs_recovery: true`, **surface** the incomplete steps to the user via the
+   "Incomplete-step surfacing (cliff detected)" HITL pattern and STOP. **Do NOT
+   automatically re-spawn** — the user decides whether to manually re-run the
+   step, abandon it, or inspect the harvested transcript.
+
+Reconciliation runs against the BUILD journal. It is advisory and read-only — a
+`reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
 
 ### Skill Preloading
 
@@ -303,6 +330,16 @@ An empty `skip_reason` is a protocol violation. If no accepted value fits, the s
 
 After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL. Derive the implement-summary path from `write_implementation_summary`'s returned `path` field; never a guessed stem.
 
+**Cliff-detection pass (observe → surface, no auto re-spawn).** After each
+code-writing subagent returns AND the normal artifact check above completes, call
+`reconcile_workspace({ workspace, emit_telemetry: true, source: "post_subagent"
+})` to catch steps that started but died before finishing their declared artifact
+— a write-cliff the simple presence check can miss for `started`/`planned` steps.
+On `needs_recovery: true`, surface via the "Incomplete-step surfacing (cliff
+detected)" HITL pattern; no automatic re-spawn. This pass is additive and
+surfacing-only: the normal path above (a *completed* step whose expected artifact
+is missing → re-spawn → second-failure HITL) is unchanged.
+
 | Agent | Expected artifact |
 |-------|------------------|
 | Architect | `plans/${slug}/DESIGN.md`, `plans/${slug}/INDEX.md` |
@@ -313,7 +350,7 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 
 > Authoritative artifact path and naming rules: `references/canon-artifact-locations.md`.
 
-### HITL Patterns <!-- last-updated: 2026-05-17 -->
+### HITL Patterns <!-- last-updated: 2026-06-04 -->
 
 - **PM Triage**: (1) Refine: classify trivial/clear/fuzzy; produce `sharpened-request.md` for non-trivial tiers. (2) Scope check: 1-2 MCP calls → trivial → engineer, non-trivial → architect. Fully-specified requests skip the requirements conversation.
 - **Requirement coverage check**: After architect returns, surface any `descoped`/`partial`/missing requirements before runbook approval. Proceed silently if all are `covered` with owning steps.
@@ -328,6 +365,7 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 - **Build-step checkpoint**: After design/implement/verify/review steps: "Step {N} of {total} complete. Continue, or resume fresh?" Skip when `CANON_SKIP_SESSION_CHECKPOINTS=1`. Does not apply to tail steps.
 - **Gate failure**: Present output, ask user how to proceed.
 - **Architect design conversation**: For genuine design tradeoffs, architect reports `HAS_QUESTIONS` with reasoning, stated lean, and request for user correction. Orchestrator surfaces to user; re-spawn with feedback. Style: think-out-loud, state a lean (not multiple choice). No round limit. Skip when only one reasonable approach exists.
+- **Incomplete-step surfacing (cliff detected)**: When `reconcile_workspace` returns `needs_recovery: true` (on resume or post-subagent), present the incomplete steps to the user: for each, the `step_id`, `agent_type`, its `missing_artifacts` / `partial_artifacts`, and (on the resume path) the harvested transcript path from `capture_transcript` when available. Offer user-driven options via `AskUserQuestion`: (a) **resume** — re-run that step (user-initiated, standard step dispatch); (b) **abandon** — mark the step skipped and continue; (c) **inspect** — show the partial artifact / harvested transcript path. **No automatic re-spawn is performed** — surfacing only. A `cliff_detected` telemetry event has already been recorded by `reconcile_workspace`. This pattern does NOT apply to normal completed-step artifact misses, which keep their existing re-spawn → second-failure HITL path.
 - **Merge conflict**: Present conflicting files, ask for resolution strategy.
 
 ### Post-Step Effects

@@ -7,9 +7,13 @@ import { KgStore } from "@graph/kg-store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+// A path that will never have a .canon/knowledge-graph.db — used by tests that
+// only care about structural analysis (not KG enrichment).
+const NO_KG_DIR = "/tmp/__no-kg-insights-test__";
+
 describe("generateInsights", () => {
   it("returns zeroed insights for empty graph", () => {
-    const result = generateInsights([], []);
+    const result = generateInsights([], [], undefined, NO_KG_DIR);
     expect(result.overview.total_files).toBe(0);
     expect(result.overview.total_edges).toBe(0);
     expect(result.overview.avg_dependencies_per_file).toBe(0);
@@ -29,7 +33,7 @@ describe("generateInsights", () => {
       { source: "a.ts", target: "c.ts" },
       { source: "b.ts", target: "c.ts" },
     ];
-    const result = generateInsights(nodes, edges);
+    const result = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(result.overview.total_files).toBe(3);
     expect(result.overview.total_edges).toBe(2);
     expect(result.overview.avg_dependencies_per_file).toBeCloseTo(0.67, 1);
@@ -54,7 +58,7 @@ describe("generateInsights", () => {
       { source: "c.ts", target: "hub.ts" },
       { source: "hub.ts", target: "c.ts" },
     ];
-    const result = generateInsights(nodes, edges);
+    const result = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(result.most_connected[0].path).toBe("hub.ts");
     expect(result.most_connected[0].in_degree).toBe(3);
     expect(result.most_connected[0].out_degree).toBe(1);
@@ -68,7 +72,7 @@ describe("generateInsights", () => {
       { id: "other.ts", layer: "domain" },
     ];
     const edges = [{ source: "connected.ts", target: "other.ts" }];
-    const result = generateInsights(nodes, edges);
+    const result = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(result.orphan_files).toEqual(["orphan.ts"]);
   });
 
@@ -77,7 +81,7 @@ describe("generateInsights", () => {
       { id: "src/services/order.ts", layer: "domain" },
       { id: "src/services/order.test.ts", layer: "domain" },
     ];
-    const result = generateInsights(nodes, []);
+    const result = generateInsights(nodes, [], undefined, NO_KG_DIR);
     expect(result.orphan_files).toEqual([]);
   });
 
@@ -86,7 +90,7 @@ describe("generateInsights", () => {
       { id: "src/services/order.ts", layer: "domain" },
       { id: "src/services/__tests__/order.ts", layer: "domain" },
     ];
-    const result = generateInsights(nodes, []);
+    const result = generateInsights(nodes, [], undefined, NO_KG_DIR);
     expect(result.orphan_files).toEqual([]);
   });
 
@@ -101,7 +105,7 @@ describe("generateInsights", () => {
       { source: "b.ts", target: "c.ts" },
       { source: "c.ts", target: "a.ts" },
     ];
-    const result = generateInsights(nodes, edges);
+    const result = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(result.circular_dependencies.length).toBe(1);
     expect(result.circular_dependencies[0]).toHaveLength(3);
     expect(result.circular_dependencies[0]).toContain("a.ts");
@@ -118,7 +122,7 @@ describe("generateInsights", () => {
       { source: "a.ts", target: "b.ts" },
       { source: "b.ts", target: "a.ts" },
     ];
-    const result = generateInsights(nodes, edges);
+    const result = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(result.circular_dependencies.length).toBe(1);
     expect(result.circular_dependencies[0]).toHaveLength(2);
   });
@@ -133,7 +137,7 @@ describe("generateInsights", () => {
       source: n.id,
       target: nodes[(i + 1) % 6].id,
     }));
-    const result = generateInsights(nodes, edges);
+    const result = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(result.circular_dependencies.length).toBe(0);
   });
 
@@ -143,7 +147,7 @@ describe("generateInsights", () => {
       { id: "infra/db.ts", layer: "infra" },
     ];
     const edges = [{ source: "api/handler.ts", target: "infra/db.ts" }];
-    const result = generateInsights(nodes, edges);
+    const result = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(result.layer_violations).toHaveLength(1);
     expect(result.layer_violations[0]).toEqual({
       source: "api/handler.ts",
@@ -163,7 +167,7 @@ describe("generateInsights", () => {
       { source: "api/handler.ts", target: "domain/service.ts" },
       { source: "api/handler.ts", target: "shared/utils.ts" },
     ];
-    const result = generateInsights(nodes, edges);
+    const result = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(result.layer_violations).toHaveLength(0);
   });
 
@@ -173,7 +177,7 @@ describe("generateInsights", () => {
       { id: "api/handler.ts", layer: "api" },
     ];
     const edges = [{ source: "misc.ts", target: "api/handler.ts" }];
-    const result = generateInsights(nodes, edges);
+    const result = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(result.layer_violations).toHaveLength(0);
   });
 
@@ -185,11 +189,11 @@ describe("generateInsights", () => {
     const edges = [{ source: "api.ts", target: "infra.ts" }];
 
     // With default rules, api -> infra is a violation
-    const defaultResult = generateInsights(nodes, edges);
+    const defaultResult = generateInsights(nodes, edges, undefined, NO_KG_DIR);
     expect(defaultResult.layer_violations).toHaveLength(1);
 
     // With custom rules allowing it
-    const customResult = generateInsights(nodes, edges, { api: ["infra"] });
+    const customResult = generateInsights(nodes, edges, { api: ["infra"] }, NO_KG_DIR);
     expect(customResult.layer_violations).toHaveLength(0);
   });
 });
@@ -447,5 +451,28 @@ describe("generateInsights — KG enrichment", () => {
     expect(result.overview.total_edges).toBe(1);
     expect(result.orphan_files).toEqual([]);
     expect(result.circular_dependencies).toEqual([]);
+  });
+
+  it("uses passed projectDir for KG db path even when process.cwd() differs", () => {
+    // Seed a DB in tmpDir (not process.cwd())
+    const db = initDatabase(dbPath);
+    const store = new KgStore(db);
+    store.upsertFile({
+      content_hash: "scope-test",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/scope-test.ts",
+    });
+    db.close();
+
+    // tmpDir is definitely not process.cwd(); if the function used cwd it would miss the DB.
+    // Only the passed projectDir (tmpDir) has the seeded DB, so enrichment should happen.
+    const result = generateInsights([], [], undefined, tmpDir);
+    expect(result.entity_overview).toBeDefined();
+    expect(result.entity_overview!.total_entities).toBe(0); // file seeded, no entities
+    // Dead code summary should also be present (DB opened at tmpDir, not cwd)
+    expect(result.dead_code_summary).toBeDefined();
   });
 });

@@ -13,7 +13,7 @@
  * - no-llm-calls-in-mcp-tools: all computation is deterministic
  */
 
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import type {
   DriftDbSignals,
   ErrorFixRow,

@@ -5,7 +5,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { CANON_FILES } from "@shared/constants.ts";
 import { initExecutionDb } from "./execution-schema.ts";
 import { ExecutionStore } from "./execution-store.ts";
@@ -68,4 +68,31 @@ export function clearStoreCache(): void {
     }
   }
   storeCache.clear();
+}
+
+/**
+ * Close and evict all cached ExecutionStore instances whose workspace path is
+ * under the given projectDir (prefix match on resolve(projectDir)).
+ *
+ * Workspace keys are `{projectDir}/.canon/workspaces/...`, so a prefix match
+ * on the resolved projectDir catches all workspaces for that project.
+ *
+ * Called from the connection-end handler (Phase 2). Under stdio the single
+ * connection never ends before process exit, so this is never called — a true
+ * behavioral no-op.
+ *
+ * // Phase 2: call evictStoresForScope/evictDriftDbForScope from the connection-end handler
+ */
+export function evictStoresForScope(projectDir: string): void {
+  const prefix = resolve(projectDir);
+  for (const [key, store] of storeCache) {
+    if (key === prefix || key.startsWith(prefix + sep)) {
+      try {
+        store.close();
+      } catch {
+        /* ignore close errors */
+      }
+      storeCache.delete(key);
+    }
+  }
 }

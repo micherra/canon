@@ -10,9 +10,8 @@
  */
 
 import { isAbsolute } from "node:path";
-import { projectDir } from "@app/server-state.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import {
@@ -27,6 +26,8 @@ export type ComputeAutonomyTierInput = {
   workspace: string;
   file_paths: string[];
   override_tier?: AutonomyTier;
+  /** Project directory — threaded from resolveScope(extra) in register-confidence-tools.ts. */
+  projectDir: string;
 };
 
 export type ComputeAutonomyTierResult = {
@@ -53,6 +54,7 @@ const FAIL_SAFE_RESULT: ComputeAutonomyTierResult = {
 async function computeTierResult(
   file_paths: string[],
   override_tier: AutonomyTier | undefined,
+  projectDir: string,
 ): Promise<ComputeAutonomyTierResult> {
   const driftDb = getDriftDb(projectDir);
   const signals = await gatherSignals(file_paths, projectDir, driftDb);
@@ -108,11 +110,11 @@ function logAutonomyTierDecision(
 export async function computeAutonomyTier(
   input: ComputeAutonomyTierInput,
 ): Promise<ToolResult<ComputeAutonomyTierResult>> {
-  const { workspace, file_paths, override_tier } = input;
+  const { workspace, file_paths, override_tier, projectDir } = input;
 
   let result: ComputeAutonomyTierResult;
   try {
-    result = await computeTierResult(file_paths, override_tier);
+    result = await computeTierResult(file_paths, override_tier, projectDir);
   } catch (err) {
     console.warn(
       "[canon] compute-autonomy-tier: signal gathering failed, defaulting to supervised:",

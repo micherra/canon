@@ -21,9 +21,8 @@
  */
 
 import { join } from "node:path";
-import { projectDir } from "@app/server-state.ts";
 import type { FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import type { RecurringViolation } from "@shared/lib/violation-patterns.ts";
 import { findRecurringViolations } from "@shared/lib/violation-patterns.ts";
@@ -218,7 +217,10 @@ export function formatTrendMarkdown(data: TrendData): string {
  * Returns false on any unexpected error (DB failure, write failure, etc.).
  * Never throws.
  */
-export async function tryWriteBuildTrendSummary(workspace: string): Promise<boolean> {
+export async function tryWriteBuildTrendSummary(
+  workspace: string,
+  projectDir: string,
+): Promise<boolean> {
   try {
     const db = getDriftDb(projectDir);
 

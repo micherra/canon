@@ -3,9 +3,9 @@ import {
   finalizeWorkspace,
   logStep,
 } from "@features/orchestration/tools/orchestration-journal.ts";
-import { wrapHandler } from "@shared/lib/wrap-handler.ts";
+import { reconcileWorkspace } from "@features/orchestration/tools/reconcile-workspace.ts";
 import { z } from "zod";
-import { server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
 
 const stepOutcomeSchema = z
   .object({
@@ -85,7 +85,9 @@ function registerLogStep(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    wrapHandler(async (input) => logStep(input)),
+    gatedWrapHandler(async (input, extra) =>
+      logStep({ ...input, projectDir: resolveScope(extra) }),
+    ),
   );
 }
 
@@ -100,7 +102,9 @@ function registerBatchLogSteps(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    wrapHandler(async (input) => batchLogSteps(input)),
+    gatedWrapHandler(async (input, extra) =>
+      batchLogSteps({ ...input, projectDir: resolveScope(extra) }),
+    ),
   );
 }
 
@@ -114,7 +118,33 @@ function registerFinalizeWorkspace(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    wrapHandler(async (input) => finalizeWorkspace(input)),
+    gatedWrapHandler(async (input, extra) =>
+      finalizeWorkspace({ ...input, projectDir: resolveScope(extra) }),
+    ),
+  );
+}
+
+function registerReconcileWorkspace(): void {
+  server.registerTool(
+    "reconcile_workspace",
+    {
+      description:
+        "Cliff detection, read-only w.r.t. the journal/archive: return started/planned steps whose declared artifacts are missing on disk. Call on resume/turn-start to detect agents that stopped before producing their artifacts. Never mutates or archives the journal. When emit_telemetry is true and a cliff is detected, appends a fail-open cliff_detected audit event to the execution-store event log (the only write it performs).",
+      inputSchema: {
+        emit_telemetry: z
+          .boolean()
+          .optional()
+          .describe(
+            "When true and a cliff is detected, append a fail-open cliff_detected audit event to the execution store.",
+          ),
+        source: z
+          .enum(["resume", "post_subagent"])
+          .optional()
+          .describe("Telemetry source tag — which orchestrator path triggered the check."),
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    gatedWrapHandler(async (input) => reconcileWorkspace(input)),
   );
 }
 
@@ -122,4 +152,5 @@ export function registerJournalTools(): void {
   registerLogStep();
   registerBatchLogSteps();
   registerFinalizeWorkspace();
+  registerReconcileWorkspace();
 }

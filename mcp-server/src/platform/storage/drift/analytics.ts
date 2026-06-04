@@ -7,7 +7,7 @@
  */
 
 import type { FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
-import { getDriftDb } from "./drift-db.ts";
+import { getDriftDb } from "./drift-db-cache.ts";
 
 // Re-export interfaces so callers continue to `import { FlowRunEntry, FlowAnalytics } from "@platform/storage/drift/analytics.ts"`
 export type {

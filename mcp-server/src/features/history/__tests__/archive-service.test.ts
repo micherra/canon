@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { ArchiveManifestEntry } from "../../../platform/storage/drift/drift-analytics-types.ts";
 
 // Mock getDriftDb to prevent actual SQLite I/O during tests
-vi.mock("../../../platform/storage/drift/drift-db.ts", () => {
+vi.mock("../../../platform/storage/drift/drift-db-cache.ts", () => {
   const appendArchiveManifest = vi.fn();
   const mockDb = { appendArchiveManifest };
   return {
@@ -38,7 +38,7 @@ vi.mock("better-sqlite3", () => {
   return { default: MockDatabase };
 });
 
-import { getDriftDb } from "../../../platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "../../../platform/storage/drift/drift-db-cache.ts";
 // Import after mocks so mocks are in place
 import { archiveWorkspace } from "../services/archive-service.ts";
 

@@ -6,7 +6,7 @@ import { storePrReview } from "@features/pr-review/tools/store-pr-review.ts";
 import { getCompliance } from "@features/principles/tools/get-compliance.ts";
 import { getPrinciples } from "@features/principles/tools/get-principles.ts";
 import { listPrinciples } from "@features/principles/tools/list-principles.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { z } from "zod";
 import {

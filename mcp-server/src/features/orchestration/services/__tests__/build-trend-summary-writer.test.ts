@@ -10,7 +10,7 @@
  *  6. Includes most-retried states sorted by total iterations
  *
  * Mock strategy:
- *  - Mock `@platform/storage/drift/drift-db.ts` to control getDriftDb
+ *  - Mock `@platform/storage/drift/drift-db-cache.ts` to control getDriftDb
  *  - Mock `@app/server-state.ts` to control projectDir
  *  - Use real temp dirs for filesystem tests
  */
@@ -30,7 +30,7 @@ vi.mock("@app/server-state.ts", () => ({
 const mockGetAllFlowRuns = vi.fn();
 const mockGetReviews = vi.fn();
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn(() => ({
     getAllFlowRuns: mockGetAllFlowRuns,
     getReviews: mockGetReviews,
@@ -280,7 +280,7 @@ describe("tryWriteBuildTrendSummary", () => {
   });
 
   test("writes build-trend-summary.md to workspace when >= 5 flow runs exist", async () => {
-    const result = await tryWriteBuildTrendSummary(workspace);
+    const result = await tryWriteBuildTrendSummary(workspace, process.cwd());
 
     expect(result).toBe(true);
     const summaryPath = join(workspace, "build-trend-summary.md");
@@ -290,7 +290,7 @@ describe("tryWriteBuildTrendSummary", () => {
   });
 
   test("written file contains all three sections", async () => {
-    await tryWriteBuildTrendSummary(workspace);
+    await tryWriteBuildTrendSummary(workspace, process.cwd());
 
     const content = await readFile(join(workspace, "build-trend-summary.md"), "utf-8");
     expect(content).toContain("## Recurring Violations");
@@ -299,7 +299,7 @@ describe("tryWriteBuildTrendSummary", () => {
   });
 
   test("written file is under 100 lines", async () => {
-    await tryWriteBuildTrendSummary(workspace);
+    await tryWriteBuildTrendSummary(workspace, process.cwd());
 
     const content = await readFile(join(workspace, "build-trend-summary.md"), "utf-8");
     const lineCount = content.split("\n").length;
@@ -309,7 +309,7 @@ describe("tryWriteBuildTrendSummary", () => {
   test("returns true without writing file when fewer than 5 flow runs exist", async () => {
     mockGetAllFlowRuns.mockReturnValue(FIVE_RUNS.slice(0, 4));
 
-    const result = await tryWriteBuildTrendSummary(workspace);
+    const result = await tryWriteBuildTrendSummary(workspace, process.cwd());
 
     expect(result).toBe(true);
     const summaryPath = join(workspace, "build-trend-summary.md");
@@ -322,7 +322,7 @@ describe("tryWriteBuildTrendSummary", () => {
     });
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(vi.fn());
-    const result = await tryWriteBuildTrendSummary(workspace);
+    const result = await tryWriteBuildTrendSummary(workspace, process.cwd());
     expect(result).toBe(false);
     warnSpy.mockRestore();
   });
@@ -336,7 +336,7 @@ describe("tryWriteBuildTrendSummary", () => {
       makeFlowRun({ tier: "large" }),
     ]);
 
-    await tryWriteBuildTrendSummary(workspace);
+    await tryWriteBuildTrendSummary(workspace, process.cwd());
 
     const content = await readFile(join(workspace, "build-trend-summary.md"), "utf-8");
     // small: 2, medium: 1, large: 2
@@ -354,7 +354,7 @@ describe("tryWriteBuildTrendSummary", () => {
       makeFlowRun({ state_iterations: { implement: 1 } }),
     ]);
 
-    await tryWriteBuildTrendSummary(workspace);
+    await tryWriteBuildTrendSummary(workspace, process.cwd());
 
     const content = await readFile(join(workspace, "build-trend-summary.md"), "utf-8");
     const implementIdx = content.indexOf("implement");

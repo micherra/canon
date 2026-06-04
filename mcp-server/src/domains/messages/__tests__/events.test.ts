@@ -1,5 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { createMetricsAccumulator } from "../events.ts";
+import { createMetricsAccumulator, validateEventPayload } from "../events.ts";
+
+describe("validateEventPayload — cliff_detected", () => {
+  const validPayload = {
+    incomplete_step_ids: ["implement", "review"],
+    missing_count: 2,
+    needs_recovery: true,
+    partial_count: 1,
+    source: "resume",
+    timestamp: new Date().toISOString(),
+  };
+
+  it("returns { valid: true } for a well-formed cliff_detected payload", () => {
+    expect(validateEventPayload("cliff_detected", validPayload)).toEqual({ valid: true });
+  });
+
+  it("returns { valid: true } when correlation_id is present", () => {
+    expect(
+      validateEventPayload("cliff_detected", { ...validPayload, correlation_id: "corr-1" }),
+    ).toEqual({ valid: true });
+  });
+
+  it("returns { valid: false } with errors when source is missing", () => {
+    const { source, ...withoutSource } = validPayload;
+    const result = validateEventPayload("cliff_detected", withoutSource);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toBeDefined();
+    expect((result.errors ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("returns { valid: false } when needs_recovery is not the literal true", () => {
+    const result = validateEventPayload("cliff_detected", {
+      ...validPayload,
+      needs_recovery: false,
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns { valid: false } when source is not an allowed enum value", () => {
+    const result = validateEventPayload("cliff_detected", { ...validPayload, source: "other" });
+    expect(result.valid).toBe(false);
+  });
+});
 
 describe("createMetricsAccumulator", () => {
   it("tracks spawns on agent_spawned events", () => {
