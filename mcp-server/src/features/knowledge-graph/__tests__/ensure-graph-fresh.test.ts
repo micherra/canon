@@ -16,7 +16,7 @@ import path from "node:path";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
-import { afterEach, beforeEach, describe, expect, test, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // --- Mocks -----------------------------------------------------------------
 
