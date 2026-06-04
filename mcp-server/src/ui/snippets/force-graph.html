@@ -1,0 +1,386 @@
+<!--
+  @snippet force-graph
+  @description Canonical force-directed-graph Canvas engine shared by the review and codebase-graph
+    renderers. Exposes a single entry point `renderForceGraph(canvasEl, graph, options)` that runs a
+    pre-computed (non-animated) spring-charge-gravity simulation, normalizes the settled layout to fill
+    the canvas, de-collides labels, then draws nodes/edges with hover + click handling. Renderer-specific
+    concerns (legend, side panel, DIFF_BASE filtering, click-to-expand-card) stay OUTSIDE the engine and
+    are wired via the options callbacks. This file is the single source of truth for the force-sim
+    constants and the normalize-to-fit pass — no inline force-sim copies may live in any renderer template.
+  @data {
+    graph: {
+      nodes: Array<{ id: string, layer?: string, violation_count?: number, changed?: boolean, kind?: string }>,
+      edges: Array<{ source: string | { id: string }, target: string | { id: string }, type?: string }>
+    },
+    options: {
+      height?: number | null,        // fixed px (review = 300) | null/undefined → use canvas computed/CSS height
+      iterations?: number,           // default 200 (review passes 100)
+      nodeFill: (node) => string,    // REQUIRED — per-renderer hex color priority
+      edgeStyle?: 'arrow' | 'curve', // default 'curve'; 'arrow' = straight line + arrowhead (review)
+      showViolationRing?: boolean,   // default true
+      drawLabels?: boolean,          // default true (review); pass false for codebase-graph (hover-only)
+      onNodeClick?: (node) => void,  // default noop — review: expand+scroll card; codebase: open side panel
+      onHover?: (node|null) => void, // optional
+      // force constants (all optional, default to the known-good codebase-graph baseline):
+      kRepel, kSpring, restLength, kGravity, damping, maxForce, nodeRadius, padding
+    }
+  }
+  @tokens --accent, --danger, --text, --text-muted, --warning, --border-muted, --bg, --border, --text-bright
+  @usage The consuming renderer template reads this file and emits its script block VERBATIM exactly
+    ONCE before the closing body tag (mirroring how file-detail-card.html / node-detail-panel.html are
+    consumed), then calls `renderForceGraph(canvasEl, { nodes, edges }, options)` from its own init script.
+    The call returns a handle `{ redraw(highlightId) }` so a renderer can request a highlight redraw on
+    node click. The optional style block below provides a shared canvas-wrap helper; emit it once in the
+    page style block if used.
+-->
+<style>
+  /* Shared canvas wrapper helper for force-directed graphs (optional — renderers may use their own). */
+  .force-graph-wrap {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+  }
+  .force-graph-wrap canvas {
+    display: block;
+    width: 100%;
+  }
+</style>
+<script>
+  // ── Canonical force-directed-graph engine ──────────────────────────────────
+  // Lifted VERBATIM from the known-good codebase-graph force-sim (the correctness
+  // baseline) and generalized with a thin options seam. The force model + the
+  // normalize-to-fit pass live ONLY here.
+  //
+  // Design token mapping (Canvas 2D cannot use CSS custom properties). The hex
+  // values below correspond to DESIGN-SYSTEM.md Section A tokens:
+  //   #6c8cff  → var(--accent)       — changed nodes, selection rings (renderer-supplied via nodeFill)
+  //   #ff6b6b  → var(--danger)       — violation rings
+  //   #636a80  → var(--text-muted)   — fallback fill (renderer-supplied via nodeFill)
+  //   #888780  → (no direct token)   — same-layer / arrow edge color; between --text-muted and --text
+  //   #EF9F27  → (no direct token)   — cross-layer edge color; amber similar to --warning (#fbbf24)
+  //   #b4b8c8  → var(--text)         — node label text color
+  //   #1e2030  → var(--bg)           — tooltip background
+  //   #3a3d52  → var(--border)       — tooltip border (opaque variant)
+  //   #e8eaf0  → var(--text-bright)  — tooltip text color
+  // When design tokens change, update these hex values to match.
+  function renderForceGraph(canvas, graph, options) {
+    if (!canvas) return { redraw: function () {} };
+    options = options || {};
+
+    // ── Resolve edge endpoints to string ids (support string or {id} object) ──
+    function resolveEndpoint(ep) {
+      return typeof ep === 'string' ? ep : (ep && ep.id) || '';
+    }
+
+    var rawNodes = (graph && graph.nodes) || [];
+    var rawEdges = (graph && graph.edges) || [];
+    var nodes = rawNodes.map(function (n) {
+      return {
+        id: n.id,
+        layer: n.layer,
+        violation_count: n.violation_count || 0,
+        changed: n.changed || false,
+        kind: n.kind || '',
+        x: 0, y: 0, vx: 0, vy: 0, fx: 0, fy: 0,
+        labelDy: 0
+      };
+    });
+    var edges = rawEdges.map(function (e) {
+      return { source: resolveEndpoint(e.source), target: resolveEndpoint(e.target), type: e.type || 'imports' };
+    });
+    if (nodes.length === 0) return { redraw: function () {} };
+
+    var nodeMap = {};
+    for (var m = 0; m < nodes.length; m++) nodeMap[nodes[m].id] = nodes[m];
+
+    // ── Options + force constants (default to the known-good baseline) ────────
+    var ITERATIONS = options.iterations != null ? options.iterations : 200;
+    var K_REPEL = options.kRepel != null ? options.kRepel : 5000;
+    var K_SPRING = options.kSpring != null ? options.kSpring : 0.01;
+    var REST_LENGTH = options.restLength != null ? options.restLength : 50;
+    var K_GRAVITY = options.kGravity != null ? options.kGravity : 0.3;
+    var DAMPING = options.damping != null ? options.damping : 0.85;
+    var MAX_FORCE = options.maxForce != null ? options.maxForce : 10;
+    var NODE_RADIUS = options.nodeRadius != null ? options.nodeRadius : 5;
+    var PADDING = options.padding != null ? options.padding : 30;
+    var edgeStyle = options.edgeStyle || 'curve';
+    var showViolationRing = options.showViolationRing !== false;
+    var drawLabels = options.drawLabels !== false;
+    var nodeFill = typeof options.nodeFill === 'function'
+      ? options.nodeFill
+      : function () { return /* --text-muted */ '#636a80'; };
+    var onNodeClick = typeof options.onNodeClick === 'function' ? options.onNodeClick : function () {};
+    var onHover = typeof options.onHover === 'function' ? options.onHover : null;
+
+    // ── Canvas dimensions (CSS pixels) ────────────────────────────────────────
+    var dpr = window.devicePixelRatio || 1;
+    var W = (canvas.parentElement && canvas.parentElement.clientWidth) || canvas.offsetWidth || 900;
+    var H = options.height != null
+      ? options.height
+      : (canvas.getBoundingClientRect().height || 300);
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // ── Seed node positions randomly within bounds ────────────────────────────
+    for (var s = 0; s < nodes.length; s++) {
+      nodes[s].x = PADDING + Math.random() * (W - PADDING * 2);
+      nodes[s].y = PADDING + Math.random() * (H - PADDING * 2);
+      nodes[s].vx = 0; nodes[s].vy = 0;
+    }
+
+    // ── Run force simulation (pre-computed, not animated) ─────────────────────
+    for (var iter = 0; iter < ITERATIONS; iter++) {
+      for (var r = 0; r < nodes.length; r++) { nodes[r].fx = 0; nodes[r].fy = 0; }
+
+      // Charge repulsion (O(n^2) — acceptable for <600 nodes)
+      for (var i = 0; i < nodes.length; i++) {
+        for (var j = i + 1; j < nodes.length; j++) {
+          var ni = nodes[i], nj = nodes[j];
+          var dx = ni.x - nj.x, dy = ni.y - nj.y;
+          var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          var force = Math.min(K_REPEL / (dist * dist), MAX_FORCE);
+          var rfx = (dx / dist) * force;
+          var rfy = (dy / dist) * force;
+          ni.fx += rfx; ni.fy += rfy;
+          nj.fx -= rfx; nj.fy -= rfy;
+        }
+      }
+
+      // Spring attraction (edges)
+      for (var e = 0; e < edges.length; e++) {
+        var src = nodeMap[edges[e].source];
+        var tgt = nodeMap[edges[e].target];
+        if (!src || !tgt) continue;
+        var edx = tgt.x - src.x, edy = tgt.y - src.y;
+        var edist = Math.sqrt(edx * edx + edy * edy) || 1;
+        var sforce = K_SPRING * (edist - REST_LENGTH);
+        var sfx = (edx / edist) * sforce;
+        var sfy = (edy / edist) * sforce;
+        src.fx += sfx; src.fy += sfy;
+        tgt.fx -= sfx; tgt.fy -= sfy;
+      }
+
+      // Center gravity (bounded, balanced against repulsion)
+      var cx = W / 2, cy = H / 2;
+      for (var g = 0; g < nodes.length; g++) {
+        nodes[g].fx += (cx - nodes[g].x) * K_GRAVITY;
+        nodes[g].fy += (cy - nodes[g].y) * K_GRAVITY;
+      }
+
+      // Apply forces with damping
+      for (var a = 0; a < nodes.length; a++) {
+        nodes[a].vx = (nodes[a].vx + nodes[a].fx) * DAMPING;
+        nodes[a].vy = (nodes[a].vy + nodes[a].fy) * DAMPING;
+        nodes[a].x += nodes[a].vx;
+        nodes[a].y += nodes[a].vy;
+      }
+    }
+
+    // ── Normalize positions to fit within canvas bounds with padding ──────────
+    // (This is the block the old review script was missing — the framing fix.)
+    if (nodes.length > 0) {
+      var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (var b = 0; b < nodes.length; b++) {
+        if (nodes[b].x < minX) minX = nodes[b].x;
+        if (nodes[b].x > maxX) maxX = nodes[b].x;
+        if (nodes[b].y < minY) minY = nodes[b].y;
+        if (nodes[b].y > maxY) maxY = nodes[b].y;
+      }
+      var rangeX = (maxX - minX) || 1;
+      var rangeY = (maxY - minY) || 1;
+      var drawW = W - PADDING * 2;
+      var drawH = H - PADDING * 2;
+      for (var c = 0; c < nodes.length; c++) {
+        nodes[c].x = PADDING + ((nodes[c].x - minX) / rangeX) * drawW;
+        nodes[c].y = PADDING + ((nodes[c].y - minY) / rangeY) * drawH;
+      }
+    }
+
+    // ── Label de-collision (review fix; only runs when drawLabels is true) ────
+    // Flip a node's label above/below to avoid stacking on a near neighbor's
+    // label within a small x-band. Bounded passes; never moves node centers.
+    function computeLabelOffsets() {
+      var below = NODE_RADIUS + 11;
+      var above = -(NODE_RADIUS + 4);
+      var X_BAND = 28;   // px horizontal proximity that risks label overlap
+      var Y_BAND = 14;   // px vertical proximity of label baselines
+      for (var p = 0; p < nodes.length; p++) nodes[p].labelDy = below;
+      for (var pass = 0; pass < 3; pass++) {
+        var moved = false;
+        for (var x = 0; x < nodes.length; x++) {
+          for (var y = x + 1; y < nodes.length; y++) {
+            var nx = nodes[x], ny = nodes[y];
+            if (Math.abs(nx.x - ny.x) > X_BAND) continue;
+            var lyx = nx.y + nx.labelDy;
+            var lyy = ny.y + ny.labelDy;
+            if (Math.abs(lyx - lyy) <= Y_BAND) {
+              // Flip the lower-positioned label upward to separate them.
+              if (nx.y >= ny.y && nx.labelDy === below) { nx.labelDy = above; moved = true; }
+              else if (ny.labelDy === below) { ny.labelDy = above; moved = true; }
+            }
+          }
+        }
+        if (!moved) break;
+      }
+    }
+    if (drawLabels) computeLabelOffsets();
+
+    // ── Draw ──────────────────────────────────────────────────────────────────
+    function drawArrowEdge(ax, ay, bx, by) {
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.strokeStyle = /* --border-muted */ '#888780';
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.35;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      var angle = Math.atan2(by - ay, bx - ax);
+      var tipX = bx - Math.cos(angle) * NODE_RADIUS;
+      var tipY = by - Math.sin(angle) * NODE_RADIUS;
+      var AL = 7, AW = Math.PI / 6;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - AL * Math.cos(angle - AW), tipY - AL * Math.sin(angle - AW));
+      ctx.lineTo(tipX - AL * Math.cos(angle + AW), tipY - AL * Math.sin(angle + AW));
+      ctx.closePath();
+      ctx.fillStyle = /* --border-muted */ '#888780';
+      ctx.globalAlpha = 0.5;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawCurveEdge(src, tgt, srcNode, tgtNode, highlightId, edge) {
+      var isCrossLayer = srcNode && tgtNode && srcNode.layer !== tgtNode.layer;
+      var isConnectedToSelected = highlightId &&
+        (edge.source === highlightId || edge.target === highlightId);
+      ctx.beginPath();
+      var cpX = (src.x + tgt.x) / 2;
+      var cpY = (src.y + tgt.y) / 2 - Math.abs(tgt.x - src.x) * 0.15;
+      ctx.moveTo(src.x, src.y);
+      ctx.quadraticCurveTo(cpX, cpY, tgt.x, tgt.y);
+      ctx.strokeStyle = isCrossLayer ? /* --warning */ '#EF9F27' : /* --border-muted */ '#888780';
+      ctx.globalAlpha = isConnectedToSelected ? 0.7 : (isCrossLayer ? 0.25 : 0.15);
+      ctx.lineWidth = isConnectedToSelected ? 1.5 : 1;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawGraph(highlightId) {
+      ctx.clearRect(0, 0, W, H);
+
+      // Edges
+      for (var e2 = 0; e2 < edges.length; e2++) {
+        var sNode = nodeMap[edges[e2].source];
+        var tNode = nodeMap[edges[e2].target];
+        if (!sNode || !tNode) continue;
+        if (edgeStyle === 'arrow') {
+          drawArrowEdge(sNode.x, sNode.y, tNode.x, tNode.y);
+        } else {
+          drawCurveEdge(sNode, tNode, sNode, tNode, highlightId, edges[e2]);
+        }
+      }
+
+      // Nodes
+      for (var n2 = 0; n2 < nodes.length; n2++) {
+        var nd = nodes[n2];
+        var isSelected = nd.id === highlightId;
+
+        ctx.beginPath();
+        ctx.arc(nd.x, nd.y, isSelected ? NODE_RADIUS + 2 : NODE_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = nodeFill(nd);
+        ctx.globalAlpha = isSelected ? 1 : (highlightId ? 0.5 : 0.85);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // Violation ring
+        if (showViolationRing && (nd.violation_count || 0) > 0) {
+          ctx.beginPath();
+          ctx.arc(nd.x, nd.y, NODE_RADIUS + 2, 0, Math.PI * 2);
+          ctx.strokeStyle = /* --danger */ '#ff6b6b';
+          ctx.lineWidth = 1.5;
+          ctx.globalAlpha = 0.7;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        // Selection ring
+        if (isSelected) {
+          ctx.beginPath();
+          ctx.arc(nd.x, nd.y, NODE_RADIUS + 5, 0, Math.PI * 2);
+          ctx.strokeStyle = /* --accent */ '#6c8cff';
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = 0.8;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        // Label (de-collided offset)
+        if (drawLabels) {
+          var label = (nd.id.split('/').pop()) || nd.id;
+          if (label.length > 20) label = label.slice(0, 18) + '...';
+          ctx.font = '9px monospace';
+          ctx.fillStyle = /* --text */ '#b4b8c8';
+          ctx.textAlign = 'center';
+          ctx.fillText(label, nd.x, nd.y + nd.labelDy);
+        }
+      }
+    }
+
+    drawGraph(null);
+
+    // ── Hover tooltip + hit-testing ───────────────────────────────────────────
+    var tooltip = document.createElement('div');
+    tooltip.style.cssText = 'position:fixed;pointer-events:none;' +
+      'background:' + /* --bg */ '#1e2030' + ';border:1px solid ' + /* --border */ '#3a3d52' + ';' +
+      'color:' + /* --text-bright */ '#e8eaf0' + ';padding:4px 8px;border-radius:4px;font-size:11px;' +
+      'font-family:monospace;display:none;z-index:9999;max-width:400px;word-break:break-all;';
+    document.body.appendChild(tooltip);
+
+    function findNodeAt(mx, my) {
+      for (var k = 0; k < nodes.length; k++) {
+        var dx = mx - nodes[k].x, dy = my - nodes[k].y;
+        if (Math.sqrt(dx * dx + dy * dy) <= NODE_RADIUS + 6) return nodes[k];
+      }
+      return null;
+    }
+
+    canvas.addEventListener('mousemove', function (evt) {
+      var rect = canvas.getBoundingClientRect();
+      var mx = (evt.clientX - rect.left) * (W / rect.width);
+      var my = (evt.clientY - rect.top) * (H / rect.height);
+      var hit = findNodeAt(mx, my);
+      if (hit) {
+        tooltip.textContent = hit.id;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (evt.clientX + 12) + 'px';
+        tooltip.style.top = (evt.clientY - 8) + 'px';
+        canvas.style.cursor = 'pointer';
+      } else {
+        tooltip.style.display = 'none';
+        canvas.style.cursor = 'default';
+      }
+      if (onHover) onHover(hit);
+    });
+    canvas.addEventListener('mouseleave', function () {
+      tooltip.style.display = 'none';
+      canvas.style.cursor = 'default';
+      if (onHover) onHover(null);
+    });
+    canvas.addEventListener('click', function (evt) {
+      tooltip.style.display = 'none';
+      var rect = canvas.getBoundingClientRect();
+      var mx = (evt.clientX - rect.left) * (W / rect.width);
+      var my = (evt.clientY - rect.top) * (H / rect.height);
+      var hit = findNodeAt(mx, my);
+      if (hit) onNodeClick(hit);
+    });
+
+    // Handle for the renderer (codebase-graph uses redraw(highlightId) for selection).
+    return { redraw: function (highlightId) { drawGraph(highlightId || null); } };
+  }
+</script>
