@@ -129,7 +129,7 @@ Before claiming any principle is HONORED or any acceptance criterion is SATISFIE
 **Verification protocol:**
 1. Before marking a principle as HONORED in Stage 1: Grep for the pattern the principle requires (e.g., for `errors-are-values`, grep for Result/union return types in the changed files). If the pattern is not found, the principle is NOT HONORED.
 2. Before marking an AC as PASS in Stage 5: run the verification command or grep for the structural evidence. If evidence is not found, the AC is NOT MET.
-3. Every HONORED claim in the `honored[]` array must cite at least one file:line where the pattern was verified.
+3. The `honored[]` array contains **principle IDs only** (e.g., `"errors-are-values"`). These strings are matched by exact equality in drift analytics — never put citations, file paths, or non-ID content into this array. The file:line evidence for each honored principle belongs in the rendered **Honored** section of `REVIEW.md` (the human-readable prose evaluation), where each honored principle must cite at least one `file:line` that proves the pattern was present.
 4. Every PASS verdict in Stage 5 must cite the tool output or file:line that proves it.
 
 **No-prose-only-claims constraint**: Any claim in the review output that asserts compliance without a file:line citation or tool output excerpt is a review defect. The reviewer must self-check before writing the final verdict: scan the honored list and AC results — if any entry lacks evidence, go back and verify mechanically.
