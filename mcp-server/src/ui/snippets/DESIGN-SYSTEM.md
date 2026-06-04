@@ -395,6 +395,176 @@ function escapeHtml(s: string): string {
 }
 ```
 
+**Runtime form (canonical for renderer agents).** Renderer agents emit plain JavaScript, not
+TypeScript, and must guard against nullish input. Use this null-safe form — it is the single
+canonical `escapeHtml` every renderer template references:
+
+```javascript
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+```
+
+`String(s ?? "")` coerces `null`/`undefined` to `""` (never the literal strings `"null"` /
+`"undefined"`). Always prefer this runtime form in renderer rendering scripts.
+
+### markdownToHtml Implementation
+
+The canonical `markdownToHtml` for renderer agents. It is the behavior-preserving **union** of the
+prior per-template copies: design.md's block structure (code fences, h1–h4, ul/ol, paragraph
+wrapping with block passthrough, italic, `__bold__`) plus review.md's two inline behaviors
+(code-span **protection tokens** and `file:line` auto-linking). It calls `escapeHtml` internally
+(escape-first, wrap-second) — **do NOT pre-escape input before passing it to `markdownToHtml`**, or
+content will be double-escaped.
+
+```javascript
+/**
+ * Convert common markdown patterns to HTML.
+ * Calls escapeHtml on text content before wrapping in tags (escape-first, wrap-second).
+ * Do NOT pre-escape input — this function handles escaping internally.
+ */
+function markdownToHtml(md) {
+  if (!md) return "";
+  const lines = String(md).split("\n");
+  const out = [];
+  let inCodeFence = false;
+  let codeFenceLang = "";
+  let codeLines = [];
+  let inUl = false;
+  let inOl = false;
+
+  function closeList() {
+    if (inUl) { out.push("</ul>"); inUl = false; }
+    if (inOl) { out.push("</ol>"); inOl = false; }
+  }
+
+  function inlineFormat(text) {
+    // Escape first, then apply inline patterns.
+    let s = escapeHtml(text);
+    // Protect code spans FIRST — substitute tokens so the bold/file-ref rewrites below
+    // cannot corrupt code-span content. Restored last.
+    const codeSpans = [];
+    s = s.replace(/`([^`]+)`/g, (_, content) => {
+      codeSpans.push(`<code>${content}</code>`);
+      return `\x00CODE${codeSpans.length - 1}\x00`;
+    });
+    // Bold (**text** or __text__) — safe now, won't match inside code tokens.
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+    // Italic (*text* or _text_) — must come after bold.
+    s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    s = s.replace(/_([^_]+)_/g, "<em>$1</em>");
+    // file:line references (path.ts:42 → <code>) — safe now, code spans are tokenized.
+    s = s.replace(/([\w./\-]+\.(?:ts|js|py|go|rs|md):\d+)/g, "<code>$1</code>");
+    // Restore protected code spans.
+    s = s.replace(/\x00CODE(\d+)\x00/g, (_, i) => codeSpans[i]);
+    return s;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Code fence open/close
+    if (/^```/.test(line)) {
+      if (!inCodeFence) {
+        closeList();
+        inCodeFence = true;
+        codeFenceLang = line.slice(3).trim();
+        codeLines = [];
+      } else {
+        inCodeFence = false;
+        const langAttr = codeFenceLang ? ` class="language-${escapeHtml(codeFenceLang)}"` : "";
+        out.push(`<pre><code${langAttr}>${codeLines.map(escapeHtml).join("\n")}</code></pre>`);
+        codeLines = [];
+        codeFenceLang = "";
+      }
+      continue;
+    }
+    if (inCodeFence) { codeLines.push(line); continue; }
+
+    // Headings
+    const h4 = line.match(/^#### (.+)/);
+    if (h4) { closeList(); out.push(`<h4>${inlineFormat(h4[1])}</h4>`); continue; }
+    const h3 = line.match(/^### (.+)/);
+    if (h3) { closeList(); out.push(`<h3>${inlineFormat(h3[1])}</h3>`); continue; }
+    const h2 = line.match(/^## (.+)/);
+    if (h2) { closeList(); out.push(`<h2>${inlineFormat(h2[1])}</h2>`); continue; }
+    const h1 = line.match(/^# (.+)/);
+    if (h1) { closeList(); out.push(`<h1>${inlineFormat(h1[1])}</h1>`); continue; }
+
+    // Unordered list items
+    const ul = line.match(/^[-*] (.+)/);
+    if (ul) {
+      if (inOl) { out.push("</ol>"); inOl = false; }
+      if (!inUl) { out.push("<ul>"); inUl = true; }
+      out.push(`<li>${inlineFormat(ul[1])}</li>`);
+      continue;
+    }
+
+    // Ordered list items
+    const ol = line.match(/^\d+\. (.+)/);
+    if (ol) {
+      if (inUl) { out.push("</ul>"); inUl = false; }
+      if (!inOl) { out.push("<ol>"); inOl = true; }
+      out.push(`<li>${inlineFormat(ol[1])}</li>`);
+      continue;
+    }
+
+    // Blank line — close lists and paragraph boundary
+    if (line.trim() === "") {
+      closeList();
+      out.push(""); // paragraph break marker
+      continue;
+    }
+
+    // Regular paragraph line — close any open list first
+    closeList();
+    out.push(inlineFormat(line));
+  }
+
+  // Close any unclosed list
+  closeList();
+
+  // Wrap consecutive non-empty lines into <p> blocks
+  const result = [];
+  let paraLines = [];
+  for (const token of out) {
+    if (token === "") {
+      if (paraLines.length) {
+        // If it's already a block element, emit as-is; otherwise wrap in <p>
+        const joined = paraLines.join(" ");
+        if (/^<(h[1-6]|ul|ol|pre|li)/.test(joined)) {
+          result.push(joined);
+        } else {
+          result.push(`<p>${joined}</p>`);
+        }
+        paraLines = [];
+      }
+    } else {
+      paraLines.push(token);
+    }
+  }
+  if (paraLines.length) {
+    const joined = paraLines.join(" ");
+    if (/^<(h[1-6]|ul|ol|pre|li)/.test(joined)) {
+      result.push(joined);
+    } else {
+      result.push(`<p>${joined}</p>`);
+    }
+  }
+
+  return result.join("\n");
+}
+```
+
+`markdownToHtml` calls `escapeHtml` internally (escape-first, wrap-second) — do NOT pre-escape
+input before passing it to `markdownToHtml`.
+
 ### Rule: All User-Provided Data Must Be Escaped
 
 **All user-provided data (file paths, descriptions, names, messages, principle IDs) MUST pass
