@@ -1,11 +1,15 @@
 /**
- * reconcileWorkspace — read-only cliff detection tool.
+ * reconcileWorkspace — cliff detection tool, read-only w.r.t. the journal/archive.
  *
  * Returns started/planned steps whose declared artifacts are either missing on
  * disk OR present but still a `## Status: Partial` / `IN_PROGRESS` skeleton.
  * Call on resume/turn-start to detect agents that stopped before producing (or
- * finishing) their artifacts. Does NOT mutate the journal, archive, or run
- * side-effects.
+ * finishing) their artifacts. Never mutates the journal or archive and runs no
+ * destructive side-effects. When `emit_telemetry: true` and a cliff is detected,
+ * it appends a best-effort (fail-open) `cliff_detected` audit event to the
+ * execution-store event log — this is the only write it ever performs, it never
+ * touches the journal/archive, and a telemetry-write failure never changes the
+ * returned result.
  *
  * Extracted from orchestration-journal.ts to keep that file under 600 lines.
  */
@@ -13,6 +17,7 @@
 import { existsSync, globSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import type { JournalStep } from "./orchestration-journal.ts";
 import {
@@ -21,7 +26,11 @@ import {
   scanArtifactList,
 } from "./orchestration-journal.ts";
 
-export type ReconcileWorkspaceInput = { workspace: string };
+export type ReconcileWorkspaceInput = {
+  workspace: string;
+  emit_telemetry?: boolean;
+  source?: "resume" | "post_subagent";
+};
 
 export type IncompleteStep = {
   step_id: string;
@@ -120,11 +129,46 @@ async function toIncompleteStep(
 }
 
 /**
- * Read-only reconciliation: return started/planned steps whose declared
- * artifacts are missing on disk (cliff detection). Call on resume/turn-start
- * to detect agents that stopped before producing their artifacts.
+ * Append a `cliff_detected` audit event to the execution-store event log.
  *
- * Does NOT mutate the journal, archive, or run side-effects.
+ * Best-effort and fail-open: never throws, never changes the caller's result.
+ * Mirrors the `auto_decision` precedent in `compute-autonomy-tier.ts`. The
+ * journal/archive is never touched — only the append-only event log is written.
+ */
+function emitCliffTelemetry(
+  workspace: string,
+  incompleteSteps: IncompleteStep[],
+  source: "resume" | "post_subagent",
+): void {
+  try {
+    const store = getExecutionStore(workspace);
+    store.appendEvent("cliff_detected", {
+      incomplete_step_ids: incompleteSteps.map((s) => s.step_id),
+      missing_count: incompleteSteps.reduce((n, s) => n + s.missing_artifacts.length, 0),
+      needs_recovery: true,
+      partial_count: incompleteSteps.reduce((n, s) => n + s.partial_artifacts.length, 0),
+      source,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    // Fail-open: telemetry must never block resume or the build (PRD constraint).
+    console.warn(
+      "[canon] reconcile-workspace: cliff_detected event logging failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
+ * Reconciliation, read-only w.r.t. the journal/archive: return started/planned
+ * steps whose declared artifacts are missing on disk (cliff detection). Call on
+ * resume/turn-start to detect agents that stopped before producing their
+ * artifacts.
+ *
+ * Never mutates the journal or archive. When `emit_telemetry: true` and a cliff
+ * is detected, appends a best-effort (fail-open) `cliff_detected` audit event to
+ * the execution-store event log; a telemetry-write failure never changes the
+ * returned result.
  */
 export async function reconcileWorkspace(
   input: ReconcileWorkspaceInput,
@@ -148,6 +192,10 @@ export async function reconcileWorkspace(
   const incompleteSteps = (
     await Promise.all(steps.map((step) => toIncompleteStep(workspace, step)))
   ).filter((s): s is IncompleteStep => s !== null);
+
+  if (input.emit_telemetry && incompleteSteps.length > 0) {
+    emitCliffTelemetry(workspace, incompleteSteps, input.source ?? "resume");
+  }
 
   return toolOk({
     incomplete_steps: incompleteSteps,
