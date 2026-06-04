@@ -96,7 +96,6 @@ The Canon MCP server exposes these tools. The orchestrator uses the harness tool
 | `write_plan_index` | Persist architect task/plan data and affected-file list |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
 | `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
-| `inject_wave_event` | Inject user events into running wave execution |
 | `get_transcript` | Read a recorded agent transcript from a workspace state; modes: `full` (all entries) or `summary` (assistant-only); returns `total_tokens` when available <!-- last-updated: 2026-04-02 --> |
 
 ## Canon Engineering Principles
