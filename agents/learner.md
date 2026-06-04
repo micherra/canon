@@ -35,6 +35,7 @@ tools:
   - mcp__canon__get_drift_report
   - mcp__canon__get_history
   - mcp__canon__get_build_history
+  - mcp__canon__get_cross_run_analysis
   - mcp__canon__get_context
   - mcp__canon__get_transcript
 ---
@@ -85,7 +86,7 @@ When evaluating convention-lifecycle sub-analysis A (task convention promotion),
 
 Builds with CLEAN verdicts or low fix-iteration counts contribute confirming signal above neutral weight (> 1.0). Builds with BLOCKING verdicts or high rework contribute below neutral weight (< 1.0). When outcome signals are absent, the weight is **1.0** (neutral) — the threshold behaves identically to the previous count-based rule.
 
-This behavior is surfaced through the existing `get_cross_run_analysis` path — no new MCP tool was introduced.
+To apply this, call `mcp__canon__get_cross_run_analysis` (pass `project_dir`) and read `recurring_violations[].weighted_instance_count` for each pattern. Use the weighted count (not raw build count) when evaluating the >= 3 promotion threshold. When outcome signals are absent, `weighted_instance_count` falls back to the raw instance count so the neutral-weight path is backward-compatible.
 
 ## CONSOLIDATE staleness pass
 

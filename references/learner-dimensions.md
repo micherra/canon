@@ -114,7 +114,7 @@ This dimension merges three analyses:
 1. Read all task convention files
 2. Extract each convention line (bullets starting with `- **`)
 3. Group semantically similar conventions (same category and similar pattern)
-4. Count the **weighted instance count** for each pattern using the cross-run analyzer's `weighted_instance_count` field on `RecurringViolation`, which sums `computeOutcomeWeight(OutcomeSignals)` across all observed instances (`mcp-server/src/features/history/services/judge-weight.ts`).
+4. Call `get_cross_run_analysis` (pass `project_dir`); use `recurring_violations[].weighted_instance_count` for the weighted >= 3 promotion threshold (neutral-weight fallback when outcome signals are absent). This field is computed by summing `computeOutcomeWeight(OutcomeSignals)` across all observed instances (`mcp-server/src/features/history/services/judge-weight.ts`).
 
 **Weighting semantics**: Builds with CLEAN or low-fix-iteration outcomes contribute confirming signal above neutral weight (> 1.0). Builds with BLOCKING verdicts or high rework contribute below neutral weight (< 1.0). WARNING outcomes approximate neutral. When outcome signals are absent (drift-only entries with no `RunSummary`), the weight falls back to **1.0** (neutral) — preserving the existing count-based behavior.
 
