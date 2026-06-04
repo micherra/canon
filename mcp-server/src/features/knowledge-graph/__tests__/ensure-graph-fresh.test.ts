@@ -16,7 +16,7 @@ import path from "node:path";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi, type Mock } from "vitest";
 
 // --- Mocks -----------------------------------------------------------------
 
@@ -142,5 +142,92 @@ describe("ensureGraphFresh", () => {
     expect(runPipelineMock).toHaveBeenCalledTimes(1);
     const [, opts] = runPipelineMock.mock.calls[0];
     expect(opts?.sourceDirs).toEqual(["src", "lib"]);
+  });
+});
+
+// Single-flight guard tests — TDD: write tests first
+
+describe("ensureGraphFresh single-flight guard", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = makeTempProject();
+    runPipelineMock.mockClear();
+    getCurrentHeadMock.mockReset();
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { force: true, recursive: true });
+  });
+
+  test("concurrent stale calls for same DB run pipeline exactly once", async () => {
+    seedDb(projectDir, "old-sha");
+    getCurrentHeadMock.mockReturnValue("new-sha");
+
+    // Deferred mock: first resolve is manual so both callers can be in-flight simultaneously
+    let resolve!: () => void;
+    const deferred = new Promise<void>((res) => {
+      resolve = res;
+    });
+    runPipelineMock.mockImplementationOnce(async () => {
+      await deferred;
+      return {};
+    });
+
+    // Fire both concurrently — do not await yet
+    const p1 = ensureGraphFresh(projectDir);
+    const p2 = ensureGraphFresh(projectDir);
+
+    // Let the deferred complete so both resolve
+    resolve();
+    await Promise.all([p1, p2]);
+
+    expect(runPipelineMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("distinct DBs are not serialized (each gets its own pipeline call)", async () => {
+    // Two separate project dirs → two separate dbPaths
+    const projectDir2 = makeTempProject();
+    try {
+      seedDb(projectDir, "old-sha");
+      seedDb(projectDir2, "old-sha");
+      getCurrentHeadMock.mockReturnValue("new-sha");
+
+      await Promise.all([ensureGraphFresh(projectDir), ensureGraphFresh(projectDir2)]);
+
+      expect(runPipelineMock).toHaveBeenCalledTimes(2);
+    } finally {
+      rmSync(projectDir2, { force: true, recursive: true });
+    }
+  });
+
+  test("map cleared after completion so next stale cycle refreshes", async () => {
+    seedDb(projectDir, "old-sha");
+    getCurrentHeadMock.mockReturnValue("new-sha");
+
+    // First stale pair
+    await Promise.all([ensureGraphFresh(projectDir), ensureGraphFresh(projectDir)]);
+    expect(runPipelineMock).toHaveBeenCalledTimes(1);
+
+    // Simulate another stale condition (marker still old because mock doesn't actually stamp)
+    runPipelineMock.mockClear();
+    await ensureGraphFresh(projectDir);
+    // Second call should trigger a new pipeline run (entry was cleared in finally)
+    expect(runPipelineMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("rejecting runPipeline still fails open and clears the entry", async () => {
+    seedDb(projectDir, "old-sha");
+    getCurrentHeadMock.mockReturnValue("new-sha");
+    runPipelineMock.mockRejectedValueOnce(new Error("pipeline exploded"));
+
+    // Should not throw
+    await expect(ensureGraphFresh(projectDir)).resolves.toBeUndefined();
+
+    // The map entry should be cleared — a subsequent call retries
+    runPipelineMock.mockClear();
+    runPipelineMock.mockResolvedValueOnce({});
+    await ensureGraphFresh(projectDir);
+    expect(runPipelineMock).toHaveBeenCalledTimes(1);
   });
 });
