@@ -55,18 +55,19 @@ export function getHttpPort(): number {
  * Resolves the directory where the PID file should be written.
  * Prefer CLAUDE_PLUGIN_DATA; fall back to the resolved startup project scope's
  * .canon dir. No implicit process.cwd() fallback — scope is threaded from
- * index.ts (Phase 2 isolation-finish); fails closed rather than leaking cwd.
+ * index.ts (Phase 2 isolation-finish).
+ *
+ * Returns null when no scope is resolvable (neither CLAUDE_PLUGIN_DATA nor a
+ * seeded project scope). This is an expected condition, not an error: callers
+ * skip the PID operation rather than leaking a cwd-derived directory. Fail-closed
+ * is preserved exactly — a null return NEVER falls back to an arbitrary dir.
  * Exported for testing.
  */
-export function resolvePidDir(): string {
+export function resolvePidDir(): string | null {
   const pluginData = process.env.CLAUDE_PLUGIN_DATA;
   if (pluginData) return pluginData;
   if (resolvedProjectDir) return join(resolvedProjectDir, ".canon");
-  // No scope and no plugin data: production index.ts always threads resolvedDir,
-  // and the only call site in startHttpServer's listen callback is guarded by
-  // `if (!process.env.VITEST)`, so this throw is unreachable in practice. It
-  // fails closed instead of silently writing to an arbitrary directory.
-  throw new Error("resolvePidDir: no CLAUDE_PLUGIN_DATA and no resolved project scope");
+  return null;
 }
 
 /**
@@ -155,10 +156,13 @@ export function startHttpServer(port?: number, projectDir?: string): Promise<voi
       if (!process.env.VITEST) {
         process.stderr.write(`Canon HTTP server listening on http://127.0.0.1:${serverPort}\n`);
         // Write PID file for the SessionStart reaper. Best-effort.
-        writePidFile(resolvePidDir(), serverPort).catch(() => {
-          // Already logged inside writePidFile; no double-logging needed.
-          // DOCUMENTED FAIL-OPEN -- PID file failure is non-fatal; server continues.
-        });
+        const pidDir = resolvePidDir();
+        if (pidDir) {
+          writePidFile(pidDir, serverPort).catch(() => {
+            // Already logged inside writePidFile; no double-logging needed.
+            // DOCUMENTED FAIL-OPEN -- PID file failure is non-fatal; server continues.
+          });
+        }
       }
       resolve();
     });
@@ -197,15 +201,13 @@ export function stopHttpServer(): Promise<void> {
     const server = httpServer;
     httpServer = null;
     // Remove PID file on graceful shutdown. Best-effort.
-    // resolvePidDir() fails closed (throws) when no scope is resolvable rather
-    // than leaking cwd; at this best-effort shutdown site we degrade to skipping
-    // PID removal — never falling back to an arbitrary directory.
-    try {
-      removePidFile(resolvePidDir()).catch(() => {
+    // resolvePidDir() returns null when no scope is resolvable — skip removal
+    // rather than leaking cwd. Never falls back to an arbitrary directory.
+    const pidDir = resolvePidDir();
+    if (pidDir) {
+      removePidFile(pidDir).catch(() => {
         // DOCUMENTED FAIL-OPEN -- PID removal failure is non-fatal during shutdown.
       });
-    } catch {
-      // DOCUMENTED FAIL-OPEN -- no resolvable scope for the PID dir; nothing to remove.
     }
     // Destroy all active/keep-alive connections so close() resolves promptly.
     server.closeAllConnections();

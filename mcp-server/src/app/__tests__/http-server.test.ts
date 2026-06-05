@@ -288,9 +288,11 @@ describe("resolvePidDir scope resolution (no implicit cwd leak)", () => {
     expect(resolvePidDir()).not.toContain(process.cwd());
   });
 
-  it("fails closed (throws) when neither CLAUDE_PLUGIN_DATA nor a seeded scope is available", () => {
+  it("fails closed (returns null) when neither CLAUDE_PLUGIN_DATA nor a seeded scope is available", () => {
     delete process.env.CLAUDE_PLUGIN_DATA;
     resetStateForTesting(); // clears resolvedProjectDir
-    expect(() => resolvePidDir()).toThrow();
+    // Fail-closed guarantee preserved: null can never be a cwd-derived directory,
+    // so it never leaks process.cwd() — the value contract IS the fail-closed assertion.
+    expect(resolvePidDir()).toBeNull();
   });
 });
