@@ -6,18 +6,17 @@ The writer operates in two contexts: as a **plugin maintainer** editing the port
 
 ## Detection
 
-Run the following shell check once, before saving any principle:
+Run both shell checks once, before saving any principle:
 
 ```sh
-git ls-files principles/ | head -1
+# tracked-source iff BOTH return non-empty / succeed:
+git ls-files principles/ | head -1          # non-empty → principles/ is tracked here
+test -d "$(git rev-parse --show-toplevel)/principles"  # principles/ lives under THIS worktree root
 ```
 
-Interpret the result:
+**tracked-source context** (plugin maintainer): both checks pass — `git ls-files` returns a filename AND the directory exists directly under the worktree root.
 
-| Result | Meaning |
-|--------|---------|
-| Non-empty AND `principles/` resolves under the current git worktree root | **tracked-source context** — the `principles/` directory is git-tracked source in this repo (plugin maintainer). |
-| Empty, or `principles/` resolves outside the git worktree root (e.g., under a plugin cache path) | **installed-copy context** — the `principles/` directory is a plugin installation, not source (project adopter). |
+**installed-copy context** (project adopter): default to this whenever either check fails, errors, or returns empty — including when not inside a git repo, when `principles/` is absent from the worktree root, or when `git rev-parse --show-toplevel` errors. If in doubt, default to installed-copy.
 
 The test is purely structural — it asks "is the portable principles directory my own tracked source?" with no Canon-specific naming assumptions.
 

@@ -129,20 +129,22 @@ Present findings and ask whether to proceed, adjust, or cancel.
 
 ### Step 5.5: Detect context and determine tier
 
-Before saving, run the detection check defined in `${CLAUDE_PLUGIN_ROOT}/references/principle-tier-routing.md`:
+Before saving, run the two-part detection check defined in `${CLAUDE_PLUGIN_ROOT}/references/principle-tier-routing.md`:
 
 ```sh
-git ls-files principles/ | head -1
+# tracked-source iff BOTH return non-empty / succeed:
+git ls-files principles/ | head -1          # non-empty → principles/ is tracked here
+test -d "$(git rev-parse --show-toplevel)/principles"  # principles/ lives under THIS worktree root
 ```
 
-**If the output is non-empty AND `principles/` resolves under the current git worktree root** → **tracked-source context**. Apply the two-question classification test:
+**If both checks pass** → **tracked-source context**. Apply the two-question classification test:
 
 1. Would this principle constrain the code of a team using Canon for an entirely unrelated project? (No → project-specific)
 2. Is it a specialization of an existing universal principle onto this project's own internals? (Yes → project-specific)
 
 If neither condition holds → **universal**.
 
-**If the output is empty, or `principles/` resolves outside the worktree root** → **installed-copy context**. All principles are project-specific. Skip the classification test.
+**If either check fails, errors, or returns empty** (including: not in a git repo, `principles/` absent from the worktree root, `git rev-parse` errors) → **installed-copy context**. Default to this when in doubt. All principles are project-specific. Skip the classification test.
 
 Record the resolved tier (`universal` or `project-specific`) and context (`tracked-source` or `installed-copy`) — you will use them in Step 6.
 
