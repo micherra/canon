@@ -12,21 +12,17 @@
 import type { CraftProfileRow } from "@platform/storage/drift/craft-profile-dao.ts";
 import type { FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
 import type { DriftDb } from "@platform/storage/drift/drift-db.ts";
-import type { CraftDimension } from "@shared/lib/craft-rubric.ts";
-import { craftBandOrdinal } from "@shared/lib/craft-rubric.ts";
 import type { NormalizedViolation } from "@shared/lib/violation-patterns.ts";
 import { findRecurringViolations } from "@shared/lib/violation-patterns.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import type {
-  AgentPerformanceTrend,
-  CraftDimensionDrift,
-  CraftDrift,
   CrossRunAnalysisResult,
   FixCyclePattern,
-  PlannerPatternAnalysis,
   RecurringViolation,
   RunSummary,
 } from "../history-types.ts";
+import { computeCraftDrift } from "./cross-run-craft-drift.ts";
+import { analyzePlannerPatterns, computePerformanceTrends } from "./cross-run-patterns.ts";
 import { computeOutcomeWeight, type OutcomeSignals } from "./judge-weight.ts";
 
 // ---- Helpers ----
@@ -184,224 +180,6 @@ function computeFixCyclePatterns(
   return result;
 }
 
-/**
- * Compute agent performance trends grouped by flow name.
- *
- * Prefers step durations from run summaries when available.
- * Falls back to FlowRunEntry records for runs without summaries.
- * Deduplicates on (flow, started): when a summary and a FlowRunEntry share the
- * same (flow, started) pair, the summary entry is preferred.
- *
- * Trend classification compares recent 5 runs to previous 5:
- * - "improving": recent avg > 10% faster than prior avg
- * - "degrading": recent avg > 10% slower than prior avg
- * - "stable": within 10% or fewer than 10 total runs
- *
- * @param summaries - Run summaries with optional step_outcomes
- * @param runs - Flow run entries from drift.db
- * @param limit - Optional cap on the number of data points per flow (most recent N kept)
- */
-function computePerformanceTrends(
-  summaries: RunSummary[],
-  runs: FlowRunEntry[],
-  limit?: number,
-): AgentPerformanceTrend[] {
-  const points = buildUnifiedDataPoints(summaries, runs);
-  const byFlow = groupDataPointsByFlow(points);
-
-  const result: AgentPerformanceTrend[] = [];
-  for (const [flow, flowPoints] of byFlow) {
-    result.push(computeFlowTrend(flow, flowPoints, limit));
-  }
-  return result;
-}
-
-// DataPoint type for performance trend computation
-type DataPoint = { flow: string; duration_ms: number; spawns: number; started: string };
-
-/**
- * Build unified data points from summaries (preferred) and flow run entries (fallback).
- * Deduplicates on (flow, started): summary data takes priority.
- */
-function buildUnifiedDataPoints(summaries: RunSummary[], runs: FlowRunEntry[]): DataPoint[] {
-  const points: DataPoint[] = [];
-  const summaryKeys = new Set<string>();
-
-  for (const summary of summaries) {
-    const { flow, total_duration_ms, started_at } = summary.run_metadata;
-    if (total_duration_ms === null) continue;
-    const spawns = summary.step_outcomes.length;
-    const started = started_at ?? summary.run_metadata.archived_at;
-    summaryKeys.add(`${flow}\0${started}`);
-    points.push({ duration_ms: total_duration_ms, flow, spawns, started });
-  }
-
-  for (const run of runs) {
-    if (summaryKeys.has(`${run.flow}\0${run.started}`)) continue;
-    points.push({
-      duration_ms: run.total_duration_ms,
-      flow: run.flow,
-      spawns: run.total_spawns,
-      started: run.started,
-    });
-  }
-
-  return points;
-}
-
-/**
- * Group data points by flow name.
- */
-function groupDataPointsByFlow(points: DataPoint[]): Map<string, DataPoint[]> {
-  const byFlow = new Map<string, DataPoint[]>();
-  for (const p of points) {
-    const existing = byFlow.get(p.flow);
-    if (existing === undefined) {
-      byFlow.set(p.flow, [p]);
-    } else {
-      existing.push(p);
-    }
-  }
-  return byFlow;
-}
-
-/**
- * Compute trend classification for a single flow's data points.
- * "improving": recent 5 avg > 10% faster than prior 5.
- * "degrading": recent 5 avg > 10% slower than prior 5.
- * "stable": within 10% or fewer than 10 total runs.
- */
-function computeFlowTrend(
-  flow: string,
-  flowPoints: DataPoint[],
-  limit?: number,
-): AgentPerformanceTrend {
-  flowPoints.sort((a, b) => a.started.localeCompare(b.started));
-
-  if (limit !== undefined && limit > 0 && flowPoints.length > limit) {
-    flowPoints.splice(0, flowPoints.length - limit);
-  }
-
-  const n = flowPoints.length;
-  const avgDurationMs = flowPoints.reduce((sum, p) => sum + p.duration_ms, 0) / n;
-  const avgSpawns = flowPoints.reduce((sum, p) => sum + p.spawns, 0) / n;
-  const trend = classifyTrend(flowPoints, n);
-
-  return { avg_duration_ms: avgDurationMs, avg_spawns: avgSpawns, flow, run_count: n, trend };
-}
-
-/**
- * Classify trend direction by comparing recent 5 vs prior 5 runs.
- */
-function classifyTrend(flowPoints: DataPoint[], n: number): "improving" | "stable" | "degrading" {
-  if (n < 10) return "stable";
-
-  const prior5 = flowPoints.slice(n - 10, n - 5);
-  const recent5 = flowPoints.slice(n - 5);
-  const priorAvg = prior5.reduce((sum, p) => sum + p.duration_ms, 0) / 5;
-  const recentAvg = recent5.reduce((sum, p) => sum + p.duration_ms, 0) / 5;
-
-  if (priorAvg <= 0) return "stable";
-
-  const changePct = (recentAvg - priorAvg) / priorAvg;
-  if (changePct < -0.1) return "improving";
-  if (changePct > 0.1) return "degrading";
-  return "stable";
-}
-
-/**
- * Analyze planner patterns across run summaries.
- *
- * Extracts common assumptions, effort accuracy, and value distribution
- * from summaries that have non-null planner_context.
- * Returns zero counts when no summaries have planner context.
- *
- * @param summaries - Run summaries to analyze
- */
-function analyzePlannerPatterns(summaries: RunSummary[]): PlannerPatternAnalysis {
-  const withPlanner = summaries.filter((s) => s.planner_context !== null);
-
-  if (withPlanner.length === 0) {
-    return {
-      common_assumptions: [],
-      effort_accuracy: [],
-      total_runs_with_planner: 0,
-      value_distribution: [],
-    };
-  }
-
-  const common_assumptions = computeCommonAssumptions(withPlanner);
-  const effort_accuracy = computeEffortAccuracy(withPlanner);
-  const value_distribution = computeValueDistribution(withPlanner);
-
-  return {
-    common_assumptions,
-    effort_accuracy,
-    total_runs_with_planner: withPlanner.length,
-    value_distribution,
-  };
-}
-
-/**
- * Count occurrences of each assumption text across summaries with planner context.
- * Returns top 10 by occurrence count.
- */
-function computeCommonAssumptions(
-  withPlanner: RunSummary[],
-): Array<{ assumption: string; occurrence_count: number }> {
-  const counts = new Map<string, number>();
-  for (const summary of withPlanner) {
-    for (const assumption of summary.planner_context!.assumptions) {
-      const normalized = assumption.trim();
-      if (normalized.length === 0) continue;
-      counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
-    }
-  }
-  return [...counts.entries()]
-    .map(([assumption, occurrence_count]) => ({ assumption, occurrence_count }))
-    .sort((a, b) => b.occurrence_count - a.occurrence_count)
-    .slice(0, 10);
-}
-
-/**
- * Group summaries by effort_estimate and compute avg actual duration per group.
- */
-function computeEffortAccuracy(
-  withPlanner: RunSummary[],
-): Array<{ estimate: string; actual_avg_duration_ms: number; sample_count: number }> {
-  const effortGroups = new Map<string, number[]>();
-  for (const summary of withPlanner) {
-    const estimate = summary.planner_context!.effort_estimate;
-    const duration = summary.run_metadata.total_duration_ms;
-    if (duration === null) continue;
-    const existing = effortGroups.get(estimate);
-    if (existing === undefined) {
-      effortGroups.set(estimate, [duration]);
-    } else {
-      existing.push(duration);
-    }
-  }
-  return [...effortGroups.entries()].map(([estimate, durations]) => ({
-    actual_avg_duration_ms: durations.reduce((sum, d) => sum + d, 0) / durations.length,
-    estimate,
-    sample_count: durations.length,
-  }));
-}
-
-/**
- * Count occurrences of each value_estimate across summaries with planner context.
- */
-function computeValueDistribution(
-  withPlanner: RunSummary[],
-): Array<{ value: string; count: number }> {
-  const valueCounts = new Map<string, number>();
-  for (const summary of withPlanner) {
-    const value = summary.planner_context!.value_estimate;
-    valueCounts.set(value, (valueCounts.get(value) ?? 0) + 1);
-  }
-  return [...valueCounts.entries()].map(([value, count]) => ({ count, value }));
-}
-
 // ---- Outcome weighting helpers ----
 
 /**
@@ -432,10 +210,10 @@ export function summaryToOutcomeSignals(
   // If multiple reviews contain it, pick the worst (most penalizing) verdict.
   // Verdict severity order (worst first): blocking > warning > clean/approve/other.
   const VERDICT_SEVERITY: Record<string, number> = {
-    blocking: 3,
-    warning: 2,
-    clean: 1,
     approve: 1,
+    blocking: 3,
+    clean: 1,
+    warning: 2,
   };
   const verdictSeverity = (v: string): number => VERDICT_SEVERITY[v.toLowerCase().trim()] ?? 0;
 
@@ -573,141 +351,60 @@ function enrichWithWeightedCounts(
   });
 }
 
-// ---- Craft drift computation ----
-
-/** Minimum number of profiles per dimension (or area) to classify a trend direction. */
-const MIN_CRAFT_PROFILES = 4;
+// ---- Analysis input loading helpers ----
 
 /**
- * Ordinal data point for a single profile's rating of a given dimension.
- * Only graded (non-n-a) ratings are included.
+ * Load craft profiles from drift.db, applying optional filters.
+ * Degrades gracefully when the craft-profile store is unavailable.
  */
-type OrdinalPoint = { created_at: string; ordinal: number };
-
-/**
- * Collect ordinal data points for a specific dimension from a set of profiles,
- * sorted chronologically. Excludes profiles where the dimension is rated n-a.
- */
-function collectOrdinalPoints(
-  profiles: CraftProfileRow[],
-  dimension: CraftDimension,
-): OrdinalPoint[] {
-  const points: OrdinalPoint[] = [];
-  for (const profile of profiles) {
-    for (const rating of profile.ratings) {
-      if (rating.dimension !== dimension) continue;
-      const ordinal = craftBandOrdinal(rating.band);
-      if (ordinal === null) continue; // n-a excluded
-      points.push({ created_at: profile.created_at, ordinal });
+function loadCraftProfiles(
+  driftDb: DriftDb,
+  options: { since?: string; limit?: number },
+): CraftProfileRow[] {
+  const { since, limit } = options;
+  let craftProfiles: CraftProfileRow[] = [];
+  try {
+    if (typeof (driftDb as { getCraftProfiles?: unknown }).getCraftProfiles === "function") {
+      craftProfiles = (
+        driftDb as unknown as {
+          getCraftProfiles(): { getRecentProfiles(n: number): CraftProfileRow[] };
+        }
+      )
+        .getCraftProfiles()
+        .getRecentProfiles(limit ?? 200);
     }
+  } catch {
+    // craft-profile store unavailable — craft_drift will be the empty result
   }
-  points.sort((a, b) => a.created_at.localeCompare(b.created_at));
-  return points;
+  if (since !== undefined) {
+    craftProfiles = craftProfiles.filter((p) => p.created_at >= since);
+  }
+  return craftProfiles;
 }
 
 /**
- * Classify trend direction by comparing recent half vs prior half.
- * Mirrors the classifyTrend logic used for performance trends.
- * Rising mean ordinal > 10% → "improving" (higher = better craft).
- * Falling > 10% → "degrading". Flat or sparse → "stable".
+ * Compute the analysis window from all available timestamps in the data set.
+ * Falls back to the current instant when no timestamps are present.
  */
-function classifyCraftTrend(points: OrdinalPoint[]): "improving" | "stable" | "degrading" {
-  const n = points.length;
-  if (n < MIN_CRAFT_PROFILES) return "stable";
-
-  const half = Math.floor(n / 2);
-  const priorHalf = points.slice(0, half);
-  const recentHalf = points.slice(n - half);
-
-  const priorAvg = priorHalf.reduce((sum, p) => sum + p.ordinal, 0) / half;
-  const recentAvg = recentHalf.reduce((sum, p) => sum + p.ordinal, 0) / half;
-
-  if (priorAvg <= 0) return "stable";
-
-  const changePct = (recentAvg - priorAvg) / priorAvg;
-  // Higher ordinal = better craft (non-inverted)
-  if (changePct > 0.1) return "improving";
-  if (changePct < -0.1) return "degrading";
-  return "stable";
-}
-
-/**
- * Compute CraftDimensionDrift entries for a given set of profiles.
- * Handles all 6 dimensions; skips dimensions where all ratings are n-a.
- */
-function computeDimensionDrifts(profiles: CraftProfileRow[]): CraftDimensionDrift[] {
-  const dimensions: CraftDimension[] = [
-    "simplicity",
-    "cohesion",
-    "interface-depth",
-    "naming",
-    "locality",
-    "predictability",
+function computeAnalysisWindow(
+  allReviews: ReviewEntry[],
+  allFlowRuns: FlowRunEntry[],
+  summaries: RunSummary[],
+): { from: string; to: string } {
+  const allTimestamps: (string | null | undefined)[] = [
+    ...allReviews.map((r) => r.timestamp),
+    ...allFlowRuns.map((r) => r.started),
+    ...allFlowRuns.map((r) => r.completed),
+    ...summaries.map((s) => s.run_metadata.started_at),
+    ...summaries.map((s) => s.run_metadata.completed_at),
+    ...summaries.map((s) => s.run_metadata.archived_at),
   ];
-
-  const result: CraftDimensionDrift[] = [];
-  for (const dimension of dimensions) {
-    const points = collectOrdinalPoints(profiles, dimension);
-    if (points.length === 0) continue; // no graded data for this dimension
-
-    const avg_band_ordinal = points.reduce((sum, p) => sum + p.ordinal, 0) / points.length;
-    const direction = classifyCraftTrend(points);
-
-    result.push({
-      avg_band_ordinal,
-      dimension,
-      direction,
-      sample_count: points.length,
-    });
-  }
-  return result;
-}
-
-/**
- * Compute craft drift across a set of craft profiles.
- *
- * Pure function — no I/O. The caller is responsible for fetching profiles
- * from the DAO before calling this function (command-query-separation).
- *
- * Empty/sparse inputs return "stable" direction and empty collections —
- * never null, never throw (define-errors-out-of-existence).
- *
- * @param profiles - CraftProfileRow records from both review and audit sources
- * @returns CraftDrift with global by_dimension rollup and optional by_area breakdown
- */
-export function computeCraftDrift(profiles: CraftProfileRow[]): CraftDrift {
-  if (profiles.length === 0) {
-    return { by_dimension: [], profile_count: 0 };
-  }
-
-  // Global rollup across all areas
-  const by_dimension = computeDimensionDrifts(profiles);
-
-  // Per-area breakdown: group profiles by subsystem_key
-  const byArea = new Map<string, CraftProfileRow[]>();
-  for (const profile of profiles) {
-    const existing = byArea.get(profile.subsystem_key);
-    if (existing === undefined) {
-      byArea.set(profile.subsystem_key, [profile]);
-    } else {
-      existing.push(profile);
+  return (
+    computeTimeRange(allTimestamps) ?? {
+      from: new Date().toISOString(),
+      to: new Date().toISOString(),
     }
-  }
-
-  // Only include areas with enough profiles to be meaningful
-  const by_area: Array<{ subsystem_key: string; by_dimension: CraftDimensionDrift[] }> = [];
-  for (const [subsystem_key, areaProfiles] of byArea) {
-    if (areaProfiles.length < MIN_CRAFT_PROFILES) continue;
-    const areaDimensions = computeDimensionDrifts(areaProfiles);
-    if (areaDimensions.length === 0) continue;
-    by_area.push({ by_dimension: areaDimensions, subsystem_key });
-  }
-
-  return {
-    by_area: by_area.length > 0 ? by_area : undefined,
-    by_dimension,
-    profile_count: profiles.length,
-  };
+  );
 }
 
 /**
@@ -732,39 +429,18 @@ export function analyzeCrossRunPatterns(
   // Get data from drift.db
   const allReviews = driftDb.getReviews();
   let allFlowRuns = driftDb.getAllFlowRuns();
-
-  // Apply since filter to flow runs
   if (since !== undefined) {
     allFlowRuns = allFlowRuns.filter((r) => r.started >= since);
   }
 
-  // Fetch craft profiles and apply since filter (ISO string comparison is lexicographic)
-  // Guard: getCraftProfiles is an additive signal; degrade gracefully if unavailable.
-  let craftProfiles: CraftProfileRow[] = [];
-  try {
-    if (typeof (driftDb as { getCraftProfiles?: unknown }).getCraftProfiles === "function") {
-      craftProfiles = (
-        driftDb as unknown as {
-          getCraftProfiles(): { getRecentProfiles(n: number): CraftProfileRow[] };
-        }
-      )
-        .getCraftProfiles()
-        .getRecentProfiles(limit ?? 200);
-    }
-  } catch {
-    // craft-profile store unavailable — craft_drift will be the empty result
-  }
-  if (since !== undefined) {
-    craftProfiles = craftProfiles.filter((p) => p.created_at >= since);
-  }
+  // Load craft profiles (degraded gracefully when store unavailable)
+  const craftProfiles = loadCraftProfiles(driftDb, { limit, since });
 
   // Collect violations from summaries
   const summaryViolations = violationsFromSummaries(summaries);
 
   // Run sub-analyses
   const rawRecurringViolations = findRecurringViolations(summaryViolations, allReviews);
-
-  // Enrich recurring violations with weighted_instance_count
   const runLookup = buildRunLookup(allFlowRuns);
   const recurring_violations = enrichWithWeightedCounts(
     rawRecurringViolations,
@@ -776,22 +452,7 @@ export function analyzeCrossRunPatterns(
   const agent_performance_trends = computePerformanceTrends(summaries, allFlowRuns, limit);
   const planner_patterns = analyzePlannerPatterns(summaries);
   const craft_drift = computeCraftDrift(craftProfiles);
-
-  // Compute analysis window from all available timestamps
-  const allTimestamps: (string | null | undefined)[] = [
-    ...allReviews.map((r) => r.timestamp),
-    ...allFlowRuns.map((r) => r.started),
-    ...allFlowRuns.map((r) => r.completed),
-    ...summaries.map((s) => s.run_metadata.started_at),
-    ...summaries.map((s) => s.run_metadata.completed_at),
-    ...summaries.map((s) => s.run_metadata.archived_at),
-  ];
-
-  const timeRange = computeTimeRange(allTimestamps);
-  const analysis_window = timeRange ?? {
-    from: new Date().toISOString(),
-    to: new Date().toISOString(),
-  };
+  const analysis_window = computeAnalysisWindow(allReviews, allFlowRuns, summaries);
 
   return {
     agent_performance_trends,
