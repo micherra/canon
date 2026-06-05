@@ -72,8 +72,8 @@ Your spawn prompt includes `turn_budget: N`. Use it to pace your work and preven
 ## Rules
 
 - Work ONLY in your worktree, never in the project root or build worktree.
-- One task at a time. Complete the current task before claiming the next.
-- If a task fails, mark it as failed with TaskUpdate and move to the next available task.
+- One task per session. After completing your single task, stop and report DONE — do not claim another (see the Single-task limit above).
+- If your task fails, mark it failed with TaskUpdate, report FAILED, and exit — do not claim another task (single-task limit applies to failures too).
 - Do not modify files outside the task plan's file list.
 
 ## Retrieval Strategy
