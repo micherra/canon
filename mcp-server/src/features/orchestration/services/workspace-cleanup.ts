@@ -2,12 +2,63 @@ import { existsSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { archiveWorkspace } from "@features/history/services/archive-service.ts";
-import { gitExec } from "@platform/adapters/git-adapter.ts";
+import { gitDiff, gitExec } from "@platform/adapters/git-adapter.ts";
 import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
 import { releaseClaims } from "@shared/lib/file-claims.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { JournalStep } from "../tools/orchestration-journal.ts";
 import { computeFlowOutcome } from "../tools/orchestration-journal.ts";
+
+/** Optional diff-size fields for a FlowRunEntry. Both absent = "could not measure". */
+export type DiffStatFields = {
+  diff_stat?: string;
+  total_files_changed?: number;
+};
+
+/**
+ * Parse `git diff --shortstat` output (e.g. "12 files changed, 340 insertions(+), 25 deletions(-)").
+ * Empty output means an empty diff — a measured zero, not missing data.
+ * Unparsable non-empty output returns {} (fields absent).
+ */
+export function parseShortstat(stdout: string): DiffStatFields {
+  const line = stdout.trim();
+  if (line === "") return { total_files_changed: 0 };
+  const match = line.match(/^(\d+) files? changed/);
+  if (!match) return {};
+  return { diff_stat: line, total_files_changed: parseInt(match[1], 10) };
+}
+
+type GitDiffFn = typeof gitDiff;
+
+/**
+ * Compute whole-build diff stats (base_commit..HEAD in the build worktree).
+ * Best-effort — never throws. Returns {} when the data is unobtainable
+ * (no board/base_commit, worktree missing, git failure).
+ */
+export function tryComputeDiffStats(
+  workspace: string,
+  gitDiffFn: GitDiffFn = gitDiff,
+): DiffStatFields {
+  try {
+    const store = getExecutionStore(workspace);
+    const baseCommit = store.getBoard()?.base_commit;
+    const worktree = store.getSession()?.worktree_path ?? join(workspace, "worktree");
+    if (!baseCommit || !existsSync(worktree)) return {};
+    const result = gitDiffFn(["--shortstat", `${baseCommit}..HEAD`], worktree);
+    if (!result.ok) {
+      console.warn("[canon] finalizeWorkspace: diff shortstat failed:", result.stderr.trim());
+      return {};
+    }
+    return parseShortstat(result.stdout);
+  } catch (err: unknown) {
+    // best-effort: diff stats are advisory metadata — never block finalize
+    console.warn(
+      "[canon] finalizeWorkspace: failed to compute diff stats:",
+      err instanceof Error ? err.message : err,
+    );
+    return {};
+  }
+}
 
 /** Best-effort branch delete after worktree removal. Never throws. */
 function tryDeleteBranch(slug: string, projectDir: string): void {
@@ -104,6 +155,7 @@ export async function tryAppendAnalytics(
   workspace: string,
   steps: readonly JournalStep[],
   projectDir: string,
+  gitDiffFn: GitDiffFn = gitDiff,
 ): Promise<boolean> {
   try {
     const session = getExecutionStore(workspace).getSession();
@@ -121,6 +173,7 @@ export async function tryAppendAnalytics(
       tier: "unknown",
       total_duration_ms: flowOutcome.total_duration_ms ?? 0,
       total_spawns: 0,
+      ...tryComputeDiffStats(workspace, gitDiffFn),
     };
     await appendFlowRun(projectDir, flowRun);
     return true;
