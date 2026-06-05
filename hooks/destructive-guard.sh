@@ -32,6 +32,13 @@ if [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
+# Preserve the raw (pre-quote-deletion) command for subcommand resolution.
+# canon_git_subcommand requires the raw form so that quoted multi-word values
+# for value-consuming globals (e.g. -C "my dir") are treated as ONE token —
+# without this, quote deletion would split "my dir" into two tokens, causing
+# "dir" to be misidentified as the subcommand → fail-OPEN (Bug-2 fix).
+RAW_COMMAND="$COMMAND"
+
 # Neutralize shell quote characters before any boundary/flag matching by
 # DELETING them — exactly reproducing bash quote-removal. A quote sitting
 # between a whitespace boundary and a trigger flag (e.g. git reset "--hard",
@@ -119,11 +126,29 @@ git_subcommand_args() {
 # ---------------------------------------------------------------------------
 
 # Replace segment separators with newlines so we can iterate segments.
+# Two parallel segment streams:
+#   SEGMENTS     — quote-deleted form (COMMAND); used for flag detection
+#                  via git_subcommand_args and the per-subcommand case switch.
+#   RAW_SEGMENTS — raw form (RAW_COMMAND, pre-quote-deletion); passed to
+#                  canon_git_subcommand so quoted multi-word values for
+#                  value-consuming globals (-C "my dir") are treated as ONE
+#                  token during subcommand resolution (Bug-2 fix).
 SEGMENTS=$(printf '%s' "$COMMAND" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+RAW_SEGMENTS=$(printf '%s' "$RAW_COMMAND" | sed -E 's/(&&|\|\||;|\|)/\n/g')
 
+# Pair each quote-deleted segment with its corresponding raw segment by line
+# number. Both streams have the same number of lines because they were built
+# by the same sed substitution applied to strings that differ only in quote
+# characters (which cannot introduce or remove separator characters).
+seg_idx=0
 while IFS= read -r segment; do
+  seg_idx=$(( seg_idx + 1 ))
+  raw_segment=$(printf '%s' "$RAW_SEGMENTS" | sed -n "${seg_idx}p" || true) # DOCUMENTED FAIL-OPEN -- missing raw segment falls back to quote-deleted segment for subcommand resolution
+  [[ -z "$raw_segment" ]] && raw_segment="$segment"
+
   # Trim leading/trailing whitespace.
   segment=$(printf '%s' "$segment" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  raw_segment=$(printf '%s' "$raw_segment" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
   [[ -z "$segment" ]] && continue
 
   # Does this segment contain a standalone "git" token?
@@ -131,7 +156,9 @@ while IFS= read -r segment; do
     continue
   fi
 
-  sub=$(canon_git_subcommand "$segment" || true) # DOCUMENTED FAIL-OPEN -- empty sub on a git segment triggers the parse-ambiguity block below
+  # Resolve subcommand from the RAW segment (pre-quote-deletion) so that
+  # quoted multi-word option values (e.g. -C "my dir") stay as one token.
+  sub=$(canon_git_subcommand "$raw_segment" || true) # DOCUMENTED FAIL-OPEN -- empty sub on a git segment triggers the parse-ambiguity block below
 
   # Fail-closed parse guard: a git invocation whose subcommand cannot be
   # resolved is ambiguous → block rather than risk passing a real destructive op.

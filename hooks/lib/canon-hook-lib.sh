@@ -204,6 +204,21 @@ canon_is_git_cmd() {
 # The FIRST bare (non-'-'-prefixed) token after the global options is the
 # subcommand. Strips a leading "cd <dir> &&" prefix like canon_is_git_cmd.
 # Uses [[:space:]] throughout for POSIX/BSD (macOS) compatibility.
+#
+# Bug-1 fix (command-prefix wrappers): locates the first standalone "git"
+# token via awk and processes only the tokens AFTER it. A blind word-
+# substitution (sed s/…git…//) only removes the "git" word, leaving any
+# wrapper prefix (sudo, env, time, nice, command) fused to the next token,
+# which then mis-resolves as the subcommand → fail-OPEN.  Anchoring to the
+# actual "git" token (not a substring match) is required for correctness.
+#
+# Bug-2 fix (quoted option values with spaces): accepts the raw (pre-quote-
+# deletion) segment so that quoted multi-word values for value-consuming
+# globals (e.g. -C "my dir") are treated as ONE token.  A quote-aware awk
+# tokenizer splits on unquoted whitespace only — quoted spans are preserved
+# as a single token.  Quote characters are stripped from the resolved
+# subcommand token to maintain compatibility with Bypass-3 intra-token
+# quote handling (git "clean" → subcommand clean).
 canon_git_subcommand() {
   local command="$1"
   local stripped
@@ -216,61 +231,137 @@ canon_git_subcommand() {
     stripped="$command"
   fi
 
-  # Drop everything up to and including the "git" keyword. If there is no
-  # "git" token, this is not a git invocation → return 1.
-  local after_git
-  after_git=$(printf '%s' "$stripped" \
-    | sed -E 's/(^|[[:space:]])git[[:space:]]+//' \
-    || true) # DOCUMENTED FAIL-OPEN -- sed no-match means "git" keyword not found
-  # sed prints the line unchanged when it does not match; detect "no git token".
-  if [[ "$after_git" == "$stripped" ]] \
-     && ! printf '%s' "$stripped" | grep -qE '(^|[[:space:]])git([[:space:]]|$)'; then
+  # Verify a standalone "git" token exists before further processing.
+  if ! printf '%s' "$stripped" | grep -qE '(^|[[:space:]])git([[:space:]]|$)'; then
     return 1
   fi
 
-  local remaining="$after_git"
-  local expect_value=0
+  # Use a quote-aware awk tokenizer to split the segment into tokens, then
+  # locate the first standalone "git" token and walk the tokens after it.
+  #
+  # Tokenizer rules (mimicking bash quote-removal + word-splitting):
+  #   - Single- and double-quoted spans group: whitespace inside quotes does
+  #     NOT split a token.  Quote chars themselves are REMOVED from the token.
+  #   - Unquoted whitespace separates tokens (runs collapse to one boundary).
+  #   - The output is one token per line so the shell loop can consume it.
+  #
+  # Token walk after "git":
+  #   1. Skip tokens before "git" (prefix wrappers like sudo/env/time/nice).
+  #   2. After locating "git", apply the global-option classifier:
+  #        value-consuming globals (-C -c --git-dir …): consume this token
+  #          AND skip the NEXT token as the option value.
+  #        =-form or self-contained: skip this token only.
+  #        UNKNOWN -flag: skip only (fail-closed: never consume next token).
+  #   3. First bare non-'-' token after the globals is the subcommand; print it.
+  #   4. If "git" is found but the subcommand cannot be resolved, print nothing
+  #      and exit non-zero (caller's parse-ambiguity guard fires → block).
+  local tokens_output
+  tokens_output=$(printf '%s' "$stripped" | awk '
+  {
+    line = $0
+    n = 0
+    tokens[n] = ""
+    in_tok = 0
+    for (i = 1; i <= length(line); i++) {
+      c = substr(line, i, 1)
+      if (in_dq) {
+        if (c == "\"") { in_dq = 0 }
+        # else: append c (not the quote) to current token
+        else { tokens[n] = tokens[n] c }
+        continue
+      }
+      if (in_sq) {
+        if (c == "'"'"'") { in_sq = 0 }
+        else { tokens[n] = tokens[n] c }
+        continue
+      }
+      if (c == "\"") { in_dq = 1; in_tok = 1; continue }
+      if (c == "'"'"'") { in_sq = 1; in_tok = 1; continue }
+      if (c == " " || c == "\t") {
+        if (in_tok) {
+          n++
+          tokens[n] = ""
+          in_tok = 0
+        }
+        continue
+      }
+      tokens[n] = tokens[n] c
+      in_tok = 1
+    }
+    # Emit one token per line (skip trailing empty token from trailing space)
+    for (j = 0; j <= n; j++) {
+      if (tokens[j] != "" || j < n) print tokens[j]
+    }
+  }
+  ' || true) # DOCUMENTED FAIL-OPEN -- empty output triggers "git not found" return below
 
-  while true; do
-    local first
-    first=$(printf '%s' "$remaining" | awk '{print $1}')
-    if [[ -z "$first" ]]; then
-      # Ran out of tokens before finding a subcommand → unresolved.
-      return 1
+  # Load tokens into an array, one per line.
+  local -a tok_arr
+  local tok_count=0
+  while IFS= read -r t; do
+    tok_arr[tok_count]="$t"
+    tok_count=$(( tok_count + 1 ))
+  done <<< "$tokens_output"
+
+  # Locate the first standalone "git" token.
+  local git_idx=-1
+  local i
+  for (( i=0; i<tok_count; i++ )); do
+    if [[ "${tok_arr[$i]}" == "git" ]]; then
+      git_idx=$i
+      break
     fi
+  done
+
+  if [[ $git_idx -lt 0 ]]; then
+    # No standalone "git" token found.
+    return 1
+  fi
+
+  # Walk tokens after "git" applying the global-option classifier.
+  local expect_value=0
+  for (( i=git_idx+1; i<tok_count; i++ )); do
+    local tok="${tok_arr[$i]}"
 
     if [[ "$expect_value" -eq 1 ]]; then
-      # This token is the value argument for a value-consuming global; skip it.
+      # This token is the value for a value-consuming global; skip it.
       expect_value=0
-      remaining=$(printf '%s' "$remaining" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//' || true) # DOCUMENTED FAIL-OPEN -- advancing past token in word-by-word parser
       continue
     fi
 
-    if [[ "$first" == -* ]]; then
-      # A '-'-prefixed global option. Classify it.
-      if [[ "$first" == *=* ]]; then
-        # =-form (e.g. --git-dir=/x, -c k=v) is always self-contained.
+    if [[ "$tok" == -* ]]; then
+      # A '-'-prefixed global option.
+      if [[ "$tok" == *=* ]]; then
+        # =-form (e.g. --git-dir=/x, -c k=v): self-contained.
         : # skip flag only
       else
-        case "$first" in
+        case "$tok" in
           -C|-c|--git-dir|--work-tree|--namespace|--exec-path|--super-prefix)
             # Value-consuming global: skip this flag and the next token.
             expect_value=1
             ;;
           *)
             # Self-contained global (-p, --no-pager, …) OR an unknown -flag.
-            # Skip ONLY this flag — never consume the next token, so a real
-            # subcommand is never skipped past (fail-closed posture).
+            # Skip ONLY this flag — never consume the next token.
             : # skip flag only
             ;;
         esac
       fi
-      remaining=$(printf '%s' "$remaining" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//' || true) # DOCUMENTED FAIL-OPEN -- advancing past token in word-by-word parser
       continue
     fi
 
     # First bare (non-'-') token — this is the subcommand.
-    printf '%s' "$first"
-    return 0
+    # Strip any residual quote chars (safety: tokenizer should have removed
+    # them already, but intra-token quotes like cl""ean → clean need this).
+    local sub
+    sub=$(printf '%s' "$tok" | tr -d '"'"'"'')
+    if [[ -n "$sub" ]]; then
+      printf '%s' "$sub"
+      return 0
+    fi
+    # Empty after quote-strip → not a valid subcommand; continue walking.
   done
+
+  # Ran out of tokens without finding a subcommand → unresolved.
+  return 1
 }

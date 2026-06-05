@@ -515,6 +515,69 @@ run_test "git branch -\"\"D feature-x blocks (intra-token quotes, non-Canon)" \
   2 '{"command":"git branch -\"\"D feature-x"}' "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# Bug-1 regression: command-prefix wrappers (sudo/env/time/nice/command).
+#
+# Old code removed only the "git" word via sed word-substitution, leaving
+# the wrapper prefix fused to the next token (e.g. "sudo git clean -fd" →
+# "sudoclean -f"). The case switch matched nothing → fail-OPEN (exit 0).
+# The fix anchors subcommand resolution to the actual "git" token via awk.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Bug-1 regression: command-prefix wrappers (should block, exit 2) --"
+
+run_test "sudo git clean -fd blocks"             2 "$(make_input 'sudo git clean -fd')"  "$NON_WT_PWD"
+run_test "sudo git reset --hard blocks"          2 "$(make_input 'sudo git reset --hard')" "$NON_WT_PWD"
+run_test "env git clean -fd blocks"              2 "$(make_input 'env git clean -fd')"   "$NON_WT_PWD"
+run_test "env VAR=1 git clean -fd blocks"        2 "$(make_input 'env VAR=1 git clean -fd')" "$NON_WT_PWD"
+run_test "time git reset --hard blocks"          2 "$(make_input 'time git reset --hard')" "$NON_WT_PWD"
+run_test "nice git clean -fd blocks"             2 "$(make_input 'nice git clean -fd')"  "$NON_WT_PWD"
+run_test "nice -n 5 git clean -fd blocks"        2 "$(make_input 'nice -n 5 git clean -fd')" "$NON_WT_PWD"
+run_test "command git clean -fd blocks"          2 "$(make_input 'command git clean -fd')" "$NON_WT_PWD"
+run_test "command git checkout -- . blocks"      2 "$(make_input 'command git checkout -- .')" "$NON_WT_PWD"
+
+echo ""
+echo "-- Bug-1 regression: wrapper-prefix non-destructive ops (should pass, exit 0) --"
+
+run_test "sudo git status passes"                0 "$(make_input 'sudo git status')"     "$NON_WT_PWD"
+run_test "sudo git log --oneline passes"         0 "$(make_input 'sudo git log --oneline')" "$NON_WT_PWD"
+run_test "env git fetch --all passes"            0 "$(make_input 'env git fetch --all')" "$NON_WT_PWD"
+run_test "time git push origin main passes"      0 "$(make_input 'time git push origin main')" "$NON_WT_PWD"
+run_test "nice git commit -m msg passes"         0 "$(make_input 'nice git commit -m msg')" "$NON_WT_PWD"
+run_test "sudo git branch -D canon/slug passes"  0 "$(make_input 'sudo git branch -D canon/slug')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Bug-2 regression: quoted option values with spaces.
+#
+# Old code stripped all quote characters globally before tokenizing.
+# "git -C \"my dir\" reset --hard" → "git -C my dir reset --hard" →
+# "-C" consumes "my" as its value → "dir" misidentified as subcommand →
+# reset --hard allowed → fail-OPEN (exit 0).
+# The fix passes the raw (pre-quote-deletion) segment to
+# canon_git_subcommand, which uses a quote-aware tokenizer internally.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Bug-2 regression: quoted option values with spaces (should block, exit 2) --"
+
+run_test 'git -C "my dir" reset --hard blocks'  2 \
+  '{"command":"git -C \"my dir\" reset --hard"}' "$NON_WT_PWD"
+run_test 'git -C "my dir" clean -fd blocks'     2 \
+  '{"command":"git -C \"my dir\" clean -fd"}' "$NON_WT_PWD"
+run_test "git -C 'my dir' checkout -- . blocks" 2 \
+  "$(make_input "git -C 'my dir' checkout -- .")" "$NON_WT_PWD"
+run_test 'git --git-dir "my dir/.git" reset --hard blocks' 2 \
+  '{"command":"git --git-dir \"my dir/.git\" reset --hard"}' "$NON_WT_PWD"
+
+echo ""
+echo "-- Bug-2 regression: quoted spaced path non-destructive ops (should pass, exit 0) --"
+
+run_test 'git -C "my dir" log passes'           0 \
+  '{"command":"git -C \"my dir\" log --oneline"}' "$NON_WT_PWD"
+run_test 'git -C "my dir" status passes'        0 \
+  '{"command":"git -C \"my dir\" status"}' "$NON_WT_PWD"
+run_test "git -C 'my dir' fetch passes"         0 \
+  "$(make_input "git -C 'my dir' fetch --all")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""
