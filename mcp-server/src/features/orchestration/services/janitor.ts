@@ -212,6 +212,57 @@ function pruneWorktreesTask(projectDir: string): JanitorTaskResult {
 }
 
 /**
+ * Prune completely empty top-level branch directories under `.canon/workspaces/`.
+ *
+ * These are "husk" directories left behind after all their slug workspaces were
+ * previously removed (e.g., by `finalize_workspace` or prior janitor runs). They
+ * contain zero entries and are safe to delete — an empty directory cannot be an
+ * ancestor of any git-registered worktree.
+ *
+ * Removal uses `rmSync` with `{ recursive: true }` — safety guaranteed by the
+ * prior emptiness check; the flag is needed to avoid EISDIR on directories.
+ */
+
+/** Returns true when `entryPath` is an empty directory (a husk candidate). */
+function isEmptyBranchDir(entryPath: string): boolean {
+  let isDir: boolean;
+  try {
+    isDir = statSync(entryPath).isDirectory();
+  } catch {
+    return false;
+  }
+  if (!isDir) return false;
+  const contents = listDir(entryPath);
+  return contents !== null && contents.length === 0;
+}
+
+function pruneHuskDirsTask(canonDir: string): JanitorTaskResult {
+  const canonWorkspacesDir = join(canonDir, "workspaces");
+  const branchEntries = listDir(canonWorkspacesDir);
+  if (branchEntries === null) {
+    return { detail: "no workspaces directory or empty", status: "skipped" };
+  }
+
+  let pruned = 0;
+  const errors: string[] = [];
+
+  for (const entry of branchEntries) {
+    const entryPath = join(canonWorkspacesDir, entry);
+    if (!isEmptyBranchDir(entryPath)) continue;
+
+    try {
+      rmSync(entryPath, { recursive: true });
+      pruned++;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`${entry}: ${message}`);
+    }
+  }
+
+  return buildPruneResult(pruned, errors, "empty branch dir(s)", "no empty branch dirs found");
+}
+
+/**
  * Prune abandoned workspace slug directories across ALL branch directories (including `main`).
  *
  * Completed workspaces are archived and deleted immediately by finalize_workspace —
@@ -405,6 +456,38 @@ function cleanupEmptyBranchDir(branchDir: string, prunedInBranch: number): void 
 }
 
 /**
+ * Execute all janitor tasks and release the lock.
+ * Separated from gate-checking to keep runJanitor under complexity limits.
+ */
+async function runJanitorTasks(
+  projectDir: string,
+  canonDir: string,
+  config: JanitorConfig,
+): Promise<{ tasks: Record<string, JanitorTaskResult>; needs_prune: boolean }> {
+  const tasks: Record<string, JanitorTaskResult> = {};
+
+  try {
+    tasks.wal_checkpoint = runWalCheckpointTask(canonDir);
+    tasks.prune_worktrees = pruneWorktreesTask(projectDir);
+    tasks.prune_workspaces = await pruneWorkspacesTask(projectDir, canonDir, config);
+    tasks.prune_husk_dirs = pruneHuskDirsTask(canonDir);
+    await commitJanitorLock(canonDir);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    tasks.unexpected_error = { detail: message, status: "error" };
+  } finally {
+    await releaseJanitorLock(canonDir);
+  }
+
+  const needs_prune =
+    tasks.prune_worktrees?.status === "success" ||
+    tasks.prune_workspaces?.status === "success" ||
+    tasks.prune_husk_dirs?.status === "success";
+
+  return { needs_prune, tasks };
+}
+
+/**
  * Run the janitor service.
  *
  * Gate check order (cheapest-first):
@@ -454,36 +537,7 @@ export async function runJanitor(projectDir: string): Promise<JanitorResult> {
     };
   }
 
-  // Gate passed — run tasks
-  const tasks: Record<string, JanitorTaskResult> = {};
-
-  try {
-    // Task: WAL checkpoint
-    tasks.wal_checkpoint = runWalCheckpointTask(canonDir);
-
-    // Task: prune orphaned agent isolation worktrees
-    tasks.prune_worktrees = pruneWorktreesTask(projectDir);
-
-    // Task: prune workspace slugs by age + completion status (covers all branches, including main)
-    tasks.prune_workspaces = await pruneWorkspacesTask(projectDir, canonDir, config);
-
-    // Commit lock (update mtime = last successful run timestamp)
-    await commitJanitorLock(canonDir);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    tasks.unexpected_error = { detail: message, status: "error" };
-    // Fall through to lock release
-  } finally {
-    await releaseJanitorLock(canonDir);
-  }
-
-  // needs_prune is true when any prune task actually removed entries
-  const needsPrune =
-    tasks.prune_worktrees?.status === "success" || tasks.prune_workspaces?.status === "success";
-
-  return {
-    gate_passed: true,
-    needs_prune: needsPrune,
-    tasks,
-  };
+  // Gate passed — run tasks (lock released inside runJanitorTasks)
+  const { tasks, needs_prune } = await runJanitorTasks(projectDir, canonDir, config);
+  return { gate_passed: true, needs_prune, tasks };
 }
