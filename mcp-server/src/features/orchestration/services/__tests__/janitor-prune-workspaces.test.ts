@@ -472,15 +472,15 @@ describe("prune_workspaces task", () => {
 describe("prune_husk_dirs task", () => {
   test("removes a completely empty top-level branch dir and reports count", async () => {
     // Create a completely empty branch dir (husk)
-    const hussDir = join(canonWorkspacesDir, "canon--adopt-release-please");
-    await mkdir(hussDir, { recursive: true });
+    const huskDir = join(canonWorkspacesDir, "canon--adopt-release-please");
+    await mkdir(huskDir, { recursive: true });
 
     const result = await runJanitor(tmpDir);
 
     expect(result.tasks.prune_husk_dirs).toBeDefined();
     expect(result.tasks.prune_husk_dirs.status).toBe("success");
     expect(result.tasks.prune_husk_dirs.detail).toContain("1");
-    expect(existsSync(hussDir)).toBe(false);
+    expect(existsSync(huskDir)).toBe(false);
   });
 
   test("does not remove a non-empty top-level branch dir", async () => {
@@ -505,8 +505,8 @@ describe("prune_husk_dirs task", () => {
   });
 
   test("sets needs_prune true when husk dirs are removed", async () => {
-    const hussDir = join(canonWorkspacesDir, "canon--empty-husk");
-    await mkdir(hussDir, { recursive: true });
+    const huskDir = join(canonWorkspacesDir, "canon--empty-husk");
+    await mkdir(huskDir, { recursive: true });
 
     const result = await runJanitor(tmpDir);
 

@@ -5,6 +5,7 @@
  *   - wal_checkpoint: flush WAL files for root-level Canon SQLite databases
  *   - prune_worktrees: remove orphaned agent isolation worktrees from .claude/worktrees/
  *   - prune_workspaces: remove abandoned workspace slugs by age (all branches)
+ *   - prune_husk_dirs: remove empty top-level branch directories under .canon/workspaces/
  *
  * Completed workspaces are archived and deleted immediately by finalize_workspace.
  * The janitor only handles abandoned workspaces (no .lock file, older than
@@ -19,7 +20,7 @@
  *   - subprocess-isolation: git commands via gitExec (spawnSync, shell never true)
  */
 
-import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, rmdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { archiveWorkspace } from "@features/history/services/archive-service.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
@@ -219,15 +220,15 @@ function pruneWorktreesTask(projectDir: string): JanitorTaskResult {
  * contain zero entries and are safe to delete — an empty directory cannot be an
  * ancestor of any git-registered worktree.
  *
- * Removal uses `rmSync` with `{ recursive: true }` — safety guaranteed by the
- * prior emptiness check; the flag is needed to avoid EISDIR on directories.
+ * Removal uses `rmdirSync` — the kernel-level empty-directory primitive that
+ * atomically fails ENOTEMPTY when the directory is non-empty (TOCTOU safety).
  */
 
 /** Returns true when `entryPath` is an empty directory (a husk candidate). */
 function isEmptyBranchDir(entryPath: string): boolean {
   let isDir: boolean;
   try {
-    isDir = statSync(entryPath).isDirectory();
+    isDir = lstatSync(entryPath).isDirectory();
   } catch {
     return false;
   }
@@ -251,7 +252,7 @@ function pruneHuskDirsTask(canonDir: string): JanitorTaskResult {
     if (!isEmptyBranchDir(entryPath)) continue;
 
     try {
-      rmSync(entryPath, { recursive: true });
+      rmdirSync(entryPath);
       pruned++;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -495,7 +496,7 @@ async function runJanitorTasks(
  *   2. Time gate (min_hours_between_runs)
  *   3. Lock acquisition
  *
- * When gate passes, runs WAL checkpoint, worktree prune, and workspace prune tasks.
+ * When gate passes, runs WAL checkpoint, worktree prune, workspace prune, and husk-dir prune tasks.
  * Always releases lock on exit, even on unexpected error.
  *
  * @param projectDir - Project root directory (contains .canon/ and .claude/)
