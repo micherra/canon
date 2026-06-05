@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,12 +96,45 @@ export let readyPromise: Promise<void> = new Promise<void>((res) => {
 
 // ── Plugin dir ────────────────────────────────────────────────────────────────
 
-// Plugin dir: the repo root that contains the `principles/` directory.
-// __filename → src/index.ts (or dist/index.js), dirname twice → mcp-server/, once more → repo root.
-// Using dirname(fileURLToPath(...)) is more explicit than URL("..") traversal.
-const thisFile = fileURLToPath(import.meta.url);
-const mcpServerRoot = dirname(dirname(thisFile));
-export const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || dirname(mcpServerRoot));
+/**
+ * Walk up from `startDir` until a directory containing every `markers` entry is found.
+ * Returns the first matching ancestor directory.
+ *
+ * Pure function with an injectable `existsFn` seam for unit testing — callers pass a
+ * fake existsFn to drive the walk without real filesystem stat calls.
+ *
+ * Throws a clear diagnostic error if no matching ancestor is found and the env override
+ * is not set — fail-closed so a misconfigured install fails loudly at boot rather than
+ * silently producing a wrong path that ENOENTs later at an opaque call site.
+ */
+export function findAnchorDir(
+  startDir: string,
+  markers: readonly string[],
+  existsFn: (p: string) => boolean = existsSync,
+): string {
+  let dir = startDir;
+  for (;;) {
+    if (markers.every((m) => existsFn(join(dir, m)))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) {
+      throw new Error(
+        `Canon plugin root not found from ${startDir}: no ancestor contains ` +
+          `[${markers.join(", ")}]. Set CANON_PLUGIN_DIR to override.`,
+      );
+    }
+    dir = parent;
+  }
+}
+
+// Plugin dir: the repo/plugin root that contains Canon's asset directories (agents/, principles/, …).
+// Resolved by walking up from this module's directory to the first ancestor containing those marker
+// directories — robust to this file moving or any future dist/ layout. A fixed dirname count is what
+// broke this before (the module is at src/app/, not src/ as the old comment assumed).
+const thisDir = dirname(fileURLToPath(import.meta.url));
+const mcpServerRoot = findAnchorDir(thisDir, ["boot.sh"]);
+export const pluginDir = process.env.CANON_PLUGIN_DIR
+  ? resolve(process.env.CANON_PLUGIN_DIR)
+  : findAnchorDir(thisDir, ["agents", "principles"]);
 
 // ── MCP server instance ───────────────────────────────────────────────────────
 
