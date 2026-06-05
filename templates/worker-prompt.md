@@ -22,6 +22,7 @@ and passes the result as the worker's spawn prompt.
 - `${SLUG}` — the build slug
 - `${CANON_PARENT_WORKSPACE}` — relative workspace path under `.canon/workspaces/` (e.g., `main/{slug}`) for L4 hook authorization
 - `${MODEL_TIER}` — the model tier of this worker (e.g., `sonnet`, `haiku`, `opus`)
+- `${BUILD_BASE_COMMIT}` — git commit SHA of the build worktree's HEAD at workspace init time (from `init_workspace` return value)
 
 ## Prompt
 
@@ -39,13 +40,13 @@ echo "CANON_PARENT_WORKSPACE=$CANON_PARENT_WORKSPACE"
 If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook authorization failed — CANON_PARENT_WORKSPACE is not set."
 
 1. Call TaskList to find available (unblocked, unclaimed) tasks.
-2. If no tasks are available, wait and retry.
+2. If no tasks are available yet, wait and retry (loop back to step 1). This retry-until-available wait applies only while you are waiting for your FIRST task.
 3. Claim a task: TaskUpdate({ task_id, owner: "${WORKER_NAME}", status: "in_progress" }).
 4. Read the task description — it contains your full instructions, principles, and file context.
 5. Create your worktree (note: {task_id} is sanitized — non-alphanumeric chars except `.`, `_`, `-` become dashes):
    - Path: ${PROJECT_DIR}/.canon/worktrees/{sanitized_task_id}
    - Branch: canon-task/{sanitized_task_id}
-   - Command: git worktree add {path} -b {branch} HEAD
+   - Command: git worktree add {path} -b {branch} ${BUILD_BASE_COMMIT}
 6. Work in the worktree. Follow the task plan exactly.
 7. Commit with Canon provenance trailers:
    Canon-Workflow: ${SLUG}
@@ -53,8 +54,9 @@ If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook
    Canon-State: implement
    Canon-Task: {task_id}
 8. Mark complete: TaskUpdate({ task_id, status: "completed" }).
-9. Loop back to step 1.
-10. If TaskList returns empty (all tasks completed), you are done.
+9. Report DONE and exit. Do NOT call TaskList again. Your session is complete.
+
+**Single-task limit**: You may claim and complete AT MOST ONE task per session invocation. After marking your task complete in step 8, stop immediately — report DONE and exit. Remaining tasks in the queue will be claimed by peer workers.
 
 ## Budget Checkpoints (WIP Commits)
 
@@ -69,8 +71,8 @@ Your spawn prompt includes `turn_budget: N`. Use it to pace your work and preven
 ## Rules
 
 - Work ONLY in your worktree, never in the project root or build worktree.
-- One task at a time. Complete the current task before claiming the next.
-- If a task fails, mark it as failed with TaskUpdate and move to the next available task.
+- One task per session. After completing your single task, stop and report DONE — do not claim another (see the Single-task limit above).
+- If your task fails, mark it failed with TaskUpdate, report FAILED, and exit — do not claim another task (single-task limit applies to failures too).
 - Do not modify files outside the task plan's file list.
 
 ## Retrieval Strategy
