@@ -40,7 +40,7 @@ src/
 
 **Key subsystems:**
 - **Drift tracking** (`platform/storage/drift/`) — JSONL-backed store for reviews with auto-rotation
-- **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs; `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01)
+- **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs; lazy commit-granularity freshness via `ensureGraphFresh` (structural) and `ensureGitIntelFresh` (git signals); `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01)
 - **Community detection** (`graph/kg-community.ts`) — Louvain algorithm assigns `community_id` to each file in the KG; added 2026-05-02
 - **Tag propagation** (`graph/kg-tags.ts`) — 4-signal pipeline (directory, imports, community, cross-ref) writes computed tags to `file_tags` table; used by `get-principles` and `get-file-context`; added 2026-05-02
 - **Principle matching** (`shared/matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity; OR semantics: matches if layers OR scope.tags intersect (updated 2026-05-02)
@@ -48,6 +48,7 @@ src/
 
 
 ## Contracts
+<!-- last-updated: 2026-06-04 (KG prune+marker full-run-only; ensureGraphFresh single-flight guard; graph_head_commit scoped-run contract) -->
 <!-- last-updated: 2026-06-04 (JUDGE+CONSOLIDATE: judge-weight.ts, watch-staleness-adapter.ts, consolidate-policy.ts; RecurringViolation.weighted_instance_count) -->
 <!-- last-updated: 2026-06-04 (reconcile_workspace: emit_telemetry + source inputs; cliff_detected FlowEventType + FlowEventMap + EventPayloadSchemas) -->
 <!-- last-updated: 2026-06-03 (HTTP Phase 1 complete: projectDir global deleted, resolveScope(extra) sole accessor, fail-closed for unregistered sessions, eviction hooks present-but-unwired; drift-db.ts split into drift-db-cache.ts + drift-db-rows.ts) -->
@@ -77,7 +78,7 @@ src/
 
 **Execution store** (`src/domains/workspaces/execution-store.ts`) — optimistic locking via `updateExecutionVersioned(fields, expectedVersion)` (returns `{ updated: true|false }`); transparent `SQLITE_BUSY` retry via `withRetry`; all board mutations use `updateExecutionVersioned`. `isStuck` is SQL-based. SCHEMA_VERSION = '11'. See Invariants.
 
-**KG schema** (`src/graph/kg-schema.ts`) — SCHEMA_VERSION = "5"; v5 adds `community_id` (INTEGER NULL on `files`), `file_tags` table, `hotspot_scores` table, `co_change_edges` table (see source for columns).
+**KG schema** (`src/graph/kg-schema.ts`) — SCHEMA_VERSION = "5"; v5 adds `community_id` (INTEGER NULL on `files`), `file_tags` table, `hotspot_scores` table, `co_change_edges` table (see source for columns). Freshness marker stored in the existing `meta` table under key `graph_head_commit` (no schema migration; written by `runPipeline` on full-project runs only — `sourceDirs == null`/empty; scoped runs skip both orphan pruning and marker stamping).
 
 **Execution schema** (`src/domains/workspaces/execution-schema.ts`) — SCHEMA_VERSION = '11'; `runMigrations(db)` is idempotent. v3 adds `iteration_results` table, v11 adds `version` column to `execution` table.
 
@@ -102,7 +103,9 @@ src/
 **`show_pr_impact`** — unified PR analysis tool; returns `UnifiedPrOutput` with `has_review` boolean; `status` always `"ok"`; resource URI: `ui://canon/pr-review`
 **`get_drift_report`** — `pr_reviews` field uses `ReviewEntry[]` (unified type); filters by pr_number/branch presence
 **KgQuery** (`src/graph/kg-query.ts`) — `computeImpactScore`, `computeFileInsightMaps` (call once per request), `getFileMetrics`, `getSubgraph`; must call `computeFileInsightMaps` before `getFileMetrics` in loops (see source for full API)
+**KgStore** (`src/graph/kg-store.ts`) — new methods: `getMeta(key)` / `setMeta(key, value)` (upsert via `ON CONFLICT`), `getAllFilePaths()` (returns all `rel_path` values from `files` table); used internally by `runPipeline` for freshness marker + orphan prune set-diff.
 **Git Intelligence** (`src/features/knowledge-graph/git-intel/`) — pipeline: git log → parse → churn scoring → co-change detection → persist atomically; `ensureGitIntelFresh` is the main entry point (no-op when fresh)
+**Structural KG freshness** (`src/features/knowledge-graph/ensure-graph-fresh.ts`) — `ensureGraphFresh(projectDir, opts?)`: async, fail-open (never throws), no-op when DB absent / HEAD null / marker matches HEAD; on mismatch runs incremental `runPipeline`; orphan pruning and `graph_head_commit` stamping occur on full-project runs only (`sourceDirs == null`/empty) — scoped runs (codebase-graph, graph-worker, job-manager) skip both; concurrent stale callers share one pipeline run per DB via in-process single-flight map (fail-open: concurrent callers proceed even if the in-flight run errors); marker read uses a cheap read-only `better-sqlite3` handle (no sqlite-vec load, no DDL). Sibling to `ensureGitIntelFresh`. Called before `graph_query` + `semantic_search` (handler boundary in `register-knowledge.ts`) and inside `getFileContext`. Limitations: first read after a commit pays full incremental-pipeline latency (embed included only when files actually changed — a no-op pass skips embed via the `total===0` guard); freshness is commit-granular, so uncommitted working-tree edits are not reflected until commit.
 **Craft rubric** (`src/shared/lib/craft-rubric.ts`) — `CRAFT_DIMENSIONS` (6), `CRAFT_BANDS` (strong/adequate/weak/n-a), `CRAFT_DIMENSION_PRINCIPLES`, `craftBandOrdinal` (3/2/1/null), `craftRollup` (ordinal mean 1–3, undefined when all n-a); types exported via `src/shared/schema.ts`. Added 2026-06-03.
 
 **Craft audit service** (`src/features/diagnostics/services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` (pure, bounded by `limit` default 5); `persistAuditProfile(areas, ratings, dao)` (writes `source:"audit"` rows via injected `CraftProfileDao`); reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
@@ -112,11 +115,12 @@ src/
 **Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — pure functions; `formatPitfallsSection` returns `""` when both arrays empty. Added 2026-05-22.
 **Area Memory Enrichment** (`src/features/diagnostics/services/area-memory-enrichment.ts`) — fail-open; calls `markInjected` after query; returns `{ section: ""; count: 0 }` on error. Added 2026-05-29.
 **Hot-File Detection** (`src/features/diagnostics/services/hot-file-detection.ts`) — threshold ≥ 3 appearances, cap 3; fail-open. Added 2026-05-29.
+**Backfill Error Fixes** (`src/features/diagnostics/services/backfill-error-fixes.ts`) — added 2026-05-22; script that mines `file_violation_history` to populate the `error_fixes` table; call once per project to seed historical data
 **`store-summaries`** — DB-only write path (JSON removed ADR-005); `inferLanguageFromExtension` maps extensions to language strings
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 **Principle matcher** (`src/shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; `matchesScopeTags` checks tag overlap
 **`get-principles`** — loads KG computed tags and passes to `matchPrinciples`; tag matching active when KG indexed
-**`get-file-context`** — surfaces `computed_tags`, `hotspot_score`, `co_change_partners`; `shape` derived from graph metrics (see `deriveShape` in source)
+**`get-file-context`** — surfaces `computed_tags`, `hotspot_score`, `co_change_partners`; `shape` derived from graph metrics (see `deriveShape` in source); calls `ensureGraphFresh` before reading the KG. KG loaders extracted to `get-file-context-kg.ts` (`loadKgData`, `loadGitIntelData`, `computeProjectMaxImpact`, `loadEntitiesAndSummary`); re-exported from `get-file-context.ts` for backward compatibility.
 **PR Review Data** (`pr-review-data.ts`) — pure functions: `classifyFile`, `generateNarrative`, `buildFileViolationMap`, `assembleOutput`; bucket thresholds: needs-attention = violations OR high in_degree; worth-a-look = priority >= 5; `getPrReviewData` returns `{ error }` (not throw) for invalid `pr_number`. Extracted 2026-05-25.
 **Correction Reader** (`features/orchestration/services/correction-reader.ts`) — `readCorrections(projectDir, filePaths?, maxAge?)` → `{ ok: true; records[] } | { ok: false; error }`; ENOENT → `ok:true, records:[]`; updated 2026-05-25
 **Confidence engine** (`src/shared/lib/confidence.ts`) — added 2026-05-25; `deriveTier(score, sampleSize)` returns `"insufficient"` for sparse data (never throws); `computeConfidenceAnnotation(inputs[])` returns zero-confidence for empty input.
@@ -192,8 +196,8 @@ src/
 | Tool | Purpose |
 |------|---------|
 | `open_artifact` | Open an HTML artifact from `${workspace}/artifacts/` in browser; reads file, registers with HTTP server, opens fire-and-forget; returns `{ url }`; path traversal blocked; `UNEXPECTED` when HTTP server not running. Added 2026-05-25. |
-| `init_workspace` | Create or resume a workspace; creates build worktree at `{workspace}/worktree` on `canon/{slug}` branch; `preflight: true` checks git/sessions/claims — returns `workspace: ""` + `preflight_issues` on problems; resume checks new path first, then legacy `.canon/worktrees/{slug}` fallback; `expectedTask` guards slug-collision |
-| `write_plan_index` | Write `INDEX.md` to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs, wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
+| `init_workspace` | Create or resume a workspace; seeds `progress.md`; creates build worktree at `{workspace}/worktree` on `canon/{slug}` branch; `preflight: true` checks git status, stale sessions, file claims (non-blocking); when preflight issues found, returns `workspace: ""` + `candidate_workspace` — callers must check `preflight_issues`; resume checks `{workspace}/worktree` first, then legacy `.canon/worktrees/{slug}`; `tryResumeWorkspace` accepts optional `expectedTask` (slug-collision guard) |
+| `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
 | `finalize_workspace` | Close the flow: verifies journal completeness, releases file claims for the workflow slug, aggregates gate/postcondition/violation/test metrics into `FlowRunEntry` |
 | `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json` |
 | `record_agent_metrics` | Record performance counters into execution state; `INVALID_INPUT` if no fields; `WORKSPACE_NOT_FOUND` if state absent — ADR-003a 2026-04-01 |

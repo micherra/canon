@@ -474,5 +474,42 @@ describe("Knowledge Graph Store", () => {
         expect(store.getFileEdgesFrom(fileA.file_id!)).toHaveLength(0);
       });
     });
+
+    describe("Meta key/value helpers", () => {
+      test("getMeta returns undefined for an absent key", () => {
+        expect(store.getMeta("graph_head_commit")).toBeUndefined();
+      });
+
+      test("setMeta then getMeta round-trips a value", () => {
+        store.setMeta("graph_head_commit", "abc123");
+        expect(store.getMeta("graph_head_commit")).toBe("abc123");
+      });
+
+      test("setMeta upserts an existing key (ON CONFLICT)", () => {
+        store.setMeta("graph_head_commit", "abc123");
+        store.setMeta("graph_head_commit", "def456");
+        expect(store.getMeta("graph_head_commit")).toBe("def456");
+      });
+
+      test("getMeta reads the seeded schema_version row", () => {
+        // schema_version is seeded by initDatabase via DDL
+        expect(store.getMeta("schema_version")).toBeDefined();
+      });
+    });
+
+    describe("getAllFilePaths", () => {
+      test("returns an empty array when no files exist", () => {
+        expect(store.getAllFilePaths()).toEqual([]);
+      });
+
+      test("returns every stored file path", () => {
+        store.upsertFile(makeFileRow({ path: "src/A.ts" }));
+        store.upsertFile(makeFileRow({ path: "src/B.ts" }));
+        const paths = store.getAllFilePaths();
+        expect(paths).toHaveLength(2);
+        expect(paths).toContain("src/A.ts");
+        expect(paths).toContain("src/B.ts");
+      });
+    });
   });
 });
