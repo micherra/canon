@@ -23,9 +23,15 @@ export type GraphPollInput = {
  *
  * Synchronous — reads DB only; no async I/O.
  * Returns INVALID_INPUT if the job_id does not exist or the manager is not initialized.
+ *
+ * `projectDir` is the resolved per-request scope (from resolveScope(extra)) — the
+ * manager is looked up per project, never from an implicit/global singleton.
  */
-export function codebaseGraphPoll(input: GraphPollInput): ToolResult<PollResult> {
-  const manager = getJobManager();
+export function codebaseGraphPoll(
+  input: GraphPollInput,
+  projectDir: string,
+): ToolResult<PollResult> {
+  const manager = getJobManager(projectDir);
   if (!manager) {
     return toolError(
       "INVALID_INPUT",

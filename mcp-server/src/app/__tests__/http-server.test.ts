@@ -19,13 +19,14 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getHttpPort,
   registerArtifact,
   removeArtifact,
   removePidFile,
   resetStateForTesting,
+  resolvePidDir,
   startHttpServer,
   stopHttpServer,
   writePidFile,
@@ -250,5 +251,48 @@ describe("PID file helpers", () => {
       writePidFile("/nonexistent/path/that/does/not/exist", 3141),
     ).resolves.not.toThrow();
     stderrSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolvePidDir scope resolution — Phase 2 isolation-finish (no process.cwd leak)
+// ---------------------------------------------------------------------------
+describe("resolvePidDir scope resolution (no implicit cwd leak)", () => {
+  let savedPluginData: string | undefined;
+
+  beforeEach(() => {
+    savedPluginData = process.env.CLAUDE_PLUGIN_DATA;
+  });
+
+  afterEach(() => {
+    if (savedPluginData === undefined) {
+      delete process.env.CLAUDE_PLUGIN_DATA;
+    } else {
+      process.env.CLAUDE_PLUGIN_DATA = savedPluginData;
+    }
+    // Clear any seeded scope so tests do not bleed.
+    resetStateForTesting();
+  });
+
+  it("returns CLAUDE_PLUGIN_DATA verbatim when set", () => {
+    process.env.CLAUDE_PLUGIN_DATA = "/plugin/data/dir";
+    expect(resolvePidDir()).toBe("/plugin/data/dir");
+  });
+
+  it("returns {seededScope}/.canon when no CLAUDE_PLUGIN_DATA but a startup scope was seeded", async () => {
+    delete process.env.CLAUDE_PLUGIN_DATA;
+    // Seed scope via the startup entry point (does not rebind/restart the server).
+    await startHttpServer(TEST_PORT, "/seeded/project");
+    expect(resolvePidDir()).toBe(join("/seeded/project", ".canon"));
+    // No path containing the process cwd is produced when a scope is seeded.
+    expect(resolvePidDir()).not.toContain(process.cwd());
+  });
+
+  it("fails closed (returns null) when neither CLAUDE_PLUGIN_DATA nor a seeded scope is available", () => {
+    delete process.env.CLAUDE_PLUGIN_DATA;
+    resetStateForTesting(); // clears resolvedProjectDir
+    // Fail-closed guarantee preserved: null can never be a cwd-derived directory,
+    // so it never leaks process.cwd() — the value contract IS the fail-closed assertion.
+    expect(resolvePidDir()).toBeNull();
   });
 });

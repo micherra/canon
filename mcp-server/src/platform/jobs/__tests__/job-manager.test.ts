@@ -544,7 +544,7 @@ describe("getOrCreateJobManager", () => {
     expect(manager).toBeInstanceOf(JobManager);
   });
 
-  it("returns the same instance on second call (singleton)", async () => {
+  it("returns the same instance on second call (same project dir)", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "getorcreate-singleton-"));
     const { mkdirSync } = await import("node:fs");
     mkdirSync(path.join(tmpDir, ".canon"), { recursive: true });
