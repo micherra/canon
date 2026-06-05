@@ -133,7 +133,12 @@ grep -rn "process\.cwd()\|CANON_PROJECT_DIR\|import.*projectDir.*server-state" \
   --exclude-dir="__tests__"
 ```
 
-Expected output: empty (zero hits) in production handler and service files. Exclude `resolve-project-dir.ts` and `http-server.ts` which are permitted infrastructure files. Test files are excluded from this check — test code legitimately passes `process.cwd()` as a `projectDir` argument.
+Expected output: zero actionable hits (no code violations). Two known comment-line false positives are acceptable and do not indicate violations:
+
+- `codebase-graph.ts:210` — trailing inline comment `// explicit scope — was implicitly process.cwd()` (refactor note; the surrounding code correctly uses the `projectDir` parameter)
+- `digest-writer.ts:18` — JSDoc sentence mentioning `CANON_PROJECT_DIR` as a documentation reference (the file itself receives `projectDir` as an explicit parameter)
+
+Exclude `resolve-project-dir.ts` and `http-server.ts` which are permitted infrastructure files. Test files are excluded from this check — test code legitimately passes `process.cwd()` as a `projectDir` argument.
 
 - [ ] Every new handler in `register-*.ts` threads scope via `resolveScope(extra)` — no inline `process.cwd()` or `process.env.CANON_PROJECT_DIR`.
 - [ ] Every new tool or service function in `features/**/tools/*.ts` and `features/**/services/*.ts` that needs `projectDir` accepts it as an explicit parameter.
