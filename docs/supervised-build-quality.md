@@ -133,6 +133,7 @@ Canon's own documentation and artifacts accumulate drift. Eat your own dogfood.
 | ~~**Documentation staleness in drift reports**~~ | ~~Medium~~ | ~~Medium~~ | Shipped (PR #274). `doc_freshness` dimension in `get_drift_report`: `DocFreshness[]` per direction doc with `commits_since_sync` + decaying `ConfidenceAnnotation`, sorted by staleness descending. Scribe also gained elective `docs/*.md` factual-sync in Step 5b (prevention half, addresses `watch_ZZZ1`). |
 | **Repo-level `.canon/log.md`** | Tiny | Medium | Global timeline of flow completions, principle additions, and lint passes. Single append at `complete_flow`. Grep-parseable `## [YYYY-MM-DD] type | title` prefix. |
 | **Consolidate `write_*` → `write_artifact`** | Small | Low | 5 individual write tools still individually registered. One `write_artifact({ type, workspace, data })` reduces MCP surface. |
+| **Piece B — diff_stat denominator wiring** | Small | Medium | `evaluate-step.ts` computes `diff_stats` but `tryAppendAnalytics` never writes `diff_stat`/`total_files_changed` onto the persisted FlowRunEntry (0/340 rows have it). Wire at the finalize seam. Useful as a per-flow change-size denominator for any future metric; independent of the shelved taxonomy. See `docs/explore/automatic-craft-prerequisites-scoping.md`. |
 
 ### Thread 5: Flow Inputs & Exploration
 
@@ -270,6 +271,7 @@ The shipper "creates the PR and returns" — it can't watch CI. Turn "PR opened"
 
 These were evaluated and explicitly rejected:
 
+- **Automatic craft signal / finding intent+severity taxonomy (Pieces A+D of the craft scoping)** — Killed 2026-06-05. Rationale: even fully built, only ~2 of 6 craft dimensions become trustworthy-automatic (locality, partially simplicity/predictability); the meaningful dimensions (cohesion, interface-depth, naming) stay reviewer-judged no matter what. Reviewer overhead plus a values decision (defining the taxonomy) isn't justified without wanting an automatic craft gate, and no automatic craft gate is wanted. Compliance score is already populated (59/64 reviews carry real tallies — no work needed). Craft v2 (PR #301) reviewer-judged 6-dimension profile remains the craft measure. Piece B (diff_stat wiring) is kept on the backlog independently. See `docs/explore/automatic-craft-prerequisites-scoping.md`.
 - **Scheduled full *builds* via CronCreate** — Kicking off feature development on a timer. Stays rejected: GitHub Actions + existing monitoring tools do this better, and auto-triage without a human PM is the wrong default. *Scheduled **maintenance*** (scribe / janitor / KG re-indexer spawned when a staleness threshold is crossed) is explicitly **permitted** and tracked under Thread 6 — Background Maintenance: it needs Canon's own agents and workspace/file-claim locking, which GH Actions cannot run, and it always emits a draft PR + notification, never a silent merge.
 - **Event-driven triggers (RemoteTrigger)** — Same reasoning. External shim complexity for a solo dev project.
 - **Streaming observability pipeline** — JSONL + existing tooling is sufficient. No custom dashboard.
