@@ -2,7 +2,7 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
-import { getJobManager } from "@platform/jobs/job-manager.ts";
+import { cleanupAllJobManagers } from "@platform/jobs/job-manager.ts";
 import { startHttpServer } from "./http-server.ts";
 import { registerArtifactTools } from "./register-artifacts.ts";
 import { registerKnowledgeTools } from "./register-knowledge.ts";
@@ -21,8 +21,7 @@ registerPrincipleTools();
 
 function cleanupAndExit(signal: string): void {
   try {
-    const manager = getJobManager();
-    if (manager) manager.cleanup();
+    cleanupAllJobManagers();
   } catch {
     // Best-effort cleanup — do not let errors prevent shutdown
   }
@@ -60,8 +59,7 @@ async function main() {
 
   // Mark any leftover running jobs from a previous crashed session as failed
   try {
-    const manager = getJobManager();
-    if (manager) manager.cleanup();
+    cleanupAllJobManagers();
   } catch {
     // Best-effort — do not fail startup if cleanup errors
   }

@@ -49,7 +49,13 @@ import { forkJob, killJob, sendWorkerInput } from "@platform/adapters/job-adapte
 import { isSyncMode } from "@shared/lib/env.ts";
 // Import mocked modules AFTER vi.mock declarations
 import { computeJobFingerprint } from "../job-fingerprint.ts";
-import { _resetJobManagerSingleton, getOrCreateJobManager, JobManager } from "../job-manager.ts";
+import {
+  _resetJobManagerSingleton,
+  cleanupAllJobManagers,
+  getJobManager,
+  getOrCreateJobManager,
+  JobManager,
+} from "../job-manager.ts";
 
 function makeDb() {
   const tmpDir = mkdtempSync(path.join(os.tmpdir(), "job-manager-test-"));
@@ -544,7 +550,7 @@ describe("getOrCreateJobManager", () => {
     expect(manager).toBeInstanceOf(JobManager);
   });
 
-  it("returns the same instance on second call (singleton)", async () => {
+  it("returns the same instance on second call (same project dir)", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "getorcreate-singleton-"));
     const { mkdirSync } = await import("node:fs");
     mkdirSync(path.join(tmpDir, ".canon"), { recursive: true });
@@ -552,5 +558,85 @@ describe("getOrCreateJobManager", () => {
     const m1 = await getOrCreateJobManager(tmpDir, "/fake/plugin");
     const m2 = await getOrCreateJobManager(tmpDir, "/fake/plugin");
     expect(m1).toBe(m2);
+  });
+});
+
+// Per-project map characterization (sug_JJJJ1 / sug_UUUU5)
+
+describe("JobManager per-project map", () => {
+  async function makeScopeDir(prefix: string): Promise<string> {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), prefix));
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(path.join(tmpDir, ".canon"), { recursive: true });
+    return tmpDir;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _resetJobManagerSingleton();
+  });
+
+  afterEach(() => {
+    _resetJobManagerSingleton();
+  });
+
+  it("distinct project dirs yield distinct JobManager instances (cross-project leak closed)", async () => {
+    const dirA = await makeScopeDir("jm-map-a-");
+    const dirB = await makeScopeDir("jm-map-b-");
+
+    const mA = await getOrCreateJobManager(dirA, "/fake/plugin");
+    const mB = await getOrCreateJobManager(dirB, "/fake/plugin");
+
+    expect(mA).not.toBe(mB);
+  });
+
+  it("same project dir yields the identical instance (stdio single-scope no-op invariant)", async () => {
+    const dir = await makeScopeDir("jm-map-same-");
+
+    const m1 = await getOrCreateJobManager(dir, "/fake/plugin");
+    const m2 = await getOrCreateJobManager(dir, "/fake/plugin");
+
+    expect(m1).toBe(m2);
+  });
+
+  it("getJobManager returns undefined before create and the same instance after create", async () => {
+    const dir = await makeScopeDir("jm-map-lookup-");
+
+    expect(getJobManager(dir)).toBeUndefined();
+
+    const created = await getOrCreateJobManager(dir, "/fake/plugin");
+    expect(getJobManager(dir)).toBe(created);
+  });
+
+  it("getJobManager keys by resolved path (non-canonical input resolves to the same instance)", async () => {
+    const dir = await makeScopeDir("jm-map-resolve-");
+
+    const created = await getOrCreateJobManager(dir, "/fake/plugin");
+    // A non-normalized variant of the same dir must resolve to the same key.
+    expect(getJobManager(path.join(dir, ".", "."))).toBe(created);
+  });
+
+  it("_resetJobManagerSingleton clears the map (lookup undefined afterward)", async () => {
+    const dir = await makeScopeDir("jm-map-reset-");
+
+    await getOrCreateJobManager(dir, "/fake/plugin");
+    expect(getJobManager(dir)).toBeInstanceOf(JobManager);
+
+    _resetJobManagerSingleton();
+    expect(getJobManager(dir)).toBeUndefined();
+  });
+
+  it("cleanupAllJobManagers cleans every per-project manager without throwing", async () => {
+    const dirA = await makeScopeDir("jm-map-cleanup-a-");
+    const dirB = await makeScopeDir("jm-map-cleanup-b-");
+
+    const mA = await getOrCreateJobManager(dirA, "/fake/plugin");
+    const mB = await getOrCreateJobManager(dirB, "/fake/plugin");
+    const spyA = vi.spyOn(mA, "cleanup");
+    const spyB = vi.spyOn(mB, "cleanup");
+
+    expect(() => cleanupAllJobManagers()).not.toThrow();
+    expect(spyA).toHaveBeenCalledTimes(1);
+    expect(spyB).toHaveBeenCalledTimes(1);
   });
 });

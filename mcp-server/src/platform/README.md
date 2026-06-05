@@ -22,10 +22,10 @@ The `platform/` directory provides concrete infrastructure implementations that 
 
 | Export | File | Description |
 |--------|------|-------------|
-| `JobManager` | `jobs/job-manager.ts` | Singleton manager: `submit`, `poll`, `cancel`, `cleanup` |
-| `initJobManager` | `jobs/job-manager.ts` | Initialize the singleton at server startup |
-| `getJobManager` | `jobs/job-manager.ts` | Retrieve the singleton (returns `null` if not yet initialized) |
-| `getOrCreateJobManager` | `jobs/job-manager.ts` | Lazy-init accessor (for tool handlers) |
+| `JobManager` | `jobs/job-manager.ts` | Per-project manager: `submit`, `poll`, `cancel`, `cleanup` |
+| `getJobManager` | `jobs/job-manager.ts` | Non-creating lookup keyed by `path.resolve(projectDir)` (returns `undefined` if no manager exists for that scope) |
+| `getOrCreateJobManager` | `jobs/job-manager.ts` | Per-project lazy-init factory (for tool handlers) |
+| `cleanupAllJobManagers` | `jobs/job-manager.ts` | Cleanup every per-project manager (process shutdown / signal handlers) |
 | `SubmitResult` | `jobs/job-manager.ts` | Return type from `JobManager.submit()` |
 | `PollResult` | `jobs/job-manager.ts` | Return type from `JobManager.poll()` |
 | `JobStatus` | `jobs/job-store.ts` | `"pending" \| "running" \| "complete" \| "failed" \| "cancelled" \| "timed_out"` |
@@ -63,4 +63,4 @@ features/diagnostics/   →  IDriftStore (domains/drift/)
                              DriftStore (platform/storage/drift/)
 ```
 
-The `JobManager` is a singleton initialized at server startup (`app/index.ts`) and accessed by feature tools via `getJobManager()`.
+The `JobManager` is instantiated per project scope (keyed by resolved `projectDir`) and created lazily on first KG submit via `getOrCreateJobManager(projectDir, pluginDir)`. Feature tools look it up with `getJobManager(projectDir)`, passing the per-request scope from `resolveScope(extra)`. Signal handlers in `app/index.ts` call `cleanupAllJobManagers()` to tear down every per-project manager at shutdown. Under stdio there is exactly one scope, so this resolves to a single instance — the per-project map is the session-isolation half that pairs with `resolveScope` for a future multi-tenant HTTP daemon.
