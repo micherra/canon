@@ -13,8 +13,8 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { VALID_LAYERS } from "@shared/lib/config.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
+import { VALID_LAYERS } from "@shared/lib/config.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
 import type { Principle } from "@shared/parser.ts";
 import {
@@ -248,9 +248,7 @@ export async function wikiLint(
   const staleRefs = enabled.has("stale_refs") ? runStaleRefCheck(projectDir, claudeMdFiles) : [];
   const missingExamples = enabled.has("missing_examples") ? checkMissingExamples(principles) : [];
   const citedPaths = enabled.has("cited_paths") ? runCitedPathCheck(projectDir) : [];
-  const scopeLayers = enabled.has("scope_layers")
-    ? checkScopeLayers(principles, VALID_LAYERS)
-    : [];
+  const scopeLayers = enabled.has("scope_layers") ? checkScopeLayers(principles, VALID_LAYERS) : [];
 
   return assembleWikiLintOutput({
     citedPaths,

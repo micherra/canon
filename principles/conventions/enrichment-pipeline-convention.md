@@ -8,7 +8,7 @@ scope:
     - "mcp-server/src/features/diagnostics/services/**"
     - "mcp-server/src/platform/storage/drift/**"
     - "mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts"
-  layers: [service]
+  layers: []
 ---
 
 When adding a new enrichment section to the `resolve_agent_skills` spawn prompt,

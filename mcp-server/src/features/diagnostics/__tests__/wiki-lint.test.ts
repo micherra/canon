@@ -33,8 +33,8 @@
  * - assembles all arrays and computes summary counts
  */
 
-import type { Principle } from "@shared/parser.ts";
 import { DEFAULT_LAYER_MAPPINGS, VALID_LAYERS } from "@shared/lib/config.ts";
+import type { Principle } from "@shared/parser.ts";
 import { describe, expect, it } from "vitest";
 import {
   assembleWikiLintOutput,

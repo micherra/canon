@@ -58,7 +58,7 @@ Ask only questions the user hasn't already answered. If the prompt includes the 
 
 3. **The scope** — Where does this apply?
    - For principles:
-     - "Which architectural layers? (api, ui, domain, data, infra, shared, or all?)"
+     - "Which architectural layers? (api, data, domain, hooks, infra, shared, ui — or none). If none apply, set scope.layers: [] and scope via file_patterns instead."
      - "Any specific file patterns? (e.g., `**/api/**`)"
    - For agent-rules:
      - "Which Canon agent(s) should this rule apply to?" List the options:
