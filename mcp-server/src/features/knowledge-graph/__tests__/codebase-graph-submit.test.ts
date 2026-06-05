@@ -16,9 +16,9 @@ vi.mock("@platform/jobs/job-manager.ts", () => {
   return {
     _mockManager: mockManager,
     _resetJobManagerSingleton: vi.fn(),
+    cleanupAllJobManagers: vi.fn(),
     getJobManager: vi.fn().mockReturnValue(mockManager),
     getOrCreateJobManager: vi.fn().mockReturnValue(mockManager),
-    initJobManager: vi.fn().mockReturnValue(mockManager),
     JobManager: vi.fn().mockImplementation(() => mockManager),
   };
 });

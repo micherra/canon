@@ -3,6 +3,7 @@ import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
 import { wikiLint } from "@features/diagnostics/tools/wiki-lint.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
+import { ensureGraphFresh } from "@features/knowledge-graph/ensure-graph-fresh.ts";
 import { codebaseGraph, compactGraph } from "@features/knowledge-graph/tools/codebase-graph.ts";
 import { codebaseGraphMaterialize } from "@features/knowledge-graph/tools/codebase-graph-materialize.ts";
 import { codebaseGraphPoll } from "@features/knowledge-graph/tools/codebase-graph-poll.ts";
@@ -225,7 +226,13 @@ function registerGraphQueryTool(): void {
           .describe("Target entity name or file path (not needed for dead_code)"),
       },
     },
-    gatedWrapHandler(async (input, extra) => graphQuery(input, resolveScope(extra))),
+    gatedWrapHandler(async (input, extra) => {
+      const dir = resolveScope(extra);
+      // Lazily refresh the structural KG when HEAD moved before reading.
+      // graphQuery stays synchronous — gate at this async handler boundary.
+      await ensureGraphFresh(dir);
+      return graphQuery(input, dir);
+    }),
   );
 }
 
@@ -262,7 +269,12 @@ function registerSemanticSearchTool(): void {
           ),
       },
     },
-    gatedWrapHandler(async (input, extra) => semanticSearch(input, resolveScope(extra))),
+    gatedWrapHandler(async (input, extra) => {
+      const dir = resolveScope(extra);
+      // Lazily refresh the structural KG when HEAD moved before reading.
+      await ensureGraphFresh(dir);
+      return semanticSearch(input, dir);
+    }),
   );
 }
 
@@ -289,7 +301,7 @@ function registerGraphJobTools(): void {
         "Poll the status of a background codebase graph job. Returns job_id, status (pending/running/complete/failed/timed_out/cancelled), progress, and error.",
       inputSchema: { job_id: z.string().describe("Job ID returned by codebase_graph_submit") },
     },
-    gatedWrapHandler(async (input) => codebaseGraphPoll(input)),
+    gatedWrapHandler(async (input, extra) => codebaseGraphPoll(input, resolveScope(extra))),
   );
 
   registerToolWithUi("codebase_graph_materialize", {

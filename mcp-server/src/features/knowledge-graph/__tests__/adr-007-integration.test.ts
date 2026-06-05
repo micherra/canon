@@ -311,9 +311,9 @@ describe("codebaseGraphPoll when manager not initialized (Known Gap: Task-04)", 
   });
 
   it("returns INVALID_INPUT error when job manager singleton has not been initialized", () => {
-    // After reset, getJobManager() returns null — this path is in the source
-    // but was not exercised in the implementor's tests
-    const result = codebaseGraphPoll({ job_id: "any-job-id" });
+    // After reset, getJobManager(dir) returns undefined for the unknown scope —
+    // this path is in the source but was not exercised in the implementor's tests
+    const result = codebaseGraphPoll({ job_id: "any-job-id" }, "/fake/project");
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -449,7 +449,7 @@ describe("codebaseGraphMaterialize when manager not initialized (Known Gap: Task
     // shared vi.mock for job-manager in scope.
     const { codebaseGraphMaterialize } = await import("../tools/codebase-graph-materialize.ts");
 
-    // After reset, getJobManager() returns null
+    // After reset, getJobManager(dir) returns undefined for the unknown scope
     const result = await codebaseGraphMaterialize(
       { job_id: "any-job" },
       "/fake/project",

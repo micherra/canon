@@ -109,6 +109,8 @@ Read the complete worked example at `${CLAUDE_PLUGIN_ROOT}/references/writer-wor
 
 Use the `list_principles` MCP tool to load the index of all existing entries (metadata only — id, title, severity, tags, scope). This avoids loading full bodies into context.
 
+Note: `list_principles` merges both tiers (project-local `.canon/principles/` and the portable `principles/` set). An ID collision against an entry in the *other* tier is an override-precedence situation (project-local always wins, enforced by `loadAllPrinciples` in `mcp-server/src/shared/matcher.ts`), not a true conflict — flag it informatively rather than as a blocking error.
+
 For agent-rules, also glob `.canon/rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/rules/*.md` and read only their frontmatter.
 
 Check for:
@@ -125,9 +127,42 @@ Check for:
 
 Present findings and ask whether to proceed, adjust, or cancel.
 
+### Step 5.5: Detect context and determine tier
+
+Before saving, run the two-part detection check defined in `${CLAUDE_PLUGIN_ROOT}/references/principle-tier-routing.md`:
+
+> **Precondition**: run these checks from the repository/worktree root. `git ls-files principles/` resolves the pathspec relative to the current working directory — if run from a subdirectory it will return empty and detection will silently fall back to installed-copy.
+
+<!-- keep in sync with references/principle-tier-routing.md -->
+```sh
+# tracked-source iff BOTH return non-empty / succeed:
+git ls-files principles/ | head -1          # non-empty → principles/ is tracked here
+test -d "$(git rev-parse --show-toplevel)/principles"  # principles/ lives under THIS worktree root
+```
+
+**If both checks pass** → **tracked-source context**. Apply the two-question classification test:
+
+1. Would this principle constrain the code of a team using Canon for an entirely unrelated project? (No → project-specific)
+2. Is it a specialization of an existing universal principle onto this project's own internals? (Yes → project-specific)
+
+If neither condition holds → **universal**.
+
+**If either check fails, errors, or returns empty** (including: not in a git repo, `principles/` absent from the worktree root, `git rev-parse` errors) → **installed-copy context**. Default to this when in doubt. All principles are project-specific. Skip the classification test.
+
+Record the resolved tier (`universal` or `project-specific`) and context (`tracked-source` or `installed-copy`) — you will use them in Step 6.
+
 ### Step 6: Save the file
 
-- **Principles**: Save to `.canon/principles/{severity-subdir}/{id}.md` where `severity-subdir` is `rules/`, `strong-opinions/`, or `conventions/`. Create directory if needed.
+Save based on the tier resolved in Step 5.5:
+
+- **installed-copy context, any tier** → `.canon/principles/{severity-subdir}/{id}.md`
+- **tracked-source context, project-specific** → `.canon/principles/{severity-subdir}/{id}.md`
+- **tracked-source context, universal** → `principles/{severity-subdir}/{id}.md`
+
+  Before writing to `principles/{severity-subdir}/`, record a one-line "applies to unrelated adopters" justification in the SUMMARY artifact. In **apply-proposal mode**, also confirm with the user before writing: "This principle will be saved to the portable `principles/` set and will ship to all adopters. Proceed?" (In interactive modes the classification conversation serves as confirmation — no extra gate needed.)
+
+Where `severity-subdir` is `rules/`, `strong-opinions/`, or `conventions/`. Create the directory if needed.
+
 - **Agent-rules**: Ask the user: plugin-level (`${CLAUDE_PLUGIN_ROOT}/rules/{id}.md`) or project-local (`.canon/rules/{id}.md`)?
 
 ### Step 7: Validate

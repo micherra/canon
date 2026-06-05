@@ -6,22 +6,23 @@
 Shared kernel — cross-cutting utilities, constants, parsers, and low-level helpers used by all features. This is the dependency root of the codebase: every layer may import from `shared/`, but `shared/` must not import from any bounded context.
 
 ## Architecture
-<!-- last-updated: 2026-04-23 -->
+<!-- last-updated: 2026-06-04 -->
 
 **Top-level modules:**
 
 | File | Responsibility |
 |------|---------------|
-| `constants.ts` | Canonical constants: `CANON_DIR`, `CANON_FILES` (now includes `JANITOR_LOCK`), `LAYER_CENTRALITY`, file extension sets, embedding config, `JOB_TIMEOUT_MS`, `PRINCIPLE_SECTIONS` |
-| `schema.ts` | Shared Zod schemas: `reportInputSchema`, `ReportInput`, `ReviewEntry`, `ReviewViolation` — cross-boundary types used by pr-review, diagnostics, and orchestration |
+| `constants.ts` | Canonical constants: `CANON_DIR`, `CANON_FILES` (now includes `JANITOR_LOCK`), `LAYER_CENTRALITY`, file extension sets, embedding config, `JOB_TIMEOUT_MS`, `PRINCIPLE_SECTIONS`, `GRAPH_HEAD_COMMIT_KEY` (KG freshness marker key) |
+| `schema.ts` | Shared Zod schemas: `reportInputSchema`, `ReportInput`, `ReviewEntry` (includes optional `craft_profile?: CraftProfile`), `ReviewViolation`, `CraftProfile`, `CraftProfileSchema`, `CraftDimensionRating` — cross-boundary types used by pr-review, diagnostics, and orchestration |
 | `matcher.ts` | Principle matching engine: `matchPrinciples`, `inferLayer`, `loadPrinciplesFromDir`, `loadAllPrinciples` |
 | `parser.ts` | Principle file parser: `Principle`, `parsePrinciple`, `loadPrincipleFile`, `parseFrontmatter`, `extractSections`, `filterBodyBySections` |
 
 **`lib/`** — Focused utility modules with no cross-context knowledge:
-<!-- last-updated: 2026-04-23 -->
+<!-- last-updated: 2026-06-04 -->
 
 | File | Key exports |
 |------|-------------|
+| `craft-rubric.ts` | `CRAFT_DIMENSIONS` (6 strings), `CRAFT_BANDS`, `CRAFT_DIMENSION_PRINCIPLES`, `craftBandOrdinal(band)`, `craftRollup(ratings)` — craft scoring primitives; added 2026-06-03 |
 | `tool-result.ts` | `ToolResult<T>`, `CanonToolError`, `CanonErrorCode`, `toolOk`, `toolError`, `isToolError`, `assertOk` |
 | `wrap-handler.ts` | `wrapHandler` — wraps MCP tool handlers, converts unexpected throws to `UNEXPECTED` errors |
 | `config.ts` | `buildLayerInferrer`, `loadLayerMappings`, `loadLayerMappingsStrict`, `loadGraphCompositionConfig`, `loadConfigNumber`, `loadJanitorConfig`, `JanitorConfig`, `VALID_LAYERS` — janitor config from `.canon/config.json` `janitor` key; `VALID_LAYERS` = `Object.keys(DEFAULT_LAYER_MAPPINGS)` (derived valid set for `scope.layers`); added 2026-04-23, `VALID_LAYERS` added 2026-06-05 |

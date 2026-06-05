@@ -43,7 +43,7 @@ describe("codebaseGraphPoll", () => {
       status: "running",
     });
 
-    const result = codebaseGraphPoll({ job_id: "job-abc" });
+    const result = codebaseGraphPoll({ job_id: "job-abc" }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -67,7 +67,7 @@ describe("codebaseGraphPoll", () => {
       status: "complete",
     });
 
-    const result = codebaseGraphPoll({ job_id: "job-done" });
+    const result = codebaseGraphPoll({ job_id: "job-done" }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -89,7 +89,7 @@ describe("codebaseGraphPoll", () => {
       status: "failed",
     });
 
-    const result = codebaseGraphPoll({ job_id: "job-fail" });
+    const result = codebaseGraphPoll({ job_id: "job-fail" }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -106,7 +106,7 @@ describe("codebaseGraphPoll", () => {
       recoverable: false,
     });
 
-    const result = codebaseGraphPoll({ job_id: "nonexistent-id" });
+    const result = codebaseGraphPoll({ job_id: "nonexistent-id" }, "/fake/project");
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -127,7 +127,7 @@ describe("codebaseGraphPoll", () => {
       status: "timed_out",
     });
 
-    const result = codebaseGraphPoll({ job_id: "job-timeout" });
+    const result = codebaseGraphPoll({ job_id: "job-timeout" }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -147,7 +147,7 @@ describe("codebaseGraphPoll", () => {
       status: "complete",
     });
 
-    const result = codebaseGraphPoll({ job_id: "job-sync" });
+    const result = codebaseGraphPoll({ job_id: "job-sync" }, "/fake/project");
 
     // Must not be a promise
     expect(result).not.toBeInstanceOf(Promise);

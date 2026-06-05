@@ -15,6 +15,7 @@ rules:
 references:
   - status-protocol
   - content-flow
+  - principle-tier-routing
 skills:
   - canon:write-principle
 tools:

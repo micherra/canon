@@ -377,7 +377,7 @@ Stage 3 does NOT change the verdict. Discrepancies are addenda for the next revi
 
 ### Stage 3 check for observable-best-effort
 
-1. When engineer summary claims `console.warn` was added: grep the named files before marking honored. Trust code, not summary.
+1. When engineer summary claims `console.warn`/log signal was added to catch blocks, grep the named files for that call before marking `observable-best-effort` honored. Trust the code, not the summary — this principle exists precisely because invisible failures pass review.
 
 **Note — also applies during Stage 1 principle matching**: When the diff introduces new `catch` blocks, match `observable-best-effort`. A new catch block is a violation ONLY when it is silent — it neither re-throws, nor logs at WARN or higher (e.g., `console.warn`), nor returns a failure result, nor carries an explicit comment naming a cosmetic-only exception reason. Catch blocks that take any one of those four observable actions are compliant and must NOT be flagged. (A bare catch covered by the `intentional-bare-catch` convention is the annotated-cosmetic case.)
 

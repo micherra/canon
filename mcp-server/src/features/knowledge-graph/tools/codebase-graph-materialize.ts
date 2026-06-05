@@ -39,7 +39,7 @@ export async function codebaseGraphMaterialize(
   pluginDir: string,
 ): Promise<ToolResult<CompactGraphOutput & { job_id: string }>> {
   // Step 1: Check job status — must be complete
-  const manager = getJobManager();
+  const manager = getJobManager(projectDir);
   if (!manager) {
     return toolError(
       "INVALID_INPUT",

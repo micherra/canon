@@ -36,6 +36,9 @@ export const SCANNABLE_EXTENSIONS = new Set([
 /** Extensions to try when resolving imports (e.g., `./foo` → `./foo.ts`). */
 export const RESOLVE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"];
 
+/** Meta-table key for the commit SHA the knowledge graph was last built at. */
+export const GRAPH_HEAD_COMMIT_KEY = "graph_head_commit";
+
 /** Canon data directory and file names. */
 export const CANON_DIR = ".canon";
 export const CANON_FILES = {

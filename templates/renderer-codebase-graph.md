@@ -547,18 +547,12 @@ This includes: node IDs (file paths), layer names, violation IDs, entity names.
 and `"` → `&quot;`. Color constants (hex values from `layer.color`) and numeric values do
 not need escaping.
 
-Implement inline (do not import):
-
-```javascript
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-```
+Use the canonical `escapeHtml` defined in
+`mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` Section E (Security Requirements) — which you read
+in Step 1. Copy that definition verbatim into your build-time rendering script (use the runtime
+null-safe `escapeHtml` form noted there). Do NOT redefine or re-implement it here. (This refers to
+the build-time content escaper only; the runtime `escHtml` helper inside the Canvas force-sim
+script in Step 4.5 is a separate, page-embedded function and is unaffected.)
 
 ## Step 6 — Write output
 

@@ -7,11 +7,37 @@
  * NOTE: These tests download the Xenova/all-MiniLM-L6-v2 model (~22MB) on first run.
  * They are marked with a 60s timeout to accommodate the download.
  * In CI, the model is cached after the first run.
+ *
+ * The "real embeddings" suite skips gracefully when the model CDN is unreachable
+ * (e.g. HTTP 429, ENOTFOUND). It runs in full when the model is cached locally.
  */
 
 import { EmbeddingService } from "@graph/kg-embedding.ts";
 import { EMBEDDING_BATCH_SIZE, EMBEDDING_DIM } from "@shared/constants.ts";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+
+// ---------------------------------------------------------------------------
+// isNetworkError — pure helper, file scope is fine for a stateless classifier.
+//
+// Returns true when the error looks like a CDN/network availability failure.
+// Only network/availability errors trigger suite skip. Any error that originates
+// from within a running test (assertion failures, logic errors) still fails
+// normally — the probe only guards the initial model load.
+// ---------------------------------------------------------------------------
+
+/** Returns true when the error looks like a CDN/network availability failure. */
+function isNetworkError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("429") ||
+    msg.includes("rate limit") ||
+    msg.includes("enotfound") ||
+    msg.includes("fetch failed") ||
+    msg.includes("network") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("load file") // huggingface "Error (NNN) occurred while trying to load file:"
+  );
+}
 
 /** Create a real EmbeddingService instance for lifecycle tests (no model download). */
 function makeService(): EmbeddingService {
@@ -91,52 +117,63 @@ describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
 // Embedding correctness tests (require real model download)
 //
 // These tests run the real Xenova/all-MiniLM-L6-v2 model (~22 MB download).
-// If the model host returns a 429 or is unreachable the beforeAll guard catches
-// the error and sets `modelUnavailable = true`. Each test calls `ctx.skip()`
-// at the top of its body — this is a RUNTIME skip (evaluated after beforeAll),
-// unlike `test.skipIf(flag)` which is evaluated at collection time and cannot
-// see values set by beforeAll. A 429 / offline environment produces SKIP,
-// not FAIL.
-
-let modelUnavailable = false;
-
-beforeAll(async () => {
-  const probe = new EmbeddingService();
-  try {
-    await probe.embedOne("warmup");
-  } catch (err) {
-    modelUnavailable = true;
-    console.warn(
-      "[kg-embedding] Skipping real-embedding tests: model load failed " +
-        "(network 429 or offline). Error:",
-      err instanceof Error ? err.message : String(err),
-    );
-  } finally {
-    probe.dispose();
-  }
-}, 120_000);
+// The availability probe lives INSIDE this describe block so that selecting
+// only lifecycle/unit tests (e.g. `vitest ... -t "lifecycle"`) never triggers
+// a model download. The probe's beforeAll is only registered when the
+// real-embeddings describe is collected.
+//
+// Skip precision: only network/CDN errors (429, ENOTFOUND, fetch failures)
+// cause the suite to skip via isNetworkError. A genuine assertion/logic/model
+// error re-throws so the suite fails loudly rather than silently hiding a
+// real bug. A 429 / offline environment produces SKIP, not FAIL.
 
 describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
   let service: EmbeddingService;
+  let modelUnavailable = false;
 
-  beforeEach(() => {
+  // ---------------------------------------------------------------------------
+  // Availability probe — registered INSIDE this describe so it only runs when
+  // this suite is selected. Selecting only the lifecycle suite above will NOT
+  // trigger this beforeAll or any model download.
+  // ---------------------------------------------------------------------------
+  beforeAll(async () => {
+    const probe = new EmbeddingService();
+    try {
+      await probe.embedOne("warmup");
+    } catch (err) {
+      if (err instanceof Error && isNetworkError(err)) {
+        // CDN/network unreachable — skip the real-embeddings suite, not a test failure.
+        console.warn(
+          `[kg-embedding] real-embeddings suite skipped: model unavailable (${err.message.slice(0, 120)})`,
+        );
+        modelUnavailable = true;
+      } else {
+        // Unexpected non-network error during probe — re-throw so the suite fails
+        // loudly rather than silently skipping a genuine bug.
+        throw err;
+      }
+    } finally {
+      probe.dispose();
+    }
+  }, 120_000);
+
+  beforeEach((ctx) => {
+    if (modelUnavailable) ctx.skip();
     service = new EmbeddingService();
   });
 
   afterEach(() => {
-    service.dispose();
+    service?.dispose();
   });
 
-  test("embedOne() returns Float32Array of length EMBEDDING_DIM (384)", async (ctx) => {
-    if (modelUnavailable) ctx.skip();
+  test("embedOne() returns Float32Array of length EMBEDDING_DIM (384)", async () => {
     const result = await service.embedOne("Hello world");
     expect(result).toBeInstanceOf(Float32Array);
     expect(result.length).toBe(EMBEDDING_DIM);
     expect(result.length).toBe(384);
   });
 
-  test("embed() returns correct number of Float32Arrays", async (ctx) => {
-    if (modelUnavailable) ctx.skip();
+  test("embed() returns correct number of Float32Arrays", async () => {
     const texts = ["first sentence", "second sentence", "third sentence"];
     const results = await service.embed(texts);
     expect(results).toHaveLength(3);
@@ -146,21 +183,18 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
     }
   });
 
-  test("embed() with empty array returns empty array", async (ctx) => {
-    if (modelUnavailable) ctx.skip();
+  test("embed() with empty array returns empty array", async () => {
     const results = await service.embed([]);
     expect(results).toHaveLength(0);
   });
 
-  test("isLoaded is true after first embed()", async (ctx) => {
-    if (modelUnavailable) ctx.skip();
+  test("isLoaded is true after first embed()", async () => {
     expect(service.isLoaded).toBe(false);
     await service.embedOne("test");
     expect(service.isLoaded).toBe(true);
   });
 
-  test("dispose() then embed() re-initializes model", async (ctx) => {
-    if (modelUnavailable) ctx.skip();
+  test("dispose() then embed() re-initializes model", async () => {
     await service.embedOne("load model");
     expect(service.isLoaded).toBe(true);
 
@@ -174,8 +208,7 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
     expect(service.isLoaded).toBe(true);
   });
 
-  test("embeddings are normalized (L2 norm ≈ 1.0)", async (ctx) => {
-    if (modelUnavailable) ctx.skip();
+  test("embeddings are normalized (L2 norm ≈ 1.0)", async () => {
     const vec = await service.embedOne("normalize test");
     const sumSq = vec.reduce((acc, v) => acc + v * v, 0);
     const norm = Math.sqrt(sumSq);
@@ -184,8 +217,7 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
     expect(norm).toBeLessThan(1.01);
   });
 
-  test("batch processing respects EMBEDDING_BATCH_SIZE boundary", async (ctx) => {
-    if (modelUnavailable) ctx.skip();
+  test("batch processing respects EMBEDDING_BATCH_SIZE boundary", async () => {
     // Create texts that exceed one batch
     const texts = Array.from(
       { length: EMBEDDING_BATCH_SIZE + 2 },
@@ -199,8 +231,7 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
     }
   });
 
-  test("identical texts produce identical embeddings", async (ctx) => {
-    if (modelUnavailable) ctx.skip();
+  test("identical texts produce identical embeddings", async () => {
     const text = "deterministic embedding test";
     const [v1, v2] = await service.embed([text, text]);
     // Same text should produce same vector

@@ -274,85 +274,17 @@ below). All user-supplied text content within the converted elements must still 
 security — the conversion function handles this by escaping raw text before inserting it into
 HTML tags.
 
-Implement `markdownToHtml` inline in your rendering script. This function handles the reviewer
-narrative section only — headings, lists, paragraphs, and inline formatting. Tables and fenced
-code blocks in other review sections (violation tables, acceptance criteria grids) are rendered
-by their own dedicated section handlers, not by this function. The function must convert:
+This function handles the reviewer narrative section only — headings, lists, paragraphs, and
+inline formatting. Tables and fenced code blocks in other review sections (violation tables,
+acceptance criteria grids) are rendered by their own dedicated section handlers, not by this
+function.
 
-```javascript
-function markdownToHtml(md) {
-  const lines = String(md ?? "").split("\n");
-  const output = [];
-  let listType = null; // "ul" | "ol" | null
-
-  function closeList() {
-    if (listType) { output.push(`</${listType}>`); listType = null; }
-  }
-
-  for (const raw of lines) {
-    const line = raw;
-
-    // Blank line — close open list
-    if (line.trim() === "") {
-      closeList();
-      continue;
-    }
-
-    // ### heading
-    if (line.startsWith("### ")) {
-      closeList();
-      output.push(`<h3>${escapeHtml(line.slice(4).trim())}</h3>`);
-      continue;
-    }
-
-    // #### heading
-    if (line.startsWith("#### ")) {
-      closeList();
-      output.push(`<h4>${escapeHtml(line.slice(5).trim())}</h4>`);
-      continue;
-    }
-
-    // - list item (unordered)
-    if (/^[-*] /.test(line)) {
-      if (listType !== "ul") { closeList(); output.push("<ul>"); listType = "ul"; }
-      output.push(`<li>${inlineFormat(line.slice(2).trim())}</li>`);
-      continue;
-    }
-
-    // Numbered list item (1. item)
-    if (/^\d+\. /.test(line)) {
-      if (listType !== "ol") { closeList(); output.push("<ol>"); listType = "ol"; }
-      output.push(`<li>${inlineFormat(line.replace(/^\d+\. /, "").trim())}</li>`);
-      continue;
-    }
-
-    // Regular paragraph line
-    closeList();
-    output.push(`<p>${inlineFormat(line.trim())}</p>`);
-  }
-
-  closeList();
-  return output.join("\n");
-}
-
-// Apply inline formatting: **bold**, `code`, and file:line references
-function inlineFormat(text) {
-  let s = escapeHtml(text);
-  // Protect code spans first — replace with tokens to prevent bold/file-ref inside them
-  const codeSpans = [];
-  s = s.replace(/`([^`]+)`/g, (_, content) => {
-    codeSpans.push(`<code>${content}</code>`);
-    return `\x00CODE${codeSpans.length - 1}\x00`;
-  });
-  // **bold** — safe now, won't match inside code tokens
-  s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  // file paths with :line — safe now, won't match inside code tokens
-  s = s.replace(/([\w./\-]+\.(?:ts|js|py|go|rs|md):\d+)/g, "<code>$1</code>");
-  // Restore code spans
-  s = s.replace(/\x00CODE(\d+)\x00/g, (_, i) => codeSpans[i]);
-  return s;
-}
-```
+Use the canonical `escapeHtml` and `markdownToHtml` defined in
+`mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` Section E (Security Requirements) — which you read
+in Step 1. Copy those definitions verbatim into your build-time rendering script (use the runtime
+null-safe `escapeHtml` form noted there). The canonical `markdownToHtml` already includes the
+code-span protection tokens and `file:line` auto-linking this dashboard relies on. Do NOT redefine
+or re-implement them here.
 
 ### Dependency subgraph
 
@@ -611,18 +543,10 @@ subsystem directories, and entity names.
 escapes raw text internally before wrapping in HTML tags. Do not double-escape by calling
 `escapeHtml()` on the narrative before passing it to `markdownToHtml()`.
 
-Implement inline (do not import):
-
-```javascript
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-```
+Use the canonical `escapeHtml` and `markdownToHtml` defined in
+`mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` Section E (Security Requirements) — which you read
+in Step 1. Copy those definitions verbatim into your build-time rendering script (use the runtime
+null-safe `escapeHtml` form noted there). Do NOT redefine or re-implement them here.
 
 Color constants, CSS property values, and numeric values do not need escaping.
 
