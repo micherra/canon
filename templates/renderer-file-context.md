@@ -171,29 +171,10 @@ Use the security helpers (Step 4.0), then assemble each section in order (Steps 
 
 ### Step 4.0 — Security helpers
 
-Include these functions inline near the top of your JavaScript (or in the script generating HTML):
-
-```javascript
-function escapeHtml(s) {
-  if (typeof s !== "string") return String(s ?? "");
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function markdownToHtml(md) {
-  if (!md) return "";
-  return md
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/^/, "<p>").replace(/$/, "</p>");
-}
-```
+Use the canonical `escapeHtml` and `markdownToHtml` defined in
+`mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` Section E (Security Requirements) — which you read
+in Step 1. Copy those definitions verbatim into the script generating the HTML (use the runtime
+null-safe `escapeHtml` form noted there). Do NOT redefine or re-implement them here.
 
 Apply `escapeHtml` to ALL user-supplied strings before embedding in HTML:
 - file paths, layer names, entity names, principle IDs, violation messages

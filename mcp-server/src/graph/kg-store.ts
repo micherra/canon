@@ -78,6 +78,11 @@ export class KgStore {
   private stmtCountEdges!: Database.Statement;
   private stmtCountFileEdges!: Database.Statement;
 
+  // ---- Meta + file-path statements ----
+  private stmtGetMeta!: Database.Statement;
+  private stmtSetMeta!: Database.Statement;
+  private stmtGetAllFilePaths!: Database.Statement;
+
   constructor(db: Database.Database) {
     this.db = db;
     this.prepareFileStatements(db);
@@ -90,6 +95,12 @@ export class KgStore {
     this.stmtCountEntities = db.prepare(`SELECT COUNT(*) AS n FROM entities`);
     this.stmtCountEdges = db.prepare(`SELECT COUNT(*) AS n FROM edges`);
     this.stmtCountFileEdges = db.prepare(`SELECT COUNT(*) AS n FROM file_edges`);
+    this.stmtGetMeta = db.prepare(`SELECT value FROM meta WHERE key = ?`);
+    this.stmtSetMeta = db.prepare(`
+      INSERT INTO meta (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `);
+    this.stmtGetAllFilePaths = db.prepare(`SELECT path FROM files`);
   }
 
   private prepareFileStatements(db: Database.Database): void {
@@ -406,6 +417,35 @@ export class KgStore {
    */
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)();
+  }
+
+  // Meta (key/value)
+
+  /**
+   * Read a value from the `meta` key/value table.
+   * Returns undefined when the key is absent.
+   */
+  getMeta(key: string): string | undefined {
+    const row = this.stmtGetMeta.get(key) as { value: string } | undefined;
+    return row?.value;
+  }
+
+  /**
+   * Insert or update a value in the `meta` key/value table.
+   * Upserts on the `key` primary key (ON CONFLICT DO UPDATE).
+   */
+  setMeta(key: string, value: string): void {
+    this.stmtSetMeta.run(key, value);
+  }
+
+  /**
+   * Return every file path currently stored in the `files` table.
+   * Used by the pipeline's self-healing orphan prune (set-diff against the
+   * on-disk scan). Cheaper than `getAllFilesWithStats` — path column only.
+   */
+  getAllFilePaths(): string[] {
+    const rows = this.stmtGetAllFilePaths.all() as Array<{ path: string }>;
+    return rows.map((r) => r.path);
   }
 
   // Stats

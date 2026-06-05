@@ -8,6 +8,7 @@
  * mock that returns random 384-dim vectors (no model download needed).
  */
 
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,6 +17,7 @@ import { reindexFile } from "@graph/kg-pipeline-reindex.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import { KgVectorStore } from "@graph/kg-vector-store.ts";
+import { GRAPH_HEAD_COMMIT_KEY } from "@shared/constants.ts";
 import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -200,6 +202,131 @@ describe("runPipeline", () => {
   });
 });
 
+// Freshness marker + orphan prune tests
+
+/** Initialise a git repo in dir and create one commit so HEAD resolves. */
+function initGitRepo(dir: string): string {
+  const run = (args: string[]) => execFileSync("git", args, { cwd: dir, stdio: "pipe" });
+  run(["init", "-q"]);
+  run(["config", "user.email", "test@example.com"]);
+  run(["config", "user.name", "Test"]);
+  run(["commit", "--allow-empty", "-q", "-m", "init"]);
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir }).toString().trim();
+}
+
+describe("runPipeline freshness marker", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = makeTempProject();
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { force: true, recursive: true });
+  });
+
+  test("stamps meta.graph_head_commit with HEAD SHA on success", async () => {
+    const head = initGitRepo(projectDir);
+    writeFile(projectDir, "src/foo.ts", "export const x = 1;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    const marker = store.getMeta("graph_head_commit");
+    db.close();
+
+    expect(marker).toBe(head);
+  });
+
+  test("writes marker even on a no-op incremental pass (filesUpdated === 0)", async () => {
+    const head = initGitRepo(projectDir);
+    writeFile(projectDir, "src/foo.ts", "export const x = 1;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    // First pass indexes the file.
+    await runPipeline(projectDir, { dbPath, incremental: false });
+    // Second incremental pass: nothing changed, filesUpdated should be 0.
+    const second = await runPipeline(projectDir, { dbPath, incremental: true });
+    expect(second.filesUpdated).toBe(0);
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    const marker = store.getMeta("graph_head_commit");
+    db.close();
+
+    expect(marker).toBe(head);
+  });
+
+  test("does not write marker when git is unavailable (HEAD null)", async () => {
+    // projectDir is NOT a git repo → getCurrentHead returns null.
+    writeFile(projectDir, "src/foo.ts", "export const x = 1;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    const marker = store.getMeta("graph_head_commit");
+    db.close();
+
+    expect(marker).toBeUndefined();
+  });
+});
+
+describe("runPipeline orphan prune", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = makeTempProject();
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { force: true, recursive: true });
+  });
+
+  test("prunes a file removed from disk and corrects a dependent's in_degree via CASCADE", async () => {
+    // B imports A → file_edge B → A. Deleting A on disk should prune A's row
+    // AND (via ON DELETE CASCADE) remove the inbound B → A edge, so B's
+    // in_degree (file edges pointing AT it) and A's absence are both correct.
+    writeFile(projectDir, "src/a.ts", "export const a = 1;");
+    writeFile(projectDir, "src/b.ts", "import { a } from './a.ts';\nexport const b = a + 1;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    // Sanity: both files indexed, and the B → A edge exists.
+    {
+      const db = new Database(dbPath);
+      const store = new KgStore(db);
+      const a = store.getFile("src/a.ts");
+      const b = store.getFile("src/b.ts");
+      expect(a).toBeDefined();
+      expect(b).toBeDefined();
+      // A is imported by B → A has an inbound file edge.
+      expect(store.getFileEdgesTo(a!.file_id as number).length).toBeGreaterThan(0);
+      db.close();
+    }
+
+    // Delete A from disk and run an incremental pass → triggers orphan prune.
+    rmSync(path.join(projectDir, "src/a.ts"));
+    await runPipeline(projectDir, { dbPath, incremental: true });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    const a = store.getFile("src/a.ts");
+    const b = store.getFile("src/b.ts");
+    // A's node is gone.
+    expect(a).toBeUndefined();
+    // B remains, and B's outbound edges to A are gone (CASCADE removed them).
+    expect(b).toBeDefined();
+    const bOutbound = store.getFileEdgesFrom(b!.file_id as number);
+    expect(bOutbound.length).toBe(0);
+    db.close();
+  });
+});
+
 // Embed phase tests
 
 describe("runPipeline embed phase", () => {
@@ -285,6 +412,107 @@ describe("runPipeline embed phase", () => {
       filesScanned: expect.any(Number),
       filesUpdated: expect.any(Number),
     });
+  });
+});
+
+// Scope-aware prune + marker (Codex P1 + P2) -- TDD: write tests first
+
+/** Initialise a git repo (shared helper for scope-aware tests). */
+function initGitRepoForScope(dir: string): string {
+  const run = (args: string[]) => execFileSync("git", args, { cwd: dir, stdio: "pipe" });
+  run(["init", "-q"]);
+  run(["config", "user.email", "test@example.com"]);
+  run(["config", "user.name", "Test"]);
+  run(["commit", "--allow-empty", "-q", "-m", "init"]);
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir }).toString().trim();
+}
+
+describe("scope-aware prune + marker", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = makeTempProject();
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { force: true, recursive: true });
+  });
+
+  test("scoped run preserves out-of-scope rows", async () => {
+    // Seed files in two subdirs: src/ and docs/
+    writeFile(projectDir, "src/index.ts", "export const x = 1;");
+    writeFile(projectDir, "docs/guide.md", "# Guide");
+
+    const dbPath = path.join(projectDir, "test.db");
+
+    // Full run — indexes everything including docs/guide.md
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    // Verify docs/guide.md is indexed
+    {
+      const db = new Database(dbPath);
+      const store = new KgStore(db);
+      expect(store.getAllFilePaths()).toContain("docs/guide.md");
+      db.close();
+    }
+
+    // Scoped run targeting only src/ — must NOT prune docs/guide.md
+    await runPipeline(projectDir, { dbPath, incremental: true, sourceDirs: ["src"] });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    expect(store.getAllFilePaths()).toContain("docs/guide.md");
+    db.close();
+  });
+
+  test("scoped run does not stamp the marker", async () => {
+    initGitRepoForScope(projectDir);
+    writeFile(projectDir, "src/index.ts", "export const x = 1;");
+    writeFile(projectDir, "docs/guide.md", "# Guide");
+
+    const dbPath = path.join(projectDir, "test.db");
+
+    // Full run — stamps the marker
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    // Record marker value after full run
+    {
+      const db = new Database(dbPath);
+      const store = new KgStore(db);
+      const beforeMarker = store.getMeta(GRAPH_HEAD_COMMIT_KEY);
+      db.close();
+      expect(beforeMarker).toBeDefined();
+
+      // Scoped run — must NOT change the marker
+      await runPipeline(projectDir, { dbPath, incremental: true, sourceDirs: ["src"] });
+
+      const db2 = new Database(dbPath);
+      const store2 = new KgStore(db2);
+      const afterMarker = store2.getMeta(GRAPH_HEAD_COMMIT_KEY);
+      db2.close();
+      expect(afterMarker).toBe(beforeMarker);
+    }
+  });
+
+  test("full run prunes deleted files and stamps marker", async () => {
+    const head = initGitRepoForScope(projectDir);
+    writeFile(projectDir, "src/a.ts", "export const a = 1;");
+    writeFile(projectDir, "src/b.ts", "export const b = 2;");
+
+    const dbPath = path.join(projectDir, "test.db");
+    await runPipeline(projectDir, { dbPath, incremental: false });
+
+    // Delete a.ts and run full pipeline
+    rmSync(path.join(projectDir, "src/a.ts"));
+    await runPipeline(projectDir, { dbPath, incremental: true });
+
+    const db = new Database(dbPath);
+    const store = new KgStore(db);
+    // Deleted file pruned
+    expect(store.getAllFilePaths()).not.toContain("src/a.ts");
+    // Marker stamped to HEAD
+    expect(store.getMeta(GRAPH_HEAD_COMMIT_KEY)).toBe(head);
+    db.close();
   });
 });
 
