@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -130,11 +130,25 @@ export function findAnchorDir(
 // Resolved by walking up from this module's directory to the first ancestor containing those marker
 // directories — robust to this file moving or any future dist/ layout. A fixed dirname count is what
 // broke this before (the module is at src/app/, not src/ as the old comment assumed).
+//
+// Directory-strict predicate: agents/ and principles/ are directories. A bare existsSync check would
+// match a stray file named "agents" or "principles". We use a dir-strict predicate for that walk only.
+// boot.sh is a plain file, so its walk keeps the default existsSync predicate.
+const isDir = (p: string): boolean => existsSync(p) && statSync(p).isDirectory();
+
 const thisDir = dirname(fileURLToPath(import.meta.url));
-const mcpServerRoot = findAnchorDir(thisDir, ["boot.sh"]);
+
+// pluginDir resolved first — mcpServerRoot may derive from it when the env override is set.
 export const pluginDir = process.env.CANON_PLUGIN_DIR
   ? resolve(process.env.CANON_PLUGIN_DIR)
-  : findAnchorDir(thisDir, ["agents", "principles"]);
+  : findAnchorDir(thisDir, ["agents", "principles"], isDir);
+
+// mcpServerRoot is always the mcp-server/ subdirectory of pluginDir.
+// When CANON_PLUGIN_DIR is set, derive directly from the already-resolved pluginDir so both
+// roots honour the same env override without an independent boot.sh marker walk.
+const mcpServerRoot = process.env.CANON_PLUGIN_DIR
+  ? join(pluginDir, "mcp-server")
+  : findAnchorDir(thisDir, ["boot.sh"]);
 
 // ── MCP server instance ───────────────────────────────────────────────────────
 
