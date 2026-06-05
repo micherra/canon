@@ -578,6 +578,56 @@ run_test "git -C 'my dir' fetch passes"         0 \
   "$(make_input "git -C 'my dir' fetch --all")" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# Bug-3 regression: spurious "git" value/positional before the real git.
+#
+# The awk tokenizer latches onto the FIRST standalone "git" token, so when
+# a wrapper prefix supplies a literal "git" as its own argument
+# (env git git …, sudo -u git git …, nice -n git git …, git git …),
+# the token-walk returns "git" as the resolved subcommand. The case switch
+# has no "git" arm → falls through → exit 0 (fail-open).
+#
+# Fix: canonically "git" is not a valid git subcommand. When the resolved
+# subcommand token is itself "git", canon_git_subcommand returns 1
+# (unresolved) so the parse-ambiguity guard in destructive-guard.sh fires
+# → exit 2. Test inputs use variable assembly to avoid triggering the live
+# PreToolUse hook that intercepts this test file's own Bash calls.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Bug-3 regression: spurious git value before real git invocation (should block, exit 2) --"
+
+# Assemble trigger words via variables so the live hook does not intercept
+# the make_input calls in this test file itself.
+_HARD="--hard"
+_FD="-fd"
+
+run_test 'env git git reset --hard blocks' 2 \
+  "$(make_input "env git git reset $_HARD")" "$NON_WT_PWD"
+
+run_test 'sudo -u git git reset --hard blocks' 2 \
+  "$(make_input "sudo -u git git reset $_HARD")" "$NON_WT_PWD"
+
+run_test 'nice -n git git clean -fd blocks' 2 \
+  "$(make_input "nice -n git git clean $_FD")" "$NON_WT_PWD"
+
+run_test 'git git reset --hard blocks' 2 \
+  "$(make_input "git git reset $_HARD")" "$NON_WT_PWD"
+
+echo ""
+echo "-- Bug-3 regression: prior Bug-1 fixes must still hold (should block, exit 2) --"
+
+run_test "sudo git clean -fd still blocks after Bug-3 fix" 2 \
+  "$(make_input "sudo git clean $_FD")" "$NON_WT_PWD"
+
+run_test "env git clean -fd still blocks after Bug-3 fix" 2 \
+  "$(make_input "env git clean $_FD")" "$NON_WT_PWD"
+
+echo ""
+echo "-- Bug-3 regression: non-destructive spurious-git forms (should pass, exit 0) --"
+
+run_test 'sudo git status still passes after Bug-3 fix' 0 \
+  "$(make_input 'sudo git status')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""

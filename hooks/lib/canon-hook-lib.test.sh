@@ -268,12 +268,47 @@ assert_eq 'git -C /some/path reset --hard → reset (unquoted, no regression)' \
   "reset" \
   "$(canon_git_subcommand 'git -C /some/path reset --hard')"
 
+# Plain (unquoted) single-word value must still work after the fix.
+assert_eq 'git -C /some/path reset --hard → reset (unquoted, no regression)' \
+  "reset" \
+  "$(canon_git_subcommand 'git -C /some/path reset --hard')"
+
 # Bypass-3 compatibility: intra-token quotes are still handled correctly
 # because the tokenizer removes quote chars when building each token, and
 # the subcommand is further stripped of any residual quote chars.
 assert_eq 'git cl""ean -f → clean (Bypass-3 intra-token quotes still work)' \
   "clean" \
   "$(canon_git_subcommand 'git cl""ean -f')"
+
+# ---------------------------------------------------------------------------
+# canon_git_subcommand — Bug-3 regression: spurious "git" value/positional
+# When a prefix supplies a literal "git" as its own argument (env git git …,
+# sudo -u git git …, nice -n git git …, git git …), the token walk returns
+# "git" as the candidate subcommand. "git" is not a valid git subcommand;
+# the fix returns 1 (unresolved) so the parse-ambiguity guard fires → exit 2.
+# ---------------------------------------------------------------------------
+printf '\n=== canon_git_subcommand — Bug-3: spurious git value before real git ===\n'
+
+assert_false 'env git git reset --hard → unresolved (returns 1)' \
+  canon_git_subcommand "env git git reset --hard"
+
+assert_false 'sudo -u git git reset --hard → unresolved (returns 1)' \
+  canon_git_subcommand "sudo -u git git reset --hard"
+
+assert_false 'nice -n git git clean -fd → unresolved (returns 1)' \
+  canon_git_subcommand "nice -n git git clean -fd"
+
+assert_false 'git git reset --hard → unresolved (returns 1)' \
+  canon_git_subcommand "git git reset --hard"
+
+# Prior Bug-1 fixes must still hold: single-git wrapper still resolves.
+assert_eq 'sudo git clean -fd still resolves to clean' \
+  "clean" \
+  "$(canon_git_subcommand 'sudo git clean -fd')"
+
+assert_eq 'env git status still resolves to status' \
+  "status" \
+  "$(canon_git_subcommand 'env git status')"
 
 # ---------------------------------------------------------------------------
 # Summary

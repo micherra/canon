@@ -356,6 +356,15 @@ canon_git_subcommand() {
     local sub
     sub=$(printf '%s' "$tok" | tr -d '"'"'"'')
     if [[ -n "$sub" ]]; then
+      # Fail-closed: if the resolved "subcommand" is itself the word "git",
+      # the tokenizer latched onto a spurious bare "git" value/positional
+      # that appeared before the real git invocation (e.g. "env git git
+      # reset --hard", "sudo -u git git clean -fd", "git git reset --hard").
+      # "git" is never a valid git subcommand; returning 1 here causes the
+      # parse-ambiguity guard in destructive-guard.sh to fire → exit 2.
+      if [[ "$sub" == "git" ]]; then
+        return 1
+      fi
       printf '%s' "$sub"
       return 0
     fi
