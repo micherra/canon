@@ -11,7 +11,8 @@
  */
 
 import path from "node:path";
-import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { getCurrentHead } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
+import { CANON_DIR, CANON_FILES, GRAPH_HEAD_COMMIT_KEY } from "@shared/constants.ts";
 import type { Database } from "better-sqlite3";
 
 // biome-ignore lint/performance/noBarrelFile: intentional re-export — kg-pipeline is the single entry point for both bulk pipeline and incremental reindex; consumers should not need to know about the internal split
@@ -226,6 +227,55 @@ async function scanAndFilterPhase(
   return { fileHashCache, relPaths, toIndex };
 }
 
+/**
+ * Self-healing orphan prune: delete file rows present in the store but absent
+ * from the on-disk scan. Relies on ON DELETE CASCADE to drop each orphan's
+ * edges (including inbound edges from dependents), so dependents' blast-radius
+ * and in_degree correct automatically — no dependent reparse required.
+ */
+function pruneOrphanFiles(store: KgStore, scannedRelPaths: string[]): void {
+  const scanned = new Set(scannedRelPaths);
+  const storedPaths = store.getAllFilePaths();
+  const orphans = storedPaths.filter((p) => !scanned.has(p));
+  if (orphans.length === 0) return;
+  store.transaction(() => {
+    for (const p of orphans) {
+      store.deleteFileAndDependents(p);
+    }
+  });
+}
+
+/**
+ * Stamp the graph with its build commit and assemble the PipelineResult.
+ * Called only after all phases succeed (decision kg-marker-01). The marker is
+ * stamped only on full-project runs (`meta.isFullRun === true`) — scoped runs
+ * must not advance the marker because they only processed a subset of the tree,
+ * so a later full `ensureGraphFresh` would see a fresh marker and skip rebuilding
+ * the parts it missed (decision kg-sync-fix-01). It is skipped when git is
+ * unavailable (head null) so the next read retries.
+ */
+function stampAndBuildResult(
+  store: KgStore,
+  projectDir: string,
+  phases: PhaseResult,
+  meta: { startMs: number; relPathsCount: number; filesUpdated: number; isFullRun: boolean },
+): PipelineResult {
+  const head = getCurrentHead(projectDir);
+  if (head && meta.isFullRun) store.setMeta(GRAPH_HEAD_COMMIT_KEY, head);
+
+  const stats = store.getStats();
+  return {
+    communitiesDetected: phases.communityResult.communityCount,
+    durationMs: Date.now() - meta.startMs,
+    edgesTotal: stats.edges + stats.fileEdges,
+    embeddingsGenerated: phases.embedResult.entitiesEmbedded + phases.embedResult.summariesEmbedded,
+    entitiesTotal: stats.entities,
+    filesScanned: meta.relPathsCount,
+    filesUpdated: meta.filesUpdated,
+    tagsComputed: phases.tagResult.totalTags,
+  };
+}
+
 export async function runPipeline(
   projectDir: string,
   options?: PipelineOptions,
@@ -240,6 +290,13 @@ export async function runPipeline(
       /* noop */
     });
 
+  // A full run owns the entire project tree: prune orphans + stamp the HEAD marker.
+  // Scoped runs target a subset (sourceDirs provided) and must do neither — they
+  // only see a portion of the tree, so pruning would delete out-of-scope rows, and
+  // stamping the marker would trick ensureGraphFresh into skipping the next full
+  // refresh (decision kg-sync-fix-01).
+  const isFullRun = options?.sourceDirs == null || options.sourceDirs.length === 0;
+
   const db = initDatabase(dbPath);
   const store = new KgStore(db);
 
@@ -250,6 +307,11 @@ export async function runPipeline(
       sourceDirs: options?.sourceDirs,
     });
     const filesUpdated = toIndex.length;
+
+    // Self-healing prune: remove stored files no longer on disk (set-diff).
+    // CASCADE drops dependents' inbound edges automatically (decision kg-prune-04).
+    // Scoped runs skip this to avoid deleting out-of-scope rows (decision kg-sync-fix-01).
+    if (isFullRun) pruneOrphanFiles(store, relPaths);
 
     // Phase 2: Parse + extract
     progress("parse", 0, filesUpdated);
@@ -275,23 +337,14 @@ export async function runPipeline(
     });
 
     // Phases 5-7: Community detection, tag propagation, embedding
-    const { communityResult, tagResult, embedResult } = await runEnrichmentPhases(
-      db,
-      store,
-      progress,
-    );
+    const phases = await runEnrichmentPhases(db, store, progress);
 
-    const stats = store.getStats();
-    return {
-      communitiesDetected: communityResult.communityCount,
-      durationMs: Date.now() - startMs,
-      edgesTotal: stats.edges + stats.fileEdges,
-      embeddingsGenerated: embedResult.entitiesEmbedded + embedResult.summariesEmbedded,
-      entitiesTotal: stats.entities,
-      filesScanned: relPaths.length,
+    return stampAndBuildResult(store, projectDir, phases, {
       filesUpdated,
-      tagsComputed: tagResult.totalTags,
-    };
+      isFullRun,
+      relPathsCount: relPaths.length,
+      startMs,
+    });
   } finally {
     store.close();
   }

@@ -11,7 +11,7 @@
 
 import { EmbeddingService } from "@graph/kg-embedding.ts";
 import { EMBEDDING_BATCH_SIZE, EMBEDDING_DIM } from "@shared/constants.ts";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 /** Create a real EmbeddingService instance for lifecycle tests (no model download). */
 function makeService(): EmbeddingService {
@@ -89,6 +89,32 @@ describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
 });
 
 // Embedding correctness tests (require real model download)
+//
+// These tests run the real Xenova/all-MiniLM-L6-v2 model (~22 MB download).
+// If the model host returns a 429 or is unreachable the beforeAll guard catches
+// the error and sets `modelUnavailable = true`. Each test calls `ctx.skip()`
+// at the top of its body — this is a RUNTIME skip (evaluated after beforeAll),
+// unlike `test.skipIf(flag)` which is evaluated at collection time and cannot
+// see values set by beforeAll. A 429 / offline environment produces SKIP,
+// not FAIL.
+
+let modelUnavailable = false;
+
+beforeAll(async () => {
+  const probe = new EmbeddingService();
+  try {
+    await probe.embedOne("warmup");
+  } catch (err) {
+    modelUnavailable = true;
+    console.warn(
+      "[kg-embedding] Skipping real-embedding tests: model load failed " +
+        "(network 429 or offline). Error:",
+      err instanceof Error ? err.message : String(err),
+    );
+  } finally {
+    probe.dispose();
+  }
+}, 120_000);
 
 describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
   let service: EmbeddingService;
@@ -101,14 +127,16 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
     service.dispose();
   });
 
-  test("embedOne() returns Float32Array of length EMBEDDING_DIM (384)", async () => {
+  test("embedOne() returns Float32Array of length EMBEDDING_DIM (384)", async (ctx) => {
+    if (modelUnavailable) ctx.skip();
     const result = await service.embedOne("Hello world");
     expect(result).toBeInstanceOf(Float32Array);
     expect(result.length).toBe(EMBEDDING_DIM);
     expect(result.length).toBe(384);
   });
 
-  test("embed() returns correct number of Float32Arrays", async () => {
+  test("embed() returns correct number of Float32Arrays", async (ctx) => {
+    if (modelUnavailable) ctx.skip();
     const texts = ["first sentence", "second sentence", "third sentence"];
     const results = await service.embed(texts);
     expect(results).toHaveLength(3);
@@ -118,18 +146,21 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
     }
   });
 
-  test("embed() with empty array returns empty array", async () => {
+  test("embed() with empty array returns empty array", async (ctx) => {
+    if (modelUnavailable) ctx.skip();
     const results = await service.embed([]);
     expect(results).toHaveLength(0);
   });
 
-  test("isLoaded is true after first embed()", async () => {
+  test("isLoaded is true after first embed()", async (ctx) => {
+    if (modelUnavailable) ctx.skip();
     expect(service.isLoaded).toBe(false);
     await service.embedOne("test");
     expect(service.isLoaded).toBe(true);
   });
 
-  test("dispose() then embed() re-initializes model", async () => {
+  test("dispose() then embed() re-initializes model", async (ctx) => {
+    if (modelUnavailable) ctx.skip();
     await service.embedOne("load model");
     expect(service.isLoaded).toBe(true);
 
@@ -143,7 +174,8 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
     expect(service.isLoaded).toBe(true);
   });
 
-  test("embeddings are normalized (L2 norm ≈ 1.0)", async () => {
+  test("embeddings are normalized (L2 norm ≈ 1.0)", async (ctx) => {
+    if (modelUnavailable) ctx.skip();
     const vec = await service.embedOne("normalize test");
     const sumSq = vec.reduce((acc, v) => acc + v * v, 0);
     const norm = Math.sqrt(sumSq);
@@ -152,7 +184,8 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
     expect(norm).toBeLessThan(1.01);
   });
 
-  test("batch processing respects EMBEDDING_BATCH_SIZE boundary", async () => {
+  test("batch processing respects EMBEDDING_BATCH_SIZE boundary", async (ctx) => {
+    if (modelUnavailable) ctx.skip();
     // Create texts that exceed one batch
     const texts = Array.from(
       { length: EMBEDDING_BATCH_SIZE + 2 },
@@ -166,7 +199,8 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
     }
   });
 
-  test("identical texts produce identical embeddings", async () => {
+  test("identical texts produce identical embeddings", async (ctx) => {
+    if (modelUnavailable) ctx.skip();
     const text = "deterministic embedding test";
     const [v1, v2] = await service.embed([text, text]);
     // Same text should produce same vector

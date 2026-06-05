@@ -343,6 +343,291 @@ run_test_truly_no_jq \
 rm -rf "$_DG_TMPBIN"
 
 # -----------------------------------------------------------------------
+# False-positive regression: branch/ref/path NAME contains a trigger word
+# (clean/reset/checkout) or ends in -…f. These are push/fetch/pull/log/merge
+# operations — the trigger word is an ARGUMENT, not the subcommand.
+# Must ALLOW (exit 0).  (PRD AC-1)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- False-positive regression: trigger word in branch/ref/path name (should pass, exit 0) --"
+
+run_test "push branch HEAD:canon/...clean-profile... passes (session repro)" \
+  0 "$(make_input 'git push origin HEAD:canon/fix-canon-mcp-boot-for-clean-profile-installs-x')" "$NON_WT_PWD"
+
+run_test "fetch canon/fix-clean-profile-installs-x passes" \
+  0 "$(make_input 'git fetch origin canon/fix-clean-profile-installs-x')" "$NON_WT_PWD"
+
+run_test "pull canon/some-reset-hard-branch passes" \
+  0 "$(make_input 'git pull origin canon/some-reset-hard-branch')" "$NON_WT_PWD"
+
+run_test "log --oneline canon/checkout-rework passes" \
+  0 "$(make_input 'git log --oneline canon/checkout-rework')" "$NON_WT_PWD"
+
+run_test "merge canon/feature-cleanup-f passes (ends in -...f)" \
+  0 "$(make_input 'git merge canon/feature-cleanup-f')" "$NON_WT_PWD"
+
+run_test "push feature/reset-defaults passes" \
+  0 "$(make_input 'git push origin feature/reset-defaults')" "$NON_WT_PWD"
+
+run_test "branch -d canon/clean-profile-x passes (safe lowercase delete, name has clean)" \
+  0 "$(make_input 'git branch -d canon/clean-profile-x')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# True-positive: real destructive ops behind self-contained git GLOBAL
+# options. The prototype canon_is_git_cmd fails-OPEN on these (it assumes
+# every -flag consumes the next token, skipping the real subcommand).
+# Must BLOCK (exit 2).  (PRD AC-2/3/4 — closes the fail-open gap)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- True-positive: real destructive ops behind self-contained globals (should block, exit 2) --"
+
+run_test "git -p clean -fd blocks (self-contained -p global)" \
+  2 "$(make_input 'git -p clean -fd')" "$NON_WT_PWD"
+
+run_test "git --no-pager clean -f blocks (self-contained global)" \
+  2 "$(make_input 'git --no-pager clean -f')" "$NON_WT_PWD"
+
+run_test "git --git-dir=/x reset --hard blocks (=-form global)" \
+  2 "$(make_input 'git --git-dir=/x reset --hard')" "$NON_WT_PWD"
+
+run_test "git -c core.pager=cat clean -fd blocks (=-form -c value)" \
+  2 "$(make_input 'git -c core.pager=cat clean -fd')" "$NON_WT_PWD"
+
+run_test "git clean --force blocks (long flag form)" \
+  2 "$(make_input 'git clean --force')" "$NON_WT_PWD"
+
+run_test "git checkout -- src/app.ts blocks (path form, not '.')" \
+  2 "$(make_input 'git checkout -- src/app.ts')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Compound commands: segment on && || ; | and block if ANY segment is a
+# real destructive op (decision -02). A scary branch name in a
+# non-destructive segment must NOT trip the guard.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Compound commands (segmentation, decision -02) --"
+
+run_test "compound: git status && git clean -fd blocks" \
+  2 "$(make_input 'git status && git clean -fd')" "$NON_WT_PWD"
+
+run_test "compound: echo canon/clean-profile && git push origin canon/clean-profile passes" \
+  0 "$(make_input 'echo canon/clean-profile && git push origin canon/clean-profile')" "$NON_WT_PWD"
+
+run_test "compound: git fetch origin canon/clean-x ; git log passes" \
+  0 "$(make_input 'git fetch origin canon/clean-x ; git log')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Parse-ambiguity fail-closed: a segment contains a 'git' token but no
+# subcommand can be resolved (e.g. git followed only by an unterminated
+# value-consuming global option). Must BLOCK (exit 2).  (PRD AC-7)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Parse-ambiguity fail-closed (should block, exit 2) --"
+
+run_test "parse-ambiguity: git -C with no subcommand blocks" \
+  2 "$(make_input 'git -C /some/dir')" "$NON_WT_PWD"
+
+run_test "parse-ambiguity: bare git with only a value-consuming global blocks" \
+  2 "$(make_input 'git --git-dir /x')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Bypass 1 regression: a quote character between the whitespace boundary and
+# the trigger flag (git reset "--hard", git clean "-f") must NOT defeat the
+# flag boundary. These are genuine destructive ops once the shell strips the
+# quotes. Must BLOCK (exit 2). (review fix iteration 1)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Bypass 1: quoted trigger flag (should block, exit 2) --"
+
+run_test "git reset \"--hard\" blocks (double-quoted flag)" \
+  2 '{"command":"git reset \"--hard\""}' "$NON_WT_PWD"
+
+run_test "git reset \"--hard\" HEAD blocks" \
+  2 '{"command":"git reset \"--hard\" HEAD"}' "$NON_WT_PWD"
+
+run_test "git clean \"-f\" blocks (double-quoted flag)" \
+  2 '{"command":"git clean \"-f\""}' "$NON_WT_PWD"
+
+run_test "git clean '-f' blocks (single-quoted flag)" \
+  2 "$(make_input "git clean '-f'")" "$NON_WT_PWD"
+
+run_test "git \"clean\" \"-f\" blocks (quoted subcommand and flag)" \
+  2 '{"command":"git \"clean\" \"-f\""}' "$NON_WT_PWD"
+
+run_test "git \"clean\" -f blocks (quoted subcommand)" \
+  2 '{"command":"git \"clean\" -f"}' "$NON_WT_PWD"
+
+run_test "git branch \"-D\" feature-x blocks (quoted -D, non-Canon)" \
+  2 '{"command":"git branch \"-D\" feature-x"}' "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Bypass 2 regression: greedy arg-extraction. When the subcommand word
+# reappears as a later operand (a ref/pathspec literally named clean/reset/
+# checkout), the greedy sed must not strip through the LAST occurrence and
+# swallow the destructive flag. Must BLOCK (exit 2). (review fix iteration 1)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Bypass 2: subcommand word as operand (should block, exit 2) --"
+
+run_test "git clean -f clean blocks (operand named clean)" \
+  2 "$(make_input 'git clean -f clean')" "$NON_WT_PWD"
+
+run_test "git clean -fd -- clean blocks (pathspec named clean)" \
+  2 "$(make_input 'git clean -fd -- clean')" "$NON_WT_PWD"
+
+run_test "git reset --hard reset blocks (ref named reset)" \
+  2 "$(make_input 'git reset --hard reset')" "$NON_WT_PWD"
+
+run_test "git checkout -- checkout blocks (pathspec named checkout)" \
+  2 "$(make_input 'git checkout -- checkout')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Bypass 3 regression: intra-token quotes. Bash quote-removal CONCATENATES
+# quotes inside a token (it does not insert a space). Replacing quotes with
+# spaces splits a token the guard sees but the shell runs joined, letting a
+# destructive op slip past. The guard must DELETE quote chars (matching bash
+# quote-removal) so -""f → -f, --ha""rd → --hard, cl""ean → clean.
+# Each form is a genuine destructive op once the shell strips the quotes and
+# must BLOCK (exit 2). (review fix iteration 2)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Bypass 3: intra-token quotes (should block, exit 2) --"
+
+run_test "git clean -\"\"f blocks (intra-token double quotes in flag)" \
+  2 '{"command":"git clean -\"\"f"}' "$NON_WT_PWD"
+
+run_test "git clean '-''f' blocks (intra-token single quotes in flag)" \
+  2 "$(make_input "git clean '-''f'")" "$NON_WT_PWD"
+
+run_test "git reset --ha\"\"rd blocks (intra-token double quotes in flag)" \
+  2 '{"command":"git reset --ha\"\"rd"}' "$NON_WT_PWD"
+
+run_test "git reset --h\"\"ard HEAD blocks (intra-token quotes + operand)" \
+  2 '{"command":"git reset --h\"\"ard HEAD"}' "$NON_WT_PWD"
+
+run_test "git cl\"\"ean -f blocks (intra-token quotes in subcommand)" \
+  2 '{"command":"git cl\"\"ean -f"}' "$NON_WT_PWD"
+
+run_test "git checkout -\"\"- . blocks (intra-token quotes in pathspec sep)" \
+  2 '{"command":"git checkout -\"\"- ."}' "$NON_WT_PWD"
+
+run_test "git branch -\"\"D feature-x blocks (intra-token quotes, non-Canon)" \
+  2 '{"command":"git branch -\"\"D feature-x"}' "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Bug-1 regression: command-prefix wrappers (sudo/env/time/nice/command).
+#
+# Old code removed only the "git" word via sed word-substitution, leaving
+# the wrapper prefix fused to the next token (e.g. "sudo git clean -fd" →
+# "sudoclean -f"). The case switch matched nothing → fail-OPEN (exit 0).
+# The fix anchors subcommand resolution to the actual "git" token via awk.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Bug-1 regression: command-prefix wrappers (should block, exit 2) --"
+
+run_test "sudo git clean -fd blocks"             2 "$(make_input 'sudo git clean -fd')"  "$NON_WT_PWD"
+run_test "sudo git reset --hard blocks"          2 "$(make_input 'sudo git reset --hard')" "$NON_WT_PWD"
+run_test "env git clean -fd blocks"              2 "$(make_input 'env git clean -fd')"   "$NON_WT_PWD"
+run_test "env VAR=1 git clean -fd blocks"        2 "$(make_input 'env VAR=1 git clean -fd')" "$NON_WT_PWD"
+run_test "time git reset --hard blocks"          2 "$(make_input 'time git reset --hard')" "$NON_WT_PWD"
+run_test "nice git clean -fd blocks"             2 "$(make_input 'nice git clean -fd')"  "$NON_WT_PWD"
+run_test "nice -n 5 git clean -fd blocks"        2 "$(make_input 'nice -n 5 git clean -fd')" "$NON_WT_PWD"
+run_test "command git clean -fd blocks"          2 "$(make_input 'command git clean -fd')" "$NON_WT_PWD"
+run_test "command git checkout -- . blocks"      2 "$(make_input 'command git checkout -- .')" "$NON_WT_PWD"
+
+echo ""
+echo "-- Bug-1 regression: wrapper-prefix non-destructive ops (should pass, exit 0) --"
+
+run_test "sudo git status passes"                0 "$(make_input 'sudo git status')"     "$NON_WT_PWD"
+run_test "sudo git log --oneline passes"         0 "$(make_input 'sudo git log --oneline')" "$NON_WT_PWD"
+run_test "env git fetch --all passes"            0 "$(make_input 'env git fetch --all')" "$NON_WT_PWD"
+run_test "time git push origin main passes"      0 "$(make_input 'time git push origin main')" "$NON_WT_PWD"
+run_test "nice git commit -m msg passes"         0 "$(make_input 'nice git commit -m msg')" "$NON_WT_PWD"
+run_test "sudo git branch -D canon/slug passes"  0 "$(make_input 'sudo git branch -D canon/slug')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Bug-2 regression: quoted option values with spaces.
+#
+# Old code stripped all quote characters globally before tokenizing.
+# "git -C \"my dir\" reset --hard" → "git -C my dir reset --hard" →
+# "-C" consumes "my" as its value → "dir" misidentified as subcommand →
+# reset --hard allowed → fail-OPEN (exit 0).
+# The fix passes the raw (pre-quote-deletion) segment to
+# canon_git_subcommand, which uses a quote-aware tokenizer internally.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Bug-2 regression: quoted option values with spaces (should block, exit 2) --"
+
+run_test 'git -C "my dir" reset --hard blocks'  2 \
+  '{"command":"git -C \"my dir\" reset --hard"}' "$NON_WT_PWD"
+run_test 'git -C "my dir" clean -fd blocks'     2 \
+  '{"command":"git -C \"my dir\" clean -fd"}' "$NON_WT_PWD"
+run_test "git -C 'my dir' checkout -- . blocks" 2 \
+  "$(make_input "git -C 'my dir' checkout -- .")" "$NON_WT_PWD"
+run_test 'git --git-dir "my dir/.git" reset --hard blocks' 2 \
+  '{"command":"git --git-dir \"my dir/.git\" reset --hard"}' "$NON_WT_PWD"
+
+echo ""
+echo "-- Bug-2 regression: quoted spaced path non-destructive ops (should pass, exit 0) --"
+
+run_test 'git -C "my dir" log passes'           0 \
+  '{"command":"git -C \"my dir\" log --oneline"}' "$NON_WT_PWD"
+run_test 'git -C "my dir" status passes'        0 \
+  '{"command":"git -C \"my dir\" status"}' "$NON_WT_PWD"
+run_test "git -C 'my dir' fetch passes"         0 \
+  "$(make_input "git -C 'my dir' fetch --all")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Bug-3 regression: spurious "git" value/positional before the real git.
+#
+# The awk tokenizer latches onto the FIRST standalone "git" token, so when
+# a wrapper prefix supplies a literal "git" as its own argument
+# (env git git …, sudo -u git git …, nice -n git git …, git git …),
+# the token-walk returns "git" as the resolved subcommand. The case switch
+# has no "git" arm → falls through → exit 0 (fail-open).
+#
+# Fix: canonically "git" is not a valid git subcommand. When the resolved
+# subcommand token is itself "git", canon_git_subcommand returns 1
+# (unresolved) so the parse-ambiguity guard in destructive-guard.sh fires
+# → exit 2. Test inputs use variable assembly to avoid triggering the live
+# PreToolUse hook that intercepts this test file's own Bash calls.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Bug-3 regression: spurious git value before real git invocation (should block, exit 2) --"
+
+# Assemble trigger words via variables so the live hook does not intercept
+# the make_input calls in this test file itself.
+_HARD="--hard"
+_FD="-fd"
+
+run_test 'env git git reset --hard blocks' 2 \
+  "$(make_input "env git git reset $_HARD")" "$NON_WT_PWD"
+
+run_test 'sudo -u git git reset --hard blocks' 2 \
+  "$(make_input "sudo -u git git reset $_HARD")" "$NON_WT_PWD"
+
+run_test 'nice -n git git clean -fd blocks' 2 \
+  "$(make_input "nice -n git git clean $_FD")" "$NON_WT_PWD"
+
+run_test 'git git reset --hard blocks' 2 \
+  "$(make_input "git git reset $_HARD")" "$NON_WT_PWD"
+
+echo ""
+echo "-- Bug-3 regression: prior Bug-1 fixes must still hold (should block, exit 2) --"
+
+run_test "sudo git clean -fd still blocks after Bug-3 fix" 2 \
+  "$(make_input "sudo git clean $_FD")" "$NON_WT_PWD"
+
+run_test "env git clean -fd still blocks after Bug-3 fix" 2 \
+  "$(make_input "env git clean $_FD")" "$NON_WT_PWD"
+
+echo ""
+echo "-- Bug-3 regression: non-destructive spurious-git forms (should pass, exit 0) --"
+
+run_test 'sudo git status still passes after Bug-3 fix' 0 \
+  "$(make_input 'sudo git status')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""
