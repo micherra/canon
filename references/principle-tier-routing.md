@@ -8,6 +8,8 @@ The writer operates in two contexts: as a **plugin maintainer** editing the port
 
 Run both shell checks once, before saving any principle:
 
+> **Precondition**: run these checks from the repository/worktree root. `git ls-files principles/` resolves the pathspec relative to the current working directory — if run from a subdirectory it will return empty and the writer will silently fall back to installed-copy.
+
 ```sh
 # tracked-source iff BOTH return non-empty / succeed:
 git ls-files principles/ | head -1          # non-empty → principles/ is tracked here
@@ -18,7 +20,7 @@ test -d "$(git rev-parse --show-toplevel)/principles"  # principles/ lives under
 
 **installed-copy context** (project adopter): default to this whenever either check fails, errors, or returns empty — including when not inside a git repo, when `principles/` is absent from the worktree root, or when `git rev-parse --show-toplevel` errors. If in doubt, default to installed-copy.
 
-The test is purely structural — it asks "is the portable principles directory my own tracked source?" with no Canon-specific naming assumptions.
+The test is purely structural — it asks "is the portable principles directory my own tracked source?" A tracked root `principles/` directory is assumed to be the portable plugin set; an adopter whose own project happens to have a root-level git-tracked `principles/` directory would classify as tracked-source, which is harmless — the write lands in their own version-controlled tree and nothing is lost.
 
 ---
 

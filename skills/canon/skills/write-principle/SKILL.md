@@ -109,7 +109,7 @@ Read the complete worked example at `${CLAUDE_PLUGIN_ROOT}/references/writer-wor
 
 Use the `list_principles` MCP tool to load the index of all existing entries (metadata only — id, title, severity, tags, scope). This avoids loading full bodies into context.
 
-Note: `list_principles` merges both tiers (project-local `.canon/principles/` and the portable `principles/` set). An ID collision against an entry in the *other* tier is an override-precedence situation (project-local always wins), not a true conflict — flag it informatively rather than as a blocking error.
+Note: `list_principles` merges both tiers (project-local `.canon/principles/` and the portable `principles/` set). An ID collision against an entry in the *other* tier is an override-precedence situation (project-local always wins, enforced by `loadAllPrinciples` in `mcp-server/src/shared/matcher.ts`), not a true conflict — flag it informatively rather than as a blocking error.
 
 For agent-rules, also glob `.canon/rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/rules/*.md` and read only their frontmatter.
 
@@ -131,6 +131,9 @@ Present findings and ask whether to proceed, adjust, or cancel.
 
 Before saving, run the two-part detection check defined in `${CLAUDE_PLUGIN_ROOT}/references/principle-tier-routing.md`:
 
+> **Precondition**: run these checks from the repository/worktree root. `git ls-files principles/` resolves the pathspec relative to the current working directory — if run from a subdirectory it will return empty and detection will silently fall back to installed-copy.
+
+<!-- keep in sync with references/principle-tier-routing.md -->
 ```sh
 # tracked-source iff BOTH return non-empty / succeed:
 git ls-files principles/ | head -1          # non-empty → principles/ is tracked here
