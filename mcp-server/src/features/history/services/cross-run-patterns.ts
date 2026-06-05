@@ -1,0 +1,234 @@
+/**
+ * Cross-run pattern helpers — performance trends and planner pattern analysis.
+ *
+ * Extracted from cross-run-analyzer.ts to keep each file under 600 lines.
+ * All functions are pure (no I/O).
+ *
+ * bounded-context-boundaries: imports only from shared kernel types and the
+ * history-types bounded context. No cross-feature imports.
+ */
+
+import type { FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
+import type {
+  AgentPerformanceTrend,
+  PlannerPatternAnalysis,
+  RunSummary,
+} from "../history-types.ts";
+
+// DataPoint type for performance trend computation
+type DataPoint = { flow: string; duration_ms: number; spawns: number; started: string };
+
+/**
+ * Build unified data points from summaries (preferred) and flow run entries (fallback).
+ * Deduplicates on (flow, started): summary data takes priority.
+ */
+function buildUnifiedDataPoints(summaries: RunSummary[], runs: FlowRunEntry[]): DataPoint[] {
+  const points: DataPoint[] = [];
+  const summaryKeys = new Set<string>();
+
+  for (const summary of summaries) {
+    const { flow, total_duration_ms, started_at } = summary.run_metadata;
+    if (total_duration_ms === null) continue;
+    const spawns = summary.step_outcomes.length;
+    const started = started_at ?? summary.run_metadata.archived_at;
+    summaryKeys.add(`${flow}\0${started}`);
+    points.push({ duration_ms: total_duration_ms, flow, spawns, started });
+  }
+
+  for (const run of runs) {
+    if (summaryKeys.has(`${run.flow}\0${run.started}`)) continue;
+    points.push({
+      duration_ms: run.total_duration_ms,
+      flow: run.flow,
+      spawns: run.total_spawns,
+      started: run.started,
+    });
+  }
+
+  return points;
+}
+
+/**
+ * Group data points by flow name.
+ */
+function groupDataPointsByFlow(points: DataPoint[]): Map<string, DataPoint[]> {
+  const byFlow = new Map<string, DataPoint[]>();
+  for (const p of points) {
+    const existing = byFlow.get(p.flow);
+    if (existing === undefined) {
+      byFlow.set(p.flow, [p]);
+    } else {
+      existing.push(p);
+    }
+  }
+  return byFlow;
+}
+
+/**
+ * Classify trend direction by comparing recent 5 vs prior 5 runs.
+ */
+function classifyTrend(flowPoints: DataPoint[], n: number): "improving" | "stable" | "degrading" {
+  if (n < 10) return "stable";
+
+  const prior5 = flowPoints.slice(n - 10, n - 5);
+  const recent5 = flowPoints.slice(n - 5);
+  const priorAvg = prior5.reduce((sum, p) => sum + p.duration_ms, 0) / 5;
+  const recentAvg = recent5.reduce((sum, p) => sum + p.duration_ms, 0) / 5;
+
+  if (priorAvg <= 0) return "stable";
+
+  const changePct = (recentAvg - priorAvg) / priorAvg;
+  if (changePct < -0.1) return "improving";
+  if (changePct > 0.1) return "degrading";
+  return "stable";
+}
+
+/**
+ * Compute trend classification for a single flow's data points.
+ * "improving": recent 5 avg > 10% faster than prior 5.
+ * "degrading": recent 5 avg > 10% slower than prior 5.
+ * "stable": within 10% or fewer than 10 total runs.
+ */
+function computeFlowTrend(
+  flow: string,
+  flowPoints: DataPoint[],
+  limit?: number,
+): AgentPerformanceTrend {
+  flowPoints.sort((a, b) => a.started.localeCompare(b.started));
+
+  if (limit !== undefined && limit > 0 && flowPoints.length > limit) {
+    flowPoints.splice(0, flowPoints.length - limit);
+  }
+
+  const n = flowPoints.length;
+  const avgDurationMs = flowPoints.reduce((sum, p) => sum + p.duration_ms, 0) / n;
+  const avgSpawns = flowPoints.reduce((sum, p) => sum + p.spawns, 0) / n;
+  const trend = classifyTrend(flowPoints, n);
+
+  return { avg_duration_ms: avgDurationMs, avg_spawns: avgSpawns, flow, run_count: n, trend };
+}
+
+/**
+ * Compute agent performance trends grouped by flow name.
+ *
+ * Prefers step durations from run summaries when available.
+ * Falls back to FlowRunEntry records for runs without summaries.
+ * Deduplicates on (flow, started): when a summary and a FlowRunEntry share the
+ * same (flow, started) pair, the summary entry is preferred.
+ *
+ * Trend classification compares recent 5 runs to previous 5:
+ * - "improving": recent avg > 10% faster than prior avg
+ * - "degrading": recent avg > 10% slower than prior avg
+ * - "stable": within 10% or fewer than 10 total runs
+ *
+ * @param summaries - Run summaries with optional step_outcomes
+ * @param runs - Flow run entries from drift.db
+ * @param limit - Optional cap on the number of data points per flow (most recent N kept)
+ */
+export function computePerformanceTrends(
+  summaries: RunSummary[],
+  runs: FlowRunEntry[],
+  limit?: number,
+): AgentPerformanceTrend[] {
+  const points = buildUnifiedDataPoints(summaries, runs);
+  const byFlow = groupDataPointsByFlow(points);
+
+  const result: AgentPerformanceTrend[] = [];
+  for (const [flow, flowPoints] of byFlow) {
+    result.push(computeFlowTrend(flow, flowPoints, limit));
+  }
+  return result;
+}
+
+/**
+ * Count occurrences of each assumption text across summaries with planner context.
+ * Returns top 10 by occurrence count.
+ */
+function computeCommonAssumptions(
+  withPlanner: RunSummary[],
+): Array<{ assumption: string; occurrence_count: number }> {
+  const counts = new Map<string, number>();
+  for (const summary of withPlanner) {
+    for (const assumption of summary.planner_context!.assumptions) {
+      const normalized = assumption.trim();
+      if (normalized.length === 0) continue;
+      counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([assumption, occurrence_count]) => ({ assumption, occurrence_count }))
+    .sort((a, b) => b.occurrence_count - a.occurrence_count)
+    .slice(0, 10);
+}
+
+/**
+ * Group summaries by effort_estimate and compute avg actual duration per group.
+ */
+function computeEffortAccuracy(
+  withPlanner: RunSummary[],
+): Array<{ estimate: string; actual_avg_duration_ms: number; sample_count: number }> {
+  const effortGroups = new Map<string, number[]>();
+  for (const summary of withPlanner) {
+    const estimate = summary.planner_context!.effort_estimate;
+    const duration = summary.run_metadata.total_duration_ms;
+    if (duration === null) continue;
+    const existing = effortGroups.get(estimate);
+    if (existing === undefined) {
+      effortGroups.set(estimate, [duration]);
+    } else {
+      existing.push(duration);
+    }
+  }
+  return [...effortGroups.entries()].map(([estimate, durations]) => ({
+    actual_avg_duration_ms: durations.reduce((sum, d) => sum + d, 0) / durations.length,
+    estimate,
+    sample_count: durations.length,
+  }));
+}
+
+/**
+ * Count occurrences of each value_estimate across summaries with planner context.
+ */
+function computeValueDistribution(
+  withPlanner: RunSummary[],
+): Array<{ value: string; count: number }> {
+  const valueCounts = new Map<string, number>();
+  for (const summary of withPlanner) {
+    const value = summary.planner_context!.value_estimate;
+    valueCounts.set(value, (valueCounts.get(value) ?? 0) + 1);
+  }
+  return [...valueCounts.entries()].map(([value, count]) => ({ count, value }));
+}
+
+/**
+ * Analyze planner patterns across run summaries.
+ *
+ * Extracts common assumptions, effort accuracy, and value distribution
+ * from summaries that have non-null planner_context.
+ * Returns zero counts when no summaries have planner context.
+ *
+ * @param summaries - Run summaries to analyze
+ */
+export function analyzePlannerPatterns(summaries: RunSummary[]): PlannerPatternAnalysis {
+  const withPlanner = summaries.filter((s) => s.planner_context !== null);
+
+  if (withPlanner.length === 0) {
+    return {
+      common_assumptions: [],
+      effort_accuracy: [],
+      total_runs_with_planner: 0,
+      value_distribution: [],
+    };
+  }
+
+  const common_assumptions = computeCommonAssumptions(withPlanner);
+  const effort_accuracy = computeEffortAccuracy(withPlanner);
+  const value_distribution = computeValueDistribution(withPlanner);
+
+  return {
+    common_assumptions,
+    effort_accuracy,
+    total_runs_with_planner: withPlanner.length,
+    value_distribution,
+  };
+}

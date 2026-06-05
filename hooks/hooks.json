@@ -1,5 +1,5 @@
 {
-  "description": "Canon hooks — secrets detection, destructive command guard, workspace lock guard, push review guard, large file guard, principle injection, learn nudge, compaction check, agent-teams workspace-check, commit trailer validation, doc/KG staleness nudges, and scribe queuing",
+  "description": "Canon hooks — secrets detection, destructive command guard, workspace lock guard, push review guard, large file guard, principle injection, learn nudge, compaction check, agent-teams workspace-check, commit trailer validation, and doc/KG staleness nudges",
   "hooks": {
     "PreToolUse": [
       {
@@ -167,17 +167,6 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/postcompact-narrative-capture.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/post-engineer-scribe.sh",
             "timeout": 10
           }
         ]

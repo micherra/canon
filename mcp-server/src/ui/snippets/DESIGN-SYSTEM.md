@@ -427,6 +427,12 @@ content will be double-escaped.
  * Convert common markdown patterns to HTML.
  * Calls escapeHtml on text content before wrapping in tags (escape-first, wrap-second).
  * Do NOT pre-escape input — this function handles escaping internally.
+ *
+ * inlineFormat token ordering (must not reorder):
+ *   escape → tokenize code spans → tokenize file:line refs → bold → italic → restore tokens
+ * Both code spans and file:line refs are replaced with \x00CODEn\x00 placeholder tokens
+ * before bold/italic runs, so underscored path segments (e.g. src/foo_bar.ts:42) are never
+ * matched by the _..._ italic pass.
  */
 function markdownToHtml(md) {
   if (!md) return "";
@@ -446,22 +452,27 @@ function markdownToHtml(md) {
   function inlineFormat(text) {
     // Escape first, then apply inline patterns.
     let s = escapeHtml(text);
-    // Protect code spans FIRST — substitute tokens so the bold/file-ref rewrites below
-    // cannot corrupt code-span content. Restored last.
+    // Protect code spans FIRST — substitute tokens so the bold/italic/file-ref rewrites
+    // below cannot corrupt code-span content. Restored last.
     const codeSpans = [];
     s = s.replace(/`([^`]+)`/g, (_, content) => {
       codeSpans.push(`<code>${content}</code>`);
       return `\x00CODE${codeSpans.length - 1}\x00`;
     });
+    // file:line references (path.ts:42 → <code>) — tokenized BEFORE italic so that
+    // underscored path segments (e.g. src/foo_bar.ts:42) are not corrupted by _..._.
+    // We replace with the same \x00CODE token pool so the italic pass cannot touch them.
+    s = s.replace(/([\w./\-]+\.(?:ts|js|py|go|rs|md):\d+)/g, (_, ref) => {
+      codeSpans.push(`<code>${ref}</code>`);
+      return `\x00CODE${codeSpans.length - 1}\x00`;
+    });
     // Bold (**text** or __text__) — safe now, won't match inside code tokens.
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
-    // Italic (*text* or _text_) — must come after bold.
+    // Italic (*text* or _text_) — must come after bold and file:line.
     s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
     s = s.replace(/_([^_]+)_/g, "<em>$1</em>");
-    // file:line references (path.ts:42 → <code>) — safe now, code spans are tokenized.
-    s = s.replace(/([\w./\-]+\.(?:ts|js|py|go|rs|md):\d+)/g, "<code>$1</code>");
-    // Restore protected code spans.
+    // Restore protected code spans (includes file:line refs tokenized above).
     s = s.replace(/\x00CODE(\d+)\x00/g, (_, i) => codeSpans[i]);
     return s;
   }

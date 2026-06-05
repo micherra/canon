@@ -10,7 +10,7 @@ fields:
   status: "UPDATED | NO_UPDATES"
   agent: scribe
   timestamp: ISO-8601
-  context-budget: "per-file budget status for CLAUDE.md files touched"
+  context-budget: "per-file advisory size status for CLAUDE.md files touched (report-don't-trim)"
 ---
 
 ```markdown
@@ -41,13 +41,13 @@ timestamp: "{ISO-8601}"
 | `docs/{name}.md` | left-untouched | {drift observed but deliberately not edited — editorial/uncertain — with reason} |
 | `docs/{name}.md` | not-relevant | Diff did not touch this doc's domain |
 
-### Context Budget
+### Context Budget (advisory only)
 | File | Status | Action Taken |
 |------|--------|--------------|
-| `path/to/CLAUDE.md` | Over budget (NN,NNN chars) | Trimmed: {category, ~N lines} |
-| `path/to/other/CLAUDE.md` | Within budget | — |
+| `path/to/CLAUDE.md` | Looks oversized (≈NN,NNN chars) | Advisory: dedicated trim build recommended; not trimmed this sync. |
+| `path/to/other/CLAUDE.md` | Within budget — no action | — |
 
-_If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync." If all files were within budget, write "All files within budget."_
+_If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync." If all files looked fine, write "All files within budget — no advisory." The scribe never trims; this section only records advisory size status._
 
 ### Freshness
 | Document | Section | Last Updated |
@@ -62,5 +62,5 @@ _If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync
 3. **Doc Updated column**: If the file's category triggered a doc update, name the document and section. Otherwise `—`.
 4. **Documents Updated section**: List every managed document with what changed. If nothing changed, say "No updates needed" — never omit the line.
 5. **Freshness table**: Only include documents/sections that were actually updated in this sync. Omit the table entirely if status is NO_UPDATES.
-6. **Context Budget table**: Always include this section when any CLAUDE.md file was touched. One row per file touched. If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync." If a file is over budget after all trimming options are exhausted, mark status as "Over budget (unreducible)" — this is a warning, not a failure.
+6. **Context Budget table (advisory only)**: Always include this section when any CLAUDE.md file was touched. One row per file touched. If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync." This section records advisory size status only — the scribe never trims. If a file looks oversized, mark status as "Looks oversized (≈NN,NNN chars)" and note in Action Taken that a dedicated trim build is recommended and the file was not trimmed this sync. This is a heads-up for a future build, not a warning about a failure or an enforced limit.
 7. **Direction-Doc Disposition**: List every top-level `docs/*.md` direction doc (excluding `docs/reference/`). For each, give a disposition: `factual-update` (you synced a fact), `left-untouched` (drift observed but deliberately not edited — always state the reason, especially editorial-prose drift), or `not-relevant` (diff did not touch its domain). Omit the section entirely only when status is NO_UPDATES.
