@@ -10,8 +10,18 @@
  * should catch errors and return an appropriate ToolResult.
  */
 
-import { type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
+import { env, type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
 import { EMBEDDING_BATCH_SIZE, EMBEDDING_MODEL } from "@shared/constants.ts";
+
+// Redirect the model cache when HF_TRANSFORMERS_CACHE is set.
+// @huggingface/transformers v4.x does not read any env var for the cache dir —
+// `env.cacheDir` is the sole supported mechanism. We apply it once at module
+// load time so that CI (and any local override) can point the cache at a
+// stable, cacheable path outside node_modules.
+const _hfCacheOverride = process.env.HF_TRANSFORMERS_CACHE;
+if (_hfCacheOverride) {
+  env.cacheDir = _hfCacheOverride;
+}
 
 // Pipeline factory — injectable for testing
 

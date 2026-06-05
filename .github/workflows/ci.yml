@@ -42,6 +42,8 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    env:
+      HF_TRANSFORMERS_CACHE: ${{ github.workspace }}/.hf-cache
     defaults:
       run:
         working-directory: mcp-server
@@ -52,6 +54,13 @@ jobs:
           node-version: 25.8.0
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
+      - name: Cache HuggingFace model (Xenova/all-MiniLM-L6-v2)
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.hf-cache
+          key: hf-models-${{ runner.os }}-all-MiniLM-L6-v2-v1
+          restore-keys: |
+            hf-models-${{ runner.os }}-all-MiniLM-L6-v2-
       - run: npm ci
       - run: npm run lint
       - run: npm run lint:deps
