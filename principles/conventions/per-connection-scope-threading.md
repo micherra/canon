@@ -128,10 +128,12 @@ Run the following grep to catch violations (should return zero hits in productio
 grep -rn "process\.cwd()\|CANON_PROJECT_DIR\|import.*projectDir.*server-state" \
   mcp-server/src/features \
   mcp-server/src/app/register-* \
-  --include="*.ts"
+  --include="*.ts" \
+  --exclude="*.test.ts" \
+  --exclude-dir="__tests__"
 ```
 
-Expected output: empty (zero hits). Exclude `resolve-project-dir.ts` and `http-server.ts` which are permitted infrastructure files.
+Expected output: empty (zero hits) in production handler and service files. Exclude `resolve-project-dir.ts` and `http-server.ts` which are permitted infrastructure files. Test files are excluded from this check — test code legitimately passes `process.cwd()` as a `projectDir` argument.
 
 - [ ] Every new handler in `register-*.ts` threads scope via `resolveScope(extra)` — no inline `process.cwd()` or `process.env.CANON_PROJECT_DIR`.
 - [ ] Every new tool or service function in `features/**/tools/*.ts` and `features/**/services/*.ts` that needs `projectDir` accepts it as an explicit parameter.
