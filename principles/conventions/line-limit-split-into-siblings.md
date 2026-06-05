@@ -3,9 +3,7 @@ id: line-limit-split-into-siblings
 title: Extract Cohesive Siblings When a File Crosses the Line Limit
 severity: convention
 scope:
-  layers:
-    - features
-    - shared
+  layers: []
   file_patterns:
     - "mcp-server/src/**/*.ts"
 tags:
