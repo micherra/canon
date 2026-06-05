@@ -164,6 +164,18 @@ assert_eq "cd with trailing space before && — returns -C /tmp" \
   "-C /tmp" \
   "$(canon_git_dir_arg "cd /tmp  && git commit")"
 
+assert_eq "double-quoted cd target — strips quotes, returns -C /tmp" \
+  "-C /tmp" \
+  "$(canon_git_dir_arg "cd \"/tmp\" && git commit")"
+
+assert_eq "single-quoted cd target — strips quotes, returns -C /tmp" \
+  "-C /tmp" \
+  "$(canon_git_dir_arg "cd '/tmp' && git commit")"
+
+assert_eq "quoted nonexistent dir — -d gate still applies, returns empty" \
+  "" \
+  "$(canon_git_dir_arg "cd \"/this/path/does/not/exist/9x7z\" && git commit")"
+
 # ---------------------------------------------------------------------------
 # canon_is_git_cmd
 # ---------------------------------------------------------------------------
