@@ -17,17 +17,12 @@ import { EMBEDDING_BATCH_SIZE, EMBEDDING_DIM } from "@shared/constants.ts";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
-// Network/availability probe for the real-embeddings suite
+// isNetworkError — pure helper, file scope is fine for a stateless classifier.
 //
-// We attempt to load the model once before the suite runs. If it fails due to
-// a network or CDN availability error (429, ENOTFOUND, fetch errors from
-// huggingface.co), we mark the model as unavailable and every test in the
-// real-embeddings suite is skipped via test.skipIf.
-//
-// Only network/availability errors trigger the skip. Any error that originates
+// Returns true when the error looks like a CDN/network availability failure.
+// Only network/availability errors trigger suite skip. Any error that originates
 // from within a running test (assertion failures, logic errors) still fails
-// normally because those tests call service methods directly — the probe only
-// guards the initial model load.
+// normally — the probe only guards the initial model load.
 // ---------------------------------------------------------------------------
 
 /** Returns true when the error looks like a CDN/network availability failure. */
@@ -43,33 +38,6 @@ function isNetworkError(err: Error): boolean {
     msg.includes("load file") // huggingface "Error (NNN) occurred while trying to load file:"
   );
 }
-
-let modelAvailable = false;
-/** Shared probe service — disposed after the probe so real tests manage their own instances. */
-let _probeService: EmbeddingService | null = null;
-
-beforeAll(async () => {
-  _probeService = new EmbeddingService();
-  try {
-    await _probeService.init();
-    modelAvailable = true;
-  } catch (err) {
-    if (err instanceof Error && isNetworkError(err)) {
-      // CDN/network unreachable — skip the real-embeddings suite, not a test failure.
-      console.warn(
-        `[kg-embedding] real-embeddings suite skipped: model unavailable (${err.message.slice(0, 120)})`,
-      );
-      modelAvailable = false;
-    } else {
-      // Unexpected non-network error during probe — re-throw so the suite fails
-      // loudly rather than silently skipping a genuine bug.
-      throw err;
-    }
-  } finally {
-    _probeService.dispose();
-    _probeService = null;
-  }
-}, 120_000);
 
 /** Create a real EmbeddingService instance for lifecycle tests (no model download). */
 function makeService(): EmbeddingService {
@@ -147,16 +115,50 @@ describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
 });
 
 // Embedding correctness tests (require real model download)
-// The beforeEach inside this suite calls ctx.skip() when modelAvailable is false.
-// modelAvailable is set by the beforeAll probe above after attempting a real init().
-// When the model CDN is unreachable (429, ENOTFOUND, etc.) the probe sets
-// modelAvailable = false and every test here is skipped at runtime, not failed.
+//
+// These tests run the real Xenova/all-MiniLM-L6-v2 model (~22 MB download).
+// The availability probe lives INSIDE this describe block so that selecting
+// only lifecycle/unit tests (e.g. `vitest ... -t "lifecycle"`) never triggers
+// a model download. The probe's beforeAll is only registered when the
+// real-embeddings describe is collected.
+//
+// Skip precision: only network/CDN errors (429, ENOTFOUND, fetch failures)
+// cause the suite to skip via isNetworkError. A genuine assertion/logic/model
+// error re-throws so the suite fails loudly rather than silently hiding a
+// real bug. A 429 / offline environment produces SKIP, not FAIL.
 
 describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
   let service: EmbeddingService;
+  let modelUnavailable = false;
+
+  // ---------------------------------------------------------------------------
+  // Availability probe — registered INSIDE this describe so it only runs when
+  // this suite is selected. Selecting only the lifecycle suite above will NOT
+  // trigger this beforeAll or any model download.
+  // ---------------------------------------------------------------------------
+  beforeAll(async () => {
+    const probe = new EmbeddingService();
+    try {
+      await probe.embedOne("warmup");
+    } catch (err) {
+      if (err instanceof Error && isNetworkError(err)) {
+        // CDN/network unreachable — skip the real-embeddings suite, not a test failure.
+        console.warn(
+          `[kg-embedding] real-embeddings suite skipped: model unavailable (${err.message.slice(0, 120)})`,
+        );
+        modelUnavailable = true;
+      } else {
+        // Unexpected non-network error during probe — re-throw so the suite fails
+        // loudly rather than silently skipping a genuine bug.
+        throw err;
+      }
+    } finally {
+      probe.dispose();
+    }
+  }, 120_000);
 
   beforeEach((ctx) => {
-    if (!modelAvailable) ctx.skip();
+    if (modelUnavailable) ctx.skip();
     service = new EmbeddingService();
   });
 

@@ -20,7 +20,8 @@ import { DriftDb } from "../../../platform/storage/drift/drift-db.ts";
 import { initDriftDb } from "../../../platform/storage/drift/drift-schema.ts";
 import type { CraftDimensionRating } from "../../../shared/schema.ts";
 import type { RunSummary } from "../history-types.ts";
-import { analyzeCrossRunPatterns, computeCraftDrift } from "../services/cross-run-analyzer.ts";
+import { analyzeCrossRunPatterns } from "../services/cross-run-analyzer.ts";
+import { computeCraftDrift } from "../services/cross-run-craft-drift.ts";
 
 // ---- Helpers ----
 

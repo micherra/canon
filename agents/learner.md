@@ -35,6 +35,7 @@ tools:
   - mcp__canon__get_drift_report
   - mcp__canon__get_history
   - mcp__canon__get_build_history
+  - mcp__canon__get_cross_run_analysis
   - mcp__canon__get_context
   - mcp__canon__get_transcript
 ---
@@ -78,3 +79,23 @@ When spawned as part of a content flow (see `references/content-flow.md`), the l
 - **History-aware**: Check learning.jsonl before suggesting — don't re-suggest dismissed items.
 - **Demotion safety**: Never suggest demoting security-tagged rules. Flag low compliance for investigation instead.
 - **No removed tools**: Do not call `get_patterns` or `get_decisions` — these tools no longer exist. Use `get_drift_report` for review data and live Grep/Glob for codebase scanning.
+
+## Outcome-weighted promotion counting (JUDGE)
+
+When evaluating convention-lifecycle sub-analysis A (task convention promotion), count **weighted instances** toward the 3-build threshold — not raw distinct-build count. The cross-run analyzer surfaces `weighted_instance_count` on each `RecurringViolation`, computed by summing `computeOutcomeWeight(OutcomeSignals)` across all observed instances (`mcp-server/src/features/history/services/judge-weight.ts`).
+
+Builds with CLEAN verdicts or low fix-iteration counts contribute confirming signal above neutral weight (> 1.0). Builds with BLOCKING verdicts or high rework contribute below neutral weight (< 1.0). When outcome signals are absent, the weight is **1.0** (neutral) — the threshold behaves identically to the previous count-based rule.
+
+To apply this, call `mcp__canon__get_cross_run_analysis` (pass `project_dir`) and read `recurring_violations[].weighted_instance_count` for each pattern. Use the weighted count (not raw build count) when evaluating the >= 3 promotion threshold. When outcome signals are absent, `weighted_instance_count` falls back to the raw instance count so the neutral-weight path is backward-compatible.
+
+## CONSOLIDATE staleness pass
+
+At every `learn` step, after running dimension analyses and before writing the final report, run the CONSOLIDATE pass over `.canon/proposed-learnings/`:
+
+1. For each watch file, extract staleness signals and call `computeWatchConfidence` (`mcp-server/src/platform/storage/drift/watch-staleness-adapter.ts`) to get a confidence annotation via the shared `computeConfidenceAnnotation` engine.
+2. Call `decideWatchDisposition(watch, confidence)` (`mcp-server/src/features/history/services/consolidate-policy.ts`) — `watch` is a `WatchState` object, `confidence` is the `ConfidenceAnnotation` from step 1 — to obtain a disposition: `exempt` | `reinforce` | `decay` | `archive`.
+3. Write the disposition back to the watch file in `.canon/proposed-learnings/`. Items with `exempt` disposition (status `promoted` or `confirmed`) are never decayed.
+
+**Scope: `.canon/proposed-learnings/` only. Never write to `~/.claude/MEMORY.md` or any user memory store.**
+
+Full algorithm details: `references/learner-dimensions.md` → convention-lifecycle → Sub-analysis D.

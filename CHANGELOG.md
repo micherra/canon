@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.5.0](https://github.com/micherra/canon/compare/v2.4.1...v2.5.0) (2026-06-04)
+
+
+### Features
+
+* **craft-v2:** redefine craft as a principle-backed 6-dimension profile (per-review + periodic audit + learner drift) ([#301](https://github.com/micherra/canon/issues/301)) ([60ed698](https://github.com/micherra/canon/commit/60ed6984dc1d1c5b273cbd33af9e60dcac43329d))
+* **handoff:** graceful agent handoff phase 1 — reconcile_workspace + harvest substrate ([#281](https://github.com/micherra/canon/issues/281)) ([13d0c76](https://github.com/micherra/canon/commit/13d0c76b25c06a58775c468c12a5b96e748f6281))
+* **http-epic-phase1:** finish Phase 1 — remove projectDir global (1c+1d) ([#304](https://github.com/micherra/canon/issues/304)) ([8e1d55d](https://github.com/micherra/canon/commit/8e1d55ddedf7a84b4363d27b81a4cab45eeeb3e0))
+* **learner:** address BBBB1-BBBB4 — enrichment pipeline convention + docs ([#282](https://github.com/micherra/canon/issues/282)) ([d166795](https://github.com/micherra/canon/commit/d166795fe2d3e490b4e41921038e73553039c7aa))
+* **review:** 6 quality-playbook-inspired improvements to reviewer, tester, and orchestrator ([#283](https://github.com/micherra/canon/issues/283)) ([15f1ef2](https://github.com/micherra/canon/commit/15f1ef2a05e1700d7af2302ffd921e1229b712d9))
+* wire reconcile_workspace into resume + post-subagent path (observe+surface only) ([#309](https://github.com/micherra/canon/issues/309)) ([e31fd98](https://github.com/micherra/canon/commit/e31fd981002916dea3709da4c8da530ded39e642))
+
+
+### Bug Fixes
+
+* **review-graph:** unify force-directed engine — fixes clustered/unreadable dependency map ([#307](https://github.com/micherra/canon/issues/307)) ([ca5b68f](https://github.com/micherra/canon/commit/ca5b68f69cf6d77fb78a3c4a083a03aa1975146f))
+
 ## [2.4.1](https://github.com/micherra/canon/compare/v2.4.0...v2.4.1) (2026-06-03)
 
 
