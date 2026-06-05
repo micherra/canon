@@ -419,56 +419,67 @@ export class JobManager {
   }
 }
 
-// Singleton accessor
+// Per-project accessor (keyed by resolved projectDir — the session-isolation
+// half that pairs with resolveScope. Under stdio there is exactly one scope, so
+// this resolves to today's single-instance behavior; under a future multi-tenant
+// HTTP daemon each project scope gets its own manager wired to its own DB.)
 
-let _instance: JobManager | null = null;
+const jobManagers = new Map<string, JobManager>();
 
 /**
- * Get or create the singleton JobManager instance.
- * Returns null if called before initJobManager().
+ * Return the JobManager for the given project scope, or `undefined` if none
+ * exists yet. Non-creating lookup — creation is reserved to getOrCreateJobManager.
+ * Requires an explicit projectDir (fail-closed: no zero-arg form that could
+ * return a wrong-scope manager).
  */
-export function getJobManager(): JobManager | null {
-  return _instance;
+export function getJobManager(projectDir: string): JobManager | undefined {
+  return jobManagers.get(path.resolve(projectDir));
 }
 
 /**
- * Initialize the singleton JobManager.
- * Must be called before getJobManager() or getOrCreateJobManager() can return an instance.
- */
-export function initJobManager(
-  db: Database,
-  projectDir: string,
-  pluginDir: string,
-  timeoutMs?: number,
-): JobManager {
-  if (!_instance) {
-    _instance = new JobManager(db, projectDir, pluginDir, timeoutMs);
-  }
-  return _instance;
-}
-
-/**
- * Get the singleton JobManager, creating it lazily.
+ * Get or create the JobManager for a project scope.
  * Uses initExecutionDb to open orchestration.db (where jobs/job_cache tables live).
  * Suitable for use from tool handlers where the DB path is computed inside JobManager.
- *
- * NOTE: In production use, prefer calling initJobManager() at startup with the
- * shared DB so all tools share the same state.
  */
 export async function getOrCreateJobManager(
   projectDir: string,
   pluginDir: string,
   timeoutMs?: number,
 ): Promise<JobManager> {
-  if (!_instance) {
-    const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.ORCHESTRATION_DB);
-    const db = initExecutionDb(dbPath);
-    _instance = new JobManager(db, projectDir, pluginDir, timeoutMs);
-  }
-  return _instance;
+  const key = path.resolve(projectDir);
+  const existing = jobManagers.get(key);
+  if (existing) return existing;
+  const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.ORCHESTRATION_DB);
+  const db = initExecutionDb(dbPath);
+  const manager = new JobManager(db, projectDir, pluginDir, timeoutMs);
+  jobManagers.set(key, manager);
+  return manager;
 }
 
-/** Reset the singleton (test only). */
+/**
+ * Cleanup every per-project JobManager (kill active jobs, mark stale DB jobs
+ * failed). For process shutdown — signal handlers have no per-request scope, so
+ * they iterate all managers. Correct for stdio's single entry; forward-compatible
+ * for HTTP shutdown.
+ */
+export function cleanupAllJobManagers(): void {
+  for (const manager of jobManagers.values()) {
+    try {
+      manager.cleanup();
+    } catch {
+      // Best-effort shutdown — one failing manager must not block the others.
+    }
+  }
+}
+
+/** Reset all per-project JobManagers (test only). */
 export function _resetJobManagerSingleton(): void {
-  _instance = null;
+  for (const manager of jobManagers.values()) {
+    try {
+      manager.cleanup();
+    } catch {
+      // ignore — test reset is best-effort
+    }
+  }
+  jobManagers.clear();
 }

@@ -2,7 +2,7 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
-import { getJobManager } from "@platform/jobs/job-manager.ts";
+import { cleanupAllJobManagers } from "@platform/jobs/job-manager.ts";
 import { startHttpServer } from "./http-server.ts";
 import { registerArtifactTools } from "./register-artifacts.ts";
 import { registerKnowledgeTools } from "./register-knowledge.ts";
@@ -21,8 +21,7 @@ registerPrincipleTools();
 
 function cleanupAndExit(signal: string): void {
   try {
-    const manager = getJobManager();
-    if (manager) manager.cleanup();
+    cleanupAllJobManagers();
   } catch {
     // Best-effort cleanup — do not let errors prevent shutdown
   }
@@ -56,12 +55,14 @@ async function main() {
   // Start the HTTP server for interactive HTML artifact serving.
   // Binds to 127.0.0.1 (localhost only). On EADDRINUSE, logs a warning
   // and continues — MCP server operates normally without HTTP artifacts.
-  await startHttpServer();
+  // Thread the resolved startup scope so resolvePidDir uses it instead of
+  // an implicit process.cwd() (Phase 2 isolation-finish — removes the last
+  // implicit-scope leak).
+  await startHttpServer(undefined, resolvedDir);
 
   // Mark any leftover running jobs from a previous crashed session as failed
   try {
-    const manager = getJobManager();
-    if (manager) manager.cleanup();
+    cleanupAllJobManagers();
   } catch {
     // Best-effort — do not fail startup if cleanup errors
   }

@@ -88,6 +88,15 @@ canon_git_dir_arg() {
     | sed 's/[[:space:]]*$//' \
     || true) # DOCUMENTED FAIL-OPEN -- no cd prefix in command is the normal case
 
+  # Strip one matched pair of surrounding quotes, if present. Agents commonly
+  # quote the path (cd "<worktree>" && git commit); without this the quotes stay
+  # attached and the [[ -d ]] gate below fails, dropping the -C scope. Only strip
+  # when leading and trailing quotes match (a lone quote is left intact).
+  case $cd_target in
+    \"*\") cd_target=${cd_target#\"}; cd_target=${cd_target%\"} ;;
+    \'*\') cd_target=${cd_target#\'}; cd_target=${cd_target%\'} ;;
+  esac
+
   if [[ -n "$cd_target" ]] && [[ -d "$cd_target" ]]; then
     printf '%s' "-C $cd_target"
   fi

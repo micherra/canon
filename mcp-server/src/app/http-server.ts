@@ -17,7 +17,8 @@
  *
  * ## PID file
  * On successful bind, `startHttpServer` writes a PID file under
- * `${CLAUDE_PLUGIN_DATA}` or `${CANON_PROJECT_DIR}/.canon/`.
+ * `${CLAUDE_PLUGIN_DATA}` or, when unset, the resolved startup project scope's
+ * `.canon/` dir (threaded from index.ts — no implicit process.cwd() fallback).
  * `stopHttpServer` calls `removePidFile` to clean up on graceful shutdown.
  * Both operations are best-effort: failures are logged but never throw.
  */
@@ -35,6 +36,13 @@ const artifacts = new Map<string, { html: string; data: unknown }>();
 let httpServer: ReturnType<typeof createServer> | null = null;
 let serverPort = DEFAULT_PORT;
 
+// Resolved project scope, seeded at startup by startHttpServer(port, projectDir).
+// Used by resolvePidDir instead of process.cwd() — removes the last implicit-scope
+// leak (the class Phase 1 sub-build 1c eliminated everywhere else). The standalone
+// HTTP listener has no per-request MCP context, so its scope is threaded from
+// index.ts's resolved startup dir rather than read from ambient cwd.
+let resolvedProjectDir: string | null = null;
+
 /**
  * Returns the port the HTTP server is currently bound to.
  * Returns the configured default when the server has not started yet.
@@ -45,14 +53,21 @@ export function getHttpPort(): number {
 
 /**
  * Resolves the directory where the PID file should be written.
- * Prefer CLAUDE_PLUGIN_DATA; fall back to CANON_PROJECT_DIR/.canon or cwd/.canon.
+ * Prefer CLAUDE_PLUGIN_DATA; fall back to the resolved startup project scope's
+ * .canon dir. No implicit process.cwd() fallback — scope is threaded from
+ * index.ts (Phase 2 isolation-finish).
+ *
+ * Returns null when no scope is resolvable (neither CLAUDE_PLUGIN_DATA nor a
+ * seeded project scope). This is an expected condition, not an error: callers
+ * skip the PID operation rather than leaking a cwd-derived directory. Fail-closed
+ * is preserved exactly — a null return NEVER falls back to an arbitrary dir.
  * Exported for testing.
  */
-export function resolvePidDir(): string {
+export function resolvePidDir(): string | null {
   const pluginData = process.env.CLAUDE_PLUGIN_DATA;
   if (pluginData) return pluginData;
-  const projectDir = process.env.CANON_PROJECT_DIR ?? process.cwd();
-  return join(projectDir, ".canon");
+  if (resolvedProjectDir) return join(resolvedProjectDir, ".canon");
+  return null;
 }
 
 /**
@@ -118,10 +133,15 @@ export function isHttpServerRunning(): boolean {
  * the MCP server continues operating; HTTP artifacts become unavailable.
  *
  * @param port - Optional explicit port; overrides env var and default.
+ * @param projectDir - Optional resolved startup project scope. When provided,
+ *   seeds the module scope used by resolvePidDir (replacing the removed
+ *   process.cwd() implicit-scope leak). Threaded from index.ts's resolvedDir.
  * @returns A Promise that resolves when the server is listening (or when an
  *   EADDRINUSE error is detected).
  */
-export function startHttpServer(port?: number): Promise<void> {
+export function startHttpServer(port?: number, projectDir?: string): Promise<void> {
+  if (projectDir !== undefined) resolvedProjectDir = projectDir;
+
   // Resolve port: explicit arg → env var → default
   serverPort = port ?? Number.parseInt(process.env.CANON_HTTP_PORT ?? String(DEFAULT_PORT), 10);
 
@@ -136,10 +156,13 @@ export function startHttpServer(port?: number): Promise<void> {
       if (!process.env.VITEST) {
         process.stderr.write(`Canon HTTP server listening on http://127.0.0.1:${serverPort}\n`);
         // Write PID file for the SessionStart reaper. Best-effort.
-        writePidFile(resolvePidDir(), serverPort).catch(() => {
-          // Already logged inside writePidFile; no double-logging needed.
-          // DOCUMENTED FAIL-OPEN -- PID file failure is non-fatal; server continues.
-        });
+        const pidDir = resolvePidDir();
+        if (pidDir) {
+          writePidFile(pidDir, serverPort).catch(() => {
+            // Already logged inside writePidFile; no double-logging needed.
+            // DOCUMENTED FAIL-OPEN -- PID file failure is non-fatal; server continues.
+          });
+        }
       }
       resolve();
     });
@@ -178,9 +201,14 @@ export function stopHttpServer(): Promise<void> {
     const server = httpServer;
     httpServer = null;
     // Remove PID file on graceful shutdown. Best-effort.
-    removePidFile(resolvePidDir()).catch(() => {
-      // DOCUMENTED FAIL-OPEN -- PID removal failure is non-fatal during shutdown.
-    });
+    // resolvePidDir() returns null when no scope is resolvable — skip removal
+    // rather than leaking cwd. Never falls back to an arbitrary directory.
+    const pidDir = resolvePidDir();
+    if (pidDir) {
+      removePidFile(pidDir).catch(() => {
+        // DOCUMENTED FAIL-OPEN -- PID removal failure is non-fatal during shutdown.
+      });
+    }
     // Destroy all active/keep-alive connections so close() resolves promptly.
     server.closeAllConnections();
     server.close(() => {
@@ -219,6 +247,7 @@ export function removeArtifact(key: string): void {
  */
 export function resetStateForTesting(): void {
   artifacts.clear();
+  resolvedProjectDir = null;
 }
 
 // ---------------------------------------------------------------------------

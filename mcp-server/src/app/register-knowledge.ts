@@ -301,7 +301,7 @@ function registerGraphJobTools(): void {
         "Poll the status of a background codebase graph job. Returns job_id, status (pending/running/complete/failed/timed_out/cancelled), progress, and error.",
       inputSchema: { job_id: z.string().describe("Job ID returned by codebase_graph_submit") },
     },
-    gatedWrapHandler(async (input) => codebaseGraphPoll(input)),
+    gatedWrapHandler(async (input, extra) => codebaseGraphPoll(input, resolveScope(extra))),
   );
 
   registerToolWithUi("codebase_graph_materialize", {
