@@ -138,7 +138,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 #### Trivial path (PM → engineer) <!-- last-updated: 2026-05-25 -->
 
-1. `init_workspace({ flow_name, task, branch, base_commit, tier: "trivial", original_input, preflight: true })` → save `worktree_path`, `workspace`.
+1. `init_workspace({ flow_name, task, branch, base_commit, tier: "small", original_input, preflight: true })` → save `worktree_path`, `workspace`.
 2. Infer runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps`.
 3. **Pre-spawn check**: `test -d "${worktree_path}"`. If missing, report BLOCKED.
 4. Spawn `canon:engineer` with request, `worktree_path`, `turn_budget: {maxTurns}`.
@@ -444,8 +444,10 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 1. `finalize_workspace({ workspace })` — resolve missing steps/artifacts first. Verify `prd.md` exists for non-trivial builds.
    If `steps_ghost` is non-empty in the response, surface the list to the user as advisory: "Note: {N} steps were planned but never dispatched: {list}."
+   **Push-state check**: run `git rev-list --count origin/main..HEAD` in the main working tree. If > 0, surface: "Local main is N commits ahead of origin/main. Push before proceeding?" This is advisory — the user may intentionally defer pushing (watch_ZZZZ2).
 2. Context-sync: spawn scribe. Updates CLAUDE.md, context.md, CONVENTIONS.md on build branch before ship, and electively factual-syncs docs/*.md direction docs.
 3. Ship:
+   - **Pre-push mergeability check**: Before spawning the shipper or pushing, run `git fetch origin && git merge-base --is-ancestor origin/main HEAD`. If not ancestor (i.e., origin/main has advanced beyond the build branch's base), merge origin/main into the build branch, re-run verify gates, and re-review if the diff is non-trivial. This catches base advances that occurred during long build steps (watch_YYYY1).
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
    - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
@@ -556,7 +558,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (68 total: 7 rules, 35 strong-opinions, 26 conventions)
+├── principles/           # Built-in principles (73 total: 7 rules, 35 strong-opinions, 31 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
