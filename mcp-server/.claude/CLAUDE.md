@@ -87,17 +87,15 @@ src/
 
 **Drift DB schema** (`src/platform/storage/drift/drift-schema.ts`) — DRIFT_SCHEMA_VERSION = "9"; tables: `file_violation_history`, `path_effects` (v4), `error_fixes` (v6), `violation_outcomes` (v7), `area_observations` (v8), `craft_profiles` (v9 — `flow_slug`, `subsystem_key`, `ratings` JSON, `rollup` REAL, `source` "review"|"audit"); idempotent migrations. Updated 2026-06-03.
 
-**OutcomeStore** (`src/platform/storage/drift/outcome-store.ts`) — sync DAO for `violation_outcomes`; `recordOutcome`, `getOutcomesForPrinciple`, `getOutcomeStats`, `getOutcomesForFiles`. Added 2026-05-25.
+**OutcomeStore** (`src/platform/storage/drift/outcome-store.ts`) — sync DAO for `violation_outcomes`; `DriftDb.getOutcomes()` lazy accessor. Added 2026-05-25.
 
 **DriftDbSignals DAO** (`src/platform/storage/drift/drift-db-signals.ts`) — sync DAO for `file_violation_history`, `path_effects`, `error_fixes`; `DriftDb.getSignals()` lazy accessor. Updated 2026-05-22.
 
-**Drift DB module split** (`src/platform/storage/drift/`) — extracted from `drift-db.ts` (lint: noExcessiveLinesPerFile). `drift-db-cache.ts`: `getDriftDb(projectDir)` factory + `evictDriftDbForScope(projectDir)` lifecycle hook; `drift-db-rows.ts`: 5 SQLite row types + 3 deserializers. All ~20 importers of `getDriftDb` import from `drift-db-cache.ts` directly (no barrel). Added 2026-06-03.
+**Drift DB module split** (`src/platform/storage/drift/`) — `drift-db-cache.ts`: `getDriftDb(projectDir)` factory + `evictDriftDbForScope(projectDir)` lifecycle hook; `drift-db-rows.ts`: private row types + deserializers; import `getDriftDb` from `drift-db-cache.ts` directly (no barrel). Added 2026-06-03.
 
-**AreaMemoryDao** (`src/platform/storage/drift/area-memory-dao.ts`) — sync DAO for `area_observations`; `insertObservation`, `getObservationsForSubsystems` (7-day expiry via SQL), `markInjected`; `DriftDb.getAreaMemory()` lazy accessor; `deriveSubsystemKey` strips path prefixes to stable keys like `features/orchestration`. Added 2026-05-29.
+**AreaMemoryDao** (`src/platform/storage/drift/area-memory-dao.ts`) — sync DAO for `area_observations`; 7-day expiry; `deriveSubsystemKey` strips prefixes to stable keys like `features/orchestration`; `DriftDb.getAreaMemory()` lazy accessor. Added 2026-05-29.
 
-**CraftProfileDao** (`src/platform/storage/drift/craft-profile-dao.ts`) — sync DAO for `craft_profiles`; `insertProfile(CraftProfileRow)`, `getRecentProfiles({ subsystemKeys?, source?, limit? })` (order by `created_at DESC`); `DriftDb.getCraftProfiles()` lazy accessor; `source` discriminates `"review"` vs `"audit"` profiles. Added 2026-06-03.
-
-**drift-db-rows.ts** (`src/platform/storage/drift/drift-db-rows.ts`) — private row types and pure deserializer functions extracted from `drift-db.ts` to keep `drift-db.ts` under the 600-line lint cap; public API of `DriftDb` is unchanged. Added 2026-06-03.
+**CraftProfileDao** (`src/platform/storage/drift/craft-profile-dao.ts`) — sync DAO for `craft_profiles`; `source` discriminates `"review"` vs `"audit"` profiles; `DriftDb.getCraftProfiles()` lazy accessor. Added 2026-06-03.
 
 **Drift Store** (`src/platform/storage/drift/store.ts`) — `ReviewEntry` is the unified type for all reviews (principle + PR); `PrStore` deleted 2026-03-25. `DriftStore.getReviews(options?)` AND-filters by principleId/branch/prNumber (see source for full signature).
 
@@ -109,12 +107,11 @@ src/
 
 **Craft audit service** (`src/features/diagnostics/services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` (pure, bounded by `limit` default 5); `persistAuditProfile(areas, ratings, dao)` (writes `source:"audit"` rows via injected `CraftProfileDao`); reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
 
-**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths` (added 2026-06-02 — flags non-resolving paths in `references/**/*.md`; see `CheckName` in `tools/wiki-lint.ts`), `assembleWikiLintOutput(AssembleWikiLintInput)`; `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)`; all accept pre-loaded data (no I/O except `scanDirectories` and `checkCitedPaths`). Added 2026-05-26.
-**Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — `compileSignals(filePaths, driftDbSignals)` reads violation history + path effects, scores by priority, fits within per-file token budget; read-only
-**Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — added 2026-05-22; `queryDriftSignalPitfalls`/`queryErrorFixPitfalls`/`formatPitfallsSection`/`countPitfalls`; pure functions; `formatPitfallsSection` returns `""` when both arrays empty
-**Area Memory Enrichment** (`src/features/diagnostics/services/area-memory-enrichment.ts`) — added 2026-05-29; `queryAreaObservations`/`formatAreaMemorySection`/`buildAreaMemorySection`; fail-open, calls `markInjected` after query; returns `{ section: ""; count: 0 }` on error.
-**Hot-File Detection** (`src/features/diagnostics/services/hot-file-detection.ts`) — added 2026-05-29; `detectHotFiles`/`formatHotFileSection`/`buildHotFileSection`; threshold ≥ 3 appearances, cap 3; fail-open.
-**Backfill Error Fixes** (`src/features/diagnostics/services/backfill-error-fixes.ts`) — added 2026-05-22; script that mines `file_violation_history` to populate the `error_fixes` table; call once per project to seed historical data
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions; 5 checks: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths` (flags non-resolving paths in `references/**/*.md`); see `diagnostics/.claude/CLAUDE.md` for `CheckName` details. Added 2026-05-26.
+**Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — `compileSignals(filePaths, driftDbSignals)` scores by priority within per-file token budget; read-only
+**Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — pure functions; `formatPitfallsSection` returns `""` when both arrays empty. Added 2026-05-22.
+**Area Memory Enrichment** (`src/features/diagnostics/services/area-memory-enrichment.ts`) — fail-open; calls `markInjected` after query; returns `{ section: ""; count: 0 }` on error. Added 2026-05-29.
+**Hot-File Detection** (`src/features/diagnostics/services/hot-file-detection.ts`) — threshold ≥ 3 appearances, cap 3; fail-open. Added 2026-05-29.
 **`store-summaries`** — DB-only write path (JSON removed ADR-005); `inferLanguageFromExtension` maps extensions to language strings
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
 **Principle matcher** (`src/shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; `matchesScopeTags` checks tag overlap
@@ -136,13 +133,13 @@ src/
 
 **`get_drift_report` tool** — updated 2026-05-25: confidence tier rendered inline as `[confidence: TIER]` per violation in formatted output. Updated 2026-05-29: formatted output also renders `### Documentation freshness` section (omitted when empty) with commits-since-last-sync and `[confidence: TIER]` per direction doc, sorted by staleness descending.
 
-**`DocFreshness` type** (`src/platform/storage/drift/analyzer.ts`) — `{ doc_path: string; commits_since_sync: number; confidence: ConfidenceAnnotation; warning?: string }`; placed in platform so service can import it without platform importing from features. `DriftReport.doc_freshness: DocFreshness[]` added (defaults to `[]`).
+**`DocFreshness` type** (`src/platform/storage/drift/analyzer.ts`) — `{ doc_path, commits_since_sync, confidence, warning? }`; in platform to avoid circular imports. `DriftReport.doc_freshness: DocFreshness[]` added (defaults to `[]`).
 
-**`doc-freshness-adapter.ts`** (`src/platform/storage/drift/`) — `computeFreshnessConfidence(signals)`: maps `commits_since_sync` to staleness score, delegates to `computeConfidenceAnnotation`; `FRESHNESS_SAMPLE_SIZE = 10`. Added 2026-05-29.
+**`doc-freshness-adapter.ts`** (`src/platform/storage/drift/`) — `computeFreshnessConfidence(signals)`: maps `commits_since_sync` to staleness; `FRESHNESS_SAMPLE_SIZE = 10`. Added 2026-05-29.
 
-**`watch-staleness-adapter.ts`** (`src/platform/storage/drift/`) — `computeWatchConfidence(WatchStalenessSignals): ConfidenceAnnotation`; maps `days_since_last_instance` to a staleness value (0 days → 1.0, 30+ days → 0.0, `STALENESS_SATURATION_DAYS=30`), uses `confirming_instances` as `sample_size`, delegates to shared `computeConfidenceAnnotation`; re-exports `ConfidenceAnnotation` as bounded-context boundary; non-finite/negative days treated as fully stale. 3rd adapter of the shared decay engine pattern (after `drift-confidence-adapter.ts`, `doc-freshness-adapter.ts`). Added 2026-06-04.
+**`watch-staleness-adapter.ts`** (`src/platform/storage/drift/`) — `computeWatchConfidence(WatchStalenessSignals): ConfidenceAnnotation`; 0 days → 1.0, 30+ days → 0.0 (`STALENESS_SATURATION_DAYS=30`); non-finite/negative → fully stale. 3rd decay-engine adapter. Added 2026-06-04.
 
-**`judge-weight.ts`** (`src/features/history/services/`) — `computeOutcomeWeight(OutcomeSignals): number`; pure function mapping review outcome signals to a promotion weight around neutral 1.0; weight clamped to `[WEIGHT_FLOOR=0.4, WEIGHT_CEIL=1.2]`; all-absent signals → exactly `NEUTRAL_WEIGHT=1.0`. Exported types: `OutcomeSignals` (`review_verdict?`, `fix_iterations?`, `test_pass_rate?`). Added 2026-06-04.
+**`judge-weight.ts`** (`src/features/history/services/`) — `computeOutcomeWeight(OutcomeSignals): number`; weight clamped `[0.4, 1.2]`; all-absent → 1.0. Added 2026-06-04.
 
 **`consolidate-policy.ts`** (`src/features/history/services/`) — `decideWatchDisposition(watch: WatchState, confidence: ConfidenceAnnotation): WatchDisposition`; pure rule engine; disposition order (must not reorder): promoted/confirmed → `"exempt"`, score < 0.25 → `"archive"`, days_since_last_instance ≤ 7 → `"reinforce"`, else → `"decay"`. `isWatchProposal(x): x is WatchProposal` named type guard for `.canon/proposed-learnings/` parse boundary. Exported types: `WatchDisposition`, `WatchState`, `WatchProposal`. Scope: `.canon/proposed-learnings/` only — no write paths, no `~/.claude` references. Added 2026-06-04.
 
@@ -158,7 +155,7 @@ src/
 |------|---------|
 | `get_context` | Batch context for multiple files — composes `getPrinciplesBatch`, `getFileContext` (per-file), `getDriftReport`, `graphQuery`, `compileSignals` in a single call; `include` param gates sections (default: all 5) |
 
-**`get_context` tool** — implementation in `src/app/get-context-handler.ts` (extracted 2026-06-01 from `register-knowledge.ts`); re-exported from `register-knowledge.ts` so existing test imports remain valid. Input: `file_paths[]` + optional `include` (5 sections: principles, file_context, drift, graph, signals). `file_context` errors fail-closed; graph/signals fail open. Exports: `handleGetContext(input, extra?)`, `buildSlimmedOutput`, `GetContextOutput`.
+**`get_context` tool** — in `src/app/get-context-handler.ts`; re-exported from `register-knowledge.ts`. Input: `file_paths[]` + optional `include` (5 sections: principles, file_context, drift, graph, signals). `file_context` errors fail-closed; graph/signals fail open.
 
 **Text-only principle/review tools:**
 
@@ -181,7 +178,7 @@ src/
 |------|---------|
 | `get_build_history` | List archived build runs with metadata |
 | `get_historical_artifacts` | Retrieve archived artifacts from a previous build |
-| `get_cross_run_analysis` | Cross-run meta-analysis for the learner agent; result includes `craft_drift: CraftDrift` (`by_dimension[]`, `by_area[]`, `profile_count`) computed by `computeCraftDrift` in `cross-run-analyzer.ts`; higher band ordinal = better; sparse areas (< 4 profiles) yield `"stable"` direction; n-a bands excluded from ordinal math |
+| `get_cross_run_analysis` | Cross-run meta-analysis for the learner agent; result includes `craft_drift: CraftDrift` (`by_dimension[]`, `by_area[]`, `profile_count`) computed by `computeCraftDrift` in `cross-run-craft-drift.ts`; higher band ordinal = better; sparse areas (< 4 profiles) yield `"stable"` direction; n-a bands excluded from ordinal math |
 
 **Transcript capture** — best-effort; always returns `ok: true`; writes to `{workspace}/transcripts/`; path-traversal guarded
 **Orchestration tools** — `resolve_after_consultations`: pure resolution, call after last wave before `report_result`; `resolve_wave_event`: apply/reject pending events, emits `wave_event_resolved`; `resolve_agent_skills`: async since 2026-05-20; when `projectDir` provided and preload_prompt exceeds 12k chars, writes full JSON to `.canon/artifacts/agent-skills-*.json` and returns compact summary + `full_data_path`; optional `options?: { filePaths?, workspace? }` — `filePaths` appends "Known Pitfalls", "Area Memory", and "Hot-File Caution" sections; logs `pitfall_injected`/`area_enrichment_injected` audit events when data found. Updated 2026-05-29.
@@ -195,17 +192,17 @@ src/
 | Tool | Purpose |
 |------|---------|
 | `open_artifact` | Open an HTML artifact from `${workspace}/artifacts/` in browser; reads file, registers with HTTP server, opens fire-and-forget; returns `{ url }`; path traversal blocked; `UNEXPECTED` when HTTP server not running. Added 2026-05-25. |
-| `init_workspace` | Create or resume a workspace; seeds `progress.md`; creates build worktree at `{workspace}/worktree` on `canon/{slug}` branch (returned as `worktree_path`/`worktree_branch`); `preflight: true` checks git status + stale sessions + file claims — on issues returns `workspace: ""` with `candidate_workspace` and `preflight_issues`; resume checks `{workspace}/worktree` first, then legacy `.canon/worktrees/{slug}` fallback; `expectedTask` mismatch blocks resume to prevent slug-collision |
-| `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
+| `init_workspace` | Create or resume a workspace; creates build worktree at `{workspace}/worktree` on `canon/{slug}` branch; `preflight: true` checks git/sessions/claims — returns `workspace: ""` + `preflight_issues` on problems; resume checks new path first, then legacy `.canon/worktrees/{slug}` fallback; `expectedTask` guards slug-collision |
+| `write_plan_index` | Write `INDEX.md` to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs, wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
 | `finalize_workspace` | Close the flow: verifies journal completeness, releases file claims for the workflow slug, aggregates gate/postcondition/violation/test metrics into `FlowRunEntry` |
 | `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json` |
-| `record_agent_metrics` | Agent-callable tool to record performance counters (`tool_calls`, `orientation_calls`, `turns`) directly into execution state metrics; merges with existing metrics preserving orchestrator fields; returns `INVALID_INPUT` if no fields provided, `WORKSPACE_NOT_FOUND` if state not found — added 2026-04-01 (ADR-003a) |
-| `post_event` | Structured activity logging; stores `agent_activity` event via `appendEvent`; returns `{ ok: true }` or `WORKSPACE_NOT_FOUND`/`INVALID_INPUT` — added 2026-04-07 |
+| `record_agent_metrics` | Record performance counters into execution state; `INVALID_INPUT` if no fields; `WORKSPACE_NOT_FOUND` if state absent — ADR-003a 2026-04-01 |
+| `post_event` | Structured activity logging via `appendEvent`; returns `{ ok: true }` or error codes — added 2026-04-07 |
 | `batch_log_steps` | Log multiple steps in one journal read-modify-write; fail-closed (batch rejected if any `step_id` empty); parallel transcript capture for completed entries with `agent_id` — added 2026-04-30 |
-| `capture_transcript` | Best-effort transcript capture; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/…`, writes `TranscriptEntry[]` to `{workspace}/transcripts/`; returns warning (never error) when source not found; `source_path` is the primary source with the `agent_id` glob scan as fallback; `persist_path: true` records the path via `setTranscriptPath()` for `get_transcript` (fail-open) — added 2026-04-26, updated 2026-05-30 |
-| `compute_autonomy_tier` | Compute autonomy tier (autonomous/light-touch/supervised) from build history, blast radius, compliance signals; returns `ComputeAutonomyTierResult` with `tier`, `score`, `reasoning`, `signals_used`; fail-safe: defaults to supervised on any signal-gathering error; logs `auto_decision` event to execution store |
-| `get_next_escalation_strategy` | Get next fallback strategy when agent failure/stuck detected; reads/writes escalation state in execution_states.metrics; returns `EscalationResult` with `strategy`, `reasoning`, `attempts_so_far`, `time_elapsed_ms`, `is_terminal`; cascade sequence: add_primer → increase_budget → escalate_model → narrow_scope → hitl; 2-minute cumulative timeout; per-flow config via `skip_strategies`; logs `auto_decision` event |
-| `reconcile_workspace` | Cliff detection; inputs: `{ workspace, emit_telemetry?: boolean, source?: "resume" \| "post_subagent" }`; returns `{ incomplete_steps: IncompleteStep[], needs_recovery: boolean }`; flags `started`/`planned` steps whose declared artifacts are either missing on disk (`missing_artifacts`) or present but still a `## Status: Partial` / `IN_PROGRESS` skeleton (`partial_artifacts`); `completed` steps and `planned` steps with empty `artifacts_expected` are never flagged; when `emit_telemetry: true` and `needs_recovery: true`, appends a best-effort fail-open `cliff_detected` event to the execution-store event log (never mutates journal/archive; telemetry write failure never changes the returned result); `WORKSPACE_NOT_FOUND` when journal absent — added 2026-05-29, partial detection 2026-05-30, telemetry seam 2026-06-04 |
+| `capture_transcript` | Best-effort transcript capture; reads CC agent JSONL, writes to `{workspace}/transcripts/`; returns warning (never error) when source not found; `source_path` primary, `agent_id` glob fallback; `persist_path: true` records path for `get_transcript` (fail-open) — added 2026-04-26, updated 2026-05-30 |
+| `compute_autonomy_tier` | Compute autonomy tier (autonomous/light-touch/supervised); fail-safe: defaults to supervised on error; logs `auto_decision` event |
+| `get_next_escalation_strategy` | Next fallback strategy on agent failure; cascade: add_primer → increase_budget → escalate_model → narrow_scope → hitl; 2-minute cumulative timeout; `skip_strategies` per-flow config; logs `auto_decision` event |
+| `reconcile_workspace` | Cliff detection; returns `{ incomplete_steps, needs_recovery }`; flags `started`/`planned` steps with missing or partial artifacts; `emit_telemetry: true` appends fail-open `cliff_detected` event (never mutates journal); `WORKSPACE_NOT_FOUND` when journal absent — 2026-05-29, partial 2026-05-30, telemetry 2026-06-04 |
 
 ## Dependencies
 <!-- last-updated: 2026-05-16 -->
