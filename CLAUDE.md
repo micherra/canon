@@ -85,7 +85,13 @@ Do not narrate individual tool calls. One line between state transitions is corr
 
 Every build request goes through PM triage: (1) sharpen requirements, (2) assess scope to route.
 
-**Step 1 — Refine the request** (per `skills/canon/skills/refine/SKILL.md`): Trivial (clear bug, explicit AC) → skip to scope check. Clear (well-defined, implicit assumptions) → stress-test → `sharpened-request.md`. Fuzzy (vague outcome) → diverge-then-converge → stress-test → `sharpened-request.md`.
+**Step 1 — Refine the request** (per `skills/canon/skills/refine/SKILL.md`):
+
+| Tier | Signal | Action |
+|------|--------|--------|
+| **Trivial** | Clear bug fix, fully-specified, explicit AC | Skip refine → scope check |
+| **Clear** | Well-defined feature, possible implicit assumptions | Stress-test protocol → `sharpened-request.md` |
+| **Fuzzy** | Vague outcome, multiple valid interpretations | Diverge-then-converge → stress-test → `sharpened-request.md` |
 
 **Step 2 — Scope check and routing** (1-2 MCP calls: `get_file_context`, `graph_query`):
 
@@ -159,7 +165,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch via agent teams. Each entry has `task_id`, `depends_on: []`, `files: []`. If absent, fall back to sequential execution.
 
-> **Supported execution model (current).** Live path: **single-worktree sequential execution** — `init_workspace` creates one `{workspace}/worktree` shared by all code-writing agents. The worktree-per-task parallel-wave path below is documented but **not backed by automated tooling** — wave-lifecycle helpers removed in PR #167. Until rebuilt (see `docs/explore/adaptive-queen.md`), run merges as explicit git operations or prefer sequential execution. Do not reintroduce calls to removed helpers.
+> **Supported execution model (current).** The live, exercised path is **single-worktree sequential execution**: `init_workspace` creates one `{workspace}/worktree` and all code-writing agents share it. The worktree-per-task parallel-wave path described below (per-task `canon-wave/{task_id}` worktrees + sequential merge) is documented as the intended shape but is **not currently backed by automated tooling** — the wave-lifecycle helpers (`createWaveWorktrees`/`mergeWaveResults`/`cleanupWorktrees`) were removed in PR #167. Until they are deliberately rebuilt (see `docs/explore/adaptive-queen.md` revisit trigger), run the merge steps below as explicit git operations, or prefer sequential execution. Do not reintroduce calls to the removed helpers.
 
 **Validate DAG** (via `dag-validator.ts` in `mcp-server/src/shared/lib/`): no cycles, all `depends_on` refs resolve, no self-references. On failure: present errors, re-spawn architect.
 
@@ -206,11 +212,30 @@ Run sequentially after all tasks: review → context-sync → ship → learn. Th
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
-**Reconciliation-on-resume (cliff detection → observe → surface).** Call `reconcile_workspace({ workspace, emit_telemetry: true, source: "resume" })` — detects cliff and auto-records `cliff_detected` telemetry. Each `incomplete_steps` entry is a `started`/`planned` step with `missing_artifacts` (artifact absent) or `partial_artifacts` (artifact present but `## Status: Partial`/`IN_PROGRESS`). For each entry:
-1. **Harvest** transcript (read-only, NOT recovery): `capture_transcript({ workspace, step_id, agent_type, agent_id?, source_path?, persist_path: true })`. Pass `agent_id` when available; pass `source_path` if known; if neither, it's a best-effort no-op (returns warning, never error) — proceed regardless. `persist_path: true` makes it findable by `get_transcript`.
-2. If `needs_recovery: true`, **surface** via "Incomplete-step surfacing (cliff detected)" HITL pattern and STOP. **Do NOT auto re-spawn** — user decides.
+**Reconciliation-on-resume (cliff detection → observe → surface).** Before
+continuing, call `reconcile_workspace({ workspace, emit_telemetry: true, source:
+"resume" })`. This both detects the cliff and (via `emit_telemetry: true`)
+records the `cliff_detected` telemetry automatically — mechanical enforcement, no
+separate logging instruction. Each entry in `incomplete_steps` is a
+`started`/`planned` step that either (a) has a declared artifact missing on disk
+(`missing_artifacts`), or (b) has an artifact present but still a `## Status:
+Partial` / `IN_PROGRESS` skeleton (`partial_artifacts`) — an agent that stopped
+before producing or finishing its artifact. For each entry:
+1. **Harvest** the dead agent's transcript (read-only, best-effort observation —
+   NOT recovery): call `capture_transcript({ workspace, step_id, agent_type,
+   agent_id?, source_path?, persist_path: true })`. Pass the `agent_id` from the
+   original Agent spawn result (or the journal) when available; if the agent died
+   before its completion was logged, pass `source_path` if known. If neither is
+   available, capture is a best-effort no-op (it returns a warning, never an
+   error) — proceed regardless. `persist_path: true` makes the recovered
+   transcript findable by `get_transcript` so the user can inspect it.
+2. If `needs_recovery: true`, **surface** the incomplete steps to the user via the
+   "Incomplete-step surfacing (cliff detected)" HITL pattern and STOP. **Do NOT
+   automatically re-spawn** — the user decides whether to manually re-run the
+   step, abandon it, or inspect the harvested transcript.
 
-Reconciliation is advisory and read-only — a `reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
+Reconciliation runs against the BUILD journal. It is advisory and read-only — a
+`reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
 
 ### Skill Preloading
 
@@ -246,11 +271,31 @@ Three-phase loop: partition → spawn → consolidate. Reviewer is the concrete 
 
 #### Phase 1 — Partition
 
-Call `get_file_context` for each changed file; examine `in_degree`, `impact_score`, `blast_radius`. Fan-out when: blast radius entries > ~50, multiple files with `impact_score > 0.7`, or changes span 3+ layers. Partition into N groups (typically 2–3): keep dependency-cycle files, high-`in_degree` files (smaller groups), same-directory files, and `co_change_partners` together. If fan-out not warranted: single reviewer with full file list.
+Before spawning a team-dispatched review step, call `get_file_context` for each changed file and examine blast radius data (`in_degree`, `impact_score`, `blast_radius`). The fan-out decision is based on **aggregate blast radius** — NOT a fixed file count threshold. Signals that warrant fan-out:
+
+- Total blast radius entries across all changed files exceeds ~50 (many downstream dependents affected)
+- Multiple changed files have `impact_score > 0.7` (high-centrality changes)
+- Changed files span 3+ layers with cross-layer dependencies
+
+When fan-out is warranted, partition files into N groups (typically 2–3). Partitioning rules:
+
+- Files in the same dependency cycle stay together
+- High `in_degree` files get smaller groups (more attention per reviewer)
+- Files in the same directory/module stay together when possible
+- Co-change partners (from `co_change_partners`) stay together
+
+When fan-out is NOT warranted, spawn a single reviewer with the full file list (standard single-subagent pattern).
 
 #### Phase 2 — Spawn
 
-Spawn N reviewers in parallel via `Agent()`, each with: preloaded `resolve_agent_skills` context, `WORKSPACE={workspace_path}` (root, not worktree), explicit diff base (`git diff {base_commit}..HEAD`), assigned file list, reviewer number ("You are reviewer {N} of {total}. Write to `${WORKSPACE}/reviews/REVIEW-{N}.md`"). No `isolation` parameter.
+Spawn N reviewers in parallel via `Agent()`, each with:
+
+- The standard preloaded context from `resolve_agent_skills`
+- `WORKSPACE={workspace_path}` (workspace root, not worktree)
+- An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
+- Their assigned file list
+- Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
+- No `isolation` parameter (reviewers run in the shared workspace, not a worktree)
 
 #### Phase 3 — Consolidate
 
@@ -297,7 +342,15 @@ An empty `skip_reason` is a protocol violation. If no accepted value fits, the s
 
 After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL. Derive the implement-summary path from `write_implementation_summary`'s returned `path` field; never a guessed stem.
 
-**Cliff-detection pass (observe → surface, no auto re-spawn).** After each code-writing subagent returns AND the normal artifact check completes, call `reconcile_workspace({ workspace, emit_telemetry: true, source: "post_subagent" })` to catch write-cliffs missed by simple presence checks. On `needs_recovery: true`, surface via "Incomplete-step surfacing (cliff detected)" HITL pattern; no auto re-spawn. Additive to (not replacing) the normal missing-artifact → re-spawn → second-failure HITL path.
+**Cliff-detection pass (observe → surface, no auto re-spawn).** After each
+code-writing subagent returns AND the normal artifact check above completes, call
+`reconcile_workspace({ workspace, emit_telemetry: true, source: "post_subagent"
+})` to catch steps that started but died before finishing their declared artifact
+— a write-cliff the simple presence check can miss for `started`/`planned` steps.
+On `needs_recovery: true`, surface via the "Incomplete-step surfacing (cliff
+detected)" HITL pattern; no automatic re-spawn. This pass is additive and
+surfacing-only: the normal path above (a *completed* step whose expected artifact
+is missing → re-spawn → second-failure HITL) is unchanged.
 
 | Agent | Expected artifact |
 |-------|------------------|
@@ -317,7 +370,12 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 - **Plan approval HTML**: If `${WORKSPACE}/artifacts/design.html` exists, call `present_artifact({ type: "design", slug, html, data: {}, workspace })` before presenting the text runbook for approval.
 - **Architect approval**: Present plan for user approval. If design.html exists, call `present_artifact` first. Architect decides execution strategy.
 - **Review verdict**: Present results. If not CLEAN, spawn engineer fix mode. If `review.html` exists, call `present_artifact({ type: "review", ... })` alongside text verdict.
-- **Adversarial re-review (supervised tier only)**: After CLEAN verdict when tier is `supervised` (check board `autonomy_tier`). Spawn second reviewer: "Assume bugs were missed. Find what was overlooked, not what was found. Focus on: (a) error-handling edge cases, (b) implicit input-shape assumptions, (c) concurrency/ordering bugs, (d) security boundary gaps, (e) producer-consumer contract mismatches. Lower evidentiary bar." Findings follow the same BLOCKING/WARNING/CLEAN path; present as "Adversarial re-review found {N} additional findings." Skip for `autonomous`/`light-touch`, documentation-only diffs, "skip adversarial" requests, or fix-type builds (no new contracts).
+- **Adversarial re-review (supervised tier only)**: After an initial CLEAN verdict from the reviewer, optionally run an adversarial re-review pass. This is triggered only when the autonomy tier is `supervised` (check board metadata `autonomy_tier`). The adversarial pass uses a different prompt angle than the original review.
+  1. **Trigger**: After reviewer returns CLEAN and the autonomy tier is `supervised`.
+  2. **Prompt**: Spawn a second reviewer with the same files but a different framing: "You are conducting an adversarial re-review. Assume there are bugs the initial review missed. Your job is to find what was overlooked, not to confirm what was found. Focus on: (a) edge cases in error handling, (b) implicit assumptions about input shapes, (c) concurrency or ordering bugs, (d) security boundary gaps, (e) contract mismatches between producer and consumer. Lower your evidentiary bar — flag anything suspicious even if you cannot prove it is a bug."
+  3. **Verdict handling**: Adversarial findings follow the same BLOCKING/WARNING/CLEAN verdict path as regular findings. If BLOCKING or WARNING, enter the standard review-fix iteration loop. If CLEAN (adversarial pass also finds nothing), proceed.
+  4. **Presentation**: Present adversarial findings to the user as: "Adversarial re-review found {N} additional findings. Review?" The user can acknowledge or request fixes.
+  5. **Skip conditions**: Skip for `autonomous` and `light-touch` tiers. Skip for documentation-only diffs. Skip if the user says "skip adversarial" or the build is a fix-type (no new contracts).
 - **Review-fix iteration loop**: Re-spawn reviewer after each fix to verify ALL flagged violations addressed. Loop until CLEAN or WARNING. Max 3 fix→review iterations, then HITL. When reviewer flags `SUMMARY CORRECTION REQUIRED` discrepancies, include them in fix spawn prompt and instruct engineer to correct `*-SUMMARY.md`. (L1-only enforcement — no automated check.)
 - **Fix-mode SUMMARY obligation**: When a fix agent introduces behavioral changes beyond the original brief (new types, new exports, removed catch blocks, new tests), it must update the implement-step `*-SUMMARY.md`'s "What Changed", "Files", "Coverage Notes", and "Canon Compliance" sections before returning FIXED. The reviewer's `SUMMARY CORRECTION REQUIRED` flag indicates this was missed.
 - **WARNING advisory close-out**: After BLOCKING items resolved (or initial WARNING verdict), present advisory items to user: (a) **fix** — another engineer cycle; (b) **acknowledge** — log as accepted; (c) **defer** — note as follow-up. Occurs between review and ship. Does not apply if verdict is CLEAN.
@@ -325,13 +383,29 @@ After each agent returns, verify `artifacts_expected` paths exist. If missing: r
 - **Build-step checkpoint**: After design/implement/verify/review steps: "Step {N} of {total} complete. Continue, or resume fresh?" Skip when `CANON_SKIP_SESSION_CHECKPOINTS=1`. Does not apply to tail steps.
 - **Gate failure**: Present output, ask user how to proceed.
 - **Architect design conversation**: For genuine design tradeoffs, architect reports `HAS_QUESTIONS` with reasoning, stated lean, and request for user correction. Orchestrator surfaces to user; re-spawn with feedback. Style: think-out-loud, state a lean (not multiple choice). No round limit. Skip when only one reasonable approach exists.
-- **Incomplete-step surfacing (cliff detected)**: When `reconcile_workspace` returns `needs_recovery: true`, present each incomplete step: `step_id`, `agent_type`, `missing_artifacts`/`partial_artifacts`, and harvested transcript path (resume path only). Options via `AskUserQuestion`: (a) **resume** — re-run; (b) **abandon** — skip and continue; (c) **inspect** — show partial artifact. **No auto re-spawn** — surfacing only. `cliff_detected` telemetry already recorded by `reconcile_workspace`. Does NOT apply to normal completed-step artifact misses (those use re-spawn → second-failure HITL).
+- **Incomplete-step surfacing (cliff detected)**: When `reconcile_workspace` returns `needs_recovery: true` (on resume or post-subagent), present the incomplete steps to the user: for each, the `step_id`, `agent_type`, its `missing_artifacts` / `partial_artifacts`, and (on the resume path) the harvested transcript path from `capture_transcript` when available. Offer user-driven options via `AskUserQuestion`: (a) **resume** — re-run that step (user-initiated, standard step dispatch); (b) **abandon** — mark the step skipped and continue; (c) **inspect** — show the partial artifact / harvested transcript path. **No automatic re-spawn is performed** — surfacing only. A `cliff_detected` telemetry event has already been recorded by `reconcile_workspace`. This pattern does NOT apply to normal completed-step artifact misses, which keep their existing re-spawn → second-failure HITL path.
 - **Merge conflict**: Present conflicting files, ask for resolution strategy.
 
 ### Post-Step Effects
 
 - **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict.
-- **After engineer (implement)**: Run summary-vs-diff contradiction check (advisory, does NOT block). Read `*-SUMMARY.md`; run `git diff --name-only ${base_commit}..HEAD`; compare files/symbols claimed vs changed. Discrepancy types: "unreported changes" (diff not in SUMMARY), "phantom claims" (SUMMARY not in diff), "unverified symbols" (claimed but not found). Present advisory to user; log `summary_diff_check: { discrepancies: N, details: [...] }` in `log_step` outcome. For DAG builds: check each summary independently, aggregate into one advisory. Proceed regardless.
+- **After engineer (implement)**: Run summary-vs-diff contradiction check before proceeding to review. This is advisory — it does NOT block the build.
+  1. Read the engineer's `*-SUMMARY.md` from `${WORKSPACE}/plans/${slug}/`.
+  2. Run `git diff --name-only ${base_commit}..HEAD` in the worktree to get actual changed files.
+  3. Compare:
+     - **Files claimed vs files changed**: Every file listed in the SUMMARY's `### Files` section should appear in the git diff output. Files in the diff but not in the SUMMARY are "unreported changes." Files in the SUMMARY but not in the diff are "phantom claims."
+     - **Symbols claimed**: For each symbol the SUMMARY claims was added/removed/modified (in `### What Changed`), grep the diff output or the actual file to verify the symbol exists/was removed.
+  4. If discrepancies found, produce a structured advisory warning and present to user:
+     ```
+     Summary-vs-Diff Contradiction Check:
+     - Unreported changes: {files in diff but not in SUMMARY}
+     - Phantom claims: {files in SUMMARY but not in diff}
+     - Unverified symbols: {symbols claimed but not found in diff}
+     ```
+  5. Log the check result in `log_step` outcome as `summary_diff_check: { discrepancies: N, details: [...] }`.
+  6. Proceed to next step regardless of result — this check is advisory only.
+
+  **For multi-task DAG builds**: When multiple `*-SUMMARY.md` files exist, run the check for each summary independently. Aggregate all discrepancies into a single advisory warning.
 - **After architect**: spawn renderer (mandatory) → `${WORKSPACE}/artifacts/design.html`. Open in browser before plan approval HITL.
 - **After scribe**: verify the scribe committed its worktree edits before proceeding to ship. Run `git log --oneline -3` in the worktree and confirm a `docs(context-sync):` commit is present. If absent, recover: `git add -A && git commit -m "docs(context-sync): update CLAUDE.md, context.md, and CONVENTIONS.md" -m "Canon-Workflow: {slug}" -m "Canon-Agent: scribe" -m "Canon-State: context-sync"` in the worktree before proceeding.
 - **After each step**: call `record_agent_metrics` if agent didn't. Pass `agent_id` to `log_step` completion (transcript capture is automatic — no separate call needed).
@@ -450,9 +524,16 @@ When an agent failure or stuck condition is detected (`isStuck` returns true, ag
 
 ## Re-spawn Enrichment Protocol
 
-Re-spawned agents MUST receive prior progress context. Include: (1) `git diff --name-only` → commit uncommitted work as `wip(recovery): save prior agent work`; (2) `git diff --name-only {base_commit}..HEAD` → "These files do NOT need re-implementation: [list]"; (3) `step_id` + `artifacts_actual` from `journal.json`; (4) "Do not re-implement completed files." Scenarios: fix-after-review → reviewer findings + completed-files list; retry → prior partial list; reviewer re-spawn → prior stage progress ("Stage 1–2 written to REVIEW.md — continue from Stage 3").
+Re-spawned agents MUST receive prior progress context. **Include in every re-spawn prompt:**
 
-## Project Structure <!-- last-updated: 2026-06-04 -->
+1. **Uncommitted work**: `git diff --name-only` in worktree → instruct agent to commit with `wip(recovery): save prior agent work` first.
+2. **Completed files**: `git diff --name-only {base_commit}..HEAD` → explicit list: "These files do NOT need re-implementation: [list]."
+3. **Prior artifacts**: `step_id` + `artifacts_actual` from `journal.json`.
+4. **No-duplicate instruction**: "Do not re-implement completed files. Pick up from where the prior attempt left off."
+
+**Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
+
+## Project Structure <!-- last-updated: 2026-05-29 -->
 
 ```
 canon/
@@ -473,7 +554,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (73 total: 7 rules, 35 strong-opinions, 31 conventions)
+├── principles/           # Built-in principles (68 total: 7 rules, 35 strong-opinions, 26 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
