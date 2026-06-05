@@ -535,7 +535,7 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Project Structure <!-- last-updated: 2026-05-29 -->
+## Project Structure <!-- last-updated: 2026-06-05 -->
 
 ```
 canon/
@@ -556,7 +556,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (68 total: 7 rules, 35 strong-opinions, 26 conventions)
+├── principles/           # Built-in principles (71 total: 7 rules, 35 strong-opinions, 29 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
