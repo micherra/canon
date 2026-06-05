@@ -40,7 +40,7 @@ echo "CANON_PARENT_WORKSPACE=$CANON_PARENT_WORKSPACE"
 If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook authorization failed — CANON_PARENT_WORKSPACE is not set."
 
 1. Call TaskList to find available (unblocked, unclaimed) tasks.
-2. If no tasks are available, wait and retry.
+2. If no tasks are available yet, wait and retry (loop back to step 1). This retry-until-available wait applies only while you are waiting for your FIRST task.
 3. Claim a task: TaskUpdate({ task_id, owner: "${WORKER_NAME}", status: "in_progress" }).
 4. Read the task description — it contains your full instructions, principles, and file context.
 5. Create your worktree (note: {task_id} is sanitized — non-alphanumeric chars except `.`, `_`, `-` become dashes):
@@ -54,10 +54,9 @@ If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook
    Canon-State: implement
    Canon-Task: {task_id}
 8. Mark complete: TaskUpdate({ task_id, status: "completed" }).
-9. If no task was available on the first TaskList call (step 1), loop back to step 1 to retry. This retry-until-available loop applies only while waiting for your FIRST task.
-10. If TaskList returns empty (all tasks completed), you are done.
+9. Report DONE and exit. Do NOT call TaskList again. Your session is complete.
 
-**Single-task limit**: You may claim and complete AT MOST ONE task per session invocation. After marking your task complete in step 8, do NOT return to step 1. Report DONE and exit. Remaining tasks in the queue will be claimed by peer workers. The loop (steps 1–9) only applies while waiting for your first available task.
+**Single-task limit**: You may claim and complete AT MOST ONE task per session invocation. After marking your task complete in step 8, stop immediately — report DONE and exit. Remaining tasks in the queue will be claimed by peer workers.
 
 ## Budget Checkpoints (WIP Commits)
 
