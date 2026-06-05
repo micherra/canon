@@ -7,11 +7,69 @@
  * NOTE: These tests download the Xenova/all-MiniLM-L6-v2 model (~22MB) on first run.
  * They are marked with a 60s timeout to accommodate the download.
  * In CI, the model is cached after the first run.
+ *
+ * The "real embeddings" suite skips gracefully when the model CDN is unreachable
+ * (e.g. HTTP 429, ENOTFOUND). It runs in full when the model is cached locally.
  */
 
 import { EmbeddingService } from "@graph/kg-embedding.ts";
 import { EMBEDDING_BATCH_SIZE, EMBEDDING_DIM } from "@shared/constants.ts";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+
+// ---------------------------------------------------------------------------
+// Network/availability probe for the real-embeddings suite
+//
+// We attempt to load the model once before the suite runs. If it fails due to
+// a network or CDN availability error (429, ENOTFOUND, fetch errors from
+// huggingface.co), we mark the model as unavailable and every test in the
+// real-embeddings suite is skipped via test.skipIf.
+//
+// Only network/availability errors trigger the skip. Any error that originates
+// from within a running test (assertion failures, logic errors) still fails
+// normally because those tests call service methods directly — the probe only
+// guards the initial model load.
+// ---------------------------------------------------------------------------
+
+/** Returns true when the error looks like a CDN/network availability failure. */
+function isNetworkError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("429") ||
+    msg.includes("rate limit") ||
+    msg.includes("enotfound") ||
+    msg.includes("fetch failed") ||
+    msg.includes("network") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("load file") // huggingface "Error (NNN) occurred while trying to load file:"
+  );
+}
+
+let modelAvailable = false;
+/** Shared probe service — disposed after the probe so real tests manage their own instances. */
+let _probeService: EmbeddingService | null = null;
+
+beforeAll(async () => {
+  _probeService = new EmbeddingService();
+  try {
+    await _probeService.init();
+    modelAvailable = true;
+  } catch (err) {
+    if (err instanceof Error && isNetworkError(err)) {
+      // CDN/network unreachable — skip the real-embeddings suite, not a test failure.
+      console.warn(
+        `[kg-embedding] real-embeddings suite skipped: model unavailable (${err.message.slice(0, 120)})`,
+      );
+      modelAvailable = false;
+    } else {
+      // Unexpected non-network error during probe — re-throw so the suite fails
+      // loudly rather than silently skipping a genuine bug.
+      throw err;
+    }
+  } finally {
+    _probeService.dispose();
+    _probeService = null;
+  }
+}, 120_000);
 
 /** Create a real EmbeddingService instance for lifecycle tests (no model download). */
 function makeService(): EmbeddingService {
@@ -89,16 +147,21 @@ describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
 });
 
 // Embedding correctness tests (require real model download)
+// The beforeEach inside this suite calls ctx.skip() when modelAvailable is false.
+// modelAvailable is set by the beforeAll probe above after attempting a real init().
+// When the model CDN is unreachable (429, ENOTFOUND, etc.) the probe sets
+// modelAvailable = false and every test here is skipped at runtime, not failed.
 
 describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
   let service: EmbeddingService;
 
-  beforeEach(() => {
+  beforeEach((ctx) => {
+    if (!modelAvailable) ctx.skip();
     service = new EmbeddingService();
   });
 
   afterEach(() => {
-    service.dispose();
+    service?.dispose();
   });
 
   test("embedOne() returns Float32Array of length EMBEDDING_DIM (384)", async () => {
