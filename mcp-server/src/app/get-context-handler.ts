@@ -18,7 +18,7 @@ import type { GetPrinciplesBatchOutput } from "@features/principles/tools/get-pr
 import { getPrinciplesBatch } from "@features/principles/tools/get-principles.ts";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { CANON_DIR } from "@shared/constants.ts";
 import { applyDisclosure } from "@shared/lib/progressive-disclosure.ts";
 import { z } from "zod";

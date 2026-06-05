@@ -35,6 +35,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -42,6 +44,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -66,6 +70,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -73,6 +79,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -90,6 +98,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -97,6 +107,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -113,6 +125,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -120,6 +134,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -132,6 +148,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -139,6 +157,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -151,6 +171,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -158,6 +180,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -180,6 +204,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -187,6 +213,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -204,6 +232,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -211,6 +241,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -223,6 +255,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "planned",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -230,6 +264,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "plan",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -245,6 +281,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "s1",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -253,6 +291,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "s1",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -274,6 +314,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
           status,
           step_id: `step-${status}`,
           workspace,
+
+          projectDir: process.cwd(),
         }),
       ),
     );
@@ -289,6 +331,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "skipped",
       step_id: "step-skipped",
       workspace,
+
+      projectDir: process.cwd(),
     });
     assertOk(skippedResult);
     expect(skippedResult.artifacts_missing).toBeUndefined();
@@ -303,6 +347,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "review",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -310,6 +356,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "review",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -326,6 +374,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -333,6 +383,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -351,6 +403,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "mixed",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -358,6 +412,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "mixed",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -373,6 +429,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "started",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -380,6 +438,8 @@ describe("logStep artifact scanning on completion — mechanical enforcement", (
       status: "completed",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -403,6 +463,8 @@ describe("logStep artifact scanning — SUMMARY auto-discovery fallback", () => 
       status: "started",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -410,6 +472,8 @@ describe("logStep artifact scanning — SUMMARY auto-discovery fallback", () => 
       status: "completed",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -428,6 +492,8 @@ describe("logStep artifact scanning — SUMMARY auto-discovery fallback", () => 
       status: "started",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -435,6 +501,8 @@ describe("logStep artifact scanning — SUMMARY auto-discovery fallback", () => 
       status: "completed",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);
@@ -459,6 +527,8 @@ describe("logStep artifact scanning — SUMMARY auto-discovery fallback", () => 
       status: "started",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -466,6 +536,8 @@ describe("logStep artifact scanning — SUMMARY auto-discovery fallback", () => 
       status: "completed",
       step_id: "implement",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     assertOk(result);
@@ -483,6 +555,8 @@ describe("logStep artifact scanning — SUMMARY auto-discovery fallback", () => 
       status: "started",
       step_id: "design",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     const result = await logStep({
@@ -490,6 +564,8 @@ describe("logStep artifact scanning — SUMMARY auto-discovery fallback", () => 
       status: "completed",
       step_id: "design",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(isToolError(result)).toBe(true);

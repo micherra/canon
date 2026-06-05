@@ -19,7 +19,8 @@ type FlowEventType =
   | "board_updated"
   | "stuck_detected"
   | "tool_scope_audit"
-  | "agent_activity";
+  | "agent_activity"
+  | "cliff_detected";
 
 type FlowEventMap = {
   state_entered: {
@@ -123,6 +124,15 @@ type FlowEventMap = {
     timestamp: string;
     correlation_id?: string;
   };
+  cliff_detected: {
+    incomplete_step_ids: string[];
+    missing_count: number;
+    partial_count: number;
+    needs_recovery: true;
+    source: "resume" | "post_subagent";
+    timestamp: string;
+    correlation_id?: string;
+  };
 };
 
 // Zod schemas for event payloads — co-located with FlowEventMap interfaces
@@ -152,6 +162,16 @@ export const EventPayloadSchemas = {
     action: z.string(),
     correlation_id: correlationId,
     stateId: z.string().optional(),
+    timestamp: z.string(),
+  }),
+
+  cliff_detected: z.object({
+    correlation_id: correlationId,
+    incomplete_step_ids: z.array(z.string()),
+    missing_count: z.number(),
+    needs_recovery: z.literal(true),
+    partial_count: z.number(),
+    source: z.enum(["resume", "post_subagent"]),
     timestamp: z.string(),
   }),
 

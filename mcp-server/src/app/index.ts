@@ -9,7 +9,7 @@ import { registerKnowledgeTools } from "./register-knowledge.ts";
 import { registerOrchestrationTools } from "./register-orchestration.ts";
 import { registerPrincipleTools } from "./register-principles.ts";
 import { resolveGitRoot, resolveProjectDir } from "./resolve-project-dir.ts";
-import { resolveReady, server, setProjectDir } from "./server-state.ts";
+import { registerConnectionScope, resolveReady, STDIO_SESSION_ID, server } from "./server-state.ts";
 
 // Register all tool categories
 registerOrchestrationTools();
@@ -50,7 +50,7 @@ async function main() {
     () => server.server.listRoots(undefined, { timeout: 1_000 }),
     cwdFallback,
   );
-  setProjectDir(resolvedDir);
+  registerConnectionScope(STDIO_SESSION_ID, resolvedDir);
   resolveReady();
 
   // Start the HTTP server for interactive HTML artifact serving.

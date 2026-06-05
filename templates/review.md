@@ -111,6 +111,15 @@ ac-criteria-passed: {N}
 <!-- If all pass: "All acceptance criteria verified." -->
 <!-- If any fail: "N of M acceptance criteria failed — see details above." -->
 
+### Cross-Requirement Consistency
+<!-- Run when diff touches 2+ modules sharing types, constants, or config values. Otherwise note "Stage 6 skipped — single-module change, no cross-requirement surface." -->
+
+| # | Surface | File A | File B | Contradiction | Severity |
+|---|---------|--------|--------|---------------|----------|
+| 1 | {shared type/constant/policy} | `path/file:line` | `path/file:line` | {description of mismatch} | {WARNING\|BLOCKING} |
+
+<!-- If no contradictions: "No cross-requirement contradictions detected across {N} shared surfaces examined." -->
+
 ### Build Verification
 <!-- Required — run npm run build, npm run lint, npm test. Record baseline from target branch. Only new errors (delta) are BLOCKING/WARNING. Pre-existing errors tagged [baseline]. -->
 | Check | Command | Exit Code | Error Count | Baseline | New Errors |

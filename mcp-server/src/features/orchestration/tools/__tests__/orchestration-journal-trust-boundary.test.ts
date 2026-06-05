@@ -51,6 +51,8 @@ describe("readJournal — invalid JSON (trust-boundary fix 1)", () => {
       status: "planned",
       step_id: "new-step",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(result.ok).toBe(true);
@@ -66,6 +68,8 @@ describe("readJournal — invalid JSON (trust-boundary fix 1)", () => {
       status: "planned",
       step_id: "step-after-corrupt",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(result.ok).toBe(true);
@@ -81,7 +85,7 @@ describe("readJournal — invalid JSON (trust-boundary fix 1)", () => {
     // The key assertion is that finalizeWorkspace handles a corrupt file gracefully
     // (no uncaught exception). With the safe-default producing steps:[], there are
     // no completed steps and no missing artifacts — complete evaluates to true.
-    const result = await finalizeWorkspace({ workspace });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
 
     // Should not throw — either ok or a tool error, never an uncaught exception
     expect(result).toBeDefined();
@@ -104,6 +108,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       ],
       version: 1,
       workspace,
+
+      projectDir: process.cwd(),
     });
     writeRawJournal(workspace, corrupt);
 
@@ -112,6 +118,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       status: "planned",
       step_id: "another-step",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(result.ok).toBe(true);
@@ -127,6 +135,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       ],
       version: 1,
       workspace,
+
+      projectDir: process.cwd(),
     });
     writeRawJournal(workspace, corrupt);
 
@@ -134,6 +144,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       status: "started",
       step_id: "valid-step",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(result.ok).toBe(true);
@@ -149,6 +161,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       steps: "not-an-array",
       version: 1,
       workspace,
+
+      projectDir: process.cwd(),
     });
     writeRawJournal(workspace, corrupt);
 
@@ -156,6 +170,8 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       status: "planned",
       step_id: "fresh-step",
       workspace,
+
+      projectDir: process.cwd(),
     });
 
     expect(result.ok).toBe(true);

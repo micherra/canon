@@ -334,30 +334,44 @@ it to the page's main `<style>` tag.
 </div>
 ```
 
-### 4.5 Canvas rendering script (force-directed layout)
+### 4.5 Canvas rendering script (force-directed layout via shared engine)
 
-Include this script ONCE, immediately before `</body>`. It replaces the layered-column
-rendering with a force-directed layout plus click-to-inspect side panel:
+The force-directed layout now comes from the shared
+`mcp-server/src/ui/snippets/force-graph.html` engine (`renderForceGraph`) — the same canonical
+snippet the review renderer uses. The codebase-graph-specific concerns (layer legend, click-to-inspect
+side panel, DIFF_BASE filtering, panel-open canvas resize) stay HERE in this template as pre/post code
+around the engine call; only the force-sim / normalize-to-fit / draw / hover core is delegated to the
+snippet. Output is unchanged from the prior inline script — the engine was lifted from it.
 
-IMPORTANT: Canvas 2D does not support CSS variables. Every hex color value in the
-Canvas script MUST be preceded by a comment naming the design token it maps to:
-  ctx.fillStyle = /* --accent */ '#6c8cff';
-  ctx.strokeStyle = /* --danger */ '#ef4444';
-This satisfies the design-tokens-as-style-contract convention for Canvas contexts.
+**Emit the shared engine snippet `<script>` verbatim (ONCE).** Read
+`mcp-server/src/ui/snippets/force-graph.html` and include its `<script>` block verbatim exactly once,
+immediately before `</body>` and BEFORE the codebase-graph init script below. Do NOT re-implement the
+force-simulation math inline — it lives only in `force-graph.html`. If the snippet has a `<style>`
+block, include it once in the page `<style>`.
+
+IMPORTANT: Canvas 2D does not support CSS variables. Every hex color value in any Canvas code MUST be
+preceded by a comment naming the design token it maps to:
+  if (n.changed) return /* --accent */ '#6c8cff';
+  if ((n.violation_count || 0) > 0) return /* --danger */ '#ff6b6b';
+This satisfies the design-tokens-as-style-contract convention for Canvas contexts. The shared
+`force-graph.html` engine already annotates all of its own Canvas hex literals.
+
+**Then include this codebase-graph init script ONCE, after the engine snippet, before `</body>`.**
+It reads the graph data, calls `renderForceGraph` with codebase-graph's options, injects the layer
+legend, and wires the click-to-inspect side panel (using the engine's returned `redraw(highlightId)`
+handle to preserve the selection highlight):
 
 ```javascript
 (function () {
   // ── Design token mapping (Canvas 2D cannot use CSS custom properties) ──
   // The hex values below correspond to DESIGN-SYSTEM.md Section A tokens:
-  //   #6c8cff  → var(--accent)      — changed nodes, selection rings
-  //   #ff6b6b  → var(--danger)      — violation nodes, violation rings
+  //   #6c8cff  → var(--accent)      — changed nodes
+  //   #ff6b6b  → var(--danger)      — violation nodes
   //   #636a80  → var(--text-muted)  — fallback layer color (when layer has no color)
-  //   #888780  → (no direct token)  — same-layer edge color; visually between --text-muted and --text
-  //   #EF9F27  → (no direct token)  — cross-layer edge color; amber similar to --warning (#fbbf24)
-  // When design tokens change, update these hex values to match.
+  // Edge colors, selection/violation rings, labels, and tooltip live in the shared
+  // force-graph.html engine and carry their own /* --token */ comments there.
 
   const canvas = document.getElementById('codebase-graph-canvas');
-  const tooltip = document.getElementById('graph-tooltip');
   const legend = document.getElementById('layer-legend');
   const panel = document.getElementById('node-detail-panel');
   const panelClose = document.getElementById('ndp-close');
@@ -381,189 +395,26 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
 
   const { layers, nodes, edges, adjIn, adjOut } = graph;
 
-  // Build lookup maps
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
-
-  // Canvas dimensions (CSS pixels)
-  const dpr = window.devicePixelRatio || 1;
-  let W = canvas.parentElement.clientWidth || 900;
-  const H = canvas.getBoundingClientRect().height || 600;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  // ── Force simulation constants ──────────────────────────────────
-  const K_REPEL = 5000;
-  const K_SPRING = 0.01;
-  const REST_LENGTH = 50;
-  const K_GRAVITY = 0.3;
-  const DAMPING = 0.85;
-  const MAX_FORCE = 10;
-  const ITERATIONS = 200;
-  const NODE_RADIUS = 5;
-  const PADDING = 30;
-
-  // ── Initialize node positions randomly within canvas bounds ─────
-  for (const node of nodes) {
-    node.x = PADDING + Math.random() * (W - PADDING * 2);
-    node.y = PADDING + Math.random() * (H - PADDING * 2);
-    node.vx = 0;
-    node.vy = 0;
-    node.fx = 0;
-    node.fy = 0;
-  }
-
-  // ── Run force simulation (pre-computed, not animated) ───────────
-  for (let iter = 0; iter < ITERATIONS; iter++) {
-    // Reset forces
-    for (const node of nodes) { node.fx = 0; node.fy = 0; }
-
-    // Charge repulsion (O(n^2) — acceptable for <600 nodes)
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const ni = nodes[i], nj = nodes[j];
-        let dx = ni.x - nj.x, dy = ni.y - nj.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = Math.min(K_REPEL / (dist * dist), MAX_FORCE);
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        ni.fx += fx; ni.fy += fy;
-        nj.fx -= fx; nj.fy -= fy;
-      }
+  // ── Render the force-directed layout via the shared engine ────
+  // height omitted → engine uses the canvas computed/CSS height (canvasHeight).
+  // Node coloring priority preserved: changed > violation > layer color.
+  const handle = renderForceGraph(
+    canvas,
+    { nodes, edges },
+    {
+      iterations: 200,
+      edgeStyle: 'curve',
+      drawLabels: false,            // preserve current look: hover tooltip + side panel, no per-node labels
+      showViolationRing: true,
+      nodeFill: function (n) {
+        if (n.changed) return /* --accent */ '#6c8cff';
+        if ((n.violation_count || 0) > 0) return /* --danger */ '#ff6b6b';
+        const layer = layers.find(l => l.name === n.layer);
+        return (layer && layer.color) || /* --text-muted */ '#636a80';
+      },
+      onNodeClick: function (n) { showPanel(n); }
     }
-
-    // Spring attraction (edges)
-    for (const edge of edges) {
-      const src = nodeMap.get(edge.source);
-      const tgt = nodeMap.get(edge.target);
-      if (!src || !tgt) continue;
-      const dx = tgt.x - src.x, dy = tgt.y - src.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const force = K_SPRING * (dist - REST_LENGTH);
-      const fx = (dx / dist) * force;
-      const fy = (dy / dist) * force;
-      src.fx += fx; src.fy += fy;
-      tgt.fx -= fx; tgt.fy -= fy;
-    }
-
-    // Center gravity
-    const cx = W / 2, cy = H / 2;
-    for (const node of nodes) {
-      node.fx += (cx - node.x) * K_GRAVITY;
-      node.fy += (cy - node.y) * K_GRAVITY;
-    }
-
-    // Apply forces with damping
-    for (const node of nodes) {
-      node.vx = (node.vx + node.fx) * DAMPING;
-      node.vy = (node.vy + node.fy) * DAMPING;
-      node.x += node.vx;
-      node.y += node.vy;
-    }
-  }
-
-  // Normalize positions to fit within canvas bounds with padding
-  if (nodes.length > 0) {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const node of nodes) {
-      if (node.x < minX) minX = node.x;
-      if (node.x > maxX) maxX = node.x;
-      if (node.y < minY) minY = node.y;
-      if (node.y > maxY) maxY = node.y;
-    }
-    const rangeX = maxX - minX || 1;
-    const rangeY = maxY - minY || 1;
-    const drawW = W - PADDING * 2;
-    const drawH = H - PADDING * 2;
-    for (const node of nodes) {
-      node.x = PADDING + ((node.x - minX) / rangeX) * drawW;
-      node.y = PADDING + ((node.y - minY) / rangeY) * drawH;
-    }
-  }
-
-  // Build position map
-  const nodePositions = new Map(nodes.map(n => [n.id, { x: n.x, y: n.y }]));
-
-  // ── Draw edges as quadratic bezier curves ─────────────────────
-  let selectedNodeId = null;
-
-  function drawGraph(highlightId) {
-    ctx.clearRect(0, 0, W, H);
-
-    // Draw edges
-    for (const edge of edges) {
-      const src = nodePositions.get(edge.source);
-      const tgt = nodePositions.get(edge.target);
-      if (!src || !tgt) continue;
-      const srcNode = nodeMap.get(edge.source);
-      const tgtNode = nodeMap.get(edge.target);
-      const isCrossLayer = srcNode?.layer !== tgtNode?.layer;
-      const isConnectedToSelected = highlightId &&
-        (edge.source === highlightId || edge.target === highlightId);
-
-      ctx.beginPath();
-      const cpX = (src.x + tgt.x) / 2;
-      const cpY = (src.y + tgt.y) / 2 - Math.abs(tgt.x - src.x) * 0.15;
-      ctx.moveTo(src.x, src.y);
-      ctx.quadraticCurveTo(cpX, cpY, tgt.x, tgt.y);
-      ctx.strokeStyle = isCrossLayer ? /* --warning */ '#EF9F27' : /* --border-muted */ '#888780';
-      ctx.globalAlpha = isConnectedToSelected ? 0.7 : (isCrossLayer ? 0.25 : 0.15);
-      ctx.lineWidth = isConnectedToSelected ? 1.5 : 1;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-
-    // Draw nodes
-    for (const node of nodes) {
-      const pos = nodePositions.get(node.id);
-      if (!pos) continue;
-      const layerColor = layers.find(l => l.name === node.layer)?.color || /* --text-muted */ '#636a80';
-      const isSelected = node.id === highlightId;
-
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, isSelected ? NODE_RADIUS + 2 : NODE_RADIUS, 0, Math.PI * 2);
-
-      if (node.changed) {
-        ctx.fillStyle = /* --accent */ '#6c8cff';
-      } else if ((node.violation_count ?? 0) > 0) {
-        ctx.fillStyle = /* --danger */ '#ff6b6b';
-      } else {
-        ctx.fillStyle = layerColor;
-      }
-      ctx.globalAlpha = isSelected ? 1 : (highlightId ? 0.5 : 0.85);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
-      // Violation ring
-      if ((node.violation_count ?? 0) > 0) {
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, NODE_RADIUS + 2, 0, Math.PI * 2);
-        ctx.strokeStyle = /* --danger */ '#ff6b6b';
-        ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 0.7;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-
-      // Selection ring
-      if (isSelected) {
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, NODE_RADIUS + 5, 0, Math.PI * 2);
-        ctx.strokeStyle = /* --accent */ '#6c8cff';
-        ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.8;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-    }
-  }
-
-  // Initial draw
-  drawGraph(null);
+  );
 
   // ── Layer legend (inject into legend div) ─────────────────────
   const sortedLayers = [...layers].sort((a, b) => a.index - b.index);
@@ -594,37 +445,6 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
     legend.appendChild(chip);
   }
 
-  // ── Hover tooltip ─────────────────────────────────────────────
-  function findNodeAt(mx, my) {
-    for (const node of nodes) {
-      const pos = nodePositions.get(node.id);
-      if (!pos) continue;
-      const dx = mx - pos.x, dy = my - pos.y;
-      if (Math.sqrt(dx * dx + dy * dy) <= NODE_RADIUS + 6) return node;
-    }
-    return null;
-  }
-
-  canvas.addEventListener('mousemove', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const found = findNodeAt(mx, my);
-    if (found) {
-      tooltip.textContent = found.id;
-      tooltip.style.display = 'block';
-      tooltip.style.left = (e.clientX + 12) + 'px';
-      tooltip.style.top = (e.clientY - 8) + 'px';
-      canvas.style.cursor = 'pointer';
-    } else {
-      tooltip.style.display = 'none';
-      canvas.style.cursor = 'default';
-    }
-  });
-  canvas.addEventListener('mouseleave', () => {
-    tooltip.style.display = 'none';
-  });
-
   // ── Click-to-inspect panel ────────────────────────────────────
   function escHtml(s) {
     return String(s ?? "")
@@ -636,7 +456,6 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
   }
 
   function showPanel(node) {
-    selectedNodeId = node.id;
     const layerColor = layers.find(l => l.name === node.layer)?.color || /* --text-muted */ '#636a80';
 
     // File path
@@ -665,45 +484,15 @@ This satisfies the design-tokens-as-style-contract convention for Canvas context
     // Show panel
     panel.style.display = 'flex';
 
-    // Resize canvas to account for panel — update both CSS width and backing
-    // buffer so hit-testing coordinates stay aligned with visual positions.
-    const container = document.getElementById('graph-container');
-    const panelWidth = panel.offsetWidth;
-    const newW = (container.clientWidth - panelWidth) || W;
-    W = newW;
-    canvas.width = newW * dpr;
-    canvas.style.width = newW + 'px';
-    ctx.scale(dpr, dpr);
-
-    // Redraw with highlight
-    drawGraph(node.id);
+    // Redraw with the selection highlight (dims others + draws selection ring)
+    // via the engine handle, mirroring the old inline drawGraph(highlightId).
+    handle.redraw(node.id);
   }
 
   function hidePanel() {
-    selectedNodeId = null;
     panel.style.display = 'none';
-    // Restore canvas to full container width
-    const container = document.getElementById('graph-container');
-    const fullW = container.clientWidth || W;
-    W = fullW;
-    canvas.width = fullW * dpr;
-    canvas.style.width = fullW + 'px';
-    ctx.scale(dpr, dpr);
-    drawGraph(null);
+    handle.redraw(null);
   }
-
-  canvas.addEventListener('click', (e) => {
-    tooltip.style.display = 'none';
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const found = findNodeAt(mx, my);
-    if (found) {
-      showPanel(found);
-    } else {
-      hidePanel();
-    }
-  });
 
   if (panelClose) {
     panelClose.addEventListener('click', (e) => {
@@ -789,12 +578,13 @@ Return when the file is written. Do not modify the worktree.
 - `${DIFF_BASE}` and `${SOURCE_DIRS}` are both optional — the renderer must handle empty strings gracefully
 - This template requires the `codebase_graph` MCP tool call (hence `model: sonnet` — Haiku cannot make MCP tool calls reliably for large graphs)
 - The renderer reads `node-detail-panel.html` and embeds its HTML + CSS inline — no separate HTTP request is needed from the browser
-- **Force simulation**: Vanilla JS spring-charge-gravity model, 200 iterations, pre-computed (not animated). Constants: K_REPEL=5000, K_SPRING=0.01, REST_LENGTH=50, K_GRAVITY=0.3, DAMPING=0.85, MAX_FORCE=10
-- **Node coloring priority**: changed (blue #6c8cff) > violation (red #ff6b6b) > layer color
-- **Edge coloring**: cross-layer edges amber (#EF9F27 at 0.25 opacity), same-layer edges gray (#888780 at 0.15 opacity); highlight edges connected to selected node at 0.7 opacity
-- **DIFF_BASE filtering**: client-side, reduces displayNodes/displayEdges to changed + 1-hop neighbors before running force simulation
-- **Detail panel**: DOM-based (not Canvas), positioned absolute on the right within the flex graph-container; JS populates content on node click
-- The canvas width dynamically adjusts when the panel is shown (70/30 split approximated by subtracting panel.offsetWidth from container.clientWidth)
+- **Force simulation**: delegated to the shared `mcp-server/src/ui/snippets/force-graph.html` engine (`renderForceGraph`) — vanilla JS spring-charge-gravity model, pre-computed (not animated). The codebase-graph init passes `iterations: 200`; the engine's default force constants ARE this renderer's prior inline values (K_REPEL=5000, K_SPRING=0.01, REST_LENGTH=50, K_GRAVITY=0.3, DAMPING=0.85, MAX_FORCE=10), so output is unchanged. No force-sim math lives inline in this template anymore.
+- **Node coloring priority**: changed (blue #6c8cff) > violation (red #ff6b6b) > layer color — supplied to the engine via the `nodeFill` option
+- **Edge coloring**: `edgeStyle: 'curve'` — cross-layer edges amber (#EF9F27 at 0.25 opacity), same-layer edges gray (#888780 at 0.15 opacity); highlight edges connected to selected node at 0.7 opacity (handled inside the engine)
+- **Per-node labels**: `drawLabels: false` — codebase-graph relies on the engine's hover tooltip + the DOM side panel, NOT per-node Canvas labels (preserves the current look on large graphs)
+- **DIFF_BASE filtering**: client-side, reduces displayNodes/displayEdges to changed + 1-hop neighbors before passing `canvasData` to the engine
+- **Detail panel**: DOM-based (not Canvas), positioned absolute on the right within the flex graph-container; JS populates content on node click; the selection highlight (dim others + selection ring) is redrawn via the engine's returned `handle.redraw(highlightId)` on `showPanel`/`hidePanel`
+- The detail panel overlays the graph (absolutely positioned within `#graph-container`); the engine sizes the canvas once to the full container width and hit-testing stays aligned because positions are not recomputed when the panel toggles
 - The renderer writes exclusively to `${WORKSPACE}/artifacts/` — never to the worktree
 - If `codebase_graph` returns no nodes (empty graph), write a minimal informational page and stop
 - The layer legend is injected into the DOM by JavaScript — do not pre-render it in static HTML

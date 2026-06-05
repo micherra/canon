@@ -17,7 +17,7 @@ import { toToolErrorResponse } from "@shared/lib/wrap-handler.ts";
 // ── Per-connection scope registry ─────────────────────────────────────────────
 //
 // Sentinel session ID used for the single stdio connection.  Under stdio there
-// is exactly one connection so setProjectDir() writes here and resolveScope()
+// is exactly one connection so registerConnectionScope(STDIO_SESSION_ID, ...) writes here and resolveScope()
 // reads back the same value — behaviorally identical to the old module global.
 //
 // Under HTTP (Phase 2) each connection will have its own sessionId and will
@@ -39,6 +39,8 @@ export function registerConnectionScope(sessionId: string, dir: string): void {
 /**
  * Remove the scope entry for a session that has disconnected.
  * No-op for unknown session IDs.
+ *
+ * // Phase 2: call evictStoresForScope/evictDriftDbForScope from the connection-end handler
  */
 export function clearConnectionScope(sessionId: string): void {
   scopeRegistry.delete(sessionId);
@@ -49,11 +51,16 @@ export function clearConnectionScope(sessionId: string): void {
  *
  * Lookup order:
  *   1. Per-session entry keyed by extra.sessionId (present under HTTP)
- *   2. Stdio sentinel entry (keyed by STDIO_SESSION_ID) — set by setProjectDir()
- *   3. Module global projectDir — fallback when neither entry exists
+ *   2. Stdio sentinel entry (keyed by STDIO_SESSION_ID) — seeded in main() via
+ *      registerConnectionScope(STDIO_SESSION_ID, resolvedDir)
  *
- * Under stdio there is exactly one connection, so (2) and (3) always agree.
- * Zero behavior change on stdio.
+ * Under stdio the sentinel is always present after startup, so this never throws
+ * in production. Under HTTP an unregistered session fails closed instead of
+ * leaking the daemon cwd — closing the TODO(1b) cross-tenant leak hazard.
+ *
+ * Startup seed: call registerConnectionScope(STDIO_SESSION_ID, resolvedDir) in
+ * main() after resolveProjectDir() completes. Under HTTP (Phase 2) each
+ * connection will call registerConnectionScope() with its own resolved dir.
  */
 export function resolveScope(
   extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -63,33 +70,13 @@ export function resolveScope(
     const perSession = scopeRegistry.get(sessionId);
     if (perSession !== undefined) return perSession;
   }
-  // Fall back to the stdio sentinel / global.
-  // TODO(1b): HTTP connections must fail closed when sessionId is unregistered — this fail-open fallback to the daemon cwd is a cross-tenant leak hazard under multi-tenant HTTP.
-  return scopeRegistry.get(STDIO_SESSION_ID) ?? projectDir;
-}
-
-// ── Global project dir (thin shim — delegates to the stdio sentinel entry) ───
-//
-// Resolve project dir via priority chain (updated post-connect by resolveProjectDir() in main()):
-//   1. CANON_PROJECT_DIR env var (only when set AND is an absolute path) — escape hatch for CI/multi-project
-//   2. roots/list first root from MCP client — standard MCP mechanism for user's working directory
-//   3. process.cwd() fallback — for clients that don't support roots
-export let projectDir = process.cwd();
-
-/**
- * Update the project directory.
- *
- * Called from main() after roots/list resolves.  Writes to both the module
- * global (for backward-compat with any code that reads `projectDir` directly)
- * and to the STDIO_SESSION_ID entry in the scope registry so resolveScope()
- * returns the correct value.
- *
- * Under HTTP (Phase 2) this will not be called at all — each connection will
- * call registerConnectionScope() with its own resolved dir instead.
- */
-export function setProjectDir(dir: string): void {
-  projectDir = dir;
-  scopeRegistry.set(STDIO_SESSION_ID, dir);
+  // Fall back to the stdio sentinel.
+  const sentinel = scopeRegistry.get(STDIO_SESSION_ID);
+  if (sentinel !== undefined) return sentinel;
+  throw new Error(
+    `resolveScope: no project scope for session ${sessionId ?? "(none)"} — ` +
+      `connection not registered (registerConnectionScope was never called)`,
+  );
 }
 
 // ── Ready gate ────────────────────────────────────────────────────────────────
@@ -119,7 +106,7 @@ export const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || dirname(mcpServ
 
 export const server = new McpServer({
   name: "canon",
-  version: "2.4.1", // x-release-please-version
+  version: "2.5.0", // x-release-please-version
 });
 
 // Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
@@ -170,7 +157,6 @@ export const gatedWrapHandler =
 
 export function resetForTesting(): void {
   scopeRegistry.clear();
-  projectDir = process.cwd();
   // Replace the ready promise with a fresh pending one and a fresh resolver.
   readyPromise = new Promise<void>((res) => {
     resolveReady = res;

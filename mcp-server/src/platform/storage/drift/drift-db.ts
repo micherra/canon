@@ -9,9 +9,6 @@
  * methods, transaction wrapper. Callers never see SQL.
  */
 
-import { mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { CANON_DIR } from "@shared/constants.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
 import { AreaMemoryDao } from "./area-memory-dao.ts";
@@ -42,7 +39,6 @@ import {
   rowToReviewEntry,
 } from "./drift-db-rows.ts";
 import { DriftDbSignals } from "./drift-db-signals.ts";
-import { initDriftDb } from "./drift-schema.ts";
 
 // Re-export WeeklyTrendPoint so callers can import from drift-db
 export type { WeeklyTrendPoint } from "./drift-db-queries.ts";
@@ -577,28 +573,4 @@ export class DriftDb {
   close(): void {
     this.db.close();
   }
-}
-
-// getDriftDb — lazy-init cache, project-scoped singleton
-
-const cache = new Map<string, DriftDb>();
-
-/**
- * Return a cached DriftDb for the given projectDir, opening `.canon/drift.db`
- * on first access. Thread-safe within a single Node.js process since
- * better-sqlite3 is synchronous.
- */
-export function getDriftDb(projectDir: string): DriftDb {
-  const key = resolve(projectDir);
-  const existing = cache.get(key);
-  if (existing !== undefined) return existing;
-
-  const canonDir = join(key, CANON_DIR);
-  mkdirSync(canonDir, { recursive: true });
-
-  const dbPath = join(canonDir, "drift.db");
-  const db = initDriftDb(dbPath);
-  const store = new DriftDb(db);
-  cache.set(key, store);
-  return store;
 }

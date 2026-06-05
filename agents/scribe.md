@@ -117,6 +117,14 @@ If ALL changes are internal/test-only/config, skip to Step 8 with status NO_UPDA
 
 ### Step 4: Update CLAUDE.md
 
+**Blast-radius scoping — read this before editing anything.** You edit ONLY the doc sections that correspond to files in THIS build's changed-file set — the git diff blast radius you identified in Step 1. A section is in scope for editing if, and only if, it documents a file or contract the diff actually touched. Everything else is out of bounds.
+
+**Prohibition (absolute).** You MUST NOT edit, rewrite, compress, reword, reformat, or "trim" any entry for a file the build did not touch — not for size, not for tidiness, not for consistency, not for any reason. This holds even if an entry looks long, or the file looks oversized. Untouched entries are out of bounds, full stop. There is no size budget that overrides this; no character count justifies touching an untouched section.
+
+**Negative scope (what this does NOT restrict).** This prohibition targets size/budget trimming and edits to unrelated sections. It does NOT restrict your legitimate, already-scoped work: adding or updating an entry for a file the build DID change, freshness stamps on sections you legitimately edit, or the commit obligation. Do those normally.
+
+**Mechanical-backstop note (one line, do not design it):** A future enforcement option — a hook diffing scribe edits against the build's changed-file set — is out of scope here; this constraint is behavioral.
+
 Read the current CLAUDE.md. It follows a canonical template structure (see below). For each contract-level change, make surgical edits:
 
 **Finding the right CLAUDE.md for a subdirectory:** When a changed file lives in a subdirectory (e.g., `mcp-server/`), check for its CLAUDE.md in this order:
@@ -124,8 +132,6 @@ Read the current CLAUDE.md. It follows a canonical template structure (see below
 2. `{dir}/CLAUDE.md` — legacy location, accepted for backward compatibility
 
 Update whichever path exists. If neither exists, create only if a contract-level change clearly warrants it.
-
-**Pre-edit budget gate:** BEFORE writing any edits, run `wc -c` on each CLAUDE.md file you plan to touch. If the file is already at or above **38,000 characters**, you MUST trim existing content to create headroom BEFORE adding new entries. Target: keep every CLAUDE.md under 35,000 characters after your edits. This is the single most important rule — a CLAUDE.md that exceeds 40,000 characters degrades agent performance.
 
 **DO NOT document (exclusion list):**
 - "Removed modules/files" — NEVER add `~~strikethrough~~` entries or "Removed (date)" lines. Git history holds deletions; documenting them inflates the file with negative knowledge that never gets cleaned.
@@ -148,47 +154,7 @@ Update whichever path exists. If neither exists, create only if a contract-level
 
 For the full template with section headers and editing rules, see `${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md`.
 
-**Post-edit budget check:** After completing all CLAUDE.md edits in this step, run `wc -c` on each CLAUDE.md file you touched. If any file exceeds 38,000 characters, trim derivable-from-source content in this priority order:
-
-1. Detailed function signatures that restate TypeScript types
-2. Field-by-field interface documentation (type field lists)
-3. Multi-line tool/service descriptions (compress to one-liners)
-4. UI component documentation
-5. Any entry older than 60 days that restates information derivable from reading the source file
-
-**Protected content (never trim):** behavioral instructions, invariants, `<!-- last-updated -->` tags, architecture tree structures, dependency tables, development commands, section headings.
-
-Remove specific lines or sections — do not restructure. If all derivable content is already removed and the file still exceeds 40,000 characters, do not trim further; record the file as over budget in the CONTEXT-SYNC.md report (Step 8) as a warning.
-
-### Step 4b: Length Management Pass
-
-**When**: After all Step 4 edits are complete, run `wc -c` on every CLAUDE.md file in scope — the root `CLAUDE.md` plus every subdirectory CLAUDE.md identified in Step 3 classification. If any file exceeds **40,000 characters**, apply prose compression. This check runs regardless of whether Step 4 produced edits — accumulated bloat from manual edits or skipped context-sync passes should still be caught.
-
-**Techniques**:
-- Convert verbose paragraphs to tables where content is structured (lists of rules, conditions, mappings)
-- Eliminate redundant phrasing — if two sentences say the same thing differently, keep the clearer one
-- Consolidate repeated concepts — if the same rule appears in multiple sections, define once and reference it
-- Compress verbose explanations into terse declarative statements
-- Remove filler words and hedging language
-
-**What NOT to do**:
-- Never remove protocol semantics — every rule, gate, contract, and behavioral instruction must survive
-- Never extract content to other files — CLAUDE.md must remain self-contained
-- Never restructure the document's section hierarchy
-- Never remove tables, section headings, or `<!-- last-updated -->` tags
-
-**Target**: Under 35,000 characters after compression. If not achievable without losing semantics, get as close as possible and note the floor in CONTEXT-SYNC.md.
-
-#### Step 4b: Semantic compression pre-commit checklist
-
-Before committing compression edits to any CLAUDE.md, run these 4 grep checks against the original (pre-compression) content to verify no semantics were dropped:
-
-1. **Alternative tool calls**: grep for `or` patterns near tool/command names (e.g., "`X` or `Y`"). If the original had alternatives and the compressed version kept only one, restore the dropped alternative.
-2. **External filename references**: grep for backtick-quoted filenames (e.g., `` `settings.json` ``, `` `config.yaml` ``). Every filename reference in the original must appear in the compressed version.
-3. **Fallback rules**: grep for "if absent", "if it does not exist", "fall back", "fallback", "legacy". Fallback behavior is load-bearing for agents encountering missing files — never compress it away.
-4. **Scope exclusion clauses**: grep for "does not apply", "exempt", "excluded", "not subject to". Exclusion clauses define the negative boundary of a rule — dropping them changes the rule's meaning.
-
-If any check reveals dropped semantics, restore them before committing. Report restored items in CONTEXT-SYNC.md.
+**Report-don't-trim advisory (never trim):** After completing your scoped edits, if a CLAUDE.md you legitimately touched looks oversized, record ONE advisory line in `CONTEXT-SYNC.md` naming the file, its approximate size (from `wc -c`), and that "a dedicated trim build is the right path." Then proceed WITHOUT trimming. You never trim untouched entries to make room, and there is no enforced size limit you are obligated to hit — this is a heads-up for a future build, not an action you take now.
 
 ### Step 5: Update README.md (structure changes only)
 

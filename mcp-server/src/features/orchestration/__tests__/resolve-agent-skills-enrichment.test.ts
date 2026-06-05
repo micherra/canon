@@ -18,13 +18,13 @@ import {
   type ResolveAgentSkillsResult,
   resolveAgentSkills,
 } from "@features/orchestration/tools/resolve-agent-skills.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---- Mocks ----
 
-vi.mock("@platform/storage/drift/drift-db.ts", () => ({
+vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn(),
 }));
 
