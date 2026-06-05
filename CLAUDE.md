@@ -554,7 +554,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (68 total: 7 rules, 35 strong-opinions, 26 conventions)
+├── principles/           # Built-in principles (73 total: 7 rules, 35 strong-opinions, 31 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
