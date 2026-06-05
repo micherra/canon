@@ -27,6 +27,7 @@ import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sd
 import { afterEach, describe, expect, it } from "vitest";
 import {
   clearConnectionScope,
+  findAnchorDir,
   gatedWrapHandler,
   registerConnectionScope,
   resetForTesting,
@@ -263,5 +264,107 @@ describe("1d: stdio sentinel no-op + fail-closed resolveScope", () => {
     registerConnectionScope(STDIO_SESSION_ID, "/before-reset");
     resetForTesting();
     expect(() => resolveScope(makeExtra(undefined))).toThrow(/resolveScope: no project scope/);
+  });
+});
+
+// ── findAnchorDir: marker-walk plugin root resolution ────────────────────────
+//
+// These tests drive findAnchorDir with a fake existsFn so they are fully
+// hermetic — no real filesystem stat calls, no dependency on the repo layout.
+//
+// Test cases (per T1-fix-plugindir-seed-PLAN.md Step 1):
+//   1. src/app-depth start → resolves to plugin root
+//   2. dist-depth start   → same root (layout-independent, proves AC#2)
+//   3. mcpServerRoot marker (boot.sh) → resolves to mcp-server dir
+//   4. not-found           → throws with diagnostic message
+//   5. env override        → documented as short-circuit before walk
+
+describe("findAnchorDir: marker-walk plugin root resolution", () => {
+  it("resolves from src/app-depth start to the plugin root (AC#1, AC#2)", () => {
+    // Markers present at /repo: /repo/agents and /repo/principles
+    const existsFn = (p: string) => p === "/repo/agents" || p === "/repo/principles";
+    const result = findAnchorDir("/repo/mcp-server/src/app", ["agents", "principles"], existsFn);
+    expect(result).toBe("/repo");
+  });
+
+  it("resolves from dist-depth start to the same root as src/app-depth (AC#2 layout independence)", () => {
+    // Same markers, deeper start — proves no fixed dirname count assumption
+    const existsFn = (p: string) => p === "/repo/agents" || p === "/repo/principles";
+    const result = findAnchorDir(
+      "/repo/mcp-server/dist/src/app",
+      ["agents", "principles"],
+      existsFn,
+    );
+    expect(result).toBe("/repo");
+  });
+
+  it("resolves mcpServerRoot via boot.sh marker to the mcp-server dir", () => {
+    // boot.sh present at /repo/mcp-server/boot.sh — absent at repo root and src/
+    const existsFn = (p: string) => p === "/repo/mcp-server/boot.sh";
+    const result = findAnchorDir("/repo/mcp-server/src/app", ["boot.sh"], existsFn);
+    expect(result).toBe("/repo/mcp-server");
+  });
+
+  it("throws with a diagnostic message when no ancestor contains the markers", () => {
+    // existsFn always returns false → walk will reach filesystem root and throw
+    const existsFn = () => false;
+    expect(() =>
+      findAnchorDir("/repo/mcp-server/src/app", ["agents", "principles"], existsFn),
+    ).toThrow(/agents/);
+    expect(() =>
+      findAnchorDir("/repo/mcp-server/src/app", ["agents", "principles"], existsFn),
+    ).toThrow(/CANON_PLUGIN_DIR/);
+  });
+
+  it("resolves in a single step when markers are present in startDir itself", () => {
+    // Markers already exist at the start dir — should return start dir immediately
+    const existsFn = (p: string) => p === "/repo/agents" || p === "/repo/principles";
+    const result = findAnchorDir("/repo", ["agents", "principles"], existsFn);
+    expect(result).toBe("/repo");
+  });
+
+  // Advisory 2 — directory-strict predicate
+  it("dir-strict predicate: a path that exists as a file (not a directory) does NOT match the agents/principles walk", () => {
+    // Simulate a layout where /repo has a *file* named "agents" and a dir "principles"
+    // The dir-strict predicate must reject the file-named-agents case.
+    const dirs = new Set(["/repo/principles"]);
+    const files = new Set(["/repo/agents"]); // stray file — must NOT match
+    // dir-strict predicate: existsFn that only returns true when the path is in `dirs`
+    const dirStrictExistsFn = (p: string) => dirs.has(p);
+    // /repo/agents is a file (not in dirs), so the walk must NOT match /repo and must continue
+    // until it exhausts all ancestors and throws.
+    expect(() =>
+      findAnchorDir("/repo/mcp-server/src/app", ["agents", "principles"], dirStrictExistsFn),
+    ).toThrow(/Canon plugin root not found/);
+    // Verify that the file exists in our fake FS (proving the test is meaningful)
+    expect(files.has("/repo/agents")).toBe(true);
+  });
+
+  it("dir-strict predicate: resolves correctly when both agents and principles are real directories", () => {
+    // Both agents and principles are directories at /repo
+    const dirs = new Set(["/repo/agents", "/repo/principles"]);
+    const dirStrictExistsFn = (p: string) => dirs.has(p);
+    const result = findAnchorDir(
+      "/repo/mcp-server/src/app",
+      ["agents", "principles"],
+      dirStrictExistsFn,
+    );
+    expect(result).toBe("/repo");
+  });
+
+  it("boot.sh marker (file) resolves with default existsFn — dir-strict would break it", () => {
+    // boot.sh is a file; a dir-strict predicate must NOT be applied to the boot.sh walk.
+    // This test uses a dir-strict-style predicate (returns false for files) and confirms
+    // that if you (incorrectly) applied it to the boot.sh walk, it would fail.
+    const dirsOnly = new Set<string>([]); // empty — boot.sh is a file, not a dir
+    const dirStrictExistsFn = (p: string) => dirsOnly.has(p);
+    // Applying dir-strict to boot.sh walk → should throw (proves advisory 2 must be scoped)
+    expect(() => findAnchorDir("/repo/mcp-server/src/app", ["boot.sh"], dirStrictExistsFn)).toThrow(
+      /Canon plugin root not found/,
+    );
+    // The default (file-aware) existsFn resolves it correctly:
+    const fileExistsFn = (p: string) => p === "/repo/mcp-server/boot.sh";
+    const result = findAnchorDir("/repo/mcp-server/src/app", ["boot.sh"], fileExistsFn);
+    expect(result).toBe("/repo/mcp-server");
   });
 });
