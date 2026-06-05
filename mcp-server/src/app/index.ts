@@ -55,7 +55,10 @@ async function main() {
   // Start the HTTP server for interactive HTML artifact serving.
   // Binds to 127.0.0.1 (localhost only). On EADDRINUSE, logs a warning
   // and continues — MCP server operates normally without HTTP artifacts.
-  await startHttpServer();
+  // Thread the resolved startup scope so resolvePidDir uses it instead of
+  // an implicit process.cwd() (Phase 2 isolation-finish — removes the last
+  // implicit-scope leak).
+  await startHttpServer(undefined, resolvedDir);
 
   // Mark any leftover running jobs from a previous crashed session as failed
   try {
