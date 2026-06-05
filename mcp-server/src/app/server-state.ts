@@ -154,7 +154,7 @@ const mcpServerRoot = process.env.CANON_PLUGIN_DIR
 
 export const server = new McpServer({
   name: "canon",
-  version: "2.5.0", // x-release-please-version
+  version: "2.6.0", // x-release-please-version
 });
 
 // Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.

@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.6.0](https://github.com/micherra/canon/compare/v2.5.0...v2.6.0) (2026-06-05)
+
+
+### Features
+
+* **http-epic-phase2:** isolation-finish slice — per-project JobManager + http-server scope ([#316](https://github.com/micherra/canon/issues/316)) ([eec09ca](https://github.com/micherra/canon/commit/eec09ca50d37f4975415b4680973377c9d8d831a))
+* **kg-sync:** lazy commit-granularity KG freshness + self-healing orphan prune ([#303](https://github.com/micherra/canon/issues/303)) ([057aacc](https://github.com/micherra/canon/commit/057aaccbc2a245040971012391b4e77aa7171912))
+* **learner:** outcome-weighted JUDGE + staleness CONSOLIDATE ([#306](https://github.com/micherra/canon/issues/306)) ([e9f9aee](https://github.com/micherra/canon/commit/e9f9aeebf4ffea3ea1e6e3d680a2644e493de8f4))
+* **principle:** promote line-limit-split-into-siblings convention (sug_UUUU2, 4/4) ([#314](https://github.com/micherra/canon/issues/314)) ([34a3a5d](https://github.com/micherra/canon/commit/34a3a5ddc396ca96cbb9e8a42251843c964bcf6a))
+* **scribe:** constrain context-sync to build-changed sections; remove size-budget trimming ([#312](https://github.com/micherra/canon/issues/312)) ([7ac170c](https://github.com/micherra/canon/commit/7ac170c3591b659f1a987c91b113e9da7a7bc0ce))
+* **writer:** route principle writes by tier — tracked-source vs installed-copy ([#318](https://github.com/micherra/canon/issues/318)) ([dcfba2c](https://github.com/micherra/canon/commit/dcfba2cb9844a6ba528894eb3e385859ea9c17ca))
+
+
+### Bug Fixes
+
+* **hooks:** subcommand-aware tokenizer for destructive-guard (Phase 0) ([#300](https://github.com/micherra/canon/issues/300)) ([4ebd6ed](https://github.com/micherra/canon/commit/4ebd6ed80e1b98f6e3bb40494ffb0fa55daa0362))
+* **kg-embedding:** skip real-embeddings suite when model CDN unreachable (CI 429) ([#319](https://github.com/micherra/canon/issues/319)) ([8e45020](https://github.com/micherra/canon/commit/8e45020ea937b27eb8c3b55d32ed8e7d710fb103))
+* **protocol:** DAG single-task guard + BUILD_BASE_COMMIT worktree base ([#285](https://github.com/micherra/canon/issues/285)) ([16eb4d9](https://github.com/micherra/canon/commit/16eb4d9f8524749b667eda4a2b9a184a070ffb01))
+* **server-state:** replace fixed-dirname-count pluginDir seed with marker-walk ([#315](https://github.com/micherra/canon/issues/315)) ([e8ddf27](https://github.com/micherra/canon/commit/e8ddf27bcaa38f805cab13a3d99e9a5da9da1369))
+
 ## [2.5.0](https://github.com/micherra/canon/compare/v2.4.1...v2.5.0) (2026-06-04)
 
 
