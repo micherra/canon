@@ -13,6 +13,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { VALID_LAYERS } from "@shared/lib/config.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
 import type { Principle } from "@shared/parser.ts";
@@ -22,6 +23,7 @@ import {
   checkContradictions,
   checkMissingExamples,
   checkOrphanPrinciples,
+  checkScopeLayers,
   checkStaleRefs,
   type WikiLintOutput,
 } from "../services/wiki-lint.ts";
@@ -33,7 +35,8 @@ type CheckName =
   | "orphan_principles"
   | "stale_refs"
   | "missing_examples"
-  | "cited_paths";
+  | "cited_paths"
+  | "scope_layers";
 
 export type WikiLintInput = {
   checks?: CheckName[];
@@ -227,6 +230,7 @@ export async function wikiLint(
     "stale_refs",
     "missing_examples",
     "cited_paths",
+    "scope_layers",
   ];
   const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
 
@@ -244,6 +248,9 @@ export async function wikiLint(
   const staleRefs = enabled.has("stale_refs") ? runStaleRefCheck(projectDir, claudeMdFiles) : [];
   const missingExamples = enabled.has("missing_examples") ? checkMissingExamples(principles) : [];
   const citedPaths = enabled.has("cited_paths") ? runCitedPathCheck(projectDir) : [];
+  const scopeLayers = enabled.has("scope_layers")
+    ? checkScopeLayers(principles, VALID_LAYERS)
+    : [];
 
   return assembleWikiLintOutput({
     citedPaths,
@@ -252,6 +259,7 @@ export async function wikiLint(
     missingExamples,
     orphans,
     principlesChecked: principles.length,
+    scopeLayers,
     staleRefs,
   });
 }

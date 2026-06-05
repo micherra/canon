@@ -55,6 +55,9 @@ export const DEFAULT_LAYER_MAPPINGS: Record<string, string[]> = {
   ui: ["app", "components", "pages", "views"],
 };
 
+/** The valid architectural layer names, derived from DEFAULT_LAYER_MAPPINGS keys. */
+export const VALID_LAYERS: readonly string[] = Object.keys(DEFAULT_LAYER_MAPPINGS);
+
 export type LayerMappings = Record<string, string[]>;
 
 /**

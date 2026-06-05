@@ -34,6 +34,7 @@
  */
 
 import type { Principle } from "@shared/parser.ts";
+import { DEFAULT_LAYER_MAPPINGS, VALID_LAYERS } from "@shared/lib/config.ts";
 import { describe, expect, it } from "vitest";
 import {
   assembleWikiLintOutput,
@@ -41,6 +42,7 @@ import {
   checkContradictions,
   checkMissingExamples,
   checkOrphanPrinciples,
+  checkScopeLayers,
   checkStaleRefs,
 } from "../services/wiki-lint.ts";
 
@@ -237,6 +239,82 @@ describe("checkMissingExamples", () => {
   });
 });
 
+// ---- checkScopeLayers ----
+
+describe("checkScopeLayers", () => {
+  it("VALID_LAYERS is derived from DEFAULT_LAYER_MAPPINGS keys (not hardcoded)", () => {
+    expect(Array.from(VALID_LAYERS).sort()).toEqual(Object.keys(DEFAULT_LAYER_MAPPINGS).sort());
+  });
+
+  it("flags a principle with a single invalid layer name", () => {
+    const p = makePrinciple({ id: "bad-layer", scope: { layers: ["bogus"], file_patterns: [] } });
+    const findings = checkScopeLayers([p], VALID_LAYERS);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].principle_id).toBe("bad-layer");
+    expect(findings[0].invalid_layers).toEqual(["bogus"]);
+  });
+
+  it("returns zero findings for all-valid layers", () => {
+    const p = makePrinciple({
+      id: "valid-layers",
+      scope: { layers: ["api", "domain"], file_patterns: [] },
+    });
+    const findings = checkScopeLayers([p], VALID_LAYERS);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("returns zero findings for empty layers array", () => {
+    const p = makePrinciple({ id: "empty-layers", scope: { layers: [], file_patterns: [] } });
+    const findings = checkScopeLayers([p], VALID_LAYERS);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("flags only the invalid layer in a mixed valid+invalid list", () => {
+    const p = makePrinciple({
+      id: "mixed-layers",
+      scope: { layers: ["domain", "service"], file_patterns: [] },
+    });
+    const findings = checkScopeLayers([p], VALID_LAYERS);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].invalid_layers).toEqual(["service"]);
+    // valid layer must not appear in invalid_layers
+    expect(findings[0].invalid_layers).not.toContain("domain");
+  });
+
+  it("AC-2: finding message names offending layer, valid set, and remedy phrase", () => {
+    const p = makePrinciple({
+      id: "msg-test",
+      scope: { layers: ["service"], file_patterns: [] },
+    });
+    const findings = checkScopeLayers([p], VALID_LAYERS);
+    expect(findings).toHaveLength(1);
+    const msg = findings[0].message;
+    // Names the offending layer
+    expect(msg).toContain("service");
+    // Lists each valid layer name
+    for (const layer of VALID_LAYERS) {
+      expect(msg).toContain(layer);
+    }
+    // Includes remedy phrase
+    expect(msg).toContain("set layers: []");
+    expect(msg).toContain("file_patterns");
+  });
+
+  it("returns zero findings for an empty principles list", () => {
+    const findings = checkScopeLayers([], VALID_LAYERS);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("emits one finding per principle with invalid layers (multiple principles)", () => {
+    const p1 = makePrinciple({ id: "p1", scope: { layers: ["features"], file_patterns: [] } });
+    const p2 = makePrinciple({ id: "p2", scope: { layers: ["api"], file_patterns: [] } });
+    const p3 = makePrinciple({ id: "p3", scope: { layers: ["service"], file_patterns: [] } });
+    const findings = checkScopeLayers([p1, p2, p3], VALID_LAYERS);
+    expect(findings).toHaveLength(2);
+    expect(findings.map((f) => f.principle_id).sort()).toEqual(["p1", "p3"]);
+  });
+});
+
 // ---- checkCitedPaths (dc-06) ----
 
 describe("checkCitedPaths", () => {
@@ -425,12 +503,20 @@ describe("assembleWikiLintOutput", () => {
       line_number: 1,
     };
 
+    const scopeLayer = {
+      principle_id: "baz",
+      file_path: "principles/conventions/baz.md",
+      invalid_layers: ["service"],
+      message: "Principle 'baz' declares invalid scope.layers: service.",
+    };
+
     const output = assembleWikiLintOutput({
       contradictions: [contradiction],
       orphans: [orphan],
       staleRefs: [staleRef],
       missingExamples: [missingExample],
       citedPaths: [citedPath],
+      scopeLayers: [scopeLayer],
       filesScanned: 10,
       principlesChecked: 20,
     });
@@ -440,7 +526,8 @@ describe("assembleWikiLintOutput", () => {
     expect(output.stale_refs).toHaveLength(1);
     expect(output.missing_examples).toHaveLength(1);
     expect(output.cited_paths).toHaveLength(1);
-    expect(output.summary.total_findings).toBe(5);
+    expect(output.scope_layers).toHaveLength(1);
+    expect(output.summary.total_findings).toBe(6);
     expect(output.summary.files_scanned).toBe(10);
     expect(output.summary.principles_checked).toBe(20);
   });

@@ -259,6 +259,72 @@ describe("wikiLint tool handler", () => {
     expect(result.cited_paths).toEqual([]);
   });
 
+  it("scope_layers: detects a principle with an invalid layer name", async () => {
+    const tmp = makeTmpDir("scope-layers-bogus");
+
+    // Principle dir — one principle with an invalid layer name
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+
+    const bogusLayerContent = `---
+id: bogus-layer-principle
+title: Bogus Layer Principle
+severity: convention
+scope:
+  layers: [bogus]
+  tags: []
+---
+
+## Summary
+A test principle with a bogus layer.
+
+## Examples
+
+\`\`\`typescript
+// example
+const x = 1;
+\`\`\`
+`;
+    writeFileSync(join(principlesDir, "bogus-layer-principle.md"), bogusLayerContent, "utf8");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies bogus-layer-principle.\n", "utf8");
+
+    const result = await wikiLint({ checks: ["scope_layers"] }, tmp, tmp);
+
+    // Only scope_layers runs — all others empty
+    expect(result.contradictions).toEqual([]);
+    expect(result.orphan_principles).toEqual([]);
+    expect(result.stale_refs).toEqual([]);
+    expect(result.missing_examples).toEqual([]);
+    expect(result.cited_paths).toEqual([]);
+
+    // scope_layers detected the bogus layer
+    expect(result.scope_layers).toHaveLength(1);
+    expect(result.scope_layers[0].principle_id).toBe("bogus-layer-principle");
+    expect(result.scope_layers[0].invalid_layers).toEqual(["bogus"]);
+    expect(result.scope_layers[0].message).toContain("bogus");
+    expect(result.scope_layers[0].message).toContain("set layers: []");
+    expect(result.summary.total_findings).toBe(1);
+  });
+
+  it("scope_layers: README-style file (empty id) is never flagged as a finding", async () => {
+    const tmp = makeTmpDir("scope-layers-readme");
+
+    // Only a README-style file with no valid frontmatter id (empty id → filtered by loadAllPrinciples)
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+
+    // Write a valid principle (with examples) so the tool has something to work with
+    writePrincipleWithExamples(principlesDir, "real-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies real-principle.\n", "utf8");
+
+    const result = await wikiLint({ checks: ["scope_layers"] }, tmp, tmp);
+
+    // No scope_layers findings — real principle has empty layers (valid)
+    expect(result.scope_layers).toHaveLength(0);
+  });
+
   it("clean codebase: no findings when everything is valid", async () => {
     const tmp = makeTmpDir("clean");
 
