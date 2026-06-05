@@ -440,7 +440,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 **In-wave baseline**: After sequential wave execution, use `base_commit` (not `main`) as violation baseline. Only violations absent at `base_commit` are regressions. Pre-existing violations remain pre-existing even if the file was touched.
 
-**Doc-file conflict pre-check**: `CLAUDE.md` files (root and `mcp-server/.claude/CLAUDE.md`) are high-churn merge hotspots — concurrent builds and an advancing `main` conflict them even when code targets are clean. Before the verify step, if either file is in scope for context-sync OR `git rev-list {base_commit}..origin/main --count` returns > 0, run `git fetch origin` and check whether either file has diverged from the build base. Resolve any doc-file-only merge BEFORE verify, not after — this avoids a wasted verify+review cycle when the code is otherwise clean. This is a mid-build check (distinct from push-time hooks such as `pre-push-review.sh`).
+**Doc-file conflict pre-check**: `CLAUDE.md` files (root and `mcp-server/.claude/CLAUDE.md`) are high-churn merge hotspots — concurrent builds and an advancing `main` conflict them even when code targets are clean. Before the verify step, run `git fetch origin` first, then if either file is in scope for context-sync OR `git rev-list {base_commit}..origin/main --count` returns > 0, check whether either file has diverged from the build base. Resolve any doc-file-only merge BEFORE verify, not after — this avoids a wasted verify+review cycle when the code is otherwise clean. This is a mid-build check (distinct from push-time hooks such as `pre-push-review.sh`).
 
 ### Completion Checklist
 
