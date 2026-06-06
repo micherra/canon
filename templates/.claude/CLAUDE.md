@@ -6,7 +6,7 @@
 Structured output templates that agents must follow for consistent, parseable artifacts. Enforced by the `agent-template-required` rule — agents must read the template before producing output.
 
 ## Architecture
-<!-- last-updated: 2026-06-04 (renderer-review.md and renderer-codebase-graph.md now delegate force graph to shared force-graph.html snippet) -->
+<!-- last-updated: 2026-06-06 (renderer-review.md: mandatory Step 9 structural self-check added; renderer-review.md and renderer-codebase-graph.md delegate force graph to shared force-graph.html snippet) -->
 
 Each template is a markdown file with placeholder sections that agents fill in.
 
@@ -30,7 +30,7 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `chat-brief.md` | chat | Structured brief for build handoff |
 | `prd.md` | orchestrator | Structured PRD template the PM fills before spawning the architect; read by architect and renderer |
 | `renderer-design.md` | orchestrator | Renderer spawn prompt — converts PRD + design document + task DAG YAML + runbook to unified `design.html`; pure markdown, no MCP calls |
-| `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; file cards are `<details>`-expandable; includes Canvas dependency subgraph in Graph Context; delegates force-directed layout to shared `force-graph.html` snippet via `renderForceGraph(...)`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_file_context`) |
+| `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; file cards are `<details>`-expandable; includes Canvas dependency subgraph in Graph Context; delegates force-directed layout to shared `force-graph.html` snippet via `renderForceGraph(...)`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_file_context`); **Step 9** (MANDATORY): renderer must run 5 grep assertions against the written `review.html` (card count, snippet CSS, `drawFileGraph(` once, `renderForceGraph(` once [conditional on `showSubgraph`], design token defined) and loop repair+recheck until all pass before returning |
 | `renderer-codebase-graph.md` | orchestrator | Renderer spawn prompt — converts `codebase_graph` MCP data into standalone `codebase-graph.html`; delegates force-directed layout to shared `force-graph.html` snippet via `renderForceGraph(...)`; click-to-inspect side panel, DIFF_BASE filtering kept in template; requires MCP call (`codebase_graph`) |
 | `renderer-file-context.md` | orchestrator | Renderer spawn prompt — converts `get_file_context` MCP data into standalone `file-context.html`; requires MCP call (`get_file_context`) |
 | `sharpened-request.md` | pm-orchestrator | PM-to-architect hand-off artifact with Problem, Direction, Scope Boundaries, Acceptance Criteria, and Not Doing sections |
