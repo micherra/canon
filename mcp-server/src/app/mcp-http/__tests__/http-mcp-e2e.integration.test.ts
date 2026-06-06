@@ -5,7 +5,7 @@
  * Proves AC1–AC5 and AC6 (indirectly) against a real daemon composition
  * with the real @modelcontextprotocol/sdk HTTP client.
  *
- * AC1: SDK client connects, lists 44+ tools, calls a scoped tool → non-error result.
+ * AC1: SDK client connects, lists 43+ tools, calls a scoped tool → non-error result.
  * AC2: Two concurrent sessions with different project roots → zero cross-scope
  *      state bleed (scope resolves to the correct dir for each session).
  * AC3 e2e: client.close() (DELETE) triggers teardown for session A while B
@@ -26,7 +26,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -332,39 +332,37 @@ describe("AC2: two-session zero cross-scope bleed", () => {
     expect(result.isError).toBeFalsy();
   });
 
-  it("scope A artifacts do NOT appear under project B (AC2 fail-closed bleed test)", async () => {
-    // list_principles writes nothing, but we confirm the scoped call for B
-    // returns successfully, proving B's scope is isolated from A's.
-    // The negative assertion: project B's .canon dir contains no files from A.
-    const bCanonDir = join(projectB, ".canon");
-    let bEntries: string[] = [];
-    try {
-      bEntries = await readdir(bCanonDir);
-    } catch {
-      // .canon may not exist yet — that is fine, means no writes happened
-      bEntries = [];
-    }
+  it(
+    "scope A write artifact lands under projectA, NOT under projectB (AC2 fail-closed bleed test)",
+    async () => {
+      // Use store_summaries — a real writing tool that creates
+      // {projectDir}/.canon/knowledge-graph.db on first call.
+      // Scope isolation means the DB must appear only under projectA.
+      const result = await clientA.callTool({
+        name: "store_summaries",
+        arguments: {
+          summaries: [
+            {
+              file_path: "src/bleed-test-probe.ts",
+              summary: "AC2 scope-bleed probe — must land under projectA only",
+            },
+          ],
+        },
+      });
+      expect(result.isError).toBeFalsy();
 
-    const aCanonDir = join(projectA, ".canon");
-    let aEntries: string[] = [];
-    try {
-      aEntries = await readdir(aCanonDir);
-    } catch {
-      aEntries = [];
-    }
+      // (a) The artifact must exist under projectA's .canon tree
+      const artifactA = join(projectA, ".canon", "knowledge-graph.db");
+      const statA = await stat(artifactA).catch(() => null);
+      expect(statA).not.toBeNull(); // DB created under projectA
 
-    // Neither dir should contain the other's session artifacts.
-    // Since list_principles is read-only, no .canon writes occur — but we assert
-    // that nothing from projectA leaked into projectB by checking there are no
-    // cross-dir symlinks or surprise files.
-    for (const entry of bEntries) {
-      // Fail if any entry in projectB/.canon references a path under projectA
-      expect(entry).not.toContain(projectA);
-    }
-    for (const entry of aEntries) {
-      expect(entry).not.toContain(projectB);
-    }
-  });
+      // (b) The artifact must NOT exist under projectB's .canon tree
+      const artifactB = join(projectB, ".canon", "knowledge-graph.db");
+      const statB = await stat(artifactB).catch(() => null);
+      expect(statB).toBeNull(); // DB must NOT appear under projectB
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
 
 // ── AC3 e2e: Close session A while B remains live ─────────────────────────────

@@ -229,6 +229,26 @@ export async function teardownSession(sessionId: string): Promise<void> {
 
 // ── Transport factory ──────────────────────────────────────────────────────
 
+/**
+ * Build the allowedHosts list for a given port.
+ *
+ * Must stay in parity with auth.ts's ALLOWED_HOSTS (auth layer) and
+ * LOOPBACK_ADDRESSES (loopback check). Both IPv4 and IPv6 loopback forms are
+ * included so that clients connecting via [::1] are accepted by both layers.
+ *
+ * Exported for unit testing parity assertions.
+ */
+export function buildAllowedHosts(port: number): string[] {
+  return [
+    "127.0.0.1",
+    `127.0.0.1:${port}`,
+    "localhost",
+    `localhost:${port}`,
+    "[::1]",
+    `[::1]:${port}`,
+  ];
+}
+
 /** Create a stateful StreamableHTTPServerTransport for a new HTTP session. */
 function createSessionTransport(
   port: number,
@@ -236,7 +256,7 @@ function createSessionTransport(
   headerDir: string | undefined,
 ): StreamableHTTPServerTransport {
   const transport = new StreamableHTTPServerTransport({
-    allowedHosts: ["127.0.0.1", `127.0.0.1:${port}`, "localhost", `localhost:${port}`],
+    allowedHosts: buildAllowedHosts(port),
     enableDnsRebindingProtection: true,
     onsessionclosed: (closedSessionId) => {
       void teardownSession(closedSessionId);

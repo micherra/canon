@@ -7,7 +7,7 @@
  *
  * Covers:
  *   Characterization:
- *   - Tool count from factory matches pre-refactor count (44 tools)
+ *   - Tool count from factory matches pre-refactor count (43 tools)
  *   - Tool names set matches a known stable subset
  *
  *   Factory independence:

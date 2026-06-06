@@ -241,6 +241,13 @@ while (( _elapsed < TIMEOUT )); do
   if [[ -n "$_probe" ]]; then
     _started_version=$(echo "$_probe" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
     if [[ -n "$_started_version" ]]; then
+      # When the expected plugin version is known, require the polled version to
+      # match exactly. A mismatch means the old daemon survived the kill attempt
+      # and is reporting as healthy — this is NOT a successful start.
+      if [[ -n "$PLUGIN_VERSION" ]] && [[ "$_started_version" != "$PLUGIN_VERSION" ]]; then
+        echo "CANON WARNING: polled daemon reports v${_started_version} but expected v${PLUGIN_VERSION}; old daemon may have survived — start did not succeed"
+        exit 0
+      fi
       echo "CANON NOTE: daemon started successfully (v${_started_version})"
       exit 0
     fi

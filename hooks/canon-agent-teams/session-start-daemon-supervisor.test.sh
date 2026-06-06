@@ -366,6 +366,83 @@ fi
 rm -rf "$TMPDATA" "$TMPROOT"
 
 # ---------------------------------------------------------------------------
+# Test 9: Post-start poll version mismatch (old daemon survived) → WARNING, not success
+#
+# Simulates the case where the old daemon was not killed (survived) and the new
+# start command was issued, but the health poll returns the OLD version instead
+# of the expected new version. The supervisor must report a WARNING rather than
+# falsely claiming "started successfully".
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+# Plugin expects NEW version 9.0.0-new
+echo '{"name":"canon-mcp","version":"9.0.0-new"}' > "$TMPROOT/mcp-server/package.json"
+
+# Start a fake health server returning OLD version (simulates stale daemon that survived)
+FREE_PORT9=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+python3 -c "
+import http.server, json
+
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            body = json.dumps({'ok': True, 'port': ${FREE_PORT9}, 'version': '8.9.9-old', 'transport': 'http'}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(body)
+    def log_message(self, *a): pass
+
+http.server.HTTPServer(('127.0.0.1', ${FREE_PORT9}), H).serve_forever()
+" &
+FAKE_SERVER_PID9=$!
+disown "$FAKE_SERVER_PID9" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown prevents bash job-tracking; cleanup via explicit kill below
+sleep 0.5
+
+# No PID file → supervisor goes through start path, issues boot cmd, then polls
+BOOT_MARKER9="$TMPDATA/boot_called9"
+OUTPUT9=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORT9" \
+  CANON_SUPERVISOR_BOOT_CMD="touch $BOOT_MARKER9" \
+  CANON_SUPERVISOR_START_TIMEOUT=3 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE9=$?
+
+kill "$FAKE_SERVER_PID9" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- cleanup only
+
+# Boot was called (start path was entered), exit 0 (advisory hook never fails)
+# Output must contain WARNING about old daemon surviving, NOT "started successfully"
+BOOT_WAS_CALLED=no
+[[ -f "$BOOT_MARKER9" ]] && BOOT_WAS_CALLED=yes
+
+WARNED_OLD_DAEMON=no
+if echo "$OUTPUT9" | grep -q "old daemon may have survived"; then
+  WARNED_OLD_DAEMON=yes
+fi
+
+FALSELY_REPORTED_SUCCESS=no
+if echo "$OUTPUT9" | grep -q "started successfully"; then
+  FALSELY_REPORTED_SUCCESS=yes
+fi
+
+if [[ $EXIT_CODE9 -eq 0 ]] && [[ "$BOOT_WAS_CALLED" == "yes" ]] && [[ "$WARNED_OLD_DAEMON" == "yes" ]] && [[ "$FALSELY_REPORTED_SUCCESS" == "no" ]]; then
+  pass "Post-start poll version mismatch: WARNING emitted, 'started successfully' NOT printed, exit 0"
+else
+  fail "Post-start poll mismatch: exit=$EXIT_CODE9, boot_called=${BOOT_WAS_CALLED}, warned_old=${WARNED_OLD_DAEMON}, false_success=${FALSELY_REPORTED_SUCCESS}, output=$(echo "$OUTPUT9" | head -8)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

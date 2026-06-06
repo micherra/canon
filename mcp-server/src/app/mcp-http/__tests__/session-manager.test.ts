@@ -69,6 +69,7 @@ import {
 } from "../../server-state.ts";
 import {
   _injectSessionForTest,
+  buildAllowedHosts,
   closeAllSessions,
   sessionCount,
   teardownSession,
@@ -322,5 +323,39 @@ describe("closeAllSessions", () => {
     expect(sessionCount()).toBe(2);
     await closeAllSessions();
     expect(sessionCount()).toBe(0);
+  });
+});
+
+// ── allowedHosts parity (contract-parity-across-layers) ────────────────────
+//
+// auth.ts accepts [::1] (via ALLOWED_HOSTS) and ::1 (via LOOPBACK_ADDRESSES).
+// The SDK transport's allowedHosts must include the same IPv6 forms so that
+// the two layers agree — a request that passes auth must also pass the SDK host
+// check, and vice versa.
+
+describe("buildAllowedHosts — parity with auth.ts ALLOWED_HOSTS", () => {
+  it("includes all IPv4 loopback forms (with and without port)", () => {
+    const hosts = buildAllowedHosts(3142);
+    expect(hosts).toContain("127.0.0.1");
+    expect(hosts).toContain("127.0.0.1:3142");
+    expect(hosts).toContain("localhost");
+    expect(hosts).toContain("localhost:3142");
+  });
+
+  it("includes [::1] (bracketed) and [::1]:port to match auth.ts ALLOWED_HOSTS", () => {
+    const hosts = buildAllowedHosts(3142);
+    // auth.ts ALLOWED_HOSTS includes "[::1]" (extractHostname strips port suffix)
+    // SDK does an exact includes() check on the raw Host header — both forms required
+    expect(hosts).toContain("[::1]");
+    expect(hosts).toContain("[::1]:3142");
+  });
+
+  it("reflects the chosen port in port-suffixed entries", () => {
+    const hostsA = buildAllowedHosts(9001);
+    const hostsB = buildAllowedHosts(9002);
+    expect(hostsA).toContain("127.0.0.1:9001");
+    expect(hostsA).not.toContain("127.0.0.1:9002");
+    expect(hostsB).toContain("[::1]:9002");
+    expect(hostsB).not.toContain("[::1]:9001");
   });
 });
