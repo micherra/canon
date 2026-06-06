@@ -119,7 +119,7 @@ export function handleArtifactRoutes(
       respondJson(res, 404, { error: "Artifact not found", key });
       return true;
     }
-    serveArtifactHtml(res, key, artifact.html, artifact.data, ctx.port);
+    serveArtifactHtml(res, key, artifact, ctx.port);
     return true;
   }
 
@@ -134,10 +134,10 @@ export function handleArtifactRoutes(
 function serveArtifactHtml(
   res: ServerResponse,
   key: string,
-  html: string,
-  data: unknown,
+  artifact: { html: string; data: unknown },
   port: number,
 ): void {
+  const { html, data } = artifact;
   // Inject window globals before </head> (or </body> as fallback)
   const safeData = JSON.stringify(data)
     .replace(/</g, "\\u003c")

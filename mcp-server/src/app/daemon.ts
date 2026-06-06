@@ -40,15 +40,25 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanupAllJobManagers } from "@platform/jobs/job-manager.ts";
-import { authenticate, loadOrCreateToken, resolveTokenPath, type TokenResult } from "./mcp-http/auth.ts";
-import { closeAllSessions, handleMcpRequest } from "./mcp-http/session-manager.ts";
 import { handleArtifactRoutes, respondJson } from "./http-routes.ts";
 import { removePidFile, writePidFile } from "./http-server.ts";
+import {
+  authenticate,
+  loadOrCreateToken,
+  resolveTokenPath,
+  type TokenResult,
+} from "./mcp-http/auth.ts";
+import { closeAllSessions, handleMcpRequest } from "./mcp-http/session-manager.ts";
 import { resolveReady } from "./server-state.ts";
 
 // ---------------------------------------------------------------------------
@@ -184,102 +194,97 @@ export function probeExistingDaemon(
 // Daemon start / stop (exported for tests)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Request handler (extracted for line-limit compliance)
+// ---------------------------------------------------------------------------
+
 /**
- * Starts the Canon MCP HTTP daemon.
+ * Handles a single incoming request for the daemon. Extracted from startDaemon
+ * to comply with the noExcessiveLinesPerFunction lint rule.
  *
- * In production this is called once at process startup. Tests call it with
- * explicit port/pidDir/tokenPath to avoid filesystem and port collisions.
+ * @param req - Incoming HTTP request.
+ * @param res - Outgoing HTTP response.
+ * @param tokenResult - Token load result (checked for 503 path).
+ * @param version - Package version string (injected into /health).
  */
-export async function startDaemon(opts: DaemonOptions = {}): Promise<void> {
-  // Resolve port
-  daemonPort =
-    opts.port ??
-    Number.parseInt(process.env.CANON_DAEMON_PORT ?? String(DAEMON_DEFAULT_PORT), 10);
-  if (Number.isNaN(daemonPort) || daemonPort < 1 || daemonPort > 65535) {
-    daemonPort = DAEMON_DEFAULT_PORT;
+function handleDaemonRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  tokenResult: TokenResult,
+  version: string,
+): void {
+  // CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
   }
 
-  // Resolve PID dir
-  daemonPidDir = resolveDaemonPidDir(opts.pidDir);
+  const url = new URL(req.url ?? "/", `http://127.0.0.1:${daemonPort}`);
 
-  // Resolve token
-  const tokenPath = opts.tokenPath ?? resolveTokenPath();
-  const tokenResult: TokenResult = await loadOrCreateToken(tokenPath);
+  if (url.pathname === "/mcp") {
+    handleMcpRoute(req, res, tokenResult);
+    return;
+  }
 
+  // Artifact + health routes (unauthenticated)
+  if (
+    handleArtifactRoutes(req, res, {
+      healthExtra: { transport: "http", version },
+      port: daemonPort,
+    })
+  )
+    return;
+
+  // 404 fallback
+  respondJson(res, 404, { error: "Not found" });
+}
+
+/**
+ * Handles the /mcp route: 503 on token-unavailable, auth check, then delegate.
+ */
+function handleMcpRoute(req: IncomingMessage, res: ServerResponse, tokenResult: TokenResult): void {
+  // 503 when token unavailable (fail-closed)
   if (!tokenResult.ok) {
-    process.stderr.write(
-      `CANON ERROR: daemon token load failed: ${tokenResult.error}. ` +
-        `POST /mcp will return 503 until the token is available.\n`,
-    );
-  }
-
-  // Read version once at boot
-  const version = await readPackageVersion();
-
-  // Resolve the global ready gate so stray code paths don't hang.
-  // Per-session gates govern all HTTP tool handlers — the global gate
-  // is only relevant for the stdio fallback path, which is never taken
-  // in daemon mode (no __stdio__ sentinel is registered). Resolving it
-  // is safe: resolveScope() still fails closed for unregistered sessions.
-  resolveReady();
-
-  return new Promise<void>((resolve, reject) => {
-    daemonServer = createServer((req: IncomingMessage, res: ServerResponse) => {
-      // CORS headers
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id");
-
-      if (req.method === "OPTIONS") {
-        res.writeHead(204);
-        res.end();
-        return;
-      }
-
-      const url = new URL(req.url ?? "/", `http://127.0.0.1:${daemonPort}`);
-
-      // POST /mcp — auth-gated MCP endpoint
-      if (url.pathname === "/mcp") {
-        // 503 when token unavailable (fail-closed)
-        if (!tokenResult.ok) {
-          respondJson(res, 503, {
-            error: "Service unavailable: token not loaded",
-            detail: tokenResult.error,
-          });
-          return;
-        }
-        // Authenticate the request
-        const authResult = authenticate(req, tokenResult.token);
-        if (!authResult.ok) {
-          respondJson(res, authResult.status, { error: authResult.reason });
-          return;
-        }
-        // Auth passed — delegate to session manager
-        handleMcpRequest(req, res, daemonPort).catch((err: unknown) => {
-          process.stderr.write(`CANON ERROR: handleMcpRequest failed: ${String(err)}\n`);
-          if (!res.headersSent) {
-            respondJson(res, 500, { error: "Internal server error" });
-          }
-        });
-        return;
-      }
-
-      // Artifact + health routes (unauthenticated)
-      if (
-        handleArtifactRoutes(req, res, {
-          port: daemonPort,
-          healthExtra: { version, transport: "http" },
-        })
-      )
-        return;
-
-      // 404 fallback
-      respondJson(res, 404, { error: "Not found" });
+    respondJson(res, 503, {
+      detail: tokenResult.error,
+      error: "Service unavailable: token not loaded",
     });
+    return;
+  }
+  // Authenticate the request
+  const authResult = authenticate(req, tokenResult.token);
+  if (!authResult.ok) {
+    respondJson(res, authResult.status, { error: authResult.reason });
+    return;
+  }
+  // Auth passed — delegate to session manager
+  handleMcpRequest(req, res, daemonPort).catch((err: unknown) => {
+    process.stderr.write(`CANON ERROR: handleMcpRequest failed: ${String(err)}\n`);
+    if (!res.headersSent) {
+      respondJson(res, 500, { error: "Internal server error" });
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Server lifecycle
+// ---------------------------------------------------------------------------
+
+/**
+ * Binds the daemon server to the configured port and writes the PID file.
+ * Extracted from startDaemon for line-limit compliance.
+ */
+function bindDaemonServer(tokenResult: TokenResult, version: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    daemonServer = createServer((req, res) => handleDaemonRequest(req, res, tokenResult, version));
 
     daemonServer.on("error", async (err: NodeJS.ErrnoException) => {
       if (err.code === "EADDRINUSE") {
-        // Probe the existing process to determine race outcome
         const probeResult = await probeExistingDaemon(daemonPort, version);
         if (probeResult === "same-version") {
           process.stderr.write(
@@ -301,15 +306,52 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<void> {
 
     daemonServer.listen(daemonPort, "127.0.0.1", async () => {
       process.stderr.write(`Canon MCP daemon listening on http://127.0.0.1:${daemonPort}\n`);
-
-      // Write PID file (best-effort)
       if (daemonPidDir) {
         await writePidFile(daemonPidDir, daemonPort, DAEMON_PID_FILENAME);
       }
-
       resolve();
     });
   });
+}
+
+/**
+ * Starts the Canon MCP HTTP daemon.
+ *
+ * In production this is called once at process startup. Tests call it with
+ * explicit port/pidDir/tokenPath to avoid filesystem and port collisions.
+ */
+export async function startDaemon(opts: DaemonOptions = {}): Promise<void> {
+  // Resolve port
+  daemonPort =
+    opts.port ?? Number.parseInt(process.env.CANON_DAEMON_PORT ?? String(DAEMON_DEFAULT_PORT), 10);
+  if (Number.isNaN(daemonPort) || daemonPort < 1 || daemonPort > 65535) {
+    daemonPort = DAEMON_DEFAULT_PORT;
+  }
+
+  // Resolve PID dir
+  daemonPidDir = resolveDaemonPidDir(opts.pidDir);
+
+  // Resolve token
+  const tokenPath = opts.tokenPath ?? resolveTokenPath();
+  const tokenResult: TokenResult = await loadOrCreateToken(tokenPath);
+  if (!tokenResult.ok) {
+    process.stderr.write(
+      `CANON ERROR: daemon token load failed: ${tokenResult.error}. ` +
+        `POST /mcp will return 503 until the token is available.\n`,
+    );
+  }
+
+  // Read version once at boot
+  const version = await readPackageVersion();
+
+  // Resolve the global ready gate so stray code paths don't hang.
+  // Per-session gates govern all HTTP tool handlers — the global gate
+  // is only relevant for the stdio fallback path, which is never taken
+  // in daemon mode (no __stdio__ sentinel is registered). Resolving it
+  // is safe: resolveScope() still fails closed for unregistered sessions.
+  resolveReady();
+
+  return bindDaemonServer(tokenResult, version);
 }
 
 /**
@@ -382,10 +424,7 @@ export function wireDaemonSignals(): void {
 
 // Only run as the main module — skip when imported by tests.
 // ESM check: import.meta.url matches process.argv[1] (tsx resolves to the original file).
-if (
-  process.env.VITEST === undefined &&
-  process.env.CANON_HTTP_DAEMON === "1"
-) {
+if (process.env.VITEST === undefined && process.env.CANON_HTTP_DAEMON === "1") {
   wireDaemonSignals();
   startDaemon().catch((err: unknown) => {
     process.stderr.write(`CANON ERROR: daemon startup failed: ${String(err)}\n`);

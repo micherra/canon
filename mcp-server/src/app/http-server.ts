@@ -31,11 +31,32 @@ import {
   handleArtifactRoutes,
   resetRoutesStateForTesting,
   respondJson,
+  registerArtifact as routesRegister,
+  removeArtifact as routesRemove,
 } from "./http-routes.ts";
 
-// Re-export artifact registration so existing callers of http-server.ts
-// (e.g. features/orchestration, present_artifact) are unaffected.
-export { registerArtifact, removeArtifact } from "./http-routes.ts";
+/**
+ * Registers an HTML artifact for serving via GET /artifact/:type/:slug.
+ * Delegates to http-routes.ts. Kept here so existing callers of http-server.ts
+ * (features/orchestration, ui/snippets) are unaffected.
+ *
+ * @param key - Artifact key in `"${type}/${slug}"` format.
+ * @param html - Complete HTML string to serve.
+ * @param data - Arbitrary data object serialized as `window.__CANON_DATA__`.
+ */
+export function registerArtifact(key: string, html: string, data: unknown): void {
+  routesRegister(key, html, data);
+}
+
+/**
+ * Removes a registered artifact.
+ * Delegates to http-routes.ts. Kept here so existing callers of http-server.ts are unaffected.
+ *
+ * @param key - Artifact key in `"${type}/${slug}"` format.
+ */
+export function removeArtifact(key: string): void {
+  routesRemove(key);
+}
 
 const DEFAULT_PORT = 3141;
 const DEFAULT_PID_FILENAME = "canon-server.pid";

@@ -12,18 +12,12 @@
  * - startHttpServer default remains 3141 (port regression guard)
  */
 
-import { createServer, type IncomingMessage } from "node:http";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, afterEach, describe, expect, it, vi } from "vitest";
-import {
-  DAEMON_DEFAULT_PORT,
-  DAEMON_PID_FILENAME,
-  startDaemon,
-  stopDaemon,
-} from "../daemon.ts";
-import { getHttpPort as getStdioHttpPort } from "../http-server.ts";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { DAEMON_DEFAULT_PORT, DAEMON_PID_FILENAME, startDaemon, stopDaemon } from "../daemon.ts";
 
 // ---------------------------------------------------------------------------
 // Constants regression guards (must be checked before any daemon starts)
@@ -121,9 +115,7 @@ describe("Daemon /mcp — auth gate", () => {
   it("GET /health version matches package.json version", async () => {
     const { readFile: rf } = await import("node:fs/promises");
     // Read the actual package.json — version must match exactly
-    const pkgPath = join(
-      new URL("../../../package.json", import.meta.url).pathname,
-    );
+    const pkgPath = join(new URL("../../../package.json", import.meta.url).pathname);
     const pkg = JSON.parse(await rf(pkgPath, "utf8")) as { version: string };
 
     const res = await daemonRequest(TEST_DAEMON_PORT, "GET", "/health");
@@ -277,16 +269,16 @@ describe("Daemon EADDRINUSE — same version exit(0)", () => {
   it("resolves a same-version probe by calling process.exit(0) (via injection)", async () => {
     // Set up a "fake existing daemon" on an ephemeral port that responds same version
     const { readFile: rf } = await import("node:fs/promises");
-    const pkgPath = join(
-      new URL("../../../package.json", import.meta.url).pathname,
-    );
+    const pkgPath = join(new URL("../../../package.json", import.meta.url).pathname);
     const pkg = JSON.parse(await rf(pkgPath, "utf8")) as { version: string };
 
     const fakePort = 13204;
     const fakeServer = createServer((req: IncomingMessage, res) => {
       if (req.url === "/health") {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, port: fakePort, version: pkg.version, transport: "http" }));
+        res.end(
+          JSON.stringify({ ok: true, port: fakePort, version: pkg.version, transport: "http" }),
+        );
       } else {
         res.writeHead(404);
         res.end();

@@ -8,14 +8,19 @@
  * - Route isolation: /mcp not handled (returns false)
  */
 
-import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   handleArtifactRoutes,
+  type RouteContext,
   registerArtifact,
   removeArtifact,
   resetRoutesStateForTesting,
-  type RouteContext,
 } from "../http-routes.ts";
 
 // ---------------------------------------------------------------------------
@@ -118,7 +123,10 @@ describe("handleArtifactRoutes — /health", () => {
   it("/health includes healthExtra fields when provided", async () => {
     // Use a dedicated port for a server with healthExtra
     const extraPort = 13143;
-    const extraCtx: RouteContext = { port: extraPort, healthExtra: { version: "1.2.3", transport: "http" } };
+    const extraCtx: RouteContext = {
+      port: extraPort,
+      healthExtra: { version: "1.2.3", transport: "http" },
+    };
 
     let extraServer: ReturnType<typeof createServer>;
     await new Promise<void>((resolve) => {
@@ -133,23 +141,26 @@ describe("handleArtifactRoutes — /health", () => {
 
     try {
       const http = await import("node:http");
-      const res = await new Promise<{ status: number; body: string }>(
-        (resolveReq, reject) => {
-          const r = http.request(
-            { hostname: "127.0.0.1", method: "GET", path: "/health", port: extraPort },
-            (response: IncomingMessage) => {
-              let data = "";
-              response.on("data", (chunk: Buffer) => {
-                data += chunk.toString();
-              });
-              response.on("end", () => resolveReq({ status: response.statusCode ?? 0, body: data }));
-            },
-          );
-          r.on("error", reject);
-          r.end();
-        },
-      );
-      const body = JSON.parse(res.body) as { ok: boolean; port: number; version: string; transport: string };
+      const res = await new Promise<{ status: number; body: string }>((resolveReq, reject) => {
+        const r = http.request(
+          { hostname: "127.0.0.1", method: "GET", path: "/health", port: extraPort },
+          (response: IncomingMessage) => {
+            let data = "";
+            response.on("data", (chunk: Buffer) => {
+              data += chunk.toString();
+            });
+            response.on("end", () => resolveReq({ status: response.statusCode ?? 0, body: data }));
+          },
+        );
+        r.on("error", reject);
+        r.end();
+      });
+      const body = JSON.parse(res.body) as {
+        ok: boolean;
+        port: number;
+        version: string;
+        transport: string;
+      };
       expect(body.ok).toBe(true);
       expect(body.port).toBe(extraPort);
       expect(body.version).toBe("1.2.3");
