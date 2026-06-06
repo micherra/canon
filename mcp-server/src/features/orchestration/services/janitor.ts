@@ -440,13 +440,20 @@ async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[])
 
 /**
  * Remove a branch directory when it is now empty after slug pruning.
+ *
+ * Uses `rmdirSync` rather than `rmSync(recursive:true)` — the same atomic
+ * primitive used by `pruneHuskDirsTask`. `rmdirSync` fails with ENOTEMPTY if
+ * the directory is non-empty at the moment of the syscall, preventing a TOCTOU
+ * race where a concurrent process creates a new slug between our emptiness check
+ * and the deletion. The error lands in the existing best-effort warn path and
+ * the branch directory is left intact for the next janitor run.
  */
 function cleanupEmptyBranchDir(branchDir: string, prunedInBranch: number): void {
   if (prunedInBranch === 0) return;
   const remaining = listDir(branchDir);
   if (remaining !== null && remaining.length === 0) {
     try {
-      rmSync(branchDir, { force: true, recursive: true });
+      rmdirSync(branchDir);
     } catch (err: unknown) {
       console.warn(
         "[canon] janitor: failed to remove empty branch dir:",
