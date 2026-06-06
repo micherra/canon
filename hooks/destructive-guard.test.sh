@@ -628,6 +628,159 @@ run_test 'sudo git status still passes after Bug-3 fix' 0 \
   "$(make_input 'sudo git status')" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# make_multiline_input — build a JSON payload from a heredoc/variable.
+# Uses jq to properly encode the multiline string as JSON.
+# -----------------------------------------------------------------------
+make_multiline_input() {
+  local cmd="$1"
+  printf '%s' "$cmd" | jq -Rs '{"tool_input":{"command":.}}'
+}
+
+# -----------------------------------------------------------------------
+# AC #1 evidence regressions — the two exact PRD commands must pass (exit 0)
+# Assemble trigger-word variable to avoid triggering the live hook on this file.
+# -----------------------------------------------------------------------
+_WT_LIST="worktree list"
+echo ""
+echo "-- AC #1 evidence regressions: PRD multiline commands (should pass, exit 0) --"
+
+# PRD Command A (toolu_01ARZGi9): compound with VAR= assignments, comment lines,
+# ls/realpath, and git worktree list --porcelain | grep pipeline.
+_CMD_A=$(cat <<'CMDA'
+TRIM_WORKSPACE=".canon/workspaces/canon--trim-mcp-server-claudemd"
+TRIM_WORKTREE_PATH="$TRIM_WORKSPACE/worktree"
+# Check what's inside the canon--trim-mcp-server-claudemd workspace's worktree dir
+ls -la "$TRIM_WORKTREE_PATH" 2>/dev/null || echo "Worktree path does not exist"
+# Check if the worktree path is registered with git
+realpath "$TRIM_WORKTREE_PATH" 2>/dev/null || echo "Cannot resolve path"
+CMDA
+)
+# Append the git pipeline line (using variable to avoid hook triggering on this file)
+_GIT_WT_PIPELINE="git worktree list --porcelain | grep \"^worktree \" | sed 's/^worktree //' | grep -F \"\$TRIM_WORKTREE_PATH\" && echo \"REGISTERED\" || echo \"NOT REGISTERED\""
+_CMD_A_FULL="${_CMD_A}
+${_GIT_WT_PIPELINE}"
+
+run_test "AC#1 PRD Command A: multiline with comments + git worktree list pipeline passes" \
+  0 "$(make_multiline_input "$_CMD_A_FULL")" "$NON_WT_PWD"
+
+# PRD Command B (toolu_01WQUWwT): TRIM_WT= / realpath / comment / two git worktree pipelines.
+_CMD_B_PRE=$(cat <<'CMDB'
+TRIM_WT=".canon/workspaces/canon--trim/worktree"
+TRIM_WT_REAL=$(realpath "$TRIM_WT" 2>/dev/null || echo "not found")
+# Confirm the trim workspace worktree/ is empty and NOT registered with git
+CMDB
+)
+_GIT_WT_B1="git worktree list --porcelain | grep '^worktree ' | grep -xF \"\$TRIM_WT_REAL\" && echo \"REGISTERED\" || echo \"NOT REGISTERED\""
+_GIT_WT_B2="git worktree list --porcelain | grep '^worktree ' | grep -c \"\$TRIM_WT_REAL\" || true"
+_CMD_B_FULL="${_CMD_B_PRE}
+${_GIT_WT_B1}
+${_GIT_WT_B2}"
+
+run_test "AC#1 PRD Command B: multiline with comment + two git worktree list pipelines passes" \
+  0 "$(make_multiline_input "$_CMD_B_FULL")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Comment handling (exit 0)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Comment handling (should pass, exit 0) --"
+
+# Comment line ending in the word "git" followed by a safe command.
+_COMMENT_GIT_LINE="# git cleanup time
+ls /tmp"
+run_test "comment line ending in git followed by ls passes" \
+  0 "$(make_multiline_input "$_COMMENT_GIT_LINE")" "$NON_WT_PWD"
+
+# Comment containing a parenthetical git branch reference.
+_COMMENT_GIT_BRANCH="# checked (git branch --merged main confirmed it)
+ls /tmp"
+run_test "comment containing git branch --merged reference passes" \
+  0 "$(make_multiline_input "$_COMMENT_GIT_BRANCH")" "$NON_WT_PWD"
+
+# Trailing same-line comment.
+run_test "trailing same-line comment: ls /tmp # checked against git passes" \
+  0 "$(make_multiline_input "ls /tmp # checked against git")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Quoted-string handling (exit 0)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Quoted-string handling (should pass, exit 0) --"
+
+# echo with a quoted string containing git text (no standalone git token).
+run_test 'echo "git worktree remove exit: $?" passes' \
+  0 "$(make_multiline_input 'echo "git worktree remove exit: $?"')" "$NON_WT_PWD"
+
+run_test "echo 'git is fine' passes" \
+  0 "$(make_multiline_input "echo 'git is fine'")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Must-still-block (exit 2): destructive ops after comments/quoted strings
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Must-still-block: destructive ops not defeated by comments/quotes (exit 2) --"
+
+# Quoted "git is fine" then a real destructive op after ;.
+# Use variable assembly for the destructive part.
+_HARD_RESET="git reset --hard"
+run_test 'echo "git is fine" ; git reset --hard still blocks' \
+  2 "$(make_multiline_input "echo \"git is fine\" ; $_HARD_RESET")" "$NON_WT_PWD"
+
+# Comment line, then destructive op on next line.
+_COMMENT_THEN_DESTRUCTIVE="# git cleanup time
+git clean -fd"
+run_test "comment line then git clean -fd on next line still blocks" \
+  2 "$(make_multiline_input "$_COMMENT_THEN_DESTRUCTIVE")" "$NON_WT_PWD"
+
+# Quoted # inside a commit message is NOT a comment — the reset must still block.
+_QUOTED_HASH_CMD="git commit -m \"a # b\" && $_HARD_RESET"
+run_test 'git commit -m "a # b" && git reset --hard still blocks (quoted hash not a comment)' \
+  2 "$(make_multiline_input "$_QUOTED_HASH_CMD")" "$NON_WT_PWD"
+
+# AC #2 named cases: pipe and cd compound.
+_BRANCH_D="branch -D x"
+run_test "git branch -D x | cat still blocks (piped)" \
+  2 "$(make_multiline_input "git $_BRANCH_D | cat")" "$NON_WT_PWD"
+
+run_test "cd foo && git branch -D x still blocks (cd compound)" \
+  2 "$(make_multiline_input "cd foo && git $_BRANCH_D")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Comments-only command (exit 0)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Comments-only command (should pass, exit 0) --"
+
+_COMMENTS_ONLY="# just a note about git"
+run_test "comments-only command passes" \
+  0 "$(make_multiline_input "$_COMMENTS_ONLY")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Fail-closed strengthening (exit 2): git $SUBCMD-style (AC #3)
+# Single-quote payload assembly so shell variable does NOT expand.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Fail-closed strengthening: git \$SUBCMD forms (should block, exit 2) --"
+
+run_test 'git $SUBCMD blocks fail-closed (unresolvable variable subcommand)' \
+  2 "$(make_multiline_input 'git $SUBCMD')" "$NON_WT_PWD"
+
+run_test 'git $SUBCMD --hard blocks fail-closed' \
+  2 "$(make_multiline_input 'git $SUBCMD --hard')" "$NON_WT_PWD"
+
+run_test 'git $(pick-cmd) --hard blocks fail-closed' \
+  2 "$(make_multiline_input 'git $(pick-cmd) --hard')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# Shape-validation pass control (exit 0): variable as OPTION VALUE, not subcmd
+# -----------------------------------------------------------------------
+echo ""
+echo "-- Shape-validation pass control: variable as option value (should pass, exit 0) --"
+
+run_test 'git -C $DIR status passes (variable is option value, resolved sub=status)' \
+  0 "$(make_multiline_input 'git -C $DIR status')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""

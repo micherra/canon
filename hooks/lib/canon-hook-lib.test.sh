@@ -323,6 +323,100 @@ assert_eq 'env git status still resolves to status' \
   "$(canon_git_subcommand 'env git status')"
 
 # ---------------------------------------------------------------------------
+# canon_strip_comments
+# ---------------------------------------------------------------------------
+printf '\n=== canon_strip_comments ===\n'
+
+# Full-line comment dropped; newline preserved (so line count stays the same).
+assert_eq 'full-line comment dropped' \
+  "" \
+  "$(printf '# this is a comment\n' | canon_strip_comments)"
+
+# Note: the newline itself is preserved in the output — we test line count separately below.
+
+# Trailing comment on same line dropped (space before #).
+assert_eq 'trailing comment on same line dropped' \
+  "ls /tmp " \
+  "$(printf 'ls /tmp # checked against git\n' | canon_strip_comments)"
+
+# # inside double quotes preserved (not a comment).
+assert_eq '# inside double quotes preserved' \
+  'git commit -m "fix #42"' \
+  "$(printf 'git commit -m "fix #42"\n' | canon_strip_comments)"
+
+# # inside single quotes preserved.
+assert_eq "# inside single quotes preserved" \
+  "echo 'not a #comment'" \
+  "$(printf "echo 'not a #comment'\n" | canon_strip_comments)"
+
+# foo#bar (no word boundary) — not a comment, emitted verbatim.
+assert_eq 'foo#bar mid-word not a comment' \
+  "foo#bar" \
+  "$(printf 'foo#bar\n' | canon_strip_comments)"
+
+# $# — not a comment (# is not at word start).
+assert_eq '$# not a comment' \
+  'echo $#' \
+  "$(printf 'echo $#\n' | canon_strip_comments)"
+
+# Apostrophe inside a comment does NOT poison quote state for following lines.
+# After the comment line, the next line should still be processed normally.
+assert_eq "apostrophe in comment does not affect following line" \
+  "ls" \
+  "$(printf "# workspace's worktree\nls\n" | canon_strip_comments | tail -1)"
+
+# Multiline double-quoted string spanning a line whose text starts with # is preserved.
+assert_eq 'multiline dq string: line starting with # inside dq preserved' \
+  '#not-a-comment-inside-dq' \
+  "$(printf 'echo "\n#not-a-comment-inside-dq\n"\n' | canon_strip_comments | sed -n '2p')"
+
+# Newline count of output equals input (comment lines still emit a newline).
+_INPUT_LINES=$(printf '# comment\nls /tmp\n# another\n' | wc -l | tr -d ' ')
+_OUTPUT_LINES=$(printf '# comment\nls /tmp\n# another\n' | canon_strip_comments | wc -l | tr -d ' ')
+assert_eq 'newline count of output equals input' \
+  "$_INPUT_LINES" \
+  "$_OUTPUT_LINES"
+
+# ---------------------------------------------------------------------------
+# canon_has_git_token
+# ---------------------------------------------------------------------------
+printf '\n=== canon_has_git_token ===\n'
+
+assert_true '"git status" has git token' \
+  canon_has_git_token "git status"
+
+assert_false '"echo \"git x\"" has no standalone git token' \
+  canon_has_git_token 'echo "git x"'
+
+assert_true '"\"git\" status" (quoted git) has git token' \
+  canon_has_git_token '"git" status'
+
+assert_true '"sudo git status" has git token' \
+  canon_has_git_token "sudo git status"
+
+assert_false '"forgit status" has no standalone git token (prefix match)' \
+  canon_has_git_token "forgit status"
+
+# ---------------------------------------------------------------------------
+# canon_git_subcommand — shape validation (new in this task)
+# ---------------------------------------------------------------------------
+printf '\n=== canon_git_subcommand — shape validation ===\n'
+
+# $CMD: unresolvable variable token → shape validation rejects it → returns 1.
+_SUBCMD_VAR='$CMD'
+assert_false "git \$CMD → unresolved (shape validation, returns 1)" \
+  canon_git_subcommand "git $_SUBCMD_VAR"
+
+# ${CMD}: brace-form variable → shape validation rejects it → returns 1.
+assert_false 'git ${CMD} → unresolved (shape validation, returns 1)' \
+  canon_git_subcommand 'git ${CMD}'
+
+# Existing Bug-1/2/3 expectations stay unchanged.
+assert_eq "git -C /some/path status still resolves (shape valid)" \
+  "status" \
+  "$(canon_git_subcommand 'git -C /some/path status')"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 TOTAL=$(( PASS + FAIL ))

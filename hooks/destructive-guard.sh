@@ -4,6 +4,22 @@
 # Blocks destructive git operations (reset --hard, clean -f, checkout -- .,
 # branch -D) so the user is prompted for permission before they execute.
 #
+# Detection pipeline (in order):
+#   1. Extract command via canon_extract_command (jq with grep/sed fallback).
+#   2. Strip shell comments via canon_strip_comments (char-walk preserving
+#      quote state; # inside quotes is NOT a comment; preserves newlines).
+#   3. Delete shell quote characters via tr -d (bash quote-removal).
+#   4. Segment on && || ; | to evaluate each segment independently.
+#   5. For each segment, use canon_has_git_token (tokenizer-authoritative)
+#      to check for a standalone "git" token — skips segments without one.
+#   6. Resolve the git subcommand of each segment via canon_git_subcommand,
+#      which uses shape validation: subcommand tokens containing $ { } ( )
+#      cannot be resolved → parse-ambiguity guard blocks fail-closed.
+#   7. Inspect only that subcommand's own arguments for destructive flags.
+#
+# A segment with a real "git" token whose subcommand cannot be resolved
+# blocks fail-closed (exit 2).
+#
 # Input: JSON on stdin with the tool call details
 # Output: Warning message on stderr (when blocking)
 # Exit 0: allow the tool call
@@ -32,11 +48,21 @@ if [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-# Preserve the raw (pre-quote-deletion) command for subcommand resolution.
-# canon_git_subcommand requires the raw form so that quoted multi-word values
-# for value-consuming globals (e.g. -C "my dir") are treated as ONE token —
-# without this, quote deletion would split "my dir" into two tokens, causing
-# "dir" to be misidentified as the subcommand → fail-OPEN (Bug-2 fix).
+# Strip shell comments before any further processing. This must run BEFORE
+# both RAW_COMMAND and the quote-deletion derivations so that both streams
+# share the same comment-stripped base. A comment line that happens to end
+# in the word "git" or contains a quoted git string is harmless after
+# stripping. The newline is always preserved, so segment line pairing is
+# unchanged. If the entire command reduces to empty (comments-only), the
+# loop naturally no-ops and exits 0.
+COMMAND=$(printf '%s' "$COMMAND" | canon_strip_comments)
+
+# Preserve the raw (post-comment-strip, pre-quote-deletion) command for
+# subcommand resolution. canon_git_subcommand requires the raw form so that
+# quoted multi-word values for value-consuming globals (e.g. -C "my dir")
+# are treated as ONE token — without this, quote deletion would split "my dir"
+# into two tokens, causing "dir" to be misidentified as the subcommand →
+# fail-OPEN (Bug-2 fix).
 RAW_COMMAND="$COMMAND"
 
 # Neutralize shell quote characters before any boundary/flag matching by
@@ -151,8 +177,10 @@ while IFS= read -r segment; do
   raw_segment=$(printf '%s' "$raw_segment" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
   [[ -z "$segment" ]] && continue
 
-  # Does this segment contain a standalone "git" token?
-  if ! printf '%s' "$segment" | grep -qE '(^|[[:space:]])git([[:space:]]|$)'; then
+  # Does this segment contain a standalone "git" token (quote-aware)?
+  # canon_has_git_token tokenizes the RAW segment so quoted strings like
+  # 'echo "git worktree remove exit: $?"' correctly return no git token.
+  if ! canon_has_git_token "$raw_segment"; then
     continue
   fi
 

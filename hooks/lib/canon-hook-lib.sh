@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
 # canon-hook-lib.sh — Shared helper functions for Canon PreToolUse/PostToolUse hooks.
 #
-# Source this file from hook scripts to get three reusable utilities:
+# Source this file from hook scripts to get the following utilities:
 #
 #   canon_extract_command "$INPUT"
 #     Parses the "command" field from a Claude Code hook JSON input string.
 #     Prints the command on stdout. Prints nothing if the field is absent or empty.
+#
+#   canon_strip_comments "$COMMAND"
+#     Single awk char-walk over a possibly-multiline command string. Drops comment
+#     text (from a word-start # to end-of-line) while preserving quote state across
+#     newlines. Always emits the newline itself so line alignment is preserved.
+#     # mid-word (foo#bar, $#, ${#x}) is NOT treated as a comment. # inside
+#     single/double quotes is NOT treated as a comment.
+#
+#   canon_tokenize "$SEGMENT"
+#     Quote-aware awk tokenizer: splits on unquoted whitespace; quoted spans group
+#     into one token with quote chars removed. Prints one token per line.
+#
+#   canon_has_git_token "$SEGMENT"
+#     Tokenizes via canon_tokenize; returns 0 iff some token equals exactly "git".
+#     This is the authoritative replacement for the per-segment grep prefilter.
 #
 #   canon_git_dir_arg "$COMMAND"
 #     Inspects a compound command (e.g. "cd /path && git commit ...") for a leading
@@ -18,6 +33,178 @@
 #     without false-positiving on filenames that contain SUBCMD (e.g. "commit" in
 #     "git diff pre-commit-branch-guard.sh").
 #     Handles: plain "git commit", "git -C /path commit", "cd /x && git commit".
+
+# ---------------------------------------------------------------------------
+# canon_strip_comments <command>
+# ---------------------------------------------------------------------------
+# Single awk char-walk over a possibly-multiline command string. Strips shell
+# comment text while preserving quote state across newlines. Rules:
+#
+#   - Single-quoted (') and double-quoted (") spans preserve their content,
+#     including # characters. Quote state persists across newlines.
+#   - Inside a comment (from a word-start # to end-of-line), quote characters
+#     do NOT toggle quote state (handles apostrophes in prose comments like
+#     "workspace's") — only non-comment bytes toggle quote state.
+#   - A '#' at word start (at line start or after unquoted space/tab) when not
+#     inside quotes enters comment mode for the rest of that line.
+#   - '#' mid-word (foo#bar, $#, ${#x}) is NOT treated as a comment.
+#   - Comment text (from # to end of line, exclusive) is dropped. The newline
+#     itself is ALWAYS emitted to preserve line alignment.
+#   - All non-comment bytes (including quote chars) pass through unchanged.
+#
+# Reads stdin; prints the stripped command on stdout.
+canon_strip_comments() {
+  awk '
+  BEGIN {
+    in_sq = 0
+    in_dq = 0
+  }
+  {
+    line = $0
+    len = length(line)
+    in_comment = 0
+    at_word_start = 1  # true at beginning of each line
+
+    for (i = 1; i <= len; i++) {
+      c = substr(line, i, 1)
+
+      if (in_comment) {
+        # Inside a comment: drop all chars until end of line.
+        # Quote chars do NOT toggle quote state here (apostrophes in prose).
+        continue
+      }
+
+      if (in_sq) {
+        if (c == "'"'"'") { in_sq = 0 }
+        printf "%s", c
+        at_word_start = 0
+        continue
+      }
+
+      if (in_dq) {
+        if (c == "\"") { in_dq = 0 }
+        printf "%s", c
+        at_word_start = 0
+        continue
+      }
+
+      # Not in any quoted span and not in a comment.
+      if (c == "'"'"'") {
+        in_sq = 1
+        printf "%s", c
+        at_word_start = 0
+        continue
+      }
+      if (c == "\"") {
+        in_dq = 1
+        printf "%s", c
+        at_word_start = 0
+        continue
+      }
+
+      if (c == "#") {
+        if (at_word_start) {
+          # Comment start: drop the # and everything until end of line.
+          in_comment = 1
+          continue
+        }
+        # mid-word # — emit verbatim
+        printf "%s", c
+        at_word_start = 0
+        continue
+      }
+
+      if (c == " " || c == "\t") {
+        printf "%s", c
+        at_word_start = 1
+        continue
+      }
+
+      printf "%s", c
+      at_word_start = 0
+    }
+    # Always emit the newline to preserve line count.
+    printf "\n"
+    # in_sq and in_dq persist across newlines (multiline quoted strings).
+    # in_comment resets at the newline (comments run to end of line only).
+  }
+  '
+}
+
+# ---------------------------------------------------------------------------
+# canon_tokenize <segment>
+# ---------------------------------------------------------------------------
+# Quote-aware awk tokenizer: splits on unquoted whitespace; single- and
+# double-quoted spans group into one token with quote chars removed. Prints
+# one token per line on stdout. Empty input produces no output.
+#
+# This is the same tokenizer logic formerly inlined in canon_git_subcommand,
+# extracted as a named helper per source-shared-hook-helpers.
+canon_tokenize() {
+  local segment="$1"
+  printf '%s' "$segment" | awk '
+  {
+    line = $0
+    n = 0
+    tokens[n] = ""
+    in_tok = 0
+    for (i = 1; i <= length(line); i++) {
+      c = substr(line, i, 1)
+      if (in_dq) {
+        if (c == "\"") { in_dq = 0 }
+        else { tokens[n] = tokens[n] c }
+        continue
+      }
+      if (in_sq) {
+        if (c == "'"'"'") { in_sq = 0 }
+        else { tokens[n] = tokens[n] c }
+        continue
+      }
+      if (c == "\"") { in_dq = 1; in_tok = 1; continue }
+      if (c == "'"'"'") { in_sq = 1; in_tok = 1; continue }
+      if (c == " " || c == "\t") {
+        if (in_tok) {
+          n++
+          tokens[n] = ""
+          in_tok = 0
+        }
+        continue
+      }
+      tokens[n] = tokens[n] c
+      in_tok = 1
+    }
+    for (j = 0; j <= n; j++) {
+      if (tokens[j] != "" || j < n) print tokens[j]
+    }
+  }
+  ' || true # DOCUMENTED FAIL-OPEN -- empty output when segment is empty; caller handles missing tokens
+}
+
+# ---------------------------------------------------------------------------
+# canon_has_git_token <raw_segment>
+# ---------------------------------------------------------------------------
+# Tokenizes via canon_tokenize; returns 0 iff some token equals exactly "git".
+# Returns 1 otherwise.
+#
+# This is the quote-aware authoritative replacement for the guard's per-segment
+# grep prefilter. Examples:
+#   "git status"          → 0 (has standalone git token)
+#   'echo "git x"'        → 1 (git is inside double quotes, tokenized as part
+#                               of the quoted string, not a standalone token)
+#   '"git" status'        → 0 (quoted git: quote chars stripped, token = git)
+#   "sudo git status"     → 0 (prefix wrapper, standalone git token present)
+#   "forgit status"       → 1 (forgit is one token, not git)
+canon_has_git_token() {
+  local segment="$1"
+  local found=1
+  while IFS= read -r tok; do
+    if [[ "$tok" == "git" ]]; then
+      found=0
+      break
+    fi
+  done < <(canon_tokenize "$segment")
+  return $found
+}
 
 # ---------------------------------------------------------------------------
 # canon_extract_command <json>
@@ -215,19 +402,27 @@ canon_is_git_cmd() {
 # Uses [[:space:]] throughout for POSIX/BSD (macOS) compatibility.
 #
 # Bug-1 fix (command-prefix wrappers): locates the first standalone "git"
-# token via awk and processes only the tokens AFTER it. A blind word-
-# substitution (sed s/…git…//) only removes the "git" word, leaving any
+# token via canon_tokenize and processes only the tokens AFTER it. A blind
+# word-substitution (sed s/…git…//) only removes the "git" word, leaving any
 # wrapper prefix (sudo, env, time, nice, command) fused to the next token,
-# which then mis-resolves as the subcommand → fail-OPEN.  Anchoring to the
+# which then mis-resolves as the subcommand → fail-OPEN. Anchoring to the
 # actual "git" token (not a substring match) is required for correctness.
 #
 # Bug-2 fix (quoted option values with spaces): accepts the raw (pre-quote-
 # deletion) segment so that quoted multi-word values for value-consuming
-# globals (e.g. -C "my dir") are treated as ONE token.  A quote-aware awk
-# tokenizer splits on unquoted whitespace only — quoted spans are preserved
-# as a single token.  Quote characters are stripped from the resolved
-# subcommand token to maintain compatibility with Bypass-3 intra-token
-# quote handling (git "clean" → subcommand clean).
+# globals (e.g. -C "my dir") are treated as ONE token. canon_tokenize splits
+# on unquoted whitespace only — quoted spans are preserved as a single token.
+# Quote characters are stripped from the resolved subcommand token to maintain
+# compatibility with Bypass-3 intra-token quote handling (git "clean" → clean).
+#
+# Bug-3 fix (spurious "git" value/positional): "git" is never a valid git
+# subcommand; returning 1 causes the parse-ambiguity guard to fire → exit 2.
+#
+# Shape-validation fix: after quote-stripping the candidate subcommand token,
+# if it does not match ^[A-Za-z][A-Za-z0-9_-]*$ (i.e. it contains $, {}, ()
+# or other shell metacharacters), return 1 so the parse-ambiguity guard in
+# destructive-guard.sh blocks fail-closed. This closes the fail-open gap for
+# "git $SUBCMD", "git ${CMD}", "git $(pick-cmd)" etc.
 canon_git_subcommand() {
   local command="$1"
   local stripped
@@ -241,18 +436,13 @@ canon_git_subcommand() {
   fi
 
   # Verify a standalone "git" token exists before further processing.
-  if ! printf '%s' "$stripped" | grep -qE '(^|[[:space:]])git([[:space:]]|$)'; then
+  # Use canon_has_git_token for a quote-aware, tokenizer-authoritative check.
+  if ! canon_has_git_token "$stripped"; then
     return 1
   fi
 
-  # Use a quote-aware awk tokenizer to split the segment into tokens, then
-  # locate the first standalone "git" token and walk the tokens after it.
-  #
-  # Tokenizer rules (mimicking bash quote-removal + word-splitting):
-  #   - Single- and double-quoted spans group: whitespace inside quotes does
-  #     NOT split a token.  Quote chars themselves are REMOVED from the token.
-  #   - Unquoted whitespace separates tokens (runs collapse to one boundary).
-  #   - The output is one token per line so the shell loop can consume it.
+  # Use canon_tokenize to split the segment into tokens, then locate the first
+  # standalone "git" token and walk the tokens after it.
   #
   # Token walk after "git":
   #   1. Skip tokens before "git" (prefix wrappers like sudo/env/time/nice).
@@ -265,44 +455,7 @@ canon_git_subcommand() {
   #   4. If "git" is found but the subcommand cannot be resolved, print nothing
   #      and exit non-zero (caller's parse-ambiguity guard fires → block).
   local tokens_output
-  tokens_output=$(printf '%s' "$stripped" | awk '
-  {
-    line = $0
-    n = 0
-    tokens[n] = ""
-    in_tok = 0
-    for (i = 1; i <= length(line); i++) {
-      c = substr(line, i, 1)
-      if (in_dq) {
-        if (c == "\"") { in_dq = 0 }
-        # else: append c (not the quote) to current token
-        else { tokens[n] = tokens[n] c }
-        continue
-      }
-      if (in_sq) {
-        if (c == "'"'"'") { in_sq = 0 }
-        else { tokens[n] = tokens[n] c }
-        continue
-      }
-      if (c == "\"") { in_dq = 1; in_tok = 1; continue }
-      if (c == "'"'"'") { in_sq = 1; in_tok = 1; continue }
-      if (c == " " || c == "\t") {
-        if (in_tok) {
-          n++
-          tokens[n] = ""
-          in_tok = 0
-        }
-        continue
-      }
-      tokens[n] = tokens[n] c
-      in_tok = 1
-    }
-    # Emit one token per line (skip trailing empty token from trailing space)
-    for (j = 0; j <= n; j++) {
-      if (tokens[j] != "" || j < n) print tokens[j]
-    }
-  }
-  ' || true) # DOCUMENTED FAIL-OPEN -- empty output triggers "git not found" return below
+  tokens_output=$(canon_tokenize "$stripped")
 
   # Load tokens into an array, one per line.
   local -a tok_arr
@@ -372,6 +525,14 @@ canon_git_subcommand() {
       # "git" is never a valid git subcommand; returning 1 here causes the
       # parse-ambiguity guard in destructive-guard.sh to fire → exit 2.
       if [[ "$sub" == "git" ]]; then
+        return 1
+      fi
+      # Shape validation: a valid git subcommand token consists only of
+      # alphanumeric characters, hyphens, and underscores, starting with a
+      # letter. Tokens containing $, {, }, (, ), ` etc. are shell constructs
+      # whose runtime value is unknown — treat as unresolvable → return 1 so
+      # the parse-ambiguity guard fires → fail-closed (exit 2).
+      if ! printf '%s' "$sub" | grep -qE '^[A-Za-z][A-Za-z0-9_-]*$'; then
         return 1
       fi
       printf '%s' "$sub"
