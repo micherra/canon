@@ -6,8 +6,7 @@ tags: [architecture, testability, agent-behavior, diagnostics]
 scope:
   file_patterns:
     - "mcp-server/src/features/diagnostics/services/**"
-    - "mcp-server/src/platform/storage/drift/**"
-    - "mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts"
+    - "mcp-server/src/features/diagnostics/tools/**"
     - "mcp-server/src/features/orchestration/tools/**"
     - "mcp-server/src/platform/storage/**"
     - "mcp-server/src/app/**"

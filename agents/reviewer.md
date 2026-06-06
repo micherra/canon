@@ -324,7 +324,7 @@ For each such verification command, confirm that the grep pattern and path scope
    A match in a doc comment, variable name, or non-registration file does NOT satisfy a registration claim.
 
 **Outcome rules:**
-- If a verification command's scope exceeds the structural claim it was meant to verify (i.e., would return true-positive for a non-structural match): flag as **advisory** citing this sub-axis. Recommend the minimum-scope form above.
+- If a verification command's scope exceeds the structural claim it was meant to verify (i.e., would return a false positive — matching non-structural occurrences and incorrectly confirming the structural claim): flag as **advisory** citing this sub-axis. Recommend the minimum-scope form above.
 - **Upgrade to WARNING** when the over-broad grep appears in a spec, agent instruction, or protocol document and the false-positive condition would allow a dead-wire to pass undetected — the same class of defect as the one the check was designed to prevent.
 
 **Skip condition**: Skip this sub-axis when the diff adds no verification commands or structural assertion greps.
