@@ -305,6 +305,25 @@ Do NOT flag:
 - Intentional subset schemas where the file-level comment or PR description explicitly documents that the Zod schema is a strict subset of the TypeScript type by design.
 - Internal TypeScript types that have no corresponding schema file and are never serialized or exposed externally.
 
+#### Severity-Vocabulary Consistency (watch_VVVVV2)
+
+**Trigger**: When the diff adds or modifies severity language (`BLOCKING`, `WARNING`) in a protocol document (`agents/*.md`, `rules/*.md`, `references/*.md`, `templates/*.md`).
+
+**Skip condition**: Skip this sub-axis when the edited file contains no verdict/severity vocabulary section (no `## Verdict` table, no `BLOCKING / WARNING / CLEAN` summary table, no `| Severity |` column). A file that only *quotes* these marker strings as instructional examples — e.g. showing `BLOCKING / WARNING / CLEAN` as a template placeholder or teaching the vocabulary format — is not considered to have a vocabulary section and should be skipped. A file with severity keywords in the body but no dedicated vocabulary section is also out of scope for this check.
+
+For each line added or modified in the diff that contains `BLOCKING` or `WARNING` as a severity designation:
+
+1. Locate the file's severity vocabulary section (typically `## Verdict` table or a `| Severity |` table near the bottom of the file).
+2. Verify the vocabulary section includes a classification path that covers this new severity assignment. For example:
+   - A new "flag as **BLOCKING**" rule → the `## Verdict` table's BLOCKING row conditions must cover this path.
+   - A new "is a **WARNING** finding" rule → the `## Verdict` table's WARNING row conditions must include this finding type.
+3. If the vocabulary section exists but the new severity assignment has no corresponding entry, flag as **WARNING** (severity-vocabulary inconsistency).
+
+Output format — WARNING finding:
+- `path:line` — `{severity keyword}` in added/changed line assigns a classification path (`{brief description}`) that is absent from the file's severity vocabulary section (`{section name/location}`). Add a corresponding entry or bullet to the vocabulary section before committing.
+
+**Instances that prompted this check** (watch_VVVVV2): PR #328 — new Stage 2 sub-axis prescribed BLOCKING for condition-(2) tool-not-registered, but the `## Verdict` table BLOCKING row did not list this path (caught by Canon reviewer round 1). PR #332 — new Stage 6 scope-parity sub-check assigned WARNING severity, but the `## Verdict` table WARNING row was not updated (Canon reviewer passed CLEAN; caught post-ship by Codex).
+
 ### Recommendations array
 
 After completing Stages 1 and 2, produce a `recommendations` array for the `store_pr_review` call. This is the top-5 most actionable suggestions, mixing principle violations with holistic observations:
@@ -700,6 +719,7 @@ Based on the most severe finding across all six stages:
 - A matched principle is not a violated principle — most will be honored
 - Check each violation's severity explicitly before writing the verdict
 - Stage 2 agent→tool reachability: a failed condition (2) (tool absent from MCP server registration) is BLOCKING regardless of principle severity — the runtime will error on every call
+- Stage 2 discriminant surface parity: a TypeScript–Zod member count mismatch (a variant reachable in the TypeScript type system but absent from the Zod/registration schema) is BLOCKING — the missing variant is functionally unreachable through external callers
 - Stage 5 (acceptance criteria verification) failures are BLOCKING -- they enter the review-fix iteration loop. If unfixable (non-automatable AC), the user can override via HITL
 - Stage 6 (cross-requirement consistency) BLOCKING findings (type contradictions, security policy gaps) also enter the review-fix iteration loop
 - Stage 6 scope-parity WARNING findings (coverage/scope mismatches in advisory fixes) produce at least a WARNING verdict — they do NOT enter the review-fix iteration loop, but the build must acknowledge or address the finding
