@@ -518,6 +518,81 @@ assert_eq 'eval "git log --oneline" extracts git log --oneline' \
   "$(canon_unwrap_string_exec_arg 'eval "git log --oneline"')"
 
 # ---------------------------------------------------------------------------
+# canon_unwrap_string_exec_arg — Round-2 bypass fixes
+# ---------------------------------------------------------------------------
+printf '\n=== canon_unwrap_string_exec_arg — round-2 bypass fixes ===\n'
+
+# Bypass class 1: Path-qualified wrappers — basename matching.
+assert_eq '/bin/bash -c extracts inner command (path-qualified)' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg '/bin/bash -c "git reset --hard"')"
+
+assert_eq '/bin/sh -c extracts inner command (path-qualified)' \
+  "git clean -fd" \
+  "$(canon_unwrap_string_exec_arg '/bin/sh -c "git clean -fd"')"
+
+assert_eq '/usr/local/bin/zsh -c extracts (deep path-qualified)' \
+  "git checkout -- ." \
+  "$(canon_unwrap_string_exec_arg '/usr/local/bin/zsh -c "git checkout -- ."')"
+
+# /usr/bin/env bash -c: env is path-qualified (/usr/bin/env → env prefix), then bash
+assert_eq '/usr/bin/env bash -c extracts (path-qualified env + bash)' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg '/usr/bin/env bash -c "git reset --hard"')"
+
+# Bypass class 2: Combined short flags — 'c' as last char of cluster.
+assert_eq 'bash -ec "git reset --hard" extracts (c last in cluster)' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'bash -ec "git reset --hard"')"
+
+assert_eq 'bash -lc "git clean -fd" extracts (c last in cluster)' \
+  "git clean -fd" \
+  "$(canon_unwrap_string_exec_arg 'bash -lc "git clean -fd"')"
+
+assert_eq 'sh -xc "git reset --hard" extracts (c last in cluster)' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'sh -xc "git reset --hard"')"
+
+# Bypass class 3: Prefix-owned flags — env -i, command -p.
+assert_eq 'env -i bash -c extracts (env owns -i flag)' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'env -i bash -c "git reset --hard"')"
+
+assert_eq 'command -p eval extracts (command owns -p flag)' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'command -p eval "git reset --hard"')"
+
+# Bypass class 4: Escaped inner quotes → rc=2 (fail-closed, not skip-pass).
+# The tokenizer leaves backslash artifacts; the backslash check fires rc=2.
+_ESC_QT_RC=0
+_ESC_QT_OUT=$(canon_unwrap_string_exec_arg 'bash -c "git reset \"--hard\""') || _ESC_QT_RC=$?
+assert_eq 'bash -c "git reset \"--hard\"" returns empty (fail-closed, rc=2 path)' \
+  "" \
+  "$_ESC_QT_OUT"
+# The rc should be 2 (fail-closed), not 0 or 1.
+if [[ "$_ESC_QT_RC" -eq 2 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  bash -c escaped-inner-quote → rc=2 (fail-closed)\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: bash -c escaped-inner-quote — expected rc=2, got rc=$_ESC_QT_RC")
+  printf '  FAIL  bash -c escaped-inner-quote → expected rc=2, got rc=%d\n' "$_ESC_QT_RC"
+fi
+
+# Pass controls: none of the new recognitions should over-block.
+assert_eq '/bin/bash script.sh (no -c) returns empty (not -c mode)' \
+  "" \
+  "$(canon_unwrap_string_exec_arg '/bin/bash script.sh' 2>/dev/null || true)"
+
+assert_eq '/bin/bash -c "git status" still extracts safely' \
+  "git status" \
+  "$(canon_unwrap_string_exec_arg '/bin/bash -c "git status"')"
+
+assert_eq 'bash -ec "git status" extracts safely (combined flag + safe inner)' \
+  "git status" \
+  "$(canon_unwrap_string_exec_arg 'bash -ec "git status"')"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 TOTAL=$(( PASS + FAIL ))

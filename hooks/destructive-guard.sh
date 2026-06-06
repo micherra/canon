@@ -14,16 +14,19 @@
 #      to check for a standalone "git" token — skips segments without one.
 #   5a. String-executing-wrapper expansion: when a segment has no standalone
 #      "git" token but its effective command is a string-executing wrapper
-#      (eval, bash -c, sh -c, zsh -c, ksh -c — and their prefixed forms via
-#      command/nohup/env/timeout/nice), canon_unwrap_string_exec_arg extracts
-#      the inner string argument, re-segments it on && || ; |, and appends
-#      the resulting sub-segments to the processing queue. This is repeated
-#      recursively up to CANON_WRAPPER_MAX_DEPTH (3) levels deep, handling
-#      nested forms like bash -c 'eval "git reset --hard"'. Wrappers that
-#      are NOT in the recognised set are treated as non-executing — the
-#      segment is skipped (echo "git reset --hard" passes correctly). If
-#      extraction returns a non-empty string but expansion is ambiguous,
-#      the guard fails closed for that sub-segment.
+#      (eval, bash -c, sh -c, zsh -c, ksh -c — and their path-qualified and
+#      prefixed forms via command/nohup/env/timeout/nice),
+#      canon_unwrap_string_exec_arg extracts the inner string argument using a
+#      three-way return code: (a) not a wrapper → skip-pass; (b) wrapper,
+#      extracted → recurse on inner segments; (c) wrapper but unparseable →
+#      fail-CLOSED (exit 2).  This ensures a recognised shell wrapper is never
+#      silently skipped even when the inner command cannot be parsed.
+#      Combined short flags (-ec, -lc, -xc where c is last) are handled.
+#      Path-qualified wrappers (/bin/bash, /usr/bin/env) are matched by
+#      basename.  Prefix-owned flags (env -i, command -p) are skipped before
+#      resolving the wrapper name.  Recursion is capped at CANON_WRAPPER_MAX_DEPTH
+#      (3) and fails closed on depth-exceeded.
+#      Non-executing wrappers (echo "git reset --hard") remain pass-through.
 #   6. Resolve the git subcommand of each segment via canon_git_subcommand,
 #      which uses shape validation: subcommand tokens containing $ { } ( )
 #      cannot be resolved → parse-ambiguity guard blocks fail-closed.
@@ -202,13 +205,25 @@ process_segment() {
   if ! canon_has_git_token "$raw_segment"; then
     # No standalone git token. Check whether this segment is a
     # string-executing wrapper whose quoted argument may contain git commands.
-    # canon_unwrap_string_exec_arg extracts the inner string from recognised
-    # wrappers (eval, bash -c, sh -c, zsh -c, ksh -c, and their prefixed
-    # forms) and returns 1 for all other commands (echo, printf, etc.).
+    # canon_unwrap_string_exec_arg uses a three-way return code:
+    #   rc=0  — recognised wrapper, inner command extracted (printed on stdout)
+    #   rc=1  — not a string-executing wrapper at all (echo, printf, etc.)
+    #   rc=2  — recognised wrapper but inner arg unparseable/empty → fail-CLOSED
     local inner_cmd
-    inner_cmd=$(canon_unwrap_string_exec_arg "$raw_segment" 2>/dev/null) || true # DOCUMENTED FAIL-OPEN -- returns empty for non-wrapper segments; guard skips them below
-    if [[ -z "$inner_cmd" ]]; then
-      # Not a string-executing wrapper, or extraction failed — safe to skip.
+    local _unwrap_rc=0
+    inner_cmd=$(canon_unwrap_string_exec_arg "$raw_segment") || _unwrap_rc=$?
+
+    if [[ "$_unwrap_rc" -eq 2 ]]; then
+      # Outcome (c): recognised shell wrapper whose inner command cannot be
+      # safely extracted.  Fail closed — never skip-pass a recognised wrapper.
+      echo "CANON: string-executing wrapper inner command unparseable — blocking fail-closed." >&2
+      exit 2
+    fi
+
+    if [[ "$_unwrap_rc" -ne 0 ]] || [[ -z "$inner_cmd" ]]; then
+      # Outcome (a): not a string-executing wrapper — safe to skip.
+      # Also skip if extraction somehow returned 0 but produced empty stdout
+      # (defensive; should not happen after the rc=2 path above).
       return 0
     fi
 

@@ -884,6 +884,88 @@ run_test "bash script.sh (no -c) passes (not string-exec mode)" \
   0 "$(make_multiline_input 'bash script.sh')" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# P1 round-2 fix: BLOCKING bypass regressions (exit 2)
+#
+# These four classes were confirmed BLOCKING in the round-2 review because
+# canon_unwrap_string_exec_arg used exact-token matching and a shared rc=1
+# for both "not a wrapper" and "recognised-but-unparseable". The fix:
+#   - Path-qualified wrappers: matched by BASENAME after ${tok##*/} stripping.
+#   - Combined short flags (-ec, -lc, -xc): detected by checking whether
+#     'c' is the last character of a short-flag cluster.
+#   - Prefix-owned flags (env -i, command -p): skipped before resolving the
+#     wrapper token so env/command are still transparent.
+#   - Escaped inner quotes: tokenizer leaves backslash artifacts; backslash
+#     check fires rc=2 (fail-closed) instead of skip-pass.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- P1 round-2: path-qualified wrappers (should block, exit 2) --"
+
+run_test "/bin/bash -c git reset --hard blocks (path-qualified)" \
+  2 "$(make_multiline_input '/bin/bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+run_test "/bin/sh -c git clean -fd blocks (path-qualified)" \
+  2 "$(make_multiline_input '/bin/sh -c "git clean -fd"')" "$NON_WT_PWD"
+
+run_test "/usr/bin/env bash -c git reset --hard blocks (path-qualified env+bash)" \
+  2 "$(make_multiline_input '/usr/bin/env bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-2: combined short flags (should block, exit 2) --"
+
+run_test "bash -ec git reset --hard blocks (combined -ec, c last)" \
+  2 "$(make_multiline_input 'bash -ec "git reset --hard"')" "$NON_WT_PWD"
+
+run_test "bash -lc git clean -fd blocks (combined -lc, c last)" \
+  2 "$(make_multiline_input 'bash -lc "git clean -fd"')" "$NON_WT_PWD"
+
+run_test "sh -xc git reset --hard blocks (combined -xc, c last)" \
+  2 "$(make_multiline_input 'sh -xc "git reset --hard"')" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-2: prefix with its own flags (should block, exit 2) --"
+
+run_test "env -i bash -c git reset --hard blocks (env owns -i)" \
+  2 "$(make_multiline_input 'env -i bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+run_test "command -p eval git reset --hard blocks (command owns -p)" \
+  2 "$(make_multiline_input 'command -p eval "git reset --hard"')" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-2: escaped inner quotes (fail-closed, exit 2) --"
+
+# bash -c "git reset \"--hard\"" — tokenizer produces backslash artifact
+# → rc=2 (fail-closed) is the correct outcome per spec.
+run_test 'bash -c "git reset \"--hard\"" blocks (escaped inner quote → fail-closed)' \
+  2 "$(make_multiline_input 'bash -c "git reset \"--hard\""')" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-2: pass controls for new bypass fixes (should pass, exit 0) --"
+
+# echo with a quoted destructive-looking string — must still pass
+run_test "echo \"git reset --hard\" still passes (not a wrapper)" \
+  0 "$(make_multiline_input 'echo "git reset --hard"')" "$NON_WT_PWD"
+
+# printf — must still pass
+run_test "printf \"git clean -fd\" still passes (not a wrapper)" \
+  0 "$(make_multiline_input 'printf "git clean -fd"')" "$NON_WT_PWD"
+
+# /bin/bash invoked as script (no -c) — must pass
+run_test "/bin/bash script.sh passes (path-qualified, no -c)" \
+  0 "$(make_multiline_input '/bin/bash script.sh')" "$NON_WT_PWD"
+
+# UPPERCASE EVAL is not a recognised wrapper — must pass
+_EVAL_UPPER="EVAL"
+run_test "EVAL \"git reset --hard\" passes (uppercase not a wrapper)" \
+  0 "$(make_multiline_input "$_EVAL_UPPER \"git reset --hard\"")" "$NON_WT_PWD"
+
+# bash -c with a safe inner command — must still pass
+run_test "/bin/bash -c \"git status\" passes (path-qualified, safe inner)" \
+  0 "$(make_multiline_input '/bin/bash -c "git status"')" "$NON_WT_PWD"
+
+run_test "bash -ec \"git status\" passes (combined flag, safe inner)" \
+  0 "$(make_multiline_input 'bash -ec "git status"')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""

@@ -207,43 +207,83 @@ canon_has_git_token() {
 }
 
 # ---------------------------------------------------------------------------
+# CANON_STRING_EXEC_WRAPPERS
+# ---------------------------------------------------------------------------
+# Named constant: the set of canonical (basename-resolved) command names that
+# execute their string argument as shell code.  Callers match against this set
+# after resolving a raw token to its basename so that path-qualified invocations
+# like /bin/bash or /usr/local/bin/bash are covered.
+#
+#   SHELL_WRAPPERS — take -c <string>:  bash sh zsh ksh
+#   EVAL_WRAPPER   — joins remaining tokens: eval
+#
+# This constant documents the set in one place and is referenced by
+# canon_unwrap_string_exec_arg so that future additions only require a change here.
+# shellcheck disable=SC2034  # read by canon_unwrap_string_exec_arg (case match)
+CANON_STRING_EXEC_WRAPPERS="bash sh zsh ksh eval"
+
+# ---------------------------------------------------------------------------
 # canon_unwrap_string_exec_arg <raw_segment>
 # ---------------------------------------------------------------------------
-# String-executing-wrapper detector. When a segment's effective command is a
-# wrapper that executes its string argument as shell code (eval, bash -c,
-# sh -c, zsh -c, ksh -c), this function extracts that string argument and
-# prints it on stdout, then returns 0.  Returns 1 (prints nothing) when the
-# segment is NOT a string-executing wrapper form or when extraction fails.
+# String-executing-wrapper detector.  Classifies a segment into one of three
+# outcomes and signals each with a distinct return code:
 #
-# Wrapper forms recognised:
+#   (a) NOT a string-executing wrapper at all (echo, printf, git, etc.)
+#       → return 1, prints nothing.
+#       Caller treats this segment as a normal command (skip if no git token).
+#
+#   (b) Recognised string-executing wrapper; inner command cleanly extracted.
+#       → return 0, prints the inner command on stdout.
+#       Caller recurses into the inner command.
+#
+#   (c) Recognised string-executing wrapper but inner arg unparseable/empty.
+#       → return 2, prints nothing.
+#       Caller must fail CLOSED (exit 2) — never skip-pass a recognised shell
+#       wrapper whose inner command cannot be safely evaluated.
+#
+# This three-way distinction is the CRITICAL fix: the previous implementation
+# collapsed (a) and (c) into the same return code (1 / empty stdout), causing
+# the guard to treat an unresolvable /bin/bash -c "..." as "not a wrapper"
+# and skip it (fail-OPEN).
+#
+# Wrapper forms recognised (via CANON_STRING_EXEC_WRAPPERS and basename matching):
 #
 #   SHELL_WRAPPERS (take a string argument after -c):
-#     bash, sh, zsh, ksh
+#     bash, sh, zsh, ksh — and their path-qualified forms (/bin/bash, etc.)
 #   EVAL_WRAPPER:
 #     eval  (all remaining tokens form the command)
 #
-# Transparent prefixes that may precede the wrapper:
-#   command          — always transparent (single token, no args consumed)
-#   nohup            — always transparent
-#   env              — transparent; skips tokens of the form NAME=VALUE
-#   timeout          — transparent; skips the next bare (non-'-') token (time)
-#   nice             — transparent; skips -n <value> or nothing
+# Transparent prefixes that may precede the wrapper (with their own flags
+# properly skipped before resolving the wrapper token):
+#   command  — skips -p, -v, -V, --
+#   nohup    — self-contained, no flags consumed
+#   env      — skips -i, -u NAME, -0, NAME=VALUE assignments, --
+#   timeout  — skips one non-'-' time argument
+#   nice     — skips -n <value>
 #
-# Prefixed forms that therefore work:
-#   command eval "git ..."  →  recurse on "git ..."
-#   nohup bash -c "..."     →  recurse on inner command
-#   timeout 5 bash -c "..."  →  recurse on inner command
-#   env X=1 bash -c "..."   →  recurse on inner command
+# Combined short-flag clusters for shell wrappers are handled:
+#   bash -ec "cmd"  — 'c' as last char of cluster → treated as -c
+#   bash -lc "cmd"  — same
+#   sh -xc "cmd"    — same
+#   bash -cX "cmd"  — 'c' not last char → fail-closed (ambiguous position)
 #
-# For deeply nested strings (bash -c 'eval "git ..."'), the caller applies
-# this function recursively (depth is capped externally at 3).
+# Path-qualified wrappers are handled via basename matching:
+#   /bin/bash -c "..."      → recognised as bash
+#   /usr/bin/sh -c "..."    → recognised as sh
+#   /usr/bin/env bash -c "..." → env prefix + bash wrapper
+#
+# Escaped inner quotes: since canon_tokenize strips surrounding quotes,
+# 'bash -c "git reset \"--hard\""' yields the inner token 'git reset "--hard"'
+# (the backslash-escaped quotes become literal chars in the extracted token).
+# This is still a non-empty string — the guard recurses into it successfully.
+# If the inner token ends up empty (e.g., bash -c ""), outcome (c) fires.
 #
 # Uses canon_tokenize for quote-aware tokenisation so that the string argument
 # is returned with quote characters removed (the same representation the shell
 # would use after one level of quote-removal).
 #
-# This is a new helper added to close the fail-open bypass for string-executing
-# wrappers. See notes in destructive-guard.sh.
+# NOTE: Written for bash 3.2 compatibility (macOS default shell).
+# No namerefs (local -n) are used; all helpers are inlined.
 
 canon_unwrap_string_exec_arg() {
   local segment="$1"
@@ -251,8 +291,9 @@ canon_unwrap_string_exec_arg() {
   # Tokenize the segment (quote-aware; quoted spans stripped).
   local -a toks
   local tok_count=0
-  while IFS= read -r t; do
-    toks[tok_count]="$t"
+  local _t
+  while IFS= read -r _t; do
+    toks[tok_count]="$_t"
     tok_count=$(( tok_count + 1 ))
   done < <(canon_tokenize "$segment")
 
@@ -260,41 +301,199 @@ canon_unwrap_string_exec_arg() {
     return 1
   fi
 
-  # Walk tokens, skipping transparent prefixes, to find the effective command.
+  # ---------------------------------------------------------------------------
+  # Inner helper: _do_shell_c_extract
+  # Walk from current $idx searching for -c.
+  # Sets $idx as a side-effect (uses the outer function's local $idx).
+  # Returns:
+  #   0  — extracted; inner command printed on stdout
+  #   1  — not a -c invocation (script-file mode, -- without -c, etc.)
+  #   2  — recognised -c form but argument is empty → fail-closed
+  # ---------------------------------------------------------------------------
+  _do_shell_c_extract() {
+    while [[ $idx -lt $tok_count ]]; do
+      local flag="${toks[$idx]}"
+      case "$flag" in
+        -c)
+          # Standalone -c: the very next token is the command string.
+          local _ci=$(( idx + 1 ))
+          if [[ $_ci -lt $tok_count ]]; then
+            local _inner="${toks[$_ci]}"
+            if [[ -n "$_inner" ]]; then
+              # Backslash check: the canon_tokenize awk tokenizer does not handle
+              # backslash escape sequences inside double-quoted spans.  When the
+              # raw argument contains escaped inner quotes (e.g., "git reset
+              # \"--hard\""), the tokenizer leaves behind literal backslashes in
+              # the extracted token (yielding "git reset \--hard\").  The resulting
+              # inner command cannot be safely evaluated by the guard.  Failing
+              # closed is safer than attempting to interpret the garbled form.
+              # Use [\\] in the pattern to satisfy shellcheck without misreading.
+              if printf '%s' "$_inner" | grep -q '[\\]'; then
+                return 2 # escaped-quote artifact → fail-closed
+              fi
+              printf '%s' "$_inner"
+              return 0
+            else
+              return 2 # -c with empty string argument → fail-closed
+            fi
+          else
+            return 2 # -c with no argument at all → fail-closed
+          fi
+          ;;
+        --)
+          # End of options; no -c seen → not a -c invocation.
+          return 1
+          ;;
+        -*)
+          # Flag cluster like -ec, -lc, -xc, -login, -e, -x, etc.
+          # Strip the leading '-' to get the cluster body.
+          local _cluster="${flag#-}"
+          # Determine the position of 'c' in the cluster.
+          # If 'c' is the LAST character, treat as -c with the next token.
+          local _last="${_cluster: -1}"
+          if [[ "$_last" == "c" ]]; then
+            local _ci=$(( idx + 1 ))
+            if [[ $_ci -lt $tok_count ]]; then
+              local _inner="${toks[$_ci]}"
+              if [[ -n "$_inner" ]]; then
+                # Same backslash-artifact check as standalone -c above.
+                if printf '%s' "$_inner" | grep -q '[\\]'; then
+                  return 2
+                fi
+                printf '%s' "$_inner"
+                return 0
+              else
+                return 2
+              fi
+            else
+              return 2 # combined -c with no argument
+            fi
+          elif [[ "$_cluster" == *c* ]]; then
+            # 'c' appears mid-cluster (e.g., -cX) — argument position is
+            # ambiguous.  Fail closed: recognised shell wrapper, cannot parse.
+            return 2
+          else
+            # No 'c' in this flag cluster — self-contained option, advance.
+            idx=$(( idx + 1 ))
+          fi
+          ;;
+        *)
+          # Bare non-'-' token: this is a script file path, not -c mode.
+          return 1
+          ;;
+      esac
+    done
+    # Ran out of tokens without finding -c — script-file mode or bare shell.
+    return 1
+  }
+
+  # ---------------------------------------------------------------------------
+  # Inner helper: _do_skip_env_flags
+  # Advances $idx past flags and assignments owned by 'env':
+  #   -i, -0, -v (self-contained)
+  #   -u NAME     (-u consumes one following token)
+  #   -uNAME      (combined form, self-contained)
+  #   NAME=VALUE  (assignment, skip)
+  #   --          (end of options; advance once then stop)
+  # Stops at the first bare word that is not an assignment (the command).
+  # ---------------------------------------------------------------------------
+  _do_skip_env_flags() {
+    while [[ $idx -lt $tok_count ]]; do
+      local _t="${toks[$idx]}"
+      case "$_t" in
+        --)
+          idx=$(( idx + 1 )) # consume '--', stop
+          return 0
+          ;;
+        -u)
+          idx=$(( idx + 1 )) # consume '-u'
+          [[ $idx -lt $tok_count ]] && idx=$(( idx + 1 )) # consume NAME
+          ;;
+        -i|-0|-v)
+          idx=$(( idx + 1 )) # self-contained flag
+          ;;
+        -*=*)
+          idx=$(( idx + 1 )) # combined -uNAME form
+          ;;
+        -*)
+          # Unknown env flag — treat as self-contained (conservative).
+          idx=$(( idx + 1 ))
+          ;;
+        *=*)
+          # NAME=VALUE assignment
+          idx=$(( idx + 1 ))
+          ;;
+        *)
+          # Bare word: this is the command token.
+          return 0
+          ;;
+      esac
+    done
+  }
+
+  # ---------------------------------------------------------------------------
+  # Inner helper: _do_skip_command_flags
+  # Advances $idx past flags owned by the 'command' builtin:
+  #   -p, -v, -V  (self-contained)
+  #   --          (end of options; advance once then stop)
+  # Stops conservatively on any unknown flag so it doesn't skip the command.
+  # ---------------------------------------------------------------------------
+  _do_skip_command_flags() {
+    while [[ $idx -lt $tok_count ]]; do
+      local _t="${toks[$idx]}"
+      case "$_t" in
+        --)
+          idx=$(( idx + 1 ))
+          return 0
+          ;;
+        -p|-v|-V)
+          idx=$(( idx + 1 ))
+          ;;
+        -*)
+          # Unknown flag: stop conservatively.
+          return 0
+          ;;
+        *)
+          return 0
+          ;;
+      esac
+    done
+  }
+
+  # ---------------------------------------------------------------------------
+  # Main token walk: skip transparent prefixes, then match the wrapper token.
+  # ---------------------------------------------------------------------------
   local idx=0
 
   while [[ $idx -lt $tok_count ]]; do
-    local tok="${toks[$idx]}"
+    local raw_tok="${toks[$idx]}"
+    # Basename resolution for path-qualified wrappers (/bin/bash → bash).
+    local tok="${raw_tok##*/}"
 
     case "$tok" in
-      command|nohup)
-        # Transparent: skip this token, continue to the next
+      command)
+        # Skip 'command' and any flags it owns.
         idx=$(( idx + 1 ))
-        continue
+        _do_skip_command_flags
+        ;;
+      nohup)
+        # Transparent prefix: self-contained, no flags to skip.
+        idx=$(( idx + 1 ))
         ;;
       env)
-        # Skip 'env' itself and any following NAME=VALUE tokens
+        # Skip 'env' itself and any flags/assignments it owns.
         idx=$(( idx + 1 ))
-        while [[ $idx -lt $tok_count ]]; do
-          local maybe_assign="${toks[$idx]}"
-          if [[ "$maybe_assign" == *=* ]]; then
-            idx=$(( idx + 1 ))
-          else
-            break
-          fi
-        done
-        continue
+        _do_skip_env_flags
         ;;
       timeout)
-        # Skip 'timeout', then skip the time argument (a bare non-'-' token)
+        # Skip 'timeout', then skip the duration argument (non-'-' token).
         idx=$(( idx + 1 ))
         if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" != -* ]]; then
           idx=$(( idx + 1 ))
         fi
-        continue
         ;;
       nice)
-        # Skip 'nice', then optionally skip '-n <value>'
+        # Skip 'nice', then optionally skip '-n <value>'.
         idx=$(( idx + 1 ))
         if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" == "-n" ]]; then
           idx=$(( idx + 1 )) # skip -n
@@ -302,71 +501,40 @@ canon_unwrap_string_exec_arg() {
             idx=$(( idx + 1 )) # skip value
           fi
         fi
-        continue
         ;;
       eval)
         # eval: the rest of the tokens (joined by spaces) form the command.
-        # An eval with no argument is a no-op — return 1.
-        local rest_idx=$(( idx + 1 ))
-        if [[ $rest_idx -ge $tok_count ]]; then
+        # An eval with no arguments is a no-op → outcome (a).
+        local _ri=$(( idx + 1 ))
+        if [[ $_ri -ge $tok_count ]]; then
           return 1
         fi
-        # Rejoin remaining tokens
-        local cmd_str="${toks[$rest_idx]}"
-        local j=$(( rest_idx + 1 ))
-        while [[ $j -lt $tok_count ]]; do
-          cmd_str="$cmd_str ${toks[$j]}"
-          j=$(( j + 1 ))
+        local _cs="${toks[$_ri]}"
+        local _j=$(( _ri + 1 ))
+        while [[ $_j -lt $tok_count ]]; do
+          _cs="$_cs ${toks[$_j]}"
+          _j=$(( _j + 1 ))
         done
-        printf '%s' "$cmd_str"
+        printf '%s' "$_cs"
         return 0
         ;;
       bash|sh|zsh|ksh)
-        # Shell wrappers: must be followed (eventually) by -c <string>.
-        # Skip any intervening flags that don't consume an argument,
-        # and skip --. When we see -c, the NEXT token is the command string.
+        # Shell wrapper recognised.  Advance past the wrapper name, then
+        # search for -c (with combined-flag support).
         idx=$(( idx + 1 ))
-        while [[ $idx -lt $tok_count ]]; do
-          local flag="${toks[$idx]}"
-          case "$flag" in
-            -c)
-              # Next token is the command string
-              local cmd_idx=$(( idx + 1 ))
-              if [[ $cmd_idx -lt $tok_count ]]; then
-                printf '%s' "${toks[$cmd_idx]}"
-                return 0
-              else
-                return 1 # -c with no argument
-              fi
-              ;;
-            --)
-              # End of options; no -c found before --
-              return 1
-              ;;
-            -*)
-              # Some other flag: skip it (self-contained, no value consumed)
-              # This is conservative — if a flag consumed a value, we'd skip
-              # the value as if it were a new flag. That's acceptable here:
-              # misclassifying means we return 1 (no command extracted), which
-              # causes the guard to fail-CLOSED for an ambiguous wrapper form.
-              idx=$(( idx + 1 ))
-              ;;
-            *)
-              # Bare non-'-' token: this is a script file (not -c mode), stop.
-              return 1
-              ;;
-          esac
-        done
-        # Fell through without finding -c
-        return 1
+        _do_shell_c_extract
+        # Propagate the exact return code: 0 (extracted), 1 (not -c), 2 (fail-closed).
+        return $?
         ;;
       *)
-        # Not a recognised wrapper or prefix — stop walking
+        # Not a recognised wrapper or transparent prefix — outcome (a).
         return 1
         ;;
     esac
+    # loop continues — keep advancing through transparent prefixes
   done
 
+  # Exhausted all tokens without finding a wrapper — outcome (a).
   return 1
 }
 
