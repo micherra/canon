@@ -46,6 +46,11 @@ function markdownToHtml(md: string): string {
   let tableHeaders: string[] = [];
   let tableRows: string[][] = [];
   let tableSeparatorSeen = false;
+  // Buffer for a candidate pipe row that has not yet been confirmed as a table header
+  // (confirmation requires seeing a GFM separator row on the next pipe line).
+  // Stores the original raw line text so it can be re-emitted as plain text if no
+  // separator follows.
+  let pendingHeaderLine = "";
 
   function closeList() {
     if (inUl) {
@@ -66,10 +71,22 @@ function markdownToHtml(md: string): string {
     return cells;
   }
 
+  // Emit any pending (unconfirmed) header line as plain paragraph text and reset state.
+  // Called whenever we discover that the buffered pipe line was NOT followed by a
+  // GFM separator row (so it was never a real table header).
+  function flushPendingHeaderAsText() {
+    if (pendingHeaderLine) {
+      out.push(inlineFormat(pendingHeaderLine));
+      pendingHeaderLine = "";
+      tableHeaders = [];
+    }
+  }
+
   function closeTable() {
     if (!inTable) return;
     inTable = false;
     tableSeparatorSeen = false;
+    pendingHeaderLine = "";
     if (tableHeaders.length === 0) {
       tableRows = [];
       tableHeaders = [];
@@ -131,6 +148,13 @@ function markdownToHtml(md: string): string {
     if (/^```/.test(line)) {
       if (!inCodeFence) {
         closeList();
+        // A code fence is a non-pipe block — flush any open table or unconfirmed
+        // candidate header before opening the fence (preserves document order).
+        if (inTable) {
+          closeTable();
+        } else {
+          flushPendingHeaderAsText();
+        }
         inCodeFence = true;
         codeFenceLang = line.slice(3).trim();
         codeLines = [];
@@ -146,6 +170,49 @@ function markdownToHtml(md: string): string {
     if (inCodeFence) {
       codeLines.push(line);
       continue;
+    }
+
+    // Table rows — lines starting with | (pipe)
+    if (/^\|/.test(line.trim())) {
+      closeList();
+      // Separator row (e.g. |---|:---:|---) — marks end of header rows.
+      // Only commit to table rendering now that we have confirmed GFM structure.
+      if (/^\|[\s\-:|]+\|/.test(line.trim()) && /^[|\s\-:|]+$/.test(line.trim())) {
+        tableSeparatorSeen = true;
+        if (!inTable && tableHeaders.length > 0) {
+          // Separator confirms the buffered candidate header as a real table header.
+          inTable = true;
+          pendingHeaderLine = "";
+        }
+        continue;
+      }
+      const cells = parseTableCells(line.trim());
+      if (!inTable) {
+        // If a previous candidate header was buffered without a separator following,
+        // emit it as plain text before buffering the new candidate.
+        flushPendingHeaderAsText();
+        // Buffer this pipe row as a candidate header.
+        // Do NOT set inTable yet; we wait for the separator to confirm.
+        tableHeaders = cells;
+        pendingHeaderLine = line.trim();
+      } else if (!tableSeparatorSeen) {
+        // Still accumulating header rows before separator (unusual but safe)
+        tableHeaders = cells;
+        pendingHeaderLine = line.trim();
+      } else {
+        // Data row
+        tableRows.push(cells);
+      }
+      continue;
+    }
+
+    // Non-pipe line: flush any open table or unconfirmed candidate header BEFORE
+    // processing any other block type. This preserves document order when a table
+    // is immediately followed by a heading, list, blank line, or paragraph.
+    if (inTable) {
+      closeTable();
+    } else {
+      flushPendingHeaderAsText();
     }
 
     // Headings
@@ -172,35 +239,6 @@ function markdownToHtml(md: string): string {
       closeList();
       out.push(`<h1>${inlineFormat(h1[1])}</h1>`);
       continue;
-    }
-
-    // Table rows — lines starting with | (pipe)
-    if (/^\|/.test(line.trim())) {
-      closeList();
-      // Separator row (e.g. |---|:---:|---) — marks end of header rows
-      if (/^\|[\s\-:|]+\|/.test(line.trim()) && /^[|\s\-:|]+$/.test(line.trim())) {
-        tableSeparatorSeen = true;
-        if (!inTable && tableHeaders.length > 0) inTable = true;
-        continue;
-      }
-      const cells = parseTableCells(line.trim());
-      if (!inTable) {
-        // First non-separator pipe row — treat as header row
-        tableHeaders = cells;
-        inTable = true;
-      } else if (!tableSeparatorSeen) {
-        // Still accumulating header rows before separator (unusual but safe)
-        tableHeaders = cells;
-      } else {
-        // Data row
-        tableRows.push(cells);
-      }
-      continue;
-    }
-
-    // Non-pipe line after a table — flush the table first
-    if (inTable) {
-      closeTable();
     }
 
     // Unordered list items
@@ -245,9 +283,13 @@ function markdownToHtml(md: string): string {
     out.push(inlineFormat(line));
   }
 
-  // Close any unclosed list or table
+  // Close any unclosed list or table; flush any pending unconfirmed header as text.
   closeList();
-  closeTable();
+  if (inTable) {
+    closeTable();
+  } else {
+    flushPendingHeaderAsText();
+  }
 
   // Wrap consecutive non-empty lines into <p> blocks
   const result: string[] = [];
@@ -393,6 +435,83 @@ Some text after.`;
     expect(html).toContain("1 / 1");
     expect(html).not.toMatch(/\| Layer \|/);
     expect(html).not.toMatch(/\| overall \|/);
+  });
+});
+
+// ── Finding 1 regression: pipe-prefixed line with no separator → paragraph ────
+
+describe("markdownToHtml — Finding 1: pipe line without separator stays as text", () => {
+  it("preserves a pipe-prefixed line as paragraph text when no separator row follows", () => {
+    // Shell output or prose that happens to start with a pipe — must NOT become a table
+    const md = "| some shell output here";
+    const html = markdownToHtml(md);
+    // Should contain the text content but NOT table markup
+    expect(html).not.toContain("<table");
+    expect(html).not.toContain("<thead");
+    // The text should appear as a paragraph (possibly inside <p>)
+    expect(html).toContain("some shell output here");
+  });
+
+  it("preserves multiple consecutive pipe-prefixed lines without separator as text", () => {
+    const md = "| line A\n| line B";
+    const html = markdownToHtml(md);
+    expect(html).not.toContain("<table");
+    expect(html).toContain("line A");
+    expect(html).toContain("line B");
+  });
+
+  it("still renders a genuine table (header + separator + 0 data rows) with the None empty-state", () => {
+    // This is the CLEAN-review empty Violations table case — must be preserved
+    const md = `| Principle | Severity | Location | Confidence |
+|-----------|----------|----------|------------|`;
+    const html = markdownToHtml(md);
+    expect(html).toContain("<table");
+    expect(html).toContain("<th>");
+    expect(html).toContain("Principle");
+    expect(html).toContain("None");
+    expect(html).toContain("font-style:italic");
+    expect(html).not.toMatch(/\|---/);
+  });
+
+  it("still renders a genuine table when separator + data rows follow", () => {
+    const md = `| Col1 | Col2 |
+|------|------|
+| A | B |`;
+    const html = markdownToHtml(md);
+    expect(html).toContain("<table");
+    expect(html).toContain(">A<");
+    expect(html).toContain(">B<");
+  });
+});
+
+// ── Finding 2 regression: table followed immediately by heading → table first ─
+
+describe("markdownToHtml — Finding 2: table flushed before heading", () => {
+  it("emits table HTML before the heading when table is immediately followed by ## heading", () => {
+    const md = `| A | B |
+|---|---|
+| 1 | 2 |
+## Next Section`;
+    const html = markdownToHtml(md);
+    expect(html).toContain("<table");
+    expect(html).toContain("<h2>Next Section</h2>");
+    // Table must appear BEFORE the heading in output order
+    const tableIdx = html.indexOf("<table");
+    const headingIdx = html.indexOf("<h2>Next Section</h2>");
+    expect(tableIdx).toBeLessThan(headingIdx);
+  });
+
+  it("emits table HTML before h3 heading when no blank line separates them", () => {
+    const md = `| Col |
+|-----|
+| val |
+### Sub-heading`;
+    const html = markdownToHtml(md);
+    const tableIdx = html.indexOf("<table");
+    const headingIdx = html.indexOf("<h3>Sub-heading</h3>");
+    expect(tableIdx).toBeGreaterThanOrEqual(0);
+    expect(headingIdx).toBeGreaterThanOrEqual(0);
+    expect(tableIdx).toBeLessThan(headingIdx);
   });
 });
 

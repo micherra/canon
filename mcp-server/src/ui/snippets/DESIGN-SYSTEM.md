@@ -450,6 +450,11 @@ function markdownToHtml(md) {
   let tableHeaders = [];
   let tableRows = [];
   let tableSeparatorSeen = false;
+  // Buffer for a candidate pipe row that has not yet been confirmed as a table header
+  // (confirmation requires seeing a GFM separator row on the next pipe line).
+  // Stores the original raw line text so it can be re-emitted as plain text if no
+  // separator follows.
+  let pendingHeaderLine = "";
 
   function closeList() {
     if (inUl) { out.push("</ul>"); inUl = false; }
@@ -464,10 +469,22 @@ function markdownToHtml(md) {
     return cells;
   }
 
+  // Emit any pending (unconfirmed) header line as plain paragraph text and reset state.
+  // Called whenever we discover that the buffered pipe line was NOT followed by a
+  // GFM separator row (so it was never a real table header).
+  function flushPendingHeaderAsText() {
+    if (pendingHeaderLine) {
+      out.push(inlineFormat(pendingHeaderLine));
+      pendingHeaderLine = "";
+      tableHeaders = [];
+    }
+  }
+
   function closeTable() {
     if (!inTable) return;
     inTable = false;
     tableSeparatorSeen = false;
+    pendingHeaderLine = "";
     if (tableHeaders.length === 0) { tableRows = []; tableHeaders = []; return; }
     const thHtml = tableHeaders
       .map(h => `<th>${inlineFormat(h)}</th>`)
@@ -526,6 +543,9 @@ function markdownToHtml(md) {
     if (/^```/.test(line)) {
       if (!inCodeFence) {
         closeList();
+        // A code fence is a non-pipe block — flush any open table or unconfirmed
+        // candidate header before opening the fence (preserves document order).
+        if (inTable) { closeTable(); } else { flushPendingHeaderAsText(); }
         inCodeFence = true;
         codeFenceLang = line.slice(3).trim();
         codeLines = [];
@@ -540,6 +560,45 @@ function markdownToHtml(md) {
     }
     if (inCodeFence) { codeLines.push(line); continue; }
 
+    // Table rows — lines starting with | (pipe)
+    if (/^\|/.test(line.trim())) {
+      closeList();
+      // Separator row (e.g. |---|:---:|---) — marks end of header rows.
+      // Only commit to table rendering now that we have confirmed GFM structure.
+      if (/^\|[\s\-:|]+\|/.test(line.trim()) && /^[|\s\-:|]+$/.test(line.trim())) {
+        tableSeparatorSeen = true;
+        if (!inTable && tableHeaders.length > 0) {
+          // Separator confirms the buffered candidate header as a real table header.
+          inTable = true;
+          pendingHeaderLine = "";
+        }
+        continue;
+      }
+      const cells = parseTableCells(line.trim());
+      if (!inTable) {
+        // If a previous candidate header was buffered without a separator following,
+        // emit it as plain text before buffering the new candidate.
+        flushPendingHeaderAsText();
+        // Buffer this pipe row as a candidate header.
+        // Do NOT set inTable yet; we wait for the separator to confirm.
+        tableHeaders = cells;
+        pendingHeaderLine = line.trim();
+      } else if (!tableSeparatorSeen) {
+        // Still accumulating header rows before separator (unusual but safe)
+        tableHeaders = cells;
+        pendingHeaderLine = line.trim();
+      } else {
+        // Data row
+        tableRows.push(cells);
+      }
+      continue;
+    }
+
+    // Non-pipe line: flush any open table or unconfirmed candidate header BEFORE
+    // processing any other block type. This preserves document order when a table
+    // is immediately followed by a heading, list, blank line, or paragraph.
+    if (inTable) { closeTable(); } else { flushPendingHeaderAsText(); }
+
     // Headings
     const h4 = line.match(/^#### (.+)/);
     if (h4) { closeList(); out.push(`<h4>${inlineFormat(h4[1])}</h4>`); continue; }
@@ -549,33 +608,6 @@ function markdownToHtml(md) {
     if (h2) { closeList(); out.push(`<h2>${inlineFormat(h2[1])}</h2>`); continue; }
     const h1 = line.match(/^# (.+)/);
     if (h1) { closeList(); out.push(`<h1>${inlineFormat(h1[1])}</h1>`); continue; }
-
-    // Table rows — lines starting with | (pipe)
-    if (/^\|/.test(line.trim())) {
-      closeList();
-      // Separator row (e.g. |---|:---:|---) — marks end of header rows
-      if (/^\|[\s\-:|]+\|/.test(line.trim()) && /^[|\s\-:|]+$/.test(line.trim())) {
-        tableSeparatorSeen = true;
-        if (!inTable && tableHeaders.length > 0) inTable = true;
-        continue;
-      }
-      const cells = parseTableCells(line.trim());
-      if (!inTable) {
-        // First non-separator pipe row — treat as header row
-        tableHeaders = cells;
-        inTable = true;
-      } else if (!tableSeparatorSeen) {
-        // Still accumulating header rows before separator (unusual but safe)
-        tableHeaders = cells;
-      } else {
-        // Data row
-        tableRows.push(cells);
-      }
-      continue;
-    }
-
-    // Non-pipe line after a table — flush the table first
-    if (inTable) { closeTable(); }
 
     // Unordered list items
     const ul = line.match(/^[-*] (.+)/);
@@ -607,9 +639,9 @@ function markdownToHtml(md) {
     out.push(inlineFormat(line));
   }
 
-  // Close any unclosed list or table
+  // Close any unclosed list or table; flush any pending unconfirmed header as text.
   closeList();
-  closeTable();
+  if (inTable) { closeTable(); } else { flushPendingHeaderAsText(); }
 
   // Wrap consecutive non-empty lines into <p> blocks
   const result = [];
