@@ -250,6 +250,45 @@ Do NOT flag:
 - Tests where interaction IS the contract under test (e.g. "calls the logger on error" where logging is the behavior being verified, not a collaborator incidentally asserted).
 - Tests that assert call arguments AND a real behavioral outcome (the interaction assertion is supplementary, not the only assertion).
 
+#### Peer-Consumer Consistency
+
+When a build adds a new call site of an existing shared utility (config loader, I/O helper, inference function, validation helper), grep for all existing call sites of that utility in the codebase. Verify the new call follows the same established pattern — same overload, same required parameters, same fallback behavior. A deviation is a finding unless the diff explicitly documents why the new call site is intentionally different.
+
+**Verification protocol:**
+1. Identify the shared utility being called by the new code (function name, import path).
+2. `Grep` for all other call sites of that function across the codebase.
+3. Compare: parameter shape, use of optional/default arguments, error handling around the call.
+4. If the new call omits a required context parameter (e.g., passes no config when all sibling consumers pass a config object), flag as a finding.
+
+**Severity**: Advisory by default. **Upgrade to WARNING** when the deviation produces a behavioral difference with operational impact — e.g., the new call site uses built-in defaults while all existing consumers use a config-aware or project-aware loader, causing the new feature to silently behave differently in non-default environments.
+
+Output format — advisory or WARNING items:
+- `path:line` — `functionName(...)`: new call site omits `{param}` used by all {N} existing consumers at `{file:line}`, `{file:line}`, .... Verify the deviation is intentional or align with the established call pattern.
+
+Do NOT flag:
+- Overloaded functions where the new call site is using a different, documented overload for a valid reason.
+- Utility wrappers that intentionally expose a subset of the underlying function's parameters.
+- Test files calling the same utility with simplified arguments for isolation purposes.
+
+#### Discriminant Surface Parity
+
+When a build adds a new variant to a TypeScript discriminant type (union, string literal union, `const` enum, `const` array used as a type source), check whether a corresponding Zod schema, registration enum, or tool-parameter enum enumerates the same set of values. Surface mismatch is a BLOCKING finding — a variant reachable in the TypeScript type system but absent from the Zod schema is functionally unreachable via external callers (MCP clients, API consumers).
+
+**Verification protocol:**
+1. Identify the TypeScript discriminant type that received the new variant (e.g., `type CheckName = "scope_layers" | ...`).
+2. Grep for the Zod counterpart — typically a `z.enum([...])` or `z.union([...])` in a `register-*.ts` or schema file that uses or re-declares the same set.
+3. Count members: TypeScript type member count must equal Zod enum member count.
+4. A missing member in either surface is a BLOCKING finding — flag with both the TS type location and the Zod schema location.
+
+**Severity**: BLOCKING — a TypeScript–Zod member count mismatch makes the missing variant unreachable through the MCP/API schema and is a functional defect, not a style concern.
+
+Output format — BLOCKING finding:
+- `ts-type-file:line` + `zod-schema-file:line` — `TypeName` has {N} variants in the TypeScript type but {M} in the Zod enum. Missing from Zod: `{variant}`. Add `"{variant}"` to the `z.enum([...])` in `{zod-file}`.
+
+Do NOT flag:
+- Intentional subset schemas where the file-level comment or PR description explicitly documents that the Zod schema is a strict subset of the TypeScript type by design.
+- Internal TypeScript types that have no corresponding schema file and are never serialized or exposed externally.
+
 ### Recommendations array
 
 After completing Stages 1 and 2, produce a `recommendations` array for the `store_pr_review` call. This is the top-5 most actionable suggestions, mixing principle violations with holistic observations:

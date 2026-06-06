@@ -4,7 +4,7 @@ title: DAO Parameter Injection in Diagnostics Services
 severity: convention
 tags: [architecture, testability, diagnostics]
 scope:
-  layers: [service]
+  layers: []
   file_patterns:
     - "mcp-server/src/features/diagnostics/services/**"
 ---
