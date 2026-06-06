@@ -569,17 +569,25 @@ garbled cards). This converts the fidelity contract from trust-based to verified
 Run each grep command against the written `${WORKSPACE}/artifacts/review.html` and verify the
 expected result. The variable `N` in check 1 equals the number of changed files in the diff.
 
+> Note: `grep -c` counts *lines* containing a match, not total occurrences. For exact-once
+> assertions (checks 3 and 4) use `grep -o ... | wc -l` so that a multi-occurrence line cannot
+> slip through as a single count.
+
 | # | Check | Command | Expected |
 |---|-------|---------|----------|
 | 1 | One card per changed file | `grep -c 'class="file-detail-card"' review.html` | equals changed-file count |
 | 2 | Snippet CSS present | `grep -c '\.fdc-metric-card' review.html` | >= 1 |
-| 3 | Card script present exactly once | `grep -c 'function drawFileGraph' review.html` | == 1 |
-| 4 | Force-graph engine present exactly once (only when the dependency subgraph was rendered) | `grep -c 'function renderForceGraph' review.html` | == 1 |
-| 5 | Design tokens present | `grep -c -- '--bg-card' review.html` | >= 1 |
+| 3 | Card script present exactly once | `grep -o 'function drawFileGraph' review.html \| wc -l` | == 1 |
+| 4a | Force-graph engine not duplicated (always) | `grep -o 'function renderForceGraph' review.html \| wc -l` | <= 1 |
+| 4b | Force-graph engine present when subgraph rendered | `grep -o 'function renderForceGraph' review.html \| wc -l` | == 1 if `showSubgraph` was true; == 0 if `showSubgraph` was false |
+| 5 | Design token defined | `grep -c -- '--bg-card:' review.html` | >= 1 |
 
 **Failure protocol**: If ANY check fails, the composed HTML violated the snippet fidelity
 contract. Fix the composed HTML (re-read the snippet file, re-extract the missing block) and
-re-write the file, then re-run ALL checks. Do NOT return until every check passes.
+re-write the file, then re-run ALL checks. For check 4b specifically: only trigger the repair
+loop when `showSubgraph` was true and the count is 0 (missing engine), or when the count
+exceeds 1 (duplicated engine). A count of 0 when `showSubgraph` was false is correct — do NOT
+inject the engine. Do NOT return until every check passes.
 
 Return when all checks pass. Do not modify the worktree.
 ````
