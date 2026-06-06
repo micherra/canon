@@ -78,7 +78,7 @@ When task-dag.yaml exists and the current step is "implement", use TeamCreate/Ta
 for worker dispatch instead of spawning parallel Agent subagents directly.
 
 Raw Agent spawns bypass dependency tracking and task queue visibility.
-See CLAUDE.md > DAG Execution Protocol > Worker Dispatch for the correct pattern.
+See references/dag-execution-protocol.md > Worker Dispatch for the correct pattern.
 EOF
 
   # Advisory only — always exit 0

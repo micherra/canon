@@ -113,7 +113,7 @@ src/
 
 **Craft audit service** (`src/features/diagnostics/services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` (pure, bounded by `limit` default 5); `persistAuditProfile(areas, ratings, dao)` (writes `source:"audit"` rows via injected `CraftProfileDao`); reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
 
-**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions; 5 checks: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths` (flags non-resolving paths in `references/**/*.md`); see `diagnostics/.claude/CLAUDE.md` for `CheckName` details. Added 2026-05-26.
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`, `doc-gap-detect.ts`) — pure functions; 6 checks: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths` (flags non-resolving paths in `references/**/*.md`), `checkScopeLayers` (flags invalid `scope.layers` values; valid set derived from `loadLayerMappings(projectDir)` at the I/O boundary — project config keys when `.canon/config.json` defines `layers`, otherwise defaults); see `diagnostics/.claude/CLAUDE.md` for `CheckName` details. Added 2026-05-26.
 **Signal Compiler** (`src/features/diagnostics/services/signal-compiler.ts`) — `compileSignals(filePaths, driftDbSignals)` scores by priority within per-file token budget; read-only
 **Pitfall Enrichment** (`src/features/diagnostics/services/pitfall-enrichment.ts`) — pure functions; `formatPitfallsSection` returns `""` when both arrays empty. Added 2026-05-22.
 **Area Memory Enrichment** (`src/features/diagnostics/services/area-memory-enrichment.ts`) — fail-open; calls `markInjected` after query; returns `{ section: ""; count: 0 }` on error. Added 2026-05-29.
@@ -154,7 +154,7 @@ src/
 
 **`computeDocFreshness`** (`src/features/diagnostics/services/doc-freshness.ts`) — enumerates `docs/*.md` (excludes `docs/reference/`), git injectable seam; `!ok` paths log WARN + return `DocFreshness` with `warning?`; ENOENT → `[]`. Added 2026-05-29.
 
-**Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs; `DEFAULT_LAYER_MAPPINGS` includes `hooks: ["hooks"]` entry ordered before `shared` so `hooks/lib/*.sh` resolves to layer `hooks` (added 2026-05-29)
+**Shared libs** — `token-budget.ts`: `fitWithinBudget` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs; `DEFAULT_LAYER_MAPPINGS` includes `hooks: ["hooks"]` entry ordered before `shared` so `hooks/lib/*.sh` resolves to layer `hooks` (added 2026-05-29); `VALID_LAYERS` exported as `Object.keys(DEFAULT_LAYER_MAPPINGS)` — derived set of valid `scope.layers` values (added 2026-06-05)
 
 **Composite context tool:**
 
@@ -175,7 +175,7 @@ src/
 | `store_summaries` | Persist file summaries to SQLite KG DB (DB-only since ADR-005 2026-04-01; JSON write path removed) |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
-| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions between CLAUDE.md files, orphan principles, stale file refs, principles missing examples, cited-path accuracy in `references/**/*.md`; optional `checks` array selects subset (default: all 5); returns `WikiLintOutput` |
+| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions between CLAUDE.md files, orphan principles, stale file refs, principles missing examples, cited-path accuracy in `references/**/*.md`, invalid `scope.layers` values; optional `checks` array selects subset (default: all 6); returns `WikiLintOutput` |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result for drift tracking; accepts optional `craft_profile` (validated via `CraftProfileSchema`; persists one row per distinct subsystem area to `craft_profiles` with `source:"review"`) |
 

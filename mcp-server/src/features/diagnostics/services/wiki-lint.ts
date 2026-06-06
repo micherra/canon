@@ -54,12 +54,20 @@ export type CitedPathFinding = {
   line_number: number;
 };
 
+export type ScopeLayerFinding = {
+  principle_id: string;
+  file_path: string;
+  invalid_layers: string[];
+  message: string;
+};
+
 export type WikiLintOutput = {
   contradictions: ContradictionFinding[];
   orphan_principles: OrphanPrincipleFinding[];
   stale_refs: StaleRefFinding[];
   missing_examples: MissingExampleFinding[];
   cited_paths: CitedPathFinding[];
+  scope_layers: ScopeLayerFinding[];
   summary: {
     total_findings: number;
     files_scanned: number;
@@ -73,6 +81,7 @@ export type AssembleWikiLintInput = {
   staleRefs: StaleRefFinding[];
   missingExamples: MissingExampleFinding[];
   citedPaths: CitedPathFinding[];
+  scopeLayers: ScopeLayerFinding[];
   filesScanned: number;
   principlesChecked: number;
 };
@@ -443,6 +452,39 @@ export function checkCitedPaths(
   return files.flatMap((f) => collectCitedPathsInFile(f, existsOnDisk));
 }
 
+// ---- Scope Layer Check ----
+
+/**
+ * Check for invalid scope.layers names in principle definitions.
+ *
+ * A principle is flagged when its scope.layers array contains any name that
+ * is not in the provided validLayers set. Empty layers arrays are universal
+ * (matches all files) and are not flagged.
+ *
+ * Pure: receives pre-loaded principles and validLayers; no filesystem access.
+ */
+export function checkScopeLayers(
+  principles: Principle[],
+  validLayers: readonly string[],
+): ScopeLayerFinding[] {
+  const valid = new Set(validLayers);
+  const findings: ScopeLayerFinding[] = [];
+  for (const p of principles) {
+    const invalid = p.scope.layers.filter((l) => !valid.has(l));
+    if (invalid.length === 0) continue;
+    findings.push({
+      file_path: p.filePath,
+      invalid_layers: invalid,
+      message:
+        `Principle '${p.id}' declares invalid scope.layers: ${invalid.join(", ")}. ` +
+        `Valid layers are: ${validLayers.join(", ")}. ` +
+        `Remove the invalid name(s); if no valid layer remains, set layers: [] and use file_patterns.`,
+      principle_id: p.id,
+    });
+  }
+  return findings;
+}
+
 // ---- Assembler ----
 
 /**
@@ -455,6 +497,7 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     staleRefs,
     missingExamples,
     citedPaths,
+    scopeLayers,
     filesScanned,
     principlesChecked,
   } = input;
@@ -463,6 +506,7 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     contradictions,
     missing_examples: missingExamples,
     orphan_principles: orphans,
+    scope_layers: scopeLayers,
     stale_refs: staleRefs,
     summary: {
       files_scanned: filesScanned,
@@ -472,7 +516,8 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
         orphans.length +
         staleRefs.length +
         missingExamples.length +
-        citedPaths.length,
+        citedPaths.length +
+        scopeLayers.length,
     },
   };
 }

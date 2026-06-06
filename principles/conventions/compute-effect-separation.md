@@ -4,7 +4,6 @@ title: Extract Pure Computation from Effect-Bearing Functions
 severity: convention
 scope:
   layers:
-    - features
     - shared
   file_patterns:
     - "mcp-server/src/**"

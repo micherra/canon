@@ -250,6 +250,61 @@ Do NOT flag:
 - Tests where interaction IS the contract under test (e.g. "calls the logger on error" where logging is the behavior being verified, not a collaborator incidentally asserted).
 - Tests that assert call arguments AND a real behavioral outcome (the interaction assertion is supplementary, not the only assertion).
 
+#### Agent→Tool Reachability
+
+**Trigger**: When the diff touches `agents/*.md`, `CLAUDE.md`, or a task plan/runbook that introduces or restores a requirement that a specific agent must call a specific MCP tool (new or pre-existing).
+
+For each such agent→tool requirement, verify both conditions mechanically:
+
+1. The tool appears in the `tools:` field of the agent's frontmatter: `awk '/^tools:/{in_tools=1; next} in_tools && /^---/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>'` — a match confirms the tool is in the allowlist, not merely mentioned in the description or body.
+2. The tool is registered in the MCP server: `grep -rn '"<tool_name>"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result. A match only in a doc comment or non-registration file does not satisfy this condition.
+
+**Outcome rules:**
+- If condition (1) fails: the agent physically cannot call the tool at runtime regardless of what the docs or tests say. Flag as **WARNING** citing `agent-instruction-tools-list-coherence`. Include the command and its empty output as evidence.
+- If condition (2) fails: the tool is undeclared in the server — the call will produce a "tool not found" error at runtime. Flag as **BLOCKING**.
+- A SUMMARY that reports AC satisfaction ("agent now calls tool X") without satisfying both conditions has produced a **nominally-met AC** — flag it with `SUMMARY CORRECTION REQUIRED` in Stage 3.
+
+**Skip condition**: Skip this sub-axis when the diff contains no agent instruction files and no wiring requirements referencing agent→tool connections.
+
+#### Peer-Consumer Consistency
+
+When a build adds a new call site of an existing shared utility (config loader, I/O helper, inference function, validation helper), grep for all existing call sites of that utility in the codebase. Verify the new call follows the same established pattern — same overload, same required parameters, same fallback behavior. A deviation is a finding unless the diff explicitly documents why the new call site is intentionally different.
+
+**Verification protocol:**
+1. Identify the shared utility being called by the new code (function name, import path).
+2. `Grep` for all other call sites of that function across the codebase.
+3. Compare: parameter shape, use of optional/default arguments, error handling around the call.
+4. If the new call omits a required context parameter (e.g., passes no config when all sibling consumers pass a config object), flag as a finding.
+
+**Severity**: Advisory by default. **Upgrade to WARNING** when the deviation produces a behavioral difference with operational impact — e.g., the new call site uses built-in defaults while all existing consumers use a config-aware or project-aware loader, causing the new feature to silently behave differently in non-default environments.
+
+Output format — advisory or WARNING items:
+- `path:line` — `functionName(...)`: new call site omits `{param}` used by all {N} existing consumers at `{file:line}`, `{file:line}`, .... Verify the deviation is intentional or align with the established call pattern.
+
+Do NOT flag:
+- Overloaded functions where the new call site is using a different, documented overload for a valid reason.
+- Utility wrappers that intentionally expose a subset of the underlying function's parameters.
+- Test files calling the same utility with simplified arguments for isolation purposes.
+
+#### Discriminant Surface Parity
+
+When a build adds a new variant to a TypeScript discriminant type (union, string literal union, `const` enum, `const` array used as a type source), check whether a corresponding Zod schema, registration enum, or tool-parameter enum enumerates the same set of values. Surface mismatch is a BLOCKING finding — a variant reachable in the TypeScript type system but absent from the Zod schema is functionally unreachable via external callers (MCP clients, API consumers).
+
+**Verification protocol:**
+1. Identify the TypeScript discriminant type that received the new variant (e.g., `type CheckName = "scope_layers" | ...`).
+2. Grep for the Zod counterpart — typically a `z.enum([...])` or `z.union([...])` in a `register-*.ts` or schema file that uses or re-declares the same set.
+3. Count members: TypeScript type member count must equal Zod enum member count.
+4. A missing member in either surface is a BLOCKING finding — flag with both the TS type location and the Zod schema location.
+
+**Severity**: BLOCKING — a TypeScript–Zod member count mismatch makes the missing variant unreachable through the MCP/API schema and is a functional defect, not a style concern.
+
+Output format — BLOCKING finding:
+- `ts-type-file:line` + `zod-schema-file:line` — `TypeName` has {N} variants in the TypeScript type but {M} in the Zod enum. Missing from Zod: `{variant}`. Add `"{variant}"` to the `z.enum([...])` in `{zod-file}`.
+
+Do NOT flag:
+- Intentional subset schemas where the file-level comment or PR description explicitly documents that the Zod schema is a strict subset of the TypeScript type by design.
+- Internal TypeScript types that have no corresponding schema file and are never serialized or exposed externally.
+
 ### Recommendations array
 
 After completing Stages 1 and 2, produce a `recommendations` array for the `store_pr_review` call. This is the top-5 most actionable suggestions, mixing principle violations with holistic observations:
@@ -626,6 +681,7 @@ Based on the most severe finding across all six stages:
 - BLOCKING requires a concrete `rule`-severity violation — only principles with `severity: rule` can trigger it
 - A matched principle is not a violated principle — most will be honored
 - Check each violation's severity explicitly before writing the verdict
+- Stage 2 agent→tool reachability: a failed condition (2) (tool absent from MCP server registration) is BLOCKING regardless of principle severity — the runtime will error on every call
 - Stage 5 (acceptance criteria verification) failures are BLOCKING -- they enter the review-fix iteration loop. If unfixable (non-automatable AC), the user can override via HITL
 - Stage 6 (cross-requirement consistency) BLOCKING findings (type contradictions, security policy gaps) also enter the review-fix iteration loop
 

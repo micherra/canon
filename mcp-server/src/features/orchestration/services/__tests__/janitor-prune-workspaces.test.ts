@@ -1,5 +1,5 @@
 /**
- * Janitor service tests — prune_workspaces task.
+ * Janitor service tests — prune_workspaces task + cleanupEmptyBranchDir TOCTOU guard.
  *
  * Split from janitor.test.ts to keep each file under 600 lines.
  */
@@ -464,5 +464,82 @@ describe("prune_workspaces task", () => {
     );
     expect(removeCall).toBeUndefined();
     expect(existsSync(slugDir)).toBe(false);
+  });
+});
+
+// --- prune_husk_dirs task ---
+
+describe("prune_husk_dirs task", () => {
+  test("removes a completely empty top-level branch dir and reports count", async () => {
+    // Create a completely empty branch dir (husk)
+    const huskDir = join(canonWorkspacesDir, "canon--adopt-release-please");
+    await mkdir(huskDir, { recursive: true });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_husk_dirs).toBeDefined();
+    expect(result.tasks.prune_husk_dirs.status).toBe("success");
+    expect(result.tasks.prune_husk_dirs.detail).toContain("1");
+    expect(existsSync(huskDir)).toBe(false);
+  });
+
+  test("does not remove a non-empty top-level branch dir", async () => {
+    // Create a branch dir with a slug subdir inside it
+    const branchDir = join(canonWorkspacesDir, "canon--http-epic-1b");
+    const slugDir = join(branchDir, "my-workspace-slug");
+    await mkdir(slugDir, { recursive: true });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_husk_dirs.status).toBe("skipped");
+    expect(existsSync(branchDir)).toBe(true);
+    expect(existsSync(slugDir)).toBe(true);
+  });
+
+  test("reports skipped with message when no husk dirs exist", async () => {
+    // No workspaces dir at all
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_husk_dirs).toBeDefined();
+    expect(result.tasks.prune_husk_dirs.status).toBe("skipped");
+  });
+
+  test("sets needs_prune true when husk dirs are removed", async () => {
+    const huskDir = join(canonWorkspacesDir, "canon--empty-husk");
+    await mkdir(huskDir, { recursive: true });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.needs_prune).toBe(true);
+  });
+
+  test("removes multiple empty husk dirs and reports total count", async () => {
+    const husk1 = join(canonWorkspacesDir, "canon--husk-one");
+    const husk2 = join(canonWorkspacesDir, "canon--husk-two");
+    const husk3 = join(canonWorkspacesDir, "canon--husk-three");
+    await mkdir(husk1, { recursive: true });
+    await mkdir(husk2, { recursive: true });
+    await mkdir(husk3, { recursive: true });
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_husk_dirs.status).toBe("success");
+    expect(result.tasks.prune_husk_dirs.detail).toContain("3");
+    expect(existsSync(husk1)).toBe(false);
+    expect(existsSync(husk2)).toBe(false);
+    expect(existsSync(husk3)).toBe(false);
+  });
+
+  test("skips non-directory entries under workspaces dir", async () => {
+    // A file (not dir) at the top level of workspaces should not be touched
+    await mkdir(canonWorkspacesDir, { recursive: true });
+    const aFile = join(canonWorkspacesDir, "somefile.json");
+    await writeFile(aFile, "{}");
+
+    const result = await runJanitor(tmpDir);
+
+    // The file is not a directory — should not be removed
+    expect(existsSync(aFile)).toBe(true);
+    expect(result.tasks.prune_husk_dirs.status).toBe("skipped");
   });
 });
