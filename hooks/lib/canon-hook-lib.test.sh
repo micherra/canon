@@ -650,6 +650,57 @@ assert_eq 'nice bash -c "git status" extracts safely (nice, no flags)' \
   "$(canon_unwrap_string_exec_arg 'nice bash -c "git status"')"
 
 # ---------------------------------------------------------------------------
+# canon_unwrap_string_exec_arg -- round-4 bypass fixes (scan-forward).
+#
+# Root cause: round-3 used arity-based skipping for timeout/nice.  For
+# space-separated flag values (-s 9, -k 1), the non-'-' scan consumed the
+# FLAG VALUE as the duration, leaving the real duration as the next token;
+# the main loop saw an unrecognised token and returned 1 (not a wrapper).
+#
+# Fix: after the prefix word, scan ALL remaining tokens for the first token
+# that normalizes to a known wrapper or prefix (arity-free).
+# ---------------------------------------------------------------------------
+printf '\n=== canon_unwrap_string_exec_arg -- round-4 scan-forward bypass fixes ===\n'
+
+_R4H="--hard"
+_R4FD="-fd"
+
+# Round-4 bypass: space-separated -s VALUE (REVIEWER BLOCKING FORM).
+assert_eq "timeout -s 9 5 bash -c inner extracts (space-separated -s value)" \
+  "git reset $_R4H" \
+  "$(canon_unwrap_string_exec_arg "timeout -s 9 5 bash -c \"git reset $_R4H\"")"
+
+# Round-4 bypass: space-separated -k VALUE (REVIEWER BLOCKING FORM).
+assert_eq "timeout -k 1 5 bash -c inner extracts (space-separated -k value)" \
+  "git reset $_R4H" \
+  "$(canon_unwrap_string_exec_arg "timeout -k 1 5 bash -c \"git reset $_R4H\"")"
+
+# Multiple flags with space-separated values.
+assert_eq "timeout -k 1 --preserve-status 5 bash -c inner extracts (multi-flag)" \
+  "git reset $_R4H" \
+  "$(canon_unwrap_string_exec_arg "timeout -k 1 --preserve-status 5 bash -c \"git reset $_R4H\"")"
+
+# All prior round-3 forms must still work after scan-forward change.
+assert_eq "timeout -s9 5 bash -c inner extracts after scan-forward (r3 regression)" \
+  "git reset $_R4H" \
+  "$(canon_unwrap_string_exec_arg "timeout -s9 5 bash -c \"git reset $_R4H\"")"
+
+assert_eq "timeout 5 bash -c inner extracts after scan-forward (plain form)" \
+  "git reset $_R4H" \
+  "$(canon_unwrap_string_exec_arg "timeout 5 bash -c \"git reset $_R4H\"")"
+
+# nice still works after scan-forward change.
+assert_eq "nice -n 5 bash -c inner extracts after scan-forward (two-token -n)" \
+  "git clean $_R4FD" \
+  "$(canon_unwrap_string_exec_arg "nice -n 5 bash -c \"git clean $_R4FD\"")"
+
+# Return 1 (not a wrapper) when no wrapper token exists in remaining tokens.
+assert_eq "timeout 5 -- passes (no wrapper in remaining tokens, return empty)" \
+  "" \
+  "$(canon_unwrap_string_exec_arg "timeout 5 --")"
+
+
+# ---------------------------------------------------------------------------
 # canon_has_ambiguous_git_token — Round-3 fix for git$IFS inner bypass.
 #
 # When a string-executing wrapper extracts "git$IFS reset --hard" as its

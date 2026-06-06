@@ -520,6 +520,37 @@ canon_unwrap_string_exec_arg() {
   }
 
   # ---------------------------------------------------------------------------
+  # Inner helper: _do_scan_for_wrapper
+  # Scans tokens from current $idx forward (left-to-right) for the FIRST
+  # token that normalizes (basename + backslash-strip) to a known
+  # string-executing wrapper (bash/sh/zsh/ksh/eval) or a recognized
+  # transparent prefix (command/nohup/env/timeout/nice).
+  #
+  # If found: sets $idx to that token's position and returns 0.
+  # If not found (no wrapper or prefix among remaining tokens): returns 1.
+  #
+  # Arity-free: ignores how many flags (-s/-k/--signal/--kill-after for
+  # timeout; -n for nice) or positional values (durations, priority numbers)
+  # precede the wrapper.  The scan finds the wrapper regardless.
+  # ---------------------------------------------------------------------------
+  _do_scan_for_wrapper() {
+    local _scan_i="$idx"
+    while [[ $_scan_i -lt $tok_count ]]; do
+      local _sr="${toks[$_scan_i]}"
+      local _st="${_sr##*/}"
+      _st="${_st#\\}"
+      case "$_st" in
+        command|nohup|env|timeout|nice|bash|sh|zsh|ksh|eval)
+          idx="$_scan_i"
+          return 0
+          ;;
+      esac
+      _scan_i=$(( _scan_i + 1 ))
+    done
+    return 1
+  }
+
+  # ---------------------------------------------------------------------------
   # Main token walk: skip transparent prefixes, then match the wrapper token.
   # ---------------------------------------------------------------------------
   local idx=0
@@ -547,44 +578,30 @@ canon_unwrap_string_exec_arg() {
         idx=$(( idx + 1 ))
         _do_skip_env_flags
         ;;
-      timeout)
-        # Skip 'timeout', then generically skip any option-like tokens
-        # (e.g. -s9, -k 5, --foreground) before skipping the mandatory
-        # duration argument.  Enumerating specific timeout flags is the
-        # wrong axis — any token starting with '-' is an option.
+      timeout|nice)
+        # Scan-forward approach (arity-free): after the prefix word, scan ALL
+        # remaining tokens left-to-right for the first token that normalizes to
+        # a known string-executing wrapper or recognized transparent prefix.
+        #
+        # This replaces per-command flag-arity tracking.  It does not matter
+        # how many flags or positional values precede the wrapper:
+        #   timeout 5 bash -c "..."            (plain duration, no flags)
+        #   timeout -s 9 5 bash -c "..."       (space-separated -s value)
+        #   timeout -k 1 5 bash -c "..."       (space-separated -k value)
+        #   timeout --signal=9 5 bash -c "..." (=-form, self-contained)
+        #   timeout -k 1 --preserve-status 5 bash -c "..."
+        #   nice bash -c "..."                 (no flags)
+        #   nice -n 5 bash -c "..."            (two-token -n value)
+        #   nice -n5 bash -c "..."             (combined form)
+        #
+        # KEY CONSTRAINT: if no wrapper is found among remaining tokens,
+        # return 1 (not a string-executing wrapper).  Benign direct-git
+        # prefixed forms (timeout 5 git status) are handled by
+        # process_segment's canon_has_git_token branch, not here.
         idx=$(( idx + 1 ))
-        # Generic option skip: advance past all '-*' tokens.
-        while [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" == -* ]]; do
-          idx=$(( idx + 1 ))
-        done
-        # Skip the mandatory duration argument (one non-'-' positional token).
-        if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" != -* ]]; then
-          idx=$(( idx + 1 ))
+        if ! _do_scan_for_wrapper; then
+          return 1
         fi
-        ;;
-      nice)
-        # Skip 'nice', then generically skip any option-like tokens.
-        # Handles all forms:
-        #   -n5       (combined — self-contained, skip the whole token)
-        #   -n <val>  (two-token — skip -n AND the following value token)
-        #   any other -* token (skip)
-        # Enumerating specific flags is the wrong axis; the only special
-        # case is that bare '-n' consumes the NEXT token as its value.
-        idx=$(( idx + 1 ))
-        while [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" == -* ]]; do
-          local _nice_opt="${toks[$idx]}"
-          idx=$(( idx + 1 )) # skip the option token itself
-          case "$_nice_opt" in
-            -n)
-              # Two-token form: -n <value>.  Consume the following non-'-' token.
-              if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" != -* ]]; then
-                idx=$(( idx + 1 ))
-              fi
-              ;;
-            # Combined forms (-n5, -n-5) and any other self-contained option:
-            # already consumed by the idx++ above; nothing more to skip.
-          esac
-        done
         ;;
       eval)
         # eval: the rest of the tokens (joined by spaces) form the command.

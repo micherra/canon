@@ -1064,6 +1064,62 @@ run_test 'depth-4 nesting fails-closed (exceeds CANON_WRAPPER_MAX_DEPTH)' \
   2 "$(make_multiline_input 'bash -c "bash -c \"bash -c \\\"bash -c echo git\\\"\""')" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# P1 round-4 fix: scan-forward eliminates the timeout space-separated flag-
+# value class (-s/-k/--signal/--kill-after).
+#
+# Root cause: round-3 timeout handling skipped all '-*' option tokens, then
+# consumed exactly ONE non-'-' token as the duration.  For -s 9 5 bash ...,
+# the non-'-' scan consumed '9' as the duration, leaving '5' as the next
+# token; the main loop then saw '5' (unrecognised -> return 1, not a wrapper).
+#
+# Fix: scan ALL remaining tokens after the prefix word for the first token
+# that normalizes to a known wrapper or prefix -- arity-free; the duration,
+# signal value, and any other interleaved positionals are simply skipped.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- P1 round-4: timeout space-separated flag values (should block, exit 2) --"
+
+_R4_HARD="--hard"
+_R4_FD="-fd"
+
+run_test 'timeout -s 9 5 bash -c inner blocks (space-separated -s value)' \
+  2 "$(make_multiline_input "timeout -s 9 5 bash -c \"git reset $_R4_HARD\"")" "$NON_WT_PWD"
+
+run_test 'timeout -k 1 5 bash -c inner blocks (space-separated -k value)' \
+  2 "$(make_multiline_input "timeout -k 1 5 bash -c \"git reset $_R4_HARD\"")" "$NON_WT_PWD"
+
+run_test 'timeout -k 1 --preserve-status 5 bash -c inner blocks (multi-flag)' \
+  2 "$(make_multiline_input "timeout -k 1 --preserve-status 5 bash -c \"git reset $_R4_HARD\"")" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-4: direct destructive-git prefixed forms (should block, exit 2) --"
+
+run_test 'timeout 5 git reset direct blocks (direct prefixed git)' \
+  2 "$(make_input "timeout 5 git reset $_R4_HARD")" "$NON_WT_PWD"
+
+run_test 'nice git reset direct blocks (direct nice-prefixed git)' \
+  2 "$(make_input "nice git reset $_R4_HARD")" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-4: benign prefixed pass controls (should pass, exit 0) --"
+
+run_test 'timeout 5 git status passes (benign direct-git)' \
+  0 "$(make_input 'timeout 5 git status')" "$NON_WT_PWD"
+
+run_test 'timeout -s9 5 git status passes (signal flag, benign git)' \
+  0 "$(make_input 'timeout -s9 5 git status')" "$NON_WT_PWD"
+
+run_test 'timeout -k 1 5 git status passes (kill-after, benign git)' \
+  0 "$(make_input 'timeout -k 1 5 git status')" "$NON_WT_PWD"
+
+run_test 'nice git log passes (benign nice-prefixed git)' \
+  0 "$(make_input 'nice git log')" "$NON_WT_PWD"
+
+run_test 'env FOO=bar git status passes (env assignment, benign git)' \
+  0 "$(make_input 'env FOO=bar git status')" "$NON_WT_PWD"
+
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""
