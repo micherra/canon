@@ -138,7 +138,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 #### Trivial path (PM → engineer) <!-- last-updated: 2026-05-25 -->
 
-1. `init_workspace({ flow_name, task, branch, base_commit, tier: "trivial", original_input, preflight: true })` → save `worktree_path`, `workspace`.
+1. `init_workspace({ flow_name, task, branch, base_commit, tier: "small", original_input, preflight: true })` → save `worktree_path`, `workspace`.
 2. Infer runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps`.
 3. **Pre-spawn check**: `test -d "${worktree_path}"`. If missing, report BLOCKED.
 4. Spawn `canon:engineer` with request, `worktree_path`, `turn_budget: {maxTurns}`.
@@ -378,7 +378,7 @@ MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_
 
 When the review step completes and a tester step follows: extract Stage 5 "Acceptance Criteria Verification" from `${WORKSPACE}/reviews/REVIEW.md` and include it (plus the architect design's Acceptance Criteria section) in the tester's spawn prompt. When runbook ACs include verification method/type columns, the tester MUST run after the review step — it consumes the reviewer's Stage 5 output.
 
-### Step Enforcement Contracts <!-- last-updated: 2026-05-27 -->
+### Step Enforcement Contracts <!-- last-updated: 2026-06-05 -->
 
 **Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL.
 
@@ -386,12 +386,16 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 **In-wave baseline**: After sequential wave execution, use `base_commit` (not `main`) as violation baseline. Only violations absent at `base_commit` are regressions. Pre-existing violations remain pre-existing even if the file was touched.
 
+**Doc-file conflict pre-check**: `CLAUDE.md` files (root and `mcp-server/.claude/CLAUDE.md`) are high-churn merge hotspots — concurrent builds and an advancing `main` conflict them even when code targets are clean. Before the verify step, run `git fetch origin` first, then if either file is in scope for context-sync OR `git rev-list {base_commit}..origin/main --count` returns > 0, check whether either file has diverged from the build base. Resolve any doc-file-only merge BEFORE verify, not after — this avoids a wasted verify+review cycle when the code is otherwise clean. This is a mid-build check (distinct from push-time hooks such as `pre-push-review.sh`).
+
 ### Completion Checklist
 
 1. `finalize_workspace({ workspace })` — resolve missing steps/artifacts first. Verify `prd.md` exists for non-trivial builds.
    If `steps_ghost` is non-empty in the response, surface the list to the user as advisory: "Note: {N} steps were planned but never dispatched: {list}."
+   **Push-state check**: run `git rev-list --count origin/main..HEAD` in the main working tree. If > 0, surface: "Local main is N commits ahead of origin/main. Push before proceeding?" This is advisory — the user may intentionally defer pushing (watch_ZZZZ2).
 2. Context-sync: spawn scribe. Updates CLAUDE.md, context.md, CONVENTIONS.md on build branch before ship, and electively factual-syncs docs/*.md direction docs.
 3. Ship:
+   - **Pre-push mergeability check**: Before spawning the shipper or pushing, run `git fetch origin && git merge-base --is-ancestor origin/main HEAD`. If not ancestor (i.e., origin/main has advanced beyond the build branch's base), merge origin/main into the build branch, re-run verify gates, and re-review if the diff is non-trivial. This catches base advances that occurred during long build steps (watch_YYYY1).
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
    - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
@@ -502,7 +506,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (71 total: 7 rules, 35 strong-opinions, 29 conventions)
+├── principles/           # Built-in principles (74 total: 7 rules, 35 strong-opinions, 32 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
