@@ -16,12 +16,15 @@ PR review tools: unified PR impact analysis, code review surfacing, review persi
 | `review-code.ts` | `review_code` | Surface principles for code review + code content |
 | `store-pr-review.ts` | `store_pr_review` | Persist PR review result; accepts optional `craft_profile` |
 | `present-review.ts` | `present_review` | `showPrImpact` → read pre-rendered `review.html` → `presentArtifact`; returns `{ url: string }`; `INVALID_INPUT` when `review.html` missing or `has_review === false` |
-| `pr-review-data.ts` | (service, not tool) | Pure data assembly; see Contracts below |
+| `pr-review-data.ts` | (service, not tool) | `getPrReviewData` — top-level assembler; returns `{ error }` for invalid `pr_number` (never throws) |
+| `pr-review-data-helpers.ts` | (service, not tool) | Pure helper functions; see Contracts below |
 
 ## Contracts
 <!-- last-updated: 2026-06-05 -->
 
-**PR Review Data** (`tools/pr-review-data.ts`) — pure functions: `classifyFile`, `generateNarrative`, `buildFileViolationMap`, `assembleOutput`. Bucket thresholds: `needs-attention` = violations OR high in_degree; `worth-a-look` = priority ≥ 5. `getPrReviewData` returns `{ error }` (not throw) for invalid `pr_number`. Extracted 2026-05-25.
+**PR Review Data helpers** (`tools/pr-review-data-helpers.ts`) — pure functions: `classifyFile`, `generateNarrative`, `buildFileViolationMap`, `assembleOutput`. Bucket thresholds: `needs-attention` = violations OR high in_degree; `worth-a-look` = priority ≥ 5. Extracted 2026-05-25.
+
+**`getPrReviewData`** (`tools/pr-review-data.ts`) — top-level assembler; returns `{ error }` (not throw) for invalid `pr_number`.
 
 **`store_pr_review`** — accepts optional `craft_profile` (validated via `CraftProfileSchema`); persists one row per distinct subsystem area to `craft_profiles` table with `source:"review"`.
 
