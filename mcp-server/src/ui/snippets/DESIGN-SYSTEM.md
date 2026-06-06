@@ -418,7 +418,10 @@ function escapeHtml(s) {
 The canonical `markdownToHtml` for renderer agents. It is the behavior-preserving **union** of the
 prior per-template copies: design.md's block structure (code fences, h1–h4, ul/ol, paragraph
 wrapping with block passthrough, italic, `__bold__`) plus review.md's two inline behaviors
-(code-span **protection tokens** and `file:line` auto-linking). It calls `escapeHtml` internally
+(code-span **protection tokens** and `file:line` auto-linking). Now also handles GitHub-Flavored
+Markdown tables: pipe-delimited rows are converted to `<table class="requirement-table">` wrapped
+in `.table-scroll-wrapper`; header-only tables (separator row followed by no data rows) render a
+muted "None" empty-state row instead of raw pipe text. It calls `escapeHtml` internally
 (escape-first, wrap-second) — **do NOT pre-escape input before passing it to `markdownToHtml`**, or
 content will be double-escaped.
 
@@ -443,10 +446,49 @@ function markdownToHtml(md) {
   let codeLines = [];
   let inUl = false;
   let inOl = false;
+  let inTable = false;
+  let tableHeaders = [];
+  let tableRows = [];
+  let tableSeparatorSeen = false;
 
   function closeList() {
     if (inUl) { out.push("</ul>"); inUl = false; }
     if (inOl) { out.push("</ol>"); inOl = false; }
+  }
+
+  function parseTableCells(line) {
+    // Split on | delimiters, trim each cell, drop leading/trailing empty cells
+    // produced by the mandatory outer pipes (| cell | cell |).
+    const raw = line.split("|");
+    const cells = raw.slice(1, raw.length - 1).map(c => c.trim());
+    return cells;
+  }
+
+  function closeTable() {
+    if (!inTable) return;
+    inTable = false;
+    tableSeparatorSeen = false;
+    if (tableHeaders.length === 0) { tableRows = []; tableHeaders = []; return; }
+    const thHtml = tableHeaders
+      .map(h => `<th>${inlineFormat(h)}</th>`)
+      .join("");
+    let tbodyHtml;
+    if (tableRows.length === 0) {
+      // Header-only table (empty-state): render a muted "none" row spanning all columns
+      tbodyHtml = `<tr><td colspan="${tableHeaders.length}" style="color:var(--text-muted);font-style:italic;">None</td></tr>`;
+    } else {
+      tbodyHtml = tableRows
+        .map(cells => {
+          const padded = tableHeaders.map((_, idx) => cells[idx] ?? "");
+          return `<tr>${padded.map(c => `<td>${inlineFormat(c)}</td>`).join("")}</tr>`;
+        })
+        .join("");
+    }
+    out.push(
+      `<div class="table-scroll-wrapper"><table class="requirement-table"><thead><tr>${thHtml}</tr></thead><tbody>${tbodyHtml}</tbody></table></div>`
+    );
+    tableHeaders = [];
+    tableRows = [];
   }
 
   function inlineFormat(text) {
@@ -508,6 +550,33 @@ function markdownToHtml(md) {
     const h1 = line.match(/^# (.+)/);
     if (h1) { closeList(); out.push(`<h1>${inlineFormat(h1[1])}</h1>`); continue; }
 
+    // Table rows — lines starting with | (pipe)
+    if (/^\|/.test(line.trim())) {
+      closeList();
+      // Separator row (e.g. |---|:---:|---) — marks end of header rows
+      if (/^\|[\s\-:|]+\|/.test(line.trim()) && /^[|\s\-:|]+$/.test(line.trim())) {
+        tableSeparatorSeen = true;
+        if (!inTable && tableHeaders.length > 0) inTable = true;
+        continue;
+      }
+      const cells = parseTableCells(line.trim());
+      if (!inTable) {
+        // First non-separator pipe row — treat as header row
+        tableHeaders = cells;
+        inTable = true;
+      } else if (!tableSeparatorSeen) {
+        // Still accumulating header rows before separator (unusual but safe)
+        tableHeaders = cells;
+      } else {
+        // Data row
+        tableRows.push(cells);
+      }
+      continue;
+    }
+
+    // Non-pipe line after a table — flush the table first
+    if (inTable) { closeTable(); }
+
     // Unordered list items
     const ul = line.match(/^[-*] (.+)/);
     if (ul) {
@@ -538,8 +607,9 @@ function markdownToHtml(md) {
     out.push(inlineFormat(line));
   }
 
-  // Close any unclosed list
+  // Close any unclosed list or table
   closeList();
+  closeTable();
 
   // Wrap consecutive non-empty lines into <p> blocks
   const result = [];
@@ -549,7 +619,7 @@ function markdownToHtml(md) {
       if (paraLines.length) {
         // If it's already a block element, emit as-is; otherwise wrap in <p>
         const joined = paraLines.join(" ");
-        if (/^<(h[1-6]|ul|ol|pre|li)/.test(joined)) {
+        if (/^<(h[1-6]|ul|ol|pre|li|div|table)/.test(joined)) {
           result.push(joined);
         } else {
           result.push(`<p>${joined}</p>`);
@@ -562,7 +632,7 @@ function markdownToHtml(md) {
   }
   if (paraLines.length) {
     const joined = paraLines.join(" ");
-    if (/^<(h[1-6]|ul|ol|pre|li)/.test(joined)) {
+    if (/^<(h[1-6]|ul|ol|pre|li|div|table)/.test(joined)) {
       result.push(joined);
     } else {
       result.push(`<p>${joined}</p>`);
