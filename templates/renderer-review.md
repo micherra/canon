@@ -382,9 +382,9 @@ patterns from Section G of DESIGN-SYSTEM.md exactly:
     - `{{VIOLATION_COUNT}}` — numeric; `{{VIOLATION_BADGE_CLASS}}` = "clean" | "danger"; `{{VIOLATION_BADGE_TEXT}}` = "no violations" | "N violations"
     - `{{BLAST_RADIUS_SEVERITY}}` — severity string, no escaping; `{{BLAST_RADIUS_TOTAL}}` — numeric
     - `{{CARD_ID}}` — collision-safe encoding of file path: replace each non-alphanumeric char `c` with `-` + `c.charCodeAt(0)` + `-` (e.g. `/` → `-47-`, `.` → `-46-`, `-` → `-45-`); alphanumeric chars pass through unchanged; no HTML escaping
-    - `{{GRAPH_DATA_JSON}}` — JSON-stringified GraphData object, then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`)
-    - `{{ENTITIES_HTML}}` — pre-rendered `<tr>` rows (see G.4 for format, limit 15 rows)
-    - `{{BLAST_RADIUS_DEPTH1_HTML}}` — pre-rendered depth-chip spans (see G.4 for format, limit 8 chips)
+    - `{{GRAPH_DATA_JSON}}` — JSON-stringified GraphData object, then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`). Leaf files (0 imports AND 0 dependents) are handled automatically — the snippet script collapses the graph area to a compact empty-state. Do not omit the canvas or alter the snippet markup for leaf files.
+    - `{{ENTITIES_HTML}}` — pre-rendered `<tr>` rows (see G.4 for format, limit 15 rows); when the file has no entities, emit exactly: `<tr><td colspan="4" class="fdc-empty-note">No exports detected</td></tr>`
+    - `{{BLAST_RADIUS_DEPTH1_HTML}}` — pre-rendered depth-chip spans (see G.4 for format, limit 8 chips); when there are no depth-1 dependents, emit exactly: `<span class="fdc-empty-note">No dependents</span>`
   - Extract the `<style>` block from the snippet and include it in the page `<style>` tag (once)
   - Extract the `<script>` block from the snippet and include it **ONCE** before `</body>` (not per card)
 - **Note**: `file-summary-card.html` is no longer used for the card body — the `<summary>` row above replaces it. The `.file-summary-path` and `.file-summary-shape` styles from that snippet are included in the expandable pattern CSS (Step 6). You do NOT need to read `file-summary-card.html`.
@@ -558,9 +558,30 @@ Write the complete, self-contained HTML to:
   ${WORKSPACE}/artifacts/review.html
 
 The file must be fully self-contained (no external stylesheets, no JavaScript, no CDN links).
-All CSS is inline in the `<style>` tag.
+All CSS is inline in the `<style>` tag. Proceed to Step 9 before returning.
 
-Return when the file is written. Do not modify the worktree.
+## Step 9 — Structural self-check (MANDATORY)
+
+After writing the file in Step 8, run these checks before returning. These checks verify the
+output because instruction-following alone has failed before (style block silently omitted →
+garbled cards). This converts the fidelity contract from trust-based to verified.
+
+Run each grep command against the written `${WORKSPACE}/artifacts/review.html` and verify the
+expected result. The variable `N` in check 1 equals the number of changed files in the diff.
+
+| # | Check | Command | Expected |
+|---|-------|---------|----------|
+| 1 | One card per changed file | `grep -c 'class="file-detail-card"' review.html` | equals changed-file count |
+| 2 | Snippet CSS present | `grep -c '\.fdc-metric-card' review.html` | >= 1 |
+| 3 | Card script present exactly once | `grep -c 'function drawFileGraph' review.html` | == 1 |
+| 4 | Force-graph engine present exactly once (only when the dependency subgraph was rendered) | `grep -c 'function renderForceGraph' review.html` | == 1 |
+| 5 | Design tokens present | `grep -c -- '--bg-card' review.html` | >= 1 |
+
+**Failure protocol**: If ANY check fails, the composed HTML violated the snippet fidelity
+contract. Fix the composed HTML (re-read the snippet file, re-extract the missing block) and
+re-write the file, then re-run ALL checks. Do NOT return until every check passes.
+
+Return when all checks pass. Do not modify the worktree.
 ````
 
 ## Template Notes

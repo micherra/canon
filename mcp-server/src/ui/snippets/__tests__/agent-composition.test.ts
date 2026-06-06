@@ -281,3 +281,89 @@ ${extractSnippetHtml(substitutedStats)}
     });
   });
 });
+
+// ── file-detail-card — leaf empty-state and polish ──────────────────────────
+
+describe("file-detail-card — leaf empty-state and polish", () => {
+  const fdcContent = readFileSync(join(SNIPPETS_DIR, "file-detail-card.html"), "utf8");
+
+  it("snippet script contains the 0-edge early-return branch with classList.add", () => {
+    expect(fdcContent).toContain("imports.length === 0 && dependents.length === 0");
+    expect(fdcContent).toContain('classList.add("fdc-graph-empty")');
+  });
+
+  it("snippet script null-guards the section lookup", () => {
+    expect(fdcContent).toContain("if (section)");
+  });
+
+  it("snippet CSS contains hide rules for canvas-wrap and legend, and show rule for empty-note", () => {
+    expect(fdcContent).toContain(".fdc-graph-section.fdc-graph-empty .fdc-canvas-wrap");
+    expect(fdcContent).toContain(".fdc-graph-section.fdc-graph-empty .fdc-graph-legend");
+    expect(fdcContent).toContain(".fdc-graph-section.fdc-graph-empty .fdc-graph-empty-note");
+  });
+
+  it("snippet markup contains fdc-graph-empty-note div after fdc-canvas-wrap", () => {
+    expect(fdcContent).toContain('class="fdc-graph-empty-note"');
+    const canvasWrapIdx = fdcContent.indexOf("fdc-canvas-wrap");
+    const emptyNoteIdx = fdcContent.indexOf("fdc-graph-empty-note");
+    expect(emptyNoteIdx).toBeGreaterThan(canvasWrapIdx);
+  });
+
+  it("snippet CSS defines .fdc-empty-note", () => {
+    expect(fdcContent).toContain(".fdc-empty-note");
+  });
+
+  it("computeLayout minimum height is 160", () => {
+    expect(fdcContent).toContain("Math.max(160,");
+  });
+
+  it("leaf-card composition: paired value+label structure and empty-note rows present", () => {
+    const leafGraphData = JSON.stringify({
+      imports: [],
+      imported_by: [],
+      exports: [],
+      fileName: "leaf.md",
+      layer: "docs",
+      crossLayerImports: [],
+      crossLayerDependents: [],
+    })
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;");
+
+    const composed = substituteSnippet(fdcContent, {
+      FILE_PATH: "docs/leaf.md",
+      LAYER: "docs",
+      LAYER_COLOR: "#636a80",
+      SHAPE_LABEL: "Leaf",
+      SHAPE_DESCRIPTION: "Standalone document",
+      IMPORT_COUNT: "0",
+      IMPORTED_BY_COUNT: "0",
+      IMPORT_LAYER_COUNT: "0",
+      EXPORT_COUNT: "0",
+      ENTITY_TYPE_COUNT: "0",
+      ENTITY_FN_COUNT: "0",
+      IMPACT_SCORE: "0.00",
+      IMPACT_RANK: "—",
+      VIOLATION_COUNT: "0",
+      VIOLATION_BADGE_CLASS: "clean",
+      VIOLATION_BADGE_TEXT: "no violations",
+      BLAST_RADIUS_SEVERITY: "contained",
+      BLAST_RADIUS_TOTAL: "0",
+      CARD_ID: "docs-leaf-md",
+      GRAPH_DATA_JSON: leafGraphData,
+      ENTITIES_HTML: '<tr><td colspan="4" class="fdc-empty-note">No exports detected</td></tr>',
+      BLAST_RADIUS_DEPTH1_HTML: '<span class="fdc-empty-note">No dependents</span>',
+      IMPORTS_HTML: "",
+      IMPORTED_BY_HTML: "",
+    });
+
+    // paired value+label structure
+    expect(composed).toContain("fdc-metric-value");
+    expect(composed).toContain("fdc-metric-label");
+
+    // empty-note rows
+    expect(composed).toContain("No exports detected");
+    expect(composed).toContain("No dependents");
+    expect(composed).toContain('class="fdc-empty-note"');
+  });
+});
