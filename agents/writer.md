@@ -84,4 +84,4 @@ Before committing any principle, convention, or agent-rule:
   Example reconciliation:
   - Body adds "…flag as **BLOCKING**" → verify the `## Verdict` table has a BLOCKING row that covers this path.
   - Body adds "…is a **WARNING** finding" → verify the `## Verdict` table's WARNING row conditions include this finding type.
-  - If no vocabulary section exists in the file, this check does not apply.
+  - If no vocabulary section exists in the file, this check does not apply. Equally, a file that only *quotes* `BLOCKING / WARNING / CLEAN` as instructional or template text — rather than defining a live verdict classification path — is not considered to have a vocabulary section; skip this check.

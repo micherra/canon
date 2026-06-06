@@ -307,9 +307,9 @@ Do NOT flag:
 
 #### Severity-Vocabulary Consistency (watch_VVVVV2)
 
-**Trigger**: When the diff adds or modifies severity language (`BLOCKING`, `WARNING`) in a protocol document (`agents/*.md`, `rules/*.md`, `references/*.md`).
+**Trigger**: When the diff adds or modifies severity language (`BLOCKING`, `WARNING`) in a protocol document (`agents/*.md`, `rules/*.md`, `references/*.md`, `templates/*.md`).
 
-**Skip condition**: Skip this sub-axis when the edited file contains no verdict/severity vocabulary section (no `## Verdict` table, no `BLOCKING / WARNING / CLEAN` summary table, no `| Severity |` column). A file with severity keywords in the body but no dedicated vocabulary section is out of scope for this check.
+**Skip condition**: Skip this sub-axis when the edited file contains no verdict/severity vocabulary section (no `## Verdict` table, no `BLOCKING / WARNING / CLEAN` summary table, no `| Severity |` column). A file that only *quotes* these marker strings as instructional examples — e.g. showing `BLOCKING / WARNING / CLEAN` as a template placeholder or teaching the vocabulary format — is not considered to have a vocabulary section and should be skipped. A file with severity keywords in the body but no dedicated vocabulary section is also out of scope for this check.
 
 For each line added or modified in the diff that contains `BLOCKING` or `WARNING` as a severity designation:
 
@@ -701,6 +701,7 @@ Based on the most severe finding across all six stages:
 - A matched principle is not a violated principle — most will be honored
 - Check each violation's severity explicitly before writing the verdict
 - Stage 2 agent→tool reachability: a failed condition (2) (tool absent from MCP server registration) is BLOCKING regardless of principle severity — the runtime will error on every call
+- Stage 2 discriminant surface parity: a TypeScript–Zod member count mismatch (a variant reachable in the TypeScript type system but absent from the Zod/registration schema) is BLOCKING — the missing variant is functionally unreachable through external callers
 - Stage 5 (acceptance criteria verification) failures are BLOCKING -- they enter the review-fix iteration loop. If unfixable (non-automatable AC), the user can override via HITL
 - Stage 6 (cross-requirement consistency) BLOCKING findings (type contradictions, security policy gaps) also enter the review-fix iteration loop
 
