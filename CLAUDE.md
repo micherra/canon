@@ -432,13 +432,15 @@ MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_
 
 When the review step completes and a tester step follows: extract Stage 5 "Acceptance Criteria Verification" from `${WORKSPACE}/reviews/REVIEW.md` and include it (plus the architect design's Acceptance Criteria section) in the tester's spawn prompt. When runbook ACs include verification method/type columns, the tester MUST run after the review step — it consumes the reviewer's Stage 5 output.
 
-### Step Enforcement Contracts <!-- last-updated: 2026-05-27 -->
+### Step Enforcement Contracts <!-- last-updated: 2026-06-05 -->
 
 **Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL.
 
 **Verify skip**: If `git diff {base_commit}..HEAD --name-only` contains only `.md`/`.txt` files, skip with `skip_reason: "documentation-only diff, verify produces zero signal"`.
 
 **In-wave baseline**: After sequential wave execution, use `base_commit` (not `main`) as violation baseline. Only violations absent at `base_commit` are regressions. Pre-existing violations remain pre-existing even if the file was touched.
+
+**Doc-file conflict pre-check**: `CLAUDE.md` files (root and `mcp-server/.claude/CLAUDE.md`) are high-churn merge hotspots — concurrent builds and an advancing `main` conflict them even when code targets are clean. Before the verify step, run `git fetch origin` first, then if either file is in scope for context-sync OR `git rev-list {base_commit}..origin/main --count` returns > 0, check whether either file has diverged from the build base. Resolve any doc-file-only merge BEFORE verify, not after — this avoids a wasted verify+review cycle when the code is otherwise clean. This is a mid-build check (distinct from push-time hooks such as `pre-push-review.sh`).
 
 ### Completion Checklist
 
