@@ -207,6 +207,65 @@ canon_has_git_token() {
 }
 
 # ---------------------------------------------------------------------------
+# canon_has_ambiguous_git_token <segment>
+# ---------------------------------------------------------------------------
+# Returns 0 when the segment contains a WORD-BOUNDARY token that STARTS WITH
+# "git" followed immediately by a shell metacharacter (no space between).
+# Examples that match: git$IFS, git${X}, git$(cmd), git`cmd`, git\`...\`
+# Examples that do NOT match: "git" (exact), "gitconfig" (plain alpha suffix),
+#   the quoted string "git worktree remove exit: $?" (tokenized as one long
+#   token — the $ is not adjacent to git at the word boundary).
+# Returns 1 otherwise.
+#
+# Purpose: inside a recursed inner command (already unwrapped from a string-
+# executing wrapper), a token like "git$IFS" means the shell expansion is
+# glued directly to "git" — the runtime value is unknown, so the guard cannot
+# safely evaluate whether "git$IFS" resolves to the git command.  Failing
+# closed on this pattern prevents the bypass where a deliberate IFS/expansion
+# trick defeats canon_has_git_token's exact-match check.
+#
+# Critical: the token MUST be a short, word-boundary form — specifically the
+# FIRST 3 characters must be "git" and the 4th character (if any) must be a
+# shell metachar ('$', '`', '{', '(', '\').  This rejects quoted strings like
+# "git worktree remove exit: $?" which tokenize into one long token starting
+# with "git " (with a space at position 4, not a metachar).
+#
+# Uses POSIX-safe constructs for bash 3.2 / macOS BSD compat.
+canon_has_ambiguous_git_token() {
+  local segment="$1"
+  local found=1
+  local tok
+  while IFS= read -r tok; do
+    # Must start with "git" but not be exactly "git".
+    case "$tok" in
+      git) ;;  # exact match — not ambiguous
+      git*)
+        # Extract the character immediately following "git" (4th char).
+        # If it is a shell expansion/quoting metachar, this token is ambiguous.
+        # This check intentionally rejects plain-alpha suffixes (gitconfig, etc.)
+        # and space-separated continuations (quoted strings starting with "git ").
+        local suffix4
+        suffix4=$(printf '%s' "$tok" | cut -c4)
+        # Match shell-expansion metacharacters immediately following "git":
+        #   $  — variable expansion (git$IFS, git$VAR)
+        #   `  — command substitution (git`cmd`)
+        #   {  — brace expansion / parameter expansion (git${IFS})
+        #   (  — subshell/arithmetic expansion (git$(cmd))
+        # Note: backslash is intentionally omitted — git\ is not a known
+        # bypass pattern and its addition triggers SC1003 in case patterns.
+        case "$suffix4" in
+          '$'|'`'|'{'|'(')
+            found=0
+            break
+            ;;
+        esac
+        ;;
+    esac
+  done < <(canon_tokenize "$segment")
+  return $found
+}
+
+# ---------------------------------------------------------------------------
 # CANON_STRING_EXEC_WRAPPERS
 # ---------------------------------------------------------------------------
 # Named constant: the set of canonical (basename-resolved) command names that
@@ -468,7 +527,10 @@ canon_unwrap_string_exec_arg() {
   while [[ $idx -lt $tok_count ]]; do
     local raw_tok="${toks[$idx]}"
     # Basename resolution for path-qualified wrappers (/bin/bash → bash).
+    # Also strip a leading backslash so \bash is treated the same as bash
+    # (bash quote-removal does not prevent a literal \bash from reaching here).
     local tok="${raw_tok##*/}"
+    tok="${tok#\\}"
 
     case "$tok" in
       command)
@@ -486,21 +548,43 @@ canon_unwrap_string_exec_arg() {
         _do_skip_env_flags
         ;;
       timeout)
-        # Skip 'timeout', then skip the duration argument (non-'-' token).
+        # Skip 'timeout', then generically skip any option-like tokens
+        # (e.g. -s9, -k 5, --foreground) before skipping the mandatory
+        # duration argument.  Enumerating specific timeout flags is the
+        # wrong axis — any token starting with '-' is an option.
         idx=$(( idx + 1 ))
+        # Generic option skip: advance past all '-*' tokens.
+        while [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" == -* ]]; do
+          idx=$(( idx + 1 ))
+        done
+        # Skip the mandatory duration argument (one non-'-' positional token).
         if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" != -* ]]; then
           idx=$(( idx + 1 ))
         fi
         ;;
       nice)
-        # Skip 'nice', then optionally skip '-n <value>'.
+        # Skip 'nice', then generically skip any option-like tokens.
+        # Handles all forms:
+        #   -n5       (combined — self-contained, skip the whole token)
+        #   -n <val>  (two-token — skip -n AND the following value token)
+        #   any other -* token (skip)
+        # Enumerating specific flags is the wrong axis; the only special
+        # case is that bare '-n' consumes the NEXT token as its value.
         idx=$(( idx + 1 ))
-        if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" == "-n" ]]; then
-          idx=$(( idx + 1 )) # skip -n
-          if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" != -* ]]; then
-            idx=$(( idx + 1 )) # skip value
-          fi
-        fi
+        while [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" == -* ]]; do
+          local _nice_opt="${toks[$idx]}"
+          idx=$(( idx + 1 )) # skip the option token itself
+          case "$_nice_opt" in
+            -n)
+              # Two-token form: -n <value>.  Consume the following non-'-' token.
+              if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" != -* ]]; then
+                idx=$(( idx + 1 ))
+              fi
+              ;;
+            # Combined forms (-n5, -n-5) and any other self-contained option:
+            # already consumed by the idx++ above; nothing more to skip.
+          esac
+        done
         ;;
       eval)
         # eval: the rest of the tokens (joined by spaces) form the command.

@@ -221,9 +221,15 @@ process_segment() {
     fi
 
     if [[ "$_unwrap_rc" -ne 0 ]] || [[ -z "$inner_cmd" ]]; then
-      # Outcome (a): not a string-executing wrapper — safe to skip.
-      # Also skip if extraction somehow returned 0 but produced empty stdout
-      # (defensive; should not happen after the rc=2 path above).
+      # Outcome (a): not a string-executing wrapper — BUT check for ambiguous
+      # git tokens (e.g. git$IFS, git${X}, git$(cmd)) that start with "git"
+      # but are NOT exactly "git".  These defeat canon_has_git_token's exact
+      # match and would otherwise silently pass through.  Since the runtime
+      # value of the expansion is unknown, fail closed.
+      if canon_has_ambiguous_git_token "$raw_segment"; then
+        echo "CANON: ambiguous git-prefixed token detected — blocking fail-closed." >&2
+        exit 2
+      fi
       return 0
     fi
 

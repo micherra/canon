@@ -966,6 +966,104 @@ run_test "bash -ec \"git status\" passes (combined flag, safe inner)" \
   0 "$(make_multiline_input 'bash -ec "git status"')" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# P1 round-3 fix: four generalization regressions (exit 2 for all).
+#
+# These four forms bypassed the guard because canon_unwrap_string_exec_arg
+# used exact-token matching or failed to normalise the command word before
+# the case match:
+#
+#  1. Leading backslash: \bash defeats the former basename-only strip.
+#     bash quote-removal does not prevent a literal \bash from surviving in
+#     the command string.  Fix: strip leading '\' after basename resolution.
+#
+#  2. timeout -s9 5 bash -c: timeout only skipped one non-'-' token for the
+#     duration, so a leading '-s9' flag caused the duration skip to be
+#     skipped entirely, leaving 'bash' visible but never reached.
+#     Fix: skip ALL '-*' tokens before the mandatory duration arg.
+#
+#  3. nice -n5 bash -c: only the two-token '-n <val>' form was handled.
+#     Combined '-n5' was not recognised.
+#     Fix: generic option-skip loop with specific '-n' → consume value handling.
+#
+#  4. bash -c "git$IFS reset --hard": git$IFS is not the exact token 'git'.
+#     Already blocked by the shape-validation gate in canon_git_subcommand
+#     (git$IFS fails ^[A-Za-z][A-Za-z0-9_-]*$ → rc=1 → parse-ambiguity
+#     guard fires → exit 2). Tests added here for regression coverage.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- P1 round-3: backslash-prefix wrapper \\bash (should block, exit 2) --"
+
+# Use single-quote outer shell literal, JSON-escape the backslash manually.
+run_test '\\bash -c "git reset --hard" blocks (leading backslash defeated basename)' \
+  2 "$(make_multiline_input '\bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+run_test '\\bash -c "git clean -fd" blocks (leading backslash)' \
+  2 "$(make_multiline_input '\bash -c "git clean -fd"')" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-3: timeout with signal flag (should block, exit 2) --"
+
+# Reviewer finding: combined -s9 flag was not skipped, so timeout's duration
+# skip consumed nothing and bash was never reached.  Fix: skip ALL '-*' tokens
+# before consuming the duration positional.
+run_test 'timeout -s9 5 bash -c "git reset --hard" blocks (timeout -s9 not skipped)' \
+  2 "$(make_multiline_input 'timeout -s9 5 bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+# Long-form =-value flag (self-contained, no following value token to consume).
+run_test 'timeout --signal=9 5 bash -c "git reset --hard" blocks (long-form signal)' \
+  2 "$(make_multiline_input 'timeout --signal=9 5 bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-3: nice combined flag (should block, exit 2) --"
+
+run_test 'nice -n5 bash -c "git reset --hard" blocks (combined -n5 not skipped)' \
+  2 "$(make_multiline_input 'nice -n5 bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+run_test 'nice -n-5 bash -c "git clean -fd" blocks (combined -n-5 negative)' \
+  2 "$(make_multiline_input 'nice -n-5 bash -c "git clean -fd"')" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-3: git\$IFS token (should block, exit 2) --"
+
+run_test 'bash -c "git$IFS reset --hard" blocks (git$IFS not exact git token)' \
+  2 "$(make_multiline_input 'bash -c "git$IFS reset --hard"')" "$NON_WT_PWD"
+
+run_test 'bash -c "git${IFS}clean -fd" blocks (git${IFS} expansion attached)' \
+  2 "$(make_multiline_input 'bash -c "git${IFS}clean -fd"')" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-3: pass controls (should pass, exit 0) --"
+
+# bash with extra whitespace around -c (existing form, regression guard)
+run_test 'bash  -c  "git status" passes (extra spaces around -c)' \
+  0 "$(make_multiline_input 'bash  -c  "git status"')" "$NON_WT_PWD"
+
+# Quoted wrapper word: "bash" is still a wrapper
+run_test '"bash" -c "git status" passes (quoted word is still bash)' \
+  0 "$(make_multiline_input '"bash" -c "git status"')" "$NON_WT_PWD"
+
+# Benign prefixes: timeout/nice with direct git (bypasses wrapper check via canon_has_git_token)
+run_test 'timeout 5 git status passes (benign prefix, direct git)' \
+  0 "$(make_multiline_input 'timeout 5 git status')" "$NON_WT_PWD"
+
+run_test 'nice git log passes (benign prefix, direct git)' \
+  0 "$(make_multiline_input 'nice git log')" "$NON_WT_PWD"
+
+run_test 'timeout 5 bash -c "git status" passes (safe inner via timeout)' \
+  0 "$(make_multiline_input 'timeout 5 bash -c "git status"')" "$NON_WT_PWD"
+
+run_test 'nice bash -c "git log" passes (nice with safe inner)' \
+  0 "$(make_multiline_input 'nice bash -c "git log"')" "$NON_WT_PWD"
+
+# xargs standalone with no string-exec args — passes (rc=1 from unwrap → skip)
+run_test 'xargs git status passes (xargs not a string-exec wrapper)' \
+  0 "$(make_multiline_input 'xargs git status')" "$NON_WT_PWD"
+
+# Depth-4 wrapper nesting blocked (depth limit is 3)
+run_test 'depth-4 nesting fails-closed (exceeds CANON_WRAPPER_MAX_DEPTH)' \
+  2 "$(make_multiline_input 'bash -c "bash -c \"bash -c \\\"bash -c echo git\\\"\""')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""

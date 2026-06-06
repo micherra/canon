@@ -593,6 +593,103 @@ assert_eq 'bash -ec "git status" extracts safely (combined flag + safe inner)' \
   "$(canon_unwrap_string_exec_arg 'bash -ec "git status"')"
 
 # ---------------------------------------------------------------------------
+# canon_unwrap_string_exec_arg — Round-3 bypass fixes
+#
+# Four additional classes confirmed fail-open by the round-3 reviewer:
+#  1. Leading backslash: \bash defeats basename-only strip.  Fix: also strip
+#     a leading '\' from the resolved token.
+#  2. timeout combined flag: -s9 was not skipped, so duration never consumed.
+#     Fix: generic skip of all '-*' tokens before the duration positional.
+#  3. nice combined flag: -n5 only had the two-token '-n <val>' handler.
+#     Fix: generic option-skip loop that handles all '-*' forms; bare '-n'
+#     still consumes the next token as its value.
+#  4. git$IFS (inner token): tested via canon_has_ambiguous_git_token below.
+# ---------------------------------------------------------------------------
+printf '\n=== canon_unwrap_string_exec_arg — round-3 bypass fixes ===\n'
+
+# Round-3 bypass 1: leading backslash (\bash).
+assert_eq '\\bash -c "git reset --hard" extracts (backslash-prefix normalised)' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg '\bash -c "git reset --hard"')"
+
+assert_eq '\\bash -c "git status" extracts safely (backslash-prefix, safe inner)' \
+  "git status" \
+  "$(canon_unwrap_string_exec_arg '\bash -c "git status"')"
+
+# Round-3 bypass 2: timeout combined signal flag (-s9).
+assert_eq 'timeout -s9 5 bash -c "git reset --hard" extracts (combined -s9 skipped)' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'timeout -s9 5 bash -c "git reset --hard"')"
+
+assert_eq 'timeout --signal=9 5 bash -c "git clean -fd" extracts (long-form signal)' \
+  "git clean -fd" \
+  "$(canon_unwrap_string_exec_arg 'timeout --signal=9 5 bash -c "git clean -fd"')"
+
+# timeout with no flags (existing regression — must still work).
+assert_eq 'timeout 5 bash -c "git status" extracts safely (timeout, no flags)' \
+  "git status" \
+  "$(canon_unwrap_string_exec_arg 'timeout 5 bash -c "git status"')"
+
+# Round-3 bypass 3: nice combined flag (-n5).
+assert_eq 'nice -n5 bash -c "git reset --hard" extracts (combined -n5 skipped)' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'nice -n5 bash -c "git reset --hard"')"
+
+assert_eq 'nice -n-5 bash -c "git clean -fd" extracts (combined -n-5 negative)' \
+  "git clean -fd" \
+  "$(canon_unwrap_string_exec_arg 'nice -n-5 bash -c "git clean -fd"')"
+
+# nice -n <val> two-token form (existing regression — must still work).
+assert_eq 'nice -n 5 bash -c "git clean -f" extracts safely (two-token -n val)' \
+  "git clean -f" \
+  "$(canon_unwrap_string_exec_arg 'nice -n 5 bash -c "git clean -f"')"
+
+# nice with no flags (existing regression — must still work).
+assert_eq 'nice bash -c "git status" extracts safely (nice, no flags)' \
+  "git status" \
+  "$(canon_unwrap_string_exec_arg 'nice bash -c "git status"')"
+
+# ---------------------------------------------------------------------------
+# canon_has_ambiguous_git_token — Round-3 fix for git$IFS inner bypass.
+#
+# When a string-executing wrapper extracts "git$IFS reset --hard" as its
+# inner command, canon_has_git_token returns false (git$IFS != git), so the
+# outer canon_has_git_token check misses it. canon_has_ambiguous_git_token
+# detects the shell-metachar-glued form and allows process_segment to fail
+# closed.
+# ---------------------------------------------------------------------------
+printf '\n=== canon_has_ambiguous_git_token — round-3 (git$IFS inner bypass) ===\n'
+
+# Ambiguous forms (should return 0 = found).
+assert_true 'git$IFS token detected as ambiguous' \
+  canon_has_ambiguous_git_token 'git$IFS reset --hard'
+
+assert_true 'git${IFS} token detected as ambiguous' \
+  canon_has_ambiguous_git_token 'git${IFS}clean -fd'
+
+assert_true 'git$(cmd) token detected as ambiguous (subshell expansion glued)' \
+  canon_has_ambiguous_git_token 'git$(pick-cmd) reset --hard'
+
+assert_true 'git`cmd` token detected as ambiguous (backtick subst glued)' \
+  canon_has_ambiguous_git_token 'git`pick-cmd` clean -fd'
+
+# Non-ambiguous forms (should return 1 = not found).
+assert_false '"git" exact token — not ambiguous' \
+  canon_has_ambiguous_git_token 'git status'
+
+assert_false '"gitconfig" tool — not ambiguous (plain alpha suffix, no metachar)' \
+  canon_has_ambiguous_git_token 'gitconfig --list'
+
+assert_false 'echo "git worktree remove exit: $?" — not ambiguous ($? follows space, not glued)' \
+  canon_has_ambiguous_git_token 'echo "git worktree remove exit: $?"'
+
+assert_false '"git worktree remove exit: $?" as inner seg — not ambiguous' \
+  canon_has_ambiguous_git_token 'git worktree remove exit: $?'
+
+assert_false 'empty segment — not ambiguous' \
+  canon_has_ambiguous_git_token ''
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 TOTAL=$(( PASS + FAIL ))
