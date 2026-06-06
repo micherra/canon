@@ -31,7 +31,9 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `backfill-error-fixes.ts` | One-off script; mines `file_violation_history` to seed `error_fixes` table |
 
 ## Contracts
-<!-- last-updated: 2026-06-02 -->
+<!-- last-updated: 2026-06-05 -->
+
+**Craft audit service** (`services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` pure selector; bounded by `limit` default 5; `persistAuditProfile(areas, ratings, dao)` writes `source:"audit"` rows via injected `CraftProfileDao`; reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
 
 **`wiki_lint` tool** — `wikiLint(input, projectDir)` runs any combination of 5 checks; returns `WikiLintOutput` with per-check arrays + `total_findings`.
 

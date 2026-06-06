@@ -58,7 +58,9 @@ src/
 > - Drift DB (DAOs, schema, confidence adapters) → `src/platform/storage/drift/.claude/CLAUDE.md`
 > - Orchestration tools (init_workspace, write_review, write_implementation_summary, resolve_agent_skills, etc.) → `src/features/orchestration/.claude/CLAUDE.md`
 > - Diagnostics services (wiki_lint, signal compiler, area memory, doc freshness, craft audit) → `src/features/diagnostics/.claude/CLAUDE.md`
+> - History tools + RecurringViolation types → `src/features/history/.claude/CLAUDE.md`
 > - History services (judge-weight, consolidate-policy, cross-run analysis, craft drift) → `src/features/history/services/.claude/CLAUDE.md`
+> - PR review tools + PR Review Data service → `src/features/pr-review/.claude/CLAUDE.md`
 
 **Tool error types** (`src/shared/lib/tool-result.ts`) — ADR-002: `ToolResult<T>` is a discriminated union `({ ok: true } & T) | CanonToolError`; all tools return this (never throw for expected errors). `CanonErrorCode` has 9 values; unexpected throws caught as `UNEXPECTED` by `gatedWrapHandler` or `wrapHandler<T>`.
 
@@ -106,8 +108,15 @@ src/
 
 **Confidence engine** (`src/shared/lib/confidence.ts`) — `deriveTier(score, sampleSize)` returns `"insufficient"` for sparse data; `computeConfidenceAnnotation(inputs[])` returns zero-confidence for empty input. Added 2026-05-25.
 
+**Correction Reader** (`features/orchestration/services/correction-reader.ts`) — `readCorrections(projectDir, filePaths?, maxAge?)` → `{ ok: true; records[] } | { ok: false; error }`; ENOENT → `ok:true, records:[]`; updated 2026-05-25.
+
+**Shared libs** (`src/shared/lib/`) — `token-budget.ts`: `fitWithinBudget(items, budget)` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs; `DEFAULT_LAYER_MAPPINGS` includes `hooks: ["hooks"]` entry ordered before `shared` so `hooks/lib/*.sh` resolves to layer `hooks` (added 2026-05-29). See `src/shared/.claude/CLAUDE.md` for full lib inventory.
+
 **Flow schema** (`flow-schema.ts`) — `StateDefinitionSchema` is a `z.discriminatedUnion` with 5 type schemas; all new fields MUST be `.optional()`; `WavePolicy` defaults: isolation=worktree, merge=sequential, on_conflict=hitl.
 
+**`resolve_after_consultations`** — pure resolution tool; call after the last consultation wave before `report_result`; resolves pending consultation results.
+**`resolve_wave_event`** — apply/reject pending wave events; emits `wave_event_resolved` flow event.
+**`computeAnalytics(entries)`** — aggregates flow run metrics from `FlowRunEntry[]`; skips entries without gate data.
 **Step journaling** — `log_step` / `batch_log_steps` record step completion in `journal.json`; quality signals and discovery fields accumulate across steps (append, not replace).
 
 **Orchestration harness tools:**

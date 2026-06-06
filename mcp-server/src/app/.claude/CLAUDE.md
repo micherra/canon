@@ -13,7 +13,7 @@ Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, 
 | File | Responsibility |
 |------|---------------|
 | `index.ts` | Server entry — calls `registerConnectionScope(STDIO_SESSION_ID, resolvedDir)` at startup; all `register-*.ts` wired here |
-| `server-state.ts` | Per-connection scope registry (`resolveScope(extra)`), `findAnchorDir` boot helper, per-project `JobManager` map |
+| `server-state.ts` | Per-connection scope registry (`resolveScope(extra)`), `findAnchorDir` boot helper; delegates to `src/platform/jobs/job-manager.ts` for per-project `JobManager` map |
 | `http-server.ts` | HTTP server lifecycle — `startHttpServer`, `stopHttpServer`, `resolvePidDir`, `writePidFile`, `removePidFile`, `resetStateForTesting` |
 | `resolve-project-dir.ts` | `resolveGitRoot(cwd, gitTopLevelFn)` — git root or cwd fallback; never throws |
 | `get-context-handler.ts` | `get_context` composite tool handler; re-exported from `register-knowledge.ts` |
@@ -28,7 +28,7 @@ Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, 
 
 **`findAnchorDir(startDir, markers[], existsFn?)`** (`server-state.ts`) — walks up from `startDir` until a directory containing every `markers[]` entry is found; injectable `existsFn` seam (default `existsSync`); throws with diagnostic message (names missing markers and `CANON_PLUGIN_DIR` escape hatch) when no ancestor qualifies. Boot seeds: `pluginDir = CANON_PLUGIN_DIR ?? findAnchorDir(thisDir, ["agents","principles"], isDir)` (repo/plugin root — dir-strict predicate); `mcpServerRoot = CANON_PLUGIN_DIR ? join(pluginDir, "mcp-server") : findAnchorDir(thisDir, ["boot.sh"])` — `boot.sh` marker walk (file; dir-strict NOT applied). `pluginDir` always declared before `mcpServerRoot`.
 
-**`JobManager` per-project** (`server-state.ts`) — `job-manager.ts` holds a `Map<string, JobManager>` keyed by `path.resolve(projectDir)`; `getOrCreateJobManager(projectDir, ...)` is the sole factory; `getJobManager(projectDir)` returns `undefined` for unknown scope; `cleanupAllJobManagers()` tears down all managers at shutdown; `initJobManager` deleted (dead code). Eviction hooks `evictStoresForScope` / `evictDriftDbForScope` present but unwired — deferred to HTTP-transport sub-build per `decisions/isolation-finish-01.md`.
+**`JobManager` per-project** (`src/platform/jobs/job-manager.ts`) — holds a `Map<string, JobManager>` keyed by `path.resolve(projectDir)`; `getOrCreateJobManager(projectDir, ...)` is the sole factory; `getJobManager(projectDir)` returns `undefined` for unknown scope; `cleanupAllJobManagers()` tears down all managers at shutdown; `initJobManager` deleted (dead code). Eviction hooks `evictStoresForScope` / `evictDriftDbForScope` present but unwired — deferred to HTTP-transport sub-build (see `decisions/isolation-finish-01.md` in the workspace `decisions/` directory, not repo root).
 
 **`http-server.ts`** — `startHttpServer(port?, projectDir?)` seeds module-level `resolvedProjectDir` at startup. `resolvePidDir(): string | null` resolves: `CLAUDE_PLUGIN_DATA` → `{resolvedProjectDir}/.canon` → **returns `null`** (no scope resolvable; errors-as-values, never throws); no `process.cwd()` / `CANON_PROJECT_DIR` fallback. `writePidFile(pidDir?)` writes `{pid}:{port}\n`; `removePidFile` removes only if PID matches; failures WARN, never thrown; skipped in VITEST. `resetStateForTesting()` clears `resolvedProjectDir`.
 

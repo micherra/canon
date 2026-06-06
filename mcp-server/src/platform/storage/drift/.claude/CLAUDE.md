@@ -12,7 +12,7 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 
 | File | Responsibility |
 |------|---------------|
-| `drift-schema.ts` | `DRIFT_SCHEMA_VERSION = "9"`, idempotent `runMigrations(db)`; tables: `file_violation_history`, `path_effects` (v4), `error_fixes` (v6), `violation_outcomes` (v7), `area_observations` (v8), `craft_profiles` (v9) |
+| `drift-schema.ts` | `DRIFT_SCHEMA_VERSION = "9"`, idempotent `runMigrations(db)`; tables: `file_violation_history`, `path_effects` (v4), `error_fixes` (v6), `violation_outcomes` (v7), `area_observations` (v8), `craft_profiles` (v9 — `flow`/`run_id` nullable review-only; `source`, `subsystem_key`, `ratings` JSON, `rollup` REAL) |
 | `drift-db.ts` | `DriftDb` class — lazy-accessor facade; `getSignals()`, `getOutcomes()`, `getAreaMemory()`, `getCraftProfiles()` accessors |
 | `drift-db-cache.ts` | `getDriftDb(projectDir)` factory + `evictDriftDbForScope(projectDir)` lifecycle hook; import `getDriftDb` here directly (no barrel) |
 | `drift-db-rows.ts` | Private row types + deserializers; not exported from barrel |
@@ -23,7 +23,7 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 |------|-----|-------|-----------|
 | `drift-db-signals.ts` | `DriftDbSignals` | `file_violation_history`, `path_effects`, `error_fixes` | `DriftDb.getSignals()` lazy accessor |
 | `outcome-store.ts` | `OutcomeStore` | `violation_outcomes` | `DriftDb.getOutcomes()` lazy accessor; added 2026-05-25 |
-| `area-memory-dao.ts` | `AreaMemoryDao` | `area_observations` | `DriftDb.getAreaMemory()`; 7-day expiry; `deriveSubsystemKey` strips prefixes to stable keys like `features/orchestration` |
+| `area-memory-dao.ts` | `AreaMemoryDao` | `area_observations` | `DriftDb.getAreaMemory()`; 7-day expiry; uses `deriveSubsystemKey` from `src/shared/lib/subsystem-key.ts` to produce stable keys like `features/orchestration` |
 | `craft-profile-dao.ts` | `CraftProfileDao` | `craft_profiles` | `DriftDb.getCraftProfiles()`; `source` discriminates `"review"` vs `"audit"` profiles |
 | `store.ts` | `DriftStore` | `reviews.jsonl` | `ReviewEntry` unified type; `PrStore` deleted 2026-03-25; `getReviews(options?)` AND-filters by principleId/branch/prNumber |
 
@@ -41,7 +41,7 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 
 - `getDriftDb(projectDir)` — module-level cache keyed by resolved `projectDir`; returns existing `DriftDb` or creates + migrates; `evictDriftDbForScope(projectDir)` removes entry (lifecycle hook, currently unwired at HTTP transport layer)
 - `DriftDb` — lazy accessors: `.getSignals()` returns `DriftDbSignals`, `.getOutcomes()` returns `OutcomeStore`, `.getAreaMemory()` returns `AreaMemoryDao`, `.getCraftProfiles()` returns `CraftProfileDao`
-- `craft_profiles` schema (v9): columns `flow_slug`, `subsystem_key`, `ratings` (JSON), `rollup` (REAL), `source` ("review"|"audit")
+- `craft_profiles` schema (v9): columns `subsystem_key`, `source` ("review"|"audit"), `flow` (nullable, review-only), `run_id` (nullable, review-only), `ratings` (JSON), `rollup` (REAL)
 - `area_observations` schema (v8): keyed by `subsystem_key`; 7-day TTL enforced by `AreaMemoryDao`
 - `ReviewEntry` (unified type) lives in `@shared/schema.ts` — import from there, not from this layer
 
