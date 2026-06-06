@@ -64,3 +64,13 @@ DONE
 ### When workspace path is absent
 
 If the spawn prompt does not include a workspace path, the writer is operating in standalone mode (legacy, pre-content-flow). Continue with the existing mode behavior — no `*-SUMMARY.md` is required.
+
+## Pre-commit checklist
+
+Before committing any principle, convention, or agent-rule:
+
+- [ ] If the file's `## Verification` section contains a shell command with a declared expected output (e.g., "this grep must return zero hits", "confirm zero results"), run that command against the real project tree, observe the actual output, and reconcile any discrepancy before committing.
+      Acceptable reconciliation:
+      (a) Add exclusion flags (`--exclude`, `--exclude-dir`, `grep -v`) to suppress known-false-positive sources (test files, comment lines — include a brief rationale inline).
+      (b) Amend the expected-output claim to name known acceptable hits with a rationale sentence.
+      Do NOT commit a verification command whose documented expected output does not match the observed output.
