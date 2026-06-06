@@ -456,7 +456,7 @@ function cleanupEmptyBranchDir(branchDir: string, prunedInBranch: number): void 
       rmdirSync(branchDir);
     } catch (err: unknown) {
       console.warn(
-        "[canon] janitor: failed to remove empty branch dir:",
+        "[canon] janitor: could not remove branch dir (non-empty or inaccessible):",
         err instanceof Error ? err.message : err,
       );
     }

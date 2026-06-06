@@ -387,6 +387,9 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
 
   afterAll(async () => {
     vi.restoreAllMocks();
+    // Un-register the doMock so tests in later files are not affected if this
+    // describe block happens to be positioned before them in the run order.
+    vi.doUnmock("@platform/adapters/git-adapter-async.ts");
   });
 
   beforeEach(async () => {
