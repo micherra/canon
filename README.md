@@ -245,4 +245,4 @@ Canon does not collect, transmit, or share any data. No telemetry, no analytics,
 
 Full MCP tool signatures, hook details, and the principles guide: [docs/reference/canon-reference.md](./docs/reference/canon-reference.md).
 
-What's coming next: [docs/roadmap.md](./docs/roadmap.md).
+What's coming next: [docs/supervised-build-quality.md](./docs/supervised-build-quality.md).
