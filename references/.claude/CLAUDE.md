@@ -6,12 +6,14 @@
 Protocol fragments for the orchestrator and specialist agents. Each file defines a specific protocol, convention, or vocabulary that agents consult at runtime — not documentation for humans, but prescriptive instructions for agents.
 
 ## Architecture
-<!-- last-updated: 2026-06-02 -->
+<!-- last-updated: 2026-06-05 -->
 
 ```
 references/
 ├── canon-artifact-locations.md   # Authoritative naming rules for workspace artifacts
-├── canon-orchestrator.md         # Orchestrator protocol (HITL gates, journal, dispatch)
+├── canon-orchestrator.md         # Orchestrator protocol (journal, dispatch) — pointers to DAG + HITL refs
+├── dag-execution-protocol.md     # Full DAG parallel build protocol (TeamCreate, merge, failure handling)
+├── hitl-patterns.md              # Full HITL checkpoint catalog (every mandatory and advisory gate)
 ├── content-flow.md               # Principle/writer content authoring flow
 ├── principle-loading.md          # How agents load Canon principles
 ├── runbook-vocabulary.md         # Runbook step vocabulary and disposition values
