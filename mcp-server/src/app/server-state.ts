@@ -46,6 +46,27 @@ export function clearConnectionScope(sessionId: string): void {
 }
 
 /**
+ * Return the project directory registered for a session, or undefined if not registered.
+ * Used by teardownSession to capture the dir before clearing the scope entry.
+ */
+export function getScopeForSession(sessionId: string): string | undefined {
+  return scopeRegistry.get(sessionId);
+}
+
+/**
+ * Return true if any session OTHER than the given one maps to the given dir.
+ * Called AFTER clearConnectionScope(sessionId) — the caller's entry is already removed.
+ * The stdio sentinel counts as a session (STDIO_SESSION_ID), so a shared-dir HTTP session
+ * closing while stdio also uses that dir will not evict the scope.
+ */
+export function hasOtherSessionsForDir(dir: string): boolean {
+  for (const registeredDir of scopeRegistry.values()) {
+    if (registeredDir === dir) return true;
+  }
+  return false;
+}
+
+/**
  * Resolve the project directory for the current request context.
  *
  * Lookup order:

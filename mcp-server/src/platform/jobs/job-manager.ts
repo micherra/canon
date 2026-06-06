@@ -472,6 +472,23 @@ export function cleanupAllJobManagers(): void {
   }
 }
 
+/**
+ * Evict the JobManager for a single project scope (HTTP session teardown path).
+ * Cleanup the manager's active jobs then remove from the map.
+ * Keeps the jobManagers map private — callers must not reach into the map directly.
+ * No-op when no manager exists for this scope.
+ */
+export function evictJobManagerForScope(projectDir: string): void {
+  const key = path.resolve(projectDir);
+  const manager = jobManagers.get(key);
+  if (!manager) return;
+  try {
+    manager.cleanup();
+  } finally {
+    jobManagers.delete(key);
+  }
+}
+
 /** Reset all per-project JobManagers (test only). */
 export function _resetJobManagerSingleton(): void {
   for (const manager of jobManagers.values()) {
