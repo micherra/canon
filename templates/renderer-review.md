@@ -435,6 +435,8 @@ Also add CSS for:
 .narrative-content ul, .narrative-content ol { margin: 8px 0; padding-left: 20px; }
 .narrative-content li { font-size: 12px; line-height: 1.6; color: var(--text); margin: 4px 0; }
 .narrative-content code { background: var(--bg-secondary); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+.narrative-content .table-scroll-wrapper { margin: 12px 0; }
+.narrative-content .requirement-table td, .narrative-content .requirement-table th { font-size: 11px; padding: 6px 10px; }
 ```
 
 - Expandable file card pattern CSS (copy verbatim):
