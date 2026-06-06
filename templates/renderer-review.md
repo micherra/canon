@@ -470,7 +470,7 @@ details[open] > .file-expandable-summary .file-expand-arrow { transform: rotate(
 
 Include before `</body>` (in this order):
 1. The `<script>` block from `file-detail-card.html` (Canvas graph initialization for detail cards)
-2. The shared force-directed-graph engine, then the subgraph init call:
+2. The shared force-directed-graph engine and the subgraph init call — only when `showSubgraph` is true:
 
 **2a. Emit the shared engine snippet `<script>` verbatim (ONCE).** Read
 `mcp-server/src/ui/snippets/force-graph.html` and include its `<script>` block verbatim exactly
@@ -577,17 +577,26 @@ expected result. The variable `N` in check 1 equals the number of changed files 
 |---|-------|---------|----------|
 | 1 | One card per changed file | `grep -c 'class="file-detail-card"' review.html` | equals changed-file count |
 | 2 | Snippet CSS present | `grep -c '\.fdc-metric-card' review.html` | >= 1 |
-| 3 | Card script present exactly once | `grep -o 'function drawFileGraph' review.html \| wc -l` | == 1 |
-| 4a | Force-graph engine not duplicated (always) | `grep -o 'function renderForceGraph' review.html \| wc -l` | <= 1 |
-| 4b | Force-graph engine present when subgraph rendered | `grep -o 'function renderForceGraph' review.html \| wc -l` | == 1 if `showSubgraph` was true; == 0 if `showSubgraph` was false |
+| 3 | Card script present exactly once | `grep -o 'function drawFileGraph(' review.html \| wc -l` | == 1 |
+| 4a | Force-graph engine not duplicated (always) | `grep -o 'function renderForceGraph(' review.html \| wc -l` | <= 1 |
+| 4b | Force-graph engine present when subgraph rendered | `grep -o 'function renderForceGraph(' review.html \| wc -l` | == 1 if `showSubgraph` was true; == 0 if `showSubgraph` was false |
 | 5 | Design token defined | `grep -c -- '--bg-card:' review.html` | >= 1 |
+
+The trailing `(` in checks 3 and 4a/4b anchors the match to the function declaration form.
+Narrative text that mentions a function name in prose (e.g. "calls `drawFileGraph`") does NOT
+carry the open-paren immediately after the name and therefore does not match. The rare case where
+a reviewer narrative includes a complete function signature with arguments (e.g.,
+`` `function drawFileGraph(canvas)` `` inside a code span) will match — this is a true collision,
+not a false positive. Resolve it by entity-escaping only the narrative occurrence (e.g.,
+`&#102;unction drawFileGraph(`) while leaving the `<script>` block untouched.
 
 **Failure protocol**: If ANY check fails, the composed HTML violated the snippet fidelity
 contract. Fix the composed HTML (re-read the snippet file, re-extract the missing block) and
 re-write the file, then re-run ALL checks. For check 4b specifically: only trigger the repair
 loop when `showSubgraph` was true and the count is 0 (missing engine), or when the count
 exceeds 1 (duplicated engine). A count of 0 when `showSubgraph` was false is correct — do NOT
-inject the engine. Do NOT return until every check passes.
+inject the engine. Never alter the `<script>` block to satisfy a count; resolve narrative
+collisions in the narrative text. Do NOT return until every check passes.
 
 Return when all checks pass. Do not modify the worktree.
 ````
