@@ -20,7 +20,7 @@ import { getFileContext } from "@features/file-context/tools/get-file-context.ts
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateNarrative } from "../tools/pr-review-data-helpers.ts";
 import {
   buildBlastRadiusByFile,
@@ -226,6 +226,11 @@ describe("buildBlastRadiusByFile", () => {
 //
 // Integration gap: adr005-06 tests single-file round-trip. This tests batch
 // storeSummaries → individual getFileContext reads for multiple files.
+//
+// Per-test timeout: each test calls getFileContext which runs ensureGraphFresh
+// internally (real SQLite + FS I/O). Under full-suite load this takes ~2.8s per
+// call. The 15s timeout gives adequate headroom without being excessively long.
+// This is a legitimate I/O budget, NOT suppression of a misbehaving test.
 
 describe("store-summaries → get-file-context cross-task round-trip (multiple files)", () => {
   let tmpDir: string;
@@ -294,7 +299,7 @@ describe("store-summaries → get-file-context cross-task round-trip (multiple f
 
     expect(handlerCtx.summary).toBe("HTTP request handler");
     expect(userCtx.summary).toBe("User domain entity");
-  });
+  }, 15_000);
 
   it("overwrite: second storeSummaries updates both files, reads reflect updated values", async () => {
     await storeSummaries(
@@ -324,7 +329,7 @@ describe("store-summaries → get-file-context cross-task round-trip (multiple f
 
     expect(handlerCtx.summary).toBe("Updated handler summary");
     expect(userCtx.summary).toBe("Updated user summary");
-  });
+  }, 15_000);
 
   it("file not in KG gets auto-stub and summary is readable via getFileContext", async () => {
     // src/new/tool.ts is NOT pre-registered in the KG
@@ -340,7 +345,7 @@ describe("store-summaries → get-file-context cross-task round-trip (multiple f
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.message);
     expect(result.summary).toBe("Auto-stubbed file summary");
-  });
+  }, 15_000);
 });
 
 // 10. DB-only workflow: kg_freshness_ms flows from KgQuery to getPrReviewData
@@ -348,18 +353,48 @@ describe("store-summaries → get-file-context cross-task round-trip (multiple f
 // Gap declared in adr005-04: "pr-review-data.ts priority scoring with a fully
 // populated KG is only tested via unit tests with mock KgQuery data."
 // This test verifies the kg_freshness_ms field flows correctly with a real SQLite DB.
+//
+// Module setup: vi.resetModules() + vi.doMock + dynamic import are hoisted to
+// beforeAll so the expensive module tree reload (pr-review-data.ts imports the
+// full KG + git adapter stack) only happens once per describe block instead of
+// once per test. Both tests share the same gitExecAsync mock (empty diff) so
+// a single shared import is safe. Under full-suite load, per-test module resets
+// were the primary source of the 5s timeout flake.
 
 describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
   let tmpDir: string;
+  let getPrReviewData: (
+    input: Record<string, unknown>,
+    dir: string,
+  ) => Promise<{ kg_freshness_ms?: number }>;
+
+  beforeAll(async () => {
+    // Reset module registry once so vi.doMock applies to the fresh import below.
+    vi.resetModules();
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: vi.fn().mockResolvedValue({
+        exitCode: 0,
+        ok: true,
+        stderr: "",
+        stdout: "",
+        timedOut: false,
+      }),
+    }));
+    // Import once; both tests reuse this cached function.
+    const mod = await import("../tools/pr-review-data.js");
+    getPrReviewData = mod.getPrReviewData as typeof getPrReviewData;
+  });
+
+  afterAll(async () => {
+    vi.restoreAllMocks();
+  });
 
   beforeEach(async () => {
-    vi.resetModules();
     tmpDir = await mkdtemp(join(tmpdir(), "canon-pr-freshness-"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
   });
 
   afterEach(async () => {
-    vi.restoreAllMocks();
     await rm(tmpDir, { force: true, recursive: true });
   });
 
@@ -379,19 +414,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
     });
     db.close();
 
-    // Mock git adapter to return an empty diff
-    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi.fn().mockResolvedValue({
-        exitCode: 0,
-        ok: true,
-        stderr: "",
-        stdout: "",
-        timedOut: false,
-      }),
-    }));
-
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    const result = await fn({}, tmpDir);
+    const result = await getPrReviewData({}, tmpDir);
 
     // kg_freshness_ms must be present and represent ~10 minutes
     expect(result.kg_freshness_ms).toBeDefined();
@@ -400,18 +423,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
   });
 
   it("kg_freshness_ms is undefined when KG DB does not exist", async () => {
-    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi.fn().mockResolvedValue({
-        exitCode: 0,
-        ok: true,
-        stderr: "",
-        stdout: "",
-        timedOut: false,
-      }),
-    }));
-
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    const result = await fn({}, tmpDir);
+    const result = await getPrReviewData({}, tmpDir);
 
     expect(result.kg_freshness_ms).toBeUndefined();
   });

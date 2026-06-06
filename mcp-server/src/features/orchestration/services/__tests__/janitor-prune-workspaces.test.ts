@@ -544,20 +544,13 @@ describe("prune_husk_dirs task", () => {
   });
 });
 
-// --- cleanupEmptyBranchDir TOCTOU guard ---
-//
-// When a slug is pruned and the branch dir is checked for emptiness, a concurrent
-// writer could create a new entry in the branch dir before the delete executes.
-// The fix uses atomic rmdirSync (which fails ENOTEMPTY) instead of rmSync
-// (which recursively removes even non-empty dirs). This test verifies that a
-// branch dir that is non-empty at deletion time is NOT removed and the janitor
-// does not crash.
+// --- cleanupEmptyBranchDir TOCTOU guard (rmdirSync = atomic ENOTEMPTY) ---
 
 describe("cleanupEmptyBranchDir — TOCTOU guard via atomic rmdirSync", () => {
   const ABANDONED_AGE_HOURS = 48;
   const ABANDONED_AGE_MS = ABANDONED_AGE_HOURS * 60 * 60 * 1000;
 
-  test("does not delete branch dir that is non-empty at deletion time, and janitor does not crash", async () => {
+  test("does not delete branch dir that is non-empty at deletion time, janitor does not crash", async () => {
     mockLoadJanitorConfig.mockResolvedValue({
       enabled: true,
       max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
@@ -565,37 +558,29 @@ describe("cleanupEmptyBranchDir — TOCTOU guard via atomic rmdirSync", () => {
     });
 
     const branchDir = join(canonWorkspacesDir, "main");
-    // Stale slug — will be pruned, triggering cleanupEmptyBranchDir
     const staleSlug = join(branchDir, "stale-slug");
     await mkdir(staleSlug, { recursive: true });
     setMtime(staleSlug, Date.now() - (ABANDONED_AGE_MS + 1000));
 
-    // A "concurrent" new slug that appears in the branch dir alongside the stale one.
-    // After the stale slug is pruned the branch dir still contains new-slug, so
-    // rmdirSync must fail atomically (ENOTEMPTY) and leave the branch dir intact.
+    // new-slug is present alongside stale-slug: after stale-slug is pruned,
+    // branchDir still has new-slug so rmdirSync must fail ENOTEMPTY and leave it.
     const newSlug = join(branchDir, "new-slug");
     await mkdir(newSlug, { recursive: true });
-    // new-slug is recent — will not be pruned
     setMtime(newSlug, Date.now() - 1 * 60 * 60 * 1000);
 
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {
+      /* suppress output */
+    });
     const result = await runJanitor(tmpDir);
     warnSpy.mockRestore();
 
-    // The stale slug was pruned
     expect(existsSync(staleSlug)).toBe(false);
-    // The branch dir was NOT deleted because new-slug is still there
     expect(existsSync(branchDir)).toBe(true);
-    // new-slug itself is intact
     expect(existsSync(newSlug)).toBe(true);
-    // Janitor reports success (the slug prune succeeded)
     expect(result.tasks.prune_workspaces.status).toBe("success");
   });
 
-  test("deletes a branch dir that becomes empty after all its slugs are pruned (rmdirSync positive path)", async () => {
-    // Positive-path companion to the TOCTOU test above: verifies that rmdirSync
-    // correctly removes a branch dir that is genuinely empty after slug pruning
-    // (i.e. the fix did not break the normal cleanup path).
+  test("deletes branch dir that becomes empty after all slugs are pruned (rmdirSync positive path)", async () => {
     mockLoadJanitorConfig.mockResolvedValue({
       enabled: true,
       max_abandoned_workspace_age_hours: ABANDONED_AGE_HOURS,
@@ -605,15 +590,11 @@ describe("cleanupEmptyBranchDir — TOCTOU guard via atomic rmdirSync", () => {
     const branchDir = join(canonWorkspacesDir, "feat--toctou-branch");
     const staleSlug = join(branchDir, "stale-slug-2");
     await mkdir(staleSlug, { recursive: true });
-    // Make stale — eligible for pruning
     setMtime(staleSlug, Date.now() - (ABANDONED_AGE_MS + 1000));
-    // branchDir has only the stale slug; after pruning it is empty
 
     const result = await runJanitor(tmpDir);
 
-    // The stale slug is removed
     expect(existsSync(staleSlug)).toBe(false);
-    // The now-empty branch dir is also removed by rmdirSync
     expect(existsSync(branchDir)).toBe(false);
     expect(result.tasks.prune_workspaces.status).toBe("success");
   });
