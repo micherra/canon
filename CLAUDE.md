@@ -488,14 +488,14 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Project Structure <!-- last-updated: 2026-06-05 -->
+## Project Structure <!-- last-updated: 2026-06-06 -->
 
 ```
 canon/
 ├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (21 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
-│   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, jq wrappers)
+│   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, comment stripping, quote-aware tokenizer, git-token detection, jq wrappers)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/
 │       ├── app/          # Entry point (index.ts), tool registration
