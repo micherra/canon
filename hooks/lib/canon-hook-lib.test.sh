@@ -699,6 +699,65 @@ assert_eq "timeout 5 -- passes (no wrapper in remaining tokens, return empty)" \
   "" \
   "$(canon_unwrap_string_exec_arg "timeout 5 --")"
 
+# ---------------------------------------------------------------------------
+# canon_unwrap_string_exec_arg -- round-5 universal scan-forward bypass fixes.
+#
+# Root cause: the round-4 implementation had a fixed allowlist of recognised
+# outer prefix words (command, nohup, env, timeout, nice).  Any unrecognised
+# leading word hit the '*) return 1' arm — skip-pass (fail-OPEN) for forms
+# like 'setsid bash -c "…"', 'stdbuf -oL bash -c "…"', 'xargs -I{} bash -c'.
+#
+# Fix: the '*' arm now uses universal scan-forward: advance past the unknown
+# prefix token, then call _do_scan_for_wrapper to find any wrapper token in
+# the remaining tokens.  This is prefix-vocabulary-free.
+#
+# No-over-block property: echo "bash -c '…'" — after canon_tokenize, token[0]
+# is 'echo' and token[1] is the entire quoted string 'bash -c '…'' as one
+# token.  The scan checks token[1]: its raw value 'bash -c …' does NOT match
+# 'bash' exactly in the case, so scan finds no wrapper and returns 1.
+# ---------------------------------------------------------------------------
+printf '\n=== canon_unwrap_string_exec_arg -- round-5 universal scan-forward ===\n'
+
+_R5H="--hard"
+_R5FD="-fd"
+
+# setsid prefix (should extract, rc=0).
+assert_eq "setsid bash -c inner extracts (universal scan-forward)" \
+  "git reset $_R5H" \
+  "$(canon_unwrap_string_exec_arg "setsid bash -c \"git reset $_R5H\"")"
+
+# stdbuf prefix with flag (should extract, rc=0).
+assert_eq "stdbuf -oL bash -c inner extracts (flag-bearing unknown prefix)" \
+  "git reset $_R5H" \
+  "$(canon_unwrap_string_exec_arg "stdbuf -oL bash -c \"git reset $_R5H\"")"
+
+# xargs -I{} prefix (should extract, rc=0).
+assert_eq "xargs -I{} bash -c inner extracts (xargs with replacement token)" \
+  "git reset $_R5H" \
+  "$(canon_unwrap_string_exec_arg "xargs -I{} bash -c \"git reset $_R5H\"")"
+
+# No-over-block: echo "bash -c '…'" — the whole quoted arg is one token, NOT matched as bash.
+assert_eq "echo \"bash -c '...'\": quoted wrapper word is NOT a bare token (no-over-block)" \
+  "" \
+  "$(canon_unwrap_string_exec_arg "echo \"bash -c 'git reset $_R5H'\"")"
+
+# No-over-block: printf "bash -c ..." — same property.
+assert_eq "printf \"bash -c ...\": quoted wrapper word is NOT a bare token (no-over-block)" \
+  "" \
+  "$(canon_unwrap_string_exec_arg "printf \"bash -c 'git clean $_R5FD'\"")"
+
+# Consciously-documented gap: command-substitution inner is not evaluated.
+# The inner arg is '$(echo git reset --hard)' — a single token with '$('.
+# The guard returns 0 but the inner string contains '$(' which canon_tokenize
+# yields as a single non-'git' token → canon_has_git_token returns false on
+# the recursion → guard passes.  This is the known deferred limitation.
+# (No assert here — behavior is captured in the guard integration test.)
+
+# Unknown prefix with no wrapper found — returns empty (rc=1).
+assert_eq "setsid git status: no wrapper in tokens, scan returns empty" \
+  "" \
+  "$(canon_unwrap_string_exec_arg 'setsid git status')"
+
 
 # ---------------------------------------------------------------------------
 # canon_has_ambiguous_git_token — Round-3 fix for git$IFS inner bypass.

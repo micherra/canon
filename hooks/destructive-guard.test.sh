@@ -1118,6 +1118,50 @@ run_test 'nice git log passes (benign nice-prefixed git)' \
 run_test 'env FOO=bar git status passes (env assignment, benign git)' \
   0 "$(make_input 'env FOO=bar git status')" "$NON_WT_PWD"
 
+# -----------------------------------------------------------------------
+# P1 round-5: universal scan-forward closes the unrecognised-prefix class.
+#
+# Root cause: the round-4 '*) return 1' catch-all in
+# canon_unwrap_string_exec_arg treated any unrecognised outer token as
+# "not a wrapper" — skipping it (fail-OPEN) instead of scanning forward.
+# setsid/stdbuf/xargs all hit this arm.
+#
+# Fix: the '*' arm now uses scan-forward — advance past the unknown token,
+# then call _do_scan_for_wrapper to find any wrapper in the remaining tokens.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- P1 round-5: unrecognised-prefix wrapper forms (should block, exit 2) --"
+
+_R5_HARD="--hard"
+_R5_FD="-fd"
+
+run_test 'setsid bash -c inner blocks (unrecognised prefix setsid)' \
+  2 "$(make_multiline_input "setsid bash -c \"git reset $_R5_HARD\"")" "$NON_WT_PWD"
+
+run_test 'stdbuf -oL bash -c inner blocks (stdbuf with flag, unrecognised prefix)' \
+  2 "$(make_multiline_input "stdbuf -oL bash -c \"git reset $_R5_HARD\"")" "$NON_WT_PWD"
+
+run_test 'xargs -I{} bash -c inner blocks (xargs with replacement, unrecognised prefix)' \
+  2 "$(make_multiline_input "xargs -I{} bash -c \"git reset $_R5_HARD\"")" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-5: no-over-block controls (should pass, exit 0) --"
+
+# Use make_multiline_input (jq-encoded) for commands that contain quotes.
+run_test 'echo "bash -c git reset" passes (quoted wrapper word is not a bare token)' \
+  0 "$(make_multiline_input "echo \"bash -c 'git reset $_R5_HARD'\"")" "$NON_WT_PWD"
+
+run_test 'printf "bash -c ..." passes (quoted printf arg not treated as wrapper)' \
+  0 "$(make_multiline_input "printf \"bash -c 'git clean $_R5_FD'\"")" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-5: command-substitution gap (consciously deferred, should pass) --"
+# bash -c "$(echo git reset --hard)" — inner arg is a command substitution.
+# Static analysis cannot evaluate $(...) at hook time; this is a consciously
+# documented limitation.  The guard passes it (exit 0).
+run_test 'bash -c "$(echo git reset --hard)" passes (command-substitution gap, consciously deferred)' \
+  0 "$(make_multiline_input 'bash -c "$(echo git reset --hard)"')" "$NON_WT_PWD"
+
 
 # -----------------------------------------------------------------------
 # Summary

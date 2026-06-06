@@ -268,20 +268,6 @@ canon_has_ambiguous_git_token() {
 # ---------------------------------------------------------------------------
 # CANON_STRING_EXEC_WRAPPERS
 # ---------------------------------------------------------------------------
-# Named constant: the set of canonical (basename-resolved) command names that
-# execute their string argument as shell code.  Callers match against this set
-# after resolving a raw token to its basename so that path-qualified invocations
-# like /bin/bash or /usr/local/bin/bash are covered.
-#
-#   SHELL_WRAPPERS — take -c <string>:  bash sh zsh ksh
-#   EVAL_WRAPPER   — joins remaining tokens: eval
-#
-# This constant documents the set in one place and is referenced by
-# canon_unwrap_string_exec_arg so that future additions only require a change here.
-# shellcheck disable=SC2034  # read by canon_unwrap_string_exec_arg (case match)
-CANON_STRING_EXEC_WRAPPERS="bash sh zsh ksh eval"
-
-# ---------------------------------------------------------------------------
 # canon_unwrap_string_exec_arg <raw_segment>
 # ---------------------------------------------------------------------------
 # String-executing-wrapper detector.  Classifies a segment into one of three
@@ -305,20 +291,32 @@ CANON_STRING_EXEC_WRAPPERS="bash sh zsh ksh eval"
 # the guard to treat an unresolvable /bin/bash -c "..." as "not a wrapper"
 # and skip it (fail-OPEN).
 #
-# Wrapper forms recognised (via CANON_STRING_EXEC_WRAPPERS and basename matching):
+# Wrapper forms recognised (via basename matching):
 #
 #   SHELL_WRAPPERS (take a string argument after -c):
 #     bash, sh, zsh, ksh — and their path-qualified forms (/bin/bash, etc.)
 #   EVAL_WRAPPER:
 #     eval  (all remaining tokens form the command)
 #
-# Transparent prefixes that may precede the wrapper (with their own flags
-# properly skipped before resolving the wrapper token):
-#   command  — skips -p, -v, -V, --
-#   nohup    — self-contained, no flags consumed
-#   env      — skips -i, -u NAME, -0, NAME=VALUE assignments, --
-#   timeout  — skips one non-'-' time argument
-#   nice     — skips -n <value>
+# Universal scan-forward (prefix-vocabulary-free):
+#   Any token preceding the wrapper that is not itself a recognised wrapper
+#   or transparent prefix is treated as an unknown outer prefix.  The
+#   implementation scans forward past it to find the first wrapper token,
+#   regardless of what the outer command is.  This covers arbitrary prefixes
+#   such as setsid, stdbuf, xargs, sudo, and any future command.
+#   Known transparent prefixes (handled with their own flag-skipping logic):
+#     command  — skips -p, -v, -V, --
+#     nohup    — self-contained, no flags consumed
+#     env      — skips -i, -u NAME, -0, NAME=VALUE assignments, --
+#     timeout  — scan-forward after prefix (arity-free)
+#     nice     — scan-forward after prefix (arity-free)
+#
+# Known limitation (consciously deferred):
+#   bash -c "$(echo git reset --hard)" — the inner argument is a command
+#   substitution, not a literal string.  Static analysis cannot evaluate
+#   $(…) or `…` at hook time, so this form passes (exit 0).  This is
+#   deliberately exotic (requires attacker-controlled shell expansion) and
+#   is not worth the complexity of attempted static evaluation.
 #
 # Combined short-flag clusters for shell wrappers are handled:
 #   bash -ec "cmd"  — 'c' as last char of cluster → treated as -c
@@ -628,8 +626,28 @@ canon_unwrap_string_exec_arg() {
         return $?
         ;;
       *)
-        # Not a recognised wrapper or transparent prefix — outcome (a).
-        return 1
+        # Unknown leading token (e.g. setsid, stdbuf, xargs, sudo, or any
+        # future unrecognised prefix).  Universal scan-forward: advance past
+        # this token, then scan ALL remaining tokens left-to-right for the
+        # first one that normalises to a known string-executing wrapper
+        # (bash/sh/zsh/ksh/eval) or recognised transparent prefix.
+        #
+        # This is prefix-vocabulary-free: no allowlist of outer words is
+        # needed because we simply look for the wrapper wherever it appears.
+        # Benign commands like "echo" are safe because their argument tokens
+        # are entire quoted strings (e.g. echo "bash -c …") — after
+        # canon_tokenize strips the outer quotes, that multi-word string
+        # becomes ONE token ("bash -c …") which does NOT match "bash" exactly
+        # in the case, so the scan proceeds past it and returns 1.
+        #
+        # If a wrapper is found, _do_scan_for_wrapper sets idx to its
+        # position; the outer loop continues and the wrapper's case arm fires.
+        # If no wrapper is found, the segment has no string-executing context
+        # — outcome (a).
+        idx=$(( idx + 1 ))
+        if ! _do_scan_for_wrapper; then
+          return 1
+        fi
         ;;
     esac
     # loop continues — keep advancing through transparent prefixes
