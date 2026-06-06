@@ -29,9 +29,12 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `hot-file-detection.ts` | `detectHotFiles`, `formatHotFileSection`, `buildHotFileSection`; threshold ≥ 3 appearances |
 | `doc-freshness.ts` | `computeDocFreshness` — enumerates `docs/*.md` (excludes `docs/reference/`); ENOENT → `[]` |
 | `backfill-error-fixes.ts` | One-off script; mines `file_violation_history` to seed `error_fixes` table |
+| `craft-audit-service.ts` | Pure audit area selector + profile persistence; see Contracts below |
 
 ## Contracts
 <!-- last-updated: 2026-06-05 (scope_layers valid set: loadLayerMappings(projectDir) replaces static VALID_LAYERS) -->
+
+**Craft audit service** (`services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` pure selector; bounded by `limit` default 5; `persistAuditProfile(areas, ratings, dao)` writes `source:"audit"` rows via injected `CraftProfileDao`; reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
 
 **`wiki_lint` tool** — `wikiLint(input, projectDir)` runs any combination of 6 checks; returns `WikiLintOutput` with per-check arrays + `total_findings`.
 
