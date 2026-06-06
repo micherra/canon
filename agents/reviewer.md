@@ -667,6 +667,24 @@ Run Stage 6 when the diff touches 2+ modules or files that share types, constant
 
 If no contradictions found, include the section header with: "No cross-requirement contradictions detected across {N} shared surfaces examined."
 
+### Scope-Parity Check for Precision/Scope Advisory Fixes
+
+**Trigger**: Run this sub-check when the diff (a) revises a verification mechanism in response to a precision/scope advisory from a prior review round, OR (b) introduces or modifies an embedded shell command (grep, git pathspec, awk) in `CLAUDE.md`, a convention body, or an agent protocol that enforces a declared scope.
+
+**Obligation**: For each such revision or embedded command, explicitly ask: "Does the revised check close the structural hole, or only eliminate the most obvious surface overmatch? Does the check's coverage match the scope it is declared to enforce?" (watch_KKKKK1; instances: PR #328, PR #330)
+
+**Concrete checks**:
+
+1. **Embedded shell commands in CLAUDE.md or convention bodies**: verify the command's pathspec/file arguments cover the same file set as the principle's or convention's `scope.file_patterns`. Run `git ls-files -- <command's pathspec>` and compare the result against `git ls-files -- <declared glob pattern>`. If the command's file set is a strict subset of the declared scope, the check is under-scoped.
+
+   Example: a post-scribe guard runs `git diff -- CLAUDE.md` but the enforced convention declares `scope.file_patterns: [CLAUDE.md, **/CLAUDE.md]`. Running `git ls-files -- CLAUDE.md` returns only the root file; `git ls-files -- '**/CLAUDE.md'` returns 17 files. The command covers 1 of 17 — scope mismatch.
+
+2. **Grep-based structural checks**: confirm the grep scope is bounded to the exact structural unit being asserted (a specific YAML field, a specific file set, a specific code block), not merely a narrower string in a broader context. A grep that matches any line before a delimiter (e.g., before the closing `---` of frontmatter) rather than lines within the specific target field is still over-scoped even if it is narrower than the original bare-string form.
+
+**Severity**: A coverage/scope mismatch is a WARNING finding at minimum. It is not an advisory pass. If the mismatch means the declared safety property is structurally unenforced (e.g., a guard that only covers a fraction of its declared file set leaves the uncovered files unguarded), escalate to WARNING and note the uncovered set.
+
+**Skip condition**: Skip this sub-check when the diff contains no revised advisory fixes and no embedded shell commands in protocol or convention files.
+
 ## Verdict
 
 Based on the most severe finding across all six stages:
