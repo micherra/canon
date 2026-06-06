@@ -43,7 +43,9 @@ src/
 - **Drift storage** (`platform/storage/drift/`) — SQLite drift DB, DAO inventory, confidence-decay adapters. See `src/platform/storage/drift/.claude/CLAUDE.md`.
 - **Orchestration tools** (`features/orchestration/`) — workspace lifecycle, artifact writing, agent skill resolution. See `src/features/orchestration/.claude/CLAUDE.md`.
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
+- **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
 - **History services** (`features/history/services/`) — cross-run analysis, craft drift, judge-weight, consolidate-policy. See `src/features/history/services/.claude/CLAUDE.md`.
+- **PR review tools + PR Review Data service** → `src/features/pr-review/.claude/CLAUDE.md`.
 - **Shared kernel** (`shared/`) — constants, matcher, schema, lib/ utilities. See `src/shared/.claude/CLAUDE.md`.
 - **UI snippets** (`ui/snippets/`) — force-graph, file-detail-card, renderer helpers. See `src/ui/snippets/.claude/CLAUDE.md`.
 - **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports, computes in/out degree, detects cycles; lazy commit-granularity freshness via `ensureGraphFresh` (structural) and `ensureGitIntelFresh` (git signals); `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01)
@@ -102,6 +104,8 @@ src/
 
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`.
 
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 6 checks: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`; see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details and valid `scope.layers` derivation.
+
 **Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — `injectWorktreeSettings(worktreePath, tools)` atomically writes `.claude/settings.local.json`; returns `false` on failure (never throws); idempotent. Called in all three spawn paths before `{ action: "spawn" }` when `permission_mode === "auto"`.
 
 **Agent Provenance** (`src/shared/lib/commit-trailers.ts`, `src/shared/lib/file-claims.ts`) — `formatCommitTrailers`/`buildCommitMessage` produce Canon trailer blocks; `ClaimsFile` persisted to `.canon/claims.json`; 24h-TTL file ownership claims. See `src/shared/.claude/CLAUDE.md`.
@@ -110,7 +114,7 @@ src/
 
 **Correction Reader** (`features/orchestration/services/correction-reader.ts`) — `readCorrections(projectDir, filePaths?, maxAge?)` → `{ ok: true; records[] } | { ok: false; error }`; ENOENT → `ok:true, records:[]`; updated 2026-05-25.
 
-**Shared libs** (`src/shared/lib/`) — `token-budget.ts`: `fitWithinBudget(items, budget)` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs; `DEFAULT_LAYER_MAPPINGS` includes `hooks: ["hooks/**"]` entry ordered before `shared` so `hooks/lib/*.sh` resolves to layer `hooks` (added 2026-05-29). See `src/shared/.claude/CLAUDE.md` for full lib inventory.
+**Shared libs** (`src/shared/lib/`) — `token-budget.ts`: `fitWithinBudget(items, budget)` greedy selector by priority; `violation-patterns.ts`: 8 extracted pure functions for violation analysis; `config.ts`: `buildLayerInferrer` supports globs; `DEFAULT_LAYER_MAPPINGS` has `hooks: ["hooks/**"]` before `shared` so `hooks/lib/*.sh` resolves to `hooks` layer (2026-05-29); `VALID_LAYERS = Object.keys(DEFAULT_LAYER_MAPPINGS)` — derived valid `scope.layers` set (2026-06-05). See `src/shared/.claude/CLAUDE.md`.
 
 **Flow schema** (`flow-schema.ts`) — `StateDefinitionSchema` is a `z.discriminatedUnion` with 5 type schemas; all new fields MUST be `.optional()`; `WavePolicy` defaults: isolation=worktree, merge=sequential, on_conflict=hitl.
 
@@ -147,7 +151,7 @@ src/
 | `store_summaries` | Persist file summaries to SQLite KG DB (DB-only since ADR-005 2026-04-01) |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews, doc freshness |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
-| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy; optional `checks` array; returns `WikiLintOutput` |
+| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy in `references/**/*.md`, invalid `scope.layers` values; optional `checks` array selects subset (default: all 6); returns `WikiLintOutput` |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result; accepts optional `craft_profile` (persists one row per distinct subsystem area to `craft_profiles` with `source:"review"`) |
 | `get_context` | Batch context for multiple files — composes principles, file_context, drift, graph, signals in one call |

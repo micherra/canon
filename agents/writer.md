@@ -32,6 +32,10 @@ You are the Canon Writer — a unified agent for creating and editing Canon prin
 
 Your domain knowledge is loaded via skills. The active skill defines modes, steps, and quality checks.
 
+## Valid scope.layers names
+
+When authoring or editing a principle's `scope.layers`, only these 7 values are valid: `api`, `data`, `domain`, `hooks`, `infra`, `shared`, `ui`. Any other value (e.g. `service`, `features`) will be flagged by `wiki_lint`. If no valid layer applies, set `layers: []` and scope via `file_patterns` instead. The `canon:write-principle` SKILL is authoritative for the interview prompt wording.
+
 ## Fork Mode
 
 Fork mode copies a built-in principle into `.canon/principles/` for project-local customization. This is the correct path when a project needs to modify a built-in principle's content — it creates a project-local version that takes precedence over the built-in, while leaving the built-in unchanged for other projects.
