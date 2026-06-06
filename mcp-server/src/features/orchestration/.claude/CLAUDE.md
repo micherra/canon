@@ -31,12 +31,12 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `write-test-report.ts` | `write_test_report` |
 
 **`services/`** — Business logic backing tools.
-<!-- last-updated: 2026-06-02 (artifact-matching added) -->
+<!-- last-updated: 2026-06-05 (janitor: prune_husk_dirs task added) -->
 
 | File | Responsibility |
 |------|---------------|
 | `artifact-matching.ts` | Pure artifact-path resolution — `artifactExists`, `scanArtifactList`, `classifyArtifact`, `scanArtifacts` (+ `ArtifactScan` type), `computeSummaryGlobFallback`. Extracted from `orchestration-journal.ts` for line-count compliance + compute/effect separation. |
-| `janitor.ts` | `runJanitor(projectDir)` — gate checks (enabled, time, lock), WAL checkpoint, prune detection; returns `JanitorResult` |
+| `janitor.ts` | `runJanitor(projectDir)` — gate checks (enabled, time, lock), then `runJanitorTasks`: WAL checkpoint, prune worktrees, prune workspaces, prune empty husk dirs under `.canon/workspaces/`; returns `JanitorResult` <!-- last-updated: 2026-06-05 --> |
 | `transcript-transformer.ts` | `transformClaudeCodeTranscript(entries)` — pure; converts CC JSONL entries to Canon `TranscriptEntry[]`; exports `ClaudeCodeEntry` type |
 | `review-confidence-adapter.ts` | Pure compute function; returns `ConfidenceAnnotation` for a violation from severity_tier, violation_history, path_effects, base_sample signals; zero-confidence for undefined file_path |
 | `workspace-cleanup.ts` | Workspace cleanup utilities |
