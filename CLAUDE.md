@@ -329,12 +329,12 @@ is missing → re-spawn → second-failure HITL) is unchanged.
 
 Full catalog in `references/hitl-patterns.md`. Covers every mandatory and advisory
 gate: plan approval, review verdict, adversarial re-review, WARNING close-out,
-manual verification, build-step checkpoint, cliff surfacing, merge conflict,
+manual verification, build-step checkpoint, Incomplete-step surfacing (cliff detected), merge conflict,
 gate failure, and architect design conversation.
 
 Read `references/hitl-patterns.md` BEFORE presenting any HITL checkpoint (plan
 approval, review verdict, WARNING close-out, manual verification, build-step
-checkpoint, cliff surfacing, merge conflict, gate failure, design conversation).
+checkpoint, Incomplete-step surfacing (cliff detected), merge conflict, gate failure, design conversation).
 
 ### Post-Step Effects
 

@@ -6,8 +6,6 @@ description: >-
   re-review, WARNING close-out, manual verification, build-step checkpoint,
   cliff surfacing, merge conflict, gate failure, and architect design
   conversation.
-model: sonnet
-color: white
 ---
 
 # HITL Patterns <!-- last-updated: 2026-06-04 -->
@@ -19,7 +17,7 @@ Read this file BEFORE presenting any HITL checkpoint. See `CLAUDE.md` for the st
 - **Coverage chain**: Architect task plans need `### Brief Coverage` table (runbook req → task element). Engineer logs need `#### Criteria Coverage` table (AC → implementation). Missing/empty tables are artifact defects. Disposition vocabulary: `covered`, `descoped`, `partial`. Engineer summaries must also include `### Canon Compliance` table listing applicable principles with `honored`/`violated`/`n/a` status, enabling reviewer Stage 3 cross-check.
 - **Plan approval HTML**: If `${WORKSPACE}/artifacts/design.html` exists, call `present_artifact({ type: "design", slug, html, data: {}, workspace })` before presenting the text runbook for approval.
 - **Architect approval**: Present plan for user approval. If design.html exists, call `present_artifact` first. Architect decides execution strategy.
-- **Review verdict**: Present results. If not CLEAN, spawn engineer fix mode. If `review.html` exists, call `present_artifact({ type: "review", ... })` alongside text verdict.
+- **Review verdict**: Present results. If not CLEAN, present options: **Auto-fix** (spawn engineer fix mode) | **Show details** | **Override** (proceed despite findings). If `review.html` exists, call `present_artifact({ type: "review", ... })` alongside text verdict.
 - **Adversarial re-review (supervised tier only)**: After an initial CLEAN verdict from the reviewer, optionally run an adversarial re-review pass. This is triggered only when the autonomy tier is `supervised` (check board metadata `autonomy_tier`). The adversarial pass uses a different prompt angle than the original review.
   1. **Trigger**: After reviewer returns CLEAN and the autonomy tier is `supervised`.
   2. **Prompt**: Spawn a second reviewer with the same files but a different framing: "You are conducting an adversarial re-review. Assume there are bugs the initial review missed. Your job is to find what was overlooked, not to confirm what was found. Focus on: (a) edge cases in error handling, (b) implicit assumptions about input shapes, (c) concurrency or ordering bugs, (d) security boundary gaps, (e) contract mismatches between producer and consumer. Lower your evidentiary bar — flag anything suspicious even if you cannot prove it is a bug."

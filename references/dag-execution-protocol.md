@@ -5,8 +5,6 @@ description: >-
   validation, Task Queue Setup, Worker Dispatch (TeamCreate/TaskCreate),
   Merge Protocol, Post-DAG Tail, and Failure Handling. Read before any
   build where task-dag.yaml exists or before TeamCreate/merge/cleanup.
-model: sonnet
-color: white
 ---
 
 # DAG Execution Protocol
