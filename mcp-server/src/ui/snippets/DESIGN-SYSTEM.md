@@ -379,6 +379,8 @@ Each snippet file uses this structured comment format at the top:
 
 ## Section E: Security Requirements
 
+The `PARITY:*` sentinels delimit the canonical sources; `section-e-parity.test.ts` asserts they stay in sync with the executable test copy in `markdown-to-html.test.ts`. Edit both together.
+
 ### escapeHtml Implementation
 
 Implement this function inline in any code that generates HTML. Use it on **every** piece of
@@ -399,6 +401,7 @@ function escapeHtml(s: string): string {
 TypeScript, and must guard against nullish input. Use this null-safe form — it is the single
 canonical `escapeHtml` every renderer template references:
 
+<!-- PARITY:escapeHtml:BEGIN -->
 ```javascript
 function escapeHtml(s) {
   return String(s ?? "")
@@ -409,6 +412,7 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 ```
+<!-- PARITY:escapeHtml:END -->
 
 `String(s ?? "")` coerces `null`/`undefined` to `""` (never the literal strings `"null"` /
 `"undefined"`). Always prefer this runtime form in renderer rendering scripts.
@@ -425,6 +429,7 @@ muted "None" empty-state row instead of raw pipe text. It calls `escapeHtml` int
 (escape-first, wrap-second) — **do NOT pre-escape input before passing it to `markdownToHtml`**, or
 content will be double-escaped.
 
+<!-- PARITY:markdownToHtml:BEGIN -->
 ```javascript
 /**
  * Convert common markdown patterns to HTML.
@@ -674,6 +679,7 @@ function markdownToHtml(md) {
   return result.join("\n");
 }
 ```
+<!-- PARITY:markdownToHtml:END -->
 
 `markdownToHtml` calls `escapeHtml` internally (escape-first, wrap-second) — do NOT pre-escape
 input before passing it to `markdownToHtml`.
