@@ -250,6 +250,22 @@ Do NOT flag:
 - Tests where interaction IS the contract under test (e.g. "calls the logger on error" where logging is the behavior being verified, not a collaborator incidentally asserted).
 - Tests that assert call arguments AND a real behavioral outcome (the interaction assertion is supplementary, not the only assertion).
 
+#### Agent→Tool Reachability
+
+**Trigger**: When the diff touches `agents/*.md`, `CLAUDE.md`, or a task plan/runbook that introduces or restores a requirement that a specific agent must call a specific MCP tool (new or pre-existing).
+
+For each such agent→tool requirement, verify both conditions mechanically:
+
+1. `grep 'mcp__canon__<tool_name>' agents/<agent>.md` returns a match in the `tools:` frontmatter block — not just in the instruction body.
+2. The tool is registered in the MCP server: `grep -r '<tool_name>' mcp-server/src/app/` (or `register-*.ts`) returns a non-empty result.
+
+**Outcome rules:**
+- If condition (1) fails: the agent physically cannot call the tool at runtime regardless of what the docs or tests say. Flag as **WARNING** citing `agent-instruction-tools-list-coherence`. Include the grep command and its empty output as evidence.
+- If condition (2) fails: the tool is undeclared in the server — the call will produce a "tool not found" error at runtime. Flag as **BLOCKING**.
+- A SUMMARY that reports AC satisfaction ("agent now calls tool X") without satisfying both conditions has produced a **nominally-met AC** — flag it with `SUMMARY CORRECTION REQUIRED` in Stage 3.
+
+**Skip condition**: Skip this sub-axis when the diff contains no agent instruction files and no wiring requirements referencing agent→tool connections.
+
 ### Recommendations array
 
 After completing Stages 1 and 2, produce a `recommendations` array for the `store_pr_review` call. This is the top-5 most actionable suggestions, mixing principle violations with holistic observations:

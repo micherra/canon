@@ -150,6 +150,8 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Dead-code-removal enrichment**: For builds that delete symbols, functions, types, or directory paths, add to the engineer spawn prompt: "After deleting each symbol, grep the full codebase for: (1) the symbol name as a string literal (catches constant arrays and config entries), (2) the TypeScript type name (catches orphan type declarations whose value-producers were deleted), (3) any directory path strings being removed (catches docstrings and comments). List all additional deletions in the Criteria Coverage table."
 
+**Wiring-task enrichment**: When the build spec requires that agent X calls tool Y (new or pre-existing), add to the engineer spawn prompt: "Before closing any AC that says agent X must call tool Y, verify: (1) `grep 'mcp__canon__Y' agents/X.md` returns a match inside the `tools:` frontmatter block — not just in the instruction body; (2) `grep -r 'Y' mcp-server/src/app/` returns a non-empty result confirming the tool is registered in the MCP server. Both checks are required. List the grep output as evidence in the Criteria Coverage table."
+
 #### Non-trivial path (PM → architect → execution)
 
 1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` → save `worktree_path`, `workspace`.
