@@ -305,6 +305,30 @@ Do NOT flag:
 - Intentional subset schemas where the file-level comment or PR description explicitly documents that the Zod schema is a strict subset of the TypeScript type by design.
 - Internal TypeScript types that have no corresponding schema file and are never serialized or exposed externally.
 
+#### Structural Assertion Grep Scope
+
+**Trigger**: When the diff adds or modifies a verification command (grep, awk, or Bash assertion) that claims to confirm a structural property — specifically: frontmatter field presence (e.g., "tool Y is in the `tools:` allowlist"), server registration (e.g., "tool Y is registered in `register-*.ts`"), or config/schema entry existence.
+
+For each such verification command, confirm that the grep pattern and path scope are the **minimum sufficient** to confirm the stated structural claim:
+
+1. **Frontmatter field presence**: The grep must be scoped to the specific frontmatter block, not the full file. A bare `grep` or `grep -n` with a line-number-before-`---` check is insufficient — it will match occurrences in `description:`, `name:`, or body prose. The correct form uses block-extraction:
+   ```
+   awk '/^tools:/{in_tools=1; next} in_tools && /^---/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>'
+   ```
+   A match in any line before the closing `---` is NOT sufficient — the match must fall within the target block.
+
+2. **Server registration**: The grep must be scoped to registration files with quoted-string form, not directory-wide bare-string search. A bare `grep -r '<tool_name>' mcp-server/src/app/` matches doc comments and JSDoc strings — it does not confirm the tool is registered. The correct form:
+   ```
+   grep -rn '"<tool_name>"' mcp-server/src/app/register-*.ts
+   ```
+   A match in a doc comment, variable name, or non-registration file does NOT satisfy a registration claim.
+
+**Outcome rules:**
+- If a verification command's scope exceeds the structural claim it was meant to verify (i.e., would return true-positive for a non-structural match): flag as **advisory** citing this sub-axis. Recommend the minimum-scope form above.
+- **Upgrade to WARNING** when the over-broad grep appears in a spec, agent instruction, or protocol document and the false-positive condition would allow a dead-wire to pass undetected — the same class of defect as the one the check was designed to prevent.
+
+**Skip condition**: Skip this sub-axis when the diff adds no verification commands or structural assertion greps.
+
 ### Recommendations array
 
 After completing Stages 1 and 2, produce a `recommendations` array for the `store_pr_review` call. This is the top-5 most actionable suggestions, mixing principle violations with holistic observations:
