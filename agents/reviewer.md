@@ -677,7 +677,7 @@ If no contradictions found, include the section header with: "No cross-requireme
 
 1. **Embedded shell commands in CLAUDE.md or convention bodies**: verify the command's pathspec/file arguments cover the same file set as the principle's or convention's `scope.file_patterns`. Run `git ls-files -- <command's pathspec>` and compare the result against `git ls-files -- <declared glob pattern>`. If the command's file set is a strict subset of the declared scope, the check is under-scoped.
 
-   Example: a post-scribe guard runs `git diff -- CLAUDE.md` but the enforced convention declares `scope.file_patterns: [CLAUDE.md, **/CLAUDE.md]`. Running `git ls-files -- CLAUDE.md` returns only the root file; `git ls-files -- '**/CLAUDE.md'` returns 17 files. The command covers 1 of 17 — scope mismatch.
+   Example: a post-scribe guard runs `git diff -- CLAUDE.md` but the enforced convention declares `scope.file_patterns: [CLAUDE.md, **/CLAUDE.md]`. Running `git ls-files -- CLAUDE.md` returns only the root file; `git ls-files -- '**/CLAUDE.md'` returns many nested files (returned 17 at the time of PR #330). The command covers 1 of many — scope mismatch.
 
 2. **Grep-based structural checks**: confirm the grep scope is bounded to the exact structural unit being asserted (a specific YAML field, a specific file set, a specific code block), not merely a narrower string in a broader context. A grep that matches any line before a delimiter (e.g., before the closing `---` of frontmatter) rather than lines within the specific target field is still over-scoped even if it is narrower than the original bare-string form.
 
