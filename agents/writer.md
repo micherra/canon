@@ -78,3 +78,10 @@ Before committing any principle, convention, or agent-rule:
       (a) Add exclusion flags (`--exclude`, `--exclude-dir`, `grep -v`) to suppress known-false-positive sources (test files, comment lines — include a brief rationale inline).
       (b) Amend the expected-output claim to name known acceptable hits with a rationale sentence.
       Do NOT commit a verification command whose documented expected output does not match the observed output.
+
+- [ ] **Severity-vocabulary consistency** (watch_VVVVV2): When editing any file that contains a severity/verdict vocabulary section — such as `agents/reviewer.md`'s `## Verdict` table, or any file with a `BLOCKING / WARNING / CLEAN` summary table or `| Severity |` column — grep the edited file for severity keywords (`BLOCKING`, `WARNING`) in your added or changed lines. For every new severity assignment found in the body, confirm a corresponding entry (row or bullet) exists in the vocabulary section. A body severity assignment with no vocabulary entry must be reconciled before commit: either add the entry to the vocabulary section or revise the body language. Do NOT commit as-is.
+
+  Example reconciliation:
+  - Body adds "…flag as **BLOCKING**" → verify the `## Verdict` table has a BLOCKING row that covers this path.
+  - Body adds "…is a **WARNING** finding" → verify the `## Verdict` table's WARNING row conditions include this finding type.
+  - If no vocabulary section exists in the file, this check does not apply. Equally, a file that only *quotes* `BLOCKING / WARNING / CLEAN` as instructional or template text — rather than defining a live verdict classification path — is not considered to have a vocabulary section; skip this check.
