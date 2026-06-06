@@ -90,8 +90,8 @@ The biggest time sink. If the engineer gets it right first pass, you skip 1-2 fu
 |---------|--------|----------|--------|
 | ~~**Feed-forward enrichment** (Epic 6)~~ | ~~Medium~~ | ~~Very high~~ | Shipped (PR #239) |
 | ~~**Cross-session error + fix index**~~ | ~~Medium~~ | ~~High~~ | Shipped (PR #239) |
-| **Short-term area memory** | Small | High | Compact observations attached to subsystems with 7-day expiry. Next agent in same area gets them pre-injected. |
-| **Hot-file caution for engineers** | Small | Medium | Inject a caution note when an engineer edits a file modified across many recent builds. Hotspot data exists in `get_file_context` — just needs injection into engineer spawn prompts. |
+| ~~**Short-term area memory**~~ | ~~Small~~ | ~~High~~ | Shipped (PR #279). `AreaMemoryDao` + `area-memory-enrichment.ts`; observations injected into architect/engineer spawn prompts. |
+| ~~**Hot-file caution for engineers**~~ | ~~Small~~ | ~~Medium~~ | Shipped (PR #279). `hot-file-detection.ts`; caution note injected when a file appears in many recent builds. |
 | **Outdated violation detection** | Medium | Medium | Track which diff lines each violation was pinned to. On re-review, violations on unchanged lines persist; violations on changed lines are marked "outdated." Stops reviewers from re-flagging fixed code. |
 | **Reviewer pulls real LSP diagnostics** | Medium | High | L1. Replace/augment `npm run build` stdout-parsing with per-file, per-line LSP diagnostics (codes included). Gives `feedback_reviewer_must_build` real teeth. Open question: LSP availability in worktrees/headless. |
 
@@ -178,14 +178,14 @@ Source: the 2026-06-04 ruflo (ruvnet/ruflo) re-audit — a 30-agent workflow (fa
 
 **Precondition — fix the journal write race first.** `log_step`'s read-modify-write on `journal.json` is unlocked; DAG workers calling `log_step` can race the orchestrator and silently drop entries. Every "wire the dead data" and reachability-lint item below depends on trustworthy journal/store writes, so this precondition lands before them. (Highest-severity orchestration correctness gap; previously deferred to v2.1b.)
 
-**Slate-B status (corrected 2026-06-04).** The slate-B learner build (verdict-weight learner inputs by build outcome) is **PR #306 — OPEN**, not a pre-input build to re-sequence. It independently hit the exact dead-input this audit flagged: `get_cross_run_analysis` was absent from the learner's tool allowlist, so JUDGE was inert. #306 **caught and fixed it mid-build** (commit `665f8d97`). The action is therefore to **merge #306**, not pause anything. The only genuinely-dead surface remaining after #306 is `OutcomeStore` (zero consumers, untouched by #306); `decision_summaries` is a documented back-compat tombstone, not a bug (see the Tier 1 table below).
+**Slate-B status (corrected 2026-06-04).** The slate-B learner build (verdict-weight learner inputs by build outcome) shipped as **PR #306 — MERGED**. It independently hit the exact dead-input this audit flagged: `get_cross_run_analysis` was absent from the learner's tool allowlist, so JUDGE was inert. #306 **caught and fixed it mid-build** (commit `665f8d97`). The only genuinely-dead surface remaining after #306 is `OutcomeStore` (zero consumers, untouched by #306); `decision_summaries` is a documented back-compat tombstone, not a bug (see the Tier 1 table below).
 
 ### Tier 1 — Wire the dead data (correctness; XS–S)
 
 | Feature | Effort | Leverage | Source / Note |
 |---------|--------|----------|---------------|
 | **Wire OutcomeStore to the WARNING close-out HITL** | Small | Very high | `outcome-store.ts` (recordOutcome/getOutcomeStats/getOutcomesForFiles) has zero production consumers — only the test file calls it. The WARNING-advisory close-out gate (fix/acknowledge/defer) discards the user's disposition, Canon's highest-value human signal. One `recordOutcome` call at that decision point captures it. |
-| **Reconnect the learner to cross-run analysis** | Tiny | High | `learner.md`'s frontmatter listed `get_history`/`get_build_history` but **not** `get_cross_run_analysis`, making the cross-run substrate structurally unreachable by the agent meant to consume it. **Fixed on the slate-B branch (commit `665f8d97`); ships with PR #306.** |
+| ~~**Reconnect the learner to cross-run analysis**~~ | ~~Tiny~~ | ~~High~~ | Shipped (PR #306). `learner.md` now lists `get_cross_run_analysis` in its tool allowlist. |
 | **Thread `task_description` into the matcher** | Small | Medium | `task_description` is accepted by `get-principles.ts` but never threaded into the matcher — an accepted-but-ignored input. NOTE: `decision_summaries` was previously grouped here in error — it is **not** a dead-wire bug but an intentional version:1 back-compat tombstone (documented at `run-summary-builder.ts:62` and `history-types.ts:104`; its source `decisions/` workspace dir was deliberately removed). Disposition: leave as documented compat or delete the field — never populate it. |
 | **Tier-vocabulary mismatch** | Tiny | Medium | `CLAUDE.md` instructs `tier: "trivial"` but `init-workspace.ts` accepts only `small\|medium\|large` — an XS correctness bug on the path every build hits (confirmed live: init rejected `"trivial"`). Reconcile the vocabulary in one place. |
 | **De-alias `unintentional_violations`** | Tiny | Low | Increments in lockstep with `total_violations` (`analyzer.ts:85`) — dead data shown in drift reports as if meaningful. Compute it for real or stop surfacing it. |
@@ -230,14 +230,14 @@ Parallel infra track to the build-quality threads. Removes the MCP server's proc
 |-------|------|--------|
 | **1a** | Per-connection scope foundation | Shipped (PR #288) |
 | **1b** | Migrate consumers to connection scope | Shipped (PR #290) |
-| **1c + 1d** | Eliminate `process.cwd()` implicit-scope sites; delete the `projectDir`/`setProjectDir` global; add (unwired) `evictStoresForScope`/`evictDriftDbForScope` eviction hooks; split `drift-db.ts` into siblings | Shipped (PR #304) — CLEAN review, behavioral no-op under stdio |
+| **1c + 1d** | Eliminate `process.cwd()` implicit-scope sites; delete the `projectDir`/`setProjectDir` global; add (unwired) `evictStoresForScope`/`evictDriftDbForScope` eviction hooks; split `drift-db.ts` into siblings | Shipped (PR #304) — CLEAN review, behavioral no-op under stdio. Isolation-finish (per-project `JobManager` via `getOrCreateJobManager`) shipped PR #316. |
 | **2** | HTTP daemon: auto-reconnect kills the silent zero-tool cold start; `url` config sidesteps the `${CLAUDE_PLUGIN_ROOT}` token-expansion failure; wire the eviction hooks to connection-end | Not started — unblocked by #304 |
 
 **Sequencing notes:**
 
 - **#304 (HTTP Phase 1) is the per-project-state substrate for the MCP-touching Memory-Integrity kernels.** Wiring OutcomeStore, adding a trajectory-index table, and the typed-status store-write all extend the per-project-state surfaces #304 made connection-scoped; build them on that substrate rather than the old `projectDir` global.
-- **Known residual** (fold into Phase 2): `http-server.ts:54` still reads `process.env.CANON_PROJECT_DIR ?? process.cwd()` for the artifact server's own directory — same implicit-scope class 1c/1d eliminated, tagged `[baseline]` in #304's review.
-- **Live tooling caveat** (same family, observed during this build): `resolve_agent_skills` resolved `projectDir` to `mcp-server/` instead of the repo root and failed to find `agents/engineer.md` — a `CANON_PROJECT_DIR`/cwd resolution defect worth confirming the per-connection resolver fixes.
+- **Known residual resolved** (PR #316): `http-server.ts` artifact server scope now threaded from `index.ts` — `process.cwd()` implicit-scope fallback removed.
+- **Live tooling caveat resolved** (PR #315): `resolve_agent_skills` pluginDir seed was off-by-one (fixed-dirname-count → marker-walk via `findAnchorDir`); now correctly resolves to the repo root.
 
 ---
 
@@ -299,7 +299,7 @@ These were evaluated and explicitly rejected:
 | ~~**Done**~~ | ~~Wiki-lint + doc gap detection~~ | Shipped PR #267. |
 | **Next** | GitHub-linkable review output | Last remaining Thread 2 item. Small build, immediate value for PR workflows. |
 | **Prerequisite** | Fix the journal `log_step` write race | Guarantees journal/store writes don't silently drop under DAG parallelism — the floor every dead-wire fix stands on. (The #304 HTTP Phase 1 per-project-state substrate is the other floor for the MCP-touching kernels.) |
-| **Then (high ROI)** | Memory-Integrity Tier 1 — wire OutcomeStore to the WARNING close-out, thread `task_description` into the matcher, fix the tier-enum, de-alias `unintentional_violations` | XS–S correctness fixes dead-center in auditability identity; best ROI on the new slate. Builds on the #304 per-project-state substrate. **Prerequisite: #306 must merge first** — `get_cross_run_analysis` is absent from `agents/learner.md`'s tool allowlist until #306 lands, so the cross-run substrate remains structurally unreachable without it. `decision_summaries` is a tombstone, not a fix. |
+| **Then (high ROI)** | Memory-Integrity Tier 1 — wire OutcomeStore to the WARNING close-out, thread `task_description` into the matcher, fix the tier-enum, de-alias `unintentional_violations` | XS–S correctness fixes dead-center in auditability identity; best ROI on the new slate. Builds on the #304 per-project-state substrate. (#306 merged — cross-run substrate now reachable.) `decision_summaries` is a tombstone, not a fix. |
 | **Then** | Typed agent status return (Memory-Integrity Tier 2) | Removes the largest behavioral-only fragility (regex-scan of agent prose) for minimal cost; reuses the typed terminal-write tools. |
 | **Then** | Self-hollowness lint + single-coordinator invariant | Generalized reachability enforcement (subsumes the Tier-1 reachability checks) + the XS identity guardrail that auto-rejects swarm/consensus scope creep. |
 | **Later** | Honest-metric discipline (cognitive-load baseline derivation only — craft density+intent redesign killed 2026-06-05, see Not Doing) + audit design-kernel grafts (per-node model hints, semantic trajectory retrieval, MergePlan, codemods, tool-group gating, cost accounting) | Prototype-gated; several depend on prior decisions (worktree model for MergePlan, offline embedder for retrieval) or on accumulated data. |
@@ -309,7 +309,7 @@ These were evaluated and explicitly rejected:
 | **Then** | Runbook field enrichment (G1–G9) | Deterministic Spine — declare the nine executor-needed fields in the runbook schema. Delivers the "better runbooks" win immediately and independently of any execution (zero #151 tension), and is the hard prerequisite for the transpiler. **G8 (tier→gate semantics) is load-bearing** — it computes the firing-gate set that drives segment boundaries. |
 | **Then** | W4 tail pipeline as a Workflow PoC | Deterministic Spine — bounded determinism proof-of-concept. Validates `Workflow`→`Agent` before the transpiler; design its node interface so the transpiler emits the same shape. Run wiki-lint doc-correction pass first (clears stale-runtime-doc risk). |
 | **Then** | Reviewer pulls real LSP diagnostics (L1) | Thread 1 graft — upgrades the review/verify floor from regex+stdout to structured compiler signal. Independent; slots in wherever LSP-in-headless is confirmed. |
-| **Later** | Short-term area memory + hot-file caution | Compound context for engineers. Data exists in `get_file_context`, needs injection into spawn prompts. |
+| ~~**Done**~~ | ~~Short-term area memory + hot-file caution~~ | Shipped PR #279. |
 | **Later** | Effort budgets + skill effectiveness tracking | Last Thread 3 items. Cap runaway agent turns and learn which primers/skills help. |
 | **Later** | Deterministic runbook→IR transpiler | Deterministic Spine — subsumes W1/W2/W3. Tier-gated to autonomous/light-touch first. Deferred until W4 PoC proves the `Workflow`→`Agent` path. |
 | **Later** | W8-via-compilation (whole-build Workflow) | Deterministic Spine — autonomous-tier whole-build endpoint. Deferred behind transpiler proving out on the conservative boundary (tail + review-fix loop + wave execution). |

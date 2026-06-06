@@ -1,0 +1,35 @@
+---
+name: hitl-patterns
+description: >-
+  Full HITL checkpoint catalog for the Canon orchestrator. Covers every
+  mandatory and advisory gate: plan approval, review verdict, adversarial
+  re-review, WARNING close-out, manual verification, build-step checkpoint,
+  cliff surfacing, merge conflict, gate failure, and architect design
+  conversation.
+---
+
+# HITL Patterns <!-- last-updated: 2026-06-04 -->
+
+Read this file BEFORE presenting any HITL checkpoint. See `CLAUDE.md` for the stub pointer.
+
+- **PM Triage**: (1) Refine: classify trivial/clear/fuzzy; produce `sharpened-request.md` for non-trivial tiers. (2) Scope check: 1-2 MCP calls → trivial → engineer, non-trivial → architect. Fully-specified requests skip the requirements conversation.
+- **Requirement coverage check**: After architect returns, surface any `descoped`/`partial`/missing requirements before runbook approval. Proceed silently if all are `covered` with owning steps.
+- **Coverage chain**: Architect task plans need `### Brief Coverage` table (runbook req → task element). Engineer logs need `#### Criteria Coverage` table (AC → implementation). Missing/empty tables are artifact defects. Disposition vocabulary: `covered`, `descoped`, `partial`. Engineer summaries must also include `### Canon Compliance` table listing applicable principles with `honored`/`violated`/`n/a` status, enabling reviewer Stage 3 cross-check.
+- **Plan approval HTML**: If `${WORKSPACE}/artifacts/design.html` exists, call `present_artifact({ type: "design", slug, html, data: {}, workspace })` before presenting the text runbook for approval.
+- **Architect approval**: Present plan for user approval. If design.html exists, call `present_artifact` first. Architect decides execution strategy.
+- **Review verdict**: Present results. If not CLEAN, present options: **Auto-fix** (spawn engineer fix mode) | **Show details** | **Override** (proceed despite findings). If `review.html` exists, call `present_artifact({ type: "review", ... })` alongside text verdict.
+- **Adversarial re-review (supervised tier only)**: After an initial CLEAN verdict from the reviewer, optionally run an adversarial re-review pass. This is triggered only when the autonomy tier is `supervised` (check board metadata `autonomy_tier`). The adversarial pass uses a different prompt angle than the original review.
+  1. **Trigger**: After reviewer returns CLEAN and the autonomy tier is `supervised`.
+  2. **Prompt**: Spawn a second reviewer with the same files but a different framing: "You are conducting an adversarial re-review. Assume there are bugs the initial review missed. Your job is to find what was overlooked, not to confirm what was found. Focus on: (a) edge cases in error handling, (b) implicit assumptions about input shapes, (c) concurrency or ordering bugs, (d) security boundary gaps, (e) contract mismatches between producer and consumer. Lower your evidentiary bar — flag anything suspicious even if you cannot prove it is a bug."
+  3. **Verdict handling**: Adversarial findings follow the same BLOCKING/WARNING/CLEAN verdict path as regular findings. If BLOCKING or WARNING, enter the standard review-fix iteration loop. If CLEAN (adversarial pass also finds nothing), proceed.
+  4. **Presentation**: Present adversarial findings to the user as: "Adversarial re-review found {N} additional findings. Review?" The user can acknowledge or request fixes.
+  5. **Skip conditions**: Skip for `autonomous` and `light-touch` tiers. Skip for documentation-only diffs. Skip if the user says "skip adversarial" or the build is a fix-type (no new contracts).
+- **Review-fix iteration loop**: Re-spawn reviewer after each fix to verify ALL flagged violations addressed. Loop until CLEAN or WARNING. Max 3 fix→review iterations, then HITL. When reviewer flags `SUMMARY CORRECTION REQUIRED` discrepancies, include them in fix spawn prompt and instruct engineer to correct `*-SUMMARY.md`. (L1-only enforcement — no automated check.)
+- **Fix-mode SUMMARY obligation**: When a fix agent introduces behavioral changes beyond the original brief (new types, new exports, removed catch blocks, new tests), it must update the implement-step `*-SUMMARY.md`'s "What Changed", "Files", "Coverage Notes", and "Canon Compliance" sections before returning FIXED. The reviewer's `SUMMARY CORRECTION REQUIRED` flag indicates this was missed.
+- **WARNING advisory close-out**: After BLOCKING items resolved (or initial WARNING verdict), present advisory items to user: (a) **fix** — another engineer cycle; (b) **acknowledge** — log as accepted; (c) **defer** — note as follow-up. Occurs between review and ship. Does not apply if verdict is CLEAN.
+- **Manual verification gate**: If tester report has `## Manual Verification Needed` section with rows, present via `AskUserQuestion` before ship: (a) **confirmed** → ship; (b) **not verified** → pause; (c) **defer** → ship with note. Absent or empty section: skip gate.
+- **Build-step checkpoint**: After design/implement/verify/review steps: "Step {N} of {total} complete. Continue, or resume fresh?" Skip when `CANON_SKIP_SESSION_CHECKPOINTS=1`. Does not apply to tail steps.
+- **Gate failure**: Present output, ask user how to proceed.
+- **Architect design conversation**: For genuine design tradeoffs, architect reports `HAS_QUESTIONS` with reasoning, stated lean, and request for user correction. Orchestrator surfaces to user; re-spawn with feedback. Style: think-out-loud, state a lean (not multiple choice). No round limit. Skip when only one reasonable approach exists.
+- **Incomplete-step surfacing (cliff detected)**: When `reconcile_workspace` returns `needs_recovery: true` (on resume or post-subagent), present the incomplete steps to the user: for each, the `step_id`, `agent_type`, its `missing_artifacts` / `partial_artifacts`, and (on the resume path) the harvested transcript path from `capture_transcript` when available. Offer user-driven options via `AskUserQuestion`: (a) **resume** — re-run that step (user-initiated, standard step dispatch); (b) **abandon** — mark the step skipped and continue; (c) **inspect** — show the partial artifact / harvested transcript path. **No automatic re-spawn is performed** — surfacing only. A `cliff_detected` telemetry event has already been recorded by `reconcile_workspace`. This pattern does NOT apply to normal completed-step artifact misses, which keep their existing re-spawn → second-failure HITL path.
+- **Merge conflict**: Present conflicting files, ask for resolution strategy.

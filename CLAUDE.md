@@ -150,7 +150,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Dead-code-removal enrichment**: For builds that delete symbols, functions, types, or directory paths, add to the engineer spawn prompt: "After deleting each symbol, grep the full codebase for: (1) the symbol name as a string literal (catches constant arrays and config entries), (2) the TypeScript type name (catches orphan type declarations whose value-producers were deleted), (3) any directory path strings being removed (catches docstrings and comments). List all additional deletions in the Criteria Coverage table."
 
-**Wiring-task enrichment**: When the build spec requires that agent X calls tool Y (new or pre-existing), add to the engineer spawn prompt: "Before closing any AC that says agent X must call tool Y, verify: (1) `grep -n 'mcp__canon__Y' agents/X.md | head -1` returns a match AND the matching line number falls before the closing `---` of the frontmatter block (inside the `tools:` list, not only in the instruction body); (2) `grep -rn '"Y"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result — a match only in a doc comment or non-registration file does not satisfy this condition. Both checks are required. List the grep output as evidence in the Criteria Coverage table."
+**Wiring-task enrichment**: When the build spec requires that agent X calls tool Y (new or pre-existing), add to the engineer spawn prompt: "Before closing any AC that says agent X must call tool Y, verify: (1) `awk '/^tools:/{in_tools=1; next} in_tools && /^---/{exit} in_tools{print}' agents/X.md | grep '  - mcp__canon__Y'` returns a match — this confirms Y is in the `tools:` allowlist, not merely mentioned in the description or body; (2) `grep -rn '"Y"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result — a match only in a doc comment or non-registration file does not satisfy this condition. Both checks are required. List the command output as evidence in the Criteria Coverage table."
 
 #### Non-trivial path (PM → architect → execution)
 
@@ -165,54 +165,13 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 ### DAG Execution Protocol
 
-When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch via agent teams. Each entry has `task_id`, `depends_on: []`, `files: []`. If absent, fall back to sequential execution.
+Full protocol in `references/dag-execution-protocol.md`. Covers DAG validation,
+Task Queue Setup (TeamCreate/TaskCreate), Worker Dispatch, Merge Protocol,
+Post-DAG Tail, and Failure Handling.
 
-> **Supported execution model (current).** The live, exercised path is **single-worktree sequential execution**: `init_workspace` creates one `{workspace}/worktree` and all code-writing agents share it. The worktree-per-task parallel-wave path described below (per-task `canon-task/{task_id}` worktrees + sequential merge) is documented as the intended shape but is **not currently backed by automated tooling** — the wave-lifecycle helpers (`createWaveWorktrees`/`mergeWaveResults`/`cleanupWorktrees`) were removed in PR #167. Until they are deliberately rebuilt (see `docs/explore/adaptive-queen.md` revisit trigger), run the merge steps below as explicit git operations, or prefer sequential execution. Do not reintroduce calls to the removed helpers.
-
-**Validate DAG** (via `dag-validator.ts` in `mcp-server/src/shared/lib/`): no cycles, all `depends_on` refs resolve, no self-references. On failure: present errors, re-spawn architect.
-
-#### Task Queue Setup
-
-1. `TeamCreate({ team_name: "canon-{slug}" })`
-2. For each node: `TaskCreate({ title: task_id, description: <enrichment payload> })`. Enrichment: `resolve_agent_skills("engineer")` + `get_context(include: ["principles", "file_context"])` + task plan content + worktree/provenance instructions. For `depends_on` tasks: `TaskUpdate({ addBlockedBy: [...] })`.
-
-#### Worker Dispatch
-
-> **Anti-pattern**: Do NOT substitute parallel Agent spawns for team dispatch. Raw Agent spawns bypass dependency tracking and task queue visibility. When `task-dag.yaml` exists and the step is `implement`, always use `TeamCreate`/`TaskCreate` for worker dispatch. The `dag-dispatch-guard.sh` hook (advisory, L1) will warn on raw Agent spawns during DAG execution.
-
-**Single-task guard**: Each worker may claim AT MOST one task per session. After marking a task completed (step 8), workers must NOT call `TaskList` again. The loop (step 2 in the worker prompt) applies only if no task was available on the first `TaskList` call (retry-until-available pattern). If a worker finds tasks remaining after completing its own task, it MUST stop and report DONE — the remaining tasks belong to peer workers.
-
-**TeamCreate invariant**: A single canon:engineer subagent MUST NOT be used as a substitute for TeamCreate when task-dag.yaml exists. The journal `step_id` for the implement phase of a DAG build must not appear as a single `engineer` entry — it should appear as N per-task entries or be absent from the build journal (per-task journals are separate). If the orchestrator cannot call TeamCreate, it must HITL before proceeding.
-
-1. Spawn N workers (= root task count, capped at 5): `Agent({ team_name: "canon-{slug}", name: "worker-{N}", subagent_type: "canon:engineer" })`.
-2. Worker prompt: fill `templates/worker-prompt.md` with `${TEAM_NAME}`, `${WORKER_NAME}`, `${PROJECT_DIR}`, `${WORKSPACE}`, `${SLUG}`, `${CANON_PARENT_WORKSPACE}` (workspace path minus `{projectDir}/.canon/workspaces/` prefix — needed for L4 hook authorization), `${BUILD_BASE_COMMIT}` (= base_commit from init_workspace, the git SHA the build worktree was created from).
-3. Workers create their own worktrees: path `{projectDir}/.canon/worktrees/{task_id}`, branch `canon-task/{task_id}`, branched from `${BUILD_BASE_COMMIT}` (not HEAD).
-4. Complex tasks: pass `model: "opus"`.
-
-#### Merge Protocol
-
-After `TaskList` is empty (all done):
-
-1. In alphabetical `task_id` order, merge each completed task branch into the build worktree: `git merge --no-ff canon-task/{task_id}` (run from `buildWorktreePath`).
-2. **Post-merge verification**: For each task, `git diff {base_commit} -- {file}` for every declared file. Empty diff = no committed changes = task failed → retry (one retry, then HITL).
-3. Conflict: `git merge --abort` auto-runs → HITL: `"Merge conflict in task {task_id} affecting files: {files}."`.
-4. Remove each task worktree (`git worktree remove {projectDir}/.canon/worktrees/{task_id}`) and delete its branch (`git branch -d canon-task/{task_id}`), then `TeamDelete({ team_name: "canon-{slug}" })`.
-
-**Key asymmetry**: merges target `buildWorktreePath`; cleanup uses `projectDir`.
-
-#### Post-DAG Tail
-
-Run sequentially after all tasks: review → context-sync → ship → learn. These are NOT DAG nodes.
-
-#### Failure Handling
-
-| Failure | Action |
-|---------|--------|
-| Task failure | Re-create via `TaskCreate`. One retry, then HITL. |
-| Merge conflict | HITL with conflict details. |
-| Team stalled | All remaining tasks blocked, none in-progress. HITL listing blocked tasks + unmet dependencies. |
-| Validation failure | Present errors, re-spawn architect. |
-| Race condition | Two workers claim same task. Discard later result. |
+Read `references/dag-execution-protocol.md` BEFORE executing any build where
+`${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, and before any
+TeamCreate/merge/cleanup operation.
 
 ### Resume Protocol
 
@@ -370,27 +329,14 @@ is missing → re-spawn → second-failure HITL) is unchanged.
 
 ### HITL Patterns <!-- last-updated: 2026-06-04 -->
 
-- **PM Triage**: (1) Refine: classify trivial/clear/fuzzy; produce `sharpened-request.md` for non-trivial tiers. (2) Scope check: 1-2 MCP calls → trivial → engineer, non-trivial → architect. Fully-specified requests skip the requirements conversation.
-- **Requirement coverage check**: After architect returns, surface any `descoped`/`partial`/missing requirements before runbook approval. Proceed silently if all are `covered` with owning steps.
-- **Coverage chain**: Architect task plans need `### Brief Coverage` table (runbook req → task element). Engineer logs need `#### Criteria Coverage` table (AC → implementation). Missing/empty tables are artifact defects. Disposition vocabulary: `covered`, `descoped`, `partial`. Engineer summaries must also include `### Canon Compliance` table listing applicable principles with `honored`/`violated`/`n/a` status, enabling reviewer Stage 3 cross-check.
-- **Plan approval HTML**: If `${WORKSPACE}/artifacts/design.html` exists, call `present_artifact({ type: "design", slug, html, data: {}, workspace })` before presenting the text runbook for approval.
-- **Architect approval**: Present plan for user approval. If design.html exists, call `present_artifact` first. Architect decides execution strategy.
-- **Review verdict**: Present results. If not CLEAN, spawn engineer fix mode. If `review.html` exists, call `present_artifact({ type: "review", ... })` alongside text verdict.
-- **Adversarial re-review (supervised tier only)**: After an initial CLEAN verdict from the reviewer, optionally run an adversarial re-review pass. This is triggered only when the autonomy tier is `supervised` (check board metadata `autonomy_tier`). The adversarial pass uses a different prompt angle than the original review.
-  1. **Trigger**: After reviewer returns CLEAN and the autonomy tier is `supervised`.
-  2. **Prompt**: Spawn a second reviewer with the same files but a different framing: "You are conducting an adversarial re-review. Assume there are bugs the initial review missed. Your job is to find what was overlooked, not to confirm what was found. Focus on: (a) edge cases in error handling, (b) implicit assumptions about input shapes, (c) concurrency or ordering bugs, (d) security boundary gaps, (e) contract mismatches between producer and consumer. Lower your evidentiary bar — flag anything suspicious even if you cannot prove it is a bug."
-  3. **Verdict handling**: Adversarial findings follow the same BLOCKING/WARNING/CLEAN verdict path as regular findings. If BLOCKING or WARNING, enter the standard review-fix iteration loop. If CLEAN (adversarial pass also finds nothing), proceed.
-  4. **Presentation**: Present adversarial findings to the user as: "Adversarial re-review found {N} additional findings. Review?" The user can acknowledge or request fixes.
-  5. **Skip conditions**: Skip for `autonomous` and `light-touch` tiers. Skip for documentation-only diffs. Skip if the user says "skip adversarial" or the build is a fix-type (no new contracts).
-- **Review-fix iteration loop**: Re-spawn reviewer after each fix to verify ALL flagged violations addressed. Loop until CLEAN or WARNING. Max 3 fix→review iterations, then HITL. When reviewer flags `SUMMARY CORRECTION REQUIRED` discrepancies, include them in fix spawn prompt and instruct engineer to correct `*-SUMMARY.md`. (L1-only enforcement — no automated check.)
-- **Fix-mode SUMMARY obligation**: When a fix agent introduces behavioral changes beyond the original brief (new types, new exports, removed catch blocks, new tests), it must update the implement-step `*-SUMMARY.md`'s "What Changed", "Files", "Coverage Notes", and "Canon Compliance" sections before returning FIXED. The reviewer's `SUMMARY CORRECTION REQUIRED` flag indicates this was missed.
-- **WARNING advisory close-out**: After BLOCKING items resolved (or initial WARNING verdict), present advisory items to user: (a) **fix** — another engineer cycle; (b) **acknowledge** — log as accepted; (c) **defer** — note as follow-up. Occurs between review and ship. Does not apply if verdict is CLEAN.
-- **Manual verification gate**: If tester report has `## Manual Verification Needed` section with rows, present via `AskUserQuestion` before ship: (a) **confirmed** → ship; (b) **not verified** → pause; (c) **defer** → ship with note. Absent or empty section: skip gate.
-- **Build-step checkpoint**: After design/implement/verify/review steps: "Step {N} of {total} complete. Continue, or resume fresh?" Skip when `CANON_SKIP_SESSION_CHECKPOINTS=1`. Does not apply to tail steps.
-- **Gate failure**: Present output, ask user how to proceed.
-- **Architect design conversation**: For genuine design tradeoffs, architect reports `HAS_QUESTIONS` with reasoning, stated lean, and request for user correction. Orchestrator surfaces to user; re-spawn with feedback. Style: think-out-loud, state a lean (not multiple choice). No round limit. Skip when only one reasonable approach exists.
-- **Incomplete-step surfacing (cliff detected)**: When `reconcile_workspace` returns `needs_recovery: true` (on resume or post-subagent), present the incomplete steps to the user: for each, the `step_id`, `agent_type`, its `missing_artifacts` / `partial_artifacts`, and (on the resume path) the harvested transcript path from `capture_transcript` when available. Offer user-driven options via `AskUserQuestion`: (a) **resume** — re-run that step (user-initiated, standard step dispatch); (b) **abandon** — mark the step skipped and continue; (c) **inspect** — show the partial artifact / harvested transcript path. **No automatic re-spawn is performed** — surfacing only. A `cliff_detected` telemetry event has already been recorded by `reconcile_workspace`. This pattern does NOT apply to normal completed-step artifact misses, which keep their existing re-spawn → second-failure HITL path.
-- **Merge conflict**: Present conflicting files, ask for resolution strategy.
+Full catalog in `references/hitl-patterns.md`. Covers every mandatory and advisory
+gate: plan approval, review verdict, adversarial re-review, WARNING close-out,
+manual verification, build-step checkpoint, Incomplete-step surfacing (cliff detected), merge conflict,
+gate failure, and architect design conversation.
+
+Read `references/hitl-patterns.md` BEFORE presenting any HITL checkpoint (plan
+approval, review verdict, WARNING close-out, manual verification, build-step
+checkpoint, Incomplete-step surfacing (cliff detected), merge conflict, gate failure, design conversation).
 
 ### Post-Step Effects
 
@@ -541,7 +487,7 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Project Structure <!-- last-updated: 2026-05-29 -->
+## Project Structure <!-- last-updated: 2026-06-05 -->
 
 ```
 canon/
@@ -562,7 +508,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (73 total: 7 rules, 35 strong-opinions, 31 conventions)
+├── principles/           # Built-in principles (74 total: 7 rules, 35 strong-opinions, 32 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/

@@ -2,8 +2,9 @@
 name: canon-orchestrator
 description: >-
   Orchestrator protocol reference for Canon agent-teams mode. Covers PM
-  requirements gate, architect dispatch, runbook execution, DAG dispatch,
-  HITL patterns, journal protocol, and completion checklist.
+  requirements gate, architect dispatch, runbook execution, journal protocol,
+  and completion checklist. DAG dispatch → references/dag-execution-protocol.md.
+  HITL patterns → references/hitl-patterns.md.
 model: sonnet
 color: white
 tools:
@@ -105,15 +106,9 @@ All code-writing agents (`engineer`, `tester`, `reviewer`, `scribe`, `shipper`) 
 
 ### DAG Execution
 
-When the architect produces `task-dag.yaml`, use it for parallel dispatch instead of sequential execution.
-
-1. Parse `${WORKSPACE}/plans/${slug}/task-dag.yaml`. Validate: no cycles, all `depends_on` refs resolve.
-2. `TeamCreate({ team_name: "canon-{slug}" })`.
-3. For each DAG node: `TaskCreate` with full agent enrichment payload (principles, file context, task plan content, working instructions). For tasks with `depends_on`: `TaskUpdate({ addBlockedBy: [...] })`.
-4. Spawn N workers (one per root task, capped at 5): `Agent({ team_name, subagent_type: "canon:engineer" })`.
-5. Workers claim tasks, create their own worktrees at `{projectDir}/.canon/worktrees/{task_id}` on branch `canon-wave/{task_id}`.
-6. After all tasks complete: merge each `canon-wave/{task_id}` branch in alphabetical order (`git merge --no-ff`), remove each worktree (`git worktree remove`) and delete its branch (`git branch -d canon-wave/{task_id}`), then `TeamDelete`. (The removed `mergeWaveResults` / `cleanupWorktrees` helpers are not available — run these as explicit git operations.)
-7. Execute remaining tail steps (review, context-sync, ship, learn) sequentially.
+Full protocol in `references/dag-execution-protocol.md`. Read it before executing
+any build where `task-dag.yaml` exists or before any TeamCreate/merge/cleanup
+operation.
 
 ### Post-Step Artifact Check <!-- last-updated: 2026-06-04 -->
 
@@ -140,31 +135,10 @@ Retry with exponential backoff: 4s → 8s → 16s (max 3 retries). After 3 failu
 
 ## Concern 4: HITL Patterns <!-- last-updated: 2026-06-04 -->
 
-Use `AskUserQuestion` for all closed-choice HITL gates.
-
-### Incomplete-step surfacing (cliff detected)
-
-When `reconcile_workspace` returns `needs_recovery: true` (on resume or post-subagent), present the incomplete steps to the user: for each, the `step_id`, `agent_type`, its `missing_artifacts` / `partial_artifacts`, and (on the resume path) the harvested transcript path from `capture_transcript` when available. Offer user-driven options via `AskUserQuestion`: (a) **resume** — re-run that step (user-initiated, standard step dispatch); (b) **abandon** — mark the step skipped and continue; (c) **inspect** — show the partial artifact / harvested transcript path. **No automatic re-spawn is performed** — surfacing only. A `cliff_detected` telemetry event has already been recorded by `reconcile_workspace`. This pattern does NOT apply to normal completed-step artifact misses, which keep their existing re-spawn → second-failure HITL path.
-
-### Review verdict (BLOCKING)
-
-Present violations. Options: Auto-fix (spawn engineer in fix mode) | Show details | Override. After fix agent completes, re-spawn reviewer to verify. Maximum 3 fix→review iterations before HITL escalation.
-
-### WARNING advisory close-out
-
-After BLOCKING items resolved (or initial verdict is WARNING), surface advisory items. Options: Fix | Acknowledge | Defer. Occurs before ship step.
-
-### Build-step checkpoint
-
-After each major step (design, implement, verify, review): "Step N of total complete. Continue?" Options: Continue | Pause. Skip when `CANON_SKIP_SESSION_CHECKPOINTS=1`. Not applied to tail steps.
-
-### PM Requirements Sharpening
-
-For non-trivial requests, the PM (you) applies the refine skill to sharpen the request. Classify the tier (trivial/clear/fuzzy), run the appropriate protocol (stress-test or diverge-then-converge), and produce `sharpened-request.md` for clear and fuzzy tiers. The refine skill (`skills/canon/skills/refine/SKILL.md`) is the authoritative source for the full protocol.
-
-### Architect design conversation
-
-For requests with genuine design tradeoffs, the architect thinks out loud and states a lean. Uses `EnterPlanMode` (headless: `HAS_QUESTIONS`). The architect checks in periodically and proceeds when the user confirms direction. The architect may also report `HAS_QUESTIONS` if it discovers requirements gaps during research that the PM conversation missed.
+Full catalog in `references/hitl-patterns.md`. Read it before presenting any HITL
+checkpoint (plan approval, review verdict, WARNING close-out, manual verification,
+build-step checkpoint, cliff surfacing, merge conflict, gate failure, design
+conversation). Use `AskUserQuestion` for all closed-choice HITL gates.
 
 ## Concern 5: Journal Protocol
 
