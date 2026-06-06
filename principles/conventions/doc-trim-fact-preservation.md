@@ -3,11 +3,6 @@ id: doc-trim-fact-preservation
 title: Doc-Trim Builds Require a Reviewer Fact-Preservation Audit
 severity: convention
 scope:
-  tags:
-    - reviewer
-    - doc-trim
-    - scribe
-    - context-sync
   file_patterns:
     - "CLAUDE.md"
     - "**/CLAUDE.md"
@@ -18,7 +13,7 @@ tags:
   - scribe
 ---
 
-When a doc-trim build deletes or relocates protocol or contract content from a `CLAUDE.md` file, the reviewer's Stage 2 (structural pass) MUST include a fact-preservation audit. The audit verifies that every deleted fact arrived at a declared destination — not merely that a pointer to a destination was written.
+When a doc-trim build deletes or relocates protocol or contract content from a `CLAUDE.md` file, the reviewer's Stage 2 (Principle-Informed Code Quality) MUST include a fact-preservation audit. The audit verifies that every deleted fact arrived at a declared destination — not merely that a pointer to a destination was written.
 
 **Trigger condition**: Any doc-trim that reduces a single `CLAUDE.md` file by more than 20% of its byte count, regardless of whether relocation pointers were written.
 
