@@ -256,8 +256,8 @@ Do NOT flag:
 
 For each such agent→tool requirement, verify both conditions mechanically:
 
-1. `grep 'mcp__canon__<tool_name>' agents/<agent>.md` returns a match in the `tools:` frontmatter block — not just in the instruction body.
-2. The tool is registered in the MCP server: `grep -r '<tool_name>' mcp-server/src/app/` (or `register-*.ts`) returns a non-empty result.
+1. `grep -n 'mcp__canon__<tool_name>' agents/<agent>.md` returns a match, AND the matching line number falls before the closing `---` of the frontmatter block (i.e., within the `tools:` list, not only in the instruction body). For example: `grep -n 'mcp__canon__<tool_name>' agents/<agent>.md | head -1` — confirm the line number is ≤ the line of the second `---` delimiter.
+2. The tool is registered in the MCP server: `grep -rn '"<tool_name>"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result. A match only in a doc comment or non-registration file does not satisfy this condition.
 
 **Outcome rules:**
 - If condition (1) fails: the agent physically cannot call the tool at runtime regardless of what the docs or tests say. Flag as **WARNING** citing `agent-instruction-tools-list-coherence`. Include the grep command and its empty output as evidence.
@@ -642,6 +642,7 @@ Based on the most severe finding across all six stages:
 - BLOCKING requires a concrete `rule`-severity violation — only principles with `severity: rule` can trigger it
 - A matched principle is not a violated principle — most will be honored
 - Check each violation's severity explicitly before writing the verdict
+- Stage 2 agent→tool reachability: a failed condition (2) (tool absent from MCP server registration) is BLOCKING regardless of principle severity — the runtime will error on every call
 - Stage 5 (acceptance criteria verification) failures are BLOCKING -- they enter the review-fix iteration loop. If unfixable (non-automatable AC), the user can override via HITL
 - Stage 6 (cross-requirement consistency) BLOCKING findings (type contradictions, security policy gaps) also enter the review-fix iteration loop
 
