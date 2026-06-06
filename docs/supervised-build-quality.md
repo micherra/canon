@@ -133,7 +133,7 @@ Canon's own documentation and artifacts accumulate drift. Eat your own dogfood.
 | ~~**Documentation staleness in drift reports**~~ | ~~Medium~~ | ~~Medium~~ | Shipped (PR #274). `doc_freshness` dimension in `get_drift_report`: `DocFreshness[]` per direction doc with `commits_since_sync` + decaying `ConfidenceAnnotation`, sorted by staleness descending. Scribe also gained elective `docs/*.md` factual-sync in Step 5b (prevention half, addresses `watch_ZZZ1`). |
 | **Repo-level `.canon/log.md`** | Tiny | Medium | Global timeline of flow completions, principle additions, and lint passes. Single append at `complete_flow`. Grep-parseable `## [YYYY-MM-DD] type | title` prefix. |
 | **Consolidate `write_*` → `write_artifact`** | Small | Low | 5 individual write tools still individually registered. One `write_artifact({ type, workspace, data })` reduces MCP surface. |
-| **Piece B — diff_stat denominator wiring** | Small | Medium | `evaluate-step.ts` computes `diff_stats` but `tryAppendAnalytics` never writes `diff_stat`/`total_files_changed` onto the persisted FlowRunEntry (0/340 rows have it). Wire at the finalize seam. Useful as a per-flow change-size denominator for any future metric; independent of the shelved taxonomy. See `docs/explore/automatic-craft-prerequisites-scoping.md`. |
+| ~~**Piece B — diff_stat denominator wiring**~~ | ~~Small~~ | ~~Medium~~ | Shipped (PR #327). `tryComputeDiffStats` wired into `tryAppendAnalytics` at finalize: `diff_stat` + `total_files_changed` populated on `FlowRunEntry` via single-rev worktree-state measurement (committed + staged + unstaged + untracked). |
 
 ### Thread 5: Flow Inputs & Exploration
 

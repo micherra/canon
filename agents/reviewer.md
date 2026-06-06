@@ -667,6 +667,24 @@ Run Stage 6 when the diff touches 2+ modules or files that share types, constant
 
 If no contradictions found, include the section header with: "No cross-requirement contradictions detected across {N} shared surfaces examined."
 
+### Scope-Parity Check for Precision/Scope Advisory Fixes
+
+**Trigger**: Run this sub-check when the diff (a) revises a verification mechanism in response to a precision/scope advisory from a prior review round, OR (b) introduces or modifies an embedded shell command (grep, git pathspec, awk) in `CLAUDE.md`, a convention body, or an agent protocol that enforces a declared scope.
+
+**Obligation**: For each such revision or embedded command, explicitly ask: "Does the revised check close the structural hole, or only eliminate the most obvious surface overmatch? Does the check's coverage match the scope it is declared to enforce?" (watch_KKKKK1; instances: PR #328, PR #330)
+
+**Concrete checks**:
+
+1. **Embedded shell commands in CLAUDE.md or convention bodies**: verify the command's pathspec/file arguments cover the same file set as the principle's or convention's `scope.file_patterns`. Run `git ls-files -- <command's pathspec>` and compare the result against `git ls-files -- <declared glob pattern>`. If the command's file set is a strict subset of the declared scope, the check is under-scoped.
+
+   Example: a post-scribe guard runs `git diff -- CLAUDE.md` but the enforced convention declares `scope.file_patterns: [CLAUDE.md, **/CLAUDE.md]`. Running `git ls-files -- CLAUDE.md` returns only the root file; `git ls-files -- '**/CLAUDE.md'` returns many nested files (returned 17 at the time of PR #330). The command covers 1 of many — scope mismatch.
+
+2. **Grep-based structural checks**: confirm the grep scope is bounded to the exact structural unit being asserted (a specific YAML field, a specific file set, a specific code block), not merely a narrower string in a broader context. A grep that matches any line before a delimiter (e.g., before the closing `---` of frontmatter) rather than lines within the specific target field is still over-scoped even if it is narrower than the original bare-string form.
+
+**Severity**: A coverage/scope mismatch is a WARNING finding at minimum. It is not an advisory pass. If the mismatch means the declared safety property is structurally unenforced (e.g., a guard that only covers a fraction of its declared file set leaves the uncovered files unguarded), escalate to WARNING and note the uncovered set.
+
+**Skip condition**: Skip this sub-check when the diff contains no revised advisory fixes and no embedded shell commands in protocol or convention files.
+
 ## Verdict
 
 Based on the most severe finding across all six stages:
@@ -674,7 +692,7 @@ Based on the most severe finding across all six stages:
 | Verdict | Condition | Effect |
 |---------|-----------|--------|
 | **BLOCKING** | Any `rule`-severity violation | Build must stop |
-| **WARNING** | `strong-opinion` violations, Stage 2/4 WARNINGs, no `rule` violations | Build proceeds, address violations |
+| **WARNING** | `strong-opinion` violations, Stage 2/4 WARNINGs, Stage 6 scope-parity WARNINGs, no `rule` violations | Build proceeds, address violations |
 | **CLEAN** | No violations, or only `convention`-level | Build proceeds |
 
 **Before assigning the verdict:**
@@ -684,6 +702,7 @@ Based on the most severe finding across all six stages:
 - Stage 2 agent→tool reachability: a failed condition (2) (tool absent from MCP server registration) is BLOCKING regardless of principle severity — the runtime will error on every call
 - Stage 5 (acceptance criteria verification) failures are BLOCKING -- they enter the review-fix iteration loop. If unfixable (non-automatable AC), the user can override via HITL
 - Stage 6 (cross-requirement consistency) BLOCKING findings (type contradictions, security policy gaps) also enter the review-fix iteration loop
+- Stage 6 scope-parity WARNING findings (coverage/scope mismatches in advisory fixes) produce at least a WARNING verdict — they do NOT enter the review-fix iteration loop, but the build must acknowledge or address the finding
 
 Include `## Canon Review — Verdict: {BLOCKING|WARNING|CLEAN}` at the top of the report.
 
