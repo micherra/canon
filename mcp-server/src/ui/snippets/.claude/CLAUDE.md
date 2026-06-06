@@ -1,7 +1,7 @@
 # UI Snippets — Agent Guidelines
 
 <!-- Managed by Canon. Manual edits are preserved. -->
-<!-- last-updated: 2026-06-04 -->
+<!-- last-updated: 2026-06-06 -->
 
 ## Purpose
 
@@ -38,7 +38,7 @@ HTML/CSS/JS component recipes emitted verbatim into renderer-generated artifacts
 
 **`renderForceGraph(canvasEl, { nodes, edges }, options)`** (`force-graph.html`) — canonical force-directed layout engine. Options: `height`, `iterations`, `nodeFill(node)` (required), `edgeStyle: 'arrow'|'curve'`, `showViolationRing`, `drawLabels`, `onNodeClick(node)`, `onHover`; force constants override known-good defaults (K_REPEL=5000, K_SPRING=0.01, REST_LENGTH=50, K_GRAVITY=0.3, DAMPING=0.85, MAX_FORCE=10). Returns `{ redraw(highlightId) }`. Runs force-sim + normalize-to-fit + label de-collision + draw.
 
-**`drawFileGraph`** (`file-detail-card.html`) — deterministic columnar layout for single-file import/export neighborhoods; NOT force-directed; different data contract from `renderForceGraph`; do NOT substitute one for the other.
+**`drawFileGraph`** (`file-detail-card.html`) — deterministic columnar layout for single-file import/export neighborhoods; NOT force-directed; different data contract from `renderForceGraph`; do NOT substitute one for the other. Leaf files (0 imports AND 0 dependents) trigger an early return: `fdc-graph-empty` class added to the `.fdc-graph-section` via null-safe `closest()`, canvas/legend hidden, `.fdc-graph-empty-note` shown; both review and file-context consumers inherit this automatically.
 
 ## Invariants
 
@@ -48,4 +48,5 @@ HTML/CSS/JS component recipes emitted verbatim into renderer-generated artifacts
 - **Token comments on all Canvas hex literals**: every `#RRGGBB` in executable Canvas code carries a `/* --token */` comment; no new theme colors without a token.
 - **`file-detail-card.html` is deliberately separate**: the columnar `drawFileGraph` engine in `file-detail-card.html` is a different algorithm with a different data contract; it serves file-context and review per-file cards; do NOT unify it with `force-graph.html`.
 - **Docblock format**: every snippet must have a 5-tag docblock (`@snippet`, `@description`, `@data`, `@tokens`, `@usage`) — enforced by `agent-composition.test.ts`.
+- **PARITY sentinels** (`DESIGN-SYSTEM.md` Section E): `<!-- PARITY:name:BEGIN/END -->` HTML-comment sentinels bracket each canonical JS function in Section E; matching `// PARITY:name:BEGIN/END` line-comment sentinels appear in `markdown-to-html.test.ts`; `section-e-parity.test.ts` extracts both copies, normalizes whitespace/type annotations, and asserts equality — drift causes test failure. Do NOT remove or reorder sentinels; add sentinel pairs when adding a new canonical function to Section E.
 - **No inline renderer helpers**: `escapeHtml`, `markdownToHtml`, and `inlineFormat` must never be redefined inline in a renderer template — they live only in `DESIGN-SYSTEM.md` Section E. See "Canonical Renderer Helpers" above.
