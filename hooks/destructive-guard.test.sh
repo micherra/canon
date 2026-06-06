@@ -781,6 +781,109 @@ run_test 'git -C $DIR status passes (variable is option value, resolved sub=stat
   0 "$(make_multiline_input 'git -C $DIR status')" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# P1 fix: string-executing wrappers (eval, bash -c, sh -c, zsh -c, …)
+#
+# Segments where git appears ONLY inside a quoted string argument to a
+# string-executing wrapper must block (exit 2) — the quoted string IS
+# executable code and the guard must recurse into it.
+#
+# Pass controls: non-executing wrappers (echo, printf) and plain read-only
+# git commands must still pass (exit 0).
+# -----------------------------------------------------------------------
+echo ""
+echo "-- P1 fix: string-executing wrappers (should block, exit 2) --"
+
+# Core AC cases (verbatim from the reviewer finding)
+_EVAL="eval"
+run_test "${_EVAL} \"git reset --hard\" blocks" \
+  2 "$(make_multiline_input 'eval "git reset --hard"')" "$NON_WT_PWD"
+
+_BASH_C="bash -c"
+run_test "${_BASH_C} \"git reset --hard\" blocks" \
+  2 "$(make_multiline_input 'bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+_SH_C="sh -c"
+run_test "${_SH_C} \"git clean -fd\" blocks" \
+  2 "$(make_multiline_input 'sh -c "git clean -fd"')" "$NON_WT_PWD"
+
+# Additional shell wrappers
+_ZSH_C="zsh -c"
+run_test "${_ZSH_C} \"git reset --hard\" blocks" \
+  2 "$(make_multiline_input 'zsh -c "git reset --hard"')" "$NON_WT_PWD"
+
+_KSH_C="ksh -c"
+run_test "${_KSH_C} \"git clean -f\" blocks" \
+  2 "$(make_multiline_input 'ksh -c "git clean -f"')" "$NON_WT_PWD"
+
+# eval with single-quoted string
+run_test "${_EVAL} 'git reset --hard' (single-quoted) blocks" \
+  2 "$(make_multiline_input "eval 'git reset --hard'")" "$NON_WT_PWD"
+
+# eval with multiple tokens (eval git clean -fd — no outer quotes, all tokens join)
+run_test "${_EVAL} git clean -fd blocks (unquoted tokens)" \
+  2 "$(make_multiline_input 'eval git clean -fd')" "$NON_WT_PWD"
+
+# Checkout via wrapper
+run_test "${_BASH_C} \"git checkout -- .\" blocks" \
+  2 "$(make_multiline_input 'bash -c "git checkout -- ."')" "$NON_WT_PWD"
+
+# Branch -D via wrapper
+run_test "${_SH_C} \"git branch -D feature/x\" blocks" \
+  2 "$(make_multiline_input 'sh -c "git branch -D feature/x"')" "$NON_WT_PWD"
+
+# Compound inner command: bash -c "git status && git clean -fd"
+_INNER_CHAIN="bash -c \"git status && git clean -fd\""
+run_test "${_BASH_C} with inner && chain blocks (inner has destructive segment)" \
+  2 "$(make_multiline_input 'bash -c "git status && git clean -fd"')" "$NON_WT_PWD"
+
+# Prefixed wrappers (transparent prefixes before the wrapper)
+run_test "command eval \"git reset --hard\" blocks" \
+  2 "$(make_multiline_input 'command eval "git reset --hard"')" "$NON_WT_PWD"
+
+run_test "nohup bash -c \"git reset --hard\" blocks" \
+  2 "$(make_multiline_input 'nohup bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+run_test "timeout 5 bash -c \"git clean -fd\" blocks" \
+  2 "$(make_multiline_input 'timeout 5 bash -c "git clean -fd"')" "$NON_WT_PWD"
+
+run_test "env X=1 bash -c \"git reset --hard\" blocks" \
+  2 "$(make_multiline_input 'env X=1 bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+run_test "nice bash -c \"git clean -f\" blocks" \
+  2 "$(make_multiline_input 'nice bash -c "git clean -f"')" "$NON_WT_PWD"
+
+run_test "nice -n 5 bash -c \"git reset --hard\" blocks" \
+  2 "$(make_multiline_input 'nice -n 5 bash -c "git reset --hard"')" "$NON_WT_PWD"
+
+# Nested wrapper: bash -c 'eval "git reset --hard"'
+run_test "${_BASH_C} 'eval \"git reset --hard\"' (nested wrappers) blocks" \
+  2 "$(make_multiline_input "bash -c 'eval \"git reset --hard\"'")" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 fix: non-executing wrappers and read-only git (should pass, exit 0) --"
+
+# echo and printf are NOT string-executing wrappers — must pass
+run_test "echo \"git reset --hard\" passes (echo is not a string-executor)" \
+  0 "$(make_multiline_input 'echo "git reset --hard"')" "$NON_WT_PWD"
+
+run_test "printf \"git clean -fd\" passes (printf is not a string-executor)" \
+  0 "$(make_multiline_input 'printf "git clean -fd"')" "$NON_WT_PWD"
+
+# Shell wrapper with only a safe inner command — must pass
+run_test "${_BASH_C} \"git status\" passes (safe inner command)" \
+  0 "$(make_multiline_input 'bash -c "git status"')" "$NON_WT_PWD"
+
+run_test "${_SH_C} \"git log --oneline\" passes (safe inner command)" \
+  0 "$(make_multiline_input 'sh -c "git log --oneline"')" "$NON_WT_PWD"
+
+run_test "${_EVAL} \"git status\" passes (safe inner command)" \
+  0 "$(make_multiline_input 'eval "git status"')" "$NON_WT_PWD"
+
+# bash invoked as a script (no -c), not as a string executor
+run_test "bash script.sh (no -c) passes (not string-exec mode)" \
+  0 "$(make_multiline_input 'bash script.sh')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""

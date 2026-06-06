@@ -417,6 +417,107 @@ assert_eq "git -C /some/path status still resolves (shape valid)" \
   "$(canon_git_subcommand 'git -C /some/path status')"
 
 # ---------------------------------------------------------------------------
+# canon_unwrap_string_exec_arg — P1 fix: string-executing wrapper detector
+# ---------------------------------------------------------------------------
+printf '\n=== canon_unwrap_string_exec_arg ===\n'
+
+# Core cases: eval
+assert_eq 'eval "git reset --hard" extracts inner command' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'eval "git reset --hard"')"
+
+assert_eq 'eval git clean -fd (unquoted) extracts as joined tokens' \
+  "git clean -fd" \
+  "$(canon_unwrap_string_exec_arg 'eval git clean -fd')"
+
+assert_eq "eval 'git clean -fd' (single-quoted) extracts inner command" \
+  "git clean -fd" \
+  "$(canon_unwrap_string_exec_arg "eval 'git clean -fd'")"
+
+# Core cases: shell wrappers with -c
+assert_eq 'bash -c "git reset --hard" extracts inner command' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'bash -c "git reset --hard"')"
+
+assert_eq 'sh -c "git clean -fd" extracts inner command' \
+  "git clean -fd" \
+  "$(canon_unwrap_string_exec_arg 'sh -c "git clean -fd"')"
+
+assert_eq 'zsh -c "git reset --hard" extracts inner command' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'zsh -c "git reset --hard"')"
+
+assert_eq 'ksh -c "git clean -f" extracts inner command' \
+  "git clean -f" \
+  "$(canon_unwrap_string_exec_arg 'ksh -c "git clean -f"')"
+
+# Transparent prefixes
+assert_eq 'command eval "git reset --hard" extracts inner command' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'command eval "git reset --hard"')"
+
+assert_eq 'nohup bash -c "git clean -fd" extracts inner command' \
+  "git clean -fd" \
+  "$(canon_unwrap_string_exec_arg 'nohup bash -c "git clean -fd"')"
+
+assert_eq 'timeout 5 bash -c "git reset --hard" extracts inner command' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'timeout 5 bash -c "git reset --hard"')"
+
+assert_eq 'env X=1 bash -c "git clean -fd" extracts inner command' \
+  "git clean -fd" \
+  "$(canon_unwrap_string_exec_arg 'env X=1 bash -c "git clean -fd"')"
+
+assert_eq 'env X=1 Y=2 sh -c "git reset --hard" extracts inner command' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'env X=1 Y=2 sh -c "git reset --hard"')"
+
+assert_eq 'nice bash -c "git reset --hard" extracts inner command' \
+  "git reset --hard" \
+  "$(canon_unwrap_string_exec_arg 'nice bash -c "git reset --hard"')"
+
+assert_eq 'nice -n 5 bash -c "git clean -f" extracts inner command' \
+  "git clean -f" \
+  "$(canon_unwrap_string_exec_arg 'nice -n 5 bash -c "git clean -f"')"
+
+# Non-executing wrappers — must return empty (return 1)
+assert_eq 'echo "git reset --hard" returns empty (not a string executor)' \
+  "" \
+  "$(canon_unwrap_string_exec_arg 'echo "git reset --hard"' 2>/dev/null || true)"
+
+assert_eq 'printf "git clean -fd" returns empty (not a string executor)' \
+  "" \
+  "$(canon_unwrap_string_exec_arg 'printf "git clean -fd"' 2>/dev/null || true)"
+
+assert_eq 'git status returns empty (not a wrapper)' \
+  "" \
+  "$(canon_unwrap_string_exec_arg 'git status' 2>/dev/null || true)"
+
+# bash without -c (script mode) — must return empty
+assert_eq 'bash script.sh returns empty (not -c mode)' \
+  "" \
+  "$(canon_unwrap_string_exec_arg 'bash script.sh' 2>/dev/null || true)"
+
+# eval with no argument — must return empty
+assert_eq 'eval with no argument returns empty' \
+  "" \
+  "$(canon_unwrap_string_exec_arg 'eval' 2>/dev/null || true)"
+
+# bash -c with no argument — must return empty
+assert_eq 'bash -c with no string argument returns empty' \
+  "" \
+  "$(canon_unwrap_string_exec_arg 'bash -c' 2>/dev/null || true)"
+
+# Safe inner commands — extracts correctly (caller decides if destructive)
+assert_eq 'bash -c "git status" extracts git status' \
+  "git status" \
+  "$(canon_unwrap_string_exec_arg 'bash -c "git status"')"
+
+assert_eq 'eval "git log --oneline" extracts git log --oneline' \
+  "git log --oneline" \
+  "$(canon_unwrap_string_exec_arg 'eval "git log --oneline"')"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 TOTAL=$(( PASS + FAIL ))

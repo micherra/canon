@@ -12,6 +12,18 @@
 #   4. Segment on && || ; | to evaluate each segment independently.
 #   5. For each segment, use canon_has_git_token (tokenizer-authoritative)
 #      to check for a standalone "git" token — skips segments without one.
+#   5a. String-executing-wrapper expansion: when a segment has no standalone
+#      "git" token but its effective command is a string-executing wrapper
+#      (eval, bash -c, sh -c, zsh -c, ksh -c — and their prefixed forms via
+#      command/nohup/env/timeout/nice), canon_unwrap_string_exec_arg extracts
+#      the inner string argument, re-segments it on && || ; |, and appends
+#      the resulting sub-segments to the processing queue. This is repeated
+#      recursively up to CANON_WRAPPER_MAX_DEPTH (3) levels deep, handling
+#      nested forms like bash -c 'eval "git reset --hard"'. Wrappers that
+#      are NOT in the recognised set are treated as non-executing — the
+#      segment is skipped (echo "git reset --hard" passes correctly). If
+#      extraction returns a non-empty string but expansion is ambiguous,
+#      the guard fails closed for that sub-segment.
 #   6. Resolve the git subcommand of each segment via canon_git_subcommand,
 #      which uses shape validation: subcommand tokens containing $ { } ( )
 #      cannot be resolved → parse-ambiguity guard blocks fail-closed.
@@ -162,30 +174,68 @@ git_subcommand_args() {
 SEGMENTS=$(printf '%s' "$COMMAND" | sed -E 's/(&&|\|\||;|\|)/\n/g')
 RAW_SEGMENTS=$(printf '%s' "$RAW_COMMAND" | sed -E 's/(&&|\|\||;|\|)/\n/g')
 
-# Pair each quote-deleted segment with its corresponding raw segment by line
-# number. Both streams have the same number of lines because they were built
-# by the same sed substitution applied to strings that differ only in quote
-# characters (which cannot introduce or remove separator characters).
-seg_idx=0
-while IFS= read -r segment; do
-  seg_idx=$(( seg_idx + 1 ))
-  raw_segment=$(printf '%s' "$RAW_SEGMENTS" | sed -n "${seg_idx}p" || true) # DOCUMENTED FAIL-OPEN -- missing raw segment falls back to quote-deleted segment for subcommand resolution
-  [[ -z "$raw_segment" ]] && raw_segment="$segment"
+# Maximum recursion depth for string-executing wrapper expansion.
+# Handles nesting like: bash -c 'eval "git reset --hard"' (depth 2).
+# Cap at 3 to prevent pathological inputs from looping.
+CANON_WRAPPER_MAX_DEPTH=3
 
-  # Trim leading/trailing whitespace.
-  segment=$(printf '%s' "$segment" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-  raw_segment=$(printf '%s' "$raw_segment" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-  [[ -z "$segment" ]] && continue
+# ---------------------------------------------------------------------------
+# process_segment <segment> <raw_segment> <depth>
+#
+# Evaluates a single segment pair for destructive git operations.
+# Exits the script (exit 2) if a destructive op is found.
+# Returns 0 otherwise (caller continues to the next segment).
+#
+# <depth> tracks how many times we've expanded a string-executing wrapper.
+# When depth reaches CANON_WRAPPER_MAX_DEPTH and a wrapper is encountered,
+# the guard fails closed (exit 2) rather than skipping — better to over-block
+# than allow a deeply nested destructive op.
+# ---------------------------------------------------------------------------
+process_segment() {
+  local segment="$1"
+  local raw_segment="$2"
+  local depth="$3"
 
   # Does this segment contain a standalone "git" token (quote-aware)?
   # canon_has_git_token tokenizes the RAW segment so quoted strings like
   # 'echo "git worktree remove exit: $?"' correctly return no git token.
   if ! canon_has_git_token "$raw_segment"; then
-    continue
+    # No standalone git token. Check whether this segment is a
+    # string-executing wrapper whose quoted argument may contain git commands.
+    # canon_unwrap_string_exec_arg extracts the inner string from recognised
+    # wrappers (eval, bash -c, sh -c, zsh -c, ksh -c, and their prefixed
+    # forms) and returns 1 for all other commands (echo, printf, etc.).
+    local inner_cmd
+    inner_cmd=$(canon_unwrap_string_exec_arg "$raw_segment" 2>/dev/null) || true # DOCUMENTED FAIL-OPEN -- returns empty for non-wrapper segments; guard skips them below
+    if [[ -z "$inner_cmd" ]]; then
+      # Not a string-executing wrapper, or extraction failed — safe to skip.
+      return 0
+    fi
+
+    # Depth guard: cap recursion to prevent pathological nesting.
+    if [[ "$depth" -ge "$CANON_WRAPPER_MAX_DEPTH" ]]; then
+      echo "CANON: string-executing wrapper nesting exceeds depth limit — blocking fail-closed." >&2
+      exit 2
+    fi
+
+    # Expand the inner string: re-segment on && || ; | and recurse.
+    local inner_segs
+    inner_segs=$(printf '%s' "$inner_cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+    local sub_depth=$(( depth + 1 ))
+    while IFS= read -r inner_seg; do
+      # Trim whitespace.
+      inner_seg=$(printf '%s' "$inner_seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+      [[ -z "$inner_seg" ]] && continue
+      # For expanded inner segments, raw = the segment itself (already
+      # unquoted by canon_unwrap_string_exec_arg / canon_tokenize).
+      process_segment "$inner_seg" "$inner_seg" "$sub_depth"
+    done <<< "$inner_segs"
+    return 0
   fi
 
   # Resolve subcommand from the RAW segment (pre-quote-deletion) so that
   # quoted multi-word option values (e.g. -C "my dir") stay as one token.
+  local sub
   sub=$(canon_git_subcommand "$raw_segment" || true) # DOCUMENTED FAIL-OPEN -- empty sub on a git segment triggers the parse-ambiguity block below
 
   # Fail-closed parse guard: a git invocation whose subcommand cannot be
@@ -195,13 +245,14 @@ while IFS= read -r segment; do
     exit 2
   fi
 
+  local args
   args=$(git_subcommand_args "$segment" "$sub")
 
   case "$sub" in
     reset)
       if printf '%s' "$args" | grep -qE '(^|[[:space:]])--hard([[:space:]]|$)'; then
         if is_canon_worktree_command "$segment"; then
-          continue
+          return 0
         fi
         cat <<EOF >&2
 CANON: Destructive git operation detected — git reset --hard. This discards all uncommitted changes and cannot be undone. Ensure you have committed or stashed any work you want to keep.
@@ -214,7 +265,7 @@ EOF
       if printf '%s' "$args" | grep -qE '(^|[[:space:]])-[a-zA-Z]*f' \
          || printf '%s' "$args" | grep -qE '(^|[[:space:]])--force([[:space:]]|$)'; then
         if is_canon_worktree_command "$segment"; then
-          continue
+          return 0
         fi
         cat <<EOF >&2
 CANON: Destructive git operation detected — git clean -f. This permanently deletes untracked files. Ensure no important untracked files will be lost.
@@ -228,7 +279,7 @@ EOF
       # branch switch (git checkout <branch>) has no "--" and is not blocked.
       if printf '%s' "$args" | grep -qE '(^|[[:space:]])--([[:space:]]|$)'; then
         if is_canon_worktree_command "$segment"; then
-          continue
+          return 0
         fi
         cat <<EOF >&2
 CANON: Destructive git operation detected — git checkout -- . This discards all unstaged changes in the working tree and cannot be undone.
@@ -248,9 +299,11 @@ EOF
         # can collapse adjacent quotes into runs of spaces, which tr would turn
         # into empty operand lines; an empty line must not be treated as a
         # non-Canon branch (that would falsely block a valid canon/* delete).
+        local branch_args
         branch_args=$(printf '%s' "$args" | sed 's/^.*-D[[:space:]]*//' | tr -d '"'"'" | tr ' \t' '\n' | grep -vE '^(-|$)' || true) # DOCUMENTED FAIL-OPEN -- empty operand list falls through to the block below
         if [[ -n "$branch_args" ]]; then
-          all_canon=true
+          local all_canon=true
+          local branch
           while IFS= read -r branch; do
             if ! printf '%s' "$branch" | grep -qE '^canon(-wave|-task)?/'; then
               all_canon=false
@@ -258,7 +311,7 @@ EOF
             fi
           done <<< "$branch_args"
           if [[ "$all_canon" == "true" ]]; then
-            continue
+            return 0
           fi
         fi
         cat <<EOF >&2
@@ -268,6 +321,24 @@ EOF
       fi
       ;;
   esac
+}
+
+# Pair each quote-deleted segment with its corresponding raw segment by line
+# number. Both streams have the same number of lines because they were built
+# by the same sed substitution applied to strings that differ only in quote
+# characters (which cannot introduce or remove separator characters).
+seg_idx=0
+while IFS= read -r segment; do
+  seg_idx=$(( seg_idx + 1 ))
+  raw_segment=$(printf '%s' "$RAW_SEGMENTS" | sed -n "${seg_idx}p" || true) # DOCUMENTED FAIL-OPEN -- missing raw segment falls back to quote-deleted segment for subcommand resolution
+  [[ -z "$raw_segment" ]] && raw_segment="$segment"
+
+  # Trim leading/trailing whitespace.
+  segment=$(printf '%s' "$segment" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  raw_segment=$(printf '%s' "$raw_segment" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  [[ -z "$segment" ]] && continue
+
+  process_segment "$segment" "$raw_segment" 0
 done <<< "$SEGMENTS"
 
 # No segment was a destructive command — allow

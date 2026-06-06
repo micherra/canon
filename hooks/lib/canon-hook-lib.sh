@@ -207,6 +207,170 @@ canon_has_git_token() {
 }
 
 # ---------------------------------------------------------------------------
+# canon_unwrap_string_exec_arg <raw_segment>
+# ---------------------------------------------------------------------------
+# String-executing-wrapper detector. When a segment's effective command is a
+# wrapper that executes its string argument as shell code (eval, bash -c,
+# sh -c, zsh -c, ksh -c), this function extracts that string argument and
+# prints it on stdout, then returns 0.  Returns 1 (prints nothing) when the
+# segment is NOT a string-executing wrapper form or when extraction fails.
+#
+# Wrapper forms recognised:
+#
+#   SHELL_WRAPPERS (take a string argument after -c):
+#     bash, sh, zsh, ksh
+#   EVAL_WRAPPER:
+#     eval  (all remaining tokens form the command)
+#
+# Transparent prefixes that may precede the wrapper:
+#   command          — always transparent (single token, no args consumed)
+#   nohup            — always transparent
+#   env              — transparent; skips tokens of the form NAME=VALUE
+#   timeout          — transparent; skips the next bare (non-'-') token (time)
+#   nice             — transparent; skips -n <value> or nothing
+#
+# Prefixed forms that therefore work:
+#   command eval "git ..."  →  recurse on "git ..."
+#   nohup bash -c "..."     →  recurse on inner command
+#   timeout 5 bash -c "..."  →  recurse on inner command
+#   env X=1 bash -c "..."   →  recurse on inner command
+#
+# For deeply nested strings (bash -c 'eval "git ..."'), the caller applies
+# this function recursively (depth is capped externally at 3).
+#
+# Uses canon_tokenize for quote-aware tokenisation so that the string argument
+# is returned with quote characters removed (the same representation the shell
+# would use after one level of quote-removal).
+#
+# This is a new helper added to close the fail-open bypass for string-executing
+# wrappers. See notes in destructive-guard.sh.
+
+canon_unwrap_string_exec_arg() {
+  local segment="$1"
+
+  # Tokenize the segment (quote-aware; quoted spans stripped).
+  local -a toks
+  local tok_count=0
+  while IFS= read -r t; do
+    toks[tok_count]="$t"
+    tok_count=$(( tok_count + 1 ))
+  done < <(canon_tokenize "$segment")
+
+  if [[ $tok_count -eq 0 ]]; then
+    return 1
+  fi
+
+  # Walk tokens, skipping transparent prefixes, to find the effective command.
+  local idx=0
+
+  while [[ $idx -lt $tok_count ]]; do
+    local tok="${toks[$idx]}"
+
+    case "$tok" in
+      command|nohup)
+        # Transparent: skip this token, continue to the next
+        idx=$(( idx + 1 ))
+        continue
+        ;;
+      env)
+        # Skip 'env' itself and any following NAME=VALUE tokens
+        idx=$(( idx + 1 ))
+        while [[ $idx -lt $tok_count ]]; do
+          local maybe_assign="${toks[$idx]}"
+          if [[ "$maybe_assign" == *=* ]]; then
+            idx=$(( idx + 1 ))
+          else
+            break
+          fi
+        done
+        continue
+        ;;
+      timeout)
+        # Skip 'timeout', then skip the time argument (a bare non-'-' token)
+        idx=$(( idx + 1 ))
+        if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" != -* ]]; then
+          idx=$(( idx + 1 ))
+        fi
+        continue
+        ;;
+      nice)
+        # Skip 'nice', then optionally skip '-n <value>'
+        idx=$(( idx + 1 ))
+        if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" == "-n" ]]; then
+          idx=$(( idx + 1 )) # skip -n
+          if [[ $idx -lt $tok_count ]] && [[ "${toks[$idx]}" != -* ]]; then
+            idx=$(( idx + 1 )) # skip value
+          fi
+        fi
+        continue
+        ;;
+      eval)
+        # eval: the rest of the tokens (joined by spaces) form the command.
+        # An eval with no argument is a no-op — return 1.
+        local rest_idx=$(( idx + 1 ))
+        if [[ $rest_idx -ge $tok_count ]]; then
+          return 1
+        fi
+        # Rejoin remaining tokens
+        local cmd_str="${toks[$rest_idx]}"
+        local j=$(( rest_idx + 1 ))
+        while [[ $j -lt $tok_count ]]; do
+          cmd_str="$cmd_str ${toks[$j]}"
+          j=$(( j + 1 ))
+        done
+        printf '%s' "$cmd_str"
+        return 0
+        ;;
+      bash|sh|zsh|ksh)
+        # Shell wrappers: must be followed (eventually) by -c <string>.
+        # Skip any intervening flags that don't consume an argument,
+        # and skip --. When we see -c, the NEXT token is the command string.
+        idx=$(( idx + 1 ))
+        while [[ $idx -lt $tok_count ]]; do
+          local flag="${toks[$idx]}"
+          case "$flag" in
+            -c)
+              # Next token is the command string
+              local cmd_idx=$(( idx + 1 ))
+              if [[ $cmd_idx -lt $tok_count ]]; then
+                printf '%s' "${toks[$cmd_idx]}"
+                return 0
+              else
+                return 1 # -c with no argument
+              fi
+              ;;
+            --)
+              # End of options; no -c found before --
+              return 1
+              ;;
+            -*)
+              # Some other flag: skip it (self-contained, no value consumed)
+              # This is conservative — if a flag consumed a value, we'd skip
+              # the value as if it were a new flag. That's acceptable here:
+              # misclassifying means we return 1 (no command extracted), which
+              # causes the guard to fail-CLOSED for an ambiguous wrapper form.
+              idx=$(( idx + 1 ))
+              ;;
+            *)
+              # Bare non-'-' token: this is a script file (not -c mode), stop.
+              return 1
+              ;;
+          esac
+        done
+        # Fell through without finding -c
+        return 1
+        ;;
+      *)
+        # Not a recognised wrapper or prefix — stop walking
+        return 1
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # canon_extract_command <json>
 # ---------------------------------------------------------------------------
 # Extracts the value of the "command" JSON key from a Claude Code hook payload.
