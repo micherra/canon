@@ -30,7 +30,7 @@ HTML/CSS/JS component recipes emitted verbatim into renderer-generated artifacts
 
 - Renderer templates reference Section E; they never re-inline these function definitions.
 - `escapeHtml` — null-safe `String(s ?? "")` form + 5-replace chain.
-- `markdownToHtml` — behavior-preserving union: code fences, h1–h4, ul/ol, bold/italic (`**`, `__`), code-span protection tokens (`\x00CODE{n}\x00`), `file:line` auto-linking, block-grouped paragraph wrapping. Calls `escapeHtml` internally (escape-first) — do NOT pre-escape input.
+- `markdownToHtml` — behavior-preserving union: code fences, h1–h4, ul/ol, bold/italic (`**`, `__`), code-span protection tokens (`\x00CODE{n}\x00`), `file:line` auto-linking, GFM tables (pipe-delimited rows → `<table class="requirement-table">` in `.table-scroll-wrapper`; header-only tables render a muted "None" empty-state row), block-grouped paragraph wrapping. Calls `escapeHtml` internally (escape-first) — do NOT pre-escape input.
 - `inlineFormat` token ordering (must not reorder): escape → tokenize code spans → tokenize `file:line` refs → bold → italic → restore tokens. Both code spans and `file:line` refs are replaced with `\x00CODEn\x00` placeholder tokens before bold/italic runs, so underscored path segments (e.g., `src/foo_bar.ts:42`) are never matched by the `_..._` italic pass.
 - The runtime `escHtml` inside `renderer-codebase-graph.md`'s Canvas force-sim IIFE is a separate, deliberate escaper scoped to that IIFE; it is NOT covered by this convention.
 

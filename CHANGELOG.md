@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.0](https://github.com/micherra/canon/compare/v2.6.0...v2.7.0) (2026-06-06)
+
+
+### Features
+
+* **diagnostics:** wiki-lint scope_layers check + retroactive invalid-layer fixes (sug_VVVVV1) ([#321](https://github.com/micherra/canon/issues/321)) ([891e1af](https://github.com/micherra/canon/commit/891e1af51ad669a4d65a47df4702388d5934d4f9))
+* **janitor:** detect and remove empty workspace husk directories ([#325](https://github.com/micherra/canon/issues/325)) ([cbec8f6](https://github.com/micherra/canon/commit/cbec8f63281d8905d911584c5a0866744a4c0b09))
+* **learner:** promote sug_DDDDD1 — doc-trim-fact-preservation convention + post-scribe scope guard ([#330](https://github.com/micherra/canon/issues/330)) ([ee32149](https://github.com/micherra/canon/commit/ee321493a1f971179fec22685a6b1e4a26740ba2))
+* **learner:** promote sug_VVVV1 — agent→tool reachability gate (reviewer Stage 2 + wiring enrichment) ([#328](https://github.com/micherra/canon/issues/328)) ([1f53b59](https://github.com/micherra/canon/commit/1f53b5922207665497e34778a555c0487d38b78c))
+* **orchestration:** wire build diff stats into FlowRunEntry at finalize (craft Piece B) ([#327](https://github.com/micherra/canon/issues/327)) ([f0c56fe](https://github.com/micherra/canon/commit/f0c56fed2bc6d3ac9957e4444c5ba7ef2b6b2020))
+* **writer:** require executing verification commands against the real tree before commit (sug_EEEEE1) ([#324](https://github.com/micherra/canon/issues/324)) ([fef7988](https://github.com/micherra/canon/commit/fef7988f5bde29f945c05bf017e292d3122a1195))
+
 ## [2.6.0](https://github.com/micherra/canon/compare/v2.5.0...v2.6.0) (2026-06-05)
 
 
