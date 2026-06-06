@@ -256,7 +256,7 @@ Do NOT flag:
 
 For each such agent→tool requirement, verify both conditions mechanically:
 
-1. The tool appears in the `tools:` field of the agent's frontmatter: `awk '/^tools:/{in_tools=1; next} in_tools && /^---/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>'` — a match confirms the tool is in the allowlist, not merely mentioned in the description or body.
+1. The tool appears in the `tools:` field of the agent's frontmatter: `awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>'` — a match confirms the tool is in the allowlist, not merely mentioned in the description or body.
 2. The tool is registered in the MCP server: `grep -rn '"<tool_name>"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result. A match only in a doc comment or non-registration file does not satisfy this condition.
 
 **Outcome rules:**
@@ -304,6 +304,30 @@ Output format — BLOCKING finding:
 Do NOT flag:
 - Intentional subset schemas where the file-level comment or PR description explicitly documents that the Zod schema is a strict subset of the TypeScript type by design.
 - Internal TypeScript types that have no corresponding schema file and are never serialized or exposed externally.
+
+#### Structural Assertion Grep Scope
+
+**Trigger**: When the diff adds or modifies a verification command (grep, awk, or Bash assertion) that claims to confirm a structural property — specifically: frontmatter field presence (e.g., "tool Y is in the `tools:` allowlist"), server registration (e.g., "tool Y is registered in `register-*.ts`"), or config/schema entry existence.
+
+For each such verification command, confirm that the grep pattern and path scope are the **minimum sufficient** to confirm the stated structural claim:
+
+1. **Frontmatter field presence**: The grep must be scoped to the specific frontmatter block, not the full file. A bare `grep` or `grep -n` with a line-number-before-`---` check is insufficient — it will match occurrences in `description:`, `name:`, or body prose. The correct form uses block-extraction that stops at the next top-level YAML key (items in the `tools:` list are indented; any top-level key or the closing `---` starts at column 0):
+   ```
+   awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>'
+   ```
+   A match in any line outside the `tools:` block is NOT sufficient — the match must fall within the target block. Using `/^---/{exit}` alone is insufficient when `tools:` is not the last frontmatter key: subsequent keys such as `skills:`, `memory:`, or `description:` will leak through and can produce a false positive.
+
+2. **Server registration**: The grep must be scoped to registration files with quoted-string form, not directory-wide bare-string search. A bare `grep -r '<tool_name>' mcp-server/src/app/` matches doc comments and JSDoc strings — it does not confirm the tool is registered. The correct form:
+   ```
+   grep -rn '"<tool_name>"' mcp-server/src/app/register-*.ts
+   ```
+   A match in a doc comment, variable name, or non-registration file does NOT satisfy a registration claim.
+
+**Outcome rules:**
+- If a verification command's scope exceeds the structural claim it was meant to verify (i.e., would return a false positive — matching non-structural occurrences and incorrectly confirming the structural claim): flag as **advisory** citing this sub-axis. Recommend the minimum-scope form above.
+- **Upgrade to WARNING** when the over-broad grep appears in a spec, agent instruction, or protocol document and the false-positive condition would allow a dead-wire to pass undetected — the same class of defect as the one the check was designed to prevent.
+
+**Skip condition**: Skip this sub-axis when the diff adds no verification commands or structural assertion greps.
 
 #### Severity-Vocabulary Consistency (watch_VVVVV2)
 
