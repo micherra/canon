@@ -325,6 +325,95 @@ const x = 1;
     expect(result.scope_layers).toHaveLength(0);
   });
 
+  it("scope_layers: custom layer from .canon/config.json is NOT flagged", async () => {
+    const tmp = makeTmpDir("scope-layers-custom");
+
+    // Write a .canon/config.json with a custom "backend" layer
+    const canonDir = join(tmp, ".canon");
+    mkdirSync(canonDir, { recursive: true });
+    writeFileSync(
+      join(canonDir, "config.json"),
+      JSON.stringify({ layers: { backend: ["src/backend"], frontend: ["src/frontend"] } }),
+      "utf8",
+    );
+
+    // Principle using the custom "backend" layer
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    const customLayerContent = `---
+id: custom-layer-principle
+title: Custom Layer Principle
+severity: convention
+scope:
+  layers: [backend]
+  tags: []
+---
+
+## Summary
+A principle using a project-local layer.
+
+## Examples
+
+\`\`\`typescript
+// example
+const x = 1;
+\`\`\`
+`;
+    writeFileSync(join(principlesDir, "custom-layer-principle.md"), customLayerContent, "utf8");
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies custom-layer-principle.\n", "utf8");
+
+    const result = await wikiLint({ checks: ["scope_layers"] }, tmp, tmp);
+
+    // custom-layer-principle uses "backend" which is defined in config.json — should NOT be flagged
+    expect(result.scope_layers).toHaveLength(0);
+    expect(result.summary.total_findings).toBe(0);
+  });
+
+  it("scope_layers: layer unknown to both defaults and config is still flagged", async () => {
+    const tmp = makeTmpDir("scope-layers-still-bogus");
+
+    // Write a .canon/config.json with a custom layer that does NOT include "bogus"
+    const canonDir = join(tmp, ".canon");
+    mkdirSync(canonDir, { recursive: true });
+    writeFileSync(
+      join(canonDir, "config.json"),
+      JSON.stringify({ layers: { backend: ["src/backend"] } }),
+      "utf8",
+    );
+
+    // Principle using a layer that is NOT in defaults or config
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    const bogusLayerContent = `---
+id: still-bogus-principle
+title: Still Bogus
+severity: convention
+scope:
+  layers: [bogus]
+  tags: []
+---
+
+## Summary
+Still bogus.
+
+## Examples
+
+\`\`\`typescript
+// example
+const x = 1;
+\`\`\`
+`;
+    writeFileSync(join(principlesDir, "still-bogus-principle.md"), bogusLayerContent, "utf8");
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies still-bogus-principle.\n", "utf8");
+
+    const result = await wikiLint({ checks: ["scope_layers"] }, tmp, tmp);
+
+    // "bogus" is not in defaults OR the config — should still be flagged
+    expect(result.scope_layers).toHaveLength(1);
+    expect(result.scope_layers[0].principle_id).toBe("still-bogus-principle");
+    expect(result.scope_layers[0].invalid_layers).toEqual(["bogus"]);
+  });
+
   it("clean codebase: no findings when everything is valid", async () => {
     const tmp = makeTmpDir("clean");
 
