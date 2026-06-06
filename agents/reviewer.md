@@ -692,7 +692,7 @@ Based on the most severe finding across all six stages:
 | Verdict | Condition | Effect |
 |---------|-----------|--------|
 | **BLOCKING** | Any `rule`-severity violation | Build must stop |
-| **WARNING** | `strong-opinion` violations, Stage 2/4 WARNINGs, no `rule` violations | Build proceeds, address violations |
+| **WARNING** | `strong-opinion` violations, Stage 2/4 WARNINGs, Stage 6 scope-parity WARNINGs, no `rule` violations | Build proceeds, address violations |
 | **CLEAN** | No violations, or only `convention`-level | Build proceeds |
 
 **Before assigning the verdict:**
@@ -702,6 +702,7 @@ Based on the most severe finding across all six stages:
 - Stage 2 agent→tool reachability: a failed condition (2) (tool absent from MCP server registration) is BLOCKING regardless of principle severity — the runtime will error on every call
 - Stage 5 (acceptance criteria verification) failures are BLOCKING -- they enter the review-fix iteration loop. If unfixable (non-automatable AC), the user can override via HITL
 - Stage 6 (cross-requirement consistency) BLOCKING findings (type contradictions, security policy gaps) also enter the review-fix iteration loop
+- Stage 6 scope-parity WARNING findings (coverage/scope mismatches in advisory fixes) produce at least a WARNING verdict — they do NOT enter the review-fix iteration loop, but the build must acknowledge or address the finding
 
 Include `## Canon Review — Verdict: {BLOCKING|WARNING|CLEAN}` at the top of the report.
 
