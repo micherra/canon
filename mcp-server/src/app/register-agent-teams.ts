@@ -1,7 +1,8 @@
 import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { z } from "zod";
-import { pluginDir, resolveScope, server } from "./server-state.ts";
+import { pluginDir, resolveScope } from "./server-state.ts";
 
 /**
  * Agent-teams tool registrations.
@@ -9,7 +10,7 @@ import { pluginDir, resolveScope, server } from "./server-state.ts";
  * Moved out of register-orchestration.ts to keep that file under biome's
  * noExcessiveLinesPerFile ceiling.
  */
-export function registerAgentTeamsTools(): void {
+export function registerAgentTeamsTools(server: McpServer): void {
   server.registerTool(
     "resolve_agent_skills",
     {

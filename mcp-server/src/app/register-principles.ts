@@ -6,19 +6,14 @@ import { storePrReview } from "@features/pr-review/tools/store-pr-review.ts";
 import { getCompliance } from "@features/principles/tools/get-compliance.ts";
 import { getPrinciples } from "@features/principles/tools/get-principles.ts";
 import { listPrinciples } from "@features/principles/tools/list-principles.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { z } from "zod";
-import {
-  gatedWrapHandler,
-  pluginDir,
-  registerToolWithUi,
-  resolveScope,
-  server,
-} from "./server-state.ts";
+import { gatedWrapHandler, pluginDir, registerToolWithUi, resolveScope } from "./server-state.ts";
 
-function registerPrImpactTool(): void {
-  registerToolWithUi("show_pr_impact", {
+function registerPrImpactTool(server: McpServer): void {
+  registerToolWithUi(server, "show_pr_impact", {
     description:
       "Opens the PR Review view — change analysis, impact assessment, and review violations for a pull request or branch.",
     handler: gatedWrapHandler(async (input, extra) => {
@@ -44,7 +39,7 @@ function registerPrImpactTool(): void {
   });
 }
 
-function registerPrincipleQueryTools(): void {
+function registerPrincipleQueryTools(server: McpServer): void {
   server.registerTool(
     "get_principles",
     {
@@ -96,7 +91,7 @@ function registerPrincipleQueryTools(): void {
   );
 }
 
-function registerCodeReviewTools(): void {
+function registerCodeReviewTools(server: McpServer): void {
   server.registerTool(
     "review_code",
     {
@@ -145,7 +140,7 @@ function registerCodeReviewTools(): void {
   );
 }
 
-function registerStorePrReviewTool(): void {
+function registerStorePrReviewTool(server: McpServer): void {
   server.registerTool(
     "store_pr_review",
     {
@@ -204,7 +199,7 @@ function registerStorePrReviewTool(): void {
   );
 }
 
-function registerPresentReviewTool(): void {
+function registerPresentReviewTool(server: McpServer): void {
   server.registerTool(
     "present_review",
     {
@@ -231,10 +226,10 @@ function registerPresentReviewTool(): void {
   );
 }
 
-export function registerPrincipleTools(): void {
-  registerPrImpactTool();
-  registerPrincipleQueryTools();
-  registerCodeReviewTools();
-  registerStorePrReviewTool();
-  registerPresentReviewTool();
+export function registerPrincipleTools(server: McpServer): void {
+  registerPrImpactTool(server);
+  registerPrincipleQueryTools(server);
+  registerCodeReviewTools(server);
+  registerStorePrReviewTool(server);
+  registerPresentReviewTool(server);
 }

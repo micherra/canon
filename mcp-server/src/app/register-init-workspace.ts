@@ -1,8 +1,9 @@
 import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler, pluginDir, resolveScope, server } from "./server-state.ts";
+import { gatedWrapHandler, pluginDir, resolveScope } from "./server-state.ts";
 
-export function registerInitWorkspaceTool(): void {
+export function registerInitWorkspaceTool(server: McpServer): void {
   server.registerTool(
     "init_workspace",
     {

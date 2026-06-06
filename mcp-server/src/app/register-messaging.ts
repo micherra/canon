@@ -1,9 +1,9 @@
 import { postEvent } from "@features/orchestration/tools/post-event.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { z } from "zod";
-import { server } from "./server-state.ts";
 
-export function registerMessagingTools(): void {
+export function registerMessagingTools(server: McpServer): void {
   server.registerTool(
     "post_event",
     {

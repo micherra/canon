@@ -10,13 +10,14 @@ import {
   GetHistoricalArtifactsInputSchema,
   getHistoricalArtifacts,
 } from "@features/history/tools/get-historical-artifacts.ts";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { gatedWrapHandler } from "./server-state.ts";
 
 /**
  * Register history MCP tools: get_build_history, get_historical_artifacts,
  * and get_cross_run_analysis.
  */
-export function registerHistoryTools(): void {
+export function registerHistoryTools(server: McpServer): void {
   server.registerTool(
     "get_build_history",
     {

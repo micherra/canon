@@ -8,7 +8,6 @@ vi.mock("@app/server-state.ts", () => ({
   projectDir: "/mock/project",
   registerToolWithUi: vi.fn(),
   resolveScope: () => "/mock/project",
-  server: { registerTool: vi.fn() },
 }));
 
 // Mock all dependencies of handleGetContext that are not under test

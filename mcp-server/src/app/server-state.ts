@@ -7,12 +7,10 @@ import {
   RESOURCE_URI_META_KEY,
   registerAppResource,
 } from "@modelcontextprotocol/ext-apps/server";
-import type { ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer, ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
-import { installFuzzyValidation } from "@shared/lib/fuzzy-field-validation.ts";
 import { toToolErrorResponse } from "@shared/lib/wrap-handler.ts";
 
 // ── Per-connection scope registry ─────────────────────────────────────────────
@@ -82,9 +80,10 @@ export function resolveScope(
 
 // ── Ready gate ────────────────────────────────────────────────────────────────
 //
-// Promise that resolves once the project directory has been confirmed.
-// All tool handlers must await this before accessing projectDir to avoid the startup
-// race where a client call arrives before roots/list has completed.
+// Global promise that resolves once the project directory has been confirmed
+// for the stdio path. All tool handlers must await the appropriate gate before
+// accessing projectDir to avoid the startup race where a client call arrives
+// before roots/list has completed.
 //
 // We create the promise here (at module load) with an external resolve handle so
 // gatedWrapHandler can safely await it before main() runs — in that edge case
@@ -93,6 +92,66 @@ export let resolveReady!: () => void;
 export let readyPromise: Promise<void> = new Promise<void>((res) => {
   resolveReady = res;
 });
+
+// ── Per-session ready gates ───────────────────────────────────────────────────
+//
+// Under HTTP each session gets its own gate, created at session-open time and
+// resolved after registerConnectionScope() completes for that session.
+// Under stdio extra.sessionId is undefined → readyPromiseFor falls back to the
+// global readyPromise, preserving identical stdio behavior.
+
+type SessionGate = { promise: Promise<void>; resolve: () => void };
+const sessionReady = new Map<string, SessionGate>();
+
+/**
+ * Create a per-session ready gate. Idempotent: a second call for the same
+ * sessionId is a no-op (the existing gate is kept).
+ */
+export function createSessionReadyGate(sessionId: string): void {
+  if (sessionReady.has(sessionId)) return;
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  sessionReady.set(sessionId, { promise, resolve });
+}
+
+/**
+ * Resolve the per-session ready gate for sessionId. No-op for unknown sessions.
+ */
+export function resolveSessionReady(sessionId: string): void {
+  sessionReady.get(sessionId)?.resolve();
+}
+
+/**
+ * Remove the per-session ready gate for sessionId. No-op for unknown sessions.
+ * Call this when a session closes (alongside clearConnectionScope).
+ */
+export function clearSessionReady(sessionId: string): void {
+  sessionReady.delete(sessionId);
+}
+
+/**
+ * Return the ready promise appropriate for the current request context.
+ *
+ * Lookup order:
+ *   1. extra.sessionId has a registered gate → that gate's promise
+ *   2. Fallback → global readyPromise (stdio sentinel path; also used for
+ *      unknown session IDs that lack a gate — e.g. stdio-internal sentinel calls)
+ *
+ * Under stdio extra.sessionId is undefined → always returns the global promise.
+ * This keeps the stdio startup sequence behaviorally identical to the pre-refactor path.
+ */
+export function readyPromiseFor(
+  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+): Promise<void> {
+  const sessionId = extra.sessionId;
+  if (sessionId) {
+    const gate = sessionReady.get(sessionId);
+    if (gate) return gate.promise;
+  }
+  return readyPromise;
+}
 
 // ── Plugin dir ────────────────────────────────────────────────────────────────
 
@@ -150,16 +209,6 @@ const mcpServerRoot = process.env.CANON_PLUGIN_DIR
   ? join(pluginDir, "mcp-server")
   : findAnchorDir(thisDir, ["boot.sh"]);
 
-// ── MCP server instance ───────────────────────────────────────────────────────
-
-export const server = new McpServer({
-  name: "canon",
-  version: "2.6.0", // x-release-please-version
-});
-
-// Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
-installFuzzyValidation(server);
-
 // ── Standard JSON response helper (inline — keeps gatedWrapHandler self-contained) ──
 
 function jsonResponse(result: unknown) {
@@ -190,7 +239,7 @@ export const gatedWrapHandler =
     extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
   ): Promise<ReturnType<typeof jsonResponse>> => {
     try {
-      await readyPromise;
+      await readyPromiseFor(extra);
       const result = await handler(input, extra);
       return jsonResponse(result);
     } catch (err) {
@@ -205,6 +254,7 @@ export const gatedWrapHandler =
 
 export function resetForTesting(): void {
   scopeRegistry.clear();
+  sessionReady.clear();
   // Replace the ready promise with a fresh pending one and a fresh resolver.
   readyPromise = new Promise<void>((res) => {
     resolveReady = res;
@@ -213,8 +263,18 @@ export function resetForTesting(): void {
 
 // ── MCP App UI registration ───────────────────────────────────────────────────
 
-/** Helper to register a tool + resource pair for an MCP App UI. */
-export const registeredResources = new Set<string>();
+/** Per-server resource dedup set — keyed by server instance so each factory call
+ * gets its own independent tracking set (WeakMap ensures no memory leak). */
+const serverResourceSets = new WeakMap<McpServer, Set<string>>();
+
+function getResourceSet(server: McpServer): Set<string> {
+  let set = serverResourceSets.get(server);
+  if (!set) {
+    set = new Set<string>();
+    serverResourceSets.set(server, set);
+  }
+  return set;
+}
 
 /** Options for registering a tool with an MCP App UI. */
 export type RegisterToolWithUiOptions<Schema extends ZodRawShapeCompat> = {
@@ -227,6 +287,7 @@ export type RegisterToolWithUiOptions<Schema extends ZodRawShapeCompat> = {
 };
 
 export function registerToolWithUi<Schema extends ZodRawShapeCompat>(
+  server: McpServer,
   toolName: string,
   options: RegisterToolWithUiOptions<Schema>,
 ) {
@@ -242,8 +303,9 @@ export function registerToolWithUi<Schema extends ZodRawShapeCompat>(
     handler,
   );
 
-  if (!registeredResources.has(resourceUri)) {
-    registeredResources.add(resourceUri);
+  const resourceSet = getResourceSet(server);
+  if (!resourceSet.has(resourceUri)) {
+    resourceSet.add(resourceUri);
     registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
       const html = await readFile(join(mcpServerRoot, "dist", "src", "ui", htmlFile), "utf-8");
       return {
