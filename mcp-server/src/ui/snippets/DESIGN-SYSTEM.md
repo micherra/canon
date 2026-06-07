@@ -379,6 +379,8 @@ Each snippet file uses this structured comment format at the top:
 
 ## Section E: Security Requirements
 
+The `PARITY:*` sentinels delimit the canonical sources; `section-e-parity.test.ts` asserts they stay in sync with the executable test copy in `markdown-to-html.test.ts`. Edit both together.
+
 ### escapeHtml Implementation
 
 Implement this function inline in any code that generates HTML. Use it on **every** piece of
@@ -399,6 +401,7 @@ function escapeHtml(s: string): string {
 TypeScript, and must guard against nullish input. Use this null-safe form — it is the single
 canonical `escapeHtml` every renderer template references:
 
+<!-- PARITY:escapeHtml:BEGIN -->
 ```javascript
 function escapeHtml(s) {
   return String(s ?? "")
@@ -409,6 +412,7 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 ```
+<!-- PARITY:escapeHtml:END -->
 
 `String(s ?? "")` coerces `null`/`undefined` to `""` (never the literal strings `"null"` /
 `"undefined"`). Always prefer this runtime form in renderer rendering scripts.
@@ -425,6 +429,7 @@ muted "None" empty-state row instead of raw pipe text. It calls `escapeHtml` int
 (escape-first, wrap-second) — **do NOT pre-escape input before passing it to `markdownToHtml`**, or
 content will be double-escaped.
 
+<!-- PARITY:markdownToHtml:BEGIN -->
 ```javascript
 /**
  * Convert common markdown patterns to HTML.
@@ -674,6 +679,7 @@ function markdownToHtml(md) {
   return result.join("\n");
 }
 ```
+<!-- PARITY:markdownToHtml:END -->
 
 `markdownToHtml` calls `escapeHtml` internally (escape-first, wrap-second) — do NOT pre-escape
 input before passing it to `markdownToHtml`.
@@ -1432,6 +1438,23 @@ const cardHtml = substituteSnippet(fileDetailSnippet, {
 **Script placement**: Extract the `<script>` block from `file-detail-card.html` and include it
 **once** before `</body>` in the final HTML. Do NOT include it multiple times (once per card).
 The script self-initializes on `DOMContentLoaded` and draws all canvases.
+
+**Leaf file empty-state (automatic — no renderer action needed)**: When `graphData.imports` and
+`graphData.imported_by` are both empty arrays, the snippet script detects the 0-edge condition at
+runtime and adds class `fdc-graph-empty` to the `.fdc-graph-section` container. This hides the
+canvas and legend via CSS (`.fdc-graph-section.fdc-graph-empty .fdc-canvas-wrap` and
+`.fdc-graph-section.fdc-graph-empty .fdc-graph-legend` set to `display: none`) and shows the
+`.fdc-graph-empty-note` div ("No imports or dependents — leaf file"). Do not omit the canvas
+element or alter the snippet markup for leaf files — the script handles it from the graph data.
+
+**Empty-state row formats (canonical recipes):**
+
+| Placeholder | Empty state HTML |
+|-------------|-----------------|
+| `{{ENTITIES_HTML}}` | `<tr><td colspan="4" class="fdc-empty-note">No exports detected</td></tr>` |
+| `{{BLAST_RADIUS_DEPTH1_HTML}}` | `<span class="fdc-empty-note">No dependents</span>` |
+
+Use `.fdc-empty-note` (muted, italic, small) for both. The class is defined in the snippet CSS.
 
 ### G.5 File Summary Card Recipe
 

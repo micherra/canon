@@ -19,6 +19,8 @@ result as the renderer agent's spawn prompt.
 - `${SLUG}` — the build slug (e.g., `add-dark-mode`)
 - `${BASE_COMMIT}` — the git commit hash to diff against (e.g., `abc1234`); used to scope
   `show_pr_impact` to the correct change set
+- `${WORKTREE_PATH}` — absolute path to the build worktree (`${WORKSPACE}/worktree`); scopes
+  `show_pr_impact` diff resolution to the build's checkout
 
 ## Prompt
 
@@ -82,9 +84,17 @@ Call these two MCP tools to enrich the HTML with structural context:
 
 ```
 mcp__canon__show_pr_impact({
-  diff_base: "${BASE_COMMIT}"
+  diff_base: "${BASE_COMMIT}",
+  worktree_path: "${WORKTREE_PATH}"
 })
 ```
+
+> **Limitation**: without `worktree_path`, `show_pr_impact` diffs against the main repo checkout
+> (`projectDir`), not the build worktree; when the main checkout has advanced past `${BASE_COMMIT}`,
+> returned stats may include unrelated changes, and KG-derived enrichment always reflects
+> project-root state. Servers that predate the `worktree_path` parameter ignore it harmlessly.
+> On any contradiction, the changed-file list in REVIEW.md Stage 1 is authoritative — fall back
+> to it and treat `show_pr_impact` stats as approximate.
 
 From the result, extract:
 - `filesChanged` — total files changed count
@@ -382,9 +392,9 @@ patterns from Section G of DESIGN-SYSTEM.md exactly:
     - `{{VIOLATION_COUNT}}` — numeric; `{{VIOLATION_BADGE_CLASS}}` = "clean" | "danger"; `{{VIOLATION_BADGE_TEXT}}` = "no violations" | "N violations"
     - `{{BLAST_RADIUS_SEVERITY}}` — severity string, no escaping; `{{BLAST_RADIUS_TOTAL}}` — numeric
     - `{{CARD_ID}}` — collision-safe encoding of file path: replace each non-alphanumeric char `c` with `-` + `c.charCodeAt(0)` + `-` (e.g. `/` → `-47-`, `.` → `-46-`, `-` → `-45-`); alphanumeric chars pass through unchanged; no HTML escaping
-    - `{{GRAPH_DATA_JSON}}` — JSON-stringified GraphData object, then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`)
-    - `{{ENTITIES_HTML}}` — pre-rendered `<tr>` rows (see G.4 for format, limit 15 rows)
-    - `{{BLAST_RADIUS_DEPTH1_HTML}}` — pre-rendered depth-chip spans (see G.4 for format, limit 8 chips)
+    - `{{GRAPH_DATA_JSON}}` — JSON-stringified GraphData object, then HTML-attribute-escaped (`&` → `&amp;`, then `"` → `&quot;`). Leaf files (0 imports AND 0 dependents) are handled automatically — the snippet script collapses the graph area to a compact empty-state. Do not omit the canvas or alter the snippet markup for leaf files.
+    - `{{ENTITIES_HTML}}` — pre-rendered `<tr>` rows (see G.4 for format, limit 15 rows); when the file has no entities, emit exactly: `<tr><td colspan="4" class="fdc-empty-note">No exports detected</td></tr>`
+    - `{{BLAST_RADIUS_DEPTH1_HTML}}` — pre-rendered depth-chip spans (see G.4 for format, limit 8 chips); when there are no depth-1 dependents, emit exactly: `<span class="fdc-empty-note">No dependents</span>`
   - Extract the `<style>` block from the snippet and include it in the page `<style>` tag (once)
   - Extract the `<script>` block from the snippet and include it **ONCE** before `</body>` (not per card)
 - **Note**: `file-summary-card.html` is no longer used for the card body — the `<summary>` row above replaces it. The `.file-summary-path` and `.file-summary-shape` styles from that snippet are included in the expandable pattern CSS (Step 6). You do NOT need to read `file-summary-card.html`.
@@ -470,7 +480,7 @@ details[open] > .file-expandable-summary .file-expand-arrow { transform: rotate(
 
 Include before `</body>` (in this order):
 1. The `<script>` block from `file-detail-card.html` (Canvas graph initialization for detail cards)
-2. The shared force-directed-graph engine, then the subgraph init call:
+2. The shared force-directed-graph engine and the subgraph init call — only when `showSubgraph` is true:
 
 **2a. Emit the shared engine snippet `<script>` verbatim (ONCE).** Read
 `mcp-server/src/ui/snippets/force-graph.html` and include its `<script>` block verbatim exactly
@@ -558,9 +568,47 @@ Write the complete, self-contained HTML to:
   ${WORKSPACE}/artifacts/review.html
 
 The file must be fully self-contained (no external stylesheets, no JavaScript, no CDN links).
-All CSS is inline in the `<style>` tag.
+All CSS is inline in the `<style>` tag. Proceed to Step 9 before returning.
 
-Return when the file is written. Do not modify the worktree.
+## Step 9 — Structural self-check (MANDATORY)
+
+After writing the file in Step 8, run these checks before returning. These checks verify the
+output because instruction-following alone has failed before (style block silently omitted →
+garbled cards). This converts the fidelity contract from trust-based to verified.
+
+Run each grep command against the written `${WORKSPACE}/artifacts/review.html` and verify the
+expected result. The variable `N` in check 1 equals the number of changed files in the diff.
+
+> Note: `grep -c` counts *lines* containing a match, not total occurrences. For exact-once
+> assertions (checks 3 and 4) use `grep -o ... | wc -l` so that a multi-occurrence line cannot
+> slip through as a single count.
+
+| # | Check | Command | Expected |
+|---|-------|---------|----------|
+| 1 | One card per changed file | `grep -c 'class="file-detail-card"' review.html` | equals changed-file count |
+| 2 | Snippet CSS present | `grep -c '\.fdc-metric-card' review.html` | >= 1 |
+| 3 | Card script present exactly once | `grep -o 'function drawFileGraph(' review.html \| wc -l` | == 1 |
+| 4a | Force-graph engine not duplicated (always) | `grep -o 'function renderForceGraph(' review.html \| wc -l` | <= 1 |
+| 4b | Force-graph engine present when subgraph rendered | `grep -o 'function renderForceGraph(' review.html \| wc -l` | == 1 if `showSubgraph` was true; == 0 if `showSubgraph` was false |
+| 5 | Design token defined | `grep -c -- '--bg-card:' review.html` | >= 1 |
+
+The trailing `(` in checks 3 and 4a/4b anchors the match to the function declaration form.
+Narrative text that mentions a function name in prose (e.g. "calls `drawFileGraph`") does NOT
+carry the open-paren immediately after the name and therefore does not match. The rare case where
+a reviewer narrative includes a complete function signature with arguments (e.g.,
+`` `function drawFileGraph(canvas)` `` inside a code span) will match — this is a true collision,
+not a false positive. Resolve it by entity-escaping only the narrative occurrence (e.g.,
+`&#102;unction drawFileGraph(`) while leaving the `<script>` block untouched.
+
+**Failure protocol**: If ANY check fails, the composed HTML violated the snippet fidelity
+contract. Fix the composed HTML (re-read the snippet file, re-extract the missing block) and
+re-write the file, then re-run ALL checks. For check 4b specifically: only trigger the repair
+loop when `showSubgraph` was true and the count is 0 (missing engine), or when the count
+exceeds 1 (duplicated engine). A count of 0 when `showSubgraph` was false is correct — do NOT
+inject the engine. Never alter the `<script>` block to satisfy a count; resolve narrative
+collisions in the narrative text. Do NOT return until every check passes.
+
+Return when all checks pass. Do not modify the worktree.
 ````
 
 ## Template Notes

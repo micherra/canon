@@ -580,7 +580,13 @@ function buildReviewOutput(
 
 export async function showPrImpact(
   projectDir: string,
-  options?: { branch?: string; pr_number?: number; diff_base?: string; incremental?: boolean },
+  options?: {
+    branch?: string;
+    diff_base?: string;
+    incremental?: boolean;
+    pr_number?: number;
+    worktree_path?: string;
+  },
 ): Promise<UnifiedPrOutput> {
   const prepResult = await getPrReviewData(
     {
@@ -588,6 +594,7 @@ export async function showPrImpact(
       diff_base: options?.diff_base,
       incremental: options?.incremental,
       pr_number: options?.pr_number,
+      worktree_path: options?.worktree_path,
     },
     projectDir,
   );

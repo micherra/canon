@@ -14,7 +14,9 @@
  * (triple-backtick inside a regex literal), which confuses naive fence-end detection.
  *
  * Solution: the function is included inline here. Keep this copy in sync with
- * DESIGN-SYSTEM.md Section E when markdownToHtml is updated.
+ * DESIGN-SYSTEM.md Section E when markdownToHtml is updated. Sync is now
+ * mechanically enforced: section-e-parity.test.ts extracts via PARITY:* sentinels
+ * and asserts normalized equality between the canonical source and this copy.
  */
 
 import { describe, expect, it } from "vitest";
@@ -24,6 +26,7 @@ import { describe, expect, it } from "vitest";
 // The copy-here approach is necessary because the function body contains triple-backtick
 // patterns (/^```/) that break naive markdown code-block boundary detection.
 
+// PARITY:escapeHtml:BEGIN
 function escapeHtml(s: unknown): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -32,7 +35,9 @@ function escapeHtml(s: unknown): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+// PARITY:escapeHtml:END
 
+// PARITY:markdownToHtml:BEGIN
 function markdownToHtml(md: string): string {
   if (!md) return "";
   const lines = String(md).split("\n");
@@ -321,6 +326,7 @@ function markdownToHtml(md: string): string {
 
   return result.join("\n");
 }
+// PARITY:markdownToHtml:END
 /* eslint-enable */
 
 // ── Table rendering tests ─────────────────────────────────────────────────────

@@ -6,7 +6,7 @@
 Structured output templates that agents must follow for consistent, parseable artifacts. Enforced by the `agent-template-required` rule — agents must read the template before producing output.
 
 ## Architecture
-<!-- last-updated: 2026-06-04 (renderer-review.md and renderer-codebase-graph.md now delegate force graph to shared force-graph.html snippet) -->
+<!-- last-updated: 2026-06-06 (renderer-review.md: mandatory Step 9 structural self-check added; renderer-review.md and renderer-codebase-graph.md delegate force graph to shared force-graph.html snippet) -->
 
 Each template is a markdown file with placeholder sections that agents fill in.
 
@@ -30,7 +30,7 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `chat-brief.md` | chat | Structured brief for build handoff |
 | `prd.md` | orchestrator | Structured PRD template the PM fills before spawning the architect; read by architect and renderer |
 | `renderer-design.md` | orchestrator | Renderer spawn prompt — converts PRD + design document + task DAG YAML + runbook to unified `design.html`; pure markdown, no MCP calls |
-| `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; file cards are `<details>`-expandable; includes Canvas dependency subgraph in Graph Context; delegates force-directed layout to shared `force-graph.html` snippet via `renderForceGraph(...)`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_file_context`) |
+| `renderer-review.md` | orchestrator | Renderer spawn prompt — converts review markdown to `review.html`; file cards are `<details>`-expandable; includes Canvas dependency subgraph in Graph Context; delegates force-directed layout to shared `force-graph.html` snippet via `renderForceGraph(...)`; references `file-detail-card.html` (Canvas-based) and `blast-radius-tree.html`; requires MCP calls (`show_pr_impact`, `get_file_context`); **Step 9** (MANDATORY): renderer must run 5 grep assertions against the written `review.html` (card count, snippet CSS, `drawFileGraph(` once, `renderForceGraph(` once [conditional on `showSubgraph`], design token defined) and loop repair+recheck until all pass before returning |
 | `renderer-codebase-graph.md` | orchestrator | Renderer spawn prompt — converts `codebase_graph` MCP data into standalone `codebase-graph.html`; delegates force-directed layout to shared `force-graph.html` snippet via `renderForceGraph(...)`; click-to-inspect side panel, DIFF_BASE filtering kept in template; requires MCP call (`codebase_graph`) |
 | `renderer-file-context.md` | orchestrator | Renderer spawn prompt — converts `get_file_context` MCP data into standalone `file-context.html`; requires MCP call (`get_file_context`) |
 | `sharpened-request.md` | pm-orchestrator | PM-to-architect hand-off artifact with Problem, Direction, Scope Boundaries, Acceptance Criteria, and Not Doing sections |
@@ -47,15 +47,20 @@ Spawn-prompt templates are structurally distinct from artifact-output templates.
 
 **Reading protocol**: The orchestrator reads the template, fills `## Variables` placeholders, and passes the `## Prompt` section content to the `Agent()` call. See `principles/conventions/spawn-prompt-template-structure.md` for the full convention.
 
-## Renderer Helper Convention <!-- last-updated: 2026-06-04 -->
+## Renderer Helper Convention <!-- last-updated: 2026-06-06 -->
 
 All `renderer-*.md` templates source `escapeHtml` and `markdownToHtml` from `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` **Section E** — never re-inline these definitions. Each template instructs the renderer agent to copy the Section E definitions verbatim into its build-time rendering script.
 
+**Runtime page scripts** — JavaScript emitted verbatim into the page and executed by the browser (e.g., the Canvas force-directed IIFE) — live in a dedicated snippet file under `mcp-server/src/ui/snippets/` (reference: `force-graph.html`), emitted via `readSnippet`.
+
+**Discriminator**: function body appears inside a `<script>`/Canvas IIFE in the emitted HTML → runtime → snippet file. Function's return value is interpolated into the HTML string during composition → build-time → DESIGN-SYSTEM.md Section E. Full convention: `principles/conventions/shared-renderer-helper-placement.md`.
+
 ## Conventions
-<!-- last-updated: 2026-06-02 -->
+<!-- last-updated: 2026-06-06 -->
 
 - Templates ensure downstream agents can reliably parse upstream output
 - Never modify template structure without updating all consuming agents
 - Templates use markdown with clear section headers and placeholder text
 - Some templates now include optional evidence sections (`External Evidence`, `Evidence URLs`, `Verified Facts`, `Assumptions`) that downstream readers should preserve and tolerate when absent
 - **Template filenames must match their output artifact stem in lowercase-kebab form.** A template that produces `CONTEXT-SYNC.md` is named `context-sync.md`; one that produces `REVIEW.md` is named `review.md`; one that produces `*-SUMMARY.md` is named `summary.md`. This lets the orchestrator derive the output filename from the template name mechanically. (sug_KKKK1 Fix C)
+- Builds that change `renderer-*.md` or renderer-consumed snippets (`mcp-server/src/ui/snippets/*.html` or `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`) must dogfood-render the build's own review.html through the changed template before the review step closes (see root CLAUDE.md → Post-Step Effects → After reviewer).
