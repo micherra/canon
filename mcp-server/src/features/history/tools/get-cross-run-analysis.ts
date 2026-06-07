@@ -13,8 +13,8 @@ import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 import type { CrossRunAnalysisResult, RunSummary } from "../history-types.ts";
-import { analyzeCrossRunPatterns } from "../services/cross-run-analyzer.ts";
 import { sweepCliffEvents } from "../services/cliff-event-sweep.ts";
+import { analyzeCrossRunPatterns } from "../services/cross-run-analyzer.ts";
 
 export const GetCrossRunAnalysisInputSchema = z.object({
   limit: z

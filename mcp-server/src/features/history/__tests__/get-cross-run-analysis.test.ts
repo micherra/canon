@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { CliffEventRow } from "../../../platform/storage/drift/cliff-events-dao.ts";
 import type { ArchiveManifestEntry } from "../../../platform/storage/drift/drift-analytics-types.ts";
+import type { DriftDb } from "../../../platform/storage/drift/drift-db.ts";
 import type { RunSummary } from "../history-types.ts";
 
 // ---- Mock getDriftDb ----
@@ -21,29 +22,32 @@ const mockGetArchiveManifests =
   vi.fn<(filter?: { branch?: string; flow?: string; limit?: number }) => ArchiveManifestEntry[]>();
 const mockGetReviews = vi.fn(() => []);
 const mockGetAllFlowRuns = vi.fn(() => []);
-const mockGetCliffEventsAll = vi.fn(() => []);
+const mockGetCliffEventsAll = vi.fn<() => CliffEventRow[]>(() => []);
 
 vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
-  getDriftDb: vi.fn(() => ({
-    getAllFlowRuns: mockGetAllFlowRuns,
-    getArchiveManifests: mockGetArchiveManifests,
-    getReviews: mockGetReviews,
-    getCraftProfiles: () => ({ getRecentProfiles: () => [] }),
-    getCliffEvents: () => ({ getAll: mockGetCliffEventsAll }),
-  })),
+  getDriftDb: vi.fn(
+    () =>
+      ({
+        getAllFlowRuns: mockGetAllFlowRuns,
+        getArchiveManifests: mockGetArchiveManifests,
+        getReviews: mockGetReviews,
+        getCraftProfiles: () => ({ getRecentProfiles: () => [] as never[] }),
+        getCliffEvents: () => ({ getAll: mockGetCliffEventsAll }),
+      }) as unknown as DriftDb,
+  ),
 }));
 
 // ---- Mock sweepCliffEvents ----
 
-const mockSweepCliffEvents = vi.fn(() => ({
+const mockSweepCliffEvents = vi.fn((_projectDir: string) => ({
   scanned_workspaces: 0,
   events_ingested: 0,
   outcomes_updated: 0,
-  skipped: [],
+  skipped: [] as { path: string; reason: string }[],
 }));
 
 vi.mock("../services/cliff-event-sweep.ts", () => ({
-  sweepCliffEvents: (...args: unknown[]) => mockSweepCliffEvents(...args),
+  sweepCliffEvents: (projectDir: string) => mockSweepCliffEvents(projectDir),
 }));
 
 import { getCrossRunAnalysis } from "../tools/get-cross-run-analysis.ts";
@@ -442,15 +446,18 @@ describe("getCrossRunAnalysis — cliff_events dimension", () => {
     const mockDriftDb = vi.mocked(getDriftDb);
 
     const originalImpl = mockDriftDb.getMockImplementation();
-    mockDriftDb.mockImplementationOnce(() => ({
-      getAllFlowRuns: mockGetAllFlowRuns,
-      getArchiveManifests: mockGetArchiveManifests,
-      getReviews: mockGetReviews,
-      getCraftProfiles: () => ({ getRecentProfiles: () => [] }),
-      getCliffEvents: () => {
-        throw new Error("no such table: cliff_events");
-      },
-    }));
+    mockDriftDb.mockImplementationOnce(
+      () =>
+        ({
+          getAllFlowRuns: mockGetAllFlowRuns,
+          getArchiveManifests: mockGetArchiveManifests,
+          getReviews: mockGetReviews,
+          getCraftProfiles: () => ({ getRecentProfiles: () => [] as never[] }),
+          getCliffEvents: () => {
+            throw new Error("no such table: cliff_events");
+          },
+        }) as unknown as DriftDb,
+    );
 
     try {
       const result = await getCrossRunAnalysis({ project_dir: "/tmp/proj" });
