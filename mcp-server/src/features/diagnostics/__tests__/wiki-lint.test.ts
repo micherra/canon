@@ -313,6 +313,26 @@ describe("checkScopeLayers", () => {
     expect(findings).toHaveLength(2);
     expect(findings.map((f) => f.principle_id).sort()).toEqual(["p1", "p3"]);
   });
+
+  it("scalar scope.layers (YAML authoring typo) → finding with malformed message, does not throw", () => {
+    // Simulate parser.ts unvalidated cast: scalar string instead of string[]
+    const p = makePrinciple({
+      id: "scalar-layers",
+      scope: { layers: "api" as unknown as string[], file_patterns: [] },
+    });
+    let threw = false;
+    let findings: ReturnType<typeof checkScopeLayers> = [];
+    try {
+      findings = checkScopeLayers([p], VALID_LAYERS);
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(false);
+    // A scalar scope.layers is malformed — must be flagged (not silently skipped)
+    expect(findings).toHaveLength(1);
+    expect(findings[0].principle_id).toBe("scalar-layers");
+    expect(findings[0].message).toContain("must be a YAML list");
+  });
 });
 
 // ---- checkCitedPaths (dc-06) ----

@@ -112,6 +112,32 @@ describe("checkScopeTags", () => {
     const findings = checkScopeTags([], VALID_TAGS);
     expect(findings).toHaveLength(0);
   });
+
+  it("7: scalar scope.tags (YAML authoring typo) → finding with malformed message, does not throw", () => {
+    // Parser unvalidated cast produces scope.tags === "error-handling" (string)
+    // checkScopeTags must not throw TypeError: p.scope.tags.filter is not a function
+    const p = makePrinciple({
+      id: "scalar-tags",
+      scope: {
+        layers: [],
+        file_patterns: [],
+        // Simulate parser.ts unvalidated cast: scalar string instead of string[]
+        tags: "error-handling" as unknown as string[],
+      },
+    });
+    let threw = false;
+    let findings: ReturnType<typeof checkScopeTags> = [];
+    try {
+      findings = checkScopeTags([p], VALID_TAGS);
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(false);
+    // A scalar scope.tags is malformed — must be flagged (not silently skipped)
+    expect(findings).toHaveLength(1);
+    expect(findings[0].principle_id).toBe("scalar-tags");
+    expect(findings[0].message).toContain("must be a YAML list");
+  });
 });
 
 // ---- assembleWikiLintOutput — scope_tags integration ----

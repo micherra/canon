@@ -479,6 +479,17 @@ export function checkScopeLayers(
   const valid = new Set(validLayers);
   const findings: ScopeLayerFinding[] = [];
   for (const p of principles) {
+    if (!Array.isArray(p.scope.layers)) {
+      findings.push({
+        file_path: p.filePath,
+        invalid_layers: [String(p.scope.layers)],
+        message:
+          `Principle '${p.id}' has a malformed scope.layers value — must be a YAML list, got: ${JSON.stringify(p.scope.layers)}. ` +
+          `Use layers: [] or a list of valid layer names.`,
+        principle_id: p.id,
+      });
+      continue;
+    }
     const invalid = p.scope.layers.filter((l) => !valid.has(l));
     if (invalid.length === 0) continue;
     findings.push({
@@ -512,7 +523,18 @@ export function checkScopeTags(
   const valid = new Set(validTags);
   const findings: ScopeTagFinding[] = [];
   for (const p of principles) {
-    if (!p.scope.tags || p.scope.tags.length === 0) continue;
+    if (!p.scope.tags || (Array.isArray(p.scope.tags) && p.scope.tags.length === 0)) continue;
+    if (!Array.isArray(p.scope.tags)) {
+      findings.push({
+        file_path: p.filePath,
+        invalid_tags: [String(p.scope.tags)],
+        message:
+          `Principle '${p.id}' has a malformed scope.tags value — must be a YAML list, got: ${JSON.stringify(p.scope.tags)}. ` +
+          `Use scope.file_patterns for path-based scoping or remove scope.tags for universal match.`,
+        principle_id: p.id,
+      });
+      continue;
+    }
     const invalid = p.scope.tags.filter((t) => !valid.has(t));
     if (invalid.length === 0) continue;
     findings.push({

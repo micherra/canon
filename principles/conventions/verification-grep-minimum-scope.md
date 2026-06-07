@@ -26,7 +26,7 @@ When a grep or awk command verifies a structural claim — frontmatter field pre
 When verifying that a value appears inside a specific frontmatter block (e.g., that a tool name appears in the `tools:` list of an agent file), the correct form isolates the target block and terminates at the next top-level key (column-0 character):
 
 ```
-awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>'
+awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>$'
 ```
 
 **Insufficient forms and why they fail:**
@@ -58,7 +58,7 @@ grep 'mcp__canon__wiki_lint' agents/engineer.md
 
 **Good** — block-extraction terminates at the next top-level key:
 ```
-awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/engineer.md | grep '  - mcp__canon__wiki_lint'
+awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/engineer.md | grep '  - mcp__canon__wiki_lint$'
 ```
 
 ### Code registration grep
