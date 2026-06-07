@@ -55,6 +55,7 @@ import { removePidFile, writePidFile } from "./http-server.ts";
 import {
   authenticate,
   loadOrCreateToken,
+  rereadToken,
   resolveTokenPath,
   type TokenResult,
 } from "./mcp-http/auth.ts";
@@ -92,6 +93,18 @@ type DaemonOptions = {
 let daemonServer: ReturnType<typeof createServer> | null = null;
 let daemonPort = DAEMON_DEFAULT_PORT;
 let daemonPidDir: string | null = null;
+
+/**
+ * Token path stored at startup — used for lazy re-read on mismatch (W5).
+ * Reset by stopDaemon for test isolation.
+ */
+let daemonTokenPath: string | null = null;
+
+/**
+ * Monotonic timestamp of the last token re-read attempt.
+ * Rate-limits re-reads to at most once per second (W5).
+ */
+let lastTokenRereadMs = 0;
 
 // ---------------------------------------------------------------------------
 // Daemon PID dir resolution
@@ -195,6 +208,40 @@ export function probeExistingDaemon(
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// Allowed loopback hostnames for Host-header guard on non-MCP routes (W6)
+// ---------------------------------------------------------------------------
+
+/** Hostnames accepted in the Host header for artifact and health routes. */
+const DAEMON_ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * Extract the hostname from a Host header value, stripping any port suffix.
+ * Handles IPv6 literals like [::1]:3142 → [::1].
+ * Duplicated from auth.ts to avoid a cross-module import of a private helper.
+ */
+function extractDaemonHostname(host: string): string {
+  if (host.startsWith("[")) {
+    const closingBracket = host.indexOf("]");
+    if (closingBracket !== -1) return host.slice(0, closingBracket + 1);
+    return host;
+  }
+  const colonIdx = host.lastIndexOf(":");
+  if (colonIdx !== -1) return host.slice(0, colonIdx);
+  return host;
+}
+
+/**
+ * Return true if the request Host header names a loopback address.
+ * Fail-closed: missing Host → rejected.
+ * Used to guard artifact and health routes against DNS-rebinding (W6).
+ */
+function isLoopbackHost(req: IncomingMessage): boolean {
+  const hostHeader = req.headers.host;
+  if (!hostHeader) return false;
+  return DAEMON_ALLOWED_HOSTS.has(extractDaemonHostname(hostHeader));
+}
+
+// ---------------------------------------------------------------------------
 // Request handler (extracted for line-limit compliance)
 // ---------------------------------------------------------------------------
 
@@ -204,34 +251,56 @@ export function probeExistingDaemon(
  *
  * @param req - Incoming HTTP request.
  * @param res - Outgoing HTTP response.
- * @param tokenResult - Token load result (checked for 503 path).
+ * @param tokenResult - Mutable ref to the current token result; may be refreshed in-place.
  * @param version - Package version string (injected into /health).
  */
 function handleDaemonRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  tokenResult: TokenResult,
+  tokenResult: { current: TokenResult },
   version: string,
 ): void {
-  // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id");
+  // CORS headers: only for /mcp (browser MCP clients).
+  // Artifact and health routes are browser-navigated directly — no cross-origin
+  // script access intended, so no ACAO header is set for those routes (W6).
+  const url = new URL(req.url ?? "/", `http://127.0.0.1:${daemonPort}`);
 
+  if (url.pathname === "/mcp") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, Mcp-Session-Id, x-canon-project-dir, MCP-Protocol-Version",
+    );
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    handleMcpRoute(req, res, tokenResult);
+    return;
+  }
+
+  // OPTIONS preflight for non-MCP routes (no CORS, just respond)
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();
     return;
   }
 
-  const url = new URL(req.url ?? "/", `http://127.0.0.1:${daemonPort}`);
-
-  if (url.pathname === "/mcp") {
-    handleMcpRoute(req, res, tokenResult);
+  // W6: Apply Host-header rebinding guard to artifact and health routes.
+  // These routes serve potentially sensitive content (review HTML, file paths).
+  // Direct browser navigation uses the loopback address as Host — this guard
+  // preserves that use case while blocking cross-origin JS fetches that would
+  // send a different Host header.
+  if (!isLoopbackHost(req)) {
+    respondJson(res, 403, { error: "Host header rejected" });
     return;
   }
 
-  // Artifact + health routes (unauthenticated)
+  // Artifact + health routes (unauthenticated, loopback-Host-gated)
   if (
     handleArtifactRoutes(req, res, {
       healthExtra: { transport: "http", version },
@@ -246,19 +315,47 @@ function handleDaemonRequest(
 
 /**
  * Handles the /mcp route: 503 on token-unavailable, auth check, then delegate.
+ *
+ * W5 fix: on token mismatch, lazily re-read the token file (rate-limited to 1/s)
+ * so that token rotation is recovered without restarting the daemon.
+ * Token deletion still fails closed (503 path preserved).
  */
-function handleMcpRoute(req: IncomingMessage, res: ServerResponse, tokenResult: TokenResult): void {
+function handleMcpRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  tokenResult: { current: TokenResult },
+): void {
   // 503 when token unavailable (fail-closed)
-  if (!tokenResult.ok) {
+  if (!tokenResult.current.ok) {
     respondJson(res, 503, {
-      detail: tokenResult.error,
+      detail: tokenResult.current.error,
       error: "Service unavailable: token not loaded",
     });
     return;
   }
   // Authenticate the request
-  const authResult = authenticate(req, tokenResult.token);
+  const authResult = authenticate(req, tokenResult.current.token);
   if (!authResult.ok) {
+    // W5: on token mismatch (401), attempt a lazy re-read of the token file
+    // (rate-limited: at most once per second). If the file has been rotated to
+    // a new value, the refreshed token will be used for subsequent requests.
+    // Deletion still fails closed — if re-read returns ok:false, we keep the
+    // current (failed-closed) tokenResult and return 401 to the caller.
+    if (authResult.status === 401 && daemonTokenPath !== null) {
+      const now = Date.now();
+      if (now - lastTokenRereadMs >= 1000) {
+        lastTokenRereadMs = now;
+        rereadToken(daemonTokenPath)
+          .then((refreshed) => {
+            if (refreshed.ok) {
+              tokenResult.current = refreshed;
+            }
+          })
+          .catch(() => {
+            // best-effort: ignore re-read errors
+          });
+      }
+    }
     respondJson(res, authResult.status, { error: authResult.reason });
     return;
   }
@@ -278,10 +375,14 @@ function handleMcpRoute(req: IncomingMessage, res: ServerResponse, tokenResult: 
 /**
  * Binds the daemon server to the configured port and writes the PID file.
  * Extracted from startDaemon for line-limit compliance.
+ *
+ * The tokenResult is wrapped in a mutable ref object so that the W5 lazy re-read
+ * in handleMcpRoute can update the current token without rebinding the closure.
  */
 function bindDaemonServer(tokenResult: TokenResult, version: string): Promise<void> {
+  const tokenRef = { current: tokenResult };
   return new Promise<void>((resolve, reject) => {
-    daemonServer = createServer((req, res) => handleDaemonRequest(req, res, tokenResult, version));
+    daemonServer = createServer((req, res) => handleDaemonRequest(req, res, tokenRef, version));
 
     daemonServer.on("error", async (err: NodeJS.ErrnoException) => {
       if (err.code === "EADDRINUSE") {
@@ -333,6 +434,8 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<void> {
 
   // Resolve token
   const tokenPath = opts.tokenPath ?? resolveTokenPath();
+  daemonTokenPath = tokenPath;
+  lastTokenRereadMs = 0;
   const tokenResult: TokenResult = await loadOrCreateToken(tokenPath);
   if (!tokenResult.ok) {
     process.stderr.write(
@@ -375,6 +478,8 @@ export async function stopDaemon(): Promise<void> {
   if (daemonPidDir) {
     await removePidFile(daemonPidDir, DAEMON_PID_FILENAME);
   }
+  daemonTokenPath = null;
+  lastTokenRereadMs = 0;
 
   // Close the listener
   await new Promise<void>((resolve) => {

@@ -69,6 +69,31 @@ export function resolveTokenPath(env: NodeJS.ProcessEnv = process.env): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * Reads the token from `tokenPath` if it exists and is non-empty.
+ * Unlike `loadOrCreateToken`, this does NOT create a new token if absent.
+ *
+ * Returns `{ ok: true, token }` if the file exists and is non-empty.
+ * Returns `{ ok: false, error }` if absent, empty, or unreadable.
+ *
+ * Used for lazy re-read on token mismatch (W5: token rotation recovery).
+ *
+ * @param tokenPath - Absolute path to the token file.
+ */
+export async function rereadToken(tokenPath: string): Promise<TokenResult> {
+  try {
+    const existing = await readFile(tokenPath, "utf8");
+    const trimmed = existing.trim();
+    if (trimmed.length > 0) {
+      return { ok: true, token: trimmed };
+    }
+    return { error: "token file is empty", ok: false };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: message, ok: false };
+  }
+}
+
+/**
  * Loads the token from `tokenPath`, or creates a new one if the file is absent
  * or has empty/whitespace content.
  *

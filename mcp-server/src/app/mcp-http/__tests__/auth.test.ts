@@ -11,7 +11,7 @@ import type { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { authenticate, loadOrCreateToken, resolveTokenPath } from "../auth.js";
+import { authenticate, loadOrCreateToken, rereadToken, resolveTokenPath } from "../auth.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -310,5 +310,68 @@ describe("authenticate — accept cases", () => {
     });
     const result = authenticate(req, expectedToken);
     expect(result.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W5 — rereadToken: lazy rotation recovery
+// ---------------------------------------------------------------------------
+
+describe("W5 — rereadToken", () => {
+  let tmpDir: string;
+  let tokenPath: string;
+
+  beforeEach(async () => {
+    const { mkdtemp } = await import("node:fs/promises");
+    tmpDir = await mkdtemp(join(tmpdir(), "auth-reread-test-"));
+    tokenPath = join(tmpDir, "canon-mcp-token");
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns ok:true with the current token when file exists and is non-empty", async () => {
+    await writeFile(tokenPath, "rotated-token-value", { mode: 0o600 });
+    const result = await rereadToken(tokenPath);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.token).toBe("rotated-token-value");
+    }
+  });
+
+  it("returns ok:false when file does not exist (fail-closed on deletion)", async () => {
+    // No file created — rereadToken should fail closed
+    const result = await rereadToken(tokenPath);
+    expect(result.ok).toBe(false);
+  });
+
+  it("returns ok:false when file is empty (treat as absent)", async () => {
+    await writeFile(tokenPath, "   \n", { mode: 0o600 });
+    const result = await rereadToken(tokenPath);
+    expect(result.ok).toBe(false);
+  });
+
+  it("rereadToken reads rotated value — old token rejected, new token accepted", async () => {
+    // Write initial token
+    const oldToken = "old-token-abc";
+    const newToken = "new-token-xyz";
+    await writeFile(tokenPath, oldToken, { mode: 0o600 });
+
+    // Re-read after initial write
+    const initial = await rereadToken(tokenPath);
+    expect(initial.ok).toBe(true);
+    if (initial.ok) expect(initial.token).toBe(oldToken);
+
+    // Rotate the token file
+    await writeFile(tokenPath, newToken, { mode: 0o600 });
+
+    // Re-read again — should now return new token
+    const rotated = await rereadToken(tokenPath);
+    expect(rotated.ok).toBe(true);
+    if (rotated.ok) {
+      expect(rotated.token).toBe(newToken);
+      expect(rotated.token).not.toBe(oldToken);
+    }
   });
 });

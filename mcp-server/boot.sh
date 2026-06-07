@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
   case "${1:-}" in
     --print-resolution) PRINT_RESOLUTION=1; shift ;;
     --force-dir) FORCE_DIR="${2:-}"; shift 2 ;;
-    --daemon) DAEMON_MODE=1; shift ;;
+    --daemon) DAEMON_MODE=1; export CANON_HTTP_DAEMON=1; shift ;;
     *) break ;;
   esac
 done

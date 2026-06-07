@@ -4,9 +4,12 @@
  * Governs:
  * - Per-session transport + server creation (one StreamableHTTPServerTransport per session)
  * - Scope handshake: header override → roots/list → capped retry, fail-closed
- * - Teardown in pinned order (isolation-finish-01): clearConnectionScope →
- *   evictStores → evictDriftDb → evictJobManager
+ * - Teardown in pinned order (isolation-finish-01): server.close (drain in-flight) →
+ *   clearConnectionScope → evictStores → evictDriftDb → evictJobManager
  * - Refcount guard: scope-wide evictions fire only when the LAST session for a dir closes
+ * - Idle-session reaper: sweeps sessions idle past CANON_HTTP_SESSION_TTL_MS (default 30 min)
+ * - Pending-handshake registry: prevents eviction during the scope-acquire window (W3)
+ * - Immutable scope: once registered, scope cannot be overridden by roots/list_changed (W4)
  *
  * PROBE FINDINGS obligations (PROBE-FINDINGS.md):
  * - fs.realpath-normalize root URIs (client reports file:///private/tmp/... for /tmp cwd on macOS)
@@ -42,18 +45,91 @@ type Session = {
   transport: StreamableHTTPServerTransport;
   server: McpServer;
   sessionId: string;
+  /** Monotonic timestamp (Date.now()) of the last observed activity. Updated on each request. */
+  lastActivityMs: number;
 };
 
 /** Module-private session map. */
 const sessions = new Map<string, Session>();
+
+/**
+ * Pending-handshake registry — tracks sessions that have been created (onsessioninitialized)
+ * but whose scope handshake has not yet completed (registerConnectionScope not yet called).
+ *
+ * Keys are session IDs. Values are the directory hint from the x-canon-project-dir header
+ * (if present) or "unknown" when only roots/list resolution is in progress.
+ *
+ * Used by hasOtherSessionsForDir (via hasOtherPendingSessionsForDir) to prevent eviction
+ * of a dir's stores while a new session for that dir is mid-handshake (W3 fix).
+ */
+const pendingHandshakes = new Map<string, string | "unknown">();
 
 /** Return the current number of active sessions. Used for observability and tests. */
 export function sessionCount(): number {
   return sessions.size;
 }
 
-/** Close all active sessions (daemon SIGTERM path). */
+// ── Idle-session reaper ────────────────────────────────────────────────────
+
+/**
+ * Session TTL in milliseconds. Configurable via CANON_HTTP_SESSION_TTL_MS.
+ * Default: 30 minutes. Sessions idle past this duration are torn down by the reaper.
+ */
+function getSessionTtlMs(): number {
+  const envVal = process.env.CANON_HTTP_SESSION_TTL_MS;
+  if (envVal) {
+    const parsed = Number.parseInt(envVal, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 30 * 60 * 1000; // 30 minutes
+}
+
+/** Reaper interval handle — unref'd so it never prevents process exit. */
+let reaperTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Reaper sweep period: check every 60 seconds regardless of TTL. */
+const REAPER_INTERVAL_MS = 60 * 1000;
+
+/**
+ * Run a single reaper sweep: tear down any session whose last-activity timestamp
+ * is older than the configured TTL.
+ */
+export function runReaperSweep(): void {
+  const ttl = getSessionTtlMs();
+  const now = Date.now();
+  for (const [id, session] of sessions) {
+    if (now - session.lastActivityMs > ttl) {
+      process.stderr.write(
+        `[session-manager] Reaping idle session ${id} (idle ${Math.round((now - session.lastActivityMs) / 1000)}s > TTL ${Math.round(ttl / 1000)}s)\n`,
+      );
+      void teardownSession(id);
+    }
+  }
+}
+
+/**
+ * Start the idle-session reaper. Safe to call multiple times — re-entrant guard.
+ * The timer is unref'd so it does not prevent process exit in tests.
+ */
+export function startReaper(): void {
+  if (reaperTimer !== null) return;
+  reaperTimer = setInterval(runReaperSweep, REAPER_INTERVAL_MS);
+  reaperTimer.unref();
+}
+
+/**
+ * Stop the idle-session reaper (called by closeAllSessions so tests have no leaked timers).
+ */
+export function stopReaper(): void {
+  if (reaperTimer !== null) {
+    clearInterval(reaperTimer);
+    reaperTimer = null;
+  }
+}
+
+/** Close all active sessions (daemon SIGTERM path). Also stops the reaper. */
 export async function closeAllSessions(): Promise<void> {
+  stopReaper();
   const ids = [...sessions.keys()];
   await Promise.allSettled(ids.map((id) => teardownSession(id)));
 }
@@ -66,13 +142,41 @@ export async function closeAllSessions(): Promise<void> {
  *
  * @internal exported for tests only
  */
-export function _injectSessionForTest(sessionId: string, server: McpServer): void {
+export function _injectSessionForTest(
+  sessionId: string,
+  server: McpServer,
+  lastActivityMs?: number,
+): void {
   const transport = {
     close: async (): Promise<void> => {
       // test stub — no-op close
     },
   } as unknown as StreamableHTTPServerTransport;
-  sessions.set(sessionId, { server, sessionId, transport });
+  sessions.set(sessionId, {
+    lastActivityMs: lastActivityMs ?? Date.now(),
+    server,
+    sessionId,
+    transport,
+  });
+}
+
+/**
+ * Directly inject a pending-handshake entry for testing.
+ * @internal exported for tests only
+ */
+export function _injectPendingHandshakeForTest(
+  sessionId: string,
+  dirHint: string | "unknown",
+): void {
+  pendingHandshakes.set(sessionId, dirHint);
+}
+
+/**
+ * Clear a pending-handshake entry. Used by tests to simulate handshake completion.
+ * @internal exported for tests only
+ */
+export function _clearPendingHandshakeForTest(sessionId: string): void {
+  pendingHandshakes.delete(sessionId);
 }
 
 // ── Scope helpers ──────────────────────────────────────────────────────────
@@ -157,49 +261,94 @@ async function retryCappedRootsList(server: McpServer): Promise<string | undefin
  *
  * Registers the scope and resolves the session ready gate on success.
  * If all attempts fail, logs loudly and leaves the gate pending (client-side timeout).
+ *
+ * Pending-handshake protocol (W3):
+ * - On entry: register a pending-handshake entry for this session so that any
+ *   concurrent teardown of another session sharing this dir sees the pending session
+ *   and defers eviction.
+ * - On exit (success or failure): always remove the pending-handshake entry.
  */
 async function resolveSessionScope(session: Session, headerDir: string | undefined): Promise<void> {
   const { server, sessionId } = session;
 
-  // Layer a: header override
-  if (headerDir !== undefined) {
-    const normalized = await validateAndNormalizeDir(headerDir);
-    if (normalized !== undefined) {
-      registerConnectionScope(sessionId, normalized);
+  // Register pending handshake — use header hint if available, "unknown" otherwise.
+  // A concurrent teardown of the last registered session for this dir will see this
+  // entry and defer eviction, closing the W3 window.
+  pendingHandshakes.set(sessionId, headerDir ?? "unknown");
+
+  try {
+    // Layer a: header override
+    if (headerDir !== undefined) {
+      const normalized = await validateAndNormalizeDir(headerDir);
+      if (normalized !== undefined) {
+        registerConnectionScope(sessionId, normalized);
+        resolveSessionReady(sessionId);
+        return;
+      }
+      // Invalid header dir — log and fall through to roots/list
+      console.error(
+        `[session-manager] x-canon-project-dir "${headerDir}" is not a valid directory; ` +
+          `falling through to roots/list for session ${sessionId}`,
+      );
+    }
+
+    // Layer b: roots/list with capped retry
+    const dir = await retryCappedRootsList(server);
+    if (dir !== undefined) {
+      registerConnectionScope(sessionId, dir);
       resolveSessionReady(sessionId);
       return;
     }
-    // Invalid header dir — log and fall through to roots/list
+
+    // Layer c: all attempts exhausted — gate stays pending (fail-closed)
     console.error(
-      `[session-manager] x-canon-project-dir "${headerDir}" is not a valid directory; ` +
-        `falling through to roots/list for session ${sessionId}`,
+      `[session-manager] Failed to resolve project scope for session ${sessionId} ` +
+        "after 3 attempts. Tools will hang until client-side timeout. " +
+        "Set x-canon-project-dir header to bypass roots/list resolution.",
     );
+  } finally {
+    // Always clear the pending-handshake entry — scope registration is complete (or failed).
+    pendingHandshakes.delete(sessionId);
   }
+}
 
-  // Layer b: roots/list with capped retry
-  const dir = await retryCappedRootsList(server);
-  if (dir !== undefined) {
-    registerConnectionScope(sessionId, dir);
-    resolveSessionReady(sessionId);
-    return;
+// ── Pending-handshake helpers (W3) ────────────────────────────────────────
+
+/**
+ * Return true if any pending-handshake session has a dir hint matching `dir`.
+ *
+ * "unknown" hints are conservatively treated as possible matches — we cannot
+ * rule out that the in-progress roots/list will resolve to `dir`. This makes
+ * the guard fail-safe: it may defer eviction slightly, but never allows premature
+ * eviction of a dir that a mid-handshake session is about to use.
+ */
+function hasPendingHandshakeForDir(dir: string): boolean {
+  for (const hint of pendingHandshakes.values()) {
+    if (hint === "unknown" || hint === dir) return true;
   }
-
-  // Layer c: all attempts exhausted — gate stays pending (fail-closed)
-  console.error(
-    `[session-manager] Failed to resolve project scope for session ${sessionId} ` +
-      "after 3 attempts. Tools will hang until client-side timeout. " +
-      "Set x-canon-project-dir header to bypass roots/list resolution.",
-  );
+  return false;
 }
 
 // ── Teardown ───────────────────────────────────────────────────────────────
 
 /**
- * Tear down a session in the pinned isolation-finish-01 order:
- * 1. Capture dir BEFORE clearing
- * 2. clearConnectionScope(sessionId); clearSessionReady(sessionId)
- * 3. If no other sessions for this dir: evictStores → evictDriftDb → evictJobManager
- * 4. sessions.delete(sessionId); server.close()
+ * Tear down a session in the corrected isolation-finish-01 order:
+ *
+ * Decision note (isolation-finish-01): The RELATIVE order within the eviction
+ * chain — clearConnectionScope → evictStoresForScope → evictDriftDbForScope →
+ * evictJobManagerForScope — is pinned by isolation-finish-01 and MUST NOT be
+ * reordered. What this fix (W2) changes is that server.close() (which awaits
+ * in-flight SDK handlers) now completes BEFORE the eviction chain begins,
+ * preventing a race where a slow tool call holds a DB reference that gets
+ * evicted mid-handler.
+ *
+ * Updated step order:
+ * 1. Remove from registry immediately (prevent new requests being dispatched)
+ * 2. Close server (awaited) — drains in-flight tool handlers before eviction
+ * 3. Capture dir BEFORE clearing scope (isolation-finish-01: capture first)
+ * 4. clearConnectionScope(sessionId); clearSessionReady(sessionId)
+ * 5. If no other sessions (registered OR pending-handshake) for this dir:
+ *    evictStores → evictDriftDb → evictJobManager (isolation-finish-01 order preserved)
  *
  * Idempotent: bails if session already removed.
  */
@@ -208,23 +357,35 @@ export async function teardownSession(sessionId: string): Promise<void> {
   const session = sessions.get(sessionId);
   if (!session) return;
 
-  // Step 1: capture dir BEFORE clearing scope
+  // Step 1: remove from registry immediately so no new requests are dispatched
+  // to this session while teardown is in progress.
+  sessions.delete(sessionId);
+
+  // Step 2: close server FIRST (awaited) — this drains any in-flight SDK handler
+  // before we evict the DB connections it may be holding. This resolves the W2
+  // race: prior code closed DBs THEN closed the server, allowing a slow tool call
+  // to hold a cached DB reference that was already closed under it.
+  //
+  // Decision isolation-finish-01: the RELATIVE order of the eviction chain below
+  // (clearConnectionScope → evictStores → evictDriftDb → evictJobManager) is
+  // unchanged. We are only prepending server.close() ahead of the entire chain.
+  await session.server.close();
+
+  // Step 3: capture dir BEFORE clearing scope (isolation-finish-01)
   const dir = getScopeForSession(sessionId);
 
-  // Step 2: clear scope and ready gate
+  // Step 4: clear scope and ready gate (isolation-finish-01 chain starts here)
   clearConnectionScope(sessionId);
   clearSessionReady(sessionId);
 
-  // Step 3: scope-wide evictions only when this is the last session for dir
-  if (dir !== undefined && !hasOtherSessionsForDir(dir)) {
+  // Step 5: scope-wide evictions only when this is the last session for dir.
+  // W3 guard: also check pendingHandshakes — a session that has been created but
+  // hasn't completed scope registration yet must block eviction of its future dir.
+  if (dir !== undefined && !hasOtherSessionsForDir(dir) && !hasPendingHandshakeForDir(dir)) {
     evictStoresForScope(dir);
     evictDriftDbForScope(dir);
     evictJobManagerForScope(dir);
   }
-
-  // Step 4: remove from registry; close server (which closes transport)
-  sessions.delete(sessionId);
-  await session.server.close();
 }
 
 // ── Transport factory ──────────────────────────────────────────────────────
@@ -262,10 +423,21 @@ function createSessionTransport(
       void teardownSession(closedSessionId);
     },
     onsessioninitialized: (newSessionId) => {
-      sessions.set(newSessionId, { server, sessionId: newSessionId, transport });
+      sessions.set(newSessionId, {
+        lastActivityMs: Date.now(),
+        server,
+        sessionId: newSessionId,
+        transport,
+      });
       createSessionReadyGate(newSessionId);
       // Kick off scope resolution without awaiting (non-blocking)
-      void resolveSessionScope({ server, sessionId: newSessionId, transport }, headerDir);
+      void resolveSessionScope(
+        { lastActivityMs: Date.now(), server, sessionId: newSessionId, transport },
+        headerDir,
+      );
+      // Start the idle-session reaper if not already running.
+      // Safe to call multiple times — startReaper() is idempotent.
+      startReaper();
     },
     sessionIdGenerator: () => randomUUID(),
   });
@@ -290,7 +462,26 @@ function registerRootsChangedHandler(
     if (!sid) return;
     const session = sessions.get(sid);
     if (!session) return;
-    // Re-resolve roots/list and update the scope (overwrite is idempotent)
+
+    // W4 fix: scope is IMMUTABLE once registered. If a scope is already registered
+    // for this session, ignore (and log) any roots/list_changed that would change it.
+    // This prevents a late notification from silently replacing a header-pinned scope
+    // (decision http2-03 layer a, the "deterministic fast-path for CI") and avoids
+    // the stale-resource leak that occurs when scope changes without triggering eviction.
+    const existingDir = getScopeForSession(sid);
+    if (existingDir !== undefined) {
+      // Scope already set — resolve silently (re-resolution is a no-op)
+      const newDir = await tryRootsList(server);
+      if (newDir !== undefined && newDir !== existingDir) {
+        process.stderr.write(
+          `[session-manager] roots/list_changed for session ${sid}: ignoring dir change ` +
+            `from "${existingDir}" to "${newDir}" — scope is immutable after first registration.\n`,
+        );
+      }
+      return;
+    }
+
+    // Scope not yet registered — allow first-time resolution from roots/list_changed
     const dir = await tryRootsList(server);
     if (dir !== undefined) {
       registerConnectionScope(sid, dir);
@@ -324,6 +515,8 @@ export async function handleMcpRequest(
   if (sessionId) {
     const session = sessions.get(sessionId);
     if (session) {
+      // Update last-activity timestamp on every dispatched request (W1 reaper input)
+      session.lastActivityMs = Date.now();
       await session.transport.handleRequest(req, res);
       return;
     }

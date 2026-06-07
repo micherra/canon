@@ -35,6 +35,7 @@ vi.mock("../../server-state.ts", async (importOriginal) => {
     hasOtherSessionsForDir: vi.fn(),
     registerConnectionScope: vi.fn(),
     resolveSessionReady: vi.fn(),
+    // Ensure all mocked functions are available
   };
 });
 
@@ -325,6 +326,9 @@ describe("closeAllSessions", () => {
     expect(sessionCount()).toBe(0);
   });
 });
+
+// W1–W4 hardening tests extracted to session-manager-hardening.test.ts
+// (kept separate to stay within the 600-line limit per file)
 
 // ── allowedHosts parity (contract-parity-across-layers) ────────────────────
 //

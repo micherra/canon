@@ -262,6 +262,81 @@ describe("Daemon SIGTERM teardown", () => {
 });
 
 // ---------------------------------------------------------------------------
+// W6 — Host-header guard on artifact/health routes
+// ---------------------------------------------------------------------------
+
+describe("W6 — Host-header guard on non-MCP routes", () => {
+  const TEST_DAEMON_PORT = 13206;
+  let tmpDir: string;
+  let tokenPath: string;
+
+  beforeAll(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-daemon-w6-test-"));
+    tokenPath = join(tmpDir, "canon-mcp-token");
+    const { writeFile, chmod } = await import("node:fs/promises");
+    await writeFile(tokenPath, "test-token-w6", { mode: 0o600 });
+    await chmod(tokenPath, 0o600);
+    await startDaemon({ port: TEST_DAEMON_PORT, pidDir: tmpDir, tokenPath });
+  });
+
+  afterAll(async () => {
+    await stopDaemon();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("GET /health with loopback Host responds 200", async () => {
+    const res = await daemonRequest(TEST_DAEMON_PORT, "GET", "/health", {
+      host: "127.0.0.1",
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("GET /health with non-loopback Host is rejected 403", async () => {
+    const res = await daemonRequest(TEST_DAEMON_PORT, "GET", "/health", {
+      host: "evil.example.com",
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /health with loopback Host:localhost also responds 200", async () => {
+    // Verify the guard accepts all canonical loopback host forms
+    const res = await daemonRequest(TEST_DAEMON_PORT, "GET", "/health", {
+      host: "localhost",
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("POST /mcp CORS headers include x-canon-project-dir and MCP-Protocol-Version", async () => {
+    // Use OPTIONS preflight to check CORS headers
+    const http = await import("node:http");
+    const headers = await new Promise<Record<string, string | string[] | undefined>>(
+      (resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            method: "OPTIONS",
+            path: "/mcp",
+            port: TEST_DAEMON_PORT,
+            headers: {
+              host: "127.0.0.1",
+              origin: "http://127.0.0.1:3000",
+            },
+          },
+          (res) => {
+            resolve(res.headers);
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      },
+    );
+    const allowHeaders = String(headers["access-control-allow-headers"] ?? "").toLowerCase();
+    expect(allowHeaders).toContain("x-canon-project-dir");
+    expect(allowHeaders).toContain("mcp-protocol-version");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // EADDRINUSE: same version → exit(0) path (injection-based)
 // ---------------------------------------------------------------------------
 
