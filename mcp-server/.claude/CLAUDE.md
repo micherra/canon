@@ -119,6 +119,8 @@ src/
 
 **Flow schema** (`flow-schema.ts`) — `StateDefinitionSchema` is a `z.discriminatedUnion` with 5 type schemas; all new fields MUST be `.optional()`; `WavePolicy` defaults: isolation=worktree, merge=sequential, on_conflict=hitl.
 
+**`computeAnalytics(projectDir)`** (`platform/storage/drift/analytics.ts`) — async wrapper over `DriftDb.computeAnalytics()`; returns `FlowAnalytics`; entries without gate data excluded from `avg_gate_pass_rate`.
+
 **Step journaling** — `log_step` / `batch_log_steps` record step completion in `journal.json`; quality signals and discovery fields accumulate across steps (append, not replace).
 
 **Orchestration harness tools:**
