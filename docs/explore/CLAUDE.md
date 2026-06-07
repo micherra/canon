@@ -7,8 +7,8 @@ This directory holds design explorations, competed proposals, and research that 
 ## Authority levels
 
 - **Ratified** (e.g., `workflow-integration/SYNTHESIS.md`): a user HITL decision was recorded; treat the synthesis as current design. Do not treat the underlying proposals as current.
-- **Parked**: analysis complete but no implementation decision was made; treat as background context.
-- **Open**: under consideration; treat as input to design, not settled.
+- **Parked** (e.g., `adaptive-queen.md`): analysis complete but no implementation decision was made; treat as background context.
+- **Open** (e.g., `automatic-craft-prerequisites-scoping.md`): under consideration; treat as input to design, not settled.
 
 ## Key ratified decisions in this directory
 
