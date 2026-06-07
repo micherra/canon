@@ -47,15 +47,20 @@ Spawn-prompt templates are structurally distinct from artifact-output templates.
 
 **Reading protocol**: The orchestrator reads the template, fills `## Variables` placeholders, and passes the `## Prompt` section content to the `Agent()` call. See `principles/conventions/spawn-prompt-template-structure.md` for the full convention.
 
-## Renderer Helper Convention <!-- last-updated: 2026-06-04 -->
+## Renderer Helper Convention <!-- last-updated: 2026-06-06 -->
 
 All `renderer-*.md` templates source `escapeHtml` and `markdownToHtml` from `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` **Section E** — never re-inline these definitions. Each template instructs the renderer agent to copy the Section E definitions verbatim into its build-time rendering script.
 
+**Runtime page scripts** — JavaScript emitted verbatim into the page and executed by the browser (e.g., the Canvas force-directed IIFE) — live in a dedicated snippet file under `mcp-server/src/ui/snippets/` (reference: `force-graph.html`), emitted via `readSnippet`.
+
+**Discriminator**: function body appears inside a `<script>`/Canvas IIFE in the emitted HTML → runtime → snippet file. Function's return value is interpolated into the HTML string during composition → build-time → DESIGN-SYSTEM.md Section E. Full convention: `principles/conventions/shared-renderer-helper-placement.md`.
+
 ## Conventions
-<!-- last-updated: 2026-06-02 -->
+<!-- last-updated: 2026-06-06 -->
 
 - Templates ensure downstream agents can reliably parse upstream output
 - Never modify template structure without updating all consuming agents
 - Templates use markdown with clear section headers and placeholder text
 - Some templates now include optional evidence sections (`External Evidence`, `Evidence URLs`, `Verified Facts`, `Assumptions`) that downstream readers should preserve and tolerate when absent
 - **Template filenames must match their output artifact stem in lowercase-kebab form.** A template that produces `CONTEXT-SYNC.md` is named `context-sync.md`; one that produces `REVIEW.md` is named `review.md`; one that produces `*-SUMMARY.md` is named `summary.md`. This lets the orchestrator derive the output filename from the template name mechanically. (sug_KKKK1 Fix C)
+- Builds that change `renderer-*.md` or renderer-consumed snippets must dogfood-render the build's own review.html through the changed template before the review step closes (see root CLAUDE.md → Post-Step Effects → After reviewer).
