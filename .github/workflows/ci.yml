@@ -55,7 +55,7 @@ jobs:
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
       - name: Cache HuggingFace model (Xenova/all-MiniLM-L6-v2)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/.hf-cache
           key: hf-models-${{ runner.os }}-all-MiniLM-L6-v2-v1
