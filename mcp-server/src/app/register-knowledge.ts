@@ -10,6 +10,7 @@ import { codebaseGraphPoll } from "@features/knowledge-graph/tools/codebase-grap
 import { codebaseGraphSubmit } from "@features/knowledge-graph/tools/codebase-graph-submit.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   buildSlimmedOutput,
@@ -18,19 +19,13 @@ import {
   handleGetContext,
   type SlimmedDriftOutput,
 } from "./get-context-handler.ts";
-import {
-  gatedWrapHandler,
-  pluginDir,
-  registerToolWithUi,
-  resolveScope,
-  server,
-} from "./server-state.ts";
+import { gatedWrapHandler, pluginDir, registerToolWithUi, resolveScope } from "./server-state.ts";
 
 // Re-export for test compatibility — existing tests import these from register-knowledge.ts
 export type { GetContextOutput, SlimmedDriftOutput };
 export { buildSlimmedOutput, handleGetContext };
 
-function registerCompositeContextTool(): void {
+function registerCompositeContextTool(server: McpServer): void {
   server.registerTool(
     "get_context",
     {
@@ -73,8 +68,8 @@ const codebaseGraphInputSchema = {
     ),
 };
 
-function registerGraphUiTools(): void {
-  registerToolWithUi("codebase_graph", {
+function registerGraphUiTools(server: McpServer): void {
+  registerToolWithUi(server, "codebase_graph", {
     description:
       "Generate a dependency graph of the codebase with Canon compliance overlay. Returns a compact summary (layers, violations, insights).",
     handler: gatedWrapHandler(async (input, extra) => {
@@ -87,7 +82,7 @@ function registerGraphUiTools(): void {
     title: "Codebase Graph",
   });
 
-  registerToolWithUi("get_file_context", {
+  registerToolWithUi(server, "get_file_context", {
     description:
       "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data.",
     handler: gatedWrapHandler(async (input, extra) => getFileContext(input, resolveScope(extra))),
@@ -100,7 +95,7 @@ function registerGraphUiTools(): void {
   });
 }
 
-function registerDiagnosticsTools(): void {
+function registerDiagnosticsTools(server: McpServer): void {
   server.registerTool(
     "store_summaries",
     {
@@ -155,12 +150,12 @@ function registerDiagnosticsTools(): void {
   );
 }
 
-function registerWikiLintTool(): void {
+function registerWikiLintTool(server: McpServer): void {
   server.registerTool(
     "wiki_lint",
     {
       description:
-        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, and invalid scope.layers values.",
+        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, and invalid scope.tags values outside the KG computed-tag vocabulary.",
       inputSchema: {
         checks: z
           .array(
@@ -171,11 +166,12 @@ function registerWikiLintTool(): void {
               "missing_examples",
               "cited_paths",
               "scope_layers",
+              "scope_tags",
             ]),
           )
           .optional()
           .describe(
-            "Checks to run (default: all 6). Options: contradictions, orphan_principles, stale_refs, missing_examples, cited_paths, scope_layers",
+            "Checks to run (default: all 7). Options: contradictions, orphan_principles, stale_refs, missing_examples, cited_paths, scope_layers, scope_tags",
           ),
       },
     },
@@ -183,7 +179,7 @@ function registerWikiLintTool(): void {
   );
 }
 
-function registerGraphQueryTool(): void {
+function registerGraphQueryTool(server: McpServer): void {
   server.registerTool(
     "graph_query",
     {
@@ -237,7 +233,7 @@ function registerGraphQueryTool(): void {
   );
 }
 
-function registerSemanticSearchTool(): void {
+function registerSemanticSearchTool(server: McpServer): void {
   server.registerTool(
     "semantic_search",
     {
@@ -279,7 +275,7 @@ function registerSemanticSearchTool(): void {
   );
 }
 
-function registerGraphJobTools(): void {
+function registerGraphJobTools(server: McpServer): void {
   server.registerTool(
     "codebase_graph_submit",
     {
@@ -305,7 +301,7 @@ function registerGraphJobTools(): void {
     gatedWrapHandler(async (input, extra) => codebaseGraphPoll(input, resolveScope(extra))),
   );
 
-  registerToolWithUi("codebase_graph_materialize", {
+  registerToolWithUi(server, "codebase_graph_materialize", {
     description:
       "Materialize the results of a completed codebase graph job into a visual graph. Job must have status 'complete' (check with codebase_graph_poll first).",
     handler: gatedWrapHandler(async (input, extra) =>
@@ -332,12 +328,12 @@ function registerGraphJobTools(): void {
   });
 }
 
-export function registerKnowledgeTools(): void {
-  registerGraphUiTools();
-  registerDiagnosticsTools();
-  registerWikiLintTool();
-  registerGraphQueryTool();
-  registerSemanticSearchTool();
-  registerGraphJobTools();
-  registerCompositeContextTool();
+export function registerKnowledgeTools(server: McpServer): void {
+  registerGraphUiTools(server);
+  registerDiagnosticsTools(server);
+  registerWikiLintTool(server);
+  registerGraphQueryTool(server);
+  registerSemanticSearchTool(server);
+  registerGraphJobTools(server);
+  registerCompositeContextTool(server);
 }

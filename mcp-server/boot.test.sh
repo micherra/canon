@@ -267,6 +267,34 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Test 12 (W7): --daemon flag sets and exports CANON_HTTP_DAEMON=1
+# The daemon entry-gate in daemon.ts checks CANON_HTTP_DAEMON === "1".
+# boot.sh --daemon must export that variable so the guard fires correctly.
+# We verify via --print-resolution (which exits before tsx runs) that the
+# variable is exported into the subprocess's environment.
+# ---------------------------------------------------------------------------
+W7_SERVER=$(mktemp -d)
+mkdir -p "$W7_SERVER/src/app"
+touch "$W7_SERVER/src/app/index.ts"
+touch "$W7_SERVER/src/app/daemon.ts"
+# Use a tsx stub that immediately prints the env variable value and exits 0
+mkdir -p "$W7_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "CANON_HTTP_DAEMON=${CANON_HTTP_DAEMON:-NOT_SET}"\nexit 0\n' > "$W7_SERVER/node_modules/.bin/tsx"
+chmod +x "$W7_SERVER/node_modules/.bin/tsx"
+# Run boot.sh --daemon and capture the tsx stub output (stdout is what tsx prints)
+W7_OUTPUT=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  CANON_HTTP_DAEMON="" \
+  bash "$BOOT_SH" --force-dir "$W7_SERVER" --daemon 2>/dev/null
+) || W7_EXIT=$?
+rm -rf "$W7_SERVER"
+if echo "$W7_OUTPUT" | grep -q "CANON_HTTP_DAEMON=1"; then
+  pass "W7: --daemon flag exports CANON_HTTP_DAEMON=1 to the environment"
+else
+  fail "W7: --daemon flag did NOT export CANON_HTTP_DAEMON=1; got: $W7_OUTPUT"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

@@ -3,19 +3,13 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { cleanupAllJobManagers } from "@platform/jobs/job-manager.ts";
+import { createCanonServer } from "./create-server.ts";
 import { startHttpServer } from "./http-server.ts";
-import { registerArtifactTools } from "./register-artifacts.ts";
-import { registerKnowledgeTools } from "./register-knowledge.ts";
-import { registerOrchestrationTools } from "./register-orchestration.ts";
-import { registerPrincipleTools } from "./register-principles.ts";
 import { resolveGitRoot, resolveProjectDir } from "./resolve-project-dir.ts";
-import { registerConnectionScope, resolveReady, STDIO_SESSION_ID, server } from "./server-state.ts";
+import { registerConnectionScope, resolveReady, STDIO_SESSION_ID } from "./server-state.ts";
 
-// Register all tool categories
-registerOrchestrationTools();
-registerKnowledgeTools();
-registerArtifactTools();
-registerPrincipleTools();
+// Create the server instance via the factory (registers all tools).
+const server = createCanonServer();
 
 // --- Signal handlers for child process cleanup ---
 

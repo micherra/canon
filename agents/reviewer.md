@@ -162,6 +162,11 @@ For each matched principle, evaluate the code: does it honor or violate the prin
 
 **Mechanical verification requirement**: For each principle you evaluate, run at least one Grep or Read call to verify the code pattern before declaring HONORED or VIOLATED. Do not rely on reading the diff alone — grep for the specific pattern the principle requires. This is the BUG-Default Rule in action: the principle is NOT YET VERIFIED until you find positive evidence.
 
+**Pre-fix regression check for guard tests (`agent-tdd-required`)**: For each new test claiming to cover a bug fix, verify it would fail against the pre-fix implementation. Ask: "If I rolled back only the production change (leaving the test in place), would this test fail?" If no, the test is non-discriminating — flag as an `agent-tdd-required` violation. Common failure modes:
+- Test exercises a pre-check short-circuit that never reaches the fixed code
+- Test exercises a happy path that both old and new code satisfy equally
+- Catch branch is the primary fix target but has zero test execution (spy declared but never asserted; real error path never triggered)
+
 ### Step 3: Produce Stage 1 output
 
 Follow the **Principle Compliance** section of the review template. If no violations found, say so clearly.
@@ -256,7 +261,7 @@ Do NOT flag:
 
 For each such agent→tool requirement, verify both conditions mechanically:
 
-1. The tool appears in the `tools:` field of the agent's frontmatter: `awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>'` — a match confirms the tool is in the allowlist, not merely mentioned in the description or body.
+1. The tool appears in the `tools:` field of the agent's frontmatter: `awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>$'` — a match confirms the tool is in the allowlist, not merely mentioned in the description or body.
 2. The tool is registered in the MCP server: `grep -rn '"<tool_name>"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result. A match only in a doc comment or non-registration file does not satisfy this condition.
 
 **Outcome rules:**
@@ -313,7 +318,7 @@ For each such verification command, confirm that the grep pattern and path scope
 
 1. **Frontmatter field presence**: The grep must be scoped to the specific frontmatter block, not the full file. A bare `grep` or `grep -n` with a line-number-before-`---` check is insufficient — it will match occurrences in `description:`, `name:`, or body prose. The correct form uses block-extraction that stops at the next top-level YAML key (items in the `tools:` list are indented; any top-level key or the closing `---` starts at column 0):
    ```
-   awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>'
+   awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/<agent>.md | grep '  - mcp__canon__<tool_name>$'
    ```
    A match in any line outside the `tools:` block is NOT sufficient — the match must fall within the target block. Using `/^---/{exit}` alone is insufficient when `tools:` is not the last frontmatter key: subsequent keys such as `skills:`, `memory:`, or `description:` will leak through and can produce a false positive.
 

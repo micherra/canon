@@ -8,7 +8,6 @@ vi.mock("@app/server-state.ts", () => ({
   projectDir: "/mock/project",
   registerToolWithUi: vi.fn(),
   resolveScope: () => "/mock/project",
-  server: { registerTool: vi.fn() },
 }));
 
 vi.mock("@features/principles/tools/get-principles.ts", () => ({
@@ -55,7 +54,7 @@ vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
   getDriftDb: vi.fn().mockReturnValue({ getSignals: vi.fn().mockReturnValue({}) }),
 }));
 
-// Import after mocks are set up
+// Import after mocks are set up (server-state mock no longer exports server singleton)
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
@@ -104,6 +103,7 @@ const mockGraphResult = {
 
 describe("register-knowledge get_context handler", () => {
   let handler: (input: { file_paths: string[]; include?: string[] }) => Promise<unknown>;
+  let mockServer: { registerTool: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -116,14 +116,13 @@ describe("register-knowledge get_context handler", () => {
     // Dynamically import after mocks are set up so the module captures our mocks.
     const mod = await import("../register-knowledge.ts");
 
-    // Extract the handler by calling registerKnowledgeTools and capturing what
-    // server.registerTool was given for get_context.
-    const { server } = await import("@app/server-state.ts");
-    vi.mocked(server.registerTool).mockClear();
-    mod.registerKnowledgeTools();
-    const calls = vi.mocked(server.registerTool).mock.calls;
+    // Create a fresh mock server to capture registerTool calls.
+    // registerKnowledgeTools now takes server as its first parameter.
+    mockServer = { registerTool: vi.fn() };
+    mod.registerKnowledgeTools(mockServer as never);
+    const calls = mockServer.registerTool.mock.calls;
     // Find the get_context registration
-    const getContextCall = calls.find((c) => c[0] === "get_context");
+    const getContextCall = calls.find((c: unknown[]) => c[0] === "get_context");
     if (!getContextCall) throw new Error("get_context tool not registered");
     handler = getContextCall[2] as typeof handler;
   });

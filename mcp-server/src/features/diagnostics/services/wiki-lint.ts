@@ -61,6 +61,13 @@ export type ScopeLayerFinding = {
   message: string;
 };
 
+export type ScopeTagFinding = {
+  principle_id: string;
+  file_path: string;
+  invalid_tags: string[];
+  message: string;
+};
+
 export type WikiLintOutput = {
   contradictions: ContradictionFinding[];
   orphan_principles: OrphanPrincipleFinding[];
@@ -68,6 +75,7 @@ export type WikiLintOutput = {
   missing_examples: MissingExampleFinding[];
   cited_paths: CitedPathFinding[];
   scope_layers: ScopeLayerFinding[];
+  scope_tags: ScopeTagFinding[];
   summary: {
     total_findings: number;
     files_scanned: number;
@@ -82,6 +90,7 @@ export type AssembleWikiLintInput = {
   missingExamples: MissingExampleFinding[];
   citedPaths: CitedPathFinding[];
   scopeLayers: ScopeLayerFinding[];
+  scopeTags: ScopeTagFinding[];
   filesScanned: number;
   principlesChecked: number;
 };
@@ -470,6 +479,17 @@ export function checkScopeLayers(
   const valid = new Set(validLayers);
   const findings: ScopeLayerFinding[] = [];
   for (const p of principles) {
+    if (!Array.isArray(p.scope.layers)) {
+      findings.push({
+        file_path: p.filePath,
+        invalid_layers: [String(p.scope.layers)],
+        message:
+          `Principle '${p.id}' has a malformed scope.layers value — must be a YAML list, got: ${JSON.stringify(p.scope.layers)}. ` +
+          `Use layers: [] or a list of valid layer names.`,
+        principle_id: p.id,
+      });
+      continue;
+    }
     const invalid = p.scope.layers.filter((l) => !valid.has(l));
     if (invalid.length === 0) continue;
     findings.push({
@@ -479,6 +499,51 @@ export function checkScopeLayers(
         `Principle '${p.id}' declares invalid scope.layers: ${invalid.join(", ")}. ` +
         `Valid layers are: ${validLayers.join(", ")}. ` +
         `Remove the invalid name(s); if no valid layer remains, set layers: [] and use file_patterns.`,
+      principle_id: p.id,
+    });
+  }
+  return findings;
+}
+
+// ---- Scope Tag Check ----
+
+/**
+ * Check for invalid scope.tags values in principle definitions.
+ *
+ * A principle is flagged when its scope.tags array contains any value that
+ * is not in the provided validTags set. Empty or absent tags arrays are
+ * universal (matches all files) and are not flagged.
+ *
+ * Pure: receives pre-loaded principles and validTags; no filesystem access.
+ */
+export function checkScopeTags(
+  principles: Principle[],
+  validTags: readonly string[],
+): ScopeTagFinding[] {
+  const valid = new Set(validTags);
+  const findings: ScopeTagFinding[] = [];
+  for (const p of principles) {
+    if (!p.scope.tags || (Array.isArray(p.scope.tags) && p.scope.tags.length === 0)) continue;
+    if (!Array.isArray(p.scope.tags)) {
+      findings.push({
+        file_path: p.filePath,
+        invalid_tags: [String(p.scope.tags)],
+        message:
+          `Principle '${p.id}' has a malformed scope.tags value — must be a YAML list, got: ${JSON.stringify(p.scope.tags)}. ` +
+          `Use scope.file_patterns for path-based scoping or remove scope.tags for universal match.`,
+        principle_id: p.id,
+      });
+      continue;
+    }
+    const invalid = p.scope.tags.filter((t) => !valid.has(t));
+    if (invalid.length === 0) continue;
+    findings.push({
+      file_path: p.filePath,
+      invalid_tags: invalid,
+      message:
+        `Principle '${p.id}' declares scope.tags outside the KG computed-tag vocabulary: ${invalid.join(", ")}. ` +
+        `Valid computed tags (from kg-tags.ts): ${validTags.join(", ")}. ` +
+        `Use scope.file_patterns for path-based scoping or remove scope.tags for universal match.`,
       principle_id: p.id,
     });
   }
@@ -498,6 +563,7 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     missingExamples,
     citedPaths,
     scopeLayers,
+    scopeTags,
     filesScanned,
     principlesChecked,
   } = input;
@@ -507,6 +573,7 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     missing_examples: missingExamples,
     orphan_principles: orphans,
     scope_layers: scopeLayers,
+    scope_tags: scopeTags,
     stale_refs: staleRefs,
     summary: {
       files_scanned: filesScanned,
@@ -517,7 +584,8 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
         staleRefs.length +
         missingExamples.length +
         citedPaths.length +
-        scopeLayers.length,
+        scopeLayers.length +
+        scopeTags.length,
     },
   };
 }

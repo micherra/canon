@@ -8,7 +8,7 @@
       "extra-files": [
         { "type": "json", "path": ".claude-plugin/plugin.json", "jsonpath": "$.version" },
         { "type": "json", "path": "mcp-server/package.json", "jsonpath": "$.version" },
-        { "type": "generic", "path": "mcp-server/src/app/server-state.ts" },
+        { "type": "generic", "path": "mcp-server/src/app/create-server.ts" },
         { "type": "json", "path": "mcp-server/package-lock.json", "jsonpath": "$.version" },
         { "type": "json", "path": "mcp-server/package-lock.json", "jsonpath": "$[\"packages\"][\"\"][\"version\"]" }
       ]

@@ -1,7 +1,8 @@
 import type { FailureEntry } from "@features/diagnostics/tools/categorize-failures.ts";
 import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler } from "./server-state.ts";
 
 const FailureEntrySchema = z.object({
   error_message: z.string().describe("Error message from the failure"),
@@ -13,7 +14,7 @@ const FailureEntrySchema = z.object({
   test_name: z.string().optional().describe("Test name"),
 });
 
-export function registerCategorizeTool(): void {
+export function registerCategorizeTool(server: McpServer): void {
   server.registerTool(
     "categorize_failures",
     {

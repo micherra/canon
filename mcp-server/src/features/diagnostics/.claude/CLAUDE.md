@@ -21,7 +21,7 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 
 | File | Responsibility |
 |------|---------------|
-| `wiki-lint.ts` | `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `assembleWikiLintOutput(AssembleWikiLintInput)` |
+| `wiki-lint.ts` | `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `assembleWikiLintOutput(AssembleWikiLintInput)` |
 | `doc-gap-detect.ts` | `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)` |
 | `signal-compiler.ts` | `compileSignals(filePaths, driftDbSignals)` — read-only; scores by priority within per-file token budget |
 | `pitfall-enrichment.ts` | `queryDriftSignalPitfalls`, `queryErrorFixPitfalls`, `formatPitfallsSection`, `countPitfalls` |
@@ -32,11 +32,11 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `craft-audit-service.ts` | Pure audit area selector + profile persistence; see Contracts below |
 
 ## Contracts
-<!-- last-updated: 2026-06-05 (scope_layers valid set: loadLayerMappings(projectDir) replaces static VALID_LAYERS) -->
+<!-- last-updated: 2026-06-07 (scope_tags check added: 7th check, VALID_COMPUTED_TAGS from kg-tags.ts; scalar guard on both scope_tags and scope_layers) -->
 
 **Craft audit service** (`services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` pure selector; bounded by `limit` default 5; `persistAuditProfile(areas, ratings, dao)` writes `source:"audit"` rows via injected `CraftProfileDao`; reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
 
-**`wiki_lint` tool** — `wikiLint(input, projectDir)` runs any combination of 6 checks; returns `WikiLintOutput` with per-check arrays + `total_findings`.
+**`wiki_lint` tool** — `wikiLint(input, projectDir)` runs any combination of 7 checks; returns `WikiLintOutput` with per-check arrays + `total_findings`.
 
 `CheckName` union (all valid values for the optional `checks` input array):
 
@@ -48,17 +48,19 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `"missing_examples"` | Principles lacking usage examples |
 | `"cited_paths"` | File paths cited in `references/**/*.md` that do not resolve from repo root |
 | `"scope_layers"` | `scope.layers` values in principles outside the valid set (derived from `loadLayerMappings(projectDir)` — project config keys when `.canon/config.json` defines `layers`, otherwise defaults; replaces defaults entirely when config defines any layers) |
+| `"scope_tags"` | `scope.tags` values in principles outside `VALID_COMPUTED_TAGS` (static const from `kg-tags.ts` — 15 values, no I/O); both `scope_tags` and `scope_layers` emit a "must be a YAML list" finding when the field is a scalar string |
 
 **`cited_paths` check** (added 2026-06-02): scans every `references/**/*.md` file. A candidate is only considered when it is a backtick-quoted token matching the pattern `` `<alpha><word-chars/dots/slashes/hyphens>.<ext>` `` where `<ext>` is one of `sh|ts|js|md|json|yaml|yml`. It is excluded (not flagged) when: it contains `${`, `<`, `>`, `{`, or `}` (template variables / placeholders); starts with `http://` or `https://`; starts with `#`; has no `/` (bare filename); or appears inside a fenced block whose opening line is labeled `example`, `hypothetical`, or `template`. A non-excluded candidate that does not resolve from the repo root is reported as a finding with its 1-based line number. Conservative by design — false positives are worse than misses.
 
-**`assembleWikiLintOutput(input: AssembleWikiLintInput)`** — `total_findings` includes all 6 check counts including `scopeLayers`.
+**`assembleWikiLintOutput(input: AssembleWikiLintInput)`** — `total_findings` includes all 7 check counts including `scopeLayers` and `scopeTags`.
 
 ## Invariants
-<!-- last-updated: 2026-06-05 -->
+<!-- last-updated: 2026-06-07 -->
 - All service functions are pure: no I/O except `scanDirectories` and `doc-freshness.ts` (git + fs reads)
 - `tools/wiki-lint.ts` is the only file that calls `existsSync` for `checkCitedPaths`; service layer receives an injected `existsOnDisk` predicate (pure-IO split)
 - `checkCitedPaths` scans `references/**/*.md` only; does not scan other directories
 - `checkScopeLayers` is a pure function in `services/wiki-lint.ts`; `tools/wiki-lint.ts` calls `loadLayerMappings(projectDir)` at the I/O boundary and passes `Object.keys(mappings)` as `validLayers` — no I/O in the service
+- `checkScopeTags` is a pure function in `services/wiki-lint.ts`; vocabulary (`VALID_COMPUTED_TAGS`) is injected at the tool boundary from `kg-tags.ts` — no I/O in the service; mirrors `checkScopeLayers` in structure
 
 ## Conventions
 <!-- last-updated: 2026-06-03 -->

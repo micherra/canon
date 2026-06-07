@@ -11,6 +11,7 @@
  * warning is logged but the MCP server continues operating.
  *
  * ## Routes
+ * Delegated to `http-routes.ts`:
  * - GET  /health                — liveness check
  * - GET  /artifact/:type/:slug — serve registered HTML artifact
  * - OPTIONS *                  — CORS preflight
@@ -26,12 +27,39 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
+import {
+  handleArtifactRoutes,
+  resetRoutesStateForTesting,
+  respondJson,
+  registerArtifact as routesRegister,
+  removeArtifact as routesRemove,
+} from "./http-routes.ts";
+
+/**
+ * Registers an HTML artifact for serving via GET /artifact/:type/:slug.
+ * Delegates to http-routes.ts. Kept here so existing callers of http-server.ts
+ * (features/orchestration, ui/snippets) are unaffected.
+ *
+ * @param key - Artifact key in `"${type}/${slug}"` format.
+ * @param html - Complete HTML string to serve.
+ * @param data - Arbitrary data object serialized as `window.__CANON_DATA__`.
+ */
+export function registerArtifact(key: string, html: string, data: unknown): void {
+  routesRegister(key, html, data);
+}
+
+/**
+ * Removes a registered artifact.
+ * Delegates to http-routes.ts. Kept here so existing callers of http-server.ts are unaffected.
+ *
+ * @param key - Artifact key in `"${type}/${slug}"` format.
+ */
+export function removeArtifact(key: string): void {
+  routesRemove(key);
+}
 
 const DEFAULT_PORT = 3141;
-const PID_FILENAME = "canon-server.pid";
-
-/** Stored artifact data keyed by `"${type}/${slug}"`. */
-const artifacts = new Map<string, { html: string; data: unknown }>();
+const DEFAULT_PID_FILENAME = "canon-server.pid";
 
 let httpServer: ReturnType<typeof createServer> | null = null;
 let serverPort = DEFAULT_PORT;
@@ -71,18 +99,24 @@ export function resolvePidDir(): string | null {
 }
 
 /**
- * Writes a PID file containing `${process.pid}\n${port}\n` to `${dir}/canon-server.pid`.
+ * Writes a PID file containing `${process.pid}\n${port}\n` to `${dir}/${filename}`.
  * Best-effort: logs WARN to stderr on failure, never throws.
  * VITEST guard: if process.env.VITEST is set, callers should pass an explicit dir
  * (tests inject a tmp dir directly — the VITEST guard is on the integration call site).
  *
  * @param dir - Directory to write the PID file into (must already exist or be creatable).
  * @param port - The port the server is bound to.
+ * @param filename - Optional PID file name; defaults to "canon-server.pid" (additive default
+ *   keeps stdio callers unchanged). The daemon passes "canon-daemon.pid".
  */
-export async function writePidFile(dir: string, port: number): Promise<void> {
+export async function writePidFile(
+  dir: string,
+  port: number,
+  filename: string = DEFAULT_PID_FILENAME,
+): Promise<void> {
   try {
     await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, PID_FILENAME), `${process.pid}\n${port}\n`, "utf8");
+    await writeFile(join(dir, filename), `${process.pid}\n${port}\n`, "utf8");
   } catch (err) {
     process.stderr.write(
       `Canon HTTP server WARN: could not write PID file to ${dir}: ${String(err)}\n`,
@@ -91,15 +125,20 @@ export async function writePidFile(dir: string, port: number): Promise<void> {
 }
 
 /**
- * Removes the PID file from `${dir}/canon-server.pid` if and only if its first
+ * Removes the PID file from `${dir}/${filename}` if and only if its first
  * line matches `process.pid`. This guards against removing another process's PID file
  * in the case of orphaned files from a prior run.
  * Best-effort: failures are logged but never throw.
  *
  * @param dir - Directory containing the PID file.
+ * @param filename - Optional PID file name; defaults to "canon-server.pid" (additive default
+ *   keeps stdio callers unchanged). The daemon passes "canon-daemon.pid".
  */
-export async function removePidFile(dir: string): Promise<void> {
-  const pidPath = join(dir, PID_FILENAME);
+export async function removePidFile(
+  dir: string,
+  filename: string = DEFAULT_PID_FILENAME,
+): Promise<void> {
+  const pidPath = join(dir, filename);
   try {
     const content = await readFile(pidPath, "utf8");
     const storedPid = Number.parseInt(content.split("\n")[0] ?? "", 10);
@@ -218,35 +257,13 @@ export function stopHttpServer(): Promise<void> {
 }
 
 /**
- * Registers an HTML artifact for serving.
- *
- * @param key - Artifact key in `"${type}/${slug}"` format.
- * @param html - Complete HTML string to serve. Data will be injected before
- *   `</head>` (or `</body>` when no `</head>` is present).
- * @param data - Arbitrary data object serialized as `window.__CANON_DATA__`.
- */
-export function registerArtifact(key: string, html: string, data: unknown): void {
-  artifacts.set(key, { data, html });
-}
-
-/**
- * Removes a registered artifact.
- * Call when the artifact is no longer needed.
- *
- * @param key - Artifact key in `"${type}/${slug}"` format.
- */
-export function removeArtifact(key: string): void {
-  artifacts.delete(key);
-}
-
-/**
- * Clears all registered artifacts.
+ * Clears all registered artifacts and module state.
  * Intended for test isolation only — do not call in production code.
  *
  * @internal
  */
 export function resetStateForTesting(): void {
-  artifacts.clear();
+  resetRoutesStateForTesting();
   resolvedProjectDir = null;
 }
 
@@ -255,8 +272,6 @@ export function resetStateForTesting(): void {
 // ---------------------------------------------------------------------------
 
 function handleRequest(req: IncomingMessage, res: ServerResponse): void {
-  const url = new URL(req.url ?? "/", `http://127.0.0.1:${serverPort}`);
-
   // CORS headers — required for browser fetch from file:// or localhost origins
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -268,54 +283,9 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-  // GET /health
-  if (req.method === "GET" && url.pathname === "/health") {
-    respondJson(res, 200, { ok: true, port: serverPort });
-    return;
-  }
-
-  // GET /artifact/:type/:slug
-  const artifactMatch = url.pathname.match(/^\/artifact\/([^/]+)\/([^/]+)$/);
-  if (req.method === "GET" && artifactMatch) {
-    const key = `${artifactMatch[1]}/${artifactMatch[2]}`;
-    const artifact = artifacts.get(key);
-    if (!artifact) {
-      respondJson(res, 404, { error: "Artifact not found", key });
-      return;
-    }
-    serveArtifactHtml(res, key, artifact.html, artifact.data);
-    return;
-  }
+  // Delegate to extracted route module (artifact + health routes)
+  if (handleArtifactRoutes(req, res, { port: serverPort })) return;
 
   // 404 fallback
   respondJson(res, 404, { error: "Not found" });
-}
-
-function serveArtifactHtml(res: ServerResponse, key: string, html: string, data: unknown): void {
-  // Inject window globals before </head> (or </body> as fallback)
-  const safeData = JSON.stringify(data)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-  const dataScript = `<script>
-    window.__CANON_DATA__ = ${safeData};
-    window.__CANON_ARTIFACT_URL__ = "http://127.0.0.1:${serverPort}/artifact/${key}";
-  </script>`;
-
-  let injectedHtml: string;
-  if (html.includes("</head>")) {
-    injectedHtml = html.replace("</head>", `${dataScript}\n</head>`);
-  } else {
-    injectedHtml = html.replace("</body>", `${dataScript}\n</body>`);
-  }
-
-  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  res.end(injectedHtml);
-}
-
-function respondJson(res: ServerResponse, status: number, data: unknown): void {
-  res.writeHead(status, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(data));
 }

@@ -4,8 +4,6 @@ title: Commands and Queries Don't Mix
 severity: strong-opinion
 scope:
   layers: []
-  tags:
-    - design
 tags:
   - side-effects
   - predictability

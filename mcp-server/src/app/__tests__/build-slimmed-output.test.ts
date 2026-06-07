@@ -17,7 +17,6 @@ vi.mock("@app/server-state.ts", () => ({
   projectDir: "/mock/project",
   registerToolWithUi: vi.fn(),
   resolveScope: () => "/mock/project",
-  server: { registerTool: vi.fn() },
 }));
 
 // Stub out all other register-knowledge.ts dependencies.
