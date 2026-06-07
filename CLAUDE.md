@@ -453,7 +453,7 @@ Detect and retry transient failures:
 | Rate limit (429, "rate limit") | API throttling |
 | Auth failure ("Not logged in", 401) | Parallel agents corrupting session credentials |
 | TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache ordering bug |
-| Stream idle timeout (agent stalls mid-run: no streaming output, tool-use history present) | Long composition or reading phase without output |
+| Stream idle timeout (agent stalls mid-run: no streaming output, tool-use history present) | Long composition or reading phase without output — **resume-first; backoff does not apply (see Stream-idle timeout recovery below)** |
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only failed ones. If all retries fail, pause and inform the user.
 

@@ -4,7 +4,8 @@ title: Lazy Freshness Gate for Commit-Granularity Caches
 severity: convention
 scope:
   file_patterns:
-    - "mcp-server/src/**"
+    - "mcp-server/src/features/knowledge-graph/**"
+    - "mcp-server/src/features/**/ensure-*.ts"
 tags:
   - caching
   - freshness
