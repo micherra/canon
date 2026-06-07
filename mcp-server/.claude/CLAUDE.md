@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-06-05 -->
+<!-- last-updated: 2026-06-07 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -40,6 +40,7 @@ src/
 
 **Key subsystems (directory docs):**
 - **Boot / server scope** (`app/`) — `boot.sh` launcher, per-connection scope, per-project `JobManager`. See `src/app/.claude/CLAUDE.md`.
+- **HTTP auth + sessions** (`app/mcp-http/`) — token auth, per-session McpServer, scope handshake, idle reaper. See `src/app/mcp-http/.claude/CLAUDE.md`.
 - **Drift storage** (`platform/storage/drift/`) — SQLite drift DB, DAO inventory, confidence-decay adapters. See `src/platform/storage/drift/.claude/CLAUDE.md`.
 - **Orchestration tools** (`features/orchestration/`) — workspace lifecycle, artifact writing, agent skill resolution. See `src/features/orchestration/.claude/CLAUDE.md`.
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
