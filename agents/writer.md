@@ -36,6 +36,10 @@ Your domain knowledge is loaded via skills. The active skill defines modes, step
 
 When authoring or editing a principle's `scope.layers`, only these 7 values are valid: `api`, `data`, `domain`, `hooks`, `infra`, `shared`, `ui`. Any other value (e.g. `service`, `features`) will be flagged by `wiki_lint`. If no valid layer applies, set `layers: []` and scope via `file_patterns` instead. The `canon:write-principle` SKILL is authoritative for the interview prompt wording.
 
+## Valid scope.tags values
+
+When authoring or editing a principle's `scope.tags`, every value must be in the KG computed-tag vocabulary (`VALID_COMPUTED_TAGS` in `mcp-server/src/graph/kg-tags.ts`): `graph-infrastructure`, `orchestration`, `principles`, `pr-review`, `file-context`, `knowledge-graph`, `diagnostics`, `infrastructure`, `shared-kernel`, `frontend`, `error-handling`, `observability`, `hub`, `entry-point`, `leaf`. Any other value is flagged by `wiki_lint` (`scope_tags` check) and makes the principle silently unmatchable when `scope.layers` is empty — the layer gate fails before `file_patterns` is ever evaluated. For path-based applicability, prefer `scope.file_patterns` (works regardless of KG indexing state); if no computed tag genuinely applies, omit `scope.tags` entirely.
+
 ## Fork Mode
 
 Fork mode copies a built-in principle into `.canon/principles/` for project-local customization. This is the correct path when a project needs to modify a built-in principle's content — it creates a project-local version that takes precedence over the built-in, while leaving the built-in unchanged for other projects.

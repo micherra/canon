@@ -160,7 +160,7 @@ function registerWikiLintTool(): void {
     "wiki_lint",
     {
       description:
-        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, and invalid scope.layers values.",
+        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, and invalid scope.tags values outside the KG computed-tag vocabulary.",
       inputSchema: {
         checks: z
           .array(
@@ -171,11 +171,12 @@ function registerWikiLintTool(): void {
               "missing_examples",
               "cited_paths",
               "scope_layers",
+              "scope_tags",
             ]),
           )
           .optional()
           .describe(
-            "Checks to run (default: all 6). Options: contradictions, orphan_principles, stale_refs, missing_examples, cited_paths, scope_layers",
+            "Checks to run (default: all 7). Options: contradictions, orphan_principles, stale_refs, missing_examples, cited_paths, scope_layers, scope_tags",
           ),
       },
     },

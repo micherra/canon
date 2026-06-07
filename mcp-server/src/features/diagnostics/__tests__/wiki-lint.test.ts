@@ -517,6 +517,7 @@ describe("assembleWikiLintOutput", () => {
       missingExamples: [missingExample],
       citedPaths: [citedPath],
       scopeLayers: [scopeLayer],
+      scopeTags: [],
       filesScanned: 10,
       principlesChecked: 20,
     });

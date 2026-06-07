@@ -13,12 +13,35 @@ import type { FileEdgeRow, FileRow } from "@graph/kg-types.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+  VALID_COMPUTED_TAGS,
   computeCommunityDerivedTags,
   computeDirectoryTags,
   computeGraphRoleTags,
   computeImportDerivedTags,
   propagateAllTags,
 } from "../graph/kg-tags.ts";
+
+// ---- VALID_COMPUTED_TAGS ----
+
+describe("VALID_COMPUTED_TAGS", () => {
+  test("contains directory tag 'diagnostics'", () => {
+    expect(VALID_COMPUTED_TAGS).toContain("diagnostics");
+  });
+
+  test("contains import tag 'error-handling'", () => {
+    expect(VALID_COMPUTED_TAGS).toContain("error-handling");
+  });
+
+  test("contains graph-role tags hub, entry-point, leaf", () => {
+    expect(VALID_COMPUTED_TAGS).toContain("hub");
+    expect(VALID_COMPUTED_TAGS).toContain("entry-point");
+    expect(VALID_COMPUTED_TAGS).toContain("leaf");
+  });
+
+  test("has no duplicate entries (dedup is load-bearing for graph-infrastructure and principles)", () => {
+    expect(new Set(VALID_COMPUTED_TAGS).size).toBe(VALID_COMPUTED_TAGS.length);
+  });
+});
 
 // --- Helpers ---
 

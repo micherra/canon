@@ -53,6 +53,23 @@ const IMPORT_TAG_MAPPINGS: Array<{ pathSubstring: string; tag: string }> = [
   { pathSubstring: "matcher.ts", tag: "principles" },
 ];
 
+/** Tags emitted by computeGraphRoleTags. */
+const GRAPH_ROLE_TAGS = ["hub", "entry-point", "leaf"] as const;
+
+/**
+ * The complete KG computed-tag vocabulary — every tag value any signal source
+ * can emit. Community propagation reuses these values and adds none.
+ * Consumed by wiki-lint's scope_tags check; principles whose scope.tags fall
+ * outside this set are silently unmatchable (matcher.ts passesLayerGate Case 2).
+ */
+export const VALID_COMPUTED_TAGS: readonly string[] = [
+  ...new Set<string>([
+    ...DIRECTORY_TAG_MAPPINGS.map((m) => m.tag),
+    ...IMPORT_TAG_MAPPINGS.map((m) => m.tag),
+    ...GRAPH_ROLE_TAGS,
+  ]),
+];
+
 // --- Hub threshold ---
 
 /**

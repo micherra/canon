@@ -8,9 +8,6 @@ scope:
   layers:
     - api
     - infra
-  tags:
-    - security
-    - boundary
 tags:
   - security
   - threat-modeling
