@@ -1,0 +1,44 @@
+# mcp-http/ — HTTP Transport Auth and Session Management
+
+<!-- Managed by Canon. Manual edits are preserved. -->
+
+## Purpose
+Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer registry, scope handshake, and idle-session eviction. Flag-dark (CANON_HTTP_DAEMON=1) until Phase 3.
+
+## Architecture
+<!-- last-updated: 2026-06-06 -->
+
+| File | Responsibility |
+|------|---------------|
+| `auth.ts` | Token lifecycle (`resolveTokenPath`/`loadOrCreateToken` 0600 fail-closed) + request auth (`authenticate` timingSafeEqual, loopback+Host rebinding guards, `rereadToken` rate-limited rotation) |
+| `session-manager.ts` | Per-session `McpServer`+`StreamableHTTPServerTransport` registry; scope handshake (header→roots/list capped retry, fail-closed, fs.realpath-normalized); refcount+pending-handshake-guarded eviction in isolation-finish-01 order (server.close first); idle reaper (`CANON_HTTP_SESSION_TTL_MS`, default 30 min); scope immutable after first registration |
+
+## Contracts
+<!-- last-updated: 2026-06-06 -->
+
+**`auth.ts`**
+- `resolveTokenPath(env?)` — 3-tier: `CANON_MCP_TOKEN_FILE` → `${CLAUDE_PLUGIN_DATA}/canon-mcp-token` → `~/.claude/canon/canon-mcp-token`
+- `loadOrCreateToken(tokenPath)` — async, fail-closed; explicit `chmod(0o600)` after `writeFile` (umask-safe); regenerates on empty/whitespace; returns `TokenResult` discriminated union
+- `authenticate(req, expectedToken)` — sync; loopback remoteAddress check (403), Host header DNS-rebinding guard (403), Bearer presence (401), `crypto.timingSafeEqual` with length-mismatch short-circuit (401)
+- `rereadToken(tokenPath)` — async; re-reads file for rate-limited background rotation recovery; fail-closed on delete/ENOENT
+
+**`session-manager.ts`**
+- `handleMcpRequest(req, res, port)` — main entry point; routes by session ID; creates transport+server for new POSTs; `cleanupFailedInit` on abrupt close
+- `createSessionTransport(port, server, headerDir)` — transport factory; wires `onsessioninitialized` and `onsessionclosed`
+- `teardownSession(sessionId)` — idempotent; isolation-finish-01 order: `server.close()` → `clearConnectionScope` → `clearSessionReady` → `evictStoresForScope` → `evictDriftDbForScope` → `evictJobManagerForScope`; refcount guard via `hasOtherSessionsForDir`; pending-handshake guard via `hasPendingHandshakeForDir`
+- `resolveSessionScope(session, headerDir)` — layered fail-closed: `x-canon-project-dir` header → `roots/list` retry (3×2s) → gate stays pending; scope never falls back to daemon cwd/env
+- `validateAndNormalizeDir(dir)` — `fs.realpath` normalization (handles macOS `/tmp`→`/private/tmp`; `path.resolve` is NOT sufficient)
+- `closeAllSessions()` — stops idle reaper; parallel teardown of all sessions; daemon SIGTERM path
+- `sessionCount()` — observability accessor
+- `startReaper()` / `stopReaper()` — unref'd interval; started lazily on first `onsessioninitialized`
+
+## Invariants
+<!-- last-updated: 2026-06-06 -->
+- `authenticate` always checks remoteAddress (loopback) BEFORE Host header BEFORE token comparison — order is security-critical (defense-in-depth)
+- `loadOrCreateToken` returns `{ ok: false }` on any fs error — callers must serve 503 (never fall through to auth)
+- Scope resolution never falls back to daemon cwd/env — gate stays pending on all failure paths
+- `fs.realpath` used for all root URI normalization — `path.resolve` is explicitly NOT sufficient (macOS symlink issue documented in PROBE-FINDINGS.md)
+- `teardownSession` is idempotent — second call is a no-op; unknown session is a no-op
+- Scope is immutable after first registration — `roots/list_changed` events that attempt re-registration are logged and dropped
+- `server.close()` fires BEFORE eviction chain (isolation-finish-01) — tools must not run against a scope that is being evicted
+- Pending handshake blocks eviction — a session in scope-resolution cannot be evicted by a concurrent teardown

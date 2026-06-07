@@ -1,10 +1,11 @@
 import { recordAgentMetrics } from "@features/diagnostics/tools/record-agent-metrics.ts";
 import { captureTranscript } from "@features/orchestration/tools/capture-transcript.ts";
 import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope } from "./server-state.ts";
 
-function registerCaptureTranscriptTool(): void {
+function registerCaptureTranscriptTool(server: McpServer): void {
   server.registerTool(
     "capture_transcript",
     {
@@ -42,7 +43,7 @@ function registerCaptureTranscriptTool(): void {
   );
 }
 
-export function registerReportTools(): void {
+export function registerReportTools(server: McpServer): void {
   server.registerTool(
     "record_agent_metrics",
     {
@@ -83,5 +84,5 @@ export function registerReportTools(): void {
     gatedWrapHandler(async (input) => getTranscript(input)),
   );
 
-  registerCaptureTranscriptTool();
+  registerCaptureTranscriptTool(server);
 }

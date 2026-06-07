@@ -70,7 +70,6 @@ vi.mock("@app/server-state.ts", async (importOriginal) => {
       async (input: T, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
         return handler(input, extra);
       },
-    server: { registerTool: vi.fn() },
     registerToolWithUi: vi.fn(),
   };
 });
@@ -223,8 +222,6 @@ vi.mock("@features/diagnostics/services/prediction-accuracy.ts", () => ({
 
 // ── Import mocked modules ─────────────────────────────────────────────────────
 
-import * as mockedAppState from "@app/server-state.ts";
-
 import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
 import { report } from "@features/orchestration/tools/report.ts";
 import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
@@ -240,18 +237,24 @@ import { registerConnectionScope, resetForTesting, STDIO_SESSION_ID } from "../s
 
 // ── Test setup ────────────────────────────────────────────────────────────────
 
+// Mock server: capture registerTool calls so tests can extract handlers.
+// Created fresh in beforeEach so each test suite starts with a clean slate.
+let mockRegisterTool: ReturnType<typeof vi.fn>;
+let mockServer: { registerTool: ReturnType<typeof vi.fn> };
+
 beforeEach(() => {
   vi.clearAllMocks();
   resetForTesting();
 
-  // Re-register all tools on the fresh mock server
-  const mockServer = mockedAppState.server as unknown as { registerTool: ReturnType<typeof vi.fn> };
-  mockServer.registerTool.mockClear();
+  // Create a fresh mock server and register all tools on it.
+  // registerXxx now takes (server: McpServer) as first param.
+  mockRegisterTool = vi.fn();
+  mockServer = { registerTool: mockRegisterTool };
 
-  registerInitWorkspaceTool();
-  registerArtifactTools();
-  registerPrincipleTools();
-  registerAgentTeamsTools();
+  registerInitWorkspaceTool(mockServer as never);
+  registerArtifactTools(mockServer as never);
+  registerPrincipleTools(mockServer as never);
+  registerAgentTeamsTools(mockServer as never);
 });
 
 afterEach(() => {
@@ -259,8 +262,7 @@ afterEach(() => {
 });
 
 function getRegisterToolCalls(): unknown[][] {
-  const mockServer = mockedAppState.server as unknown as { registerTool: ReturnType<typeof vi.fn> };
-  return mockServer.registerTool.mock.calls as unknown[][];
+  return mockRegisterTool.mock.calls as unknown[][];
 }
 
 // ── Tests: register-init-workspace.ts ────────────────────────────────────────

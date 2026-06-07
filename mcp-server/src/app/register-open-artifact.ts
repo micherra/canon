@@ -1,9 +1,10 @@
 import { openArtifact } from "@features/orchestration/tools/open-artifact.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler } from "./server-state.ts";
 
 /** Register the open_artifact MCP tool. */
-export function registerOpenArtifactTool(): void {
+export function registerOpenArtifactTool(server: McpServer): void {
   server.registerTool(
     "open_artifact",
     {

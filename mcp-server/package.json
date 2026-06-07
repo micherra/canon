@@ -1,6 +1,6 @@
 {
   "name": "@canon/mcp-server",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "MCP server for Canon engineering principles",
   "type": "module",
   "main": "src/app/index.ts",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
-    "@modelcontextprotocol/ext-apps": "^1.7.3",
+    "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.10.0",
     "graphology": "^0.26",
@@ -35,7 +35,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.9.1",
+    "@types/node": "^25.9.2",
     "dependency-cruiser": "^17.4.3",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
