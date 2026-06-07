@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.8.0](https://github.com/micherra/canon/compare/v2.7.0...v2.8.0) (2026-06-07)
+
+
+### Features
+
+* **http-epic-phase2:** Streamable-HTTP MCP daemon — per-session transport, loopback auth, scope handshake, supervisor (flag-dark) ([#342](https://github.com/micherra/canon/issues/342)) ([a2a1c67](https://github.com/micherra/canon/commit/a2a1c67adeb6c3e86b9e587b2e13c616d8598e49))
+* **learner:** promote batch 5 — worktree_path, renderer conventions, stream-idle resume, counterexample obligation ([#341](https://github.com/micherra/canon/issues/341)) ([404517b](https://github.com/micherra/canon/commit/404517ba54b9b43fc044947988a2c03c41af36cb))
+* **learner:** promote sug_NNNNNN1 + watch_WWWWW2 + watch_VVVVV3 (3-item batch) ([#334](https://github.com/micherra/canon/issues/334)) ([9c3aaec](https://github.com/micherra/canon/commit/9c3aaec7dd7be66d6222c37e03da80df0b053752))
+* **learner:** promote watch_KKKKK1 — reviewer Stage 6 scope-parity check for precision/scope fixes ([#332](https://github.com/micherra/canon/issues/332)) ([c0efa0d](https://github.com/micherra/canon/commit/c0efa0d73d80ef014eea00d1bf2d3de5b6285f57))
+* **learner:** promote watch_VVVVV2 — severity-vocabulary consistency obligations (writer pre-commit + reviewer Stage 2) ([#335](https://github.com/micherra/canon/issues/335)) ([b1ceea5](https://github.com/micherra/canon/commit/b1ceea5003249f2f0bc93c91bdbad57aaab043bb))
+
+
+### Bug Fixes
+
+* **file-card:** repair broken file-detail-card rendering in review.html ([#338](https://github.com/micherra/canon/issues/338)) ([d31614c](https://github.com/micherra/canon/commit/d31614c8b0a2c0c0c3614c907b7044c84a162fb4))
+* **hooks:** fix destructive-guard false positives on comments/quoted strings ([#337](https://github.com/micherra/canon/issues/337)) ([886fd67](https://github.com/micherra/canon/commit/886fd67fc8714082dec20e5082d4ce70e2ab5f03))
+* **renderer:** render GFM tables in review narrative panel ([#336](https://github.com/micherra/canon/issues/336)) ([7330b17](https://github.com/micherra/canon/commit/7330b17eedb04991f44bb60c0b9f787ad31d3980))
+
 ## [2.7.0](https://github.com/micherra/canon/compare/v2.6.0...v2.7.0) (2026-06-06)
 
 
