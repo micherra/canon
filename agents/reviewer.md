@@ -323,6 +323,10 @@ For each such verification command, confirm that the grep pattern and path scope
    ```
    A match in a doc comment, variable name, or non-registration file does NOT satisfy a registration claim.
 
+3. **Counterexample-probe evidence (watch_QQQQQQ1)**: when the diff *introduces a new* mechanical verification form (grep assertion, awk extractor, structural self-check step, embedded verification command in a protocol/convention file), require evidence that the author probed it with at least one concrete counterexample exercising its **real execution context** — not just the abstract source it was authored against. Examples of qualifying counterexamples: a synthetic agent frontmatter with a non-final key after `tools:` (for an awk frontmatter extractor); a rendered artifact containing prose mentions of an asserted function name outside the `<script>` block (for an HTML structural grep). Evidence = the probe command and its observed output, recorded in the SUMMARY's Criteria Coverage table or the review materials. Additionally, reason adversarially: could the assertion pattern be satisfied (false positive) or violated (false negative) by adjacent content in the concrete execution context the gate will actually scan? Both watch_QQQQQQ1 instances (PR #334 awk `/^---/{exit}` terminator; PR #338 bare function-name greps matching reviewer prose) passed abstract-level internal review and failed only in concrete context.
+
+   If a new mechanical gate ships without counterexample-probe evidence: flag as **WARNING** ("unprobed mechanical gate"), citing this sub-axis.
+
 **Outcome rules:**
 - If a verification command's scope exceeds the structural claim it was meant to verify (i.e., would return a false positive — matching non-structural occurrences and incorrectly confirming the structural claim): flag as **advisory** citing this sub-axis. Recommend the minimum-scope form above.
 - **Upgrade to WARNING** when the over-broad grep appears in a spec, agent instruction, or protocol document and the false-positive condition would allow a dead-wire to pass undetected — the same class of defect as the one the check was designed to prevent.
