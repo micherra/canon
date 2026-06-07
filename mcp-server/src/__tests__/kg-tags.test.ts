@@ -13,12 +13,12 @@ import type { FileEdgeRow, FileRow } from "@graph/kg-types.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
-  VALID_COMPUTED_TAGS,
   computeCommunityDerivedTags,
   computeDirectoryTags,
   computeGraphRoleTags,
   computeImportDerivedTags,
   propagateAllTags,
+  VALID_COMPUTED_TAGS,
 } from "../graph/kg-tags.ts";
 
 // ---- VALID_COMPUTED_TAGS ----

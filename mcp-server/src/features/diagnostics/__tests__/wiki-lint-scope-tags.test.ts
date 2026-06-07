@@ -18,10 +18,7 @@
 
 import type { Principle } from "@shared/parser.ts";
 import { describe, expect, it } from "vitest";
-import {
-  assembleWikiLintOutput,
-  checkScopeTags,
-} from "../services/wiki-lint.ts";
+import { assembleWikiLintOutput, checkScopeTags } from "../services/wiki-lint.ts";
 
 // ---- Helpers ----
 
@@ -125,7 +122,8 @@ describe("assembleWikiLintOutput with scope_tags", () => {
       principle_id: "bad-tag",
       file_path: "principles/conventions/bad-tag.md",
       invalid_tags: ["design"],
-      message: "Principle 'bad-tag' declares scope.tags outside the KG computed-tag vocabulary: design.",
+      message:
+        "Principle 'bad-tag' declares scope.tags outside the KG computed-tag vocabulary: design.",
     };
     const output = assembleWikiLintOutput({
       contradictions: [],

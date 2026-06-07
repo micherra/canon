@@ -13,11 +13,11 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { VALID_COMPUTED_TAGS } from "@graph/kg-tags.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { loadLayerMappings } from "@shared/lib/config.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
 import type { Principle } from "@shared/parser.ts";
-import { VALID_COMPUTED_TAGS } from "@graph/kg-tags.ts";
 import {
   assembleWikiLintOutput,
   checkCitedPaths,
