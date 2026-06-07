@@ -144,7 +144,9 @@ function registerReconcileWorkspace(): void {
         workspace: z.string().describe("Workspace directory path"),
       },
     },
-    gatedWrapHandler(async (input) => reconcileWorkspace(input)),
+    gatedWrapHandler(async (input, extra) =>
+      reconcileWorkspace({ ...input, projectDir: resolveScope(extra) }),
+    ),
   );
 }
 
