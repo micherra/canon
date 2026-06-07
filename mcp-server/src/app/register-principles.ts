@@ -27,6 +27,7 @@ function registerPrImpactTool(): void {
         diff_base: input.diff_base,
         incremental: input.incremental,
         pr_number: input.pr_number,
+        worktree_path: input.worktree_path,
       });
     }),
     htmlFile: "pr-review.html",
@@ -38,6 +39,12 @@ function registerPrImpactTool(): void {
         .optional()
         .describe("Only review new commits since last Canon review"),
       pr_number: z.number().optional().describe("Filter to reviews for this PR number"),
+      worktree_path: z
+        .string()
+        .optional()
+        .describe(
+          "Absolute path to the build worktree; when provided, the git diff is resolved from this checkout instead of the project root",
+        ),
     },
     resourceUri: "ui://canon/pr-review",
     title: "PR Review",

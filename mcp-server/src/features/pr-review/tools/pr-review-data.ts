@@ -20,10 +20,11 @@ import {
 } from "./pr-review-data-helpers.ts";
 
 export type PrReviewDataInput = {
-  pr_number?: number;
   branch?: string;
   diff_base?: string;
   incremental?: boolean;
+  pr_number?: number;
+  worktree_path?: string;
 };
 
 export type PrViolation = {
@@ -372,6 +373,12 @@ export async function getPrReviewData(
     if (validationError) return emptyOutput(validationError);
   }
 
+  // Validate worktree_path — explicit error on invalid path (errors-are-values; decision d03).
+  // Silent fallback to projectDir would silently produce wrong-branch diffs — the defect class this fixes.
+  if (input.worktree_path !== undefined && !existsSync(input.worktree_path)) {
+    return emptyOutput(`worktree_path does not exist: ${input.worktree_path}`);
+  }
+
   const driftStore = new DriftStore(projectDir);
   const isPrNumberMode = input.pr_number !== undefined;
 
@@ -385,10 +392,14 @@ export async function getPrReviewData(
   const layerMappings = await loadLayerMappings(projectDir);
   const inferLayer = buildLayerInferrer(layerMappings);
 
+  // Scope the git diff cwd to worktree_path when provided (decision d03).
+  // KG DB, DriftStore, and layer mappings remain on projectDir — no .canon/ exists in worktrees.
+  const diffCwd = input.worktree_path ?? projectDir;
+
   let files: PrFileInfo[] = [];
   let execError: string | undefined;
   try {
-    const stdout = await runDiffCommand(diffCmd, projectDir);
+    const stdout = await runDiffCommand(diffCmd, diffCwd);
     files = parseDiffOutput(stdout, isPrNumberMode, inferLayer, new Map());
   } catch (err) {
     execError = err instanceof Error ? err.message : String(err);

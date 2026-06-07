@@ -6,13 +6,13 @@
 PR review tools: unified PR impact analysis, code review surfacing, review persistence, and pre-rendered review artifact presentation.
 
 ## Architecture
-<!-- last-updated: 2026-06-05 -->
+<!-- last-updated: 2026-06-06 -->
 
 **`tools/`** — MCP tool handlers.
 
 | Tool file | MCP tool name | Notes |
 |-----------|--------------|-------|
-| `show-pr-impact.ts` | `show_pr_impact` | Unified PR analysis; returns `UnifiedPrOutput` with `has_review` boolean; `status` always `"ok"`; resource URI: `ui://canon/pr-review` |
+| `show-pr-impact.ts` | `show_pr_impact` | Unified PR analysis; returns `UnifiedPrOutput` with `has_review` boolean; `status` always `"ok"`; resource URI: `ui://canon/pr-review`; optional `worktree_path` scopes diff cwd (KG/DriftStore remain on projectDir; invalid path returns `error` field, never throws) |
 | `review-code.ts` | `review_code` | Surface principles for code review + code content |
 | `store-pr-review.ts` | `store_pr_review` | Persist PR review result; accepts optional `craft_profile` |
 | `present-review.ts` | `present_review` | `showPrImpact` → read pre-rendered `review.html` → `presentArtifact`; returns `{ url: string }`; `INVALID_INPUT` when `review.html` missing or `has_review === false` |

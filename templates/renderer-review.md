@@ -19,6 +19,8 @@ result as the renderer agent's spawn prompt.
 - `${SLUG}` — the build slug (e.g., `add-dark-mode`)
 - `${BASE_COMMIT}` — the git commit hash to diff against (e.g., `abc1234`); used to scope
   `show_pr_impact` to the correct change set
+- `${WORKTREE_PATH}` — absolute path to the build worktree (`${WORKSPACE}/worktree`); scopes
+  `show_pr_impact` diff resolution to the build's checkout
 
 ## Prompt
 
@@ -82,9 +84,17 @@ Call these two MCP tools to enrich the HTML with structural context:
 
 ```
 mcp__canon__show_pr_impact({
-  diff_base: "${BASE_COMMIT}"
+  diff_base: "${BASE_COMMIT}",
+  worktree_path: "${WORKTREE_PATH}"
 })
 ```
+
+> **Limitation**: without `worktree_path`, `show_pr_impact` diffs against the main repo checkout
+> (`projectDir`), not the build worktree; when the main checkout has advanced past `${BASE_COMMIT}`,
+> returned stats may include unrelated changes, and KG-derived enrichment always reflects
+> project-root state. Servers that predate the `worktree_path` parameter ignore it harmlessly.
+> On any contradiction, the changed-file list in REVIEW.md Stage 1 is authoritative — fall back
+> to it and treat `show_pr_impact` stats as approximate.
 
 From the result, extract:
 - `filesChanged` — total files changed count
