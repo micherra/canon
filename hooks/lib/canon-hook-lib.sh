@@ -459,9 +459,11 @@ canon_unwrap_string_exec_arg() {
   #   -uNAME      (combined form, self-contained)
   #   NAME=VALUE  (assignment, skip)
   #   --          (end of options; advance once then stop)
-  #   -S / --split-string / -Si / -iS / --split-string=PAYLOAD
-  #     env re-splits and executes the payload just like a shell -c argument.
-  #     Sets _env_split_payload to the extracted payload and returns 2.
+  #   -S / --split-string (separate-token forms) / --split-string=PAYLOAD (= form)
+  #   / bundled-S clusters (-iS, -Si, etc.)
+  #     env re-splits and executes the payload just like a shell -c argument,
+  #     AND appends all subsequent operands to argv.  Sets _env_split_payload to
+  #     the JOIN of toks[payload_start .. end] and returns 2 (string-executor).
   #     Returns 2 with empty _env_split_payload if payload is absent (fail-closed).
   # Stops at the first bare word that is not an assignment (the command).
   # ---------------------------------------------------------------------------
@@ -488,32 +490,102 @@ canon_unwrap_string_exec_arg() {
         #   -S PAYLOAD           — separate next token is the payload
         #   --split-string=...   — = form; payload is the suffix after =
         #   --split-string PAYLOAD — separate next token form
-        #   -Si / -iS            — bundled cluster containing S (self+PAYLOAD next)
+        #   -iS / similar        — cluster with S as last char; next token is payload
+        #   -Si                  — S has inline suffix 'i'; payload = "i" only
+        #                          (real env execs 'i'; NOT destructive — do not block)
+        #
+        # CRITICAL: env executes the payload PLUS all subsequent operands, appended
+        # to argv.  So "env -S bash -c 'git reset --hard'" executes "bash" with
+        # additional argv "-c" and "git reset --hard" → effectively "bash -c 'git
+        # reset --hard'".  The guard must reconstruct the effective command as the
+        # JOIN of toks[payload_idx .. end] so the recursion path sees the full argv.
         # ---------------------------------------------------------------------------
         --split-string=*)
-          # = form: payload embedded after =
-          _env_split_payload="${_t#--split-string=}"
+          # = form: payload is the value after =, PLUS all remaining tokens joined.
+          # "env --split-string=bash -c 'git reset --hard'" → "bash -c git reset --hard"
+          local _eqpay="${_t#--split-string=}"
+          local _ji=$(( idx + 1 ))
+          while [[ $_ji -lt $tok_count ]]; do
+            _eqpay="$_eqpay ${toks[$_ji]}"
+            _ji=$(( _ji + 1 ))
+          done
+          _env_split_payload="$_eqpay"
           return 2
           ;;
         --split-string|-S)
-          # Separate-token form: next token is the payload
+          # Separate-token form: effective command = toks[payload_idx .. end] joined.
+          # "env -S bash -c 'git reset --hard'" → payload_idx=next → "bash -c git reset --hard"
           local _si=$(( idx + 1 ))
           if [[ $_si -lt $tok_count ]]; then
-            _env_split_payload="${toks[$_si]}"
+            local _joined="${toks[$_si]}"
+            local _ji=$(( _si + 1 ))
+            while [[ $_ji -lt $tok_count ]]; do
+              _joined="$_joined ${toks[$_ji]}"
+              _ji=$(( _ji + 1 ))
+            done
+            _env_split_payload="$_joined"
           fi
           # _env_split_payload may be empty if no next token — caller fails-closed
           return 2
           ;;
         -*)
-          # Check for a bundled short-flag cluster containing 'S' (e.g. -Si, -iS).
+          # Check for a bundled short-flag cluster containing 'S' (e.g. -iS, -Si, -xiS).
           # Strip the leading '-' and check if 'S' is in the cluster body.
           local _cluster="${_t#-}"
           # Only applies to pure-short-flag clusters (no '=' and no '--' prefix).
           if [[ "$_cluster" != *=* ]] && [[ "$_cluster" == *S* ]]; then
-            # Cluster contains S: the next token is the payload.
-            local _si=$(( idx + 1 ))
-            if [[ $_si -lt $tok_count ]]; then
-              _env_split_payload="${toks[$_si]}"
+            # Determine whether S is the LAST char of the cluster or not:
+            #   S last  (-iS, -xiS) → next token is the payload for -S; remaining
+            #                         tokens are appended as argv (join-and-recurse).
+            #   S not last (-Si, -Sba) → the chars AFTER S in the cluster are the
+            #                         INLINE payload string (real env semantics:
+            #                         "env -Si bash" execs 'i', not 'bash').
+            #                         The inline form is typically a short string that
+            #                         does NOT execute a destructive git command, but
+            #                         we still extract it and recurse (fail-closed if
+            #                         somehow destructive).
+            local _slast="${_cluster: -1}"
+            if [[ "$_slast" == "S" ]]; then
+              # S is the last char: next token is the payload, remaining tokens appended.
+              local _si=$(( idx + 1 ))
+              if [[ $_si -lt $tok_count ]]; then
+                local _joined="${toks[$_si]}"
+                local _ji=$(( _si + 1 ))
+                while [[ $_ji -lt $tok_count ]]; do
+                  _joined="$_joined ${toks[$_ji]}"
+                  _ji=$(( _ji + 1 ))
+                done
+                _env_split_payload="$_joined"
+              fi
+              # _env_split_payload may be empty if no next token — caller fails-closed
+            else
+              # S is NOT the last char: the chars after S are the inline payload.
+              # Extract the substring of the cluster that follows 'S'.
+              # Iterate the cluster character-by-character to find the first S
+              # and take everything after it as the inline string.
+              local _inline_pay=""
+              local _found_s=0
+              local _ci _cc
+              for (( _ci=0; _ci<${#_cluster}; _ci++ )); do
+                _cc="${_cluster:$_ci:1}"
+                if [[ "$_found_s" -eq 1 ]]; then
+                  _inline_pay="${_inline_pay}${_cc}"
+                elif [[ "$_cc" == "S" ]]; then
+                  _found_s=1
+                fi
+              done
+              # The inline payload is the extracted substring (may be empty → fail-closed).
+              # Additionally, any tokens after this cluster token are appended to argv.
+              local _ji=$(( idx + 1 ))
+              while [[ $_ji -lt $tok_count ]]; do
+                if [[ -n "$_inline_pay" ]]; then
+                  _inline_pay="$_inline_pay ${toks[$_ji]}"
+                else
+                  _inline_pay="${toks[$_ji]}"
+                fi
+                _ji=$(( _ji + 1 ))
+              done
+              _env_split_payload="$_inline_pay"
             fi
             return 2
           fi

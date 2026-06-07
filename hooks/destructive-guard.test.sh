@@ -1213,6 +1213,55 @@ run_test "printf bash -c \"git reset\" UNQUOTED passes (printf is no-exec builti
   0 "$(make_multiline_input "printf bash -c \"git reset $_R6_HARD\"")" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# P1 round-8: env -S CLASS — separate-token payload form (join-and-recurse).
+#
+# Root cause: "env -S bash -c 'git reset --hard'" uses -S in SEPARATE-TOKEN form
+# where the payload is the NEXT token ("bash"), not a quoted string.  Real env
+# executes payload PLUS all subsequent operands as argv, so the effective command
+# is "bash -c 'git reset --hard'".  Before this fix, _do_skip_env_flags set
+# _env_split_payload to just "bash" (missing -c and the inner string) → recursion
+# returned rc=1 (not a -c invocation) → the segment slipped through (fail-OPEN).
+#
+# Fix: for all separate-payload -S forms, set _env_split_payload to the JOIN of
+# toks[payload_idx .. end].  The recursion path then sees "bash -c git reset --hard"
+# and blocks.  The = form (--split-string=PAYLOAD) also gains trailing-operand
+# appending.
+#
+# All three separate-token -S sub-forms must block (exit 2):
+#   env -S bash -c 'git reset --hard'
+#   env -iS bash -c 'git reset --hard'   (S last in cluster)
+#   env -i -S bash -c 'git reset --hard' (separate -i and -S flags)
+# -----------------------------------------------------------------------
+echo ""
+echo "-- P1 round-8: env -S CLASS separate-token form (should block, exit 2) --"
+
+_R8_HARD="--hard"
+_R8_FD="-fd"
+
+# env -S bash -c 'git reset --hard' → join toks[payload..end] → "bash -c git reset --hard" → block
+run_test "env -S bash -c DESTRUCTIVE blocks (separate-token -S, join-and-recurse)" \
+  2 "$(make_multiline_input "env -S bash -c 'git reset $_R8_HARD'")" "$NON_WT_PWD"
+
+# env -iS bash -c 'git reset --hard' → S last in -iS cluster → same join → block
+run_test "env -iS bash -c DESTRUCTIVE blocks (S-last cluster, join-and-recurse)" \
+  2 "$(make_multiline_input "env -iS bash -c 'git reset $_R8_HARD'")" "$NON_WT_PWD"
+
+# env -i -S bash -c 'git reset --hard' → -i self-contained, then -S separate-token → block
+run_test "env -i -S bash -c DESTRUCTIVE blocks (-i then separate -S, join-and-recurse)" \
+  2 "$(make_multiline_input "env -i -S bash -c 'git reset $_R8_HARD'")" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-8: env -S CLASS pass controls (should pass, exit 0) --"
+
+# env -S "git status" (single-token QUOTED payload) → unchanged: still passes
+run_test "env -S \"git status\" quoted payload passes (no regression from round-8 fix)" \
+  0 "$(make_multiline_input "env -S \"git status\"")" "$NON_WT_PWD"
+
+# env -iS "git status" (single-token QUOTED payload, S-last) → still passes
+run_test "env -iS \"git status\" quoted payload passes (no regression from round-8 fix)" \
+  0 "$(make_multiline_input "env -iS \"git status\"")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # P1 round-7: quote-parity fix — nested quoted flags inside wrapper strings
 #
 # Root cause: the recursion path (process_segment inner_seg inner_seg depth)

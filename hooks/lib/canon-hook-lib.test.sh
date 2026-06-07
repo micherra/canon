@@ -810,11 +810,17 @@ else
   printf '  FAIL  env --split-string=PAYLOAD → expected rc=0, got rc=%d\n' "$_R6_SS_RC"
 fi
 
-# env -Si "git reset --hard" → extracts "git reset --hard"
+# env -Si "git reset --hard":
+# GNU env semantics: -Si means -S with inline string "i" (chars after S in cluster).
+# The inline string is "i", and the remaining token "git reset --hard" is appended as argv.
+# Effective command env executes: "i" "git reset --hard" (execs 'i', which doesn't exist).
+# The guard extracts the FULL payload "i git reset --hard" (join-and-recurse) and recurses.
+# This is the correct class fix: even though real env runs 'i' (not git reset --hard),
+# the guard conservatively blocks because the joined payload contains a destructive git op.
 _R6_SI_RC=0
 _R6_SI_OUT=$(canon_unwrap_string_exec_arg "env -Si \"git reset $_R6H\"") || _R6_SI_RC=$?
-assert_eq "env -Si PAYLOAD extracts payload (rc=0, bundled cluster with S)" \
-  "git reset $_R6H" \
+assert_eq "env -Si PAYLOAD extracts inline payload + trailing (rc=0, join-and-recurse)" \
+  "i git reset $_R6H" \
   "$_R6_SI_OUT"
 if [[ "$_R6_SI_RC" -eq 0 ]]; then
   PASS=$(( PASS + 1 ))
@@ -880,6 +886,113 @@ assert_eq "echo QUOTED bash arg still returns empty (rc=1, no-exec path)" \
 assert_eq "printf QUOTED bash arg still returns empty (rc=1, no-exec path)" \
   "" \
   "$(canon_unwrap_string_exec_arg "printf \"bash -c 'git clean $_R6FD'\"" 2>/dev/null || true)"
+
+# ---------------------------------------------------------------------------
+# canon_unwrap_string_exec_arg -- round-8: env -S CLASS — separate-token form.
+#
+# The critical sub-case: when -S / --split-string / bundled-S clusters have the
+# payload as a SEPARATE TOKEN (not inline), env executes payload PLUS ALL
+# SUBSEQUENT OPERANDS.  "env -S bash -c 'git reset --hard'" has effective command
+# "bash -c 'git reset --hard'" — the guard must join toks[payload..end] and recurse.
+#
+# Without this fix, the guard only saw "bash" as the payload and never saw the
+# "-c 'git reset --hard'" operands → the recursion returned rc=1 (not a -c form)
+# and the segment slipped through (fail-OPEN on the CORRECT code path).
+# ---------------------------------------------------------------------------
+printf '\n=== canon_unwrap_string_exec_arg -- round-8: env -S CLASS separate-token form ===\n'
+
+_R8H="--hard"
+_R8FD="-fd"
+
+# env -S bash -c 'git reset --hard' → join → "bash -c git reset --hard" (rc=0)
+_R8_SEP_RC=0
+_R8_SEP_OUT=$(canon_unwrap_string_exec_arg "env -S bash -c 'git reset $_R8H'") || _R8_SEP_RC=$?
+assert_eq "env -S bash -c PAYLOAD extracts joined command (rc=0, join-and-recurse)" \
+  "bash -c git reset $_R8H" \
+  "$_R8_SEP_OUT"
+if [[ "$_R8_SEP_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env -S bash -c PAYLOAD → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env -S bash -c PAYLOAD — expected rc=0, got rc=$_R8_SEP_RC")
+  printf '  FAIL  env -S bash -c PAYLOAD → expected rc=0, got rc=%d\n' "$_R8_SEP_RC"
+fi
+
+# env -iS bash -c 'git reset --hard' → S is last char of -iS → same join
+_R8_IS_RC=0
+_R8_IS_OUT=$(canon_unwrap_string_exec_arg "env -iS bash -c 'git reset $_R8H'") || _R8_IS_RC=$?
+assert_eq "env -iS bash -c PAYLOAD extracts joined command (rc=0, S-last in cluster)" \
+  "bash -c git reset $_R8H" \
+  "$_R8_IS_OUT"
+if [[ "$_R8_IS_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env -iS bash -c PAYLOAD → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env -iS bash -c PAYLOAD — expected rc=0, got rc=$_R8_IS_RC")
+  printf '  FAIL  env -iS bash -c PAYLOAD → expected rc=0, got rc=%d\n' "$_R8_IS_RC"
+fi
+
+# env -i -S bash -c 'git reset --hard' → separate -i and -S flags → same join
+_R8_I_S_RC=0
+_R8_I_S_OUT=$(canon_unwrap_string_exec_arg "env -i -S bash -c 'git reset $_R8H'") || _R8_I_S_RC=$?
+assert_eq "env -i -S bash -c PAYLOAD extracts joined command (rc=0, -i then -S separate)" \
+  "bash -c git reset $_R8H" \
+  "$_R8_I_S_OUT"
+if [[ "$_R8_I_S_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env -i -S bash -c PAYLOAD → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env -i -S bash -c PAYLOAD — expected rc=0, got rc=$_R8_I_S_RC")
+  printf '  FAIL  env -i -S bash -c PAYLOAD → expected rc=0, got rc=%d\n' "$_R8_I_S_RC"
+fi
+
+# env --split-string=bash -c 'git reset --hard' → = form + trailing operands joined
+_R8_EQ_RC=0
+_R8_EQ_OUT=$(canon_unwrap_string_exec_arg "env --split-string=bash -c 'git reset $_R8H'") || _R8_EQ_RC=$?
+assert_eq "env --split-string=bash -c PAYLOAD extracts joined command (rc=0, = form + trailing)" \
+  "bash -c git reset $_R8H" \
+  "$_R8_EQ_OUT"
+if [[ "$_R8_EQ_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env --split-string=bash -c PAYLOAD → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env --split-string=bash -c PAYLOAD — expected rc=0, got rc=$_R8_EQ_RC")
+  printf '  FAIL  env --split-string=bash -c PAYLOAD → expected rc=0, got rc=%d\n' "$_R8_EQ_RC"
+fi
+
+# env -S "git status" still passes (single-token payload, no trailing → unchanged)
+_R8_SAFE_RC=0
+_R8_SAFE_OUT=$(canon_unwrap_string_exec_arg "env -S \"git status\"") || _R8_SAFE_RC=$?
+assert_eq "env -S \"git status\" single-token payload still works (rc=0)" \
+  "git status" \
+  "$_R8_SAFE_OUT"
+if [[ "$_R8_SAFE_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env -S "git status" single-token → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env -S \"git status\" single-token — expected rc=0, got rc=$_R8_SAFE_RC")
+  printf '  FAIL  env -S "git status" single-token → expected rc=0, got rc=%d\n' "$_R8_SAFE_RC"
+fi
+
+# env -iS "git status" still passes (single-token payload, S-last → next token only)
+_R8_IS_SAFE_RC=0
+_R8_IS_SAFE_OUT=$(canon_unwrap_string_exec_arg "env -iS \"git status\"") || _R8_IS_SAFE_RC=$?
+assert_eq "env -iS \"git status\" single-token payload still works (rc=0)" \
+  "git status" \
+  "$_R8_IS_SAFE_OUT"
+if [[ "$_R8_IS_SAFE_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env -iS "git status" single-token → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env -iS \"git status\" single-token — expected rc=0, got rc=$_R8_IS_SAFE_RC")
+  printf '  FAIL  env -iS "git status" single-token → expected rc=0, got rc=%d\n' "$_R8_IS_SAFE_RC"
+fi
 
 # ---------------------------------------------------------------------------
 # canon_has_ambiguous_git_token — Round-3 fix for git$IFS inner bypass.
