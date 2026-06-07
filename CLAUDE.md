@@ -340,7 +340,7 @@ checkpoint, Incomplete-step surfacing (cliff detected), merge conflict, gate fai
 
 ### Post-Step Effects
 
-- **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict.
+- **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict. **Dogfood-render obligation (watch_OOOOO2)**: when `git diff {base_commit}..HEAD --name-only` includes `templates/renderer-*.md` or renderer-consumed snippets (`mcp-server/src/ui/snippets/*.html` or `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`), the mandatory renderer spawn MUST use the changed template/snippet files from the build worktree (not the installed plugin copies) so the build's own review.html is rendered through its own renderer changes before the review step closes; record `dogfood_render: true` in the review step's `log_step` outcome. Builds changing only renderer data inputs (REVIEW.md, DESIGN.md) are exempt.
 - **After engineer (implement)**: Run summary-vs-diff contradiction check before proceeding to review. This is advisory — it does NOT block the build.
   1. Read the engineer's `*-SUMMARY.md` from `${WORKSPACE}/plans/${slug}/`.
   2. Run `git diff --name-only ${base_commit}..HEAD` in the worktree to get actual changed files.
@@ -371,7 +371,7 @@ Spawn `Agent()` (generic, not named). Use `model: "haiku"` for design templates;
 | Checkpoint | Template | Output | Required variables |
 |------------|----------|--------|--------------------|
 | Design | `renderer-design.md` | `design.html` | `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}`, `${PRD_PATH}`, `${RUNBOOK_PATH}` |
-| Review | `renderer-review.md` | `review.html` | `${WORKSPACE}`, `${SLUG}` |
+| Review | `renderer-review.md` | `review.html` | `${WORKSPACE}`, `${SLUG}`, `${BASE_COMMIT}`, `${WORKTREE_PATH}` |
 | Codebase graph | `renderer-codebase-graph.md` | `codebase-graph.html` | `${WORKSPACE}`, `${SLUG}`, `${DIFF_BASE}`, `${SOURCE_DIRS}` |
 | File context | `renderer-file-context.md` | `file-context.html` | `${WORKSPACE}`, `${SLUG}`, `${FILE_PATH}` |
 
@@ -453,8 +453,11 @@ Detect and retry transient failures:
 | Rate limit (429, "rate limit") | API throttling |
 | Auth failure ("Not logged in", 401) | Parallel agents corrupting session credentials |
 | TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache ordering bug |
+| Stream idle timeout (agent stalls mid-run: no streaming output, tool-use history present) | Long composition or reading phase without output — **resume-first; backoff does not apply (see Stream-idle timeout recovery below)** |
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only failed ones. If all retries fail, pause and inform the user.
+
+**Stream-idle timeout recovery (watch_NNNNN2)**: A stream-idle stall is a mid-run failure, NOT a spawn failure — it is excluded from the backoff-retry path above. FIRST response: send the stalled agent a brief continuation message (SendMessage resume). Both observed instances (PR #336 renderer mid-composition; PR #338 engineer mid-reading) recovered losslessly with full context intact. Only if the resume elicits no response within ~30s, fall back to the Auto-Escalation Protocol and, if re-spawning, the Re-spawn Enrichment Protocol. Re-spawn is the fallback, never the first response.
 
 **Architect re-spawn tracking**: When architect requires 2+ spawn attempts, record reason in `log_step` outcome `review_verdict` field as `"respawn:{reason}"` (values: `artifacts_missing`, `rate_limit`, `auth_failure`, `ttl_ordering`, `timeout`).
 
@@ -509,7 +512,7 @@ canon/
 │       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── principles/           # Built-in principles (75 total: 7 rules, 35 strong-opinions, 33 conventions)
+├── principles/           # Built-in principles (77 total: 7 rules, 35 strong-opinions, 35 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
