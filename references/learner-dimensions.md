@@ -489,6 +489,75 @@ Suggest: {retire from preload | rewrite for clarity | keep -- high value | compr
 
 ---
 
+## Dimension: cliff-rate <!-- last-updated: 2026-06-07 -->
+
+**Goal**: Observe write-cliff telemetry — steps that are detected as started but never finished — to identify systemic reliability problems in the build pipeline and prompt targeted pattern watches.
+
+### Data source
+
+Call `mcp__canon__get_cross_run_analysis` (pass `project_dir`) and read the `cliff_events` field on the result.
+
+- **Storage**: `cliff_events` table in `drift.db` (central aggregation, survives workspace archival).
+- **Feed path**: `reconcile_workspace` dual-writes each detected cliff at emit time; `get_cross_run_analysis` runs `sweepCliffEvents` before analysis to backfill any events from live workspace DBs not yet in `drift.db` and refresh `recovery_outcome` from `journal.json`.
+- **TypeScript type**: `CliffEventsDimension` on `CrossRunAnalysisResult.cliff_events`.
+
+### Sparse-data contract
+
+| Event count | `status` | `confidence.tier` | Permitted analysis |
+|-------------|----------|-------------------|--------------------|
+| 0 | `"no_data"` | `"insufficient"` | Report "no cliff events observed" — normal, not an error |
+| 1–4 | `"observed"` | `"insufficient"` | Report counts verbatim; NO rates, trends, or promotion proposals |
+| 5–9 | `"observed"` | `"low"` or `"medium"` | May propose pattern watches (see below) |
+| 10+ | `"observed"` | `"medium"` or `"high"` | Full rate and trend analysis permitted |
+
+**No-rates-under-insufficient rule**: When `confidence.tier` is `"insufficient"`, never compute or report cliff rates (cliffs-per-build, recovery rates, etc.). Report counts and buckets only — rates over small samples fabricate signal.
+
+### Fields to report
+
+From `cliff_events` when `status === "observed"`:
+
+| Field | Report as |
+|-------|-----------|
+| `total_cliffs` | Total write-cliff events detected |
+| `workspaces_affected` | Distinct workspace slugs affected |
+| `by_step_id` | Top buckets (step types that cliff most often) |
+| `by_agent_type` | Top buckets (agent types present at cliff time) |
+| `recovery_outcomes` | Breakdown: `recovered` / `abandoned` / `unresolved` / `unknown` |
+| `confidence.tier` | Data quality annotation |
+
+### Pattern watch proposals (tier `"low"` or better only)
+
+At `"low"` tier or better, propose a pattern watch when:
+- The same `step_id` appears in 3+ distinct workspaces (systemic step failure, not one-off).
+- `recovery_outcomes.unresolved` > 0 (steps never recovered — silent data loss risk).
+- `by_agent_type` shows one agent type dominating (agent-specific reliability signal).
+
+### Output format
+
+```
+### Write-Cliff Telemetry
+
+Status: {no_data | observed} | Confidence: {tier}
+Total cliffs: {N} | Workspaces affected: {M}
+
+{If status === "no_data":}
+No cliff events observed — all tracked steps completed or were recovered/abandoned normally.
+
+{If status === "observed" and tier === "insufficient":}
+Observed counts (insufficient data for rate analysis):
+- By step: {top buckets}
+- By agent: {top buckets}
+- Outcomes: recovered={N}, abandoned={N}, unresolved={N}, unknown={N}
+
+{If tier >= "low":}
+Top cliffing steps: {step_id}={count}, ...
+Top cliffing agents: {agent_type}={count}, ...
+Recovery: {recovered}% recovered, {abandoned}% abandoned, {unresolved}% unresolved
+{Proposed watches if threshold met}
+```
+
+---
+
 ## Report Template
 
 Combine all suggestions into `.canon/LEARNING-REPORT.md`:
