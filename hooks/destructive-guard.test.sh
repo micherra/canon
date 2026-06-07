@@ -1213,6 +1213,61 @@ run_test "printf bash -c \"git reset\" UNQUOTED passes (printf is no-exec builti
   0 "$(make_multiline_input "printf bash -c \"git reset $_R6_HARD\"")" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# P1 round-7: quote-parity fix — nested quoted flags inside wrapper strings
+#
+# Root cause: the recursion path (process_segment inner_seg inner_seg depth)
+# passed inner_seg as BOTH the segment (flag-matching) AND raw_segment args.
+# canon_unwrap_string_exec_arg strips the OUTER quotes from the extracted
+# string, but individual flag tokens may still be wrapped in quotes:
+#   bash -c "git reset '--hard'"  →  inner_cmd = git reset '--hard'
+# The '--hard' flag still carries its surrounding single quotes.  Without
+# quote deletion, the (^|[[:space:]])--hard boundary anchors miss it → exit 0.
+#
+# Fix: derive a quote-deleted variant via canon_delete_quotes() (factored from
+# the top-level tr -d site) and pass (quote-deleted, raw) to process_segment,
+# mirroring the top-level invocation exactly.
+#
+# All 5 forms below execute a real destructive op at runtime → must exit 2.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- P1 round-7: nested quoted flags (parity fix, should block, exit 2) --"
+
+_R7_HARD="--hard"
+_R7_FD="-fd"
+_R7_F="-f"
+
+# bash -c "git reset '--hard'"  — single-quoted flag inside double-quoted string
+run_test "bash -c \"git reset '--hard'\" blocks (single-quoted flag in wrapper)" \
+  2 "$(make_multiline_input "bash -c \"git reset '--hard'\"")" "$NON_WT_PWD"
+
+# eval "git reset '--hard'"  — same quote pattern via eval
+run_test "eval \"git reset '--hard'\" blocks (single-quoted flag via eval)" \
+  2 "$(make_multiline_input "eval \"git reset '--hard'\"")" "$NON_WT_PWD"
+
+# sh -c "git clean '-fd'"  — single-quoted flag in sh -c
+run_test "sh -c \"git clean '-fd'\" blocks (single-quoted -fd flag)" \
+  2 "$(make_multiline_input "sh -c \"git clean '-fd'\"")" "$NON_WT_PWD"
+
+# bash -c 'git reset "--hard"'  — double-quoted flag inside single-quoted string
+run_test 'bash -c '"'"'git reset "--hard"'"'"' blocks (double-quoted flag in single-quoted wrapper)' \
+  2 "$(make_multiline_input 'bash -c '"'"'git reset "--hard"'"'"'')" "$NON_WT_PWD"
+
+# bash -c "git clean '-f'"  — single-quoted -f flag
+run_test "bash -c \"git clean '-f'\" blocks (single-quoted -f in wrapper)" \
+  2 "$(make_multiline_input "bash -c \"git clean '-f'\"")" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-7: pass controls (should pass, exit 0) --"
+
+# bash -c "git status"  — safe inner command, must not be over-blocked
+run_test "bash -c \"git status\" passes (safe inner, no over-block from parity fix)" \
+  0 "$(make_multiline_input 'bash -c "git status"')" "$NON_WT_PWD"
+
+# bash -c "git log --oneline"  — safe inner command with a flag
+run_test "bash -c \"git log --oneline\" passes (safe inner with flag)" \
+  0 "$(make_multiline_input 'bash -c "git log --oneline"')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""

@@ -80,6 +80,15 @@ COMMAND=$(printf '%s' "$COMMAND" | canon_strip_comments)
 # fail-OPEN (Bug-2 fix).
 RAW_COMMAND="$COMMAND"
 
+# canon_delete_quotes — single source of truth for quote-removal.
+# Deletes all shell quote characters (" and ') from the input, exactly
+# reproducing bash quote-removal.  Called at the top-level and at each
+# recursive unwrap site so both paths apply the SAME transformation and
+# can never drift apart.
+canon_delete_quotes() {
+  printf '%s' "$1" | tr -d '"'"'"''
+}
+
 # Neutralize shell quote characters before any boundary/flag matching by
 # DELETING them — exactly reproducing bash quote-removal. A quote sitting
 # between a whitespace boundary and a trigger flag (e.g. git reset "--hard",
@@ -93,7 +102,7 @@ RAW_COMMAND="$COMMAND"
 # operands ("canon/a" "canon/b" → canon/a canon/b) stay space-separated. The
 # destructive detection is subcommand+flag based (never branch-name based), so
 # deleting quotes cannot reintroduce branch-name false-positives.
-COMMAND=$(printf '%s' "$COMMAND" | tr -d '"'"'"'')
+COMMAND=$(canon_delete_quotes "$COMMAND")
 
 # ---------------------------------------------------------------------------
 # Canon-managed resource helpers
@@ -247,9 +256,17 @@ process_segment() {
       # Trim whitespace.
       inner_seg=$(printf '%s' "$inner_seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
       [[ -z "$inner_seg" ]] && continue
-      # For expanded inner segments, raw = the segment itself (already
-      # unquoted by canon_unwrap_string_exec_arg / canon_tokenize).
-      process_segment "$inner_seg" "$inner_seg" "$sub_depth"
+      # Mirror the top-level (quote-deleted, raw) pairing exactly:
+      #   segment    — quote-deleted form for flag/pattern matching
+      #   raw_segment — raw form for subcommand resolution (canon_git_subcommand)
+      # canon_unwrap_string_exec_arg strips the enclosing quote chars from the
+      # extracted string, but single/double quotes AROUND individual flags
+      # (e.g. '--hard', "-fd") survive inside the string and must be deleted
+      # before the flag-boundary greps.  Passing inner_seg as BOTH args leaves
+      # those interior quotes intact → the flag greps miss → fail-OPEN.
+      local inner_seg_qd
+      inner_seg_qd=$(canon_delete_quotes "$inner_seg")
+      process_segment "$inner_seg_qd" "$inner_seg" "$sub_depth"
     done <<< "$inner_segs"
     return 0
   fi
