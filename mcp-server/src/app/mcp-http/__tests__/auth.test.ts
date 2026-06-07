@@ -353,25 +353,36 @@ describe("W5 — rereadToken", () => {
   });
 
   it("rereadToken reads rotated value — old token rejected, new token accepted", async () => {
-    // Write initial token
-    const oldToken = "old-token-abc";
-    const newToken = "new-token-xyz";
+    // Use fixed-length tokens (64 chars) so authenticate's timing-safe comparison
+    // doesn't short-circuit on length mismatch.
+    const oldToken = "a".repeat(64);
+    const newToken = "b".repeat(64);
     await writeFile(tokenPath, oldToken, { mode: 0o600 });
 
-    // Re-read after initial write
-    const initial = await rereadToken(tokenPath);
-    expect(initial.ok).toBe(true);
-    if (initial.ok) expect(initial.token).toBe(oldToken);
+    // Authenticate with old token against old token → accept
+    const reqWithOld = makeReq({ host: "localhost", authorization: `Bearer ${oldToken}` });
+    const acceptOld = authenticate(reqWithOld, oldToken);
+    expect(acceptOld.ok).toBe(true);
 
     // Rotate the token file
     await writeFile(tokenPath, newToken, { mode: 0o600 });
 
-    // Re-read again — should now return new token
+    // Re-read the token from disk: should now return the new token
     const rotated = await rereadToken(tokenPath);
     expect(rotated.ok).toBe(true);
-    if (rotated.ok) {
-      expect(rotated.token).toBe(newToken);
-      expect(rotated.token).not.toBe(oldToken);
-    }
+    if (!rotated.ok) throw new Error("expected ok:true after rotation");
+    expect(rotated.token).toBe(newToken);
+    expect(rotated.token).not.toBe(oldToken);
+
+    // Old token rejected against the rotated expected token
+    const reqWithOld2 = makeReq({ host: "localhost", authorization: `Bearer ${oldToken}` });
+    const rejectOld = authenticate(reqWithOld2, newToken);
+    expect(rejectOld.ok).toBe(false);
+    if (!rejectOld.ok) expect(rejectOld.status).toBe(401);
+
+    // New token accepted against the rotated expected token
+    const reqWithNew = makeReq({ host: "localhost", authorization: `Bearer ${newToken}` });
+    const acceptNew = authenticate(reqWithNew, newToken);
+    expect(acceptNew.ok).toBe(true);
   });
 });

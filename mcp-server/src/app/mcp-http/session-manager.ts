@@ -179,6 +179,20 @@ export function _clearPendingHandshakeForTest(sessionId: string): void {
   pendingHandshakes.delete(sessionId);
 }
 
+/**
+ * Call registerRootsChangedHandler for test use. Registers the real W4 notification
+ * handler on the provided server+transport pair. Tests capture the handler from
+ * server.server.setNotificationHandler and invoke it to exercise the real guard.
+ *
+ * @internal exported for tests only
+ */
+export function _registerRootsChangedHandlerForTest(
+  server: McpServer,
+  transport: InstanceType<typeof StreamableHTTPServerTransport>,
+): void {
+  registerRootsChangedHandler(server, transport);
+}
+
 // ── Scope helpers ──────────────────────────────────────────────────────────
 
 /**
@@ -271,10 +285,30 @@ async function retryCappedRootsList(server: McpServer): Promise<string | undefin
 async function resolveSessionScope(session: Session, headerDir: string | undefined): Promise<void> {
   const { server, sessionId } = session;
 
-  // Register pending handshake — use header hint if available, "unknown" otherwise.
-  // A concurrent teardown of the last registered session for this dir will see this
-  // entry and defer eviction, closing the W3 window.
-  pendingHandshakes.set(sessionId, headerDir ?? "unknown");
+  // Register pending handshake — use a realpath-normalized header hint if available,
+  // "unknown" otherwise. Normalization is mandatory: registered scopes are stored as
+  // realpath values (validateAndNormalizeDir), so the string comparison in
+  // hasPendingHandshakeForDir(dir) must use the same key space. Without normalization
+  // a header like "/tmp/x" would fail to match a teardown dir of "/private/tmp/x" on
+  // macOS, defeating the guard (A8/N3 bug class).
+  //
+  // Normalization is best-effort: on ENOENT or any fs error we fall back to "unknown",
+  // which hasPendingHandshakeForDir treats conservatively (blocks eviction), so the
+  // guard remains fail-safe even when the header points at a path that does not yet exist.
+  const rawHint = headerDir;
+  const normalizedHintPromise =
+    rawHint !== undefined ? validateAndNormalizeDir(rawHint) : Promise.resolve(undefined);
+  pendingHandshakes.set(sessionId, rawHint !== undefined ? rawHint : "unknown"); // placeholder until resolved
+
+  // Resolve the normalized hint asynchronously and update the pending-handshake entry.
+  // The placeholder (raw path or "unknown") is set synchronously above so that any
+  // concurrent teardown that fires before normalization completes sees a conservative hint.
+  normalizedHintPromise.then((normalized) => {
+    if (pendingHandshakes.has(sessionId)) {
+      // Replace placeholder with normalized value; fall back to "unknown" on ENOENT
+      pendingHandshakes.set(sessionId, normalized ?? "unknown");
+    }
+  });
 
   try {
     // Layer a: header override
@@ -337,14 +371,28 @@ function hasPendingHandshakeForDir(dir: string): boolean {
  * Decision note (isolation-finish-01): The RELATIVE order within the eviction
  * chain — clearConnectionScope → evictStoresForScope → evictDriftDbForScope →
  * evictJobManagerForScope — is pinned by isolation-finish-01 and MUST NOT be
- * reordered. What this fix (W2) changes is that server.close() (which awaits
- * in-flight SDK handlers) now completes BEFORE the eviction chain begins,
- * preventing a race where a slow tool call holds a DB reference that gets
- * evicted mid-handler.
+ * reordered. What this fix (W2) changes is that server.close() now completes
+ * BEFORE the eviction chain begins.
+ *
+ * SDK semantics note (N2): `server.close()` delegates to `Protocol.close()` in
+ * the vendored SDK, which calls `transport.close()` only — it does NOT drain or
+ * await in-flight tool handler promises. The SDK has no per-handler tracking.
+ * The race window (W2) is NARROWED, not eliminated:
+ *   - Step 1 (sessions.delete) stops new request dispatch to this session.
+ *   - Step 2 (server.close) closes SSE streams and clears the SDK's
+ *     `_requestResponseMap`, so no new SDK-level response writes will complete.
+ *   - A tool handler already executing when DELETE arrives can still run to
+ *     completion and attempt DB access. If the eviction chain fires before it
+ *     finishes, better-sqlite3 throws "connection not open"; `gatedWrapHandler`
+ *     catches this as an UNEXPECTED error (typed, not a crash).
+ *   - Blast radius: a typed tool error, not DB corruption (better-sqlite3 is
+ *     synchronous — no mid-statement interleave is possible).
+ * For full drain, per-session in-flight counters would be needed (future work).
  *
  * Updated step order:
  * 1. Remove from registry immediately (prevent new requests being dispatched)
- * 2. Close server (awaited) — drains in-flight tool handlers before eviction
+ * 2. Close server (awaited) — closes SSE streams; narrows but does not eliminate
+ *    the in-flight handler race (see SDK semantics note above)
  * 3. Capture dir BEFORE clearing scope (isolation-finish-01: capture first)
  * 4. clearConnectionScope(sessionId); clearSessionReady(sessionId)
  * 5. If no other sessions (registered OR pending-handshake) for this dir:
@@ -361,10 +409,11 @@ export async function teardownSession(sessionId: string): Promise<void> {
   // to this session while teardown is in progress.
   sessions.delete(sessionId);
 
-  // Step 2: close server FIRST (awaited) — this drains any in-flight SDK handler
-  // before we evict the DB connections it may be holding. This resolves the W2
-  // race: prior code closed DBs THEN closed the server, allowing a slow tool call
-  // to hold a cached DB reference that was already closed under it.
+  // Step 2: close server FIRST (awaited) — closes SSE streams and the SDK's
+  // _requestResponseMap, stopping new dispatch. Does NOT drain in-flight tool
+  // handler promises (the SDK provides no such mechanism); see the function-level
+  // "SDK semantics note (N2)" for the exact blast radius. The eviction chain below
+  // is still ordered AFTER this call to minimise (not eliminate) the race window.
   //
   // Decision isolation-finish-01: the RELATIVE order of the eviction chain below
   // (clearConnectionScope → evictStores → evictDriftDb → evictJobManager) is

@@ -13,6 +13,7 @@
 import fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Module mocks (must precede module imports) ──────────────────────────────
@@ -62,11 +63,13 @@ import {
   getScopeForSession,
   hasOtherSessionsForDir,
   registerConnectionScope,
+  resolveSessionReady,
 } from "../../server-state.ts";
 import {
   _clearPendingHandshakeForTest,
   _injectPendingHandshakeForTest,
   _injectSessionForTest,
+  _registerRootsChangedHandlerForTest,
   closeAllSessions,
   runReaperSweep,
   sessionCount,
@@ -284,6 +287,57 @@ describe("W3 — pending handshake prevents premature eviction", () => {
     }
   });
 
+  it("symlinked-dir variant: hint normalized to realpath matches teardown realpath → guard holds (N3)", async () => {
+    // N3 bug class: header like /var/folders/... resolves to /private/var/folders/... via realpath.
+    // The registered scope (from validateAndNormalizeDir) is always in realpath form.
+    // The pending-handshake hint must ALSO be in realpath form for hasPendingHandshakeForDir
+    // to match — otherwise the guard is defeated and eviction fires prematurely.
+    //
+    // This test uses the symlink that macOS exposes via os.tmpdir():
+    //   tmpdir() → /var/folders/... (symlink path)
+    //   realpath  → /private/var/folders/... (canonical path)
+    // We simulate: session A closes for `realpathDir`; session B is mid-handshake
+    // with hint already normalized to `realpathDir` (what N3 ensures).
+    const rawDir = makeTmpDir("w3-symlink");
+    const realpathDir = fs.realpathSync(rawDir); // /private/var/... on macOS
+
+    // Guard only has bite when raw != realpath (symlink present)
+    if (rawDir === realpathDir) {
+      // Not on a symlinked-tmp system; skip body — guard still passes trivially.
+      return;
+    }
+
+    const sessionA = "harden-w3-symlink-a";
+    const sessionB = "harden-w3-symlink-b";
+
+    // Session A's scope is the realpath form (as registered by validateAndNormalizeDir)
+    vi.mocked(getScopeForSession).mockReturnValue(realpathDir);
+    vi.mocked(hasOtherSessionsForDir).mockReturnValue(false);
+
+    const serverA = makeServerMock();
+    _injectSessionForTest(
+      sessionA,
+      serverA as unknown as Parameters<typeof _injectSessionForTest>[1],
+    );
+
+    // Session B has its hint normalized to realpathDir (N3 fix ensures this)
+    _injectPendingHandshakeForTest(sessionB, realpathDir);
+
+    await teardownSession(sessionA);
+
+    // Guard holds: realpathDir hint matches realpathDir scope → eviction blocked
+    expect(vi.mocked(evictStoresForScope)).not.toHaveBeenCalled();
+    expect(vi.mocked(evictDriftDbForScope)).not.toHaveBeenCalled();
+    expect(vi.mocked(evictJobManagerForScope)).not.toHaveBeenCalled();
+
+    _clearPendingHandshakeForTest(sessionB);
+    try {
+      fs.rmdirSync(rawDir);
+    } catch {
+      /* ignore */
+    }
+  });
+
   it("unknown-hint pending handshake conservatively blocks eviction", async () => {
     const dir = makeTmpDir("w3-unknown-hint");
     const sessionId = "harden-w3-known";
@@ -315,24 +369,84 @@ describe("W3 — pending handshake prevents premature eviction", () => {
 });
 
 // ── W4: scope immutability after first registration ────────────────────────
+//
+// These tests drive the REAL registerRootsChangedHandler (via the exported test
+// helper _registerRootsChangedHandlerForTest). The handler is captured from the
+// setNotificationHandler mock call, then invoked directly. This ensures the tests
+// will FAIL if the production guard in session-manager.ts is deleted — the prior
+// tests re-implemented the guard inline and were therefore green-but-unverified
+// mock-theater (N1 finding from Fix Verification cycle 2).
 
 describe("W4 — scope immutability after first registration", () => {
-  it("roots/list_changed handler skips re-registration when scope is already set", () => {
-    const sessionId = "harden-w4-already-registered";
-    const originalDir = makeTmpDir("w4-original");
-    const newDir = makeTmpDir("w4-new");
+  /**
+   * Build a minimal transport-like object that provides the `sessionId` property
+   * the real registerRootsChangedHandler closure reads.
+   */
+  function makeTransportStub(sessionId: string) {
+    return { sessionId } as unknown as Parameters<typeof _registerRootsChangedHandlerForTest>[1];
+  }
 
+  /**
+   * Register the real handler and extract the async callback from the
+   * setNotificationHandler mock call.
+   */
+  function captureRootsChangedHandler(
+    serverMock: ReturnType<typeof makeServerMock>,
+    sessionId: string,
+  ): () => Promise<void> {
+    const transportStub = makeTransportStub(sessionId);
+    _registerRootsChangedHandlerForTest(
+      serverMock as unknown as Parameters<typeof _registerRootsChangedHandlerForTest>[0],
+      transportStub,
+    );
+    // The real registerRootsChangedHandler calls server.server.setNotificationHandler
+    // with (schema, handler). Capture the handler from the mock call.
+    const calls = vi.mocked(serverMock.server.setNotificationHandler).mock.calls;
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    const handler = calls[calls.length - 1][1] as () => Promise<void>;
+    return handler;
+  }
+
+  it("roots/list_changed handler skips re-registration when scope is already set — drives REAL handler", async () => {
+    const sessionId = "harden-w4-real-already-registered";
+    const originalDir = makeTmpDir("w4-real-original");
+    const newDir = makeTmpDir("w4-real-new");
+
+    // Inject a real session so the handler's `sessions.get(sid)` check passes
+    const serverMock = makeServerMock();
+    // listRoots returns a new dir (simulating that roots changed).
+    // Use pathToFileURL to produce a properly-formed file:// URI (e.g. file:///private/tmp/...)
+    // that fileURLToPath inside tryRootsList can correctly parse.
+    serverMock.server.listRoots.mockResolvedValue({
+      roots: [{ uri: pathToFileURL(newDir).href }],
+    });
+    _injectSessionForTest(
+      sessionId,
+      serverMock as unknown as Parameters<typeof _injectSessionForTest>[1],
+    );
+
+    // Scope already registered for this session
     vi.mocked(getScopeForSession).mockReturnValue(originalDir);
 
-    // Simulate the W4 guard logic (mirrors what registerRootsChangedHandler does):
-    const existingDir = vi.mocked(getScopeForSession)(sessionId);
-    if (existingDir === undefined) {
-      vi.mocked(registerConnectionScope)(sessionId, newDir);
-    }
-    // existingDir is set → registerConnectionScope must NOT be called
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
+    const handler = captureRootsChangedHandler(serverMock, sessionId);
+
+    // Invoke the real handler — it should detect the existing scope and return early
+    await handler();
+
+    // Guard assertion: registerConnectionScope must NOT be called
+    // (removing the W4 guard in session-manager.ts causes this to fail)
     expect(vi.mocked(registerConnectionScope)).not.toHaveBeenCalled();
 
+    // Guard assertion: stderr immutability line must be emitted when dir differs
+    const stderrCalls = stderrSpy.mock.calls.map((c) => String(c[0]));
+    const immutableLogEmitted = stderrCalls.some(
+      (s) => s.includes("scope is immutable after first registration") && s.includes(sessionId),
+    );
+    expect(immutableLogEmitted).toBe(true);
+
+    stderrSpy.mockRestore();
     try {
       fs.rmdirSync(originalDir);
       fs.rmdirSync(newDir);
@@ -341,18 +455,33 @@ describe("W4 — scope immutability after first registration", () => {
     }
   });
 
-  it("roots/list_changed handler DOES register scope when not yet set (first-time path)", () => {
-    const sessionId = "harden-w4-not-yet-registered";
-    const dir = makeTmpDir("w4-first-time");
+  it("roots/list_changed handler DOES register scope when not yet set (first-time path) — drives REAL handler", async () => {
+    const sessionId = "harden-w4-real-first-time";
+    const dir = makeTmpDir("w4-real-first");
+    // validateAndNormalizeDir uses fs.realpath, so the registered scope will be the
+    // realpath-normalized form (e.g. /private/var/... on macOS). Pre-compute it.
+    const realpathDir = fs.realpathSync(dir);
 
+    const serverMock = makeServerMock();
+    serverMock.server.listRoots.mockResolvedValue({
+      roots: [{ uri: pathToFileURL(dir).href }],
+    });
+    _injectSessionForTest(
+      sessionId,
+      serverMock as unknown as Parameters<typeof _injectSessionForTest>[1],
+    );
+
+    // No scope registered yet
     vi.mocked(getScopeForSession).mockReturnValue(undefined);
 
-    const existingDir = vi.mocked(getScopeForSession)(sessionId);
-    if (existingDir === undefined) {
-      vi.mocked(registerConnectionScope)(sessionId, dir);
-    }
+    const handler = captureRootsChangedHandler(serverMock, sessionId);
 
-    expect(vi.mocked(registerConnectionScope)).toHaveBeenCalledWith(sessionId, dir);
+    await handler();
+
+    // First-time path: scope should be registered with the realpath-normalized dir.
+    // registerConnectionScope is called by the real handler with the validated+normalized path.
+    expect(vi.mocked(registerConnectionScope)).toHaveBeenCalledWith(sessionId, realpathDir);
+    expect(vi.mocked(resolveSessionReady)).toHaveBeenCalledWith(sessionId);
 
     try {
       fs.rmdirSync(dir);
