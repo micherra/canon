@@ -54,7 +54,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect
 
 ## Contracts
-<!-- last-updated: 2026-06-05 -->
+<!-- last-updated: 2026-06-07 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -119,9 +119,6 @@ src/
 
 **Flow schema** (`flow-schema.ts`) — `StateDefinitionSchema` is a `z.discriminatedUnion` with 5 type schemas; all new fields MUST be `.optional()`; `WavePolicy` defaults: isolation=worktree, merge=sequential, on_conflict=hitl.
 
-**`resolve_after_consultations`** — pure resolution tool; call after the last consultation wave before `report_result`; resolves pending consultation results.
-**`resolve_wave_event`** — apply/reject pending wave events; emits `wave_event_resolved` flow event.
-**`computeAnalytics(entries)`** — aggregates flow run metrics from `FlowRunEntry[]`; skips entries without gate data.
 **Step journaling** — `log_step` / `batch_log_steps` record step completion in `journal.json`; quality signals and discovery fields accumulate across steps (append, not replace).
 
 **Orchestration harness tools:**
