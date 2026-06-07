@@ -14,6 +14,7 @@ import { toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 import type { CrossRunAnalysisResult, RunSummary } from "../history-types.ts";
 import { analyzeCrossRunPatterns } from "../services/cross-run-analyzer.ts";
+import { sweepCliffEvents } from "../services/cliff-event-sweep.ts";
 
 export const GetCrossRunAnalysisInputSchema = z.object({
   limit: z
@@ -49,6 +50,17 @@ export async function getCrossRunAnalysis(
 ): Promise<ToolResult<CrossRunAnalysisResult>> {
   const input = GetCrossRunAnalysisInputSchema.parse(rawInput);
   const { project_dir, since, limit } = input;
+
+  // 0. Fail-open cliff-event sweep — backfills live-workspace events into
+  //    drift.db and refreshes recovery outcomes before analysis reads them.
+  try {
+    sweepCliffEvents(project_dir);
+  } catch (err) {
+    console.warn(
+      "[canon] get-cross-run-analysis: cliff event sweep failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   const db = getDriftDb(project_dir);
 
