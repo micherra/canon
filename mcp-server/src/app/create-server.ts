@@ -9,7 +9,7 @@ import { registerPrincipleTools } from "./register-principles.ts";
 export const CANON_SERVER_NAME = "canon";
 
 /** Server version — keep the release-please marker on this line so version bumps work. */
-export const CANON_SERVER_VERSION = "2.7.0"; // x-release-please-version
+export const CANON_SERVER_VERSION = "2.8.0"; // x-release-please-version
 
 /**
  * Factory that creates a fully-wired Canon McpServer instance.
