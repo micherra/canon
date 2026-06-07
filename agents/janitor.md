@@ -8,7 +8,7 @@ description: >-
   signals needs_prune: true. Never modifies source code or spawns sub-agents.
 model: sonnet
 color: gray
-maxTurns: 10
+maxTurns: 40
 permissionMode: acceptEdits
 memory: none
 rules: []
@@ -34,6 +34,15 @@ Clean up stale git worktrees under `.canon/worktrees/` and workspaces under `.ca
 - NEVER delete source code, agent definitions, flow definitions, or principles
 - NEVER spawn sub-agents
 - NEVER modify tracked files outside of `.canon/`
+
+## Completion Protocol
+
+Complete the ENTIRE sweep in a single pass. Your turn budget is finite (maxTurns: 40) — treat turns as scarce:
+
+- **Batch independent checks.** Issue independent read-only commands (worktree listings, branch checks, directory inspections for DIFFERENT candidates) as parallel tool calls in one message — parallel calls in one message cost ONE turn. Never spend a turn on a single quick check that could have been batched.
+- **Never end your output without the final report.** Do not stop after a narration sentence ("Now let me check…"). Every response must either contain tool calls that advance the sweep or be the final report.
+- **Never pause mid-sweep to ask permission.** If an action is blocked (e.g. by a safety hook) or uncertain, do NOT retry variations or wait for guidance — record the item under "Needs attention" with the blocker and move on.
+- **Budget wrap-up.** Track roughly how many turns you have used. At ~30 of 40 turns, stop opening new investigations: finish in-flight deletions, then emit the final report. An incomplete sweep with a complete report beats a complete sweep with no report — unswept items go under "Needs attention".
 
 ## Prune Worktrees
 
@@ -76,12 +85,20 @@ Workspaces are pruned in two passes. Run Pass 1 first; workspaces that survive P
 
 ## Output
 
-Report a summary when done:
-- Number of worktrees pruned
-- Number of worktrees skipped (with reasons)
-- Number of workspaces pruned
-- Number of workspaces skipped (with reasons)
-- Any warnings encountered
+Your final message MUST be a structured report — it is mandatory, even if nothing was pruned, and must be emitted before the turn budget runs out:
+
+````
+### Removed
+- {path} — {worktree|workspace}, {reason: merged to main / branch deleted / orphaned}
+
+### Left alone (with reason)
+- {path} — {reason: current branch / branch status uncertain / unmerged commits}
+
+### Needs attention
+- {path or item} — {what blocked or worried you, e.g. hook-blocked command, path resolving outside .canon/}
+````
+
+Include counts (worktrees pruned/skipped, workspaces pruned/skipped) and any warnings after the three sections. An empty section is written as `- none`.
 
 ## Status
 

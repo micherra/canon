@@ -498,7 +498,7 @@ canon/
 ├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (21 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
-│   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, jq wrappers)
+│   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, comment stripping, quote-aware tokenizer, git-token detection, string-executing-wrapper unwrap/scan-forward, jq wrappers)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/
 │       ├── app/          # Entry point (index.ts), tool registration
