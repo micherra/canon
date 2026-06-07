@@ -70,6 +70,7 @@ import {
 } from "../../server-state.ts";
 import {
   _injectSessionForTest,
+  _resolveSessionScopeForTest,
   buildAllowedHosts,
   closeAllSessions,
   sessionCount,
@@ -336,6 +337,79 @@ describe("closeAllSessions", () => {
 // The SDK transport's allowedHosts must include the same IPv6 forms so that
 // the two layers agree — a request that passes auth must also pass the SDK host
 // check, and vice versa.
+
+// ── CANON-SCOPE diagnostic log lines ──────────────────────────────────────
+
+describe("CANON-SCOPE logging — header path", () => {
+  it("emits source=header log line with raw and normalized dir when header resolves", async () => {
+    const dir = makeTmpDir("scope-header");
+    const sessionId = "scope-header-session";
+
+    const serverMock = makeServerMock();
+    const loggedLines: string[] = [];
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      loggedLines.push(String(args[0]));
+    });
+
+    try {
+      await _resolveSessionScopeForTest(sessionId, serverMock as never, dir);
+
+      const headerLog = loggedLines.find(
+        (s) => s.startsWith("CANON-SCOPE:") && s.includes("source=header"),
+      );
+      expect(headerLog).toBeDefined();
+      expect(headerLog).toContain(`session=${sessionId.slice(0, 8)}`);
+      expect(headerLog).toContain(`raw="${dir}"`);
+      expect(headerLog).toMatch(/normalized="/);
+    } finally {
+      consoleSpy.mockRestore();
+      try {
+        fs.rmdirSync(dir);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+});
+
+describe("CANON-SCOPE logging — roots-list path", () => {
+  it("emits source=roots-list log line with uri and normalized dir when roots/list resolves", async () => {
+    const { pathToFileURL } = await import("node:url");
+    const dir = makeTmpDir("scope-roots");
+    const sessionId = "scope-roots-session";
+
+    const serverMock = makeServerMock();
+    // listRoots returns the real dir as a file:// URI
+    serverMock.server.listRoots = vi
+      .fn()
+      .mockResolvedValue({ roots: [{ uri: pathToFileURL(dir).href }] });
+
+    const loggedLines: string[] = [];
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      loggedLines.push(String(args[0]));
+    });
+
+    try {
+      // No header dir — forces roots/list path
+      await _resolveSessionScopeForTest(sessionId, serverMock as never, undefined);
+
+      const rootsLog = loggedLines.find(
+        (s) => s.startsWith("CANON-SCOPE:") && s.includes("source=roots-list"),
+      );
+      expect(rootsLog).toBeDefined();
+      expect(rootsLog).toContain(`session=${sessionId.slice(0, 8)}`);
+      expect(rootsLog).toMatch(/uri="file:\/\//);
+      expect(rootsLog).toMatch(/normalized="/);
+    } finally {
+      consoleSpy.mockRestore();
+      try {
+        fs.rmdirSync(dir);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+});
 
 describe("buildAllowedHosts — parity with auth.ts ALLOWED_HOSTS", () => {
   it("includes all IPv4 loopback forms (with and without port)", () => {

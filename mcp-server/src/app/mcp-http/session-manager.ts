@@ -180,6 +180,27 @@ export function _clearPendingHandshakeForTest(sessionId: string): void {
 }
 
 /**
+ * Invoke resolveSessionScope directly for testing CANON-SCOPE log output.
+ * Builds a minimal Session from the provided server mock and delegates to the
+ * real resolveSessionScope implementation.
+ *
+ * @internal exported for tests only
+ */
+export async function _resolveSessionScopeForTest(
+  sessionId: string,
+  server: McpServer,
+  headerDir: string | undefined,
+): Promise<void> {
+  const transport = {
+    close: async (): Promise<void> => {
+      // test stub
+    },
+  } as unknown as StreamableHTTPServerTransport;
+  const session: Session = { lastActivityMs: Date.now(), server, sessionId, transport };
+  return resolveSessionScope(session, headerDir);
+}
+
+/**
  * Call registerRootsChangedHandler for test use. Registers the real W4 notification
  * handler on the provided server+transport pair. Tests capture the handler from
  * server.server.setNotificationHandler and invoke it to exercise the real guard.
@@ -212,14 +233,17 @@ async function validateAndNormalizeDir(dir: string): Promise<string | undefined>
   }
 }
 
+/** Result from `tryRootsList` — carries both the raw URI received and the normalized dir. */
+type RootsListResult = { uri: string; dir: string };
+
 /**
  * Attempt roots/list on the session's server with a 1s timeout.
- * Returns the first root's realpath-normalized URI as a string, or undefined.
+ * Returns an object with the raw URI and realpath-normalized dir, or undefined.
  *
  * PROBE FINDING: root entries may lack name — parse {uri} only.
  * PROBE FINDING: client does NOT declare listChanged — never wait on that notification.
  */
-async function tryRootsList(server: McpServer): Promise<string | undefined> {
+async function tryRootsList(server: McpServer): Promise<RootsListResult | undefined> {
   try {
     const result = await server.server.listRoots(undefined, { timeout: 1000 });
     const first = result.roots[0];
@@ -232,7 +256,9 @@ async function tryRootsList(server: McpServer): Promise<string | undefined> {
       // Not a file:// URI — skip
       return undefined;
     }
-    return await validateAndNormalizeDir(dirPath);
+    const normalized = await validateAndNormalizeDir(dirPath);
+    if (normalized === undefined) return undefined;
+    return { dir: normalized, uri: first.uri };
   } catch {
     return undefined;
   }
@@ -246,22 +272,36 @@ function delay(ms: number): Promise<void> {
 /**
  * Run a capped retry sequence for roots/list (3 attempts × 2s backoff).
  * Extracted from resolveSessionScope to eliminate await-in-loop via sequential Promise chaining.
- * Returns the resolved directory string or undefined if all attempts fail.
+ * Returns the resolved RootsListResult or undefined if all attempts fail.
  */
-async function retryCappedRootsList(server: McpServer): Promise<string | undefined> {
+async function retryCappedRootsList(server: McpServer): Promise<RootsListResult | undefined> {
   const MAX_ATTEMPTS = 3;
   const BACKOFF_MS = 2000;
 
   // Build a sequential promise chain: attempt1 → (if fail) delay → attempt2 → ...
   // This avoids await-in-loop while still being sequential (required for retry logic).
-  const makeAttempt = async (attemptsRemaining: number): Promise<string | undefined> => {
-    const dir = await tryRootsList(server);
-    if (dir !== undefined) return dir;
+  const makeAttempt = async (attemptsRemaining: number): Promise<RootsListResult | undefined> => {
+    const result = await tryRootsList(server);
+    if (result !== undefined) return result;
     if (attemptsRemaining <= 1) return undefined;
     return delay(BACKOFF_MS).then(() => makeAttempt(attemptsRemaining - 1));
   };
 
   return makeAttempt(MAX_ATTEMPTS);
+}
+
+// ── Scope diagnostics ─────────────────────────────────────────────────────
+
+/**
+ * Emit a single CANON-SCOPE: diagnostic line to stderr.
+ * All scope-resolution decision points log through this helper so grep surfaces them.
+ * Logging must never throw — safe string interpolation only, no token/secret values.
+ */
+function logScope(sessionId: string, parts: Record<string, string>): void {
+  const fields = Object.entries(parts)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(" ");
+  console.error(`CANON-SCOPE: session=${sessionId.slice(0, 8)} ${fields}`);
 }
 
 // ── Scope handshake ────────────────────────────────────────────────────────
@@ -282,39 +322,38 @@ async function retryCappedRootsList(server: McpServer): Promise<string | undefin
  *   and defers eviction.
  * - On exit (success or failure): always remove the pending-handshake entry.
  */
-async function resolveSessionScope(session: Session, headerDir: string | undefined): Promise<void> {
-  const { server, sessionId } = session;
-
-  // Register pending handshake — use a realpath-normalized header hint if available,
-  // "unknown" otherwise. Normalization is mandatory: registered scopes are stored as
-  // realpath values (validateAndNormalizeDir), so the string comparison in
-  // hasPendingHandshakeForDir(dir) must use the same key space. Without normalization
-  // a header like "/tmp/x" would fail to match a teardown dir of "/private/tmp/x" on
-  // macOS, defeating the guard (A8/N3 bug class).
-  //
-  // Normalization is best-effort: on ENOENT or any fs error we fall back to "unknown",
-  // which hasPendingHandshakeForDir treats conservatively (blocks eviction), so the
-  // guard remains fail-safe even when the header points at a path that does not yet exist.
-  const rawHint = headerDir;
-  const normalizedHintPromise =
-    rawHint !== undefined ? validateAndNormalizeDir(rawHint) : Promise.resolve(undefined);
-  pendingHandshakes.set(sessionId, rawHint !== undefined ? rawHint : "unknown"); // placeholder until resolved
-
-  // Resolve the normalized hint asynchronously and update the pending-handshake entry.
-  // The placeholder (raw path or "unknown") is set synchronously above so that any
-  // concurrent teardown that fires before normalization completes sees a conservative hint.
-  normalizedHintPromise.then((normalized) => {
+/**
+ * Register a pending-handshake entry for `sessionId`.
+ *
+ * Uses a realpath-normalized header hint when available ("unknown" otherwise).
+ * Normalization is mandatory (A8/N3 bug class): registered scopes are stored as
+ * realpath values, so the key space must match. Normalization is best-effort —
+ * ENOENT falls back to "unknown", which is conservative (blocks eviction).
+ */
+function registerPendingHandshake(sessionId: string, headerDir: string | undefined): void {
+  pendingHandshakes.set(sessionId, headerDir ?? "unknown"); // placeholder
+  if (headerDir === undefined) return;
+  validateAndNormalizeDir(headerDir).then((normalized) => {
     if (pendingHandshakes.has(sessionId)) {
-      // Replace placeholder with normalized value; fall back to "unknown" on ENOENT
       pendingHandshakes.set(sessionId, normalized ?? "unknown");
     }
   });
+}
+
+async function resolveSessionScope(session: Session, headerDir: string | undefined): Promise<void> {
+  const { server, sessionId } = session;
+  registerPendingHandshake(sessionId, headerDir);
 
   try {
     // Layer a: header override
     if (headerDir !== undefined) {
       const normalized = await validateAndNormalizeDir(headerDir);
       if (normalized !== undefined) {
+        logScope(sessionId, {
+          normalized: `"${normalized}"`,
+          raw: `"${headerDir}"`,
+          source: "header",
+        });
         registerConnectionScope(sessionId, normalized);
         resolveSessionReady(sessionId);
         return;
@@ -327,14 +366,20 @@ async function resolveSessionScope(session: Session, headerDir: string | undefin
     }
 
     // Layer b: roots/list with capped retry
-    const dir = await retryCappedRootsList(server);
-    if (dir !== undefined) {
-      registerConnectionScope(sessionId, dir);
+    const rootsResult = await retryCappedRootsList(server);
+    if (rootsResult !== undefined) {
+      logScope(sessionId, {
+        normalized: `"${rootsResult.dir}"`,
+        source: "roots-list",
+        uri: `"${rootsResult.uri}"`,
+      });
+      registerConnectionScope(sessionId, rootsResult.dir);
       resolveSessionReady(sessionId);
       return;
     }
 
     // Layer c: all attempts exhausted — gate stays pending (fail-closed)
+    logScope(sessionId, { reason: "no-resolution-after-retries", source: "fail-closed" });
     console.error(
       `[session-manager] Failed to resolve project scope for session ${sessionId} ` +
         "after 3 attempts. Tools will hang until client-side timeout. " +
@@ -431,9 +476,20 @@ export async function teardownSession(sessionId: string): Promise<void> {
   // W3 guard: also check pendingHandshakes — a session that has been created but
   // hasn't completed scope registration yet must block eviction of its future dir.
   if (dir !== undefined && !hasOtherSessionsForDir(dir) && !hasPendingHandshakeForDir(dir)) {
+    logScope(sessionId, { dir: `"${dir}"`, teardown: "evict-scope" });
     evictStoresForScope(dir);
     evictDriftDbForScope(dir);
     evictJobManagerForScope(dir);
+  } else {
+    const skipReason =
+      dir === undefined
+        ? "no-scope"
+        : hasOtherSessionsForDir(dir)
+          ? "other-sessions-active"
+          : "pending-handshake";
+    const parts: Record<string, string> = { reason: skipReason, teardown: "evict-skipped" };
+    if (dir !== undefined) parts.dir = `"${dir}"`;
+    logScope(sessionId, parts);
   }
 }
 
@@ -520,20 +576,20 @@ function registerRootsChangedHandler(
     const existingDir = getScopeForSession(sid);
     if (existingDir !== undefined) {
       // Scope already set — resolve silently (re-resolution is a no-op)
-      const newDir = await tryRootsList(server);
-      if (newDir !== undefined && newDir !== existingDir) {
+      const newResult = await tryRootsList(server);
+      if (newResult !== undefined && newResult.dir !== existingDir) {
         process.stderr.write(
           `[session-manager] roots/list_changed for session ${sid}: ignoring dir change ` +
-            `from "${existingDir}" to "${newDir}" — scope is immutable after first registration.\n`,
+            `from "${existingDir}" to "${newResult.dir}" — scope is immutable after first registration.\n`,
         );
       }
       return;
     }
 
     // Scope not yet registered — allow first-time resolution from roots/list_changed
-    const dir = await tryRootsList(server);
-    if (dir !== undefined) {
-      registerConnectionScope(sid, dir);
+    const rootsResult = await tryRootsList(server);
+    if (rootsResult !== undefined) {
+      registerConnectionScope(sid, rootsResult.dir);
       resolveSessionReady(sid);
     }
   });
