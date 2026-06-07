@@ -7,9 +7,10 @@
 Human-readable project documentation, architecture references, and historical analysis. Docs are written for human engineers and architects, not for agent consumption (use CLAUDE.md files for agents).
 
 ## Architecture
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-06-07 -->
 
 - `reference/` — Authoritative reference documentation; `canon-reference.md` is the single comprehensive reference covering MCP tool tables, flow schema, hooks, and principles
+- `explore/` — Exploration outcome documents (competition records, parked/open direction docs); each subdir/entry indexed by `docs/explore/README.md`
 - Standalone documents in the root cover architecture analysis and direction (e.g., `bounded-context-map.md`, `supervised-build-quality.md`)
 - `images/` — Diagrams and screenshots referenced by documentation
 
