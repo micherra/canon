@@ -4,8 +4,9 @@ import {
   logStep,
 } from "@features/orchestration/tools/orchestration-journal.ts";
 import { reconcileWorkspace } from "@features/orchestration/tools/reconcile-workspace.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope } from "./server-state.ts";
 
 const stepOutcomeSchema = z
   .object({
@@ -50,7 +51,7 @@ const stepEntrySchema = z
     { message: "skip_reason is required when status is 'skipped'", path: ["skip_reason"] },
   );
 
-function registerLogStep(): void {
+function registerLogStep(server: McpServer): void {
   server.registerTool(
     "log_step",
     {
@@ -91,7 +92,7 @@ function registerLogStep(): void {
   );
 }
 
-function registerBatchLogSteps(): void {
+function registerBatchLogSteps(server: McpServer): void {
   server.registerTool(
     "batch_log_steps",
     {
@@ -108,7 +109,7 @@ function registerBatchLogSteps(): void {
   );
 }
 
-function registerFinalizeWorkspace(): void {
+function registerFinalizeWorkspace(server: McpServer): void {
   server.registerTool(
     "finalize_workspace",
     {
@@ -124,7 +125,7 @@ function registerFinalizeWorkspace(): void {
   );
 }
 
-function registerReconcileWorkspace(): void {
+function registerReconcileWorkspace(server: McpServer): void {
   server.registerTool(
     "reconcile_workspace",
     {
@@ -148,9 +149,9 @@ function registerReconcileWorkspace(): void {
   );
 }
 
-export function registerJournalTools(): void {
-  registerLogStep();
-  registerBatchLogSteps();
-  registerFinalizeWorkspace();
-  registerReconcileWorkspace();
+export function registerJournalTools(server: McpServer): void {
+  registerLogStep(server);
+  registerBatchLogSteps(server);
+  registerFinalizeWorkspace(server);
+  registerReconcileWorkspace(server);
 }

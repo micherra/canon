@@ -1,8 +1,9 @@
 import { invokeJanitor } from "@features/orchestration/tools/invoke-janitor.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope } from "./server-state.ts";
 
-export function registerJanitorTool(): void {
+export function registerJanitorTool(server: McpServer): void {
   server.registerTool(
     "invoke_janitor",
     {

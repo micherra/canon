@@ -135,6 +135,11 @@
           },
           {
             "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/session-start-daemon-supervisor.sh",
+            "timeout": 30
+          },
+          {
+            "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/session-start-server-guard.sh",
             "timeout": 10
           },

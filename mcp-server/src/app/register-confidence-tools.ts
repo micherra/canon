@@ -1,7 +1,8 @@
 import { computeAutonomyTier } from "@features/orchestration/tools/compute-autonomy-tier.ts";
 import { getNextEscalationStrategy } from "@features/orchestration/tools/get-next-escalation-strategy.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope } from "./server-state.ts";
 
 /**
  * Confidence and escalation tool registrations.
@@ -9,7 +10,7 @@ import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
  * compute_autonomy_tier  — assess build risk and return gate-skip tier.
  * get_next_escalation_strategy — advance the auto-escalation cascade for a failing step.
  */
-export function registerConfidenceTools(): void {
+export function registerConfidenceTools(server: McpServer): void {
   server.registerTool(
     "compute_autonomy_tier",
     {

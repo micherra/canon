@@ -1,8 +1,9 @@
 import { evaluateStep } from "@features/orchestration/tools/evaluate-step.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler } from "./server-state.ts";
 
-export function registerEvaluateStepTool(): void {
+export function registerEvaluateStepTool(server: McpServer): void {
   server.registerTool(
     "evaluate_step",
     {

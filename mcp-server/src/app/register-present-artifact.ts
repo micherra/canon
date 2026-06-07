@@ -1,8 +1,9 @@
 import { presentArtifact } from "@features/orchestration/tools/present-artifact.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler, server } from "./server-state.ts";
+import { gatedWrapHandler } from "./server-state.ts";
 
-export function registerPresentArtifactTool(): void {
+export function registerPresentArtifactTool(server: McpServer): void {
   server.registerTool(
     "present_artifact",
     {

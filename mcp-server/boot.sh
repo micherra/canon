@@ -10,9 +10,9 @@
 #      server dir). This is the guaranteed backstop.
 #
 # Deps resolution sequence (post-fix):
-#   1. Parse flags (--print-resolution, --force-dir)
+#   1. Parse flags (--print-resolution, --force-dir, --daemon)
 #   2. Resolve SERVER_DIR
-#   3. Sanity-check SERVER_DIR/src/app/index.ts
+#   3. Sanity-check SERVER_DIR/src/app/index.ts (and daemon.ts when --daemon)
 #   4. Compute DATA_DIR = ${CLAUDE_PLUGIN_DATA}/node_modules when set
 #   5. CLEAR STALE DANGLING LINK: if $SERVER_DIR/node_modules is a symlink that
 #      does NOT resolve to a real dir (left over from a prior boot + wiped cache),
@@ -45,6 +45,9 @@
 # Flags (for testing only):
 #   --print-resolution   Print "SERVER_DIR NODE_PATH TSX_BIN" to stdout and exit 0.
 #   --force-dir <dir>    Override SERVER_DIR resolution for test isolation.
+#   --daemon             Launch the HTTP daemon entry point (src/app/daemon.ts)
+#                        instead of the default stdio entry point (src/app/index.ts).
+#                        Every other resolution step is shared and unchanged.
 #
 # Never calls npx. Fails closed with a loud stderr message on any resolution failure.
 set -euo pipefail
@@ -54,10 +57,12 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 PRINT_RESOLUTION=0
 FORCE_DIR=""
+DAEMON_MODE=0
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
     --print-resolution) PRINT_RESOLUTION=1; shift ;;
     --force-dir) FORCE_DIR="${2:-}"; shift 2 ;;
+    --daemon) DAEMON_MODE=1; export CANON_HTTP_DAEMON=1; shift ;;
     *) break ;;
   esac
 done
@@ -82,11 +87,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3: Sanity-check SERVER_DIR/src/app/index.ts
+# Step 3: Sanity-check SERVER_DIR/src/app/index.ts (and daemon.ts when --daemon)
 # ---------------------------------------------------------------------------
 # Sanity-check: SERVER_DIR must contain src/app/index.ts
 if [[ ! -f "${SERVER_DIR}/src/app/index.ts" ]]; then
   echo "CANON ERROR: cannot resolve MCP server dir (${SERVER_DIR} does not contain src/app/index.ts)" >&2
+  exit 1
+fi
+# Additional check: --daemon requires src/app/daemon.ts to exist
+if [[ $DAEMON_MODE -eq 1 ]] && [[ ! -f "${SERVER_DIR}/src/app/daemon.ts" ]]; then
+  echo "CANON ERROR: --daemon specified but ${SERVER_DIR}/src/app/daemon.ts does not exist" >&2
   exit 1
 fi
 
@@ -217,7 +227,13 @@ fi
 # ---------------------------------------------------------------------------
 # Step 13: Observability log + launch
 # ---------------------------------------------------------------------------
-echo "CANON: booting MCP server from $SERVER_DIR (NODE_PATH=${NODE_PATH:-<not set>})" >&2
+# Determine entry point: --daemon uses daemon.ts; default uses index.ts (stdio).
+ENTRY="src/app/index.ts"
+if [[ $DAEMON_MODE -eq 1 ]]; then
+  ENTRY="src/app/daemon.ts"
+fi
+
+echo "CANON: booting MCP server from $SERVER_DIR (NODE_PATH=${NODE_PATH:-<not set>}) entry=$ENTRY" >&2
 
 cd "$SERVER_DIR"
-exec "$TSX_BIN" src/app/index.ts
+exec "$TSX_BIN" "$ENTRY"

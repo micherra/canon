@@ -4,10 +4,11 @@ import { writeImplementationSummary } from "@features/orchestration/tools/write-
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
 import { type ConfidenceAdapter, writeReview } from "@features/orchestration/tools/write-review.ts";
 import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { z } from "zod";
-import { gatedWrapHandler, resolveScope, server } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope } from "./server-state.ts";
 
 /** Decision record schema for write_implementation_summary */
 const DecisionRecordSchema = z.object({
@@ -25,7 +26,7 @@ const DecisionRecordSchema = z.object({
   rationale: z.string().describe("Why this approach was chosen"),
 });
 
-function registerPlanTools(): void {
+function registerPlanTools(server: McpServer): void {
   server.registerTool(
     "write_plan_index",
     {
@@ -87,7 +88,7 @@ function registerPlanTools(): void {
   );
 }
 
-function registerWriteReviewTool(): void {
+function registerWriteReviewTool(server: McpServer): void {
   server.registerTool(
     "write_review",
     {
@@ -149,7 +150,7 @@ function registerWriteReviewTool(): void {
   );
 }
 
-function registerWriteImplementationSummaryTool(): void {
+function registerWriteImplementationSummaryTool(server: McpServer): void {
   server.registerTool(
     "write_implementation_summary",
     {
@@ -187,8 +188,8 @@ function registerWriteImplementationSummaryTool(): void {
   );
 }
 
-export function registerArtifactTools(): void {
-  registerPlanTools();
-  registerWriteReviewTool();
-  registerWriteImplementationSummaryTool();
+export function registerArtifactTools(server: McpServer): void {
+  registerPlanTools(server);
+  registerWriteReviewTool(server);
+  registerWriteImplementationSummaryTool(server);
 }
