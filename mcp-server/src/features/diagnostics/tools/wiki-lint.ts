@@ -13,6 +13,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { VALID_COMPUTED_TAGS } from "@graph/kg-tags.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { loadLayerMappings } from "@shared/lib/config.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
@@ -24,6 +25,7 @@ import {
   checkMissingExamples,
   checkOrphanPrinciples,
   checkScopeLayers,
+  checkScopeTags,
   checkStaleRefs,
   type WikiLintOutput,
 } from "../services/wiki-lint.ts";
@@ -36,7 +38,8 @@ type CheckName =
   | "stale_refs"
   | "missing_examples"
   | "cited_paths"
-  | "scope_layers";
+  | "scope_layers"
+  | "scope_tags";
 
 export type WikiLintInput = {
   checks?: CheckName[];
@@ -215,7 +218,7 @@ function runCitedPathCheck(projectDir: string): ReturnType<typeof checkCitedPath
 /**
  * Run wiki lint checks against Canon's own meta-layer artifacts.
  *
- * @param input - Which checks to run (default: all 4)
+ * @param input - Which checks to run (default: all 7)
  * @param projectDir - Project root (for CLAUDE.md scanning, stale ref resolution, drift store)
  * @param pluginDir - Plugin directory (for principles loading, agent definitions)
  */
@@ -231,6 +234,7 @@ export async function wikiLint(
     "missing_examples",
     "cited_paths",
     "scope_layers",
+    "scope_tags",
   ];
   const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
 
@@ -252,6 +256,9 @@ export async function wikiLint(
     ? Object.keys(await loadLayerMappings(projectDir))
     : [];
   const scopeLayers = enabled.has("scope_layers") ? checkScopeLayers(principles, validLayers) : [];
+  const scopeTags = enabled.has("scope_tags")
+    ? checkScopeTags(principles, VALID_COMPUTED_TAGS)
+    : [];
 
   return assembleWikiLintOutput({
     citedPaths,
@@ -261,6 +268,7 @@ export async function wikiLint(
     orphans,
     principlesChecked: principles.length,
     scopeLayers,
+    scopeTags,
     staleRefs,
   });
 }

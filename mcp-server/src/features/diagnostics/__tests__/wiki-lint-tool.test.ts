@@ -443,3 +443,69 @@ const x = 1;
     expect(result.summary.total_findings).toBe(0);
   });
 });
+
+// ---- scope_tags tool wiring ----
+
+describe("wikiLint scope_tags check (tool wiring)", () => {
+  it("scope_tags: fixture principle with invalid tag → one finding when checks: ['scope_tags']", async () => {
+    const tmp = makeTmpDir("scope-tags-tool");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+
+    const badTagContent = `---
+id: bad-scope-tag-principle
+title: Bad Scope Tag Principle
+severity: convention
+scope:
+  layers: []
+  tags:
+    - not-a-kg-tag
+---
+
+## Summary
+A test principle with an invalid scope.tags entry.
+
+## Examples
+
+\`\`\`typescript
+// example
+const x = 1;
+\`\`\`
+`;
+    writeFileSync(join(principlesDir, "bad-scope-tag-principle.md"), badTagContent, "utf8");
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\n", "utf8");
+
+    const result = await wikiLint({ checks: ["scope_tags"] }, tmp, tmp);
+
+    // Only scope_tags runs — all others empty
+    expect(result.contradictions).toEqual([]);
+    expect(result.orphan_principles).toEqual([]);
+    expect(result.stale_refs).toEqual([]);
+    expect(result.missing_examples).toEqual([]);
+    expect(result.cited_paths).toEqual([]);
+    expect(result.scope_layers).toEqual([]);
+
+    // scope_tags detected the invalid tag
+    expect(result.scope_tags).toHaveLength(1);
+    expect(result.scope_tags[0].principle_id).toBe("bad-scope-tag-principle");
+    expect(result.scope_tags[0].invalid_tags).toEqual(["not-a-kg-tag"]);
+    expect(result.summary.total_findings).toBe(1);
+  });
+
+  it("scope_tags: default run (no checks filter) includes scope_tags in output", async () => {
+    const tmp = makeTmpDir("scope-tags-default");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "good-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies good-principle.\n", "utf8");
+
+    const result = await wikiLint({}, tmp, tmp);
+
+    // scope_tags key must be present in default run (proves it is in the default check set)
+    expect(result).toHaveProperty("scope_tags");
+    expect(Array.isArray(result.scope_tags)).toBe(true);
+  });
+});
