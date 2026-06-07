@@ -7,12 +7,20 @@
  * 3. Default-unchanged backward-compatibility
  */
 
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { mockGitExecAsyncOk, useTmpDir } from "./pr-review-data-test-utils.js";
 
 // ────────────────────────────────────────────────────────────────────────────
 // 1. cwd-capture counterexample (watch_QQQQQQ1 reflexive obligation)
 //    Assert the diff runs with worktree_path as cwd, NOT projectDir.
+//
+//    Discrimination proof: worktreePath is a DISTINCT subdirectory inside
+//    the tmp dir, so worktreePath !== projectDir. The test asserts BOTH:
+//      (a) diffCall.cwd === worktreePath  (new behavior)
+//      (b) diffCall.cwd !== projectDir    (counterexample: old code used projectDir)
+//    Against the old defective code (`cwd: projectDir`), assertion (b) FAILS.
 // ────────────────────────────────────────────────────────────────────────────
 describe("getPrReviewData — worktree_path cwd scoping (counterexample probe)", () => {
   const dir = useTmpDir();
@@ -34,53 +42,23 @@ describe("getPrReviewData — worktree_path cwd scoping (counterexample probe)",
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
 
     const projectDir = dir.get();
-    const worktreePath = dir.get(); // same tmp dir — it exists (the key point is cwd used)
+    // Create a DISTINCT subdirectory inside the tmp dir so worktreePath !== projectDir.
+    // This is the key discriminating condition: the old defective code always passed
+    // projectDir as cwd, which would fail assertion (b) below.
+    const worktreePath = join(dir.get(), "wt");
+    mkdirSync(worktreePath, { recursive: true });
 
     await fn({ worktree_path: worktreePath }, projectDir);
 
     expect(capturedArgs.length).toBeGreaterThan(0);
     const diffCall = capturedArgs[0];
 
-    // NEW behavior: cwd must be worktree_path
+    // (a) NEW behavior: cwd must be the distinct worktree subdirectory
     expect(diffCall.cwd).toBe(worktreePath);
 
-    // COUNTEREXAMPLE: assert cwd is NOT projectDir when worktree_path is provided
-    // (This test would FAIL against the old defective behavior where cwd = projectDir always.)
-    expect(diffCall.cwd).not.toBe(`${projectDir}/different`);
-  });
-
-  it("OLD behavior counterexample — cwd would have been projectDir, NOT worktree_path", async () => {
-    // This test demonstrates what the OLD (defective) code did:
-    // The diff always ran against projectDir, ignoring the worktree.
-    // Running this against the NEW code: when worktree_path is set, cwd must be worktree_path.
-    // If worktree_path === projectDir, the test below verifies that a DISTINCT worktree_path
-    // is honored instead of projectDir.
-    const capturedCwd: string[] = [];
-    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi.fn().mockImplementation((_args: string[], cwd: string) => {
-        capturedCwd.push(cwd);
-        return Promise.resolve({
-          exitCode: 0,
-          ok: true,
-          stderr: "",
-          stdout: "",
-          timedOut: false,
-        });
-      }),
-    }));
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-
-    const projectDir = dir.get();
-    // Use the dir itself as worktree (it exists), but record it separately
-    const worktreePath = dir.get();
-
-    await fn({ worktree_path: worktreePath }, projectDir);
-
-    // When worktree_path is set, diff must NOT run with a different (unrelated) cwd.
-    // The defective form always used projectDir — if projectDir === worktreePath here,
-    // the key distinction is: without the param, cwd = projectDir; with it, cwd = worktree_path.
-    // The test below (default-unchanged) covers the without-param case.
-    expect(capturedCwd.every((cwd) => cwd === worktreePath)).toBe(true);
+    // (b) COUNTEREXAMPLE: cwd must NOT be projectDir when a distinct worktree_path is provided.
+    // This assertion FAILS against the old defective code (which always passed projectDir).
+    expect(diffCall.cwd).not.toBe(projectDir);
   });
 });
 
