@@ -197,6 +197,13 @@ export async function _resolveSessionScopeForTest(
     },
   } as unknown as StreamableHTTPServerTransport;
   const session: Session = { lastActivityMs: Date.now(), server, sessionId, transport };
+  // Mirror the real onsessioninitialized flow: session must be in the registry
+  // before resolveSessionScope runs so the W5 alive-check works correctly.
+  // Idempotent: if the caller already injected the session via _injectSessionForTest,
+  // we do not overwrite it.
+  if (!sessions.has(sessionId)) {
+    sessions.set(sessionId, session);
+  }
   return resolveSessionScope(session, headerDir);
 }
 
@@ -349,6 +356,16 @@ async function resolveSessionScope(session: Session, headerDir: string | undefin
     if (headerDir !== undefined) {
       const normalized = await validateAndNormalizeDir(headerDir);
       if (normalized !== undefined) {
+        // W5 guard: re-check session is still alive after the async realpath await.
+        // teardownSession() may have removed it while we were waiting. If gone, do
+        // NOT register — log and clean up instead (phantom scope → eviction leak).
+        if (!sessions.has(sessionId)) {
+          logScope(sessionId, {
+            reason: "session-closed-during-handshake",
+            source: "header",
+          });
+          return;
+        }
         logScope(sessionId, {
           normalized: `"${normalized}"`,
           raw: `"${headerDir}"`,
@@ -368,6 +385,15 @@ async function resolveSessionScope(session: Session, headerDir: string | undefin
     // Layer b: roots/list with capped retry
     const rootsResult = await retryCappedRootsList(server);
     if (rootsResult !== undefined) {
+      // W5 guard: re-check session is still alive after the async roots/list await.
+      // teardownSession() may have removed it while we were waiting.
+      if (!sessions.has(sessionId)) {
+        logScope(sessionId, {
+          reason: "session-closed-during-handshake",
+          source: "roots-list",
+        });
+        return;
+      }
       logScope(sessionId, {
         normalized: `"${rootsResult.dir}"`,
         source: "roots-list",
@@ -556,6 +582,29 @@ function createSessionTransport(
   return transport;
 }
 
+/**
+ * First-time scope registration from roots/list_changed (W5-guarded).
+ * Extracted to keep registerRootsChangedHandler's handler complexity within limits.
+ */
+async function resolveFirstTimeScopeFromRootsChanged(
+  server: McpServer,
+  sid: string,
+): Promise<void> {
+  const rootsResult = await tryRootsList(server);
+  if (rootsResult === undefined) return;
+  // W5 guard: re-check session is still alive after the async tryRootsList await.
+  // teardownSession() may have removed it during the await (same race as W5b).
+  if (!sessions.has(sid)) {
+    logScope(sid, {
+      reason: "session-closed-during-handshake",
+      source: "roots-list-changed",
+    });
+    return;
+  }
+  registerConnectionScope(sid, rootsResult.dir);
+  resolveSessionReady(sid);
+}
+
 /** Register the roots/list_changed notification handler on a server. */
 function registerRootsChangedHandler(
   server: McpServer,
@@ -586,12 +635,8 @@ function registerRootsChangedHandler(
       return;
     }
 
-    // Scope not yet registered — allow first-time resolution from roots/list_changed
-    const rootsResult = await tryRootsList(server);
-    if (rootsResult !== undefined) {
-      registerConnectionScope(sid, rootsResult.dir);
-      resolveSessionReady(sid);
-    }
+    // Scope not yet registered — delegate to W5-guarded helper
+    await resolveFirstTimeScopeFromRootsChanged(server, sid);
   });
 }
 
