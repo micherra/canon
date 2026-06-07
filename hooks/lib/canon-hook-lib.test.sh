@@ -758,6 +758,128 @@ assert_eq "setsid git status: no wrapper in tokens, scan returns empty" \
   "" \
   "$(canon_unwrap_string_exec_arg 'setsid git status')"
 
+# ---------------------------------------------------------------------------
+# canon_unwrap_string_exec_arg -- round-6: env -S / --split-string and
+#   no-exec builtin short-circuit.
+#
+# Issue 1 (BLOCKING): env -S re-splits and executes its payload — the flag-
+#   skipper must recognise -S / --split-string / bundled-S clusters and
+#   return the payload for recursive evaluation (rc=0).  If payload is absent
+#   → rc=2 (fail-closed).
+#
+# Issue 2 (WARNING regression): echo/printf with UNQUOTED args containing
+#   "bash" as a separate token were over-blocked by the universal scan-forward.
+#   Fix: the '*' arm now short-circuits for CANON_NO_EXEC_BUILTINS (echo,
+#   printf, :, true, false) before calling _do_scan_for_wrapper.
+# ---------------------------------------------------------------------------
+printf '\n=== canon_unwrap_string_exec_arg -- round-6: env -S + no-exec builtins ===\n'
+
+_R6H="--hard"
+_R6FD="-fd"
+
+# --- env -S: payload extraction (rc=0; guard recurses) ---
+
+# env -S "bash -c 'git reset --hard'" → extracts "bash -c 'git reset --hard'"
+_R6_S_PAYLOAD="bash -c 'git reset $_R6H'"
+_R6_S_RC=0
+_R6_S_OUT=$(canon_unwrap_string_exec_arg "env -S \"$_R6_S_PAYLOAD\"") || _R6_S_RC=$?
+assert_eq "env -S PAYLOAD extracts payload (rc=0, guard recurses)" \
+  "$_R6_S_PAYLOAD" \
+  "$_R6_S_OUT"
+if [[ "$_R6_S_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env -S PAYLOAD → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env -S PAYLOAD — expected rc=0, got rc=$_R6_S_RC")
+  printf '  FAIL  env -S PAYLOAD → expected rc=0, got rc=%d\n' "$_R6_S_RC"
+fi
+
+# env --split-string="git reset --hard" → extracts "git reset --hard"
+_R6_SS_RC=0
+_R6_SS_OUT=$(canon_unwrap_string_exec_arg "env --split-string=\"git reset $_R6H\"") || _R6_SS_RC=$?
+assert_eq "env --split-string=PAYLOAD extracts payload (rc=0)" \
+  "git reset $_R6H" \
+  "$_R6_SS_OUT"
+if [[ "$_R6_SS_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env --split-string=PAYLOAD → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env --split-string=PAYLOAD — expected rc=0, got rc=$_R6_SS_RC")
+  printf '  FAIL  env --split-string=PAYLOAD → expected rc=0, got rc=%d\n' "$_R6_SS_RC"
+fi
+
+# env -Si "git reset --hard" → extracts "git reset --hard"
+_R6_SI_RC=0
+_R6_SI_OUT=$(canon_unwrap_string_exec_arg "env -Si \"git reset $_R6H\"") || _R6_SI_RC=$?
+assert_eq "env -Si PAYLOAD extracts payload (rc=0, bundled cluster with S)" \
+  "git reset $_R6H" \
+  "$_R6_SI_OUT"
+if [[ "$_R6_SI_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env -Si PAYLOAD → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env -Si PAYLOAD — expected rc=0, got rc=$_R6_SI_RC")
+  printf '  FAIL  env -Si PAYLOAD → expected rc=0, got rc=%d\n' "$_R6_SI_RC"
+fi
+
+# env -S "git status" → extract "git status" (rc=0; guard recurses → safe → pass)
+_R6_SSTAT_RC=0
+_R6_SSTAT_OUT=$(canon_unwrap_string_exec_arg "env -S \"git status\"") || _R6_SSTAT_RC=$?
+assert_eq "env -S 'git status' extracts git status (rc=0; caller finds safe cmd)" \
+  "git status" \
+  "$_R6_SSTAT_OUT"
+if [[ "$_R6_SSTAT_RC" -eq 0 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  env -S git-status → rc=0\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: env -S git-status — expected rc=0, got rc=$_R6_SSTAT_RC")
+  printf '  FAIL  env -S git-status → expected rc=0, got rc=%d\n' "$_R6_SSTAT_RC"
+fi
+
+# --- No-exec builtins: short-circuit returns rc=1 (not a wrapper) ---
+
+# echo bash -c "git reset --hard" UNQUOTED → rc=1 (echo is no-exec)
+_R6_ECHO_RC=0
+_R6_ECHO_OUT=$(canon_unwrap_string_exec_arg "echo bash -c \"git reset $_R6H\"") || _R6_ECHO_RC=$?
+assert_eq "echo bash -c UNQUOTED returns empty (no-exec builtin, rc=1)" \
+  "" \
+  "$_R6_ECHO_OUT"
+if [[ "$_R6_ECHO_RC" -eq 1 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  echo bash -c UNQUOTED → rc=1 (no-exec)\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: echo bash -c UNQUOTED — expected rc=1, got rc=$_R6_ECHO_RC")
+  printf '  FAIL  echo bash -c UNQUOTED → expected rc=1, got rc=%d\n' "$_R6_ECHO_RC"
+fi
+
+# printf bash -c "git reset --hard" UNQUOTED → rc=1 (printf is no-exec)
+_R6_PRINTF_RC=0
+_R6_PRINTF_OUT=$(canon_unwrap_string_exec_arg "printf bash -c \"git reset $_R6H\"") || _R6_PRINTF_RC=$?
+assert_eq "printf bash -c UNQUOTED returns empty (no-exec builtin, rc=1)" \
+  "" \
+  "$_R6_PRINTF_OUT"
+if [[ "$_R6_PRINTF_RC" -eq 1 ]]; then
+  PASS=$(( PASS + 1 ))
+  printf '  PASS  printf bash -c UNQUOTED → rc=1 (no-exec)\n'
+else
+  FAIL=$(( FAIL + 1 ))
+  ERRORS+=("FAIL: printf bash -c UNQUOTED — expected rc=1, got rc=$_R6_PRINTF_RC")
+  printf '  FAIL  printf bash -c UNQUOTED → expected rc=1, got rc=%d\n' "$_R6_PRINTF_RC"
+fi
+
+# Prior no-over-block controls (echo/printf QUOTED) must still hold.
+assert_eq "echo QUOTED bash arg still returns empty (rc=1, no-exec path)" \
+  "" \
+  "$(canon_unwrap_string_exec_arg "echo \"bash -c 'git reset $_R6H'\"" 2>/dev/null || true)"
+
+assert_eq "printf QUOTED bash arg still returns empty (rc=1, no-exec path)" \
+  "" \
+  "$(canon_unwrap_string_exec_arg "printf \"bash -c 'git clean $_R6FD'\"" 2>/dev/null || true)"
 
 # ---------------------------------------------------------------------------
 # canon_has_ambiguous_git_token — Round-3 fix for git$IFS inner bypass.

@@ -266,8 +266,6 @@ canon_has_ambiguous_git_token() {
 }
 
 # ---------------------------------------------------------------------------
-# CANON_STRING_EXEC_WRAPPERS
-# ---------------------------------------------------------------------------
 # canon_unwrap_string_exec_arg <raw_segment>
 # ---------------------------------------------------------------------------
 # String-executing-wrapper detector.  Classifies a segment into one of three
@@ -308,8 +306,17 @@ canon_has_ambiguous_git_token() {
 #     command  — skips -p, -v, -V, --
 #     nohup    — self-contained, no flags consumed
 #     env      — skips -i, -u NAME, -0, NAME=VALUE assignments, --
+#                ALSO: env -S / --split-string / bundled-S clusters re-split
+#                and execute the payload string (GNU env); the payload is
+#                extracted and returned as an inner command (rc=0 / outcome b).
+#                Absent payload → fail-closed (rc=2 / outcome c).
 #     timeout  — scan-forward after prefix (arity-free)
 #     nice     — scan-forward after prefix (arity-free)
+#
+#   No-exec builtins (short-circuit, outcome a):
+#     echo, printf, :, true, false — never execute their arguments; the
+#     '*' scan-forward arm short-circuits immediately for these tokens so that
+#     'echo bash -c "..."' (unquoted) does not false-block via scan-forward.
 #
 # Known limitation (consciously deferred):
 #   bash -c "$(echo git reset --hard)" — the inner argument is a command
@@ -452,8 +459,13 @@ canon_unwrap_string_exec_arg() {
   #   -uNAME      (combined form, self-contained)
   #   NAME=VALUE  (assignment, skip)
   #   --          (end of options; advance once then stop)
+  #   -S / --split-string / -Si / -iS / --split-string=PAYLOAD
+  #     env re-splits and executes the payload just like a shell -c argument.
+  #     Sets _env_split_payload to the extracted payload and returns 2.
+  #     Returns 2 with empty _env_split_payload if payload is absent (fail-closed).
   # Stops at the first bare word that is not an assignment (the command).
   # ---------------------------------------------------------------------------
+  _env_split_payload=""
   _do_skip_env_flags() {
     while [[ $idx -lt $tok_count ]]; do
       local _t="${toks[$idx]}"
@@ -469,11 +481,43 @@ canon_unwrap_string_exec_arg() {
         -i|-0|-v)
           idx=$(( idx + 1 )) # self-contained flag
           ;;
-        -*=*)
-          idx=$(( idx + 1 )) # combined -uNAME form
+        # ---------------------------------------------------------------------------
+        # GNU env -S / --split-string: re-splits and EXECUTES the payload string.
+        # Treat the payload as an inner command string, like -c for shell wrappers.
+        # All of these forms set _env_split_payload and return 2 (string-executor).
+        #   -S PAYLOAD           — separate next token is the payload
+        #   --split-string=...   — = form; payload is the suffix after =
+        #   --split-string PAYLOAD — separate next token form
+        #   -Si / -iS            — bundled cluster containing S (self+PAYLOAD next)
+        # ---------------------------------------------------------------------------
+        --split-string=*)
+          # = form: payload embedded after =
+          _env_split_payload="${_t#--split-string=}"
+          return 2
+          ;;
+        --split-string|-S)
+          # Separate-token form: next token is the payload
+          local _si=$(( idx + 1 ))
+          if [[ $_si -lt $tok_count ]]; then
+            _env_split_payload="${toks[$_si]}"
+          fi
+          # _env_split_payload may be empty if no next token — caller fails-closed
+          return 2
           ;;
         -*)
-          # Unknown env flag — treat as self-contained (conservative).
+          # Check for a bundled short-flag cluster containing 'S' (e.g. -Si, -iS).
+          # Strip the leading '-' and check if 'S' is in the cluster body.
+          local _cluster="${_t#-}"
+          # Only applies to pure-short-flag clusters (no '=' and no '--' prefix).
+          if [[ "$_cluster" != *=* ]] && [[ "$_cluster" == *S* ]]; then
+            # Cluster contains S: the next token is the payload.
+            local _si=$(( idx + 1 ))
+            if [[ $_si -lt $tok_count ]]; then
+              _env_split_payload="${toks[$_si]}"
+            fi
+            return 2
+          fi
+          # Unknown env flag without S — treat as self-contained (conservative).
           idx=$(( idx + 1 ))
           ;;
         *=*)
@@ -573,8 +617,23 @@ canon_unwrap_string_exec_arg() {
         ;;
       env)
         # Skip 'env' itself and any flags/assignments it owns.
+        # When _do_skip_env_flags detects -S/--split-string it returns 2 and
+        # sets _env_split_payload to the payload string env will re-execute.
+        # Treat this like a string-executing wrapper: extract the payload and
+        # return 0 (caller recurses into it), or fail-closed (rc=2) if empty.
         idx=$(( idx + 1 ))
-        _do_skip_env_flags
+        local _env_flags_rc=0
+        _do_skip_env_flags || _env_flags_rc=$?
+        if [[ "$_env_flags_rc" -eq 2 ]]; then
+          # env is acting as a string-executor via --split-string.
+          if [[ -n "$_env_split_payload" ]]; then
+            printf '%s' "$_env_split_payload"
+            return 0
+          else
+            # No payload: fail-closed.
+            return 2
+          fi
+        fi
         ;;
       timeout|nice)
         # Scan-forward approach (arity-free): after the prefix word, scan ALL
@@ -626,6 +685,22 @@ canon_unwrap_string_exec_arg() {
         return $?
         ;;
       *)
+        # Pure-output / no-exec builtins: these commands NEVER execute their
+        # arguments, so their argument tokens are not a string-executing
+        # context.  Short-circuit: return 1 (not a wrapper).
+        #
+        # CANON_NO_EXEC_BUILTINS is the authoritative list.  Do NOT add eval
+        # or any executing command to this set.
+        # (See also: round-6 WARNING regression — echo/printf with UNQUOTED
+        #  bare "bash" token were over-blocked by scan-forward.)
+        local _tok_base="${tok##*/}"
+        _tok_base="${_tok_base#\\}"
+        case "$_tok_base" in
+          echo|printf|:|true|false)
+            return 1
+            ;;
+        esac
+
         # Unknown leading token (e.g. setsid, stdbuf, xargs, sudo, or any
         # future unrecognised prefix).  Universal scan-forward: advance past
         # this token, then scan ALL remaining tokens left-to-right for the

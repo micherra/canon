@@ -1164,6 +1164,55 @@ run_test 'bash -c "$(echo git reset --hard)" passes (command-substitution gap, c
 
 
 # -----------------------------------------------------------------------
+# P1 round-6: env --split-string / -S bypass (should block, exit 2)
+#             and no-exec builtin over-block regression (should pass, exit 0).
+#
+# env -S / --split-string re-splits its argument and executes it like a shell
+# command.  Round-6 teaches the env flag-skipper to recognise these flags and
+# extract the payload for recursive evaluation instead of silently skipping
+# them (which left the inner command unexamined → fail-OPEN).
+#
+# echo/printf with UNQUOTED args containing bare "bash" were over-blocked by
+# the round-5 universal scan-forward.  Fix: the '*' arm now short-circuits
+# for CANON_NO_EXEC_BUILTINS before calling _do_scan_for_wrapper.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- P1 round-6: env -S / --split-string forms (should block, exit 2) --"
+
+_R6_HARD="--hard"
+_R6_FD="-fd"
+
+# env -S "bash -c 'git reset --hard'" → extract payload → recurse → block
+run_test "env -S \"bash -c '...'\" blocks (env --split-string re-executes payload)" \
+  2 "$(make_multiline_input "env -S \"bash -c 'git reset $_R6_HARD'\"")" "$NON_WT_PWD"
+
+# env -Si "git reset --hard" → payload is direct destructive cmd → block
+run_test "env -Si \"git reset --hard\" blocks (bundled cluster with S)" \
+  2 "$(make_multiline_input "env -Si \"git reset $_R6_HARD\"")" "$NON_WT_PWD"
+
+# env --split-string="git reset --hard" → payload is direct destructive cmd → block
+run_test "env --split-string=\"git reset --hard\" blocks (long form with =)" \
+  2 "$(make_multiline_input "env --split-string=\"git reset $_R6_HARD\"")" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-6: env -S pass control (should pass, exit 0) --"
+
+# env -S "git status" → extract payload → recurse → safe → pass
+run_test "env -S \"git status\" passes (safe inner command)" \
+  0 "$(make_multiline_input "env -S \"git status\"")" "$NON_WT_PWD"
+
+echo ""
+echo "-- P1 round-6: no-exec builtin unquoted regression (should pass, exit 0) --"
+
+# echo bash -c "git reset --hard" (UNQUOTED) → echo is no-exec → skip-pass
+run_test "echo bash -c \"git reset\" UNQUOTED passes (echo is no-exec builtin)" \
+  0 "$(make_multiline_input "echo bash -c \"git reset $_R6_HARD\"")" "$NON_WT_PWD"
+
+# printf bash -c "git reset --hard" (UNQUOTED) → printf is no-exec → skip-pass
+run_test "printf bash -c \"git reset\" UNQUOTED passes (printf is no-exec builtin)" \
+  0 "$(make_multiline_input "printf bash -c \"git reset $_R6_HARD\"")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""
