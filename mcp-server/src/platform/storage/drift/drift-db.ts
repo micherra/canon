@@ -39,6 +39,7 @@ import {
   rowToReviewEntry,
 } from "./drift-db-rows.ts";
 import { DriftDbSignals } from "./drift-db-signals.ts";
+import { ViolationClosureDao } from "./violation-closure-dao.ts";
 
 // Re-export WeeklyTrendPoint so callers can import from drift-db
 export type { WeeklyTrendPoint } from "./drift-db-queries.ts";
@@ -85,6 +86,9 @@ export class DriftDb {
   // ---- Craft Profiles DAO (lazy) ----
   private _craftProfiles: CraftProfileDao | null = null;
 
+  // ---- Violation Closure DAO (lazy) ----
+  private _closures: ViolationClosureDao | null = null;
+
   constructor(db: Database.Database) {
     this.db = db;
 
@@ -121,7 +125,7 @@ export class DriftDb {
     `);
 
     this.stmtGetViolationsByReviewId = db.prepare(`
-      SELECT * FROM violations WHERE review_id = ?
+      SELECT * FROM violations WHERE review_id = ? AND status = 'open'
     `);
 
     // For principleId filtering: get review_ids that have a matching violation
@@ -206,11 +210,18 @@ export class DriftDb {
    * the violations table, all inside a single transaction.
    */
   appendReview(entry: ReviewEntry): void {
+    const closures = this.getClosures();
     const insertReviewAndViolations = this.db.transaction(() => {
       this.stmtInsertReview.run(buildReviewParams(entry));
       this.insertViolations(entry.review_id, entry.violations ?? []);
+      closures.supersedeOpenViolations({
+        files: entry.files,
+        honored: entry.honored ?? [],
+        recordedViolations: entry.violations ?? [],
+        reviewId: entry.review_id,
+        timestamp: entry.timestamp,
+      });
     });
-
     insertReviewAndViolations();
   }
 
@@ -566,6 +577,18 @@ export class DriftDb {
       this._craftProfiles = new CraftProfileDao(this.db);
     }
     return this._craftProfiles;
+  }
+
+  /**
+   * Lazy accessor for violation closure DAO methods.
+   * The ViolationClosureDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getClosures(): ViolationClosureDao {
+    if (this._closures === null) {
+      this._closures = new ViolationClosureDao(this.db);
+    }
+    return this._closures;
   }
 
   // Lifecycle
