@@ -156,6 +156,45 @@ function loadFileRecords(paths: string[]): FileRecord[] {
     .filter((f): f is FileRecord => f !== null);
 }
 
+// ---- DDD doc set collector ----
+
+/**
+ * Collect the DDD doc set for citation linting:
+ *   docs/ (excluding docs/explore/), domains/<name>/README.md, root CONTEXT.md.
+ *
+ * docs/explore/ holds frozen point-in-time records (proposals, judge sheets) that are
+ * stale-by-design — linting them yields guaranteed false findings (decision ddd-doc-freshness-02).
+ * Live filesystem scan (not KG) so the check never silently degrades on a cold/stale graph
+ * store (observable-best-effort — this file has prior violations of that principle).
+ */
+function collectDddDocPaths(projectDir: string): string[] {
+  const paths: string[] = [];
+
+  // docs/**/*.md, excluding docs/explore/**
+  const docsDir = join(projectDir, "docs");
+  const docsMdPaths = findFiles(docsDir, (_fp, name) => name.endsWith(".md"));
+  for (const absPath of docsMdPaths) {
+    // Compute repo-relative path using same idiom as isExcludedDir
+    const relPath = absPath.slice(projectDir.length + 1);
+    if (!relPath.startsWith("docs/explore/")) {
+      paths.push(absPath);
+    }
+  }
+
+  // mcp-server/src/domains/*/README.md
+  const domainsDir = join(projectDir, "mcp-server", "src", "domains");
+  const domainReadmePaths = findFiles(domainsDir, (_fp, name) => name === "README.md");
+  paths.push(...domainReadmePaths);
+
+  // root CONTEXT.md (if present)
+  const contextMdPath = join(projectDir, "CONTEXT.md");
+  if (existsSync(contextMdPath)) {
+    paths.push(contextMdPath);
+  }
+
+  return paths;
+}
+
 // ---- Check helpers ----
 
 async function runOrphanCheck(
@@ -193,6 +232,7 @@ async function runOrphanCheck(
 function runStaleRefCheck(
   projectDir: string,
   claudeMdFiles: FileRecord[],
+  dddDocFiles: FileRecord[],
 ): ReturnType<typeof checkStaleRefs> {
   const workspacesDir = join(projectDir, ".canon", "workspaces");
   const planPaths = findFiles(
@@ -200,17 +240,20 @@ function runStaleRefCheck(
     (_fp, name) => name.endsWith("-PLAN.md") || name === "DESIGN.md",
   );
   const planFiles = loadFileRecords(planPaths);
-  const allFiles = [...claudeMdFiles, ...planFiles];
+  const allFiles = [...claudeMdFiles, ...planFiles, ...dddDocFiles];
   const existsOnDisk = (refPath: string): boolean => existsSync(join(projectDir, refPath));
   return checkStaleRefs(allFiles, existsOnDisk);
 }
 
-function runCitedPathCheck(projectDir: string): ReturnType<typeof checkCitedPaths> {
+function runCitedPathCheck(
+  projectDir: string,
+  dddDocFiles: FileRecord[],
+): ReturnType<typeof checkCitedPaths> {
   const referencesDir = join(projectDir, "references");
   const refPaths = findFiles(referencesDir, (_fp, name) => name.endsWith(".md"));
   const refFiles = loadFileRecords(refPaths);
   const existsOnDisk = (refPath: string): boolean => existsSync(join(projectDir, refPath));
-  return checkCitedPaths(refFiles, existsOnDisk);
+  return checkCitedPaths([...refFiles, ...dddDocFiles], existsOnDisk);
 }
 
 // ---- Main tool function ----
@@ -245,13 +288,22 @@ export async function wikiLint(
   const agentsDir = join(pluginDir, "agents");
   const agentFiles = loadFileRecords(findFiles(agentsDir, (_fp, name) => name.endsWith(".md")));
 
+  // DDD doc set: docs/**/*.md (excl. docs/explore/), domains/*/README.md, CONTEXT.md.
+  // Collected once and threaded into both stale_refs and cited_paths runners.
+  const dddDocFiles =
+    enabled.has("stale_refs") || enabled.has("cited_paths")
+      ? loadFileRecords(collectDddDocPaths(projectDir))
+      : [];
+
   const contradictions = enabled.has("contradictions") ? checkContradictions(claudeMdFiles) : [];
   const orphans = enabled.has("orphan_principles")
     ? await runOrphanCheck(projectDir, principles, claudeMdFiles, agentFiles)
     : [];
-  const staleRefs = enabled.has("stale_refs") ? runStaleRefCheck(projectDir, claudeMdFiles) : [];
+  const staleRefs = enabled.has("stale_refs")
+    ? runStaleRefCheck(projectDir, claudeMdFiles, dddDocFiles)
+    : [];
   const missingExamples = enabled.has("missing_examples") ? checkMissingExamples(principles) : [];
-  const citedPaths = enabled.has("cited_paths") ? runCitedPathCheck(projectDir) : [];
+  const citedPaths = enabled.has("cited_paths") ? runCitedPathCheck(projectDir, dddDocFiles) : [];
   const validLayers = enabled.has("scope_layers")
     ? Object.keys(await loadLayerMappings(projectDir))
     : [];
@@ -263,7 +315,7 @@ export async function wikiLint(
   return assembleWikiLintOutput({
     citedPaths,
     contradictions,
-    filesScanned: claudeMdFiles.length + agentFiles.length,
+    filesScanned: claudeMdFiles.length + agentFiles.length + dddDocFiles.length,
     missingExamples,
     orphans,
     principlesChecked: principles.length,
