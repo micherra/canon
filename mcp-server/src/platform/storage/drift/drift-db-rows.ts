@@ -34,7 +34,7 @@ export type ViolationRow = {
   file_path: string | null;
   impact_score: number | null;
   message: string | null;
-  // Lifecycle columns added in migration v10 (closure-01)
+  // Lifecycle columns added in migration v11 (closure-01)
   status: string; // 'open' | 'resolved' — DEFAULT 'open'
   resolved_at: string | null;
   resolved_by_review_id: string | null;

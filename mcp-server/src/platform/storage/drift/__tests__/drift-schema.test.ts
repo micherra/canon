@@ -1,12 +1,12 @@
 /**
  * drift-schema.ts migration runner tests
  *
- * Tests the v2 migration runner ported from execution-schema.ts pattern.
+ * Tests the migration runner ported from execution-schema.ts pattern.
  * Uses in-memory SQLite (:memory:) for speed and isolation.
  *
  * Test plan:
- * - Fresh DB has schema version 2 with decisions table and flow_runs.commits column
- * - Existing v1 DB (simulated) migrates to v2
+ * - Fresh DB has schema version 11 with decisions table and flow_runs.commits column
+ * - Existing v1 DB (simulated) migrates through v2
  * - Migration is idempotent — running twice does not error
  * - columnExists returns true/false correctly for existing/missing columns
  *
