@@ -21,6 +21,7 @@ import type {
   RecurringViolation,
   RunSummary,
 } from "../history-types.ts";
+import { computeCliffEventsDimension } from "./cross-run-cliff-events.ts";
 import { computeCraftDrift } from "./cross-run-craft-drift.ts";
 import { analyzePlannerPatterns, computePerformanceTrends } from "./cross-run-patterns.ts";
 import { computeOutcomeWeight, type OutcomeSignals } from "./judge-weight.ts";
@@ -383,6 +384,30 @@ function loadCraftProfiles(
 }
 
 /**
+ * Load cliff events from drift.db, applying optional `since` cutoff.
+ * Rows are filtered by `detected_at >= since` matching the pattern used by
+ * `loadCraftProfiles` and the flow-run filter in `analyzeCrossRunPatterns`.
+ * Degrades gracefully when the cliff-events store is unavailable.
+ */
+function loadCliffEvents(
+  driftDb: DriftDb,
+  options: { since?: string },
+): import("@platform/storage/drift/cliff-events-dao.ts").CliffEventRow[] {
+  const { since } = options;
+  let rows: import("@platform/storage/drift/cliff-events-dao.ts").CliffEventRow[] = [];
+  try {
+    rows = driftDb.getCliffEvents().getAll();
+  } catch {
+    // cliff-events store unavailable — cliff_events dimension will be no_data
+    return [];
+  }
+  if (since !== undefined) {
+    rows = rows.filter((r) => r.detected_at >= since);
+  }
+  return rows;
+}
+
+/**
  * Compute the analysis window from all available timestamps in the data set.
  * Falls back to the current instant when no timestamps are present.
  */
@@ -436,6 +461,9 @@ export function analyzeCrossRunPatterns(
   // Load craft profiles (degraded gracefully when store unavailable)
   const craftProfiles = loadCraftProfiles(driftDb, { limit, since });
 
+  // Load cliff events (degraded gracefully when store unavailable)
+  const cliffRows = loadCliffEvents(driftDb, { since });
+
   // Collect violations from summaries
   const summaryViolations = violationsFromSummaries(summaries);
 
@@ -452,11 +480,13 @@ export function analyzeCrossRunPatterns(
   const agent_performance_trends = computePerformanceTrends(summaries, allFlowRuns, limit);
   const planner_patterns = analyzePlannerPatterns(summaries);
   const craft_drift = computeCraftDrift(craftProfiles);
+  const cliff_events = computeCliffEventsDimension(cliffRows);
   const analysis_window = computeAnalysisWindow(allReviews, allFlowRuns, summaries);
 
   return {
     agent_performance_trends,
     analysis_window,
+    cliff_events,
     craft_drift,
     fix_cycle_patterns,
     planner_patterns,

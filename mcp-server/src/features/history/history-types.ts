@@ -10,6 +10,7 @@
  * consumers that only need to import from this module), history-only types stay here.
  */
 
+import type { ConfidenceAnnotation } from "../../shared/lib/confidence.ts";
 import type { CraftDimension } from "../../shared/lib/craft-rubric.ts";
 
 // Re-export shared types so consumers can import from one place
@@ -17,8 +18,7 @@ export type {
   ArchiveManifestEntry,
   ArchiveManifestFilter,
 } from "../../platform/storage/drift/drift-analytics-types.ts";
-
-export type { CraftDimension };
+export type { ConfidenceAnnotation, CraftDimension };
 
 // --- Result shapes for tools ---
 
@@ -200,6 +200,33 @@ export type CraftDrift = {
   profile_count: number;
 };
 
+// --- Cliff events dimension types ---
+
+import type { CliffRecoveryOutcome } from "../../platform/storage/drift/cliff-events-dao.ts";
+
+/** Re-export so history consumers import outcome vocabulary from one place. */
+export type { CliffRecoveryOutcome };
+
+/** Aggregated count keyed by a grouping value. */
+export type CliffCountBucket = { key: string; count: number };
+
+/**
+ * Cross-run cliff/write-cliff dimension (watch_BBBBB1 consumer).
+ * status "no_data" when zero events exist — never an error.
+ * Confidence reuses the shared engine: sample_size < 5 => tier "insufficient"
+ * (the sparse-data floor; consumers must not derive rates from insufficient-tier data).
+ */
+export type CliffEventsDimension = {
+  status: "no_data" | "observed";
+  total_cliffs: number; // distinct (workspace, step) cliffed pairs
+  workspaces_affected: number; // distinct workspace_slugs
+  by_agent_type: CliffCountBucket[]; // null agent_type bucketed as "unknown"
+  by_step_id: CliffCountBucket[];
+  by_source: CliffCountBucket[];
+  recovery_outcomes: Record<CliffRecoveryOutcome, number>; // all four keys always present
+  confidence: ConfidenceAnnotation;
+};
+
 /** Full cross-run analysis result. */
 export type CrossRunAnalysisResult = {
   recurring_violations: RecurringViolation[];
@@ -207,6 +234,7 @@ export type CrossRunAnalysisResult = {
   agent_performance_trends: AgentPerformanceTrend[];
   planner_patterns: PlannerPatternAnalysis;
   craft_drift: CraftDrift;
+  cliff_events: CliffEventsDimension;
   total_archived_runs: number;
   analysis_window: { from: string; to: string };
 };

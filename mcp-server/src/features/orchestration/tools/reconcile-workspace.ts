@@ -7,17 +7,19 @@
  * finishing) their artifacts. Never mutates the journal or archive and runs no
  * destructive side-effects. When `emit_telemetry: true` and a cliff is detected,
  * it appends a best-effort (fail-open) `cliff_detected` audit event to the
- * execution-store event log — this is the only write it ever performs, it never
- * touches the journal/archive, and a telemetry-write failure never changes the
- * returned result.
+ * execution-store event log AND, when `projectDir` is supplied, writes a
+ * durable row per incomplete step to drift.db via CliffEventsDao (decision
+ * cliff-d2). Both writes are fail-open: a failure warns with context but never
+ * alters the returned result.
  *
  * Extracted from orchestration-journal.ts to keep that file under 600 lines.
  */
 
 import { existsSync, globSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import type { JournalStep } from "./orchestration-journal.ts";
 import {
@@ -30,6 +32,7 @@ export type ReconcileWorkspaceInput = {
   workspace: string;
   emit_telemetry?: boolean;
   source?: "resume" | "post_subagent";
+  projectDir?: string; // injected by register-journal.ts via resolveScope(extra); enables drift.db write-through
 };
 
 export type IncompleteStep = {
@@ -134,6 +137,9 @@ async function toIncompleteStep(
  * Best-effort and fail-open: never throws, never changes the caller's result.
  * Mirrors the `auto_decision` precedent in `compute-autonomy-tier.ts`. The
  * journal/archive is never touched — only the append-only event log is written.
+ *
+ * Payload is enriched with a `steps` array (decision D6) so future backfills
+ * carry per-step agent types and counts.
  */
 function emitCliffTelemetry(
   workspace: string,
@@ -148,12 +154,52 @@ function emitCliffTelemetry(
       needs_recovery: true,
       partial_count: incompleteSteps.reduce((n, s) => n + s.partial_artifacts.length, 0),
       source,
+      steps: incompleteSteps.map((s) => ({
+        agent_type: s.agent_type,
+        missing_count: s.missing_artifacts.length,
+        partial_count: s.partial_artifacts.length,
+        step_id: s.step_id,
+      })),
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
     // Fail-open: telemetry must never block resume or the build (PRD constraint).
     console.warn(
       "[canon] reconcile-workspace: cliff_detected event logging failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
+ * Fail-open write-through of cliff events to the central drift.db store
+ * (decision cliff-d2). Never throws; a failure warns and changes nothing
+ * for the caller. Skipped when projectDir is unavailable.
+ */
+function writeCliffEventsThrough(
+  projectDir: string,
+  workspace: string,
+  incompleteSteps: IncompleteStep[],
+  source: "resume" | "post_subagent",
+): void {
+  try {
+    const dao = getDriftDb(projectDir).getCliffEvents();
+    const detectedAt = new Date().toISOString();
+    const slug = basename(workspace);
+    for (const step of incompleteSteps) {
+      dao.upsert({
+        agent_type: step.agent_type ?? undefined,
+        detected_at: detectedAt,
+        missing_count: step.missing_artifacts.length,
+        partial_count: step.partial_artifacts.length,
+        source,
+        step_id: step.step_id,
+        workspace_slug: slug,
+      });
+    }
+  } catch (err) {
+    console.warn(
+      "[canon] reconcile-workspace: cliff_events write-through to drift.db failed:",
       err instanceof Error ? err.message : err,
     );
   }
@@ -194,7 +240,11 @@ export async function reconcileWorkspace(
   ).filter((s): s is IncompleteStep => s !== null);
 
   if (input.emit_telemetry && incompleteSteps.length > 0) {
-    emitCliffTelemetry(workspace, incompleteSteps, input.source ?? "resume");
+    const source = input.source ?? "resume";
+    emitCliffTelemetry(workspace, incompleteSteps, source);
+    if (input.projectDir) {
+      writeCliffEventsThrough(input.projectDir, workspace, incompleteSteps, source);
+    }
   }
 
   return toolOk({

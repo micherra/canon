@@ -11,7 +11,9 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { CliffEventRow } from "../../../platform/storage/drift/cliff-events-dao.ts";
 import type { ArchiveManifestEntry } from "../../../platform/storage/drift/drift-analytics-types.ts";
+import type { DriftDb } from "../../../platform/storage/drift/drift-db.ts";
 import type { RunSummary } from "../history-types.ts";
 
 // ---- Mock getDriftDb ----
@@ -20,14 +22,32 @@ const mockGetArchiveManifests =
   vi.fn<(filter?: { branch?: string; flow?: string; limit?: number }) => ArchiveManifestEntry[]>();
 const mockGetReviews = vi.fn(() => []);
 const mockGetAllFlowRuns = vi.fn(() => []);
+const mockGetCliffEventsAll = vi.fn<() => CliffEventRow[]>(() => []);
 
 vi.mock("@platform/storage/drift/drift-db-cache.ts", () => ({
-  getDriftDb: vi.fn(() => ({
-    getAllFlowRuns: mockGetAllFlowRuns,
-    getArchiveManifests: mockGetArchiveManifests,
-    getReviews: mockGetReviews,
-    getCraftProfiles: () => ({ getRecentProfiles: () => [] }),
-  })),
+  getDriftDb: vi.fn(
+    () =>
+      ({
+        getAllFlowRuns: mockGetAllFlowRuns,
+        getArchiveManifests: mockGetArchiveManifests,
+        getReviews: mockGetReviews,
+        getCraftProfiles: () => ({ getRecentProfiles: () => [] as never[] }),
+        getCliffEvents: () => ({ getAll: mockGetCliffEventsAll }),
+      }) as unknown as DriftDb,
+  ),
+}));
+
+// ---- Mock sweepCliffEvents ----
+
+const mockSweepCliffEvents = vi.fn((_projectDir: string) => ({
+  scanned_workspaces: 0,
+  events_ingested: 0,
+  outcomes_updated: 0,
+  skipped: [] as { path: string; reason: string }[],
+}));
+
+vi.mock("../services/cliff-event-sweep.ts", () => ({
+  sweepCliffEvents: (projectDir: string) => mockSweepCliffEvents(projectDir),
 }));
 
 import { getCrossRunAnalysis } from "../tools/get-cross-run-analysis.ts";
@@ -96,6 +116,13 @@ beforeEach(() => {
   mockGetArchiveManifests.mockReturnValue([]);
   mockGetReviews.mockReturnValue([]);
   mockGetAllFlowRuns.mockReturnValue([]);
+  mockGetCliffEventsAll.mockReturnValue([]);
+  mockSweepCliffEvents.mockReturnValue({
+    scanned_workspaces: 0,
+    events_ingested: 0,
+    outcomes_updated: 0,
+    skipped: [],
+  });
 });
 
 afterEach(() => {
@@ -296,5 +323,157 @@ describe("getCrossRunAnalysis", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.total_archived_runs).toBe(0);
+  });
+});
+
+// ---- Helpers for cliff events ----
+
+function makeCliffEventRow(
+  workspace_slug: string,
+  step_id: string,
+  overrides: Partial<CliffEventRow> = {},
+): CliffEventRow {
+  return {
+    id: 1,
+    workspace_slug,
+    step_id,
+    agent_type: "engineer",
+    source: "post_subagent",
+    detected_at: "2026-06-06T12:00:00.000Z",
+    missing_count: 1,
+    partial_count: 0,
+    recovery_outcome: "recovered",
+    recorded_at: "2026-06-06T12:01:00.000Z",
+    ...overrides,
+  };
+}
+
+// ---- cliff_events dimension tests ----
+
+describe("getCrossRunAnalysis — cliff_events dimension", () => {
+  test("returns cliff_events with status=observed and correct totals when 6 rows seeded (AC2)", async () => {
+    // 6 rows → tier >= insufficient (sample_size >= 5 → tiered by confidence engine)
+    const rows: CliffEventRow[] = [
+      makeCliffEventRow("ws-a", "implement", { id: 1, recovery_outcome: "recovered" }),
+      makeCliffEventRow("ws-a", "verify", { id: 2, recovery_outcome: "abandoned" }),
+      makeCliffEventRow("ws-b", "implement", { id: 3, recovery_outcome: "recovered" }),
+      makeCliffEventRow("ws-b", "context-sync", { id: 4, recovery_outcome: "unresolved" }),
+      makeCliffEventRow("ws-c", "implement", { id: 5, recovery_outcome: "recovered" }),
+      makeCliffEventRow("ws-c", "review", { id: 6, recovery_outcome: "unknown" }),
+    ];
+    mockGetCliffEventsAll.mockReturnValue(rows);
+
+    const result = await getCrossRunAnalysis({ project_dir: "/tmp/proj" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const ce = result.cliff_events;
+    expect(ce).toBeDefined();
+    expect(ce.status).toBe("observed");
+    expect(ce.total_cliffs).toBe(6);
+    expect(ce.workspaces_affected).toBe(3);
+    // recovery_outcomes breakdown
+    expect(ce.recovery_outcomes.recovered).toBe(3);
+    expect(ce.recovery_outcomes.abandoned).toBe(1);
+    expect(ce.recovery_outcomes.unresolved).toBe(1);
+    expect(ce.recovery_outcomes.unknown).toBe(1);
+    // by_step_id: implement appears 3 times — should be top bucket
+    expect(ce.by_step_id[0]?.key).toBe("implement");
+    expect(ce.by_step_id[0]?.count).toBe(3);
+  });
+
+  test("returns cliff_events with tier=insufficient when 2 rows seeded (AC4 sparse)", async () => {
+    const rows: CliffEventRow[] = [
+      makeCliffEventRow("ws-x", "implement", { id: 1 }),
+      makeCliffEventRow("ws-y", "verify", { id: 2 }),
+    ];
+    mockGetCliffEventsAll.mockReturnValue(rows);
+
+    const result = await getCrossRunAnalysis({ project_dir: "/tmp/proj" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const ce = result.cliff_events;
+    expect(ce.status).toBe("observed");
+    expect(ce.confidence.tier).toBe("insufficient");
+    expect(ce.total_cliffs).toBe(2);
+  });
+
+  test("returns cliff_events with status=no_data when store is empty (AC4 empty)", async () => {
+    mockGetCliffEventsAll.mockReturnValue([]);
+
+    const result = await getCrossRunAnalysis({ project_dir: "/tmp/proj" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const ce = result.cliff_events;
+    expect(ce.status).toBe("no_data");
+  });
+
+  test("sweep throws — tool still returns ok with full analysis (fail-open)", async () => {
+    // Make the sweep throw
+    mockSweepCliffEvents.mockImplementation(() => {
+      throw new Error("DB locked");
+    });
+    // Empty store → no_data
+    mockGetCliffEventsAll.mockReturnValue([]);
+
+    const result = await getCrossRunAnalysis({ project_dir: "/tmp/proj" });
+
+    // Must still succeed despite sweep failure
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Analysis still returns — no data from empty store
+    expect(result.cliff_events.status).toBe("no_data");
+    expect(result.total_archived_runs).toBe(0);
+  });
+
+  test("sweep is called with project_dir before analysis runs", async () => {
+    mockGetCliffEventsAll.mockReturnValue([]);
+
+    await getCrossRunAnalysis({ project_dir: "/tmp/myproject" });
+
+    expect(mockSweepCliffEvents).toHaveBeenCalledWith("/tmp/myproject");
+    expect(mockSweepCliffEvents).toHaveBeenCalledTimes(1);
+  });
+
+  test("store unavailable (getCliffEvents throws) — returns no_data cliff_events, other dimensions unaffected", async () => {
+    // Simulate pre-v10 DB where getCliffEvents isn't available
+    const { getDriftDb } = await import("@platform/storage/drift/drift-db-cache.ts");
+    const mockDriftDb = vi.mocked(getDriftDb);
+
+    const originalImpl = mockDriftDb.getMockImplementation();
+    mockDriftDb.mockImplementationOnce(
+      () =>
+        ({
+          getAllFlowRuns: mockGetAllFlowRuns,
+          getArchiveManifests: mockGetArchiveManifests,
+          getReviews: mockGetReviews,
+          getCraftProfiles: () => ({ getRecentProfiles: () => [] as never[] }),
+          getCliffEvents: () => {
+            throw new Error("no such table: cliff_events");
+          },
+        }) as unknown as DriftDb,
+    );
+
+    try {
+      const result = await getCrossRunAnalysis({ project_dir: "/tmp/proj" });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // cliff_events should be no_data (degraded, not error)
+      expect(result.cliff_events.status).toBe("no_data");
+      // Other dimensions still computed
+      expect(result.recurring_violations).toBeDefined();
+      expect(result.agent_performance_trends).toBeDefined();
+    } finally {
+      if (originalImpl) {
+        mockDriftDb.mockImplementation(originalImpl);
+      }
+    }
   });
 });
