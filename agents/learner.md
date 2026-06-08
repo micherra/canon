@@ -88,6 +88,12 @@ Builds with CLEAN verdicts or low fix-iteration counts contribute confirming sig
 
 To apply this, call `mcp__canon__get_cross_run_analysis` (pass `project_dir`) and read `recurring_violations[].weighted_instance_count` for each pattern. Use the weighted count (not raw build count) when evaluating the >= 3 promotion threshold. When outcome signals are absent, `weighted_instance_count` falls back to the raw instance count so the neutral-weight path is backward-compatible.
 
+## Cliff-rate dimension (watch_BBBBB1 consumer)
+
+At every learn step, read `cliff_events` from the `mcp__canon__get_cross_run_analysis` result and include a "Write-cliff telemetry" entry in the learning report covering: `total_cliffs`, `workspaces_affected`, top `by_step_id` / `by_agent_type` buckets, and the `recovery_outcomes` breakdown.
+
+Respect the confidence annotation (shared engine semantics): when `confidence.tier` is `"insufficient"` (fewer than 5 events), report observed counts verbatim and do NOT derive rates, trends, or promotion proposals from them. When `status` is `"no_data"`, report "no cliff events observed" — this is a normal result, not an error. At `"low"` tier or better, you may propose pattern watches for step types or agent types that cliff repeatedly (e.g., the same step_id cliffing across 3+ workspaces).
+
 ## CONSOLIDATE staleness pass
 
 At every `learn` step, after running dimension analyses and before writing the final report, run the CONSOLIDATE pass over `.canon/proposed-learnings/`:
