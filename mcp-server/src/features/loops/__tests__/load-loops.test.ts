@@ -1,8 +1,14 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadLoopsFromDir } from "../load-loops.ts";
+
+const thisDir = dirname(fileURLToPath(import.meta.url));
+// Resolve the loops/ directory relative to the worktree root (5 levels up from __tests__):
+// __tests__ → (1) feature-loops → (2) features → (3) src → (4) mcp-server → (5) worktree
+const WORKTREE_LOOPS_DIR = resolve(thisDir, "../../../../..", "loops");
 
 /** Minimal valid _probe-shaped loop frontmatter as YAML. */
 const VALID_PROBE_MD = `---
@@ -127,5 +133,20 @@ describe("loadLoopsFromDir", () => {
     const result = await loadLoopsFromDir(tmpDir);
     expect(result.valid).toHaveLength(1);
     expect(result.validBodies?.["_probe"]).toContain("re-fired action prompt");
+  });
+});
+
+// Smoke test: parse the real _probe.md from the worktree's loops/ directory (dc-04 support)
+describe("loadLoopsFromDir — real loops/ directory (_probe smoke test)", () => {
+  it("parses the real loops/_probe.md file successfully", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    expect(result.invalid).toHaveLength(0);
+    const probe = result.valid.find((d) => d.id === "_probe");
+    expect(probe).toBeDefined();
+    if (probe) {
+      expect(probe.mode).toBe("interval");
+      expect(probe.guardrails.mutates_build).toBe(false);
+      expect(probe.status).toBe("active");
+    }
   });
 });
