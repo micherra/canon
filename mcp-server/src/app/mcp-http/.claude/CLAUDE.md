@@ -6,15 +6,22 @@
 Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer registry, scope handshake, and idle-session eviction. Flag-dark (CANON_HTTP_DAEMON=1) until Phase 3.
 
 ## Architecture
-<!-- last-updated: 2026-06-06 -->
+<!-- last-updated: 2026-06-08 -->
 
 | File | Responsibility |
 |------|---------------|
-| `auth.ts` | Token lifecycle (`resolveTokenPath`/`loadOrCreateToken` 0600 fail-closed) + request auth (`authenticate` timingSafeEqual, loopback+Host rebinding guards, `rereadToken` rate-limited rotation) |
+| `loopback-host.ts` | Shared DNS-rebinding guard — single source of truth for `LOOPBACK_ALLOWED_HOSTS` set, `extractLoopbackHostname`, `isAllowedLoopbackHost`, `isLoopbackHostRequest`; consumed by `auth.ts`, `daemon.ts`, and `http-server.ts` (sidecar) |
+| `auth.ts` | Token lifecycle (`resolveTokenPath`/`loadOrCreateToken` 0600 fail-closed) + request auth (`authenticate` timingSafeEqual, loopback+Host rebinding guards via `loopback-host.ts`, `rereadToken` rate-limited rotation) |
 | `session-manager.ts` | Per-session `McpServer`+`StreamableHTTPServerTransport` registry; scope handshake (header→roots/list capped retry, fail-closed, fs.realpath-normalized); refcount+pending-handshake-guarded eviction in isolation-finish-01 order (server.close first); idle reaper (`CANON_HTTP_SESSION_TTL_MS`, default 30 min); scope immutable after first registration |
 
 ## Contracts
-<!-- last-updated: 2026-06-06 -->
+<!-- last-updated: 2026-06-08 -->
+
+**`loopback-host.ts`**
+- `LOOPBACK_ALLOWED_HOSTS` — `Set<string>` of allowed loopback hostnames: `"127.0.0.1"`, `"localhost"`, `"[::1]"`; single source of truth for all Canon HTTP endpoints
+- `extractLoopbackHostname(host)` — strips port suffix from a raw Host header value; handles IPv6 bracket notation; malformed input returned as-is (rejects at allowlist check)
+- `isAllowedLoopbackHost(hostHeader)` — `boolean`; fail-closed (empty string → false)
+- `isLoopbackHostRequest(req)` — `boolean`; fail-closed (missing Host header → false → caller returns 403)
 
 **`auth.ts`**
 - `resolveTokenPath(env?)` — 3-tier: `CANON_MCP_TOKEN_FILE` → `${CLAUDE_PLUGIN_DATA}/canon-mcp-token` → `~/.claude/canon/canon-mcp-token`
@@ -33,7 +40,8 @@ Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer r
 - `startReaper()` / `stopReaper()` — unref'd interval; started lazily on first `onsessioninitialized`
 
 ## Invariants
-<!-- last-updated: 2026-06-06 -->
+<!-- last-updated: 2026-06-08 -->
+- `loopback-host.ts` is the sole definition of the loopback allowlist — do NOT redeclare `LOOPBACK_ALLOWED_HOSTS` or `extractLoopbackHostname` in `auth.ts`, `daemon.ts`, or `http-server.ts`; divergent copies are a security-consistency risk
 - `authenticate` always checks remoteAddress (loopback) BEFORE Host header BEFORE token comparison — order is security-critical (defense-in-depth)
 - `loadOrCreateToken` returns `{ ok: false }` on any fs error — callers must serve 503 (never fall through to auth)
 - Scope resolution never falls back to daemon cwd/env — gate stays pending on all failure paths
