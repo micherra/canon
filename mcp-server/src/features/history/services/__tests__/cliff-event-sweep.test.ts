@@ -12,7 +12,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -429,8 +429,12 @@ describe("sweepCliffEvents", () => {
     expect(result.skipped).toEqual([]);
   });
 
-  it("never throws even on catastrophic failure (e.g., workspaces dir not enumerable)", () => {
-    // Use a non-existent projectDir — readdirSync will fail
+  it("absent workspaces dir is treated as normal (no warn, no skipped entry)", () => {
+    // Use a non-existent projectDir — existsSync guard returns false silently
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {
+      /* suppress console output during test */
+    });
+
     const badProjectDir = join(tmpDir, "nonexistent-project");
 
     let result: ReturnType<typeof sweepCliffEvents> | undefined;
@@ -438,9 +442,55 @@ describe("sweepCliffEvents", () => {
       result = sweepCliffEvents(badProjectDir);
     }).not.toThrow();
 
-    // Returns empty result
+    // Returns empty result without warning (absent dir is not an error)
     expect(result?.scanned_workspaces).toBe(0);
     expect(result?.events_ingested).toBe(0);
+    expect(result?.skipped).toEqual([]);
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it("warns and records skipped[] when a branch dir is unreadable (observable-best-effort)", () => {
+    // Create a valid workspace first so the workspaces root exists
+    const validPayload = JSON.stringify({
+      workspace: "readable-ws",
+      incomplete_step_ids: ["step-1"],
+      needs_recovery: true,
+      timestamp: "2026-06-07T10:00:00.000Z",
+      source: "resume",
+    });
+    createOrchestrationDb(tmpDir, "branch-readable", "readable-ws", [
+      { payload: validPayload, timestamp: "2026-06-07T10:00:00.000Z" },
+    ]);
+
+    // Create an unreadable branch dir alongside the readable one
+    const unreadableBranchDir = join(tmpDir, ".canon", "workspaces", "branch-unreadable");
+    mkdirSync(unreadableBranchDir, { recursive: true });
+    // Make the branch dir itself unreadable (chmod 000)
+    chmodSync(unreadableBranchDir, 0o000);
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {
+      /* suppress console output during test */
+    });
+
+    let result: ReturnType<typeof sweepCliffEvents> | undefined;
+    try {
+      expect(() => {
+        result = sweepCliffEvents(tmpDir);
+      }).not.toThrow();
+
+      // The unreadable branch is recorded in skipped[]
+      expect(result?.skipped.some((s) => s.path.includes("branch-unreadable"))).toBe(true);
+      // The readable workspace was still processed
+      expect(result?.events_ingested).toBe(1);
+      // warn was called for the unreadable branch
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      // Restore permissions so cleanup can run
+      chmodSync(unreadableBranchDir, 0o755);
+      warnSpy.mockRestore();
+    }
   });
 
   it("recovers agent_type from journal when legacy payload has null agent_type", () => {

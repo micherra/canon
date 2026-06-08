@@ -408,34 +408,71 @@ function enrichOutcomes(projectDir: string): number {
 
 // ---- Workspace enumeration ----
 
-function enumerateWorkspaceDbs(workspacesRoot: string): Array<{ dbPath: string; slug: string }> {
-  let branchDirs: string[] = [];
+type ReaddirResult = { ok: true; dirs: string[] } | { ok: false; reason: string };
+
+/** Read subdirectory names from a directory path. Returns error reason on I/O failure. */
+function readSubdirs(dirPath: string): ReaddirResult {
   try {
-    branchDirs = readdirSync(workspacesRoot, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
-  } catch {
+    return {
+      dirs: readdirSync(dirPath, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name),
+      ok: true,
+    };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Collect orchestration.db paths from a single branch directory.
+ * Records a skipped[] entry and warns when the branch dir is unreadable.
+ */
+function collectBranchDbs(
+  branchPath: string,
+  skipped: { path: string; reason: string }[],
+  result: Array<{ dbPath: string; slug: string }>,
+): void {
+  const read = readSubdirs(branchPath);
+  if (!read.ok) {
+    skipped.push({ path: branchPath, reason: read.reason });
+    console.warn(
+      `[canon] cliff-event-sweep: failed to enumerate branch dir ${branchPath}:`,
+      read.reason,
+    );
+    return;
+  }
+  for (const slug of read.dirs) {
+    const dbPath = join(branchPath, slug, "orchestration.db");
+    if (existsSync(dbPath)) {
+      result.push({ dbPath, slug: basename(slug) });
+    }
+  }
+}
+
+function enumerateWorkspaceDbs(
+  workspacesRoot: string,
+  skipped: { path: string; reason: string }[],
+): Array<{ dbPath: string; slug: string }> {
+  // Normal case: workspaces root simply doesn't exist yet (no workspaces created).
+  // Not an error — return silently without warn or skipped entry.
+  if (!existsSync(workspacesRoot)) {
+    return [];
+  }
+
+  const rootRead = readSubdirs(workspacesRoot);
+  if (!rootRead.ok) {
+    skipped.push({ path: workspacesRoot, reason: rootRead.reason });
+    console.warn(
+      `[canon] cliff-event-sweep: failed to enumerate workspaces root ${workspacesRoot}:`,
+      rootRead.reason,
+    );
     return [];
   }
 
   const result: Array<{ dbPath: string; slug: string }> = [];
-  for (const branchDir of branchDirs) {
-    const branchPath = join(workspacesRoot, branchDir);
-    let slugDirs: string[] = [];
-    try {
-      slugDirs = readdirSync(branchPath, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
-    } catch {
-      continue;
-    }
-
-    for (const slug of slugDirs) {
-      const dbPath = join(branchPath, slug, "orchestration.db");
-      if (existsSync(dbPath)) {
-        result.push({ dbPath, slug: basename(slug) });
-      }
-    }
+  for (const branchDir of rootRead.dirs) {
+    collectBranchDbs(join(workspacesRoot, branchDir), skipped, result);
   }
   return result;
 }
@@ -461,7 +498,7 @@ export function sweepCliffEvents(projectDir: string): SweepResult {
 
   try {
     const workspacesRoot = join(projectDir, ".canon", "workspaces");
-    const workspaces = enumerateWorkspaceDbs(workspacesRoot);
+    const workspaces = enumerateWorkspaceDbs(workspacesRoot, result.skipped);
 
     for (const { dbPath, slug } of workspaces) {
       result.scanned_workspaces++;

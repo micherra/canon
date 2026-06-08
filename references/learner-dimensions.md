@@ -507,8 +507,9 @@ Call `mcp__canon__get_cross_run_analysis` (pass `project_dir`) and read the `cli
 |-------------|----------|-------------------|--------------------|
 | 0 | `"no_data"` | `"insufficient"` | Report "no cliff events observed" — normal, not an error |
 | 1–4 | `"observed"` | `"insufficient"` | Report counts verbatim; NO rates, trends, or promotion proposals |
-| 5–9 | `"observed"` | `"low"` or `"medium"` | May propose pattern watches (see below) |
-| 10+ | `"observed"` | `"medium"` or `"high"` | Full rate and trend analysis permitted |
+| 5+ | `"observed"` | `"high"` | May propose pattern watches (see below); full rate and trend analysis permitted |
+
+**Implementation note**: `confidence.tier` is determined by `deriveTier(score, sampleSize)`. The cliff-events dimension passes `value: 1` (direct observations, not inferences), so `score = 1.0`. Because `deriveTier` returns `"high"` for `score >= 0.7`, the tier is `"high"` for any sample size ≥ 5. The `"low"` and `"medium"` tiers are unreachable in this dimension — they would only apply if the score were below 0.7, which the current implementation never produces. The dimension reports counts only (no fabricated rates).
 
 **No-rates-under-insufficient rule**: When `confidence.tier` is `"insufficient"`, never compute or report cliff rates (cliffs-per-build, recovery rates, etc.). Report counts and buckets only — rates over small samples fabricate signal.
 

@@ -130,7 +130,7 @@ function registerReconcileWorkspace(server: McpServer): void {
     "reconcile_workspace",
     {
       description:
-        "Cliff detection, read-only w.r.t. the journal/archive: return started/planned steps whose declared artifacts are missing on disk. Call on resume/turn-start to detect agents that stopped before producing their artifacts. Never mutates or archives the journal. When emit_telemetry is true and a cliff is detected, appends a fail-open cliff_detected audit event to the execution-store event log (the only write it performs).",
+        "Cliff detection, read-only w.r.t. the journal/archive: return started/planned steps whose declared artifacts are missing on disk. Call on resume/turn-start to detect agents that stopped before producing their artifacts. Never mutates or archives the journal. When emit_telemetry is true and a cliff is detected, performs two fail-open writes: (1) appends a cliff_detected audit event to the execution-store event log, and (2) writes a durable row per incomplete step to drift.db via CliffEventsDao (when projectDir is available). Both writes are best-effort — failures are warned but never alter the returned result.",
       inputSchema: {
         emit_telemetry: z
           .boolean()
