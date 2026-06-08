@@ -25,10 +25,30 @@ export type MdKindRule = {
 
 // ── Defaults ──
 
+// Basename exclusion exists to prevent stem-collision noise in name maps (README/CLAUDE stems
+// collide across the repo); classification uses the narrowed predicate below.
 const EXCLUDED_DOCS = new Set(["CLAUDE.md", "SCHEMA.md", "GATES.md", "README.md"]);
+
+// direction/competition records are point-in-time artifacts, stale-by-design — excluded from
+// graphing and linting (decision ddd-doc-freshness-02).
+const EXCLUDED_DOC_PREFIXES = ["docs/explore/"];
 
 function isExcludedDoc(filePath: string): boolean {
   return EXCLUDED_DOCS.has(basename(filePath));
+}
+
+/**
+ * Narrowed exclusion predicate for classification and edge emission.
+ * README.md under mcp-server/src/domains/ is allowed (domain READMEs become `doc` nodes
+ * and edge sources); they are still excluded from buildNameMaps to prevent stem-collision noise.
+ * CLAUDE.md, SCHEMA.md, GATES.md remain excluded everywhere.
+ */
+function isExcludedDocForClassification(filePath: string): boolean {
+  const posix = toPosix(filePath);
+  if (basename(filePath) === "README.md" && posix.startsWith("mcp-server/src/domains/")) {
+    return false;
+  }
+  return isExcludedDoc(filePath);
 }
 
 /** Default kind rules — can be overridden via config in the future. */
@@ -41,6 +61,9 @@ const DEFAULT_KIND_RULES: MdKindRule[] = [
   { kind: "principle", prefix: ".canon/principles/" },
   { kind: "command", prefix: "skills/canon/commands/" },
   { kind: "skill", prefix: "skills/" },
+  { kind: "doc", prefix: "docs/" },
+  { kind: "doc", prefix: "mcp-server/src/domains/" },
+  { kind: "doc", prefix: "CONTEXT.md" },
 ];
 
 // ── Node classification ──
@@ -50,8 +73,9 @@ export function classifyMdNode(
   kindRules: MdKindRule[] = DEFAULT_KIND_RULES,
 ): string | undefined {
   if (!filePath.endsWith(".md")) return undefined;
-  if (isExcludedDoc(filePath)) return undefined;
   const posix = toPosix(filePath);
+  if (EXCLUDED_DOC_PREFIXES.some((p) => posix.startsWith(p))) return undefined;
+  if (isExcludedDocForClassification(filePath)) return undefined;
   for (const rule of kindRules) {
     if (posix.startsWith(rule.prefix)) return rule.kind;
   }
@@ -252,8 +276,9 @@ function extractPathEdges(filePath: string, content: string, fileSet: Set<string
   const edges: GraphEdge[] = [];
   const seen = new Set<string>();
 
-  // Match paths ending in .md (with optional ${VAR}/ prefix)
-  const pathRe = /(?:\$\{[\w]+\}\/)?([\w][\w./-]*\.md)\b/g;
+  // Match paths ending in .md or code extensions (with optional ${VAR}/ prefix).
+  // The fileSet.has gate prevents false positives — only files in the scan emit edges.
+  const pathRe = /(?:\$\{[\w]+\}\/)?([\w][\w./-]*\.(?:md|ts|tsx|js|sh|json|yaml|yml))\b/g;
   let m = pathRe.exec(content);
   while (m !== null) {
     const refPath = m[1];
@@ -320,7 +345,7 @@ export async function inferMdRelations(
   projectDir: string,
 ): Promise<GraphEdge[]> {
   const activePaths = filePaths.filter(
-    (fp) => fp.endsWith(".md") && !isExcludedDoc(fp) && classifyMdNode(fp),
+    (fp) => fp.endsWith(".md") && !isExcludedDocForClassification(fp) && classifyMdNode(fp),
   );
 
   const fileContents = await Promise.all(

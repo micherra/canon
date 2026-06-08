@@ -27,13 +27,36 @@ describe("classifyMdNode", () => {
   });
 
   it("returns undefined for unrecognized paths", () => {
-    expect(classifyMdNode("docs/random.md")).toBeUndefined();
+    // docs/ is now a known prefix — this test updated to an unrecognized path
+    expect(classifyMdNode("unknown/random.md")).toBeUndefined();
   });
 
   it("supports custom kind rules", () => {
     const rules = [{ kind: "documentation", prefix: "docs/" }];
     expect(classifyMdNode("docs/guide.md", rules)).toBe("documentation");
     expect(classifyMdNode("agents/foo.md", rules)).toBeUndefined();
+  });
+
+  it("classifies doc paths as doc kind", () => {
+    expect(classifyMdNode("docs/bounded-context-map.md")).toBe("doc");
+    expect(classifyMdNode("docs/reference/canon-reference.md")).toBe("doc");
+    expect(classifyMdNode("mcp-server/src/domains/flows/README.md")).toBe("doc");
+    expect(classifyMdNode("CONTEXT.md")).toBe("doc");
+  });
+
+  it("excludes docs/explore/ paths from classification", () => {
+    expect(classifyMdNode("docs/explore/adaptive-queen.md")).toBeUndefined();
+    expect(classifyMdNode("docs/explore/workflow-integration/PROPOSAL-A.md")).toBeUndefined();
+  });
+
+  it("still excludes agents/README.md from classification", () => {
+    // README.md basename exclusion still applies outside mcp-server/src/domains/
+    expect(classifyMdNode("agents/README.md")).toBeUndefined();
+  });
+
+  it("classifies mcp-server/src/domains/ README.md as doc (path-aware narrowing)", () => {
+    // domain READMEs are classified as doc nodes; stem-collision guard only applies to name maps
+    expect(classifyMdNode("mcp-server/src/domains/flows/README.md")).toBe("doc");
   });
 });
 
@@ -79,6 +102,13 @@ describe("buildNameMaps", () => {
     const maps = await buildNameMaps(["agents/.claude/CLAUDE.md", "agents/guide.md"], tmpDir);
     expect(maps.byStem.has("CLAUDE")).toBe(false);
     expect(maps.byStem.has("guide")).toBe(true);
+  });
+
+  it("keeps README out of byStem even for mcp-server/src/domains/ paths (stem-collision protection)", async () => {
+    // buildNameMaps uses the original isExcludedDoc (basename-based), preserving anti-collision intent
+    await mkdir(join(tmpDir, "mcp-server", "src", "domains", "flows"), { recursive: true });
+    const maps = await buildNameMaps(["mcp-server/src/domains/flows/README.md"], tmpDir);
+    expect(maps.byStem.has("README")).toBe(false);
   });
 });
 
@@ -257,6 +287,48 @@ describe("inferMdRelations", () => {
         e.source === "skills/canon/commands/pr-review.md" && e.target === "flows/review-only.md",
     );
     expect(flowEdge).toBeDefined();
+  });
+
+  it("infers ref:path edges for cited code file paths in fileSet", async () => {
+    await mkdir(join(tmpDir, "docs"), { recursive: true });
+    await mkdir(join(tmpDir, "mcp-server", "src", "graph"), { recursive: true });
+    // doc body cites a .ts path that is in fileSet → edge emitted
+    await writeFile(
+      join(tmpDir, "docs", "freshness-design.md"),
+      "---\ntitle: Freshness Design\n---\n\nSee `mcp-server/src/graph/kg-store.ts` for the storage layer.",
+    );
+    // The .ts file doesn't need to exist on disk — fileSet membership is the gate
+    const filePaths = ["docs/freshness-design.md", "mcp-server/src/graph/kg-store.ts"];
+    const fileSet = new Set(filePaths);
+    const maps = await buildNameMaps(filePaths, tmpDir);
+    const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
+
+    const codeEdge = edges.find(
+      (e) =>
+        e.source === "docs/freshness-design.md" &&
+        e.target === "mcp-server/src/graph/kg-store.ts" &&
+        e.relation === "ref:path",
+    );
+    expect(codeEdge).toBeDefined();
+    expect(codeEdge?.confidence).toBe(0.7);
+  });
+
+  it("does NOT emit ref:path edge for cited code paths not in fileSet", async () => {
+    await mkdir(join(tmpDir, "docs"), { recursive: true });
+    await writeFile(
+      join(tmpDir, "docs", "freshness-design.md"),
+      "---\ntitle: Freshness Design\n---\n\nSee `mcp-server/src/graph/kg-store.ts` for the storage layer.",
+    );
+    // kg-store.ts is NOT in fileSet
+    const filePaths = ["docs/freshness-design.md"];
+    const fileSet = new Set(filePaths);
+    const maps = await buildNameMaps(filePaths, tmpDir);
+    const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
+
+    const codeEdge = edges.find(
+      (e) => e.source === "docs/freshness-design.md" && e.relation === "ref:path",
+    );
+    expect(codeEdge).toBeUndefined();
   });
 
   it("deduplicates edges by source|target|relation", async () => {
