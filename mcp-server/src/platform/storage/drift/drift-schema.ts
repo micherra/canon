@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "9";
+export const DRIFT_SCHEMA_VERSION = "10";
 
 // DDL statements — v1 base tables
 //
@@ -340,6 +340,31 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '9' WHERE key = 'schema_version'`);
     },
     version: "9",
+  },
+  {
+    up: (db) => {
+      // cliff_events — durable aggregation of cliff_detected telemetry events
+      // One row per (workspace_slug, step_id); upsert semantics via UNIQUE key.
+      // agent_type / missing_count / partial_count are nullable — legacy payloads
+      // (pre-enrichment) lack per-step data (backward-compatible-schema-changes).
+      // recovery_outcome defaults to 'unknown' (define-errors-out-of-existence).
+      db.exec(`CREATE TABLE IF NOT EXISTS cliff_events (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_slug   TEXT NOT NULL,
+        step_id          TEXT NOT NULL,
+        agent_type       TEXT,
+        source           TEXT NOT NULL,
+        detected_at      TEXT NOT NULL,
+        missing_count    INTEGER,
+        partial_count    INTEGER,
+        recovery_outcome TEXT NOT NULL DEFAULT 'unknown',
+        recorded_at      TEXT NOT NULL,
+        UNIQUE(workspace_slug, step_id)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_cliff_events_detected ON cliff_events(detected_at)`);
+      db.exec(`UPDATE meta SET value = '10' WHERE key = 'schema_version'`);
+    },
+    version: "10",
   },
 ];
 

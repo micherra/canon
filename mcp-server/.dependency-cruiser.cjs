@@ -49,6 +49,9 @@ module.exports = {
           // compute-autonomy-tier instantiates DriftDb here and passes it as DriftDbAdapter —
           // deferred DI exception until a DI container is wired
           "^src/features/orchestration/tools/compute-autonomy-tier\\.ts$",
+          // reconcile-workspace writes cliff events to drift.db (fail-open write-through, decision cliff-d2) —
+          // deferred DI exception until a DI container is wired
+          "^src/features/orchestration/tools/reconcile-workspace\\.ts$",
         ],
       },
       to: { path: "^src/platform/storage/drift/" },

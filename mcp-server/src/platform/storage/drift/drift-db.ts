@@ -12,6 +12,7 @@
 import type { ReviewEntry } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
 import { AreaMemoryDao } from "./area-memory-dao.ts";
+import { CliffEventsDao } from "./cliff-events-dao.ts";
 import { CraftProfileDao } from "./craft-profile-dao.ts";
 import type {
   ArchiveManifestEntry,
@@ -84,6 +85,9 @@ export class DriftDb {
 
   // ---- Craft Profiles DAO (lazy) ----
   private _craftProfiles: CraftProfileDao | null = null;
+
+  // ---- Cliff Events DAO (lazy) ----
+  private _cliffEvents: CliffEventsDao | null = null;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -566,6 +570,16 @@ export class DriftDb {
       this._craftProfiles = new CraftProfileDao(this.db);
     }
     return this._craftProfiles;
+  }
+
+  /**
+   * Lazy accessor for cliff events DAO methods.
+   * The CliffEventsDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getCliffEvents(): CliffEventsDao {
+    this._cliffEvents ??= new CliffEventsDao(this.db);
+    return this._cliffEvents;
   }
 
   // Lifecycle
