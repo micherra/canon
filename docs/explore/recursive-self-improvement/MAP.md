@@ -103,10 +103,16 @@ auto-apply):**
   (writer applies). This is the textbook iterative-not-recursive case — and it's
   Canon's flagship "self-improvement" loop. **The gap is at the top of the
   ladder, not the bottom.**
-- **L6 — Escalation cascade.** Strategies are applied in a **fixed order** and
-  the `auto_decision` events recording which strategy resolved which failure are
-  **write-only**. Reordering the cascade based on what actually works would close
-  this loop. Open, not broken.
+- **L6 — Escalation cascade.** Strategies are applied in a **fixed order**. The
+  `auto_decision` events log only the *attempted* strategy (`strategy`,
+  `reasoning`, `attempts_so_far`, `time_elapsed_ms` —
+  `get-next-escalation-strategy.ts:74`); no later event records whether that
+  strategy actually **resolved** the failure. So reordering the cascade based on
+  what works needs *two* added stages, not one: first an outcome-capture step
+  (stamp each `auto_decision` with its eventual resolution), then a reader that
+  reorders on the captured rates. The resolution signal isn't write-only — it
+  isn't recorded at all yet. Open, not broken — but costlier than a pure
+  reader/reorder.
 - **L3 / L4 — Cliff & craft drift.** Both compute real dimensions and surface
   them in the learner report, but the report is read by a human. No mechanical
   feedback to agent/step machinery. Open.
