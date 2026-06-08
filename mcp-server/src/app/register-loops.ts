@@ -23,7 +23,7 @@ export function registerLoopTools(server: McpServer): void {
       description:
         "List all active loop definitions from the loops/ registry. " +
         "Optionally filter by lifecycle_hook and annotate firing_posture for a tier. " +
-        "Always returns an invalid[] channel so calformed definitions are surfaced.",
+        "Always returns an invalid[] channel so malformed definitions are surfaced.",
       inputSchema: {
         lifecycle_hook: z
           .enum(["post-ship", "on-long-dispatch", "session-start"])

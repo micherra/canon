@@ -134,6 +134,16 @@ describe("loadLoopsFromDir", () => {
     expect(result.valid).toHaveLength(1);
     expect(result.validBodies?._probe).toContain("re-fired action prompt");
   });
+
+  it("returns empty valid[]/invalid[] and does not throw when readdir fails with a non-ENOENT error", async () => {
+    // Point the loader at a *file* path — readdir on a file throws ENOTDIR (not ENOENT),
+    // exercising the fail-open warn-and-return branch without mocking.
+    const filePath = join(tmpDir, "not-a-directory.md");
+    await writeFile(filePath, "some content");
+    const result = await loadLoopsFromDir(filePath);
+    expect(result.valid).toEqual([]);
+    expect(result.invalid).toEqual([]);
+  });
 });
 
 // Smoke test: parse the real _probe.md from the worktree's loops/ directory (dc-04 support)
