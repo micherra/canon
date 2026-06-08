@@ -15,7 +15,7 @@ The Canon MCP server is organized into eight bounded contexts. The **Flows Conte
 - **Key types**: `FlowDefinition`, `ResolvedFlow`, `StateDefinition`, `Board`, `Session`, `GateResult`, `STATUS_KEYWORDS`, `STATUS_ALIASES`, `BaseStateFields`
 - **Depends on**: Shared Kernel (`zod`, constants) only
 
-The Flows Context is the shared vocabulary of the system. Every other context imports types from here — it is effectively a published language module. The schema split is complete: `mcp-server/src/domains/flows/` contains `flow-definition-schemas.ts`, `board-state-schemas.ts`, and `transcript-schemas.ts` (with a barrel re-export that preserves existing import paths); `flow-schema.ts` no longer exists.
+The Flows Context is the shared vocabulary of the system. Every other context imports types from here — it is effectively a published language module. The schema split is complete: `mcp-server/src/domains/flows/` contains `flow-definition-schemas.ts`, `board-state-schemas.ts`, and `transcript-schemas.ts`, which consumers import directly; `flow-schema.ts` no longer exists.
 
 ### 2. Orchestration Context
 
