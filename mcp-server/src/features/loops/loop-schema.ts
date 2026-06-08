@@ -17,17 +17,42 @@
 
 import { z } from "zod";
 
+// ── Built-in mutation denylist (dc-05 / Comment 1 fix) ────────────────────────
+// These tools mutate the build and are ALWAYS forbidden when mutates_build:false,
+// regardless of whether the loop author specifies forbidden_tools.
+// frozen tuple — exhaustiveness is stable for Phase A+B; Phase C may extend.
+export const BUILTIN_MUTATION_TOOLS: ReadonlyArray<string> = [
+  "Write",
+  "Edit",
+  "Bash",
+  "NotebookEdit",
+] as const;
+
 // ── Sub-schemas ────────────────────────────────────────────────────────────────
 
-const FiringPostureSchema = z.object({
-  autonomous: z.enum(["auto", "opt-in", "disabled"]).default("disabled"),
-  "light-touch": z.enum(["auto", "opt-in", "disabled"]).default("disabled"),
-  supervised: z.enum(["auto", "opt-in", "disabled"]).default("opt-in"),
-});
+// Per-tier defaults: supervised → opt-in (safe default), autonomous/light-touch → disabled.
+// These are the documented safe defaults; do not change without a design update.
+//
+// The outer .default({...}) must enumerate all per-field defaults explicitly.
+// Zod applies the outer default value as-is when the key is absent — it does NOT
+// re-run inner field defaults on the default value. So we spell them out here.
+const FIRING_POSTURE_DEFAULTS = {
+  autonomous: "disabled" as const,
+  "light-touch": "disabled" as const,
+  supervised: "opt-in" as const,
+};
+
+const FiringPostureSchema = z
+  .object({
+    autonomous: z.enum(["auto", "opt-in", "disabled"]).default("disabled"),
+    "light-touch": z.enum(["auto", "opt-in", "disabled"]).default("disabled"),
+    supervised: z.enum(["auto", "opt-in", "disabled"]).default("opt-in"),
+  })
+  .default(FIRING_POSTURE_DEFAULTS);
 
 const TriggerSchema = z.object({
   fired_by: z.literal("orchestrator"),
-  firing_posture: FiringPostureSchema.optional(),
+  firing_posture: FiringPostureSchema,
   lifecycle_hook: z.enum(["post-ship", "on-long-dispatch", "session-start"]),
 });
 
@@ -152,6 +177,37 @@ export type ParseLoopOptions = {
 };
 
 /**
+ * Guardrail 2 helper — checks observe tools against built-in + author denylists.
+ *
+ * Returns an error string when a violation is found, or null when clean.
+ * Extracted to keep parseLoopDefinition under the cognitive-complexity limit.
+ */
+function checkObserveMutationGuardrail(
+  observeTools: ReadonlySet<string>,
+  forbiddenTools: ReadonlyArray<string>,
+): string | null {
+  // (a) Built-in mutation denylist — always enforced when mutates_build:false.
+  const builtinOffenders = BUILTIN_MUTATION_TOOLS.filter((t) => observeTools.has(t));
+  if (builtinOffenders.length > 0) {
+    return (
+      `mutation tool(s) declared in observe while mutates_build is false: ` +
+      `${builtinOffenders.join(", ")} (built-in mutation denylist: Write, Edit, Bash, NotebookEdit)`
+    );
+  }
+
+  // (b) Author-specified forbidden_tools — additive on top of built-in set.
+  const authorOffenders = forbiddenTools.filter((t) => observeTools.has(t));
+  if (authorOffenders.length > 0) {
+    return (
+      `forbidden tool(s) declared in observe while mutates_build is false: ` +
+      `${authorOffenders.join(", ")} (listed in guardrails.forbidden_tools)`
+    );
+  }
+
+  return null;
+}
+
+/**
  * Parse and validate a raw loop-definition frontmatter object.
  *
  * Returns a ToolResult-shaped discriminated union — never throws for expected
@@ -159,7 +215,8 @@ export type ParseLoopOptions = {
  *
  * Mechanical determinism guardrails (dc-05, loops-phase-a-05) enforced here:
  * 1. self-paced + mutates_build:true → rejected.
- * 2. mutates_build:false + forbidden tool in observe → rejected (names the tool(s)).
+ * 2. mutates_build:false + mutation tool in observe → rejected (names the tool(s)).
+ *    Built-in denylist (Write/Edit/Bash/NotebookEdit) always enforced; forbidden_tools additive.
  * 3. Cross-field: on_transition.field not in state.snapshot → rejected (in superRefine above).
  * 4. id !== idFromFilename → rejected (when idFromFilename is provided).
  */
@@ -187,17 +244,12 @@ export function parseLoopDefinition(frontmatter: unknown, opts: ParseLoopOptions
     };
   }
 
-  // ── Guardrail 2: mutates_build:false + forbidden tool intersection ─────────
-  if (def.guardrails.mutates_build === false && def.guardrails.forbidden_tools.length > 0) {
+  // ── Guardrail 2: mutates_build:false + mutation tool in observe ────────────
+  if (def.guardrails.mutates_build === false) {
     const observeTools = new Set([...def.observe.tools, ...def.observe.mcp]);
-    const offenders = def.guardrails.forbidden_tools.filter((t) => observeTools.has(t));
-    if (offenders.length > 0) {
-      return {
-        error:
-          `forbidden tool(s) declared in observe while mutates_build is false: ` +
-          `${offenders.join(", ")} (listed in guardrails.forbidden_tools)`,
-        ok: false,
-      };
+    const guardError = checkObserveMutationGuardrail(observeTools, def.guardrails.forbidden_tools);
+    if (guardError !== null) {
+      return { error: guardError, ok: false };
     }
   }
 

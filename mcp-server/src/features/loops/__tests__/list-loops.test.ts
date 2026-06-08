@@ -7,6 +7,40 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getLoopDefinitionHandler } from "../tools/get-loop-definition.ts";
 import { listLoopsHandler } from "../tools/list-loops.ts";
 
+/** Loop that omits firing_posture entirely — should materialise defaults. */
+const NO_FIRING_POSTURE_MD = `---
+id: no-posture
+title: No Firing Posture Loop
+status: active
+trigger:
+  fired_by: orchestrator
+  lifecycle_hook: post-ship
+mode: interval
+schedule:
+  interval: 5m
+  max_ticks: 10
+state:
+  scope: workspace
+  path: \${WORKSPACE}/no-posture-state.json
+  snapshot:
+    - tick_count
+observe:
+  tools: []
+  mcp: []
+surface:
+  on_transition:
+    - field: tick_count
+      message: tick
+terminate:
+  when:
+    - max_ticks_reached
+guardrails:
+  mutates_build: false
+---
+
+No firing posture loop body.
+`;
+
 /** Valid _probe loop markdown. */
 const VALID_PROBE_MD = `---
 id: _probe
@@ -173,6 +207,30 @@ describe("listLoopsHandler", () => {
     if (result.ok) {
       expect(result.invalid.length).toBeGreaterThan(0);
       expect(result.invalid[0].file).toContain("broken");
+    }
+  });
+
+  // ── Comment 2 (P2): firing_posture defaults materialise when block omitted ──
+
+  it("firing_posture [P2-C2]: loop with no firing_posture block returns firing_posture_for_tier:opt-in for supervised tier", async () => {
+    await writeFile(join(tmpDir, "no-posture.md"), NO_FIRING_POSTURE_MD);
+    const result = await listLoopsHandler(tmpDir, { tier: "supervised" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.loops).toHaveLength(1);
+      expect(result.loops[0].id).toBe("no-posture");
+      // Must resolve to "opt-in" (the documented safe default for supervised)
+      expect(result.loops[0].firing_posture_for_tier).toBe("opt-in");
+    }
+  });
+
+  it("firing_posture [P2-C2]: loop with no firing_posture block returns firing_posture_for_tier:disabled for autonomous tier", async () => {
+    await writeFile(join(tmpDir, "no-posture.md"), NO_FIRING_POSTURE_MD);
+    const result = await listLoopsHandler(tmpDir, { tier: "autonomous" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.loops).toHaveLength(1);
+      expect(result.loops[0].firing_posture_for_tier).toBe("disabled");
     }
   });
 });

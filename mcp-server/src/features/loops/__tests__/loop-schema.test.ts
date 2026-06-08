@@ -206,4 +206,119 @@ describe("parseLoopDefinition", () => {
       expect(result.error).toMatch(/list|array|when/i);
     }
   });
+
+  // ── Comment 1 (P2): built-in mutation denylist enforced even when forbidden_tools omitted ──
+
+  it("guardrail [P2-C1]: rejects mutates_build:false with Write in observe.tools even when forbidden_tools is empty", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Write"], // built-in mutation tool
+        mcp: [],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [], // no explicit denylist — must still reject
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/Write|mutation|forbidden/i);
+    }
+  });
+
+  it("guardrail [P2-C1]: rejects mutates_build:false with Bash in observe.tools even when forbidden_tools omitted", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+      },
+      guardrails: {
+        mutates_build: false,
+        // forbidden_tools omitted — schema defaults to []
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/Bash|mutation|forbidden/i);
+    }
+  });
+
+  it("guardrail [P2-C1]: rejects mutates_build:false with Edit in observe.tools even when forbidden_tools omitted", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Edit"],
+        mcp: [],
+      },
+      guardrails: {
+        mutates_build: false,
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/Edit|mutation|forbidden/i);
+    }
+  });
+
+  it("guardrail [P2-C1]: allows non-mutation tools in observe when mutates_build:false and forbidden_tools empty", () => {
+    // Read, Glob, Grep are not mutation tools — must be allowed
+    const good = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Read", "Glob"],
+        mcp: [],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+  });
+
+  it("guardrail [P2-C1]: forbidden_tools is additive — extra author-specified tool still rejected via forbidden_tools", () => {
+    // Author adds "SomeTool" to forbidden_tools; it appears in observe → still rejected
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["SomeTool"],
+        mcp: [],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: ["SomeTool"],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/SomeTool|forbidden/i);
+    }
+  });
+
+  // ── Comment 2 (P2): firing_posture defaults materialize when block omitted ──
+
+  it("firing_posture [P2-C2]: trigger with no firing_posture block yields supervised:opt-in", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      trigger: {
+        fired_by: "orchestrator" as const,
+        lifecycle_hook: "post-ship" as const,
+        // firing_posture omitted
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.definition.trigger?.firing_posture?.supervised).toBe("opt-in");
+      expect(result.definition.trigger?.firing_posture?.autonomous).toBe("disabled");
+      expect(result.definition.trigger?.firing_posture?.["light-touch"]).toBe("disabled");
+    }
+  });
 });
