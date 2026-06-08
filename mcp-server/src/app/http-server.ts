@@ -14,7 +14,14 @@
  * Delegated to `http-routes.ts`:
  * - GET  /health                — liveness check
  * - GET  /artifact/:type/:slug — serve registered HTML artifact
- * - OPTIONS *                  — CORS preflight
+ * - OPTIONS *                  — preflight (204, no CORS headers)
+ *
+ * ## Security
+ * A Host-header guard (DNS-rebinding protection) rejects requests whose Host
+ * does not name a loopback address (127.0.0.1, localhost, [::1]). Missing Host
+ * headers are also rejected (fail-closed). No Access-Control-Allow-Origin header
+ * is set — artifacts are opened via direct browser navigation, not cross-origin
+ * fetch, so ACAO is not needed and would be a data-exfiltration risk (F2 fix).
  *
  * ## PID file
  * On successful bind, `startHttpServer` writes a PID file under
@@ -268,18 +275,61 @@ export function resetStateForTesting(): void {
 }
 
 // ---------------------------------------------------------------------------
+// F2 security fix: loopback Host-header guard (DNS-rebinding protection)
+// ---------------------------------------------------------------------------
+
+/** Hostnames accepted in the Host header for artifact and health routes. */
+const SIDECAR_ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * Extract the hostname from a Host header value, stripping any port suffix.
+ * Handles IPv6 literals like [::1]:3141 → [::1].
+ * Kept module-private to avoid cross-module coupling (same pattern as daemon.ts).
+ */
+function extractSidecarHostname(host: string): string {
+  if (host.startsWith("[")) {
+    const closingBracket = host.indexOf("]");
+    if (closingBracket !== -1) return host.slice(0, closingBracket + 1);
+    return host;
+  }
+  const colonIdx = host.lastIndexOf(":");
+  if (colonIdx !== -1) return host.slice(0, colonIdx);
+  return host;
+}
+
+/**
+ * Return true if the request Host header names a loopback address.
+ * Fail-closed: missing or non-loopback Host → returns false → 403.
+ * Mirrors the daemon's isLoopbackHost (W6) for the sidecar path.
+ */
+function isSidecarLoopbackHost(req: IncomingMessage): boolean {
+  const hostHeader = req.headers.host;
+  if (!hostHeader) return false;
+  return SIDECAR_ALLOWED_HOSTS.has(extractSidecarHostname(hostHeader));
+}
+
+// ---------------------------------------------------------------------------
 // Internal request handling
 // ---------------------------------------------------------------------------
 
 function handleRequest(req: IncomingMessage, res: ServerResponse): void {
-  // CORS headers — required for browser fetch from file:// or localhost origins
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // F2: No Access-Control-Allow-Origin — Canon artifacts are opened via direct
+  // browser navigation (http://127.0.0.1:<port>/artifact/...), not cross-origin
+  // fetch. Setting ACAO: * would allow malicious pages to read sensitive artifact
+  // content (review HTML, file paths, architecture details) cross-origin.
+  // Confirmed: open_artifact and present_artifact use direct URL navigation only.
 
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // F2: Reject non-loopback Host headers to block DNS-rebinding attacks.
+  // Mirrors the daemon's isLoopbackHost guard (W6). Fail-closed: missing Host
+  // header is treated as non-loopback and rejected with 403.
+  if (!isSidecarLoopbackHost(req)) {
+    respondJson(res, 403, { error: "Host header rejected" });
     return;
   }
 
