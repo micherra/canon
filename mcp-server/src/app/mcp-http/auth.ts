@@ -20,6 +20,7 @@ import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { extractLoopbackHostname, LOOPBACK_ALLOWED_HOSTS } from "./loopback-host.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,9 +37,6 @@ export type AuthResult = { ok: true } | { ok: false; reason: string; status: 401
 // ---------------------------------------------------------------------------
 
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
-
-/** Allowed hostnames in the Host header (after stripping port). */
-const ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 // ---------------------------------------------------------------------------
 // Token path resolution
@@ -185,8 +183,8 @@ export function authenticate(req: IncomingMessage, expectedToken: string): AuthR
       status: 403,
     };
   }
-  const hostname = extractHostname(hostHeader);
-  if (!ALLOWED_HOSTS.has(hostname)) {
+  const hostname = extractLoopbackHostname(hostHeader);
+  if (!LOOPBACK_ALLOWED_HOSTS.has(hostname)) {
     return {
       ok: false,
       reason: `Host header rejected: ${hostHeader}`,
@@ -227,35 +225,4 @@ export function authenticate(req: IncomingMessage, expectedToken: string): AuthR
   }
 
   return { ok: true };
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Extracts the hostname from a Host header value, stripping any port suffix.
- *
- * Examples:
- * - "localhost"       → "localhost"
- * - "localhost:3142"  → "localhost"
- * - "127.0.0.1:3142" → "127.0.0.1"
- * - "[::1]"          → "[::1]"
- * - "[::1]:3142"     → "[::1]"
- */
-function extractHostname(host: string): string {
-  // IPv6 literal: [::1] or [::1]:port
-  if (host.startsWith("[")) {
-    const closingBracket = host.indexOf("]");
-    if (closingBracket !== -1) {
-      return host.slice(0, closingBracket + 1);
-    }
-    return host;
-  }
-  // IPv4 or hostname: strip port suffix
-  const colonIdx = host.lastIndexOf(":");
-  if (colonIdx !== -1) {
-    return host.slice(0, colonIdx);
-  }
-  return host;
 }

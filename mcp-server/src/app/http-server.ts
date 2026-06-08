@@ -41,6 +41,7 @@ import {
   registerArtifact as routesRegister,
   removeArtifact as routesRemove,
 } from "./http-routes.ts";
+import { isLoopbackHostRequest } from "./mcp-http/loopback-host.ts";
 
 /**
  * Registers an HTML artifact for serving via GET /artifact/:type/:slug.
@@ -275,40 +276,6 @@ export function resetStateForTesting(): void {
 }
 
 // ---------------------------------------------------------------------------
-// F2 security fix: loopback Host-header guard (DNS-rebinding protection)
-// ---------------------------------------------------------------------------
-
-/** Hostnames accepted in the Host header for artifact and health routes. */
-const SIDECAR_ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
-
-/**
- * Extract the hostname from a Host header value, stripping any port suffix.
- * Handles IPv6 literals like [::1]:3141 → [::1].
- * Kept module-private to avoid cross-module coupling (same pattern as daemon.ts).
- */
-function extractSidecarHostname(host: string): string {
-  if (host.startsWith("[")) {
-    const closingBracket = host.indexOf("]");
-    if (closingBracket !== -1) return host.slice(0, closingBracket + 1);
-    return host;
-  }
-  const colonIdx = host.lastIndexOf(":");
-  if (colonIdx !== -1) return host.slice(0, colonIdx);
-  return host;
-}
-
-/**
- * Return true if the request Host header names a loopback address.
- * Fail-closed: missing or non-loopback Host → returns false → 403.
- * Mirrors the daemon's isLoopbackHost (W6) for the sidecar path.
- */
-function isSidecarLoopbackHost(req: IncomingMessage): boolean {
-  const hostHeader = req.headers.host;
-  if (!hostHeader) return false;
-  return SIDECAR_ALLOWED_HOSTS.has(extractSidecarHostname(hostHeader));
-}
-
-// ---------------------------------------------------------------------------
 // Internal request handling
 // ---------------------------------------------------------------------------
 
@@ -326,9 +293,10 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   }
 
   // F2: Reject non-loopback Host headers to block DNS-rebinding attacks.
-  // Mirrors the daemon's isLoopbackHost guard (W6). Fail-closed: missing Host
+  // Uses the shared loopback-host guard (mcp-http/loopback-host.ts), which is
+  // also applied by daemon.ts (W6) and auth.ts. Fail-closed: missing Host
   // header is treated as non-loopback and rejected with 403.
-  if (!isSidecarLoopbackHost(req)) {
+  if (!isLoopbackHostRequest(req)) {
     respondJson(res, 403, { error: "Host header rejected" });
     return;
   }
