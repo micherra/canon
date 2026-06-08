@@ -346,16 +346,16 @@ export class DriftDb {
    * Compute weekly compliance trend for a principle.
    * Groups reviews by ISO week and computes pass rate per bucket.
    * Optionally limits results to the most recent N weeks.
+   *
+   * Uses only OPEN violations to build the violation set — consistent with
+   * getCompliance()'s open-only count. Resolved violations no longer depress
+   * the trend after a later review closes them (closure-02 / Codex P2 fix).
    */
   getComplianceTrend(
     principleId: string,
     weeks?: number,
   ): import("./drift-db-queries.ts").WeeklyTrendPoint[] {
-    const violationReviewIds = new Set(
-      (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>).map(
-        (r) => r.review_id,
-      ),
-    );
+    const violationReviewIds = this.getClosures().getOpenReviewIdsByPrinciple(principleId);
     const allRows = this.stmtGetAllReviews.all() as ReviewRow[];
     return computeComplianceTrend(allRows, violationReviewIds, principleId, weeks);
   }

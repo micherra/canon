@@ -77,6 +77,7 @@ export class ViolationClosureDao {
   private readonly stmtGetViolationsOpen: Database.Statement;
   private readonly stmtGetViolationsAll: Database.Statement;
   private readonly stmtCountOpen: Database.Statement;
+  private readonly stmtGetOpenReviewIdsByPrinciple: Database.Statement;
 
   // Transactions — wrapped at construction time
   private readonly txResolveByIds: (
@@ -129,6 +130,9 @@ export class ViolationClosureDao {
       FROM violations WHERE review_id = ?
     `);
     this.stmtCountOpen = db.prepare(`SELECT COUNT(*) AS c FROM violations WHERE status = 'open'`);
+    this.stmtGetOpenReviewIdsByPrinciple = db.prepare(
+      `SELECT DISTINCT review_id FROM violations WHERE principle_id = ? AND status = 'open'`,
+    );
 
     this.txResolveByIds = this.buildTxResolveByIds(db);
     this.txResolveByPairs = this.buildTxResolveByPairs(db);
@@ -251,6 +255,23 @@ export class ViolationClosureDao {
   countOpenViolations(): number {
     const row = this.stmtCountOpen.get() as { c: number };
     return row.c;
+  }
+
+  /**
+   * Return review IDs that have at least one OPEN violation for a principle.
+   *
+   * Used by getComplianceTrend to build the violation set for the weekly
+   * trend metric. Excludes resolved violations so that a resolved principle
+   * does not continue to depress the trend (consistency with getCompliance's
+   * open-only violation count — closure-02 / Codex P2 fix).
+   *
+   * Returns a Set for O(1) membership tests in the trend computation loop.
+   */
+  getOpenReviewIdsByPrinciple(principleId: string): Set<string> {
+    const rows = this.stmtGetOpenReviewIdsByPrinciple.all(principleId) as Array<{
+      review_id: string;
+    }>;
+    return new Set(rows.map((r) => r.review_id));
   }
 }
 
