@@ -7,11 +7,24 @@
  * - 5+ events → status "observed", tier per deriveTier
  *
  * Purity: same input twice → deep-equal output; input array not mutated.
+ *
+ * Integration:
+ * - analyzeCrossRunPatterns `since` cutoff excludes older cliff rows from counts
  */
 
 import type { CliffEventRow } from "@platform/storage/drift/cliff-events-dao.ts";
 import { describe, expect, it } from "vitest";
+import { DriftDb } from "../../../../platform/storage/drift/drift-db.ts";
+import { initDriftDb } from "../../../../platform/storage/drift/drift-schema.ts";
+import { analyzeCrossRunPatterns } from "../cross-run-analyzer.ts";
 import { computeCliffEventsDimension } from "../cross-run-cliff-events.ts";
+
+// ---- Shared in-memory DB helper ----
+
+function makeDb(): DriftDb {
+  const raw = initDriftDb(":memory:");
+  return new DriftDb(raw);
+}
 
 // ---- Fixture helpers ----
 
@@ -279,5 +292,74 @@ describe("computeCliffEventsDimension", () => {
       computeCliffEventsDimension(rows);
       expect(JSON.stringify(rows)).toBe(snapshot);
     });
+  });
+});
+
+// ---- `since` filter integration ----
+
+describe("analyzeCrossRunPatterns — cliff_events since filter", () => {
+  it("excludes cliff rows older than `since` from total_cliffs", () => {
+    const store = makeDb();
+    const cliffDao = store.getCliffEvents();
+
+    // Two rows: one old (before cutoff), one recent (after cutoff)
+    cliffDao.upsert({
+      workspace_slug: "ws-old",
+      step_id: "implement",
+      source: "post_subagent",
+      detected_at: "2026-01-01T00:00:00.000Z",
+    });
+    cliffDao.upsert({
+      workspace_slug: "ws-new",
+      step_id: "review",
+      source: "resume",
+      detected_at: "2026-06-01T00:00:00.000Z",
+    });
+
+    const cutoff = "2026-03-01T00:00:00.000Z";
+    const result = analyzeCrossRunPatterns(store, [], { since: cutoff });
+
+    // Only the 2026-06-01 row survives the cutoff — total_cliffs must be 1
+    expect(result.cliff_events.total_cliffs).toBe(1);
+  });
+
+  it("returns total_cliffs: 0 when all rows are older than `since`", () => {
+    const store = makeDb();
+    const cliffDao = store.getCliffEvents();
+
+    cliffDao.upsert({
+      workspace_slug: "ws-old",
+      step_id: "implement",
+      source: "post_subagent",
+      detected_at: "2025-12-01T00:00:00.000Z",
+    });
+
+    const cutoff = "2026-01-01T00:00:00.000Z";
+    const result = analyzeCrossRunPatterns(store, [], { since: cutoff });
+
+    expect(result.cliff_events.total_cliffs).toBe(0);
+    expect(result.cliff_events.status).toBe("no_data");
+  });
+
+  it("returns all rows when `since` is not provided", () => {
+    const store = makeDb();
+    const cliffDao = store.getCliffEvents();
+
+    cliffDao.upsert({
+      workspace_slug: "ws-a",
+      step_id: "implement",
+      source: "post_subagent",
+      detected_at: "2025-06-01T00:00:00.000Z",
+    });
+    cliffDao.upsert({
+      workspace_slug: "ws-b",
+      step_id: "review",
+      source: "resume",
+      detected_at: "2026-06-01T00:00:00.000Z",
+    });
+
+    const result = analyzeCrossRunPatterns(store, []);
+
+    expect(result.cliff_events.total_cliffs).toBe(2);
   });
 });

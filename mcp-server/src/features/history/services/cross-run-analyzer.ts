@@ -384,18 +384,27 @@ function loadCraftProfiles(
 }
 
 /**
- * Load cliff events from drift.db.
+ * Load cliff events from drift.db, applying optional `since` cutoff.
+ * Rows are filtered by `detected_at >= since` matching the pattern used by
+ * `loadCraftProfiles` and the flow-run filter in `analyzeCrossRunPatterns`.
  * Degrades gracefully when the cliff-events store is unavailable.
  */
 function loadCliffEvents(
   driftDb: DriftDb,
+  options: { since?: string },
 ): import("@platform/storage/drift/cliff-events-dao.ts").CliffEventRow[] {
+  const { since } = options;
+  let rows: import("@platform/storage/drift/cliff-events-dao.ts").CliffEventRow[] = [];
   try {
-    return driftDb.getCliffEvents().getAll();
+    rows = driftDb.getCliffEvents().getAll();
   } catch {
     // cliff-events store unavailable — cliff_events dimension will be no_data
     return [];
   }
+  if (since !== undefined) {
+    rows = rows.filter((r) => r.detected_at >= since);
+  }
+  return rows;
 }
 
 /**
@@ -453,7 +462,7 @@ export function analyzeCrossRunPatterns(
   const craftProfiles = loadCraftProfiles(driftDb, { limit, since });
 
   // Load cliff events (degraded gracefully when store unavailable)
-  const cliffRows = loadCliffEvents(driftDb);
+  const cliffRows = loadCliffEvents(driftDb, { since });
 
   // Collect violations from summaries
   const summaryViolations = violationsFromSummaries(summaries);
