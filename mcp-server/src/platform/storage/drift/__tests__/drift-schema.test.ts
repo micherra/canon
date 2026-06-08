@@ -23,9 +23,9 @@ import {
 // Helper: create a v9 database (all migrations through v9)
 function createV9Db(): Database.Database {
   const db = initDriftDb(":memory:");
-  // initDriftDb runs all migrations up to DRIFT_SCHEMA_VERSION (now "10")
+  // initDriftDb runs all migrations up to DRIFT_SCHEMA_VERSION (now "11")
   // so we need to manually create a v9-only DB
-  // Build a fresh DB and undo the v10 migration: not feasible with in-memory SQLite,
+  // Build a fresh DB and undo the v10/v11 migration: not feasible with in-memory SQLite,
   // so instead we create a raw v1 DB and run only up to v9 manually
   db.close();
   // Build v9 by creating fresh v1 and running manual v9 migrations
@@ -135,6 +135,28 @@ function createV9Db(): Database.Database {
   v9db.exec(`UPDATE meta SET value = '9' WHERE key = 'schema_version'`);
 
   return v9db;
+}
+
+// Helper: create a v10 database (all migrations through v10 — cliff_events)
+function createV10Db(): Database.Database {
+  const v10db = createV9Db();
+  // v10 — cliff_events
+  v10db.exec(`CREATE TABLE IF NOT EXISTS cliff_events (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_slug   TEXT NOT NULL,
+    step_id          TEXT NOT NULL,
+    agent_type       TEXT,
+    source           TEXT NOT NULL,
+    detected_at      TEXT NOT NULL,
+    missing_count    INTEGER,
+    partial_count    INTEGER,
+    recovery_outcome TEXT NOT NULL DEFAULT 'unknown',
+    recorded_at      TEXT NOT NULL,
+    UNIQUE(workspace_slug, step_id)
+  )`);
+  v10db.exec(`CREATE INDEX IF NOT EXISTS idx_cliff_events_detected ON cliff_events(detected_at)`);
+  v10db.exec(`UPDATE meta SET value = '10' WHERE key = 'schema_version'`);
+  return v10db;
 }
 
 // Helper: create a v1 database manually (base DDL without migration)
@@ -280,19 +302,19 @@ describe("columnExists", () => {
   });
 });
 
-// Fresh DB — schema version 10
+// Fresh DB — schema version 11
 
 describe("initDriftDb — fresh database", () => {
-  test("DRIFT_SCHEMA_VERSION is '10'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("10");
+  test("DRIFT_SCHEMA_VERSION is '11'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("11");
   });
 
-  test("meta table has schema_version = '10' after init", () => {
+  test("meta table has schema_version = '11' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 
@@ -374,13 +396,13 @@ describe("runDriftMigrations — v1 to v2 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v1 DB to current version: updates schema_version to '10'", () => {
+  test("migrates a v1 DB to current version: updates schema_version to '11'", () => {
     const db = createV1Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 
@@ -458,16 +480,16 @@ describe("runDriftMigrations — idempotency", () => {
 // v4 migration — file_violation_history and path_effects tables
 
 describe("initDriftDb — fresh database v4 tables", () => {
-  test("DRIFT_SCHEMA_VERSION is '10'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("10");
+  test("DRIFT_SCHEMA_VERSION is '11'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("11");
   });
 
-  test("fresh DB has schema_version = '10' after init", () => {
+  test("fresh DB has schema_version = '11' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 
@@ -550,13 +572,13 @@ describe("runDriftMigrations — v3 to v4 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v3 DB to current version: updates schema_version to '10'", () => {
+  test("migrates a v3 DB to current version: updates schema_version to '11'", () => {
     const db = createV3Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 });
@@ -627,10 +649,73 @@ describe("v4 schema — UNIQUE constraints", () => {
   });
 });
 
-// v10 migration — violation lifecycle columns
+// v10 migration — cliff_events table
 
-describe("initDriftDb — fresh database v10 columns", () => {
-  test("fresh DB has all 4 v10 lifecycle columns on violations", () => {
+describe("initDriftDb — fresh database v10 cliff_events", () => {
+  test("fresh DB creates cliff_events table", () => {
+    const db = initDriftDb(":memory:");
+    const tables = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
+      .all() as Array<{ name: string }>;
+    expect(tables.map((t) => t.name)).toContain("cliff_events");
+    db.close();
+  });
+
+  test("cliff_events table has all expected columns", () => {
+    const db = initDriftDb(":memory:");
+    const cols = db.prepare(`PRAGMA table_info(cliff_events)`).all() as Array<{ name: string }>;
+    const colNames = cols.map((c) => c.name);
+    expect(colNames).toContain("id");
+    expect(colNames).toContain("workspace_slug");
+    expect(colNames).toContain("step_id");
+    expect(colNames).toContain("agent_type");
+    expect(colNames).toContain("source");
+    expect(colNames).toContain("detected_at");
+    expect(colNames).toContain("missing_count");
+    expect(colNames).toContain("partial_count");
+    expect(colNames).toContain("recovery_outcome");
+    expect(colNames).toContain("recorded_at");
+    db.close();
+  });
+
+  test("cliff_events has idx_cliff_events_detected index", () => {
+    const db = initDriftDb(":memory:");
+    const indexes = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='cliff_events' ORDER BY name`,
+      )
+      .all() as Array<{ name: string }>;
+    expect(indexes.map((i) => i.name)).toContain("idx_cliff_events_detected");
+    db.close();
+  });
+});
+
+describe("runDriftMigrations — v9 to v10 upgrade (cliff_events)", () => {
+  test("migrates a v9 DB: creates cliff_events table", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    const tables = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
+      .all() as Array<{ name: string }>;
+    expect(tables.map((t) => t.name)).toContain("cliff_events");
+    db.close();
+  });
+
+  test("migrates a v9 DB: schema_version advances past 10 to '11'", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+      value: string;
+    };
+    expect(row.value).toBe("11");
+    db.close();
+  });
+});
+
+// v11 migration — violation lifecycle columns
+
+describe("initDriftDb — fresh database v11 columns", () => {
+  test("fresh DB has all 4 v11 lifecycle columns on violations", () => {
     const db = initDriftDb(":memory:");
     expect(columnExists(db, "violations", "status")).toBe(true);
     expect(columnExists(db, "violations", "resolved_at")).toBe(true);
@@ -665,42 +750,42 @@ describe("initDriftDb — fresh database v10 columns", () => {
     db.close();
   });
 
-  test("DRIFT_SCHEMA_VERSION is '10'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("10");
+  test("DRIFT_SCHEMA_VERSION is '11'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("11");
   });
 });
 
-describe("runDriftMigrations — v9 to v10 upgrade", () => {
-  test("migrates a v9 DB: adds status column with default 'open'", () => {
-    const db = createV9Db();
+describe("runDriftMigrations — v10 to v11 upgrade (lifecycle columns)", () => {
+  test("migrates a v10 DB: adds status column with default 'open'", () => {
+    const db = createV10Db();
     runDriftMigrations(db);
     expect(columnExists(db, "violations", "status")).toBe(true);
     db.close();
   });
 
-  test("migrates a v9 DB: adds resolved_at column", () => {
-    const db = createV9Db();
+  test("migrates a v10 DB: adds resolved_at column", () => {
+    const db = createV10Db();
     runDriftMigrations(db);
     expect(columnExists(db, "violations", "resolved_at")).toBe(true);
     db.close();
   });
 
-  test("migrates a v9 DB: adds resolved_by_review_id column", () => {
-    const db = createV9Db();
+  test("migrates a v10 DB: adds resolved_by_review_id column", () => {
+    const db = createV10Db();
     runDriftMigrations(db);
     expect(columnExists(db, "violations", "resolved_by_review_id")).toBe(true);
     db.close();
   });
 
-  test("migrates a v9 DB: adds resolution_reason column", () => {
-    const db = createV9Db();
+  test("migrates a v10 DB: adds resolution_reason column", () => {
+    const db = createV10Db();
     runDriftMigrations(db);
     expect(columnExists(db, "violations", "resolution_reason")).toBe(true);
     db.close();
   });
 
-  test("migrates a v9 DB: adds idx_violations_open partial index", () => {
-    const db = createV9Db();
+  test("migrates a v10 DB: adds idx_violations_open partial index", () => {
+    const db = createV10Db();
     runDriftMigrations(db);
     const indexes = db
       .prepare(
@@ -713,7 +798,7 @@ describe("runDriftMigrations — v9 to v10 upgrade", () => {
   });
 
   test("pre-existing violation rows default to status='open' after migration", () => {
-    const db = createV9Db();
+    const db = createV10Db();
     // Insert violation row before migration
     db.exec(`INSERT INTO reviews (review_id, timestamp, files, honored, score, verdict)
       VALUES ('rev-pre', '2026-01-01', '[]', '[]', '{}', 'BLOCKING')`);
@@ -729,26 +814,51 @@ describe("runDriftMigrations — v9 to v10 upgrade", () => {
     db.close();
   });
 
-  test("v9→v10 migration updates schema_version to '10'", () => {
+  test("v10→v11 migration updates schema_version to '11'", () => {
+    const db = createV10Db();
+    runDriftMigrations(db);
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+      value: string;
+    };
+    expect(row.value).toBe("11");
+    db.close();
+  });
+});
+
+// Also test v9 → v11 (both v10 and v11 apply in sequence)
+describe("runDriftMigrations — v9 to v11 full upgrade", () => {
+  test("migrates a v9 DB: creates cliff_events AND adds lifecycle columns", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    const tables = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
+      .all() as Array<{ name: string }>;
+    expect(tables.map((t) => t.name)).toContain("cliff_events");
+    expect(columnExists(db, "violations", "status")).toBe(true);
+    expect(columnExists(db, "violations", "resolved_at")).toBe(true);
+    db.close();
+  });
+
+  test("migrates a v9 DB: schema_version reaches '11'", () => {
     const db = createV9Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 });
 
-describe("runDriftMigrations — v10 idempotency", () => {
-  test("calling runDriftMigrations twice on a v10 DB does not error", () => {
+describe("runDriftMigrations — v11 idempotency", () => {
+  test("calling runDriftMigrations twice on a v11 DB does not error", () => {
     const db = initDriftDb(":memory:");
     expect(() => runDriftMigrations(db)).not.toThrow();
     db.close();
   });
 
-  test("calling v10 migration twice from a v9 DB does not error", () => {
-    const db = createV9Db();
+  test("calling v11 migration twice from a v10 DB does not error", () => {
+    const db = createV10Db();
     runDriftMigrations(db);
     expect(() => runDriftMigrations(db)).not.toThrow();
     db.close();

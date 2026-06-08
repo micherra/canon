@@ -10,7 +10,7 @@
  * - getUnresolvedPredictions() returns only unresolved predictions
  * - resolvePrediction() sets resolved=1, resolved_at, and outcome
  * - Double-apply v5 migration is idempotent (no errors)
- * - DRIFT_SCHEMA_VERSION equals "9"
+ * - DRIFT_SCHEMA_VERSION equals "11"
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -44,8 +44,8 @@ function makePredictionInput(
 // DRIFT_SCHEMA_VERSION
 
 describe("DRIFT_SCHEMA_VERSION", () => {
-  test("is '10'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("10");
+  test("is '11'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("11");
   });
 });
 
@@ -98,7 +98,7 @@ describe("v5 migration — predictions table", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 

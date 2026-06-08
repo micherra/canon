@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "10";
+export const DRIFT_SCHEMA_VERSION = "11";
 
 // DDL statements — v1 base tables
 //
@@ -343,6 +343,31 @@ const MIGRATIONS: Migration[] = [
   },
   {
     up: (db) => {
+      // cliff_events — durable aggregation of cliff_detected telemetry events
+      // One row per (workspace_slug, step_id); upsert semantics via UNIQUE key.
+      // agent_type / missing_count / partial_count are nullable — legacy payloads
+      // (pre-enrichment) lack per-step data (backward-compatible-schema-changes).
+      // recovery_outcome defaults to 'unknown' (define-errors-out-of-existence).
+      db.exec(`CREATE TABLE IF NOT EXISTS cliff_events (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_slug   TEXT NOT NULL,
+        step_id          TEXT NOT NULL,
+        agent_type       TEXT,
+        source           TEXT NOT NULL,
+        detected_at      TEXT NOT NULL,
+        missing_count    INTEGER,
+        partial_count    INTEGER,
+        recovery_outcome TEXT NOT NULL DEFAULT 'unknown',
+        recorded_at      TEXT NOT NULL,
+        UNIQUE(workspace_slug, step_id)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_cliff_events_detected ON cliff_events(detected_at)`);
+      db.exec(`UPDATE meta SET value = '10' WHERE key = 'schema_version'`);
+    },
+    version: "10",
+  },
+  {
+    up: (db) => {
       // Violation lifecycle columns — status + resolution provenance (closure-01)
       //
       // NOTE: SQLite ALTER TABLE ADD COLUMN cannot add a CHECK constraint to an existing
@@ -368,9 +393,9 @@ const MIGRATIONS: Migration[] = [
       db.exec(
         `CREATE INDEX IF NOT EXISTS idx_violations_open ON violations(status) WHERE status='open'`,
       );
-      db.exec(`UPDATE meta SET value = '10' WHERE key = 'schema_version'`);
+      db.exec(`UPDATE meta SET value = '11' WHERE key = 'schema_version'`);
     },
-    version: "10",
+    version: "11",
   },
 ];
 

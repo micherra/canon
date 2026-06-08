@@ -12,6 +12,7 @@
 import type { ReviewEntry } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
 import { AreaMemoryDao } from "./area-memory-dao.ts";
+import { CliffEventsDao } from "./cliff-events-dao.ts";
 import { CraftProfileDao } from "./craft-profile-dao.ts";
 import type {
   ArchiveManifestEntry,
@@ -77,17 +78,12 @@ export class DriftDb {
   private readonly stmtGetArchiveById: Database.Statement;
   private readonly stmtCountArchives: Database.Statement;
 
-  // ---- Signal DAO (lazy) ----
+  // ---- Lazy DAO accessors ----
   private _signals: DriftDbSignals | null = null;
-
-  // ---- Area Memory DAO (lazy) ----
   private _areaMemory: AreaMemoryDao | null = null;
-
-  // ---- Craft Profiles DAO (lazy) ----
   private _craftProfiles: CraftProfileDao | null = null;
-
-  // ---- Violation Closure DAO (lazy) ----
   private _closures: ViolationClosureDao | null = null;
+  private _cliffEvents: CliffEventsDao | null = null;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -549,9 +545,7 @@ export class DriftDb {
    * Returns the same instance on repeated calls (lazy singleton).
    */
   getSignals(): DriftDbSignals {
-    if (this._signals === null) {
-      this._signals = new DriftDbSignals(this.db);
-    }
+    this._signals ??= new DriftDbSignals(this.db);
     return this._signals;
   }
 
@@ -561,9 +555,7 @@ export class DriftDb {
    * Returns the same instance on repeated calls (lazy singleton).
    */
   getAreaMemory(): AreaMemoryDao {
-    if (this._areaMemory === null) {
-      this._areaMemory = new AreaMemoryDao(this.db);
-    }
+    this._areaMemory ??= new AreaMemoryDao(this.db);
     return this._areaMemory;
   }
 
@@ -573,9 +565,7 @@ export class DriftDb {
    * Returns the same instance on repeated calls (lazy singleton).
    */
   getCraftProfiles(): CraftProfileDao {
-    if (this._craftProfiles === null) {
-      this._craftProfiles = new CraftProfileDao(this.db);
-    }
+    this._craftProfiles ??= new CraftProfileDao(this.db);
     return this._craftProfiles;
   }
 
@@ -585,10 +575,18 @@ export class DriftDb {
    * Returns the same instance on repeated calls (lazy singleton).
    */
   getClosures(): ViolationClosureDao {
-    if (this._closures === null) {
-      this._closures = new ViolationClosureDao(this.db);
-    }
+    this._closures ??= new ViolationClosureDao(this.db);
     return this._closures;
+  }
+
+  /**
+   * Lazy accessor for cliff events DAO methods.
+   * The CliffEventsDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getCliffEvents(): CliffEventsDao {
+    this._cliffEvents ??= new CliffEventsDao(this.db);
+    return this._cliffEvents;
   }
 
   // Lifecycle
