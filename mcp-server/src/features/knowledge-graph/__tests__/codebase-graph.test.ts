@@ -45,7 +45,10 @@ describe("codebaseGraph", () => {
     expect(result.nodes.find((n) => n.id.includes("api"))).toBeDefined();
     expect(result.nodes.find((n) => n.id.includes("services"))).toBeDefined();
     expect(result.generated_at).toBeTruthy();
-  });
+    // Cold-start case: first codebaseGraph call in the file pays JIT + fixture
+    // setup cost and runs 5-6s under parallel-suite load, tipping over vitest's
+    // 5s default. Explicit timeout keeps it deterministic.
+  }, 15_000);
 
   it("creates edges from imports", async () => {
     await writeFile(
