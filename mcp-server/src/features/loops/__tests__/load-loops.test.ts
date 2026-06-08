@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -132,7 +132,7 @@ describe("loadLoopsFromDir", () => {
     await writeFile(join(tmpDir, "_probe.md"), VALID_PROBE_MD);
     const result = await loadLoopsFromDir(tmpDir);
     expect(result.valid).toHaveLength(1);
-    expect(result.validBodies?.["_probe"]).toContain("re-fired action prompt");
+    expect(result.validBodies?._probe).toContain("re-fired action prompt");
   });
 });
 

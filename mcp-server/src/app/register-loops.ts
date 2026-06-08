@@ -8,10 +8,10 @@
  * Text-only (no UI) — uses server.registerTool, not registerToolWithUi.
  */
 
+import { join } from "node:path";
 import { getLoopDefinitionHandler } from "@features/loops/tools/get-loop-definition.ts";
 import { listLoopsHandler } from "@features/loops/tools/list-loops.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { join } from "node:path";
 import { z } from "zod";
 import { gatedWrapHandler, pluginDir } from "./server-state.ts";
 

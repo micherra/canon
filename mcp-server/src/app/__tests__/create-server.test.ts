@@ -50,7 +50,9 @@ function getToolNames(server: McpServer): Set<string> {
 //   - registerKnowledgeTools:     12 tools
 //   - registerArtifactTools:       4 tools
 //   - registerPrincipleTools:      8 tools
-//   Total: 43 tools
+//   Total: 43 tools (pre-loop-framework)
+//   - registerLoopTools:           2 tools (list_loops, get_loop_definition)
+//   Updated total: 45 tools
 //
 // Note: register-evaluate-step.ts defines evaluate_step but it is not imported
 // from any of the 4 top-level groups, so it is NOT registered at runtime.
@@ -73,9 +75,9 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
     resetForTesting();
   });
 
-  it("factory produces a server with exactly 43 registered tools", () => {
+  it("factory produces a server with exactly 45 registered tools", () => {
     const server = createCanonServer();
-    expect(getToolCount(server)).toBe(43);
+    expect(getToolCount(server)).toBe(45);
   });
 
   it("tool names include a stable known subset", () => {
@@ -162,8 +164,8 @@ describe("createCanonServer(): factory independence", () => {
   it("each instance has the full tool count independently", () => {
     const s1 = createCanonServer();
     const s2 = createCanonServer();
-    expect(getToolCount(s1)).toBe(43);
-    expect(getToolCount(s2)).toBe(43);
+    expect(getToolCount(s1)).toBe(45);
+    expect(getToolCount(s2)).toBe(45);
   });
 });
 

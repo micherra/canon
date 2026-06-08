@@ -163,10 +163,7 @@ export type ParseLoopOptions = {
  * 3. Cross-field: on_transition.field not in state.snapshot → rejected (in superRefine above).
  * 4. id !== idFromFilename → rejected (when idFromFilename is provided).
  */
-export function parseLoopDefinition(
-  frontmatter: unknown,
-  opts: ParseLoopOptions,
-): ParseLoopResult {
+export function parseLoopDefinition(frontmatter: unknown, opts: ParseLoopOptions): ParseLoopResult {
   const parsed = LoopDefinitionSchema.safeParse(frontmatter);
 
   if (!parsed.success) {
@@ -185,8 +182,7 @@ export function parseLoopDefinition(
   // ── Guardrail 1: self-paced loops must declare mutates_build:false ─────────
   if (def.mode === "self-paced" && def.guardrails.mutates_build === true) {
     return {
-      error:
-        "self-paced loops must declare guardrails.mutates_build: false (observe+surface only)",
+      error: "self-paced loops must declare guardrails.mutates_build: false (observe+surface only)",
       ok: false,
     };
   }

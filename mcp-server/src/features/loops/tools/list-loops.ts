@@ -9,8 +9,8 @@
  * malformed definitions (observable-best-effort principle).
  */
 
-import { toolOk } from "@shared/lib/tool-result.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { toolOk } from "@shared/lib/tool-result.ts";
 import { loadLoopsFromDir } from "../load-loops.ts";
 
 export type ListLoopsInput = {

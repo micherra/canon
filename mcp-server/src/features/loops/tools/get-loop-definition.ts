@@ -11,10 +11,10 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import matter from "gray-matter";
-import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
-import { parseLoopDefinition, type LoopDefinition } from "../loop-schema.ts";
+import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import matter from "gray-matter";
+import { type LoopDefinition, parseLoopDefinition } from "../loop-schema.ts";
 
 export type GetLoopDefinitionInput = {
   id: string;
