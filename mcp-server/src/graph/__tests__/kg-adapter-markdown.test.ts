@@ -147,6 +147,18 @@ See \`mcp-server/src/graph/kg-store.ts\` and [x](./foo.ts).
     const result = markdownAdapter.parse("docs/map.md", content);
     expect(result.intraFileEdges).toEqual([]);
   });
+
+  test("backtick path with .js extension is included as doc:references (regression: .js must not be stripped for exact-match)", () => {
+    const content = `
+# Build scripts
+
+Run \`scripts/build.js\` to build the project.
+`;
+    const result = markdownAdapter.parse("docs/build-guide.md", content);
+    const spec = result.importSpecifiers.find((s) => s.specifier === "scripts/build.js");
+    expect(spec).toBeDefined();
+    expect(spec?.edgeType).toBe("doc:references");
+  });
 });
 
 // --- Pipeline-level test: doc:references edge persists and metrics are unaffected ---
@@ -247,6 +259,77 @@ See \`src/lib/store.ts\` for storage.
     // Silence unused variable warnings
     void srcFile;
     void docFile;
+  });
+
+  test("doc:references edge persists when doc cites a .js file (regression: .js must not be stripped by normaliseSpecifier)", () => {
+    // Fixture: a real .js file in the repo + a doc citing it with backtick
+    const jsPath = "scripts/build.js";
+    const docPath = "docs/build-guide.md";
+
+    store.upsertFile({
+      content_hash: "js123",
+      language: "javascript",
+      last_indexed_at: Date.now(),
+      layer: "shared",
+      mtime_ms: 1000,
+      path: jsPath,
+    });
+
+    store.upsertFile({
+      content_hash: "doc456",
+      language: "markdown",
+      last_indexed_at: Date.now(),
+      layer: "docs",
+      mtime_ms: 1000,
+      path: docPath,
+    });
+
+    const allRelPaths = new Set([jsPath, docPath]);
+
+    // Doc cites the .js file with a backtick — adapter passes "scripts/build.js" verbatim
+    const docContent = `
+# Build Guide
+
+Run \`scripts/build.js\` to build the project.
+`;
+    const adapterResult = markdownAdapter.parse(docPath, docContent);
+
+    const fileImports = new Map<
+      string,
+      {
+        relPath: string;
+        specifiers: Array<{ specifier: string; names: string[]; edgeType?: "doc:references" }>;
+      }
+    >();
+    fileImports.set(docPath, {
+      relPath: docPath,
+      specifiers: adapterResult.importSpecifiers,
+    });
+
+    store.transaction(() => {
+      resolveImports(
+        store,
+        tmpDir,
+        allRelPaths,
+        fileImports as Parameters<typeof resolveImports>[3],
+      );
+    });
+
+    // The doc:references edge must be present — .js was NOT stripped by normaliseSpecifier
+    const edgeRow = db
+      .prepare(
+        `SELECT fe.edge_type FROM file_edges fe
+         JOIN files src ON src.file_id = fe.source_file_id
+         JOIN files tgt ON tgt.file_id = fe.target_file_id
+         WHERE src.path = ? AND tgt.path = ?`,
+      )
+      .get(docPath, jsPath) as { edge_type: string } | undefined;
+
+    expect(
+      edgeRow,
+      "doc:references edge for .js file must be persisted (was silently dropped)",
+    ).toBeDefined();
+    expect(edgeRow?.edge_type).toBe("doc:references");
   });
 
   test("metric identity — in_degree of code file is identical with/without a doc citing it", () => {

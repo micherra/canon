@@ -152,23 +152,27 @@ type ResolveDocRefParams = {
 
 /**
  * Resolve a doc:references specifier using a conservative resolution order:
- *   1. Exact repo-root-relative membership (allRelPaths.has(normSpec))
- *   2. Existing relative resolution via resolveImport (handles ./ and ../ links)
- *   3. Drop silently — consistent with unresolved-import behavior
+ *   1. Exact repo-root-relative membership using the RAW specifier
+ *      (doc citations are literal paths; the .js→strip must NOT apply here).
+ *   2. Fallback to relative resolution via resolveImport with normaliseSpecifier
+ *      (handles ./ and ../ links where ESM .js→.ts aliasing is legitimate).
+ *   3. Drop silently — consistent with unresolved-import behavior.
  *
  * Named-import entity edges are skipped: doc-ref specifiers carry empty names
  * arrays by construction (verified: doc adapters never populate names for refs).
  */
 function resolveDocRefSpecifier(store: KgStore, params: ResolveDocRefParams): void {
   const { sourceFileId, specifier, allRelPaths, relPath } = params;
-  const normSpec = normaliseSpecifier(specifier);
 
-  // Step 1: exact repo-root-relative membership
-  let resolved: string | null = allRelPaths.has(normSpec) ? normSpec : null;
+  // Step 1: exact repo-root-relative membership — use raw specifier (not normalised).
+  // Doc citations are literal file paths; normaliseSpecifier strips .js which would
+  // cause "scripts/build.js" to miss an exact match against allRelPaths.
+  let resolved: string | null = allRelPaths.has(specifier) ? specifier : null;
 
-  // Step 2: fallback to relative resolution (handles ./ and ../ links)
+  // Step 2: fallback to relative resolution (handles ./ and ../ links).
+  // normaliseSpecifier is applied here only, where ESM .js→.ts aliasing is needed.
   if (!resolved) {
-    resolved = resolveImport(normSpec, relPath, allRelPaths);
+    resolved = resolveImport(normaliseSpecifier(specifier), relPath, allRelPaths);
   }
 
   // Step 3: drop silently if unresolved
