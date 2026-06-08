@@ -143,26 +143,83 @@ function resolveOneImport(store: KgStore, sourceFileId: number, params: ResolveI
   }
 }
 
+type ResolveDocRefParams = {
+  sourceFileId: number;
+  specifier: string;
+  allRelPaths: Set<string>;
+  relPath: string;
+};
+
+/**
+ * Resolve a doc:references specifier using a conservative resolution order:
+ *   1. Exact repo-root-relative membership (allRelPaths.has(normSpec))
+ *   2. Existing relative resolution via resolveImport (handles ./ and ../ links)
+ *   3. Drop silently — consistent with unresolved-import behavior
+ *
+ * Named-import entity edges are skipped: doc-ref specifiers carry empty names
+ * arrays by construction (verified: doc adapters never populate names for refs).
+ */
+function resolveDocRefSpecifier(store: KgStore, params: ResolveDocRefParams): void {
+  const { sourceFileId, specifier, allRelPaths, relPath } = params;
+  const normSpec = normaliseSpecifier(specifier);
+
+  // Step 1: exact repo-root-relative membership
+  let resolved: string | null = allRelPaths.has(normSpec) ? normSpec : null;
+
+  // Step 2: fallback to relative resolution (handles ./ and ../ links)
+  if (!resolved) {
+    resolved = resolveImport(normSpec, relPath, allRelPaths);
+  }
+
+  // Step 3: drop silently if unresolved
+  if (!resolved) return;
+
+  const targetFileRow = store.getFile(resolved);
+  if (!targetFileRow?.file_id) return;
+
+  store.insertFileEdge({
+    confidence: 1.0,
+    edge_type: "doc:references",
+    evidence: specifier,
+    relation: null,
+    source_file_id: sourceFileId,
+    target_file_id: targetFileRow.file_id as number,
+  });
+  // Named-import entity edges skipped: doc-ref specifiers have empty names arrays.
+}
+
 export function resolveImports(
   store: KgStore,
   _projectDir: string,
   allRelPaths: Set<string>,
   fileImports: Map<
     string,
-    { relPath: string; specifiers: Array<{ specifier: string; names: string[] }> }
+    {
+      relPath: string;
+      specifiers: Array<{ specifier: string; names: string[]; edgeType?: "doc:references" }>;
+    }
   >,
 ): void {
   for (const [relPath, info] of fileImports) {
     const sourceFileRow = store.getFile(relPath);
     if (!sourceFileRow?.file_id) continue;
 
-    for (const { specifier, names } of info.specifiers) {
-      resolveOneImport(store, sourceFileRow.file_id as number, {
-        allRelPaths,
-        names,
-        relPath,
-        specifier,
-      });
+    for (const { specifier, names, edgeType } of info.specifiers) {
+      if (edgeType === "doc:references") {
+        resolveDocRefSpecifier(store, {
+          allRelPaths,
+          relPath,
+          sourceFileId: sourceFileRow.file_id as number,
+          specifier,
+        });
+      } else {
+        resolveOneImport(store, sourceFileRow.file_id as number, {
+          allRelPaths,
+          names,
+          relPath,
+          specifier,
+        });
+      }
     }
   }
 }
@@ -242,7 +299,10 @@ export function resolveCanonLinks(
   store: KgStore,
   fileImports: Map<
     string,
-    { relPath: string; specifiers: Array<{ specifier: string; names: string[] }> }
+    {
+      relPath: string;
+      specifiers: Array<{ specifier: string; names: string[]; edgeType?: "doc:references" }>;
+    }
   >,
 ): void {
   try {
@@ -316,7 +376,10 @@ export type ParsePhaseContext = {
   fileHashCache: Map<string, string>;
   fileImports: Map<
     string,
-    { relPath: string; specifiers: Array<{ specifier: string; names: string[] }> }
+    {
+      relPath: string;
+      specifiers: Array<{ specifier: string; names: string[]; edgeType?: "doc:references" }>;
+    }
   >;
   progress: (phase: string, current: number, total: number) => void;
   filesUpdated: number;
@@ -359,7 +422,10 @@ export function parsePhase2(ctx: ParsePhaseContext): void {
 
 export type FileImportMap = Map<
   string,
-  { relPath: string; specifiers: Array<{ specifier: string; names: string[] }> }
+  {
+    relPath: string;
+    specifiers: Array<{ specifier: string; names: string[]; edgeType?: "doc:references" }>;
+  }
 >;
 
 export type ResolveLinkOpts = {
