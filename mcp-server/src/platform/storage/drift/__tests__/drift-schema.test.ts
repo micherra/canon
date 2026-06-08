@@ -20,6 +20,123 @@ import {
   runDriftMigrations,
 } from "../drift-schema.ts";
 
+// Helper: create a v9 database (all migrations through v9)
+function createV9Db(): Database.Database {
+  const db = initDriftDb(":memory:");
+  // initDriftDb runs all migrations up to DRIFT_SCHEMA_VERSION (now "10")
+  // so we need to manually create a v9-only DB
+  // Build a fresh DB and undo the v10 migration: not feasible with in-memory SQLite,
+  // so instead we create a raw v1 DB and run only up to v9 manually
+  db.close();
+  // Build v9 by creating fresh v1 and running manual v9 migrations
+  const v9db = new Database(":memory:");
+  v9db.pragma("journal_mode = WAL");
+  v9db.pragma("foreign_keys = ON");
+  v9db.pragma("synchronous = NORMAL");
+  v9db.pragma("busy_timeout = 5000");
+
+  // v1 base DDL
+  v9db.exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+  v9db.exec(`INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1')`);
+  v9db.exec(`CREATE TABLE IF NOT EXISTS reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, review_id TEXT NOT NULL UNIQUE,
+    timestamp TEXT NOT NULL, files TEXT NOT NULL, honored TEXT NOT NULL,
+    score TEXT NOT NULL, verdict TEXT NOT NULL, pr_number INTEGER,
+    branch TEXT, last_reviewed_sha TEXT, file_priorities TEXT, recommendations TEXT
+  )`);
+  v9db.exec(`CREATE TABLE IF NOT EXISTS violations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    review_id TEXT NOT NULL REFERENCES reviews(review_id),
+    principle_id TEXT NOT NULL, severity TEXT NOT NULL,
+    file_path TEXT, impact_score REAL, message TEXT
+  )`);
+  v9db.exec(`CREATE TABLE IF NOT EXISTS flow_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL UNIQUE,
+    flow TEXT NOT NULL, tier TEXT NOT NULL, task TEXT NOT NULL,
+    started TEXT NOT NULL, completed TEXT NOT NULL, total_duration_ms INTEGER NOT NULL,
+    state_durations TEXT NOT NULL, state_iterations TEXT NOT NULL, skipped_states TEXT NOT NULL,
+    total_spawns INTEGER NOT NULL, gate_pass_rate REAL, postcondition_pass_rate REAL,
+    total_violations INTEGER, total_test_results TEXT, total_files_changed INTEGER
+  )`);
+
+  // v2
+  v9db.exec(`CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, decision_id TEXT NOT NULL UNIQUE,
+    run_id TEXT, flow TEXT, task TEXT, title TEXT NOT NULL, content TEXT NOT NULL,
+    file_path TEXT, timestamp TEXT NOT NULL
+  )`);
+  v9db.exec(`ALTER TABLE flow_runs ADD COLUMN commits TEXT`);
+  v9db.exec(`ALTER TABLE flow_runs ADD COLUMN diff_stat TEXT`);
+  v9db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
+
+  // v3
+  v9db.exec(`CREATE TABLE IF NOT EXISTS build_archives (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, archive_id TEXT NOT NULL UNIQUE,
+    branch TEXT NOT NULL, sanitized_branch TEXT NOT NULL, slug TEXT NOT NULL,
+    flow TEXT NOT NULL DEFAULT '', tier TEXT NOT NULL DEFAULT '',
+    task TEXT NOT NULL DEFAULT '', archived_at TEXT NOT NULL, archive_path TEXT NOT NULL,
+    artifact_types TEXT NOT NULL DEFAULT '[]', has_run_summary INTEGER NOT NULL DEFAULT 0,
+    source_run_id TEXT
+  )`);
+  v9db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
+
+  // v4
+  v9db.exec(`CREATE TABLE IF NOT EXISTS file_violation_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT NOT NULL,
+    principle_id TEXT NOT NULL, violation_count INTEGER NOT NULL DEFAULT 0,
+    last_seen TEXT NOT NULL, first_seen TEXT NOT NULL, UNIQUE(file_path, principle_id)
+  )`);
+  v9db.exec(`CREATE TABLE IF NOT EXISTS path_effects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT NOT NULL UNIQUE,
+    total_violations INTEGER NOT NULL DEFAULT 0, total_reviews INTEGER NOT NULL DEFAULT 0,
+    last_violation_at TEXT, last_clean_at TEXT, clean_streak INTEGER NOT NULL DEFAULT 0,
+    violation_streak INTEGER NOT NULL DEFAULT 0
+  )`);
+  v9db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
+
+  // v5
+  v9db.exec(`CREATE TABLE IF NOT EXISTS predictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, prediction_id TEXT NOT NULL UNIQUE,
+    workspace TEXT, flow_id TEXT, file_paths TEXT NOT NULL, principle_ids TEXT NOT NULL,
+    signals_json TEXT NOT NULL, timestamp TEXT NOT NULL, resolved INTEGER NOT NULL DEFAULT 0,
+    resolved_at TEXT, outcome TEXT
+  )`);
+  v9db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
+
+  // v6
+  v9db.exec(`CREATE TABLE IF NOT EXISTS error_fixes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT NOT NULL, principle_id TEXT NOT NULL,
+    error_pattern TEXT NOT NULL, fix_pattern TEXT NOT NULL, occurrences INTEGER NOT NULL DEFAULT 0,
+    last_seen TEXT NOT NULL, first_seen TEXT NOT NULL, UNIQUE(file_path, principle_id)
+  )`);
+  v9db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
+
+  // v7
+  v9db.exec(`CREATE TABLE IF NOT EXISTS violation_outcomes (
+    file_path TEXT NOT NULL, principle_id TEXT NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('fix', 'acknowledge', 'defer')),
+    slug TEXT NOT NULL, timestamp TEXT NOT NULL, PRIMARY KEY (file_path, principle_id, slug)
+  )`);
+  v9db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
+
+  // v8
+  v9db.exec(`CREATE TABLE IF NOT EXISTS area_observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, subsystem_key TEXT NOT NULL,
+    content TEXT NOT NULL, source TEXT NOT NULL, workflow_slug TEXT, created_at TEXT NOT NULL,
+    injected_count INTEGER NOT NULL DEFAULT 0, last_injected_at TEXT
+  )`);
+  v9db.exec(`UPDATE meta SET value = '8' WHERE key = 'schema_version'`);
+
+  // v9
+  v9db.exec(`CREATE TABLE IF NOT EXISTS craft_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, subsystem_key TEXT NOT NULL, source TEXT NOT NULL,
+    flow TEXT, run_id TEXT, ratings TEXT NOT NULL, rollup REAL, created_at TEXT NOT NULL
+  )`);
+  v9db.exec(`UPDATE meta SET value = '9' WHERE key = 'schema_version'`);
+
+  return v9db;
+}
+
 // Helper: create a v1 database manually (base DDL without migration)
 // This simulates an existing v1 drift.db on disk before the migration runner existed.
 function createV1Db(): Database.Database {
@@ -163,19 +280,19 @@ describe("columnExists", () => {
   });
 });
 
-// Fresh DB — schema version 2
+// Fresh DB — schema version 10
 
 describe("initDriftDb — fresh database", () => {
-  test("DRIFT_SCHEMA_VERSION is '9'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("9");
+  test("DRIFT_SCHEMA_VERSION is '10'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("10");
   });
 
-  test("meta table has schema_version = '9' after init", () => {
+  test("meta table has schema_version = '10' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("9");
+    expect(row.value).toBe("10");
     db.close();
   });
 
@@ -257,13 +374,13 @@ describe("runDriftMigrations — v1 to v2 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v1 DB to current version: updates schema_version to '9'", () => {
+  test("migrates a v1 DB to current version: updates schema_version to '10'", () => {
     const db = createV1Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("9");
+    expect(row.value).toBe("10");
     db.close();
   });
 
@@ -341,16 +458,16 @@ describe("runDriftMigrations — idempotency", () => {
 // v4 migration — file_violation_history and path_effects tables
 
 describe("initDriftDb — fresh database v4 tables", () => {
-  test("DRIFT_SCHEMA_VERSION is '9'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("9");
+  test("DRIFT_SCHEMA_VERSION is '10'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("10");
   });
 
-  test("fresh DB has schema_version = '9' after init", () => {
+  test("fresh DB has schema_version = '10' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("9");
+    expect(row.value).toBe("10");
     db.close();
   });
 
@@ -433,13 +550,13 @@ describe("runDriftMigrations — v3 to v4 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v3 DB to current version: updates schema_version to '9'", () => {
+  test("migrates a v3 DB to current version: updates schema_version to '10'", () => {
     const db = createV3Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("9");
+    expect(row.value).toBe("10");
     db.close();
   });
 });
@@ -506,6 +623,134 @@ describe("v4 schema — UNIQUE constraints", () => {
       .prepare(`SELECT total_violations FROM path_effects WHERE file_path = 'src/foo.ts'`)
       .get() as { total_violations: number };
     expect(row.total_violations).toBe(1);
+    db.close();
+  });
+});
+
+// v10 migration — violation lifecycle columns
+
+describe("initDriftDb — fresh database v10 columns", () => {
+  test("fresh DB has all 4 v10 lifecycle columns on violations", () => {
+    const db = initDriftDb(":memory:");
+    expect(columnExists(db, "violations", "status")).toBe(true);
+    expect(columnExists(db, "violations", "resolved_at")).toBe(true);
+    expect(columnExists(db, "violations", "resolved_by_review_id")).toBe(true);
+    expect(columnExists(db, "violations", "resolution_reason")).toBe(true);
+    db.close();
+  });
+
+  test("fresh DB has partial index idx_violations_open", () => {
+    const db = initDriftDb(":memory:");
+    const indexes = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='violations' ORDER BY name`,
+      )
+      .all() as Array<{ name: string }>;
+    const indexNames = indexes.map((i) => i.name);
+    expect(indexNames).toContain("idx_violations_open");
+    db.close();
+  });
+
+  test("violations inserted without status default to 'open'", () => {
+    const db = initDriftDb(":memory:");
+    // Insert a review first (FK constraint)
+    db.exec(`INSERT INTO reviews (review_id, timestamp, files, honored, score, verdict)
+      VALUES ('r1', '2026-01-01', '[]', '[]', '{}', 'CLEAN')`);
+    db.exec(`INSERT INTO violations (review_id, principle_id, severity)
+      VALUES ('r1', 'simplicity-first', 'warning')`);
+    const row = db.prepare(`SELECT status FROM violations WHERE review_id = 'r1'`).get() as {
+      status: string;
+    };
+    expect(row.status).toBe("open");
+    db.close();
+  });
+
+  test("DRIFT_SCHEMA_VERSION is '10'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("10");
+  });
+});
+
+describe("runDriftMigrations — v9 to v10 upgrade", () => {
+  test("migrates a v9 DB: adds status column with default 'open'", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    expect(columnExists(db, "violations", "status")).toBe(true);
+    db.close();
+  });
+
+  test("migrates a v9 DB: adds resolved_at column", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    expect(columnExists(db, "violations", "resolved_at")).toBe(true);
+    db.close();
+  });
+
+  test("migrates a v9 DB: adds resolved_by_review_id column", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    expect(columnExists(db, "violations", "resolved_by_review_id")).toBe(true);
+    db.close();
+  });
+
+  test("migrates a v9 DB: adds resolution_reason column", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    expect(columnExists(db, "violations", "resolution_reason")).toBe(true);
+    db.close();
+  });
+
+  test("migrates a v9 DB: adds idx_violations_open partial index", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    const indexes = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='violations' ORDER BY name`,
+      )
+      .all() as Array<{ name: string }>;
+    const indexNames = indexes.map((i) => i.name);
+    expect(indexNames).toContain("idx_violations_open");
+    db.close();
+  });
+
+  test("pre-existing violation rows default to status='open' after migration", () => {
+    const db = createV9Db();
+    // Insert violation row before migration
+    db.exec(`INSERT INTO reviews (review_id, timestamp, files, honored, score, verdict)
+      VALUES ('rev-pre', '2026-01-01', '[]', '[]', '{}', 'BLOCKING')`);
+    db.exec(`INSERT INTO violations (review_id, principle_id, severity)
+      VALUES ('rev-pre', 'some-principle', 'rule')`);
+
+    runDriftMigrations(db);
+
+    const row = db.prepare(`SELECT status FROM violations WHERE review_id = 'rev-pre'`).get() as {
+      status: string;
+    };
+    expect(row.status).toBe("open");
+    db.close();
+  });
+
+  test("v9→v10 migration updates schema_version to '10'", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+      value: string;
+    };
+    expect(row.value).toBe("10");
+    db.close();
+  });
+});
+
+describe("runDriftMigrations — v10 idempotency", () => {
+  test("calling runDriftMigrations twice on a v10 DB does not error", () => {
+    const db = initDriftDb(":memory:");
+    expect(() => runDriftMigrations(db)).not.toThrow();
+    db.close();
+  });
+
+  test("calling v10 migration twice from a v9 DB does not error", () => {
+    const db = createV9Db();
+    runDriftMigrations(db);
+    expect(() => runDriftMigrations(db)).not.toThrow();
     db.close();
   });
 });
