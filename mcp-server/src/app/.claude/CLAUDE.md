@@ -6,7 +6,7 @@
 Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, project-directory resolution, and per-connection scope management.
 
 ## Architecture
-<!-- last-updated: 2026-06-06 -->
+<!-- last-updated: 2026-06-08 -->
 
 **Key files:**
 
@@ -16,15 +16,15 @@ Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, 
 | `create-server.ts` | `createCanonServer()` per-session factory — creates, fuzzy-validates, and fully-wires a new `McpServer`; exports `CANON_SERVER_NAME` / `CANON_SERVER_VERSION` (x-release-please-version marker) |
 | `server-state.ts` | Per-connection scope registry (`resolveScope(extra)`), `findAnchorDir` boot helper; per-session ready gates (`createSessionReadyGate`/`resolveSessionReady`/`clearSessionReady`/`readyPromiseFor`); `getScopeForSession`/`hasOtherSessionsForDir` for refcount eviction |
 | `daemon.ts` | HTTP daemon on `:3142` (`CANON_DAEMON_PORT`); auth-gated `POST /mcp` (503 on token-missing fail-closed); `/health` `{ok,port,version,transport:"http"}`; PID file `canon-daemon.pid` (pid\nport); `probeExistingDaemon`; SIGTERM teardown; flag-dark (`CANON_HTTP_DAEMON=1`) |
-| `http-routes.ts` | `handleArtifactRoutes(req,res,RouteContext)` — extracted from `http-server.ts`; sidecar `:3141` byte-identical; daemon variant adds loopback Host guard + no CORS |
-| `http-server.ts` | HTTP server lifecycle — `startHttpServer`, `stopHttpServer`, `resolvePidDir`, `writePidFile`, `removePidFile`, `resetStateForTesting` |
+| `http-routes.ts` | `handleArtifactRoutes(req,res,RouteContext)` — extracted from `http-server.ts`; handles artifact and health routes; loopback Host guard applied by callers (`http-server.ts`, daemon) via `mcp-http/loopback-host.ts` before routing |
+| `http-server.ts` | Sidecar HTTP server on `:3141` — `startHttpServer`, `stopHttpServer`, lifecycle management; Host-header guard (F2: rejects non-loopback/missing Host with 403 via `isLoopbackHostRequest`); no `Access-Control-Allow-Origin` header (F2: ACAO `*` removed) |
 | `resolve-project-dir.ts` | `resolveGitRoot(cwd, gitTopLevelFn)` — git root or cwd fallback; never throws |
 | `get-context-handler.ts` | `get_context` composite tool handler; re-exported from `register-knowledge.ts` |
 | `register-*.ts` | One file per feature boundary — each takes `server: McpServer` as first param and registers its MCP tools via `gatedWrapHandler` |
 | `mcp-http/` | HTTP transport auth + session management subsystem (flag-dark). See `mcp-http/.claude/CLAUDE.md`. |
 
 ## Contracts
-<!-- last-updated: 2026-06-06 -->
+<!-- last-updated: 2026-06-08 -->
 
 **`createCanonServer()`** (`create-server.ts`) — per-session factory; creates and fully-wires a new `McpServer` instance (calls all 16 `register-*.ts` in order); uses `WeakMap<McpServer, Set<string>>` for per-server resource dedup in `registerToolWithUi`. `CANON_SERVER_NAME = "canon"` and `CANON_SERVER_VERSION` (x-release-please-version) exported here (moved from `server-state.ts`).
 
@@ -36,14 +36,16 @@ Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, 
 
 **`JobManager` per-project** (`src/platform/jobs/job-manager.ts`) — holds a `Map<string, JobManager>` keyed by `path.resolve(projectDir)`; `getOrCreateJobManager(projectDir, ...)` is the sole factory; `getJobManager(projectDir)` returns `undefined` for unknown scope; `cleanupAllJobManagers()` tears down all managers at shutdown; `evictJobManagerForScope(projectDir)` — cleanup + delete in try/finally for HTTP session teardown (isolation-finish-01).
 
-**`http-server.ts`** — `startHttpServer(port?, projectDir?)` seeds module-level `resolvedProjectDir` at startup. `resolvePidDir(): string | null` resolves: `CLAUDE_PLUGIN_DATA` → `{resolvedProjectDir}/.canon` → **returns `null`** (no scope resolvable; errors-as-values, never throws); no `process.cwd()` / `CANON_PROJECT_DIR` fallback. `writePidFile(pidDir?)` writes `{pid}:{port}\n`; `removePidFile` removes only if PID matches; failures WARN, never thrown; skipped in VITEST. `resetStateForTesting()` clears `resolvedProjectDir`.
+**`http-server.ts`** — `startHttpServer(port?, projectDir?)` seeds module-level `resolvedProjectDir` at startup. Host-header guard: `handleRequest` calls `isLoopbackHostRequest(req)` (from `mcp-http/loopback-host.ts`) before routing; non-loopback or missing Host → 403 `{ error: "Host header rejected" }` (F2 fix, fail-closed). No `Access-Control-Allow-Origin` header set — artifacts opened via direct browser navigation, not cross-origin fetch (F2 fix). `resolvePidDir(): string | null` resolves: `CLAUDE_PLUGIN_DATA` → `{resolvedProjectDir}/.canon` → **returns `null`** (no scope resolvable; errors-as-values, never throws); no `process.cwd()` / `CANON_PROJECT_DIR` fallback. `writePidFile(pidDir?)` writes `{pid}:{port}\n`; `removePidFile` removes only if PID matches; failures WARN, never thrown; skipped in VITEST. `resetStateForTesting()` clears `resolvedProjectDir`.
 
 **`resolveGitRoot(cwd, gitTopLevelFn)`** (`resolve-project-dir.ts`) — returns git repo root for `cwd`; falls back to `cwd` when not in a git repo or git unavailable; errors logged and swallowed (never throws).
 
 **`get_context` tool** (`get-context-handler.ts`) — composite context tool; input: `file_paths[]` + optional `include` (5 sections: `principles`, `file_context`, `drift`, `graph`, `signals`); `file_context` errors fail-closed; graph/signals fail-open; re-exported from `register-knowledge.ts`.
 
 ## Invariants
-<!-- last-updated: 2026-06-06 -->
+<!-- last-updated: 2026-06-08 -->
+- Sidecar `:3141` (`http-server.ts`) rejects requests with missing or non-loopback Host headers with 403 before routing — fail-closed; `isLoopbackHostRequest` from `mcp-http/loopback-host.ts` is the sole guard implementation
+- Sidecar `:3141` does not set `Access-Control-Allow-Origin` — artifacts served via direct browser navigation, never cross-origin fetch; ACAO `*` would be a data-exfiltration risk
 - `resolveScope(extra)` is the sole accessor for per-session projectDir — never use `export let projectDir` global (deleted) or `process.cwd()` fallback
 - `createCanonServer()` is the sole factory for `McpServer` instances — module-level singleton export deleted; each HTTP session gets its own instance
 - `CANON_PLUGIN_DIR` env var is the first-priority short-circuit for `findAnchorDir`; when unset, marker-walk resolves it at boot
