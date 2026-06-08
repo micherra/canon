@@ -526,9 +526,9 @@ From `cliff_events` when `status === "observed"`:
 | `recovery_outcomes` | Breakdown: `recovered` / `abandoned` / `unresolved` / `unknown` |
 | `confidence.tier` | Data quality annotation |
 
-### Pattern watch proposals (tier `"low"` or better only)
+### Pattern watch proposals (tier `"high"` only)
 
-At `"low"` tier or better, propose a pattern watch when:
+At `"high"` tier, propose a pattern watch when:
 - The same `step_id` appears in 3+ distinct workspaces (systemic step failure, not one-off).
 - `recovery_outcomes.unresolved` > 0 (steps never recovered — silent data loss risk).
 - `by_agent_type` shows one agent type dominating (agent-specific reliability signal).
@@ -550,7 +550,7 @@ Observed counts (insufficient data for rate analysis):
 - By agent: {top buckets}
 - Outcomes: recovered={N}, abandoned={N}, unresolved={N}, unknown={N}
 
-{If tier >= "low":}
+{If tier >= "high":}
 Top cliffing steps: {step_id}={count}, ...
 Top cliffing agents: {agent_type}={count}, ...
 Recovery: {recovered}% recovered, {abandoned}% abandoned, {unresolved}% unresolved
