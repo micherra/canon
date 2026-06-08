@@ -151,6 +151,8 @@ Make Canon smarter about what goes into builds, not just what comes out.
 
 ## New Epic — Deterministic Spine
 
+> **Supersession note (2026-06-07):** The Workflow-adoption items in this epic — G1–G9 runbook field enrichment as a Workflow precursor, W4 tail PoC, the runbook→IR transpiler, and W8 (whole-build) — are superseded by the ratified design in [`docs/explore/workflow-integration/SYNTHESIS.md`](explore/workflow-integration/SYNTHESIS.md). That design (B-trunk saved-workflow library + evidence-gated endgame compiler, 8 increments, near-term commitment: Increments 0–3) was decided at a user HITL gate on 2026-06-07 after a 3-proposal, 3-judge design competition. **The X4 Stop-hook item and the #151 analysis below remain standing** — they are substrate-independent and complementary to any Workflow adoption path.
+
 Harden the invariant parts of the orchestration loop into deterministic substrate (hooks first, Workflow later), without reversing PR #151's removal of the bespoke flow engine. The LLM stays the control plane for the adaptive front; the spine guarantees the parts that have only failure modes, no legitimate adaptivity.
 
 **Two axes, not one.** Workflow adoption has a *scope* axis (how much of the build is deterministic: tail → loops → waves → whole-build) **and** an *authorship* axis (hand-written vs compiled-from-runbook). The roadmap originally explored only hand-authored, static increments. A deterministic, shape-agnostic transpiler compiles the architect's per-build runbook + `task-dag.yaml` into a validated IR (not generated source), which a thin permanently-trusted runner executes and discards. This is not what #151 deleted (a persisted, hand-authored static flow library + its bespoke engine) — the compiled Workflow is an ephemeral build artifact downstream of the freshly-designed runbook, with zero per-flow special-casing in the compiler. The closed 17-step runbook vocabulary is the invariant that keeps the compiler shape-agnostic and must be guarded.
@@ -231,7 +233,7 @@ Parallel infra track to the build-quality threads. Removes the MCP server's proc
 | **1a** | Per-connection scope foundation | Shipped (PR #288) |
 | **1b** | Migrate consumers to connection scope | Shipped (PR #290) |
 | **1c + 1d** | Eliminate `process.cwd()` implicit-scope sites; delete the `projectDir`/`setProjectDir` global; add (unwired) `evictStoresForScope`/`evictDriftDbForScope` eviction hooks; split `drift-db.ts` into siblings | Shipped (PR #304) — CLEAN review, behavioral no-op under stdio. Isolation-finish (per-project `JobManager` via `getOrCreateJobManager`) shipped PR #316. |
-| **2** | HTTP daemon: auto-reconnect kills the silent zero-tool cold start; `url` config sidesteps the `${CLAUDE_PLUGIN_ROOT}` token-expansion failure; wire the eviction hooks to connection-end | Not started — unblocked by #304 |
+| **2** | HTTP daemon: per-session Streamable-HTTP transport, loopback auth, scope handshake, supervisor, idle reaper; flag-dark (`CANON_HTTP_DAEMON=1`) until Phase 3 cutover | Shipped (PR #342) — flag-dark |
 
 **Sequencing notes:**
 
