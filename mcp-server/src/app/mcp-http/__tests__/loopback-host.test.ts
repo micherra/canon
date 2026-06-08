@@ -16,7 +16,7 @@ import {
   extractLoopbackHostname,
   isAllowedLoopbackHost,
   isLoopbackHostRequest,
-} from "../loopback-host.js";
+} from "../loopback-host.ts";
 
 // ---------------------------------------------------------------------------
 // extractLoopbackHostname

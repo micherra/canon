@@ -20,7 +20,7 @@ import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { extractLoopbackHostname, LOOPBACK_ALLOWED_HOSTS } from "./loopback-host.js";
+import { extractLoopbackHostname, LOOPBACK_ALLOWED_HOSTS } from "./loopback-host.ts";
 
 // ---------------------------------------------------------------------------
 // Types
