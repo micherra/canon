@@ -411,4 +411,63 @@ describe("codebaseGraph with md-relations", () => {
     const agentEdges = result.edges.filter((e) => e.relation === "fm:agent");
     expect(agentEdges.length).toBeGreaterThanOrEqual(1);
   });
+
+  // ── DDD doc freshness: AC 1 end-to-end ──────────────────────────────────
+  // Integration gap: no existing test exercises the full codebaseGraph tool
+  // with docs/, mcp-server/src/domains/, and CONTEXT.md fixtures. The unit
+  // tests in classifyMdNode verify the classification rules in isolation; this
+  // test verifies the wiring from CANON_SCAN_DIRS/CANON_SCAN_FILES through
+  // the full codebaseGraph call path to the observable node output.
+
+  it("codebaseGraph emits doc nodes for docs/, domain READMEs, and CONTEXT.md (AC 1)", async () => {
+    // docs/ — one DDD doc
+    await mkdir(join(tmpDir, "docs"), { recursive: true });
+    await writeFile(join(tmpDir, "docs", "bounded-context-map.md"), "# Bounded Context Map\n");
+
+    // docs/explore/ — must produce NO doc node (stale-by-design exclusion)
+    await mkdir(join(tmpDir, "docs", "explore"), { recursive: true });
+    await writeFile(join(tmpDir, "docs", "explore", "PROPOSAL-X.md"), "# Proposal X (stale)\n");
+
+    // mcp-server/src/domains/<name>/README.md — domain README
+    await mkdir(join(tmpDir, "mcp-server", "src", "domains", "flows"), { recursive: true });
+    await writeFile(
+      join(tmpDir, "mcp-server", "src", "domains", "flows", "README.md"),
+      "# Flows Domain\n",
+    );
+
+    // root CONTEXT.md — singleton via CANON_SCAN_FILES
+    await writeFile(join(tmpDir, "CONTEXT.md"), "# Context Glossary\n");
+
+    // Minimal required files so the scanner doesn't fail on empty dirs
+    await writeFile(join(tmpDir, "agents", "test.md"), "---\nname: test\n---\n");
+
+    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+
+    // docs/bounded-context-map.md must be a doc node
+    const bcmNode = result.nodes.find((n) => n.id === "docs/bounded-context-map.md");
+    expect(bcmNode, "docs/bounded-context-map.md must appear as a node").toBeDefined();
+    expect(bcmNode?.kind).toBe("doc");
+
+    // mcp-server/src/domains/flows/README.md must be a doc node
+    const domainReadmeNode = result.nodes.find(
+      (n) => n.id === "mcp-server/src/domains/flows/README.md",
+    );
+    expect(domainReadmeNode, "domain README.md must appear as a node").toBeDefined();
+    expect(domainReadmeNode?.kind).toBe("doc");
+
+    // root CONTEXT.md must be a doc node
+    const contextNode = result.nodes.find((n) => n.id === "CONTEXT.md");
+    expect(contextNode, "CONTEXT.md must appear as a node").toBeDefined();
+    expect(contextNode?.kind).toBe("doc");
+
+    // docs/explore/PROPOSAL-X.md must NOT be classified as a 'doc' node.
+    // EXCLUDED_DOC_PREFIXES prevents kind assignment — the file may still appear
+    // in the scan output (as a kind-less node) but must never carry kind='doc'.
+    // This matches the AC: "docs/explore/** produces NO doc node" (kind-level exclusion).
+    const exploreNode = result.nodes.find((n) => n.id?.includes("explore"));
+    expect(
+      exploreNode?.kind,
+      "docs/explore/ files must NOT be classified as kind='doc' (stale-by-design exclusion)",
+    ).toBeUndefined();
+  });
 });
