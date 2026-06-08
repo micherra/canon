@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Canon MCP server is organized into eight bounded contexts. The **Flows Context** owns all flow/state/fragment schema types and status vocabulary. The **Orchestration Context** owns execution lifecycle, board state, session management, wave coordination, and spawn/HITL mechanics. The **Knowledge Graph Context** owns the file entity graph, import/export edge relationships, and semantic search. The **Drift/Review Context** owns review persistence, violation tracking, and compliance analytics. The **Messages Context** owns unified inter-agent messaging, event payloads, and event validation. The **File Context** owns file-level structural analysis, entity queries, and blast radius reporting. The **Diagnostics/Analytics Context** owns flow run analytics, agent metrics recording, and convergence checking. The **Shared Kernel** is a foundation layer providing cross-cutting types and constants that ≥3 contexts depend on. A thin **Platform/Infrastructure layer** (`src/platform/`, `src/app/`) wires contexts together at startup and provides storage adapters — it is not a bounded context.
+The Canon MCP server is organized into eight bounded contexts. The **Flows Context** owns all flow/state/fragment schema types and status vocabulary. The **Orchestration Context** owns execution lifecycle, board state, session management, DAG-based parallel dispatch, and spawn/HITL mechanics. The **Knowledge Graph Context** owns the file entity graph, import/export edge relationships, and semantic search. The **Drift/Review Context** owns review persistence, violation tracking, and compliance analytics. The **Messages Context** owns unified inter-agent messaging, event payloads, and event validation. The **File Context** owns file-level structural analysis, entity queries, and blast radius reporting. The **Diagnostics/Analytics Context** owns flow run analytics, agent metrics recording, and convergence checking. The **Shared Kernel** is a foundation layer providing cross-cutting types and constants that ≥3 contexts depend on. A thin **Platform/Infrastructure layer** (`src/platform/`, `src/app/`) wires contexts together at startup and provides storage adapters — it is not a bounded context.
 
 ---
 
@@ -15,25 +15,24 @@ The Canon MCP server is organized into eight bounded contexts. The **Flows Conte
 - **Key types**: `FlowDefinition`, `ResolvedFlow`, `StateDefinition`, `Board`, `Session`, `GateResult`, `STATUS_KEYWORDS`, `STATUS_ALIASES`, `BaseStateFields`
 - **Depends on**: Shared Kernel (`zod`, constants) only
 
-The Flows Context is the shared vocabulary of the system. Every other context imports types from here — it is effectively a published language module. `flow-schema.ts` is the primary export; a planned split (ddd-03) will decompose it into `flow-definition-schemas.ts`, `board-state-schemas.ts`, and `event-schemas.ts` with a barrel re-export that preserves the 116 existing import paths.
+The Flows Context is the shared vocabulary of the system. Every other context imports types from here — it is effectively a published language module. The schema split is complete: `mcp-server/src/domains/flows/` contains `flow-definition-schemas.ts`, `board-state-schemas.ts`, and `transcript-schemas.ts` (with a barrel re-export that preserves existing import paths); `flow-schema.ts` no longer exists.
 
 ### 2. Orchestration Context
 
 - **Directories**: `mcp-server/src/features/orchestration/`, `mcp-server/src/domains/workspaces/`, `mcp-server/src/domains/board/`
-- **Responsibility**: Flow execution engine, state transitions, effects, convergence detection, wave lifecycle, board persistence, session management, spawn request assembly, HITL breakpoints, domain events, gate execution
+- **Responsibility**: Flow execution engine, state transitions, effects, convergence detection, board persistence, session management, spawn request assembly, HITL breakpoints, domain events, gate execution, DAG-based parallel task dispatch
 - **Key types**: `SpawnRequest`, `HitlBreakpoint`, `ExecutionStore`, `FlowEventBus`, `EffectResult`, `BoardStateEntry`
 - **Depends on**: Flows Context (type imports), Messages Context (messaging coordination), Shared Kernel
 
 Orchestration drives the runtime — it is the largest context. Board mutation helpers (`board.ts`) are pure functions that return new `Board` values. `ExecutionStore` is the SQLite-backed persistence layer for board and session state.
 
-**Current boundary violations** (to be resolved via ddd-03 interfaces):
+**Current boundary violations** (to be resolved via repository interfaces):
 
 | File | Violating import | Direction |
 |------|-----------------|-----------|
-| `engine/effects.ts` | `import { DriftStore } from "@platform/storage/drift/store.ts"` | Orchestration → Drift (concrete coupling) |
-| `services/inject-context.ts` | `import { KgStore } from "@graph/kg-store.ts"` | Orchestration → Knowledge Graph (concrete coupling) |
+| `mcp-server/src/features/orchestration/tools/report.ts` | `import { DriftStore } from "@platform/storage/drift/store.ts"` | Orchestration → Drift (concrete coupling) |
 
-Both violations are known. The planned fix is repository interfaces (`IDriftStore`, `IKgStore`) in `domains/drift/` and `domains/knowledge-graph/` respectively. The concrete classes satisfy the interfaces structurally; Orchestration will import the interface only.
+The planned fix is a repository interface (`IDriftStore`) in `domains/drift/` so Orchestration imports the interface only, not the concrete storage class. The `IKgStore` interface definition lives in `mcp-server/src/domains/knowledge-graph/` (planned — `kg-store.interface.ts` not yet written); when complete, it will eliminate any future concrete `KgStore` coupling from Orchestration.
 
 ### 3. Knowledge Graph Context
 
@@ -62,7 +61,7 @@ A planned `IKgStore` interface in `mcp-server/src/domains/knowledge-graph/` will
 - **Key types**: `Message`, `CanonEvent`, `EventBus`, `FlowEventChannel`
 - **Depends on**: Orchestration Context (uses `ExecutionStore` for message persistence), Shared Kernel
 
-Messages was previously bundled under the Orchestration Context in earlier versions of this map. It has its own domain directory and owns a distinct capability: structured communication between agents during wave execution. Messages are produced by orchestration events and consumed by spawned agents via prompt injection. The coupling to `ExecutionStore` is bidirectional — messages are stored in the same SQLite database as board state, making this a **Partnership** relationship with Orchestration.
+Messages was previously bundled under the Orchestration Context in earlier versions of this map. It has its own domain directory and owns a distinct capability: typed flow lifecycle events, the event bus, and variable substitution for spawn prompt templates. Message persistence via `ExecutionStore` was removed in 2026-05-16; the Messages context no longer reads or writes board-state storage directly. The relationship with Orchestration is now event-bus only — a **Partnership** via the `FlowEventBus` singleton.
 
 ### 6. File Context
 
@@ -114,9 +113,9 @@ The Shared Kernel must not contain domain-specific logic. `ReviewEntry` lives he
 | Orchestration → Flows | Yes | Direct type imports |
 | Orchestration → Shared Kernel | Yes | Direct imports |
 | Orchestration → Messages | Yes | Direct imports (co-evolving partnership) |
-| Orchestration → Knowledge Graph | Planned via interface | `IKgStore` (ddd-03) — currently a violation |
-| Orchestration → Drift | Planned via interface | `IDriftStore` (ddd-03) — currently a violation |
-| Messages → Orchestration | Yes | Direct imports (ExecutionStore) — partnership coupling |
+| Orchestration → Knowledge Graph | Planned via interface | `IKgStore` in `domains/knowledge-graph/` — interface definition planned, not yet written |
+| Orchestration → Drift | Planned via interface | `IDriftStore` in `domains/drift/` — interface definition planned; `tools/report.ts` currently a concrete-coupling violation |
+| Messages → Orchestration | Yes | Event-bus partnership; `ExecutionStore` coupling removed 2026-05-16 |
 | File Context → Knowledge Graph | Yes | Conformist — direct concrete imports |
 | File Context → Drift/Review | Yes | Conformist — direct concrete imports |
 | Diagnostics → Drift/Review | Yes | Conformist — direct concrete imports |
@@ -140,14 +139,14 @@ Every inter-context relationship is labeled with its DDD integration pattern.
 |------|----|-------------|-------|
 | All contexts | Flows | **Published Language / Open Host Service** | Flows publishes schema types consumed by all contexts; all callers conform to the published vocabulary |
 | Orchestration | Flows | **Customer/Supplier** | Orchestration is the downstream customer consuming Flows' published types; Flows is the upstream supplier |
-| Orchestration | Knowledge Graph | **Anti-Corruption Layer** (planned) | `IKgStore` interface in `domains/knowledge-graph/` will translate between the two contexts; currently violated with a direct concrete import |
-| Orchestration | Drift/Review | **Anti-Corruption Layer** (planned) | `IDriftStore` interface in `domains/drift/` will translate between the two contexts; currently violated with a direct concrete import |
+| Orchestration | Knowledge Graph | **Anti-Corruption Layer** (planned) | `IKgStore` interface in `domains/knowledge-graph/` will translate between the two contexts once written; no current direct concrete import from Orchestration |
+| Orchestration | Drift/Review | **Anti-Corruption Layer** (planned) | `IDriftStore` interface in `domains/drift/` will translate between the two contexts; `tools/report.ts` currently holds the concrete import violation |
 | All contexts | Shared Kernel | **Shared Kernel** | Explicitly shared types: `ToolResult<T>`, `CanonErrorCode`, `ReviewEntry`; governed by the ≥3 consumers rule |
 | Drift/Review | Shared Kernel | **Conformist** | Drift conforms to `ReviewEntry` as defined by the Shared Kernel; Drift does not own this type |
 | File Context | Knowledge Graph | **Conformist** | File Context uses `FileMetrics`, `KgStore`, `KgQuery` types directly without translation |
 | File Context | Drift/Review | **Conformist** | File Context imports `DriftStore` directly; conforms to Drift's concrete interface |
 | Diagnostics | Drift/Review | **Conformist** | Diagnostics analytics tools conform to `DriftStore`/`FlowRunEntry` types defined by Drift/Review |
-| Messages | Orchestration | **Partnership** | Co-evolving: Messages and Orchestration share `ExecutionStore` and evolve together; changes to execution storage require coordinated updates in both |
+| Messages | Orchestration | **Partnership** | Co-evolving via event bus: Messages publishes lifecycle events (`FlowEventBus`) consumed by the Orchestration engine; `ExecutionStore` coupling removed 2026-05-16 |
 
 ---
 
@@ -174,15 +173,15 @@ These are known placement issues where types or modules live in the "wrong" cont
 
 ### 1. Board types in `domains/flows/`
 
-`board-state-schemas.ts` lives in `domains/flows/` but defines `Board` and `Session` types used primarily by the Board aggregate in `domains/board/`. This is a known placement issue. Board types are part of the Flows published language because they are defined by flow state schemas — the shape of a `Board` is prescribed by how flows transition between states. The logical owner would be `domains/board/`, but moving the types would break the Published Language contract. This is tracked in ddd-03.
+`board-state-schemas.ts` lives in `domains/flows/` but defines `Board` and `Session` types used primarily by the Board aggregate in `domains/board/`. This is a known placement issue. Board types are part of the Flows published language because they are defined by flow state schemas — the shape of a `Board` is prescribed by how flows transition between states. The logical owner would be `domains/board/`, but moving the types would break the Published Language contract. This is a tracked work item.
 
 ### 2. `WeeklyTrendPoint` leaking from storage into interfaces
 
-`WeeklyTrendPoint` is defined in `@platform/storage/drift/drift-db.ts` (a concrete storage implementation) but leaks into the `IDriftStore` interface definition. This violates the principle that interfaces should not expose storage-layer types. The type should be promoted to `domains/drift/` and re-exported from there. Tracked for resolution alongside ddd-03 interface work.
+`WeeklyTrendPoint` is defined in `@platform/storage/drift/drift-db.ts` (a concrete storage implementation) but leaks into the planned `IDriftStore` interface definition. This violates the principle that interfaces should not expose storage-layer types. The type should be promoted to `domains/drift/` and re-exported from there. Tracked for resolution alongside the `IDriftStore` interface work.
 
 ### 3. Knowledge Graph types leaking into `IKgStore`/`IKgQuery` interfaces
 
-`FileMetrics`, `FileRow`, and `SummaryRow` are defined in `@graph/` (the concrete Knowledge Graph implementation) but are referenced in the planned `IKgStore` and `IKgQuery` interface definitions. These types should live in `domains/knowledge-graph/` so that the interface boundary does not depend on the implementation package. Tracked in ddd-03.
+`FileMetrics`, `FileRow`, and `SummaryRow` are defined in `@graph/` (the concrete Knowledge Graph implementation) but are referenced in the planned `IKgStore` and `IKgQuery` interface definitions. These types should live in `domains/knowledge-graph/` so that the interface boundary does not depend on the implementation package. Tracked as a work item alongside the `IKgStore` interface implementation.
 
 ### 4. File Context crossing multiple context boundaries without ACL
 
@@ -192,11 +191,11 @@ These are known placement issues where types or modules live in the "wrong" cont
 
 ## Integration Patterns
 
-- **Orchestration → Knowledge Graph**: The planned pattern is `IKgStore` interface in `domains/knowledge-graph/` injected into orchestration services. Currently `inject-context.ts` directly instantiates `KgStore` — the DI step is deferred to future work.
-- **Orchestration → Drift**: The planned pattern is `IDriftStore` interface in `domains/drift/` injected into `effects.ts`. Currently `effects.ts` directly imports `DriftStore` from the platform storage path.
-- **All → Flows**: Direct type imports. Flows is the shared vocabulary layer; all contexts that participate in flow execution import from `@domains/flows/flow-schema.ts`.
+- **Orchestration → Knowledge Graph**: The planned pattern is `IKgStore` interface in `domains/knowledge-graph/` injected into orchestration services. The interface definition (`kg-store.interface.ts`) is planned but not yet written; no current concrete `KgStore` import exists in Orchestration.
+- **Orchestration → Drift**: The planned pattern is `IDriftStore` interface in `domains/drift/` injected into the reporting path. Currently `tools/report.ts` directly imports `DriftStore` from the platform storage path — the concrete coupling is the remaining violation.
+- **All → Flows**: Direct type imports. Flows is the shared vocabulary layer; all contexts that participate in flow execution import from `mcp-server/src/domains/flows/` (via `flow-definition-schemas.ts`, `board-state-schemas.ts`, `transcript-schemas.ts`).
 - **All → Shared Kernel**: Direct imports. No restriction — this is the foundation.
-- **Messages ↔ Orchestration**: Co-evolving partnership. `domains/messages/` reads and writes to `ExecutionStore` (owned by Orchestration). Structural changes to message storage require coordination between both contexts.
+- **Messages ↔ Orchestration**: The Messages context owns flow lifecycle event types, the event bus, and variable substitution. Message persistence was removed from this context (2026-05-16); messages are no longer stored via `ExecutionStore`. The partnership coupling is now event-bus only.
 
 ---
 
@@ -277,15 +276,14 @@ Dependency rules are enforced in CI by `dependency-cruiser`. Run locally with:
 npm run lint:deps
 ```
 
-The `.dependency-cruiser.cjs` config encodes the boundary rules above as forbidden import patterns. The two current violations (`effects.ts → DriftStore`, `inject-context.ts → KgStore`) are listed as known exceptions with tracking comments until ddd-03 lands the repository interfaces.
+The `.dependency-cruiser.cjs` config encodes the boundary rules above as forbidden import patterns. The one current violation (`tools/report.ts → DriftStore`) is listed as a known exception with a tracking comment until the `IDriftStore` interface lands.
 
 ---
 
 ## Living Document Notes
 
-- **Interfaces section** will be expanded once ddd-03 adds `IKgStore`, `IDriftStore`, and `IExecutionStore` to `domains/knowledge-graph/`, `domains/drift/`, and `domains/workspaces/` respectively.
-- **Enforcement section** will be updated once `.dependency-cruiser.cjs` is committed (ddd-05).
-- The two current violations under Orchestration Context are tracked work items, not permanent exceptions.
+- **Interfaces section** will be expanded once `IKgStore` (`domains/knowledge-graph/kg-store.interface.ts`), `IDriftStore` (`domains/drift/`), and `IExecutionStore` (`domains/workspaces/`) are written.
+- The one current violation (`tools/report.ts → DriftStore`) is a tracked work item, not a permanent exception.
 - **Messages Context** was previously listed as part of Orchestration in this document. It has its own domain directory (`domains/messages/`) and is now documented as a separate context.
 - **Diagnostics/Analytics Context** was previously grouped with Drift/Review. It is now a separate context with a Conformist relationship to Drift/Review.
 - **File Context** was previously not documented as a bounded context. It is now documented with its cross-context Conformist dependencies.

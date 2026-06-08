@@ -14,7 +14,7 @@ Part of the **Orchestration Context** (see `docs/bounded-context-map.md`).
 
 ## What This Context Does NOT Own
 
-- **Message persistence** — messages are stored by `ExecutionStore` in `domains/workspaces/execution-store.ts`. The Messages context delegates all reads and writes through `getExecutionStore(workspace)`.
+- **Message persistence** — removed 2026-05-16. The Messages context no longer reads or writes `ExecutionStore`. Board and session state are owned exclusively by `domains/workspaces/`.
 - **Message delivery / transport** — routing, ordering, and sequencing is managed by the Orchestration flow engine (`features/orchestration/`). Messages are passive data rows; the orchestrator controls who reads them and when.
 - **Board and session state** — owned by `domains/board/` and `domains/workspaces/`.
 - **Flow definition schemas** — owned by `domains/flows/`. This context imports `GateResult`, `PostconditionResult`, `TestResults`, `ViolationSeverities`, `ConcernEntry`, and `HistoryEntry` from the Flows Context; it does not define them.
@@ -54,7 +54,7 @@ Part of the **Orchestration Context** (see `docs/bounded-context-map.md`).
 | Dependency | Allowed | Notes |
 |------------|---------|-------|
 | `@domains/flows/*` | Yes | Type imports only (`GateResult`, `PostconditionResult`, etc.) |
-| `@domains/workspaces/execution-store.ts` | Yes | For message persistence (via `getExecutionStore`) |
+| `@domains/workspaces/execution-store.ts` | No | Message persistence removed 2026-05-16; no longer used |
 | `@shared/*` | Yes | Cross-cutting utilities and constants |
 | `zod` | Yes | Event payload schema validation |
 | `node:events` | Yes | `EventEmitter` base for `FlowEventBus` |
