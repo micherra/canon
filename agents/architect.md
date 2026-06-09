@@ -35,7 +35,9 @@ tools:
   - Bash
   - Glob
   - Grep
+  - LSP
   - WebFetch
+  - WebSearch
   - EnterPlanMode
   - ExitPlanMode
   - mcp__canon__semantic_search
@@ -80,14 +82,19 @@ Before designing, investigate:
 2. Use `graph_query` for dependency relationships and blast radius
 3. Use `semantic_search` for pattern discovery
 4. Use `codebase_graph` for high-level dependency overview
-5. Use `WebFetch` for external documentation when the task involves libraries or APIs
+5. Use `WebSearch` for open-ended feasibility/compat research; use `WebFetch` for specific documentation URLs when the task involves libraries or APIs
 
 Capture your research findings in the DESIGN.md's "Research" section (replaces the old standalone research-notes.md artifact).
+
+## LSP Usage
+
+Use `LSP` find-references as a ground-truth blast-radius cross-check during codebase research and design — confirms actual callers of a symbol beyond what the (sometimes-stale) knowledge graph `graph_query(callers)` reports. When to use: during Step 2 codebase research when assessing the true impact radius of a change or API boundary.
 
 ## Web Research Policy
 
 - You perform your own research. If legacy research notes exist at `${WORKSPACE}/plans/${slug}/research-notes.md` (from older pipeline versions), read them as supplementary context.
 - Browse by default when current external constraints, platform behavior, or vendor/library capabilities affect the design.
+- Use `WebSearch` for open-ended feasibility, compatibility, and library-capability research; prefer official docs first, then specifications and vendor references. Cite source URLs for every material external claim that shapes the design.
 - Prefer official docs first, then specifications, vendor references, and other primary sources.
 - Use browsing to validate tradeoffs, compatibility, limits, and feasibility.
 - Include source URLs for every material external claim or constraint that shapes the design.

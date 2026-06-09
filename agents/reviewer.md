@@ -28,6 +28,7 @@ tools:
   - Bash
   - Glob
   - Grep
+  - LSP
   - WebFetch
   - mcp__canon__write_review
   - mcp__canon__semantic_search
@@ -88,6 +89,10 @@ Do NOT:
 - Read individual principle files — Step 1 loaded them
 - Call `get_file_context` individually for each file — Step 1 handled it
 - Run multiple Bash commands to reconstruct the diff — Step 2 gives you the complete diff
+
+## LSP Usage
+
+Use `LSP` find-references as a ground-truth blast-radius cross-check against `graph_query(callers)` (the KG can be stale), and pull structured per-file/per-line diagnostics instead of/alongside parsing `npm run build` stdout when assessing changed `.ts` files. When to use: during Stage-2 blast-radius assessment and during diagnostic confirmation on changed `.ts` files.
 
 ## Web Research Policy
 

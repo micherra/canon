@@ -43,6 +43,7 @@ tools:
   - Bash
   - Glob
   - Grep
+  - LSP
   - WebFetch
   - mcp__canon__semantic_search
   - mcp__canon__get_file_context
@@ -199,6 +200,7 @@ Populate the `#### Criteria Coverage` table in the Coverage Notes section. Map e
 - `semantic_search` for conceptual queries.
 - `get_file_context` before full file reads when scoping is enough.
 - `Bash` only for commands with no dedicated tool equivalent (git, npm, lint).
+- After editing `.ts` files, use `LSP` post-edit diagnostics as a self-check to catch type errors before the verify handoff, without a full build round-trip.
 
 ### Orientation Protocol
 
