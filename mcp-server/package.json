@@ -3,6 +3,9 @@
   "version": "2.9.0",
   "description": "MCP server for Canon engineering principles",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "main": "src/app/index.ts",
   "scripts": {
     "build": "tsc",

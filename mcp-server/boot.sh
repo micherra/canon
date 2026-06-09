@@ -225,6 +225,25 @@ if [[ -z "${TSX_BIN}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Step 12.5: Node-version preflight
+# Resolve node from SERVER_DIR context so asdf resolution matches the real
+# launch. Require Node >=24; exit with a clear, actionable error if not met.
+# Skipped under --print-resolution (already exited above).
+# ---------------------------------------------------------------------------
+NODE_VERSION_RAW=""
+NODE_VERSION_RAW=$( ( cd "$SERVER_DIR" && node -v 2>/dev/null ) ) || true
+if [[ -z "$NODE_VERSION_RAW" ]]; then
+  echo "CANON ERROR: 'node' not found on PATH. Canon's MCP server requires Node >=24." >&2
+  exit 1
+fi
+NODE_MAJOR="${NODE_VERSION_RAW#v}"   # strip leading 'v'
+NODE_MAJOR="${NODE_MAJOR%%.*}"       # keep only major
+if [[ -n "$NODE_MAJOR" ]] && [[ "$NODE_MAJOR" =~ ^[0-9]+$ ]] && (( NODE_MAJOR < 24 )); then
+  echo "CANON ERROR: Canon's MCP server requires Node >=24, but found ${NODE_VERSION_RAW}. Install/select Node 24+ (e.g. 'asdf install nodejs 24.x.x' or via your version manager) and retry." >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Step 13: Observability log + launch
 # ---------------------------------------------------------------------------
 # Determine entry point: --daemon uses daemon.ts; default uses index.ts (stdio).

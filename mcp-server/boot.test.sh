@@ -295,6 +295,109 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Test 13: Node preflight — node major < 24 → boot exits non-zero with
+# "requires Node >=24" message; does NOT exec the server.
+# ---------------------------------------------------------------------------
+NODE_OLD_SERVER=$(mktemp -d)
+mkdir -p "$NODE_OLD_SERVER/src/app"
+touch "$NODE_OLD_SERVER/src/app/index.ts"
+# Add a tsx stub so we get past the tsx-absent check
+mkdir -p "$NODE_OLD_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\nexit 0\n' > "$NODE_OLD_SERVER/node_modules/.bin/tsx"
+chmod +x "$NODE_OLD_SERVER/node_modules/.bin/tsx"
+# Inject a fake node shim that reports v18.0.0 (major < 24)
+FAKE_NODE_DIR_OLD=$(mktemp -d)
+printf '#!/usr/bin/env bash\n[[ "${1:-}" == "-v" ]] && echo "v18.0.0" && exit 0\nexit 0\n' > "$FAKE_NODE_DIR_OLD/node"
+chmod +x "$FAKE_NODE_DIR_OLD/node"
+NODE_OLD_STDERR=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_DIR_OLD:$PATH" \
+  bash "$BOOT_SH" --force-dir "$NODE_OLD_SERVER" 2>&1 >/dev/null
+) || NODE_OLD_EXIT=$?
+rm -rf "$NODE_OLD_SERVER" "$FAKE_NODE_DIR_OLD"
+if [[ "${NODE_OLD_EXIT:-0}" -ne 0 ]] && echo "$NODE_OLD_STDERR" | grep -q "requires Node >=24"; then
+  pass "Node preflight (<24): exits non-zero with 'requires Node >=24' message"
+else
+  fail "Node preflight (<24): expected non-zero exit + 'requires Node >=24'; got exit=${NODE_OLD_EXIT:-0}, stderr=${NODE_OLD_STDERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 14: Node preflight — node major >= 24 → boot proceeds past preflight
+# (tsx stub runs normally, exits 0).
+# ---------------------------------------------------------------------------
+NODE_NEW_SERVER=$(mktemp -d)
+mkdir -p "$NODE_NEW_SERVER/src/app"
+touch "$NODE_NEW_SERVER/src/app/index.ts"
+mkdir -p "$NODE_NEW_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\nexit 0\n' > "$NODE_NEW_SERVER/node_modules/.bin/tsx"
+chmod +x "$NODE_NEW_SERVER/node_modules/.bin/tsx"
+# Inject a fake node shim that reports v24.0.0 (major >= 24)
+FAKE_NODE_DIR_NEW=$(mktemp -d)
+printf '#!/usr/bin/env bash\n[[ "${1:-}" == "-v" ]] && echo "v24.0.0" && exit 0\nexit 0\n' > "$FAKE_NODE_DIR_NEW/node"
+chmod +x "$FAKE_NODE_DIR_NEW/node"
+NODE_NEW_EXIT=0
+CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_DIR_NEW:$PATH" \
+  bash "$BOOT_SH" --force-dir "$NODE_NEW_SERVER" 2>/dev/null || NODE_NEW_EXIT=$?
+rm -rf "$NODE_NEW_SERVER" "$FAKE_NODE_DIR_NEW"
+if [[ "$NODE_NEW_EXIT" -eq 0 ]]; then
+  pass "Node preflight (>=24): proceeds past preflight, tsx stub runs (exit 0)"
+else
+  fail "Node preflight (>=24): boot exited $NODE_NEW_EXIT unexpectedly (should have passed preflight)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 15: Node preflight — node not found on PATH → exits non-zero with
+# "'node' not found" message.
+# The fake node shim immediately exits 127 to simulate "command not found".
+# ---------------------------------------------------------------------------
+NODE_ABSENT_SERVER=$(mktemp -d)
+mkdir -p "$NODE_ABSENT_SERVER/src/app"
+touch "$NODE_ABSENT_SERVER/src/app/index.ts"
+mkdir -p "$NODE_ABSENT_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\nexit 0\n' > "$NODE_ABSENT_SERVER/node_modules/.bin/tsx"
+chmod +x "$NODE_ABSENT_SERVER/node_modules/.bin/tsx"
+# Place a "node" shim that always exits 127 (simulates not found via subshell)
+FAKE_NODE_ABSENT_DIR=$(mktemp -d)
+printf '#!/usr/bin/env bash\nexit 127\n' > "$FAKE_NODE_ABSENT_DIR/node"
+chmod +x "$FAKE_NODE_ABSENT_DIR/node"
+NODE_ABSENT_STDERR=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_ABSENT_DIR:$PATH" \
+  bash "$BOOT_SH" --force-dir "$NODE_ABSENT_SERVER" 2>&1 >/dev/null
+) || NODE_ABSENT_EXIT=$?
+rm -rf "$NODE_ABSENT_SERVER" "$FAKE_NODE_ABSENT_DIR"
+if [[ "${NODE_ABSENT_EXIT:-0}" -ne 0 ]] && echo "$NODE_ABSENT_STDERR" | grep -q "node.*not found\|not found.*node\|'node'"; then
+  pass "Node preflight (absent): exits non-zero with 'node not found' message"
+else
+  fail "Node preflight (absent): expected non-zero exit + 'node not found'; got exit=${NODE_ABSENT_EXIT:-0}, stderr=${NODE_ABSENT_STDERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 16: --print-resolution with node <24 still prints resolution + exits 0
+# (preflight must NOT gate --print-resolution diagnostics).
+# ---------------------------------------------------------------------------
+PR_OLD_SERVER=$(mktemp -d)
+mkdir -p "$PR_OLD_SERVER/src/app"
+touch "$PR_OLD_SERVER/src/app/index.ts"
+FAKE_NODE_DIR_PR=$(mktemp -d)
+printf '#!/usr/bin/env bash\n[[ "${1:-}" == "-v" ]] && echo "v18.0.0" && exit 0\nexit 0\n' > "$FAKE_NODE_DIR_PR/node"
+chmod +x "$FAKE_NODE_DIR_PR/node"
+PR_OLD_EXIT=0
+PR_OLD_OUTPUT=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_DIR_PR:$PATH" \
+  bash "$BOOT_SH" --force-dir "$PR_OLD_SERVER" --print-resolution 2>/dev/null
+) || PR_OLD_EXIT=$?
+rm -rf "$PR_OLD_SERVER" "$FAKE_NODE_DIR_PR"
+# Should exit 0 and print the three-field line (SERVER_DIR is the first field)
+if [[ "${PR_OLD_EXIT:-0}" -eq 0 ]] && [[ -n "$(echo "$PR_OLD_OUTPUT" | awk '{print $1}')" ]]; then
+  pass "--print-resolution with node <24: still exits 0 and prints resolution (preflight skipped)"
+else
+  fail "--print-resolution with node <24: expected exit 0 + output; got exit=${PR_OLD_EXIT:-0}, output='${PR_OLD_OUTPUT}'"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
