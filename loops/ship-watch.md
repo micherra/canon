@@ -30,6 +30,7 @@ observe:
     - gh pr checks
     - gh release list
     - gh api
+    - gh repo view
 surface:
   on_transition:
     - field: ci_conclusion

@@ -426,4 +426,22 @@ describe("parseLoopDefinition", () => {
     const result = parseLoopDefinition(validIntervalFrontmatter, { idFromFilename: "_probe" });
     expect(result.ok).toBe(true);
   });
+
+  it("Bash carve-out [gh repo view]: Bash + shell_commands including 'gh repo view' + mutates_build:false → ok", () => {
+    // ship-watch uses 'gh repo view --json nameWithOwner' — must be admitted
+    const good = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["gh pr view", "gh pr checks", "gh release list", "gh api", "gh repo view"],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+  });
 });

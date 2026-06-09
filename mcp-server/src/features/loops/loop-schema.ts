@@ -37,6 +37,7 @@ export const READ_ONLY_SHELL_COMMANDS: ReadonlyArray<string> = [
   "gh release list",
   "gh release view",
   "gh api",
+  "gh repo view",
   "gh run list",
   "gh run view",
   "git log",
