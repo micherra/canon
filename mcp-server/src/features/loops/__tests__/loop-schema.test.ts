@@ -321,4 +321,109 @@ describe("parseLoopDefinition", () => {
       expect(result.definition.trigger?.firing_posture?.["light-touch"]).toBe("disabled");
     }
   });
+
+  // ── loops-phase-b-01: Bash read-only shell carve-out ──────────────────────────
+
+  it("Bash carve-out [POSITIVE]: Bash + non-empty read-only shell_commands + mutates_build:false → ok", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["gh pr view", "git log"],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+  });
+
+  it("Bash carve-out [NEGATIVE empty list]: Bash + shell_commands:[] + mutates_build:false → rejected", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: [], // empty — must reject
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/shell_commands|Bash/i);
+    }
+  });
+
+  it("Bash carve-out [NEGATIVE mutating subcommand]: Bash + shell_commands:['git push'] → rejected", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["git push"], // mutating subcommand
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/git push|allowlist/i);
+    }
+  });
+
+  it("Bash carve-out [NEGATIVE Write not carved out]: Write + any shell_commands + mutates_build:false → rejected", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Write"],
+        mcp: [],
+        shell_commands: ["gh pr view", "git log"], // irrelevant — Write is unconditionally rejected
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/Write|mutation/i);
+    }
+  });
+
+  it("Bash carve-out [PREFIX-EDGE]: shell_commands:['git logfoo'] → rejected (must not match 'git log')", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["git logfoo"], // 'git log' prefix must NOT match 'git logfoo'
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/git logfoo|allowlist/i);
+    }
+  });
+
+  it("Bash carve-out [REGRESSION]: _probe-shape (no shell_commands) still parses ok", () => {
+    // _probe has no shell_commands — the .default([]) must keep it green
+    const result = parseLoopDefinition(validIntervalFrontmatter, { idFromFilename: "_probe" });
+    expect(result.ok).toBe(true);
+  });
 });

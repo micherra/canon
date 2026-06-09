@@ -28,6 +28,24 @@ export const BUILTIN_MUTATION_TOOLS: ReadonlyArray<string> = [
   "NotebookEdit",
 ] as const;
 
+// Read-only gh/git subcommand prefixes admitted under the Bash carve-out (decision loops-phase-b-01).
+// Extend by explicit diff only; every entry must be genuinely read-only.
+export const READ_ONLY_SHELL_COMMANDS: ReadonlyArray<string> = [
+  "gh pr view",
+  "gh pr list",
+  "gh pr checks",
+  "gh release list",
+  "gh release view",
+  "gh api",
+  "gh run list",
+  "gh run view",
+  "git log",
+  "git status",
+  "git rev-list",
+  "git show",
+  "git diff",
+] as const;
+
 // ── Sub-schemas ────────────────────────────────────────────────────────────────
 
 // Per-tier defaults: supervised → opt-in (safe default), autonomous/light-touch → disabled.
@@ -66,6 +84,7 @@ const StateSchema = z.object({
 
 const ObserveSchema = z.object({
   mcp: z.array(z.string()).default([]),
+  shell_commands: z.array(z.string()).default([]),
   tools: z.array(z.string()).default([]),
 });
 
@@ -131,7 +150,7 @@ const ModeSchema = z.discriminatedUnion("mode", [IntervalLoopSchema, SelfPacedLo
 const LoopDefinitionBaseSchema = z.object({
   guardrails: GuardrailsSchema,
   id: z.string(),
-  observe: ObserveSchema.optional().default({ mcp: [], tools: [] }),
+  observe: ObserveSchema.optional().default({ mcp: [], shell_commands: [], tools: [] }),
   state: StateSchema,
   status: z.enum(["active", "shadow", "disabled"]).default("active"),
   surface: SurfaceSchema,
@@ -177,7 +196,44 @@ export type ParseLoopOptions = {
 };
 
 /**
+ * Guardrail 2 helper — checks whether Bash is safe to admit under the read-only carve-out.
+ *
+ * `Bash` is dual-use: `git log` reads, `git push` writes. This helper validates that every
+ * declared shell_command matches a prefix in READ_ONLY_SHELL_COMMANDS, using a
+ * `cmd === allowed || cmd.startsWith(allowed + " ")` match to prevent prefix over-admission
+ * (e.g. `"git logfoo"` must NOT match `"git log"`).
+ *
+ * Returns an error string when a violation is found, or null when admitted.
+ * Extracted to keep checkObserveMutationGuardrail under the cognitive-complexity limit.
+ */
+function checkReadOnlyShell(shellCommands: ReadonlyArray<string>): string | null {
+  if (shellCommands.length === 0) {
+    return (
+      "Bash declared in observe while mutates_build is false but observe.shell_commands is empty " +
+      "— declare the read-only commands this loop runs"
+    );
+  }
+  for (const cmd of shellCommands) {
+    const allowed = READ_ONLY_SHELL_COMMANDS.some(
+      (prefix) => cmd === prefix || cmd.startsWith(`${prefix} `),
+    );
+    if (!allowed) {
+      return (
+        `shell_command '${cmd}' is not on the read-only allowlist ` +
+        `(mutating or unknown command rejected under mutates_build:false)`
+      );
+    }
+  }
+  return null;
+}
+
+/**
  * Guardrail 2 helper — checks observe tools against built-in + author denylists.
+ *
+ * `Bash` receives a special read-only carve-out (decision loops-phase-b-01): when Bash is in
+ * observe.tools and mutates_build:false, it is admitted ONLY if shell_commands is non-empty and
+ * every entry matches READ_ONLY_SHELL_COMMANDS. Write/Edit/NotebookEdit remain unconditionally
+ * rejected — the carve-out is Bash-only.
  *
  * Returns an error string when a violation is found, or null when clean.
  * Extracted to keep parseLoopDefinition under the cognitive-complexity limit.
@@ -185,17 +241,29 @@ export type ParseLoopOptions = {
 function checkObserveMutationGuardrail(
   observeTools: ReadonlySet<string>,
   forbiddenTools: ReadonlyArray<string>,
+  shellCommands: ReadonlyArray<string>,
 ): string | null {
-  // (a) Built-in mutation denylist — always enforced when mutates_build:false.
-  const builtinOffenders = BUILTIN_MUTATION_TOOLS.filter((t) => observeTools.has(t));
-  if (builtinOffenders.length > 0) {
+  // (a) Built-in mutation denylist — always enforced when mutates_build:false,
+  //     EXCEPT Bash which is handled separately via the read-only carve-out.
+  const nonBashBuiltinOffenders = BUILTIN_MUTATION_TOOLS.filter(
+    (t) => t !== "Bash" && observeTools.has(t),
+  );
+  if (nonBashBuiltinOffenders.length > 0) {
     return (
       `mutation tool(s) declared in observe while mutates_build is false: ` +
-      `${builtinOffenders.join(", ")} (built-in mutation denylist: Write, Edit, Bash, NotebookEdit)`
+      `${nonBashBuiltinOffenders.join(", ")} (built-in mutation denylist: Write, Edit, Bash, NotebookEdit)`
     );
   }
 
-  // (b) Author-specified forbidden_tools — additive on top of built-in set.
+  // (b) Bash read-only carve-out — admitted only with a validated read-only shell_commands list.
+  if (observeTools.has("Bash")) {
+    const bashError = checkReadOnlyShell(shellCommands);
+    if (bashError !== null) {
+      return bashError;
+    }
+  }
+
+  // (c) Author-specified forbidden_tools — additive on top of built-in set.
   const authorOffenders = forbiddenTools.filter((t) => observeTools.has(t));
   if (authorOffenders.length > 0) {
     return (
@@ -216,7 +284,10 @@ function checkObserveMutationGuardrail(
  * Mechanical determinism guardrails (dc-05, loops-phase-a-05) enforced here:
  * 1. self-paced + mutates_build:true → rejected.
  * 2. mutates_build:false + mutation tool in observe → rejected (names the tool(s)).
- *    Built-in denylist (Write/Edit/Bash/NotebookEdit) always enforced; forbidden_tools additive.
+ *    Built-in denylist (Write/Edit/NotebookEdit) always enforced; forbidden_tools additive.
+ *    Bash carve-out (loops-phase-b-01): Bash admitted ONLY when observe.shell_commands is
+ *    non-empty and every entry matches READ_ONLY_SHELL_COMMANDS — empty list rejects, any
+ *    non-allowlisted entry (e.g. "git push") rejects, naming the offending command.
  * 3. Cross-field: on_transition.field not in state.snapshot → rejected (in superRefine above).
  * 4. id !== idFromFilename → rejected (when idFromFilename is provided).
  */
@@ -247,7 +318,11 @@ export function parseLoopDefinition(frontmatter: unknown, opts: ParseLoopOptions
   // ── Guardrail 2: mutates_build:false + mutation tool in observe ────────────
   if (def.guardrails.mutates_build === false) {
     const observeTools = new Set([...def.observe.tools, ...def.observe.mcp]);
-    const guardError = checkObserveMutationGuardrail(observeTools, def.guardrails.forbidden_tools);
+    const guardError = checkObserveMutationGuardrail(
+      observeTools,
+      def.guardrails.forbidden_tools,
+      def.observe.shell_commands,
+    );
     if (guardError !== null) {
       return { error: guardError, ok: false };
     }
