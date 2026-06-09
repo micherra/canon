@@ -55,6 +55,38 @@ All `renderer-*.md` templates source `escapeHtml` and `markdownToHtml` from `mcp
 
 **Discriminator**: function body appears inside a `<script>`/Canvas IIFE in the emitted HTML → runtime → snippet file. Function's return value is interpolated into the HTML string during composition → build-time → DESIGN-SYSTEM.md Section E. Full convention: `principles/conventions/shared-renderer-helper-placement.md`.
 
+## Artifact Inventory
+<!-- canon:inventory:start class=templates -->
+| artifact | summary |
+|---|---|
+| chat-brief.md | Structured brief from chat discussion for build handoff |
+| claudemd-template.md | >- |
+| context-sync.md | >- |
+| design-decision.md | Structured format for recording architectural and design decisions |
+| design-document.md | Structured format for design documents with North Star section |
+| domain-primer.md |  |
+| loop-definition.md | > |
+| plan-index.md | Index of all task plans for a build |
+| planning-brief.md | >- |
+| pr-description.md | PR description synthesized from build artifacts |
+| prd.md | Structured PRD template the PM fills before spawning the architect |
+| renderer-codebase-graph.md | Renderer spawn prompt for converting codebase_graph MCP data into a standalone codebase-graph.html with force-directed layout, click-to-inspect panel, and DIFF_BASE filtering |
+| renderer-design.md | Renderer spawn prompt for converting the PRD + architect design document + task DAG into a unified design.html |
+| renderer-file-context.md | Renderer spawn prompt for converting get_file_context MCP data into a standalone file-context.html |
+| renderer-review.md | Renderer spawn prompt for converting the review markdown + live MCP data into review.html |
+| review.md | Structured format for review outputs |
+| routine.md | Schema-as-template for Canon routine artifacts — fill this in when authoring a new routine via the writer |
+| runbook.md | Synthesized runbook produced by the architect agent (canon:synthesize skill). Defines the ordered step sequence that the orchestrator executes. |
+| security-assessment.md | >- |
+| session-context.md | Living shared context document for the workspace |
+| sharpened-request.md | >- |
+| summary.md | Structured format for implementor task summaries |
+| task-dag.md | DAG schema for parallel task execution in multi-task builds |
+| task-plan.md | Atomic task plan for implementor agents |
+| test-report.md | Structured format for tester outputs |
+| worker-prompt.md | Generic pull-loop prompt for Canon DAG worker agents |
+<!-- canon:inventory:end -->
+
 ## Conventions
 <!-- last-updated: 2026-06-06 -->
 

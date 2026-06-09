@@ -22,6 +22,30 @@ references/
 └── ...                           # Other protocol fragments
 ```
 
+## Artifact Inventory
+<!-- canon:inventory:start class=references -->
+| artifact | summary |
+|---|---|
+| canon-artifact-locations.md |  |
+| canon-orchestrator.md | >- |
+| competition-debate.md |  |
+| content-flow.md |  |
+| context-isolation.md |  |
+| dag-execution-protocol.md | >- |
+| hitl-patterns.md | >- |
+| learner-dimensions.md |  |
+| plugin-server-boot.md |  |
+| principle-format.md |  |
+| principle-loading.md |  |
+| principle-tier-routing.md |  |
+| runbook-vocabulary.md |  |
+| security-checklist.md |  |
+| status-protocol.md |  |
+| tester-report-template.md |  |
+| workspace-logging.md |  |
+| writer-worked-example.md |  |
+<!-- canon:inventory:end -->
+
 ## Conventions
 <!-- last-updated: 2026-06-02 -->
 

@@ -25,6 +25,24 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 | `tester` | Writes integration tests; fills coverage gaps | sonnet |
 | `writer` | Creates and edits Canon principles and agent-rules | sonnet |
 
+## Artifact Inventory
+<!-- canon:inventory:start class=agents -->
+| artifact | summary |
+|---|---|
+| architect.md | >- |
+| engineer.md | >- |
+| evaluator.md | >- |
+| janitor.md | >- |
+| learner.md | >- |
+| planner.md | >- |
+| reviewer.md | >- |
+| scribe.md | >- |
+| security.md | >- |
+| shipper.md | >- |
+| tester.md | >- |
+| writer.md | >- |
+<!-- canon:inventory:end -->
+
 ## Conventions
 <!-- last-updated: 2026-04-29 -->
 
