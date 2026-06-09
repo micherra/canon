@@ -514,6 +514,18 @@ frontmatter starts a loop — the capability ground truth is that a plugin canno
 manually in the verify step to prove the schema→registry→runtime path. Ship-watch (Phase B)
 and session-watch/self-paced (Phase C) are separate later builds. Discovery: `list_loops`.
 
+**Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
+`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop:
+- `firing_posture[tier] === "auto"` → call `CronCreate({ schedule: loop.schedule.interval, command: "/canon:loop-tick <id>", max: loop.schedule.max_ticks })` immediately.
+- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `CronCreate` only on confirmation.
+- `firing_posture[tier] === "disabled"` → skip silently.
+
+`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
+
+**Non-declarative invariant (dc-06):** Only the orchestrator initiates `CronCreate`. Authoring
+`loops/ship-watch.md` only registers the definition — it does NOT start the loop. No manifest
+field, hook script, or command frontmatter can trigger scheduling automatically.
+
 ## Project Structure <!-- last-updated: 2026-06-09 -->
 
 ```

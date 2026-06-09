@@ -36,6 +36,12 @@ ENOENT → returns `{ valid: [], invalid: [] }` (mirrors matcher.ts ENOENT swall
 Enforced at parse time in `parseLoopDefinition`:
 1. `mode === "self-paced"` + `guardrails.mutates_build === true` → rejected
 2. `guardrails.mutates_build === false` + forbidden tool in `observe.tools`/`observe.mcp` → rejected
+   - **Bash read-only carve-out (decision loops-phase-b-01):** `Bash` is dual-use. When
+     `mutates_build: false` and `Bash ∈ observe.tools`, it is admitted ONLY if
+     `observe.shell_commands` is non-empty and every entry matches `READ_ONLY_SHELL_COMMANDS`.
+     An empty `shell_commands` → rejected. A mutating subcommand (e.g. `git push`) → rejected,
+     naming the offending command. `Write`, `Edit`, `NotebookEdit` remain unconditionally rejected —
+     the carve-out is `Bash`-only.
 3. `on_transition.field` not in `state.snapshot` → rejected (superRefine cross-field)
 4. `id !== idFromFilename` → rejected
 

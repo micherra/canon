@@ -160,3 +160,34 @@ describe("loadLoopsFromDir — real loops/ directory (_probe smoke test)", () =>
     }
   });
 });
+
+// Smoke test: parse the real ship-watch.md from the worktree's loops/ directory (dc-01 support)
+describe("loadLoopsFromDir — real loops/ directory (ship-watch smoke test)", () => {
+  it("parses the real loops/ship-watch.md file and lands in valid[]", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (shipWatch) {
+      expect(shipWatch.mode).toBe("interval");
+      expect(shipWatch.guardrails.mutates_build).toBe(false);
+      expect(shipWatch.status).toBe("active");
+      // Verify tier-gated posture
+      expect(shipWatch.trigger?.firing_posture.autonomous).toBe("auto");
+      expect(shipWatch.trigger?.firing_posture["light-touch"]).toBe("auto");
+      expect(shipWatch.trigger?.firing_posture.supervised).toBe("opt-in");
+      // Verify all 4 snapshot fields
+      expect(shipWatch.state.snapshot).toContain("pr_state");
+      expect(shipWatch.state.snapshot).toContain("ci_conclusion");
+      expect(shipWatch.state.snapshot).toContain("release_tag");
+      expect(shipWatch.state.snapshot).toContain("external_review_comment_ids");
+      // Verify Bash read-only carve-out: shell_commands declared
+      expect(shipWatch.observe.shell_commands.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("ship-watch does not appear in invalid[]", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const invalidShipWatch = result.invalid.find((e) => e.file.includes("ship-watch"));
+    expect(invalidShipWatch).toBeUndefined();
+  });
+});

@@ -43,6 +43,9 @@ The schema enforces this mechanically at load time — it is not prose:
 | Rule | What is enforced |
 |------|-----------------|
 | `mutates_build: false` + forbidden tool in `observe` | Rejected at load time |
+| `mutates_build: false` + `Bash` in `observe.tools` with non-empty `observe.shell_commands` (all on `READ_ONLY_SHELL_COMMANDS`) | Admitted at load time (read-only-shell carve-out, decision loops-phase-b-01) |
+| `mutates_build: false` + `Bash` in `observe.tools` with empty `shell_commands` | Rejected at load time |
+| `mutates_build: false` + `Bash` in `observe.tools` with mutating subcommand (e.g. `git push`) | Rejected at load time |
 | `mode: self-paced` + `mutates_build: true` | Rejected at load time |
 | Transition rule references a field not in `state.snapshot` | Rejected at load time |
 | `id` ≠ filename stem | Rejected at load time |
