@@ -538,6 +538,7 @@ describe("assembleWikiLintOutput", () => {
       citedPaths: [citedPath],
       scopeLayers: [scopeLayer],
       scopeTags: [],
+      indexDrift: [],
       filesScanned: 10,
       principlesChecked: 20,
     });

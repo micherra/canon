@@ -18,6 +18,7 @@ import { DriftStore } from "@platform/storage/drift/store.ts";
 import { loadLayerMappings } from "@shared/lib/config.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
 import type { Principle } from "@shared/parser.ts";
+import { checkIndexDrift } from "../services/index-inventory.ts";
 import {
   assembleWikiLintOutput,
   checkCitedPaths,
@@ -39,7 +40,8 @@ type CheckName =
   | "missing_examples"
   | "cited_paths"
   | "scope_layers"
-  | "scope_tags";
+  | "scope_tags"
+  | "index_drift";
 
 export type WikiLintInput = {
   checks?: CheckName[];
@@ -278,6 +280,7 @@ export async function wikiLint(
     "cited_paths",
     "scope_layers",
     "scope_tags",
+    "index_drift",
   ];
   const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
 
@@ -311,11 +314,13 @@ export async function wikiLint(
   const scopeTags = enabled.has("scope_tags")
     ? checkScopeTags(principles, VALID_COMPUTED_TAGS)
     : [];
+  const indexDrift = enabled.has("index_drift") ? await checkIndexDrift(projectDir) : [];
 
   return assembleWikiLintOutput({
     citedPaths,
     contradictions,
     filesScanned: claudeMdFiles.length + agentFiles.length + dddDocFiles.length,
+    indexDrift,
     missingExamples,
     orphans,
     principlesChecked: principles.length,

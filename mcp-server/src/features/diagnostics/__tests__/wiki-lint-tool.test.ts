@@ -434,7 +434,23 @@ const x = 1;
       "utf8",
     );
 
-    const result = await wikiLint({}, tmp, tmp);
+    // Exclude index_drift — the temp dir has no sentinel-marked indexes (that's task -02's job).
+    // This test validates the original 7 checks are clean for a minimal valid codebase.
+    const result = await wikiLint(
+      {
+        checks: [
+          "contradictions",
+          "orphan_principles",
+          "stale_refs",
+          "missing_examples",
+          "cited_paths",
+          "scope_layers",
+          "scope_tags",
+        ],
+      },
+      tmp,
+      tmp,
+    );
 
     expect(result.contradictions).toEqual([]);
     expect(result.orphan_principles).toEqual([]);

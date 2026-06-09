@@ -159,6 +159,7 @@ describe("assembleWikiLintOutput with scope_tags", () => {
       citedPaths: [],
       scopeLayers: [],
       scopeTags: [scopeTagFinding],
+      indexDrift: [],
       filesScanned: 1,
       principlesChecked: 1,
     });
@@ -178,6 +179,7 @@ describe("assembleWikiLintOutput with scope_tags", () => {
       citedPaths: [],
       scopeLayers: [],
       scopeTags: [],
+      indexDrift: [],
       filesScanned: 0,
       principlesChecked: 0,
     });

@@ -18,6 +18,7 @@
  */
 
 import type { Principle } from "@shared/parser.ts";
+import type { IndexDriftFinding } from "./index-inventory.ts";
 
 // ---- Types ----
 
@@ -68,6 +69,8 @@ export type ScopeTagFinding = {
   message: string;
 };
 
+export type { IndexDriftFinding };
+
 export type WikiLintOutput = {
   contradictions: ContradictionFinding[];
   orphan_principles: OrphanPrincipleFinding[];
@@ -76,6 +79,7 @@ export type WikiLintOutput = {
   cited_paths: CitedPathFinding[];
   scope_layers: ScopeLayerFinding[];
   scope_tags: ScopeTagFinding[];
+  index_drift: IndexDriftFinding[];
   summary: {
     total_findings: number;
     files_scanned: number;
@@ -91,6 +95,7 @@ export type AssembleWikiLintInput = {
   citedPaths: CitedPathFinding[];
   scopeLayers: ScopeLayerFinding[];
   scopeTags: ScopeTagFinding[];
+  indexDrift: IndexDriftFinding[];
   filesScanned: number;
   principlesChecked: number;
 };
@@ -564,12 +569,14 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     citedPaths,
     scopeLayers,
     scopeTags,
+    indexDrift,
     filesScanned,
     principlesChecked,
   } = input;
   return {
     cited_paths: citedPaths,
     contradictions,
+    index_drift: indexDrift,
     missing_examples: missingExamples,
     orphan_principles: orphans,
     scope_layers: scopeLayers,
@@ -585,7 +592,8 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
         missingExamples.length +
         citedPaths.length +
         scopeLayers.length +
-        scopeTags.length,
+        scopeTags.length +
+        indexDrift.length,
     },
   };
 }
