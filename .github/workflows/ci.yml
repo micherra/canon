@@ -18,7 +18,7 @@ jobs:
           cache-dependency-path: mcp-server/package-lock.json
       - name: Install shellcheck and jq
         run: sudo apt-get update && sudo apt-get install -y shellcheck jq
-      - name: Shellcheck hook scripts
+      - name: Shellcheck hook scripts + install-faithfulness checks (toolchain pins, mcp.json args token)
         run: bash hooks/lint.sh
       - name: Run hook test suites
         run: |
