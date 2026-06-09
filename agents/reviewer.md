@@ -21,6 +21,7 @@ rules:
 references:
   - principle-loading
   - status-protocol
+  - codex-defect-checklist
 templates:
   - review
 tools:
@@ -356,6 +357,16 @@ Output format — WARNING finding:
 - `path:line` — `{severity keyword}` in added/changed line assigns a classification path (`{brief description}`) that is absent from the file's severity vocabulary section (`{section name/location}`). Add a corresponding entry or bullet to the vocabulary section before committing.
 
 **Instances that prompted this check** (watch_VVVVV2): PR #328 — new Stage 2 sub-axis prescribed BLOCKING for condition-(2) tool-not-registered, but the `## Verdict` table BLOCKING row did not list this path (caught by Canon reviewer round 1). PR #332 — new Stage 6 scope-parity sub-check assigned WARNING severity, but the `## Verdict` table WARNING row was not updated (Canon reviewer passed CLEAN; caught post-ship by Codex).
+
+#### Codex Recurring-Defect Classes (grep)
+
+**Trigger**: When the diff touches shell scripts (`*.sh`, `hooks/*`), awk/grep constructs, path-resolution code, or any file building shell commands for evaluation.
+
+**Skip condition**: Skip this sub-axis when the diff touches none of the above code shapes.
+
+Run the Grep Checks from `references/codex-defect-checklist.md` (classes 5, 6, and the class-2 light grep hint) against the changed files matching the trigger. Each check ships with its exact grep command and a counterexample-probe note — consult the checklist, do not re-derive the patterns here.
+
+**Severity rule**: All grep-check findings are advisory→WARNING. Do NOT escalate to BLOCKING based on a grep heuristic alone — inspect context before flagging. A confirmed match is a WARNING finding. The `## Verdict` table's existing WARNING row covers this path; no new BLOCKING path is introduced by these checks.
 
 ### Recommendations array
 
@@ -736,6 +747,14 @@ If no contradictions found, include the section header with: "No cross-requireme
 **Severity**: A coverage/scope mismatch is a WARNING finding at minimum. It is not an advisory pass. If the mismatch means the declared safety property is structurally unenforced (e.g., a guard that only covers a fraction of its declared file set leaves the uncovered files unguarded), escalate to WARNING and note the uncovered set.
 
 **Skip condition**: Skip this sub-check when the diff contains no revised advisory fixes and no embedded shell commands in protocol or convention files.
+
+### Codex Recurring-Defect Classes (judgment)
+
+After completing cross-requirement consistency checks above, evaluate the diff against the Judgment Prompt Items in `references/codex-defect-checklist.md` (classes 1, 2, 3, 4, 7).
+
+These items cover: board/state persistence & ordering (class 1), path/dir resolution correctness (class 2), scope/boundary precision (class 3), validation on missing/bad input (class 4), and concurrency/transaction/race conditions (class 7 — maps to `explicit-transaction-boundaries`).
+
+Each judgment item states the questions to ask against the diff. Apply only the items that are relevant to the code shapes present in the diff (e.g., class 1 items apply when the diff touches board state or flow transitions; class 7 items apply when the diff touches concurrent read+write paths). Findings from these items follow the same severity rules as Stage 6 findings: WARNING for scope/policy concerns, BLOCKING for type contradictions or unfixable correctness gaps. The `## Verdict` table's existing WARNING and BLOCKING rows cover these paths.
 
 ## Verdict
 
