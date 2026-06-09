@@ -231,4 +231,4 @@ npm start            # Run server via tsx (tsx is a runtime dependency; loaded b
 npm test             # Run vitest unit tests
 ```
 
-Node.js 24+ required.
+Node.js 24+ required. Enforced at runtime by `boot.sh` Step 12.5 (fail-closed, actionable error) and declared in `package.json` `engines.node`. No `.tool-versions` pin is shipped — `boot.sh` validates the floor against the user's ambient Node.
