@@ -50,10 +50,8 @@ so future authors cannot bypass it by omission.
 
 ## Phase Boundary
 
-Phase A: schema + loader + tools + `_probe` demo loop. All loops are optional; the
-framework auto-starts nothing. Only `_probe` runs — invoked manually in verify.
-
-Phase B: ship-watch definition added to `loops/`.
+Phase A: schema + loader + tools + `_probe` demo loop; no production loop fires.
+Phase B (current): `loops/ship-watch.md` added — first real loop, dispatched post-ship.
 Phase C: self-paced mode + ScheduleWakeup + session-watch.
 
 ## Non-Declarative Constraint (dc-06)

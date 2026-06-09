@@ -491,7 +491,7 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework (Phase A) <!-- last-updated: 2026-06-08 -->
+## Loop Framework <!-- last-updated: 2026-06-09 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
@@ -510,9 +510,10 @@ CronCreate({ schedule: "<interval>", command: "/canon:loop-tick <id>", max: <max
 initiates the `CronCreate` call at a named lifecycle moment. No manifest, hook, or command
 frontmatter starts a loop — the capability ground truth is that a plugin cannot do this.
 
-**Phase A boundary:** In Phase A, NO loop fires in production. Only `_probe` runs — invoked
-manually in the verify step to prove the schema→registry→runtime path. Ship-watch (Phase B)
-and session-watch/self-paced (Phase C) are separate later builds. Discovery: `list_loops`.
+**Phase history:** Phase A shipped the framework spine — schema, registry, MCP tools, `_probe`
+demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
+dispatched via the post-ship tap. Phase C (session-watch, self-paced mode) is a future build.
+Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
 `list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop:
@@ -544,12 +545,12 @@ canon/
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
-│       │   ├── loops/           # list_loops, get_loop_definition (Phase A loop framework)
+│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase B current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase A: _probe only)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase B: _probe + ship-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── principles/           # Built-in principles (78 total: 7 rules, 35 strong-opinions, 36 conventions)
 │   ├── rules/

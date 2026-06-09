@@ -67,11 +67,9 @@ Loops may attach to these named lifecycle moments:
 
 | Phase | What ships |
 |-------|-----------|
-| **A (current)** | Schema + registry loader + `list_loops`/`get_loop_definition` + `/canon:loop-tick` runner + `_probe` demo |
-| **B** | Ship-watch definition (`loops/ship-watch.md`) |
+| **A** | Schema + registry loader + `list_loops`/`get_loop_definition` + `/canon:loop-tick` runner + `_probe` demo; no production loop fires |
+| **B (current)** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap |
 | **C** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger |
-
-In Phase A, NO loop fires in production — only `_probe` runs, invoked manually in verify.
 
 ## Relationship to Other Canon Concepts
 
