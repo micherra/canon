@@ -5,6 +5,7 @@
  * and git helpers used during graph construction.
  */
 
+import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { scanSourceFiles } from "@graph/scanner.ts";
 import { gitExecAsync } from "@platform/adapters/git-adapter-async.ts";
@@ -13,8 +14,19 @@ import { sanitizeGitRef } from "@shared/lib/git-ref.ts";
 import { toPosix } from "@shared/lib/paths.ts";
 import type { CodebaseGraphInput } from "./codebase-graph.ts";
 
-/** Canon directories to scan for .md nodes (agents, flows, templates, principles). */
-export const CANON_SCAN_DIRS = ["agents", "flows", "templates", "principles", "skills"];
+/** Canon directories to scan for .md nodes (agents, flows, templates, principles, docs, domains). */
+export const CANON_SCAN_DIRS = [
+  "agents",
+  "flows",
+  "templates",
+  "principles",
+  "skills",
+  "docs",
+  "mcp-server/src/domains",
+];
+
+/** Root-level singleton .md files outside any scan directory. */
+export const CANON_SCAN_FILES = ["CONTEXT.md"];
 
 export async function gitCurrentBranch(cwd: string): Promise<string | null> {
   const result = await gitExecAsync(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
@@ -107,6 +119,13 @@ export async function scanProjectFiles(
   const coveredDirs = new Set((sourceDirs || []).map(toPosix));
   const canonFiles = await scanCanonDirs(coveredDirs, projectDir);
   baseFiles.push(...canonFiles);
+
+  // Append root-level singleton docs that exist on disk (posix-normalized; dedup handled by Set).
+  for (const singletonFile of CANON_SCAN_FILES) {
+    if (existsSync(join(projectDir, singletonFile))) {
+      baseFiles.push(toPosix(singletonFile));
+    }
+  }
 
   return Array.from(new Set(baseFiles)).sort();
 }

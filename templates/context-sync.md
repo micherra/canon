@@ -41,6 +41,11 @@ timestamp: "{ISO-8601}"
 | `docs/{name}.md` | left-untouched | {drift observed but deliberately not edited — editorial/uncertain — with reason} |
 | `docs/{name}.md` | not-relevant | Diff did not touch this doc's domain |
 
+### DDD Doc Disposition
+| DDD doc | Trigger | Disposition | Detail |
+|---------|---------|-------------|--------|
+| `docs/bounded-context-map.md` | A/B/C | factual-update &#124; no-drift | {what was synced, or why no drift} |
+
 ### Context Budget (advisory only)
 | File | Status | Action Taken |
 |------|--------|--------------|
@@ -64,3 +69,4 @@ _If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync
 5. **Freshness table**: Only include documents/sections that were actually updated in this sync. Omit the table entirely if status is NO_UPDATES.
 6. **Context Budget table (advisory only)**: Always include this section when any CLAUDE.md file was touched. One row per file touched. If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync." This section records advisory size status only — the scribe never trims. If a file looks oversized, mark status as "Looks oversized (≈NN,NNN chars)" and note in Action Taken that a dedicated trim build is recommended and the file was not trimmed this sync. This is a heads-up for a future build, not a warning about a failure or an enforced limit.
 7. **Direction-Doc Disposition**: List every top-level `docs/*.md` direction doc (excluding `docs/reference/`). For each, give a disposition: `factual-update` (you synced a fact), `left-untouched` (drift observed but deliberately not edited — always state the reason, especially editorial-prose drift), or `not-relevant` (diff did not touch its domain). Omit the section entirely only when status is NO_UPDATES.
+8. **DDD Doc Disposition**: For every DDD doc on which Step 5c fired a trigger (Trigger A, B, or C), record one row: the doc path, which trigger(s) fired, and the disposition (`factual-update` or `no-drift` with a one-line reason). Silence on a triggered DDD doc is a protocol gap. Omit the section entirely only when no triggers fired and status is NO_UPDATES.

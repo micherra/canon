@@ -509,3 +509,160 @@ const x = 1;
     expect(Array.isArray(result.scope_tags)).toBe(true);
   });
 });
+
+// ---- DDD doc set scan surface ----
+
+describe("wikiLint DDD doc set (collectDddDocPaths wiring)", () => {
+  it("cited_paths: docs/foo.md citing a nonexistent path → finding with source_file in docs/", async () => {
+    const tmp = makeTmpDir("ddd-docs-cited");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "some-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+
+    // docs/foo.md with a broken cited path
+    const docsDir = join(tmp, "docs");
+    mkdirSync(docsDir, { recursive: true });
+    writeFileSync(
+      join(docsDir, "foo.md"),
+      "See `mcp-server/src/does-not-exist.ts` for details.\n",
+      "utf8",
+    );
+
+    const result = await wikiLint({ checks: ["cited_paths"] }, tmp, tmp);
+
+    expect(result.cited_paths.length).toBeGreaterThan(0);
+    const finding = result.cited_paths.find((f) => f.cited_path.includes("does-not-exist"));
+    expect(finding).toBeDefined();
+    expect(finding?.source_file).toContain("docs");
+  });
+
+  it("cited_paths: domain README.md citing a broken path → finding", async () => {
+    const tmp = makeTmpDir("ddd-domain-readme-cited");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "some-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+
+    // mcp-server/src/domains/sample/README.md with a broken cited path
+    const domainDir = join(tmp, "mcp-server", "src", "domains", "sample");
+    mkdirSync(domainDir, { recursive: true });
+    writeFileSync(
+      join(domainDir, "README.md"),
+      "# Sample Domain\n\nSee `mcp-server/src/features/missing/handler.ts` for wiring.\n",
+      "utf8",
+    );
+
+    const result = await wikiLint({ checks: ["cited_paths"] }, tmp, tmp);
+
+    expect(result.cited_paths.length).toBeGreaterThan(0);
+    const finding = result.cited_paths.find((f) => f.cited_path.includes("missing"));
+    expect(finding).toBeDefined();
+  });
+
+  it("stale_refs: root CONTEXT.md citing a broken markdown link → stale_refs finding", async () => {
+    const tmp = makeTmpDir("ddd-context-md-stale");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "some-principle");
+
+    // root CONTEXT.md referencing a file that doesn't exist
+    writeFileSync(
+      join(tmp, "CONTEXT.md"),
+      "# Context\n\nSee `docs/gone.md` for context details.\n",
+      "utf8",
+    );
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+
+    const result = await wikiLint({ checks: ["stale_refs"] }, tmp, tmp);
+
+    expect(result.stale_refs.length).toBeGreaterThan(0);
+    const finding = result.stale_refs.find((f) => f.referenced_path.includes("gone.md"));
+    expect(finding).toBeDefined();
+  });
+
+  it("cited_paths: docs/explore/ file citing a broken path → NO finding (excluded)", async () => {
+    const tmp = makeTmpDir("ddd-explore-excluded");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "some-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+
+    // docs/explore/ file with broken cited path — must be excluded
+    const exploreDir = join(tmp, "docs", "explore");
+    mkdirSync(exploreDir, { recursive: true });
+    writeFileSync(
+      join(exploreDir, "PROPOSAL-X.md"),
+      "See `mcp-server/src/features/future/planned.ts` for a proposed feature.\n",
+      "utf8",
+    );
+
+    const result = await wikiLint({ checks: ["cited_paths"] }, tmp, tmp);
+
+    // No finding from explore/ — the path does not exist but the file is excluded
+    const exploreFinding = result.cited_paths.find(
+      (f) => f.source_file.includes("explore") || f.cited_path.includes("planned"),
+    );
+    expect(exploreFinding).toBeUndefined();
+  });
+
+  it("collectDddDocPaths: missing docs/ dir degrades gracefully (no throw, returns other groups)", async () => {
+    const tmp = makeTmpDir("ddd-no-docs-dir");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "some-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+
+    // No docs/ dir; add a domain README and CONTEXT.md so they can still be found
+    const domainDir = join(tmp, "mcp-server", "src", "domains", "alpha");
+    mkdirSync(domainDir, { recursive: true });
+    writeFileSync(join(domainDir, "README.md"), "# Alpha Domain\nNo bad paths here.\n", "utf8");
+
+    writeFileSync(join(tmp, "CONTEXT.md"), "# Context\nAll clean.\n", "utf8");
+
+    // Should not throw; no findings expected since all content is clean
+    await expect(
+      wikiLint({ checks: ["cited_paths", "stale_refs"] }, tmp, tmp),
+    ).resolves.not.toThrow();
+    const result = await wikiLint({ checks: ["cited_paths"] }, tmp, tmp);
+    // No false findings from the domain README or CONTEXT.md (all paths valid)
+    expect(result.cited_paths).toEqual([]);
+  });
+
+  it("filesScanned: DDD doc count included in summary.files_scanned", async () => {
+    const tmp = makeTmpDir("ddd-files-scanned");
+
+    const principlesDir = join(tmp, "principles", "conventions");
+    mkdirSync(principlesDir, { recursive: true });
+    writePrincipleWithExamples(principlesDir, "some-principle");
+
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+
+    // docs/ with one file
+    const docsDir = join(tmp, "docs");
+    mkdirSync(docsDir, { recursive: true });
+    writeFileSync(join(docsDir, "guide.md"), "# Guide\nClean content.\n", "utf8");
+
+    // Domain README
+    const domainDir = join(tmp, "mcp-server", "src", "domains", "beta");
+    mkdirSync(domainDir, { recursive: true });
+    writeFileSync(join(domainDir, "README.md"), "# Beta Domain\n", "utf8");
+
+    // root CONTEXT.md
+    writeFileSync(join(tmp, "CONTEXT.md"), "# Context\n", "utf8");
+
+    const resultBefore = await wikiLint({}, tmp, tmp);
+    // files_scanned must include: CLAUDE.md (1) + agents (0) + guide.md (1) + README.md (1) + CONTEXT.md (1) = 4
+    // The exact number depends on the fixture but must be > 1 (just CLAUDE.md)
+    expect(resultBefore.summary.files_scanned).toBeGreaterThanOrEqual(4);
+  });
+});

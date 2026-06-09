@@ -84,8 +84,10 @@ export class KgQuery {
       WHERE ed.target_entity_id = ? AND ed.edge_type = 'contains'
     `);
     this.stmtGetAdjacencyList = db.prepare(`SELECT source_entity_id, target_entity_id FROM edges`);
+    // Pinned to edge_type='imports': adjacency list is used for cycle detection
+    // and community assignment — doc:references edges must not contaminate these.
     this.stmtGetFileAdjacencyList = db.prepare(
-      `SELECT source_file_id, target_file_id FROM file_edges`,
+      `SELECT source_file_id, target_file_id FROM file_edges WHERE edge_type = 'imports'`,
     );
     this.stmtGetFileIdByPath = db.prepare(`SELECT file_id, layer FROM files WHERE path = ?`);
     this.stmtGetKgFreshness = db.prepare(`SELECT MIN(last_indexed_at) AS min_ts FROM files`);
@@ -160,17 +162,22 @@ export class KgQuery {
   }
 
   private prepareFileDegreeStatements(db: Database.Database): void {
+    // Pinned to edge_type='imports': doc:references edges must not inflate
+    // in_degree/out_degree/hub/impact metrics. Only structural import edges count.
+    // getFileBlastRadius CTE (~line 244) and getSubgraph (~line 549) are left
+    // UNFILTERED so a doc citing a file appears in that file's blast radius
+    // (the freshness signal this build exists to create).
     this.stmtGetFileInDegree = db.prepare(
-      `SELECT COUNT(*) AS n FROM file_edges WHERE target_file_id = ?`,
+      `SELECT COUNT(*) AS n FROM file_edges WHERE target_file_id = ? AND edge_type = 'imports'`,
     );
     this.stmtGetFileOutDegree = db.prepare(
-      `SELECT COUNT(*) AS n FROM file_edges WHERE source_file_id = ?`,
+      `SELECT COUNT(*) AS n FROM file_edges WHERE source_file_id = ? AND edge_type = 'imports'`,
     );
     this.stmtGetAllInDegrees = db.prepare(
-      `SELECT target_file_id AS file_id, COUNT(*) AS n FROM file_edges GROUP BY target_file_id`,
+      `SELECT target_file_id AS file_id, COUNT(*) AS n FROM file_edges WHERE edge_type = 'imports' GROUP BY target_file_id`,
     );
     this.stmtGetAllOutDegrees = db.prepare(
-      `SELECT source_file_id AS file_id, COUNT(*) AS n FROM file_edges GROUP BY source_file_id`,
+      `SELECT source_file_id AS file_id, COUNT(*) AS n FROM file_edges WHERE edge_type = 'imports' GROUP BY source_file_id`,
     );
   }
 

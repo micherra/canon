@@ -11,13 +11,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
-import type {
-  AdapterResult,
-  EntityKind,
-  ImportSpecifier,
-  IntraFileEdge,
-  LanguageAdapter,
-} from "./kg-types.ts";
+import type { AdapterResult, EntityKind, ImportSpecifier, LanguageAdapter } from "./kg-types.ts";
 
 // Entity kind classification
 
@@ -125,30 +119,36 @@ function extractFrontmatterImports(frontmatterData: Record<string, unknown>): Im
   return specifiers;
 }
 
-/** Build doc:references intra-file edges from backtick refs and link URLs. */
-function buildDocReferenceEdges(
-  qualifiedName: string,
-  backtickRefs: string[],
-  linkUrls: string[],
-): IntraFileEdge[] {
-  const edges: IntraFileEdge[] = [];
+/**
+ * Conservative path-like backtick-ref extractor (mirrors wiki_lint's cited-path grammar).
+ *
+ * Accepts tokens that:
+ *   - match /^[a-zA-Z][\w./-]*\.(?:sh|ts|tsx|js|json|yaml|yml|md)$/
+ *   - contain at least one '/'
+ *   - contain none of: '${', '<', '>', '{', '}'
+ *   - do not start with 'http://' or 'https://' or '#'
+ *
+ * This rejects bare identifiers (`KgStore`), slash-less filenames (`flow-schema.ts`),
+ * template paths (`${WORKSPACE}/x.md`), and URL-like references.
+ */
+const BACKTICK_PATH_RE = /^[a-zA-Z][\w./-]*\.(?:sh|ts|tsx|js|json|yaml|yml|md)$/;
+const BACKTICK_REJECTED_CHARS = /\$\{|[<>{}]/;
+
+function extractDocRefSpecifiers(backtickRefs: string[]): ImportSpecifier[] {
+  const specifiers: ImportSpecifier[] = [];
   for (const ref of backtickRefs) {
-    edges.push({
-      confidence: 0.6,
-      edge_type: "doc:references",
-      source_qualified: qualifiedName,
-      target_qualified: ref,
-    });
+    if (
+      BACKTICK_PATH_RE.test(ref) &&
+      ref.includes("/") &&
+      !BACKTICK_REJECTED_CHARS.test(ref) &&
+      !ref.startsWith("http://") &&
+      !ref.startsWith("https://") &&
+      !ref.startsWith("#")
+    ) {
+      specifiers.push({ edgeType: "doc:references", names: [], specifier: ref });
+    }
   }
-  for (const url of linkUrls) {
-    edges.push({
-      confidence: 0.8,
-      edge_type: "doc:references",
-      source_qualified: qualifiedName,
-      target_qualified: url,
-    });
-  }
-  return edges;
+  return specifiers;
 }
 
 // Adapter implementation
@@ -186,13 +186,21 @@ export const markdownAdapter: LanguageAdapter = {
 
     const { backtickRefs, linkUrls } = extractBodyRefs(content);
 
+    // Frontmatter refs are untagged (become 'imports' edges in the pipeline).
+    // Link URLs and conservative backtick-path refs are tagged doc:references
+    // so resolveImports writes them with the correct edge_type.
     const importSpecifiers: ImportSpecifier[] = [
       ...extractFrontmatterImports(frontmatterData),
-      ...linkUrls.map((url) => ({ names: [] as string[], specifier: url })),
+      ...linkUrls.map((url) => ({
+        edgeType: "doc:references" as const,
+        names: [] as string[],
+        specifier: url,
+      })),
+      ...extractDocRefSpecifiers(backtickRefs),
     ];
 
-    const intraFileEdges = buildDocReferenceEdges(qualifiedName, backtickRefs, linkUrls);
-
-    return { entities, importSpecifiers, intraFileEdges };
+    // intraFileEdges was a dead wire (consumed nowhere, 0 DB rows).
+    // doc:references persistence now rides importSpecifiers via resolveImports.
+    return { entities, importSpecifiers, intraFileEdges: [] };
   },
 };
