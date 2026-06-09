@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.9.0](https://github.com/micherra/canon/compare/v2.8.0...v2.9.0) (2026-06-08)
+
+
+### Features
+
+* **cliff:** cliff_detected learner dimension consumer (watch_BBBBB1) ([#347](https://github.com/micherra/canon/issues/347)) ([8aad924](https://github.com/micherra/canon/commit/8aad924159498bcfd75063cc0613f11b783a34e0))
+* **learner:** promote batch 6 — reviewer pre-fix regression check, grep-scope convention, scope_tags wiki-lint check ([#343](https://github.com/micherra/canon/issues/343)) ([1025610](https://github.com/micherra/canon/commit/10256104e90ab6158aad609631831dfae6248670))
+* **loops:** Loop-as-Artifact Framework — Phase A (schema, registry, runtime) ([#350](https://github.com/micherra/canon/issues/350)) ([5c3d2e6](https://github.com/micherra/canon/commit/5c3d2e6d88eb1467eb379baa0ce5eab99f347945))
+
+
+### Bug Fixes
+
+* **security:** lock down unauthenticated artifact sidecar (:3141) + share loopback-host guard ([#349](https://github.com/micherra/canon/issues/349)) ([c7dd950](https://github.com/micherra/canon/commit/c7dd950fc85ead5a32d6331a035e7bdb1afe76b9))
+
 ## [2.8.0](https://github.com/micherra/canon/compare/v2.7.0...v2.8.0) (2026-06-07)
 
 
