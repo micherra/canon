@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { installFuzzyValidation } from "@shared/lib/fuzzy-field-validation.ts";
 import { registerArtifactTools } from "./register-artifacts.ts";
 import { registerKnowledgeTools } from "./register-knowledge.ts";
+import { registerLoopTools } from "./register-loops.ts";
 import { registerOrchestrationTools } from "./register-orchestration.ts";
 import { registerPrincipleTools } from "./register-principles.ts";
 
@@ -9,7 +10,7 @@ import { registerPrincipleTools } from "./register-principles.ts";
 export const CANON_SERVER_NAME = "canon";
 
 /** Server version — keep the release-please marker on this line so version bumps work. */
-export const CANON_SERVER_VERSION = "2.8.0"; // x-release-please-version
+export const CANON_SERVER_VERSION = "2.9.0"; // x-release-please-version
 
 /**
  * Factory that creates a fully-wired Canon McpServer instance.
@@ -28,11 +29,12 @@ export function createCanonServer(): McpServer {
   // Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
   installFuzzyValidation(server);
 
-  // Register all tool groups — same 4 groups as index.ts pre-refactor.
+  // Register all tool groups — 5 groups (added registerLoopTools for loop framework).
   registerOrchestrationTools(server);
   registerKnowledgeTools(server);
   registerArtifactTools(server);
   registerPrincipleTools(server);
+  registerLoopTools(server);
 
   return server;
 }

@@ -44,6 +44,10 @@ A file with high in-degree — many other files import it. Changes to hubs have 
 
 The file `journal.json` in the workspace root. An ordered log of step executions with status, timestamps, produced artifacts, and agent IDs. The orchestrator writes to it via `log_step` before and after spawning each agent. `finalize_workspace` verifies journal completeness before closing the build.
 
+## Loop
+
+A Canon-managed periodic-observation artifact authored as `loops/<id>.md` (YAML frontmatter + action-prompt body). The `loops/` directory at the repo root is the loop registry — no hardcoded catalog exists. Loops are discovered via `list_loops` and dispatched by the orchestrator via `CronCreate` at a named lifecycle moment (`post-ship`, `on-long-dispatch`, `session-start`). Nothing auto-starts; authoring a `loops/*.md` registers the definition but does not start the loop (dc-06 non-declarative constraint). Phase A ships the framework spine (schema, registry, MCP tools, `_probe` demo); Phase B adds ship-watch; Phase C adds self-paced mode.
+
 ## Primer
 
 A domain reasoning context file (~37 lines) loaded into an agent's context on demand. Primers teach mental models and decision frameworks for a domain (e.g., `orchestration.md`, `drift.md`) rather than imperative rules. Stored in `primers/` and referenced by name in agent frontmatter or spawn prompts.
