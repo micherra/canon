@@ -112,6 +112,12 @@ export type IntraFileEdge = {
 export type ImportSpecifier = {
   specifier: string;
   names: string[];
+  /**
+   * When set, resolveImports writes the file_edge with this edge_type instead
+   * of 'imports'. Used by doc adapters to persist doc:references edges through
+   * the existing resolution path without a separate persistence phase.
+   */
+  edgeType?: "doc:references";
 };
 
 /**
