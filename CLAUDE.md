@@ -514,7 +514,7 @@ frontmatter starts a loop — the capability ground truth is that a plugin canno
 manually in the verify step to prove the schema→registry→runtime path. Ship-watch (Phase B)
 and session-watch/self-paced (Phase C) are separate later builds. Discovery: `list_loops`.
 
-## Project Structure <!-- last-updated: 2026-06-08 -->
+## Project Structure <!-- last-updated: 2026-06-09 -->
 
 ```
 canon/
@@ -544,6 +544,7 @@ canon/
 ├── rules/                # Agent-behavior rules loaded per agent at runtime
 ├── primers/              # Domain primers — domain reasoning context loaded by agents
 ├── references/           # Orchestrator + agent protocol fragments (canon-orchestrator.md, etc.)
+├── scripts/              # Standalone re-runnable bash tools (mine-codex-comments.sh mines Codex bot PR history → docs/reference/codex-defect-classes.md)
 ├── skills/canon/         # Claude Code skill definition — entry point for Canon activation
 │   ├── commands/         # Slash command definitions (/canon:init, /canon:check, /canon:diagnose, etc.)
 │   └── evals/            # Eval suite for intent classification

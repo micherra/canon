@@ -26,7 +26,7 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 | `writer` | Creates and edits Canon principles and agent-rules | sonnet |
 
 ## Conventions
-<!-- last-updated: 2026-04-29 -->
+<!-- last-updated: 2026-06-09 -->
 
 - Each agent has a declarative `permissionMode` enforced by Claude Code:
   - **`plan`** — truly read-only. No `Write` / `Edit` / `Bash`-to-modify AND no MCP `write_*` / `update_*` tools. Currently unused (the legacy planner was the only agent on this mode).
@@ -47,4 +47,5 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 - `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.
 - `engineer` (verify mode): before reporting any build or test failure as BLOCKING, must verify whether the failure exists on the base branch. Pre-existing failures are noted as PRE-EXISTING and do not block.
 - `reviewer` writes its review artifact to `${WORKSPACE}/reviews/REVIEW.md` (exact path). The orchestrator must inject `WORKSPACE={workspace_path}` (workspace root, not worktree path) into the reviewer's spawn prompt to ensure correct artifact placement.
+- `reviewer` preloads `references/codex-defect-checklist.md` (via `references:` frontmatter) — adds Stage 2 grep checks and Stage 6 judgment prompts for the top-7 Codex recurring defect classes; all grep checks are advisory→WARNING, never BLOCKING.
 - Agents with `memory: project` (engineer, architect, scribe, learner, tester) persist agent memory across sessions; others do not.
