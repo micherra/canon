@@ -514,7 +514,7 @@ frontmatter starts a loop — the capability ground truth is that a plugin canno
 manually in the verify step to prove the schema→registry→runtime path. Ship-watch (Phase B)
 and session-watch/self-paced (Phase C) are separate later builds. Discovery: `list_loops`.
 
-## Project Structure <!-- last-updated: 2026-06-08 -->
+## Project Structure <!-- last-updated: 2026-06-09 -->
 
 ```
 canon/
@@ -533,10 +533,12 @@ canon/
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
 │       │   ├── loops/           # list_loops, get_loop_definition (Phase A loop framework)
-│       │   └── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
+│       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
+│       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase A: _probe only)
+├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── principles/           # Built-in principles (78 total: 7 rules, 35 strong-opinions, 36 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
@@ -545,10 +547,11 @@ canon/
 ├── primers/              # Domain primers — domain reasoning context loaded by agents
 ├── references/           # Orchestrator + agent protocol fragments (canon-orchestrator.md, etc.)
 ├── skills/canon/         # Claude Code skill definition — entry point for Canon activation
-│   ├── commands/         # Slash command definitions (/canon:init, /canon:check, /canon:diagnose, etc.)
+│   ├── commands/         # Slash command definitions (/canon:init, /canon:check, /canon:diagnose, /canon:routine, /canon:routines, etc.)
 │   └── evals/            # Eval suite for intent classification
-├── templates/            # Artifact templates agents must follow (includes prd.md, renderer-*.md, sharpened-request.md, worker-prompt.md)
+├── templates/            # Artifact templates agents must follow (includes prd.md, renderer-*.md, sharpened-request.md, worker-prompt.md, routine.md)
 └── .canon/               # Runtime data (workspaces, principles, config, JSONL drift store, SQLite DBs)
+    ├── routines/         # Per-routine state overrides and last-run timestamps (project-local precedence over plugin)
     └── workspaces/       # Per-branch/task build state
 ```
 
