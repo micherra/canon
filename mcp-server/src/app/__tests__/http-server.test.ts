@@ -13,6 +13,8 @@
  * - removePidFile removes PID file only when PID matches current process
  * - PID file path always under .canon or PLUGIN_DATA
  * - writePidFile failure (unwritable dir) does not throw
+ * - F2 security fix: Host-header guard rejects non-loopback hosts with 403
+ * - F2 security fix: Access-Control-Allow-Origin: * removed from responses
  */
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -37,11 +39,13 @@ async function request(
   method: string,
   path: string,
   body?: string,
+  extraHeaders?: Record<string, string>,
 ): Promise<{ status: number; body: string; headers: Record<string, string | string[]> }> {
   const port = getHttpPort();
   return new Promise((resolve, reject) => {
+    const baseHeaders: Record<string, string> = body ? { "Content-Type": "application/json" } : {};
     const options = {
-      headers: body ? { "Content-Type": "application/json" } : {},
+      headers: { ...baseHeaders, ...extraHeaders },
       hostname: "127.0.0.1",
       method,
       path,
@@ -105,11 +109,12 @@ describe("HTTP server module", () => {
       expect(res.status).toBe(404);
     });
 
-    it("sets CORS headers on all responses", async () => {
+    it("does not set Access-Control-Allow-Origin (removed by F2 fix)", async () => {
+      // F2: ACAO: * removed to prevent cross-origin reads of sensitive artifacts.
+      // Canon artifacts are opened via direct browser navigation (same-origin),
+      // not cross-origin fetch — no consumer needs ACAO on the sidecar.
       const res = await request("GET", "/health");
-      expect(res.headers["access-control-allow-origin"]).toBe("*");
-      expect(res.headers["access-control-allow-methods"]).toContain("GET");
-      expect(res.headers["access-control-allow-methods"]).toContain("OPTIONS");
+      expect(res.headers["access-control-allow-origin"]).toBeUndefined();
     });
 
     it("responds to OPTIONS preflight with 204", async () => {
@@ -191,6 +196,84 @@ describe("HTTP server module", () => {
   describe("getHttpPort", () => {
     it("returns the port the server is listening on", () => {
       expect(getHttpPort()).toBe(TEST_PORT);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // F2 security fix: Host-header guard (DNS-rebinding protection)
+  // ---------------------------------------------------------------------------
+  describe("F2 Host-header guard — sidecar artifact routes", () => {
+    beforeEach(() => {
+      registerArtifact("review/f2-test", "<html><head></head><body>secret</body></html>", {
+        secret: "data",
+      });
+    });
+
+    it("rejects a non-loopback Host header with 403 on artifact route", async () => {
+      const res = await request("GET", "/artifact/review/f2-test", undefined, {
+        Host: "evil.example.com",
+      });
+      expect(res.status).toBe(403);
+      const json = JSON.parse(res.body) as { error: string };
+      expect(json.error).toContain("Host");
+    });
+
+    it("rejects a missing Host header with 403 on artifact route", async () => {
+      // Node's http.request always sends a Host header; simulate missing by sending
+      // a clearly non-loopback value — "missing" is fail-closed per the spec.
+      // This test uses a spoofed non-loopback value which is the same code path.
+      const res = await request("GET", "/artifact/review/f2-test", undefined, {
+        Host: "rebind.attacker.net",
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it("serves artifact normally when Host is 127.0.0.1", async () => {
+      // The default test helper sends requests to 127.0.0.1; Node sets Host to
+      // "127.0.0.1:<port>". This should pass the loopback guard.
+      const res = await request("GET", "/artifact/review/f2-test");
+      expect(res.status).toBe(200);
+      expect(res.body).toContain("secret");
+    });
+
+    it("serves artifact normally when Host is localhost", async () => {
+      const res = await request("GET", "/artifact/review/f2-test", undefined, {
+        Host: "localhost",
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it("serves /health with 200 when Host is loopback", async () => {
+      const res = await request("GET", "/health");
+      expect(res.status).toBe(200);
+    });
+
+    it("rejects /health with 403 when Host is non-loopback", async () => {
+      const res = await request("GET", "/health", undefined, {
+        Host: "evil.example.com",
+      });
+      expect(res.status).toBe(403);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // F2 security fix: Access-Control-Allow-Origin: * removed
+  // ---------------------------------------------------------------------------
+  describe("F2 CORS: Access-Control-Allow-Origin header removed from sidecar", () => {
+    it("does NOT set Access-Control-Allow-Origin: * on artifact responses", async () => {
+      registerArtifact("review/cors-test", "<html><head></head><body></body></html>", {});
+      const res = await request("GET", "/artifact/review/cors-test");
+      expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    });
+
+    it("does NOT set Access-Control-Allow-Origin: * on health responses", async () => {
+      const res = await request("GET", "/health");
+      expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    });
+
+    it("does NOT set Access-Control-Allow-Origin: * on 404 responses", async () => {
+      const res = await request("GET", "/artifact/review/nonexistent");
+      expect(res.headers["access-control-allow-origin"]).toBeUndefined();
     });
   });
 });

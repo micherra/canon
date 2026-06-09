@@ -16,7 +16,33 @@ import { getFileContext } from "@features/file-context/tools/get-file-context.ts
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import { CANON_FILES } from "@shared/constants.ts";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+// Mock EmbeddingService so storeSummaries does not trigger a HuggingFace model
+// download during tests. Without this mock, the first call to storeSummaries that
+// actually writes summaries (triggering the embedSummaries path) lazy-loads an ONNX
+// transformer model, adding 1–3s of non-deterministic latency. On slower CI hosts
+// this pushes individual test durations past vitest's default 5000ms timeout,
+// causing intermittent failures. The mock returns fast deterministic vectors so
+// all DB-state assertions remain valid — embeddings are not tested here.
+let _mockSeed = 0;
+vi.mock("@graph/kg-embedding.ts", () => ({
+  EmbeddingService: class MockEmbeddingService {
+    async embed(texts: string[]): Promise<Float32Array[]> {
+      return texts.map((_, i) => randomEmbedding(_mockSeed + i));
+    }
+    async embedOne(_text: string): Promise<Float32Array> {
+      return randomEmbedding(_mockSeed++);
+    }
+    dispose(): void {
+      // no-op
+    }
+    get isLoaded(): boolean {
+      return false;
+    }
+  },
+}));
 
 // 11. DB-only workflow integration — risk mitigation for combined migration state
 //

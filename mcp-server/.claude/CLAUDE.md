@@ -25,6 +25,7 @@ src/
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
+│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader (Phase A)
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
@@ -46,6 +47,7 @@ src/
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
 - **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
 - **History services** (`features/history/services/`) — cross-run analysis, craft drift, judge-weight, consolidate-policy. See `src/features/history/services/.claude/CLAUDE.md`.
+- **Loop tools** (`features/loops/`) — loop-definition schema, registry loader, list_loops/get_loop_definition. See `src/features/loops/.claude/CLAUDE.md`.
 - **PR review tools + PR Review Data service** → `src/features/pr-review/.claude/CLAUDE.md`.
 - **Shared kernel** (`shared/`) — constants, matcher, schema, lib/ utilities. See `src/shared/.claude/CLAUDE.md`.
 - **UI snippets** (`ui/snippets/`) — force-graph, file-detail-card, renderer helpers. See `src/ui/snippets/.claude/CLAUDE.md`.
@@ -163,6 +165,13 @@ src/
 | `get_build_history` | List archived build runs with metadata |
 | `get_historical_artifacts` | Retrieve archived artifacts from a previous build |
 | `get_cross_run_analysis` | Cross-run meta-analysis for the learner; includes `craft_drift: CraftDrift` (`by_dimension[]`, `by_area[]`, `profile_count`) and `cliff_events: CliffEventsDimension`; runs fail-open `sweepCliffEvents(project_dir)` before analysis |
+
+**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-08 -->
+
+| Tool | Purpose |
+|------|---------|
+| `list_loops` | Load all loops from `loops/` registry; filters by `status:active`, `lifecycle_hook`, `tier`; always returns `invalid[]` alongside valid |
+| `get_loop_definition` | Return a single loop's `LoopDefinition` + markdown body by id; `INVALID_INPUT` when not found |
 
 ## Dependencies
 <!-- last-updated: 2026-05-16 -->

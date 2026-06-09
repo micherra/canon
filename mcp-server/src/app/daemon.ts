@@ -59,6 +59,7 @@ import {
   resolveTokenPath,
   type TokenResult,
 } from "./mcp-http/auth.ts";
+import { isLoopbackHostRequest } from "./mcp-http/loopback-host.ts";
 import { closeAllSessions, handleMcpRequest } from "./mcp-http/session-manager.ts";
 import { resolveReady } from "./server-state.ts";
 
@@ -208,40 +209,6 @@ export function probeExistingDaemon(
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Allowed loopback hostnames for Host-header guard on non-MCP routes (W6)
-// ---------------------------------------------------------------------------
-
-/** Hostnames accepted in the Host header for artifact and health routes. */
-const DAEMON_ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
-
-/**
- * Extract the hostname from a Host header value, stripping any port suffix.
- * Handles IPv6 literals like [::1]:3142 → [::1].
- * Duplicated from auth.ts to avoid a cross-module import of a private helper.
- */
-function extractDaemonHostname(host: string): string {
-  if (host.startsWith("[")) {
-    const closingBracket = host.indexOf("]");
-    if (closingBracket !== -1) return host.slice(0, closingBracket + 1);
-    return host;
-  }
-  const colonIdx = host.lastIndexOf(":");
-  if (colonIdx !== -1) return host.slice(0, colonIdx);
-  return host;
-}
-
-/**
- * Return true if the request Host header names a loopback address.
- * Fail-closed: missing Host → rejected.
- * Used to guard artifact and health routes against DNS-rebinding (W6).
- */
-function isLoopbackHost(req: IncomingMessage): boolean {
-  const hostHeader = req.headers.host;
-  if (!hostHeader) return false;
-  return DAEMON_ALLOWED_HOSTS.has(extractDaemonHostname(hostHeader));
-}
-
-// ---------------------------------------------------------------------------
 // Request handler (extracted for line-limit compliance)
 // ---------------------------------------------------------------------------
 
@@ -295,7 +262,7 @@ function handleDaemonRequest(
   // Direct browser navigation uses the loopback address as Host — this guard
   // preserves that use case while blocking cross-origin JS fetches that would
   // send a different Host header.
-  if (!isLoopbackHost(req)) {
+  if (!isLoopbackHostRequest(req)) {
     respondJson(res, 403, { error: "Host header rejected" });
     return;
   }

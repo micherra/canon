@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Canon MCP server is organized into eight bounded contexts. The **Flows Context** owns all flow/state/fragment schema types and status vocabulary. The **Orchestration Context** owns execution lifecycle, board state, session management, DAG-based parallel dispatch, and spawn/HITL mechanics. The **Knowledge Graph Context** owns the file entity graph, import/export edge relationships, and semantic search. The **Drift/Review Context** owns review persistence, violation tracking, and compliance analytics. The **Messages Context** owns unified inter-agent messaging, event payloads, and event validation. The **File Context** owns file-level structural analysis, entity queries, and blast radius reporting. The **Diagnostics/Analytics Context** owns flow run analytics, agent metrics recording, and convergence checking. The **Shared Kernel** is a foundation layer providing cross-cutting types and constants that ≥3 contexts depend on. A thin **Platform/Infrastructure layer** (`src/platform/`, `src/app/`) wires contexts together at startup and provides storage adapters — it is not a bounded context.
+The Canon MCP server is organized into nine bounded contexts. The **Flows Context** owns all flow/state/fragment schema types and status vocabulary. The **Orchestration Context** owns execution lifecycle, board state, session management, DAG-based parallel dispatch, and spawn/HITL mechanics. The **Knowledge Graph Context** owns the file entity graph, import/export edge relationships, and semantic search. The **Drift/Review Context** owns review persistence, violation tracking, and compliance analytics. The **Messages Context** owns unified inter-agent messaging, event payloads, and event validation. The **File Context** owns file-level structural analysis, entity queries, and blast radius reporting. The **Diagnostics/Analytics Context** owns flow run analytics, agent metrics recording, and convergence checking. The **Shared Kernel** is a foundation layer providing cross-cutting types and constants that ≥3 contexts depend on. A thin **Platform/Infrastructure layer** (`src/platform/`, `src/app/`) wires contexts together at startup and provides storage adapters — it is not a bounded context.
 
 ---
 
@@ -81,7 +81,16 @@ File Context is a feature-layer boundary: it aggregates data from Knowledge Grap
 
 Diagnostics wraps Drift/Review storage with domain logic for flow analytics. It was previously grouped under the Drift/Review Context in this map, but its tool implementations (`record-agent-metrics`, `get-drift-report`, `check-convergence`, `categorize-failures`, `store-summaries`) constitute a distinct analytical capability separate from pure review/violation persistence. Diagnostics conforms to the types exposed by Drift/Review — a **Conformist** relationship.
 
-### 8. Shared Kernel
+### 8. Loop Registry Context
+
+- **Directories**: `mcp-server/src/features/loops/`, `loops/`
+- **Responsibility**: Loop-as-Artifact framework MCP layer — loop-definition schema, registry loading, `list_loops`/`get_loop_definition` tools; the `loops/` directory at the repo root IS the registry
+- **Key types**: `LoopDefinition`, `ParseLoopResult` (from `loop-schema.ts`); `loadLoopsFromDir` returns `{ valid, invalid, validBodies }`
+- **Depends on**: Shared Kernel (`ToolResult<T>`, `CanonErrorCode`) only; no dependency on other contexts
+
+Phase A ships the schema, loader, and both MCP tools. The `loops/` registry directory is read at query time (directory-as-registry, mirrors `principles/`). dc-05 guardrails enforced at parse time by `parseLoopDefinition`. The non-declarative constraint (dc-06): authoring a `loops/*.md` file registers a loop definition; it does NOT start the loop — only the orchestrator initiates `CronCreate` at a named lifecycle moment.
+
+### 10. Shared Kernel
 
 - **Directory**: `mcp-server/src/shared/`
 - **Responsibility**: Cross-cutting types, error contracts, constants, utility libraries used by ≥3 contexts; the foundation layer

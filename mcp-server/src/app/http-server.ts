@@ -14,7 +14,14 @@
  * Delegated to `http-routes.ts`:
  * - GET  /health                — liveness check
  * - GET  /artifact/:type/:slug — serve registered HTML artifact
- * - OPTIONS *                  — CORS preflight
+ * - OPTIONS *                  — preflight (204, no CORS headers)
+ *
+ * ## Security
+ * A Host-header guard (DNS-rebinding protection) rejects requests whose Host
+ * does not name a loopback address (127.0.0.1, localhost, [::1]). Missing Host
+ * headers are also rejected (fail-closed). No Access-Control-Allow-Origin header
+ * is set — artifacts are opened via direct browser navigation, not cross-origin
+ * fetch, so ACAO is not needed and would be a data-exfiltration risk (F2 fix).
  *
  * ## PID file
  * On successful bind, `startHttpServer` writes a PID file under
@@ -34,6 +41,7 @@ import {
   registerArtifact as routesRegister,
   removeArtifact as routesRemove,
 } from "./http-routes.ts";
+import { isLoopbackHostRequest } from "./mcp-http/loopback-host.ts";
 
 /**
  * Registers an HTML artifact for serving via GET /artifact/:type/:slug.
@@ -272,14 +280,24 @@ export function resetStateForTesting(): void {
 // ---------------------------------------------------------------------------
 
 function handleRequest(req: IncomingMessage, res: ServerResponse): void {
-  // CORS headers — required for browser fetch from file:// or localhost origins
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // F2: No Access-Control-Allow-Origin — Canon artifacts are opened via direct
+  // browser navigation (http://127.0.0.1:<port>/artifact/...), not cross-origin
+  // fetch. Setting ACAO: * would allow malicious pages to read sensitive artifact
+  // content (review HTML, file paths, architecture details) cross-origin.
+  // Confirmed: open_artifact and present_artifact use direct URL navigation only.
 
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // F2: Reject non-loopback Host headers to block DNS-rebinding attacks.
+  // Uses the shared loopback-host guard (mcp-http/loopback-host.ts), which is
+  // also applied by daemon.ts (W6) and auth.ts. Fail-closed: missing Host
+  // header is treated as non-loopback and rejected with 403.
+  if (!isLoopbackHostRequest(req)) {
+    respondJson(res, 403, { error: "Host header rejected" });
     return;
   }
 
