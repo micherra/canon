@@ -29,7 +29,8 @@ src/
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
-│   └── prompt-pipeline/  # Prompt assembly, context enrichment, consultation pipeline
+│   ├── prompt-pipeline/  # Prompt assembly, context enrichment, consultation pipeline
+│   └── routines/         # list_routines, get_routine, sync_routines — managed routine artifact class (shared/routine.ts loader, services/, tools/, registered via register-routines.ts)
 ├── graph/                # Legacy graph scanner — import/export parsing (being migrated to features/knowledge-graph)
 ├── orchestration/        # Legacy orchestration — flow parser, execution store, schemas (being migrated to features/orchestration)
 ├── platform/             # Infrastructure: adapters (git, process), job manager, workers, storage
@@ -172,6 +173,14 @@ src/
 |------|---------|
 | `list_loops` | Load all loops from `loops/` registry; filters by `status:active`, `lifecycle_hook`, `tier`; always returns `invalid[]` alongside valid |
 | `get_loop_definition` | Return a single loop's `LoopDefinition` + markdown body by id; `INVALID_INPUT` when not found |
+
+**Routine tools** (`src/features/routines/`): <!-- last-updated: 2026-06-09 -->
+
+| Tool | Purpose |
+|------|---------|
+| `list_routines` | List all routines (project-local + plugin, project-local takes precedence); returns name, status, binding, trigger |
+| `get_routine` | Retrieve a single routine by name; returns frontmatter + body; `INVALID_INPUT` when not found |
+| `sync_routines` | Sync routine state to `.canon/routines/`; returns drift summary |
 
 ## Dependencies
 <!-- last-updated: 2026-05-16 -->
