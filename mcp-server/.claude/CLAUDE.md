@@ -29,7 +29,6 @@ src/
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
-│   ├── prompt-pipeline/  # Prompt assembly, context enrichment, consultation pipeline
 │   └── routines/         # list_routines, get_routine, sync_routines — managed routine artifact class (shared/routine.ts loader, services/, tools/, registered via register-routines.ts)
 ├── graph/                # Legacy graph scanner — import/export parsing (being migrated to features/knowledge-graph)
 ├── orchestration/        # Legacy orchestration — flow parser, execution store, schemas (being migrated to features/orchestration)
@@ -109,8 +108,6 @@ src/
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`.
 
 **Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`; both `checkScopeLayers` and `checkScopeTags` guard scalar (non-array) input with a "must be a YAML list" finding; `stale_refs` and `cited_paths` now include the DDD doc set (`docs/**/*.md` excl. `docs/explore/`, `mcp-server/src/domains/*/README.md`, `CONTEXT.md`); see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details.
-
-**Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — `injectWorktreeSettings(worktreePath, tools)` atomically writes `.claude/settings.local.json`; returns `false` on failure (never throws); idempotent. Called in all three spawn paths before `{ action: "spawn" }` when `permission_mode === "auto"`.
 
 **Agent Provenance** (`src/shared/lib/commit-trailers.ts`, `src/shared/lib/file-claims.ts`) — `formatCommitTrailers`/`buildCommitMessage` produce Canon trailer blocks; `ClaimsFile` persisted to `.canon/claims.json`; 24h-TTL file ownership claims. See `src/shared/.claude/CLAUDE.md`.
 
