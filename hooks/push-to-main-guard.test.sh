@@ -291,6 +291,65 @@ rm -rf "$TMPDIR_MASTER" "$TMPDIR_ORIGIN"
 
 echo ""
 # ---------------------------------------------------------------------------
+# CRITICAL fix: --all / --mirror bypass (security v2 finding)
+# These "push everything" modes push EVERY local branch (incl. local main)
+# regardless of the current branch and push.default. They must be blocked
+# unconditionally from any checkout (dc-05: fail-closed-on-ambiguity).
+# ---------------------------------------------------------------------------
+echo "-- CRITICAL: --all/--mirror push-everything modes (should block, exit 2) --"
+
+# Basic --all and --mirror blocks (default cwd, no real repo needed for the flag check)
+run_test "git push --all origin (feature branch, no repo cwd)"     2 "$(make_input 'git push --all origin')"
+run_test "git push --mirror origin (feature branch, no repo cwd)"  2 "$(make_input 'git push --mirror origin')"
+run_test "git push --all (no remote specified)"                     2 "$(make_input 'git push --all')"
+run_test "git push --mirror (no remote specified)"                  2 "$(make_input 'git push --mirror')"
+
+# The exploit state: from a canon/<slug> feature branch (CANON_GUARD_CWD = real repo)
+# --all still pushes local main to remote even from a feature branch checkout.
+TMPDIR_ALL=$(mktemp -d)
+setup_repo "$TMPDIR_ALL"
+# Create local main and switch to a feature branch (mirrors real Canon state)
+git -C "$TMPDIR_ALL" checkout -q -b canon/some-task 2>/dev/null || true
+
+run_test "git push --all origin from canon/* feature branch (exploit state → block)" \
+  2 "$(make_input 'git push --all origin')" "$TMPDIR_ALL"
+run_test "git push --mirror origin from canon/* feature branch (exploit state → block)" \
+  2 "$(make_input 'git push --mirror origin')" "$TMPDIR_ALL"
+
+# Wrappers: --all reachable through string-executing wrappers
+run_test "bash -c 'git push --all origin' (wrapper exploit path → block)" \
+  2 "$(make_input 'bash -c \"git push --all origin\"')"
+run_test "eval 'git push --mirror origin' (eval exploit path → block)" \
+  2 "$(make_input 'eval \"git push --mirror origin\"')"
+
+# master-default repo: --all also pushes master when origin/HEAD→master
+TMPDIR_MASTER2=$(mktemp -d)
+setup_repo "$TMPDIR_MASTER2"
+TMPDIR_ORIGIN2=$(mktemp -d)
+git -C "$TMPDIR_ORIGIN2" init -q --bare
+git -C "$TMPDIR_ORIGIN2" symbolic-ref HEAD refs/heads/master
+git -C "$TMPDIR_MASTER2" remote add origin "$TMPDIR_ORIGIN2"
+git -C "$TMPDIR_MASTER2" remote set-head origin master 2>/dev/null || \
+  git -C "$TMPDIR_MASTER2" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
+git -C "$TMPDIR_MASTER2" checkout -q -b canon/other 2>/dev/null || true
+
+run_test "git push --all origin in master-default repo (would push master → block)" \
+  2 "$(make_input 'git push --all origin')" "$TMPDIR_MASTER2"
+
+rm -rf "$TMPDIR_ALL" "$TMPDIR_MASTER2" "$TMPDIR_ORIGIN2"
+
+# Prove --tags is NOT over-blocked (pushes only refs/tags/*, never branch main)
+echo ""
+echo "-- CRITICAL: --tags must NOT be over-blocked (should allow, exit 0) --"
+run_test "git push --tags origin (tags only, cannot push branch main → allow)" \
+  0 "$(make_input 'git push --tags origin')"
+run_test "git push --tags (tags only, no remote → allow)" \
+  0 "$(make_input 'git push --tags')"
+
+rm -rf "$TMPDIR_ALL" 2>/dev/null || true
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="

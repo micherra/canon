@@ -18,10 +18,13 @@
 #   6. Resolve the git subcommand via canon_git_subcommand (shape-validated).
 #      Empty → fail-closed.
 #   7. case "$sub": only "push" is inspected; all other subcommands return 0.
-#   8. For "push": push_updates_protected_branch uses an allowlist gate on each
-#      refspec — ALLOW only if the whole token is provably-literal (strict
-#      charset, no shell metacharacters) AND its destination != protected branch.
-#      Any non-provably-literal refspec fails-closed (BLOCK).
+#   8. For "push": push_updates_protected_branch first checks for "push everything"
+#      modes (--all, --mirror) and blocks them unconditionally — they ignore
+#      push.default and the current branch, so they can push the protected branch
+#      from any checkout (dc-05: fail-closed-on-ambiguity). Then uses an allowlist
+#      gate on each refspec — ALLOW only if the whole token is provably-literal
+#      (strict charset, no shell metacharacters) AND its destination != protected
+#      branch. Any non-provably-literal refspec fails-closed (BLOCK).
 #
 # Input: JSON on stdin with the tool call details
 # Output: Warning message on stderr (when blocking)
@@ -189,6 +192,7 @@ push_updates_protected_branch() {
   local remote_seen=false
   local refspecs=()
   local skip_next=false
+  local tags_only_mode=false   # set when --tags seen (without --all/--mirror)
 
   while IFS= read -r token; do
     [[ -z "$token" ]] && continue
@@ -201,9 +205,23 @@ push_updates_protected_branch() {
     # Handle option tokens
     if [[ "$token" == -* ]]; then
       case "$token" in
+        # "Push everything" modes: --all pushes every refs/heads/* branch;
+        # --mirror pushes ALL refs and makes the remote an exact copy.
+        # Neither honors push.default or the current branch — they can push
+        # the protected branch even from a feature-branch checkout.
+        # dc-05 fail-closed-on-ambiguity: cannot prove they will NOT touch the
+        # protected branch → block unconditionally.
+        --all|--mirror)
+          return 0   # BLOCK — push-everything mode is ambiguous w.r.t. protected branch
+          ;;
+        # --tags: pushes only refs/tags/*, never branch refs. A tags-only push
+        # without positional refspecs cannot reach the protected branch.
+        --tags)
+          tags_only_mode=true
+          ;;
         # Self-contained boolean push options (no value consumed)
         -f|--force|--force-with-lease|--force-if-includes|\
-        -u|--set-upstream|--tags|--all|--mirror|\
+        -u|--set-upstream|\
         --delete|-d|--atomic|-n|--dry-run|--porcelain|\
         --no-verify|--prune|-q|--quiet|-v|--verbose|\
         --follow-tags|--signed|-4|-6)
@@ -253,6 +271,11 @@ push_updates_protected_branch() {
 
   # No refspec tokens: bare push form (git push / git push origin)
   if [[ "${#refspecs[@]}" -eq 0 ]]; then
+    # Tags-only push (--tags with no positional refspecs): pushes only
+    # refs/tags/* — never branch refs, so the protected branch is not touched.
+    if [[ "$tags_only_mode" == "true" ]]; then
+      return 1   # tags-only → allow (cannot push branch main)
+    fi
     # Narrow positive-safety allow: if current branch can be resolved and is
     # demonstrably not the protected branch with a safe push.default → allow
     if bare_push_is_safe "$raw_segment" "$protected"; then
@@ -404,8 +427,15 @@ process_segment() {
   case "$sub" in
     push)
       if push_updates_protected_branch "$segment" "$raw_segment"; then
+        # Detect --all/--mirror to provide a more specific message
+        local _protected _block_reason
+        _protected=$(resolve_protected_branch "$raw_segment")
+        _block_reason="direct push to the protected branch '$_protected'"
+        if printf '%s' "$segment" | grep -qE '(^| )(--all|--mirror)( |$)'; then
+          _block_reason="'--all'/'--mirror' push (pushes every local branch including '$_protected' — cannot be proven safe)"
+        fi
         cat <<EOF >&2
-CANON: Blocked direct push to the protected branch '$(resolve_protected_branch "$raw_segment")'.
+CANON: Blocked $_block_reason.
 Direct pushes to main bypass branch protection (PR review + required build check).
 Route this through a PR branch instead:
   git push origin HEAD:canon/<your-slug>
