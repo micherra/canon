@@ -11,10 +11,14 @@
  * - pure-io-service-split: all pure functions above; only checkIndexDrift touches fs
  * - simplicity-first: no strategy flags, no class hierarchy
  * - errors-are-values: rewriteManagedBlock returns discriminated result; diffIndex never throws
+ * - observable-best-effort: ENOENT on a class dir is silently skipped; any other readdir
+ *   error surfaces as a DISCOVERY_ERROR finding so checkIndexDrift never reports CLEAN
+ *   against a truncated artifact set
  */
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import matter from "gray-matter";
 
 // ---- Sentinel constants (Decision retrofit-indexes-01) ----
 
@@ -30,7 +34,7 @@ export type ArtifactDescriptor = { name: string; summary: string };
 
 export type IndexDriftFinding = {
   class: ArtifactClass;
-  code: "MISSING_MARKERS" | "INVENTORY_MISMATCH";
+  code: "MISSING_MARKERS" | "INVENTORY_MISMATCH" | "DISCOVERY_ERROR";
   message: string;
 };
 
@@ -49,12 +53,25 @@ export const CLASS_DIRS: Record<ArtifactClass, string[]> = {
 /**
  * Extract a one-line summary from a frontmatter string.
  * Returns `title:` value if present, else `description:` value, else "".
+ *
+ * Uses gray-matter for YAML parsing so block scalars (>-, |, etc.) are
+ * folded/chomped correctly rather than yielding the literal indicator string.
+ * Pure function — no I/O.
  */
 function extractSummaryFromFrontmatter(frontmatter: string): string {
-  const titleMatch = /^title:\s*(.+)$/m.exec(frontmatter);
-  if (titleMatch) return titleMatch[1].trim();
-  const descMatch = /^description:\s*(.+)$/m.exec(frontmatter);
-  if (descMatch) return descMatch[1].trim();
+  if (!frontmatter) return "";
+  // Wrap in --- delimiters so gray-matter can parse the YAML block
+  const parsed = matter(`---\n${frontmatter}\n---`);
+  const data = parsed.data as Record<string, unknown>;
+
+  const title = data.title;
+  if (typeof title === "string" && title.trim()) return title.trim();
+
+  const desc = data.description;
+  if (typeof desc === "string" && desc.trim()) {
+    // Collapse block-scalar newlines/indentation into a single line
+    return desc.replace(/\s+/g, " ").trim();
+  }
   return "";
 }
 
@@ -200,22 +217,45 @@ async function readFrontmatter(filePath: string): Promise<string> {
 
 /**
  * Discover all artifact files for a class by reading the CLASS_DIRS directories.
- * Returns ArtifactDescriptors sorted by name, excluding README.md.
+ *
+ * Returns:
+ * - `descriptors`: ArtifactDescriptors sorted by name, excluding README.md
+ * - `discoveryErrors`: one entry per directory that failed with an unexpected
+ *   error (NOT ENOENT/ENOTDIR — those are silently skipped as legitimately
+ *   absent dirs). Non-empty discoveryErrors means the inventory is truncated;
+ *   callers must surface this rather than reporting CLEAN.
+ *
+ * observable-best-effort: ENOENT/ENOTDIR → silent skip (dir just not there).
+ * Any other error → surfaced in discoveryErrors (dir exists but unreadable,
+ * permissions issue, etc.) — the invisible-failure mode this policy prohibits.
  */
 async function discoverArtifacts(
   cls: ArtifactClass,
   projectDir: string,
-): Promise<ArtifactDescriptor[]> {
+): Promise<{
+  descriptors: ArtifactDescriptor[];
+  discoveryErrors: Array<{ dir: string; message: string }>;
+}> {
   const dirs = CLASS_DIRS[cls];
   const allFiles: Array<{ filename: string; frontmatter: string }> = [];
+  const discoveryErrors: Array<{ dir: string; message: string }> = [];
 
   for (const dir of dirs) {
     const fullDir = join(projectDir, dir);
     let entries: string[];
     try {
       entries = await readdir(fullDir);
-    } catch {
-      // Directory missing — skip silently
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        // Legitimately absent directory — skip silently
+        continue;
+      }
+      // Unexpected error (permissions, I/O failure, etc.) — must surface
+      discoveryErrors.push({
+        dir: fullDir,
+        message: err instanceof Error ? err.message : String(err),
+      });
       continue;
     }
 
@@ -229,7 +269,7 @@ async function discoverArtifacts(
     }
   }
 
-  return toDescriptors(allFiles);
+  return { descriptors: toDescriptors(allFiles), discoveryErrors };
 }
 
 /** Path to the index file for a given class (relative to projectDir). */
@@ -253,7 +293,18 @@ export async function checkIndexDrift(projectDir: string): Promise<IndexDriftFin
   await Promise.all(
     classes.map(async (cls) => {
       try {
-        const descriptors = await discoverArtifacts(cls, projectDir);
+        const { descriptors, discoveryErrors } = await discoverArtifacts(cls, projectDir);
+
+        // Surface any unexpected directory-read errors — do NOT silently continue
+        // past them, as doing so would report CLEAN against a truncated inventory
+        for (const de of discoveryErrors) {
+          allFindings.push({
+            class: cls,
+            code: "DISCOVERY_ERROR",
+            message: `Discovery degraded for class '${cls}': could not read directory '${de.dir}' — ${de.message}`,
+          });
+        }
+
         const expectedBody = renderInventoryBlock(descriptors);
 
         const indexPath = join(projectDir, indexFilePath(cls));

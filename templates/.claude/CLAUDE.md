@@ -60,14 +60,14 @@ All `renderer-*.md` templates source `escapeHtml` and `markdownToHtml` from `mcp
 | artifact | summary |
 |---|---|
 | chat-brief.md | Structured brief from chat discussion for build handoff |
-| claudemd-template.md | >- |
-| context-sync.md | >- |
+| claudemd-template.md | Canonical structure for CLAUDE.md files managed by the scribe. Defines the sections the scribe maintains and the rules for editing them. Projects adopt this structure incrementally — the scribe adds sections as needed, never restructures the whole file at once. |
+| context-sync.md | Standardized output for the scribe agent. Records which files were classified, which documents were updated, and freshness stamps. |
 | design-decision.md | Structured format for recording architectural and design decisions |
 | design-document.md | Structured format for design documents with North Star section |
 | domain-primer.md |  |
-| loop-definition.md | > |
+| loop-definition.md | Authoring template for Loop-as-Artifact definitions. Drop a filled copy at loops/<id>.md to register a loop. The loops/ directory IS the registry — dropping a file registers the loop; it does NOT start it. Only the orchestrator starts loops by calling CronCreate at a named lifecycle moment. |
 | plan-index.md | Index of all task plans for a build |
-| planning-brief.md | >- |
+| planning-brief.md | DEPRECATED (2026-05-17). Was produced by the planner agent. The architect's DESIGN.md now absorbs the gating function (requirements, alternatives, value assessment). Kept for backward compatibility with existing workspace artifacts. |
 | pr-description.md | PR description synthesized from build artifacts |
 | prd.md | Structured PRD template the PM fills before spawning the architect |
 | renderer-codebase-graph.md | Renderer spawn prompt for converting codebase_graph MCP data into a standalone codebase-graph.html with force-directed layout, click-to-inspect panel, and DIFF_BASE filtering |
@@ -77,9 +77,9 @@ All `renderer-*.md` templates source `escapeHtml` and `markdownToHtml` from `mcp
 | review.md | Structured format for review outputs |
 | routine.md | Schema-as-template for Canon routine artifacts — fill this in when authoring a new routine via the writer |
 | runbook.md | Synthesized runbook produced by the architect agent (canon:synthesize skill). Defines the ordered step sequence that the orchestrator executes. |
-| security-assessment.md | >- |
+| security-assessment.md | Standardized output for the security agent. Records vulnerability findings ranked by severity, passed checks, and blocking status. |
 | session-context.md | Living shared context document for the workspace |
-| sharpened-request.md | >- |
+| sharpened-request.md | Lightweight PM-to-architect hand-off artifact. Produced by the PM's refine skill after sharpening a build request. Contains the problem, direction, scope boundaries, acceptance criteria, and exclusions. |
 | summary.md | Structured format for implementor task summaries |
 | task-dag.md | DAG schema for parallel task execution in multi-task builds |
 | task-plan.md | Atomic task plan for implementor agents |

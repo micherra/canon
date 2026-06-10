@@ -9,9 +9,11 @@
  * - Class=undefined → processes all 5 classes
  * - Fail-safe: fs read failure → toolError("UNEXPECTED"), no throw
  * - Index file missing → skipped (markers absent = no write)
+ * - ENOENT artifact dir → silently skipped (not a discovery error)
+ * - Unreadable artifact dir → surfaces in skipped[] with discovery error reason
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -228,6 +230,84 @@ describe("syncIndexes", () => {
     expect(second.ok).toBe(true);
     if (first.ok && second.ok) {
       expect(first.synced).toEqual(second.synced);
+    }
+  });
+
+  it("block-scalar description (>-) renders as folded text, not '>-'", async () => {
+    const agentFrontmatter = [
+      "---",
+      "name: my-agent",
+      "description: >-",
+      "  Does useful things for the Canon system.",
+      "  This is a multi-line description.",
+      "---",
+      "Body text here.",
+    ].join("\n");
+
+    setupClass(
+      projectDir,
+      "agents",
+      [{ name: "my-agent.md", content: agentFrontmatter }],
+      makeIndexWithMarkers("agents"),
+    );
+
+    const result = await syncIndexes({ class: "agents" }, projectDir);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.synced).toContain("agents");
+      // Read the written index and verify description is folded
+      const { readFileSync } = await import("node:fs");
+      const written = readFileSync(join(projectDir, "agents", ".claude", "CLAUDE.md"), "utf8");
+      expect(written).toContain("Does useful things");
+      expect(written).not.toContain(">-");
+    }
+  });
+
+  it("ENOENT artifact dir is silently skipped — sync proceeds without discovery error", async () => {
+    // Create index with markers but no artifact dir (ENOENT)
+    mkdirSync(join(projectDir, "rules", ".claude"), { recursive: true });
+    writeFileSync(
+      join(projectDir, "rules", ".claude", "CLAUDE.md"),
+      makeIndexWithMarkers("rules"),
+      "utf8",
+    );
+    // rules/ artifact dir does not exist
+
+    const result = await syncIndexes({ class: "rules" }, projectDir);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Should sync with empty inventory (no artifacts found — ENOENT skipped silently)
+      expect(result.synced).toContain("rules");
+    }
+  });
+
+  it("unreadable artifact dir surfaces in skipped[] with discovery error reason", async () => {
+    if (process.platform === "win32") return;
+
+    // Create the artifact dir + index
+    setupClass(
+      projectDir,
+      "agents",
+      [{ name: "my-agent.md", content: "---\ntitle: My Agent\n---\nBody." }],
+      makeIndexWithMarkers("agents"),
+    );
+
+    // Make artifact dir unreadable
+    chmodSync(join(projectDir, "agents"), 0o000);
+
+    try {
+      const result = await syncIndexes({ class: "agents" }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const skipped = result.skipped.find((s) => s.class === "agents");
+        expect(skipped).toBeDefined();
+        expect(skipped?.reason).toContain("discovery error");
+      }
+    } finally {
+      chmodSync(join(projectDir, "agents"), 0o755);
     }
   });
 });

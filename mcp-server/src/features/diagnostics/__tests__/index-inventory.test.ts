@@ -11,6 +11,8 @@
  * - Derives summary from `description:` field when `title:` absent
  * - Falls back to empty string when no title/description
  * - Sorts results by name
+ * - Block-scalar description (>-) is folded into a single-line summary (Fix 2)
+ * - Block-scalar description (|-) folds correctly (Fix 2)
  *
  * renderInventoryBlock:
  * - Produces deterministic output (same input twice → identical string)
@@ -34,10 +36,18 @@
  * - Returns MISSING_MARKERS when no sentinels
  * - Returns INVENTORY_MISMATCH when artifact added to disk but not in index
  * - Returns INVENTORY_MISMATCH when artifact removed from disk but still in index
+ *
+ * checkIndexDrift (I/O — uses real temp fs):
+ * - Unreadable dir surfaces DISCOVERY_ERROR finding (Fix 1)
+ * - ENOENT dir is silently skipped — no DISCOVERY_ERROR (Fix 1)
  */
 
-import { describe, expect, it } from "vitest";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  checkIndexDrift,
   diffIndex,
   extractManagedBlock,
   INVENTORY_END,
@@ -114,6 +124,48 @@ describe("toDescriptors", () => {
     ];
     const result = toDescriptors(files);
     expect(result[0].summary).toBe("The Title");
+  });
+
+  it("block-scalar description (>-) is folded into a single-line summary", () => {
+    // This is the exact pattern used in agent frontmatter:
+    // description: >-
+    //   Technical planning for non-trivial builds. Performs codebase research,
+    //   designs technical approach.
+    const frontmatter =
+      "name: architect\ndescription: >-\n  Technical planning for non-trivial builds. Performs codebase research,\n  designs technical approach.";
+    const files = [{ filename: "architect.md", frontmatter }];
+    const result = toDescriptors(files);
+    // Must NOT be the literal indicator string ">-"
+    expect(result[0].summary).not.toBe(">-");
+    // Must contain the actual text from the block scalar
+    expect(result[0].summary).toContain("Technical planning");
+    expect(result[0].summary).toContain("codebase research");
+    // Must be a single line (no newlines)
+    expect(result[0].summary).not.toContain("\n");
+  });
+
+  it("block-scalar description (|) preserves literal newlines but collapses to single line", () => {
+    const frontmatter = "name: foo\ndescription: |\n  Line one.\n  Line two.";
+    const files = [{ filename: "foo.md", frontmatter }];
+    const result = toDescriptors(files);
+    expect(result[0].summary).not.toBe("|");
+    expect(result[0].summary).toContain("Line one");
+    expect(result[0].summary).toContain("Line two");
+    expect(result[0].summary).not.toContain("\n");
+  });
+
+  it("plain (non-block) description is returned as-is", () => {
+    const files = [
+      { filename: "my-rule.md", frontmatter: "description: A plain single-line description" },
+    ];
+    const result = toDescriptors(files);
+    expect(result[0].summary).toBe("A plain single-line description");
+  });
+
+  it("empty frontmatter returns empty summary", () => {
+    const files = [{ filename: "my-rule.md", frontmatter: "" }];
+    const result = toDescriptors(files);
+    expect(result[0].summary).toBe("");
   });
 });
 
@@ -319,5 +371,77 @@ describe("diffIndex", () => {
   it("does not throw on any input (never throws)", () => {
     expect(() => diffIndex("rules", "", "some content")).not.toThrow();
     expect(() => diffIndex("principles", "body", "")).not.toThrow();
+  });
+});
+
+// ---- checkIndexDrift (I/O — observable-best-effort) ----
+
+describe("checkIndexDrift observable-best-effort", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "index-inventory-drift-test-"));
+  });
+
+  afterEach(() => {
+    // Restore permissions before cleanup (chmod 000 dirs would block rm)
+    try {
+      chmodSync(join(tmpDir, "agents"), 0o755);
+    } catch {
+      // directory may not exist — ignore
+    }
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("ENOENT dir is silently skipped — no DISCOVERY_ERROR finding", async () => {
+    // agents/ dir doesn't exist at all — legitimately absent
+    // We need an index file for the class too; create it without markers
+    mkdirSync(join(tmpDir, "agents", ".claude"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "agents", ".claude", "CLAUDE.md"),
+      "# Agents\n\nNo markers here.\n",
+      "utf8",
+    );
+    // agents/ dir itself does not exist — the artifact directory is absent
+
+    const findings = await checkIndexDrift(tmpDir);
+    // Should get MISSING_MARKERS (no sentinels in the index) but NOT DISCOVERY_ERROR
+    const discoveryErrors = findings.filter((f) => f.code === "DISCOVERY_ERROR");
+    expect(discoveryErrors).toHaveLength(0);
+  });
+
+  it("unreadable dir surfaces DISCOVERY_ERROR so drift check is not CLEAN", async () => {
+    // Skip on non-Unix systems where chmod permissions don't apply the same way
+    if (process.platform === "win32") return;
+
+    // Create the agents dir and an index file with markers
+    mkdirSync(join(tmpDir, "agents"), { recursive: true });
+    mkdirSync(join(tmpDir, "agents", ".claude"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "agents", ".claude", "CLAUDE.md"),
+      [
+        "# Agents",
+        "",
+        INVENTORY_START("agents"),
+        "| artifact | summary |",
+        "|---|---|",
+        INVENTORY_END,
+      ].join("\n"),
+      "utf8",
+    );
+
+    // Make the agents/ artifact dir unreadable (not ENOENT — it exists but can't be listed)
+    chmodSync(join(tmpDir, "agents"), 0o000);
+
+    try {
+      const findings = await checkIndexDrift(tmpDir);
+      const discoveryErrors = findings.filter((f) => f.code === "DISCOVERY_ERROR");
+      expect(discoveryErrors.length).toBeGreaterThan(0);
+      expect(discoveryErrors[0].class).toBe("agents");
+      expect(discoveryErrors[0].message).toContain("Discovery degraded");
+    } finally {
+      // Restore before afterEach cleanup
+      chmodSync(join(tmpDir, "agents"), 0o755);
+    }
   });
 });

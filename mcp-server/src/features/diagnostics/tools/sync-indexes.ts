@@ -49,6 +49,56 @@ function indexFilePath(cls: ArtifactClass, projectDir: string): string {
   return join(projectDir, cls, ".claude", "CLAUDE.md");
 }
 
+type ScanResult =
+  | { ok: true; files: Array<{ filename: string; frontmatter: string }> }
+  | { ok: false; reason: string };
+
+/**
+ * Scan one artifact directory for .md files.
+ *
+ * observable-best-effort: ENOENT/ENOTDIR → silent skip (legitimately absent).
+ * Any other error → returns { ok: false, reason } so the caller can surface it.
+ */
+async function scanDir(
+  fullDir: string,
+  files: Array<{ filename: string; frontmatter: string }>,
+): Promise<{ skipped: boolean; error?: string }> {
+  let entries: string[];
+  try {
+    entries = await readdir(fullDir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return { skipped: true };
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: `discovery error for directory '${fullDir}': ${msg}`, skipped: false };
+  }
+  const mdFiles = entries.filter(
+    (e) => e.endsWith(".md") && e !== "README.md" && !e.startsWith("."),
+  );
+  for (const filename of mdFiles) {
+    const frontmatter = await readFrontmatter(join(fullDir, filename));
+    files.push({ filename, frontmatter });
+  }
+  return { skipped: false };
+}
+
+/**
+ * Collect all artifact files for a class across its directories.
+ * Returns { ok: true, files } or { ok: false, reason } on unexpected I/O error.
+ */
+async function collectFiles(cls: ArtifactClass, projectDir: string): Promise<ScanResult> {
+  const files: Array<{ filename: string; frontmatter: string }> = [];
+  for (const dir of CLASS_DIRS[cls]) {
+    const result = await scanDir(join(projectDir, dir), files);
+    if (result.error) {
+      return { ok: false, reason: result.error };
+    }
+  }
+  return { files, ok: true };
+}
+
 /**
  * Process one artifact class: discover artifacts, render block, read index,
  * rewrite markers if present, write atomically.
@@ -58,27 +108,12 @@ async function processClass(
   cls: ArtifactClass,
   projectDir: string,
 ): Promise<{ synced: true } | { synced: false; reason: string }> {
-  const dirs = CLASS_DIRS[cls];
-  const allFiles: Array<{ filename: string; frontmatter: string }> = [];
-
-  for (const dir of dirs) {
-    const fullDir = join(projectDir, dir);
-    let entries: string[];
-    try {
-      entries = await readdir(fullDir);
-    } catch {
-      continue;
-    }
-    const mdFiles = entries.filter(
-      (e) => e.endsWith(".md") && e !== "README.md" && !e.startsWith("."),
-    );
-    for (const filename of mdFiles) {
-      const frontmatter = await readFrontmatter(join(fullDir, filename));
-      allFiles.push({ filename, frontmatter });
-    }
+  const collected = await collectFiles(cls, projectDir);
+  if (!collected.ok) {
+    return { reason: collected.reason, synced: false };
   }
 
-  const descriptors = toDescriptors(allFiles);
+  const descriptors = toDescriptors(collected.files);
   const blockBody = renderInventoryBlock(descriptors);
 
   const idxPath = indexFilePath(cls, projectDir);

@@ -27,12 +27,12 @@ references/
 | artifact | summary |
 |---|---|
 | canon-artifact-locations.md |  |
-| canon-orchestrator.md | >- |
+| canon-orchestrator.md | Orchestrator protocol reference for Canon agent-teams mode. Covers PM requirements gate, architect dispatch, runbook execution, journal protocol, and completion checklist. DAG dispatch → references/dag-execution-protocol.md. HITL patterns → references/hitl-patterns.md. |
 | competition-debate.md |  |
 | content-flow.md |  |
 | context-isolation.md |  |
-| dag-execution-protocol.md | >- |
-| hitl-patterns.md | >- |
+| dag-execution-protocol.md | Full DAG execution protocol for Canon parallel builds. Covers DAG validation, Task Queue Setup, Worker Dispatch (TeamCreate/TaskCreate), Merge Protocol, Post-DAG Tail, and Failure Handling. Read before any build where task-dag.yaml exists or before TeamCreate/merge/cleanup. |
+| hitl-patterns.md | Full HITL checkpoint catalog for the Canon orchestrator. Covers every mandatory and advisory gate: plan approval, review verdict, adversarial re-review, WARNING close-out, manual verification, build-step checkpoint, cliff surfacing, merge conflict, gate failure, and architect design conversation. |
 | learner-dimensions.md |  |
 | plugin-server-boot.md |  |
 | principle-format.md |  |
