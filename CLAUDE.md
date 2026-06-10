@@ -527,7 +527,7 @@ Discovery: `list_loops`.
 `loops/ship-watch.md` only registers the definition — it does NOT start the loop. No manifest
 field, hook script, or command frontmatter can trigger scheduling automatically.
 
-## Project Structure <!-- last-updated: 2026-06-09 -->
+## Project Structure <!-- last-updated: 2026-06-10 -->
 
 ```
 canon/
@@ -565,6 +565,8 @@ canon/
 │   └── evals/            # Eval suite for intent classification
 ├── templates/            # Artifact templates agents must follow (includes prd.md, renderer-*.md, sharpened-request.md, worker-prompt.md, routine.md)
 └── .canon/               # Runtime data (workspaces, principles, config, JSONL drift store, SQLite DBs)
+    ├── kg-languages/     # Overlay LanguageConfig JSON files (provisioned by /canon:init Step 5b; read by kg-language-overlay.ts)
+    ├── grammars/         # Overlay tree-sitter .wasm grammar files (provisioned by /canon:init Step 5b)
     ├── routines/         # Per-routine state overrides and last-run timestamps (project-local precedence over plugin)
     └── workspaces/       # Per-branch/task build state
 ```
