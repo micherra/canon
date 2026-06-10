@@ -90,6 +90,56 @@ else
   fail "loud-fail: got [$OUT]"
 fi
 
+# ── Advisory 1 tests (newest-but-broken fallback) ───────────────────────────
+
+# Test 6 — Advisory 1: newest cache install is syntactically broken, older is valid.
+#   The resolver MUST skip the broken newest and exec the valid older one.
+#   bash -n (syntax check) is the sanity gate; runtime-broken-but-syntax-ok installs
+#   are STILL selected (that is the documented bound; see Advisory 1 in REVIEW-pr370.md).
+ADV1_HOME="$(mktemp -d)"
+mkdir -p "$ADV1_HOME/.claude/plugins/cache/mk/canon/9.9.9/mcp-server"
+# Newest: syntactically broken (bash -n will fail)
+printf '#!/usr/bin/env bash\nif then\n' > "$ADV1_HOME/.claude/plugins/cache/mk/canon/9.9.9/mcp-server/boot.sh"
+mkdir -p "$ADV1_HOME/.claude/plugins/cache/mk/canon/2.10.0/mcp-server"
+# Older: syntactically valid stub
+printf '#!/usr/bin/env bash\necho "STUB_BOOTED:fallback-older"\n' > "$ADV1_HOME/.claude/plugins/cache/mk/canon/2.10.0/mcp-server/boot.sh"
+OUT="$(run_payload "$ADV1_HOME" "$EMPTY" "" "" "")"
+if [[ "$OUT" == *"STUB_BOOTED:fallback-older"* ]]; then
+  pass "Advisory 1: broken-newest skipped; valid older install selected"
+else
+  fail "Advisory 1 broken-newest fallback: got [$OUT]"
+fi
+rm -rf "$ADV1_HOME"
+
+# Test 7 — Advisory 1: ALL cache installs are syntactically broken → CANON FATAL + exit 1.
+ADV1_ALL_BROKEN_HOME="$(mktemp -d)"
+mkdir -p "$ADV1_ALL_BROKEN_HOME/.claude/plugins/cache/mk/canon/9.9.9/mcp-server"
+printf '#!/usr/bin/env bash\nif then\n' > "$ADV1_ALL_BROKEN_HOME/.claude/plugins/cache/mk/canon/9.9.9/mcp-server/boot.sh"
+mkdir -p "$ADV1_ALL_BROKEN_HOME/.claude/plugins/cache/mk/canon/2.10.0/mcp-server"
+printf '#!/usr/bin/env bash\nif then\n' > "$ADV1_ALL_BROKEN_HOME/.claude/plugins/cache/mk/canon/2.10.0/mcp-server/boot.sh"
+OUT="$(run_payload "$ADV1_ALL_BROKEN_HOME" "$EMPTY" "" "" "")"
+if [[ "$OUT" == *"CANON FATAL"* && "$OUT" == *"EXIT:1"* ]]; then
+  pass "Advisory 1: all-broken cache emits CANON FATAL and exits 1 (no silent collapse)"
+else
+  fail "Advisory 1 all-broken: got [$OUT]"
+fi
+rm -rf "$ADV1_ALL_BROKEN_HOME"
+
+# ── Advisory 2 test (hooks/lint.sh shellchecks the payload) ─────────────────
+
+# Test 8 — Advisory 2: hooks/lint.sh's Check 3 runs shellcheck on the real
+#   .mcp.json -c payload and must pass (RC=0). This confirms the lint gate
+#   is wired and the shipped payload is shellcheck-clean.
+if command -v shellcheck >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  if bash "$REPO_ROOT/hooks/lint.sh" >/dev/null 2>&1; then
+    pass "Advisory 2: hooks/lint.sh (incl. payload shellcheck) passes on real .mcp.json"
+  else
+    fail "Advisory 2: hooks/lint.sh failed — payload may have shellcheck errors (run 'bash hooks/lint.sh' for details)"
+  fi
+else
+  echo "SKIP: Advisory 2 lint test (shellcheck or jq not installed)"
+fi
+
 echo "----"
 echo "mcp-json-resolver: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]
