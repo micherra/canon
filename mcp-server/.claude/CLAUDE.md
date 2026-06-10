@@ -231,7 +231,7 @@ src/
 **Recursive filesystem scanners — root threading**: Scanners that exclude paths by relative prefix must thread the original scan root through all recursive calls. Never update the root to the current directory. Pattern: `scanFn(currentDir, rootDir)` where `rootDir` never changes. The bug class (root-drift) is silent — exclusion logic passes at depth 0 and silently fails at depth 1+. See `tools/wiki-lint.ts` (`FindFilesCtx.originalRoot`) and `services/doc-gap-detect.ts` as reference implementations.
 
 ## Development
-<!-- last-updated: 2026-05-30 -->
+<!-- last-updated: 2026-06-09 -->
 
 ```bash
 npm install          # Install dependencies
@@ -241,3 +241,7 @@ npm test             # Run vitest unit tests
 ```
 
 Node.js 24+ required. Enforced at runtime by `boot.sh` Step 12.5 (fail-closed, actionable error) and declared in `package.json` `engines.node`. No `.tool-versions` pin is shipped — `boot.sh` validates the floor against the user's ambient Node.
+
+**Vitest policy** — `vitest.config.ts` sets `testTimeout: 20000` (20s) and `maxWorkers: 4` project-wide; do not add per-test `timeout` overrides — the config-level policy covers subprocess-heavy suites (git, depcruise, embeddings).
+
+**CI supply-chain gate** — `.github/workflows/ci.yml` runs `npm audit --omit=dev --audit-level=high` after `npm ci`; high+ production-dependency vulnerabilities fail CI.
