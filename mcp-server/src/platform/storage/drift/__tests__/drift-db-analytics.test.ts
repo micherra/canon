@@ -137,6 +137,56 @@ describe("getComplianceTrend", () => {
     expect(trend).toHaveLength(2);
   });
 
+  test("resolved violation is excluded from trend — no divergence with getCompliance total_violations (Codex P2)", () => {
+    // Seed: review with open violation for principle "deep-modules"
+    const week1 = "2026-01-05T10:00:00Z"; // W01 2026
+    store.appendReview(
+      makeReviewEntry({
+        files: ["src/foo.ts"],
+        honored: [],
+        review_id: "rev_viol",
+        timestamp: week1,
+        violations: [{ file_path: "src/foo.ts", principle_id: "deep-modules", severity: "rule" }],
+      }),
+    );
+
+    // Verify violation is counted before resolution
+    const beforeTrend = store.getComplianceTrend("deep-modules");
+    expect(beforeTrend.length).toBeGreaterThanOrEqual(1);
+    const totalViolationsBefore = beforeTrend.reduce((sum, pt) => sum + pt.violations, 0);
+    expect(totalViolationsBefore).toBe(1);
+
+    // Later review that resolves the violation: honored + no new violation → triggers auto-closure
+    const week2 = "2026-01-12T10:00:00Z"; // W02 2026
+    store.appendReview(
+      makeReviewEntry({
+        files: ["src/foo.ts"],
+        honored: ["deep-modules"],
+        review_id: "rev_clean",
+        timestamp: week2,
+        violations: [],
+      }),
+    );
+
+    // Verify closure happened
+    expect(store.getClosures().countOpenViolations()).toBe(0);
+
+    // After resolution: getComplianceTrend MUST NOT count the resolved violation
+    // (The trend should show 0 total violations across all buckets)
+    const afterTrend = store.getComplianceTrend("deep-modules");
+    const totalViolationsAfter = afterTrend.reduce((sum, pt) => sum + pt.violations, 0);
+    expect(totalViolationsAfter).toBe(0);
+
+    // Consistency check: open violation count from getReviews for the seed review
+    // must match the trend's violation count (both should be 0 — no divergence)
+    const reviews = store.getReviews({ principleId: "deep-modules" });
+    const seedReview = reviews.find((r) => r.review_id === "rev_viol");
+    expect(seedReview).toBeDefined();
+    const openViolationCountFromReviews = seedReview!.violations.length;
+    expect(openViolationCountFromReviews).toBe(0);
+    expect(totalViolationsAfter).toBe(openViolationCountFromReviews);
+  });
+
   test("ISO week handles year boundary correctly (late Dec / early Jan)", () => {
     // 2026-01-01 is a Thursday — it is in ISO week 1 of 2026
     store.appendReview(
