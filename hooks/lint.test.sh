@@ -281,6 +281,36 @@ actual=0
 bash "$REPO_C2_NEG/hooks/lint.sh" > /dev/null 2>&1 || actual=$?
 assert_exit "Check 2 negative: token only in command/env → passes" 0 "$actual"
 
+# ── Check 2 negative (bash -c shell form): the #356 fixed launcher → PASSES ──
+# When args contains a -c flag (shell invocation), ${CLAUDE_PLUGIN_ROOT} inside
+# the shell-command string is runtime-shell-expanded — NOT CC-substituted — so
+# it MUST NOT be flagged. This is the exact form introduced by PR #356's fix.
+
+REPO_C2_BASH_C="$IF_TMPDIR/c2_bash_c"
+mkdir -p "$REPO_C2_BASH_C"
+make_clean_git_repo "$REPO_C2_BASH_C"
+# The post-#356 fixed form: bash -c launcher with token inside the shell command
+cat > "$REPO_C2_BASH_C/.mcp.json" <<'JSONEOF'
+{
+  "mcpServers": {
+    "canon": {
+      "command": "bash",
+      "args": ["-c", "exec bash \"${CLAUDE_PLUGIN_ROOT:-$CANON_PLUGIN_DIR}/mcp-server/boot.sh\""],
+      "env": {
+        "CANON_PLUGIN_DIR": "${CLAUDE_PLUGIN_ROOT}",
+        "CANON_PROJECT_DIR": "${CLAUDE_PROJECT_DIR:-.}"
+      }
+    }
+  }
+}
+JSONEOF
+git -C "$REPO_C2_BASH_C" add .mcp.json
+git -C "$REPO_C2_BASH_C" commit -q -m "add mcp.json with bash -c shell launcher (safe)"
+
+actual=0
+bash "$REPO_C2_BASH_C/hooks/lint.sh" > /dev/null 2>&1 || actual=$?
+assert_exit "Check 2 negative (bash -c shell form): shell-expanded token in args passes" 0 "$actual"
+
 # ── Check 2 skip: jq unavailable → no hard-fail, prints skip notice ──────────
 
 REPO_C2_SKIP="$IF_TMPDIR/c2_skip"

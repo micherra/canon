@@ -83,10 +83,24 @@ check_mcp_json_args_token() {
   # Extract all args[] elements from all mcpServers and check for the token.
   # We match ${CLAUDE_PLUGIN_ROOT and ${CLAUDE_PLUGIN_DATA to catch the :-.
   # default form too. env and command keys are NOT checked (they are safe).
+  #
+  # SAFE SHAPE (skip): when args contains a "-c" element, the server is a
+  # shell invocation (e.g. bash/sh -c "<shell string>"). In that form the
+  # token is runtime-shell-expanded by bash, NOT substituted by Claude Code,
+  # so it is safe. We use "-c" presence as the primary discriminator because
+  # it is the minimal, unambiguous signal — without -c, shell interpreters
+  # do not treat the next arg as a command string.
+  #
+  # DANGEROUS SHAPE (flag): args with no "-c" (bare path args). CC does not
+  # substitute there → token resolves to literal / ':-.'-default ('.').
   local bad_count
   bad_count=$(jq -r '
     .mcpServers // {} |
-    to_entries[].value.args // [] |
+    to_entries[].value |
+    select(
+      (.args // [] | map(. == "-c") | any | not)
+    ) |
+    .args // [] |
     .[] |
     select(contains("${CLAUDE_PLUGIN_ROOT") or contains("${CLAUDE_PLUGIN_DATA"))
   ' "$mcp_json" 2>/dev/null | wc -l | tr -d ' ')
