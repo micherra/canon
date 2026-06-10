@@ -46,12 +46,13 @@ jobs:
   # The script itself archives HEAD, spawns the real .mcp.json launcher from a non-repo
   # cwd, and connects via MCP SDK StdioClientTransport.
   #
-  # Current status (pre-#356-fix base):
+  # Status (post-#356-fix, activated by PR #368):
   #   --self-check: PASSES — proves the harness catches the #356 broken form.
-  #   normal mode:  EXPECTED TO FAIL — reproduces #356 (${CLAUDE_PLUGIN_ROOT:-.} in args
-  #                 is not substituted by bash → launch fails from non-repo cwd).
-  #                 The job runs --self-check now; full normal-mode gate activates once
-  #                 PR #356 merges (fixing .mcp.json to use a BASH_SOURCE-resolved path).
+  #   normal mode:  ACTIVE GATE — PR #356 merged (fixing .mcp.json to use bash -c with
+  #                 shell-expanded path instead of literal ${} token). Normal mode now
+  #                 reproduces a real install: archives HEAD, symlinks node_modules,
+  #                 spawns the real .mcp.json launcher, and asserts initialize +
+  #                 non-empty listTools succeeds.
   #
   # Fidelity gap: node_modules are symlinked from the CI-installed repo copy rather than
   # a real CLAUDE_PLUGIN_DATA install. Does not affect path-resolution testing (#356/#361).
@@ -68,12 +69,10 @@ jobs:
       - name: Install mcp-server deps (required by boot.sh and the MCP SDK client)
         working-directory: mcp-server
         run: npm ci
-      - name: Run install-sim smoke test (self-check — proves harness catches #356)
-        # Runs from a non-repo cwd to mirror what a user's project dir would look like.
-        # The script itself relocates to a temp archive dir for the actual server spawn.
-        # --self-check mode: asserts broken form FAILS, fixed form SUCCEEDS.
-        # This mode passes on the current base (pre-#356-fix).
-        run: node scripts/install-sim-smoke.mjs --self-check
+      - name: Run install-sim smoke test (self-check + full normal-mode gate)
+        run: |
+          node scripts/install-sim-smoke.mjs --self-check
+          node scripts/install-sim-smoke.mjs
         working-directory: ${{ github.workspace }}
 
   build:
@@ -101,6 +100,8 @@ jobs:
           restore-keys: |
             hf-models-${{ runner.os }}-all-MiniLM-L6-v2-
       - run: npm ci
+      - name: Audit production dependencies (high+ fails CI)
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm run lint:deps
       - run: npm run build

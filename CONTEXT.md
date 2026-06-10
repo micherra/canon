@@ -80,6 +80,10 @@ The complexity classification of a build: `trivial` (single-file fix), `small` (
 
 The outcome of a review step: `CLEAN` (no violations found), `WARNING` (advisory items only — build may proceed after user acknowledgment), or `BLOCKING` (must-fix violations — build cannot ship until resolved). The orchestrator gates the ship step on a non-BLOCKING verdict.
 
+## Violation Lifecycle
+
+The state model for entries in the `violations` table of the drift database. Each violation carries a `status` field that is either `open` (default, unresolved) or `resolved`. A violation transitions to `resolved` when a review affirmatively honors its `(file, principle)` pair — meaning the file is in the review's file set, the principle is in the honored list, and the review does not re-record the same violation. Resolution is always an UPDATE (never a DELETE), preserving audit history. The `DriftDb.appendReview()` auto-closure path and the `reconcileStaleViolations` backfill path both produce resolutions; all operational reads (`get_drift_report`, `get_compliance`, pulse hook) exclude `status='resolved'` rows.
+
 ## Wave
 
 An execution ordering group in a task DAG. Wave 1 contains tasks with no dependencies (`depends_on: []`). Wave N contains tasks whose dependencies all completed in Wave N-1. Tasks within the same wave can run in parallel. Workers are dispatched by the orchestrator as each wave's prerequisites are satisfied.
