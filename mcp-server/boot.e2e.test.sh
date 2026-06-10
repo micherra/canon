@@ -35,8 +35,9 @@ fi
 #   boot.sh --print-resolution resolves via BASH_SOURCE; no npx.
 # ---------------------------------------------------------------------------
 OUTPUT=$(CLAUDE_PLUGIN_ROOT="" bash "$BOOT_SH" --print-resolution 2>/dev/null) || true
-SERVER_DIR=$(echo "$OUTPUT" | awk '{print $1}')
-TSX_BIN=$(echo "$OUTPUT" | awk '{print $3}')
+# Parse only the first line (legacy positional triple); diagnostic lines follow it.
+SERVER_DIR=$(echo "$OUTPUT" | head -1 | awk '{print $1}')
+TSX_BIN=$(echo "$OUTPUT" | head -1 | awk '{print $3}')
 
 if [[ "$SERVER_DIR" == "$SCRIPT_DIR" ]]; then
   pass "Repo-as-project: SERVER_DIR resolves to $SCRIPT_DIR via BASH_SOURCE"
@@ -88,9 +89,10 @@ fi
 # Run boot.sh --print-resolution with the fake plugin + data
 RESOLUTION=$(CLAUDE_PLUGIN_ROOT="$FAKE_PLUGIN" CLAUDE_PLUGIN_DATA="$FAKE_DATA" \
   bash "$FAKE_PLUGIN/mcp-server/boot.sh" --print-resolution 2>/dev/null) || true
-RESOLVED_SERVER=$(echo "$RESOLUTION" | awk '{print $1}')
-RESOLVED_NODE_PATH=$(echo "$RESOLUTION" | awk '{print $2}')
-RESOLVED_TSX=$(echo "$RESOLUTION" | awk '{print $3}')
+# Parse only the first line (legacy positional triple); diagnostic lines follow it.
+RESOLVED_SERVER=$(echo "$RESOLUTION" | head -1 | awk '{print $1}')
+RESOLVED_NODE_PATH=$(echo "$RESOLUTION" | head -1 | awk '{print $2}')
+RESOLVED_TSX=$(echo "$RESOLUTION" | head -1 | awk '{print $3}')
 
 if [[ "$RESOLVED_SERVER" == "$FAKE_PLUGIN/mcp-server" ]]; then
   pass "Fresh-cache: SERVER_DIR resolved to plugin mcp-server dir"
@@ -166,7 +168,26 @@ fi
 rm -rf "$SYM_PLUGIN" "$SYM_DATA"
 
 # ---------------------------------------------------------------------------
-# Test 6: git status is clean after the above (no working-tree churn)
+# Test 6: .tool-versions not tracked — neither root nor mcp-server/.tool-versions
+# should appear in git ls-files after the asdf-pin fix.
+# ---------------------------------------------------------------------------
+TOOL_VERSIONS_TRACKED=$(git -C "$REPO_ROOT" ls-files | grep 'tool-versions' || true)
+if [[ -z "$TOOL_VERSIONS_TRACKED" ]]; then
+  pass ".tool-versions files are not tracked in git"
+else
+  fail ".tool-versions still tracked: $TOOL_VERSIONS_TRACKED"
+fi
+
+# Test 7 (was 6): .gitignore contains .tool-versions
+ROOT_GITIGNORE="$REPO_ROOT/.gitignore"
+if [[ -f "$ROOT_GITIGNORE" ]] && grep -q '\.tool-versions' "$ROOT_GITIGNORE"; then
+  pass ".gitignore contains .tool-versions"
+else
+  fail ".gitignore does not contain .tool-versions (file: $ROOT_GITIGNORE)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 8 (was 6): git status is clean after the above (no working-tree churn)
 # ---------------------------------------------------------------------------
 STATUS=$(git -C "$REPO_ROOT" status --short 2>/dev/null)
 # We only care about tracked files in the working tree

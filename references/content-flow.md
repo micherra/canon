@@ -12,12 +12,13 @@ Any Canon intent that edits a tracked file belongs in a workspace-creating flow 
 2. L4 (the active-workspace hook) can verify the change is part of a sanctioned flow.
 3. The mandatory tail (`context-sync`, `learn`) runs, keeping Canon's documentation and principles current.
 
-The content flow is the workspace-creating mechanism for three non-build intents:
+The content flow is the workspace-creating mechanism for non-build intents:
 
 | Intent | Variant | Spawning agent |
 |--------|---------|----------------|
 | `principle` | `content-flow/principle` | `writer` |
 | `learn` (application mode) | `content-flow/learn-apply` | `writer` (receives accepted proposal from learner) |
+| `routine` | `content-flow/routine` | `writer` (routine mode) |
 | `docs` | `content-flow/docs` | (future; engineer in content-authoring mode) |
 
 > **Note on `init_workspace`:** As of this writing, `init_workspace` defaults to a build-intent workspace layout. Full `intent_class` support (`build` | `principle` | `learn` | `docs`) needs to be added in a follow-up task (MCP server files are out of scope here). The behavioral contract defined in this document is the authoritative spec; the MCP tool will catch up. Until then, orchestrators calling `init_workspace` for a content flow should use a slug that signals the variant (e.g., `principle-<slug>`, `learn-apply-<slug>`).
@@ -79,7 +80,7 @@ The `*-SUMMARY.md` is the primary artifact. It must document:
 
 ---
 
-## Variant Specifications
+## Variant Specifications <!-- last-updated: 2026-06-09 -->
 
 ### `content-flow/principle` — writer agent
 
@@ -98,6 +99,19 @@ Triggered by: user acceptance of a proposal from `.canon/proposed-learnings/` an
 - When the user accepts a proposal, the orchestrator creates a workspace and spawns the `writer` with the accepted proposal as context. The writer applies the change using its full pipeline: conflict detection, format validation, severity checks, and implementation logging.
 - The writer receives the proposal file path in its spawn prompt and produces a `*-SUMMARY.md`.
 
+### `content-flow/routine` — writer agent <!-- last-updated: 2026-06-09 -->
+
+Triggered by: user request to create a new Canon routine via `/canon:routine` or directly.
+
+- The orchestrator calls `init_workspace` with a slug derived from the routine name (e.g., `routine-daily-drift-report`).
+- The `implement` step spawns the `writer` agent in routine mode.
+- The writer reads `templates/routine.md`, conducts the structured interview (11 questions mapping 1:1 to frontmatter fields), applies guardrail-floor and binding-override-coherence lint rules, and saves to `routines/<name>.md` (tracked) or `.canon/routines/<name>.md` (private, if `--private` was passed).
+- The writer receives the workspace path in its spawn prompt and produces a `*-SUMMARY.md` upon completion.
+- The **review step** enforces:
+  - Guardrail floor: `guardrails.mutates_running_build` is `false`.
+  - Binding-override coherence: if `binding_target` is set, it is consistent with `needs.state` and `needs.daemon`. Canonical binding rule: `mcp-server/src/features/routines/services/resolve-binding.ts` — keep in sync.
+  - Fresh-clone runnability: cloud-bound routine bodies (`binding_target: cloud-routine` or derived equivalent) must be self-contained and assume a fresh clone — no references to local `.canon/` state.
+
 ### `content-flow/docs` (future)
 
 Triggered by: documentation-only edits (`docs/*.md`, `references/*.md`, etc.).
@@ -106,9 +120,9 @@ Not yet active. When added, the `implement` step will spawn an engineer with `sk
 
 ---
 
-## Orchestrator Protocol
+## Orchestrator Protocol <!-- last-updated: 2026-06-09 -->
 
-When routing a `principle`, `learn` (application), or `docs` intent:
+When routing a `principle`, `learn` (application), `routine`, or `docs` intent:
 
 1. Call `init_workspace({ flow_name: "content-flow", task: "<description>", tier: "fast-path", ... })`.
 2. Determine which variant applies (see table above).

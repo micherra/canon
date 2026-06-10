@@ -27,13 +27,36 @@ describe("classifyMdNode", () => {
   });
 
   it("returns undefined for unrecognized paths", () => {
-    expect(classifyMdNode("docs/random.md")).toBeUndefined();
+    // docs/ is now a known prefix — this test updated to an unrecognized path
+    expect(classifyMdNode("unknown/random.md")).toBeUndefined();
   });
 
   it("supports custom kind rules", () => {
     const rules = [{ kind: "documentation", prefix: "docs/" }];
     expect(classifyMdNode("docs/guide.md", rules)).toBe("documentation");
     expect(classifyMdNode("agents/foo.md", rules)).toBeUndefined();
+  });
+
+  it("classifies doc paths as doc kind", () => {
+    expect(classifyMdNode("docs/bounded-context-map.md")).toBe("doc");
+    expect(classifyMdNode("docs/reference/canon-reference.md")).toBe("doc");
+    expect(classifyMdNode("mcp-server/src/domains/flows/README.md")).toBe("doc");
+    expect(classifyMdNode("CONTEXT.md")).toBe("doc");
+  });
+
+  it("excludes docs/explore/ paths from classification", () => {
+    expect(classifyMdNode("docs/explore/adaptive-queen.md")).toBeUndefined();
+    expect(classifyMdNode("docs/explore/workflow-integration/PROPOSAL-A.md")).toBeUndefined();
+  });
+
+  it("still excludes agents/README.md from classification", () => {
+    // README.md basename exclusion still applies outside mcp-server/src/domains/
+    expect(classifyMdNode("agents/README.md")).toBeUndefined();
+  });
+
+  it("classifies mcp-server/src/domains/ README.md as doc (path-aware narrowing)", () => {
+    // domain READMEs are classified as doc nodes; stem-collision guard only applies to name maps
+    expect(classifyMdNode("mcp-server/src/domains/flows/README.md")).toBe("doc");
   });
 });
 
@@ -79,6 +102,13 @@ describe("buildNameMaps", () => {
     const maps = await buildNameMaps(["agents/.claude/CLAUDE.md", "agents/guide.md"], tmpDir);
     expect(maps.byStem.has("CLAUDE")).toBe(false);
     expect(maps.byStem.has("guide")).toBe(true);
+  });
+
+  it("keeps README out of byStem even for mcp-server/src/domains/ paths (stem-collision protection)", async () => {
+    // buildNameMaps uses the original isExcludedDoc (basename-based), preserving anti-collision intent
+    await mkdir(join(tmpDir, "mcp-server", "src", "domains", "flows"), { recursive: true });
+    const maps = await buildNameMaps(["mcp-server/src/domains/flows/README.md"], tmpDir);
+    expect(maps.byStem.has("README")).toBe(false);
   });
 });
 
@@ -259,6 +289,48 @@ describe("inferMdRelations", () => {
     expect(flowEdge).toBeDefined();
   });
 
+  it("infers ref:path edges for cited code file paths in fileSet", async () => {
+    await mkdir(join(tmpDir, "docs"), { recursive: true });
+    await mkdir(join(tmpDir, "mcp-server", "src", "graph"), { recursive: true });
+    // doc body cites a .ts path that is in fileSet → edge emitted
+    await writeFile(
+      join(tmpDir, "docs", "freshness-design.md"),
+      "---\ntitle: Freshness Design\n---\n\nSee `mcp-server/src/graph/kg-store.ts` for the storage layer.",
+    );
+    // The .ts file doesn't need to exist on disk — fileSet membership is the gate
+    const filePaths = ["docs/freshness-design.md", "mcp-server/src/graph/kg-store.ts"];
+    const fileSet = new Set(filePaths);
+    const maps = await buildNameMaps(filePaths, tmpDir);
+    const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
+
+    const codeEdge = edges.find(
+      (e) =>
+        e.source === "docs/freshness-design.md" &&
+        e.target === "mcp-server/src/graph/kg-store.ts" &&
+        e.relation === "ref:path",
+    );
+    expect(codeEdge).toBeDefined();
+    expect(codeEdge?.confidence).toBe(0.7);
+  });
+
+  it("does NOT emit ref:path edge for cited code paths not in fileSet", async () => {
+    await mkdir(join(tmpDir, "docs"), { recursive: true });
+    await writeFile(
+      join(tmpDir, "docs", "freshness-design.md"),
+      "---\ntitle: Freshness Design\n---\n\nSee `mcp-server/src/graph/kg-store.ts` for the storage layer.",
+    );
+    // kg-store.ts is NOT in fileSet
+    const filePaths = ["docs/freshness-design.md"];
+    const fileSet = new Set(filePaths);
+    const maps = await buildNameMaps(filePaths, tmpDir);
+    const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
+
+    const codeEdge = edges.find(
+      (e) => e.source === "docs/freshness-design.md" && e.relation === "ref:path",
+    );
+    expect(codeEdge).toBeUndefined();
+  });
+
   it("deduplicates edges by source|target|relation", async () => {
     await writeFile(
       join(tmpDir, "flows", "feature.md"),
@@ -338,5 +410,64 @@ describe("codebaseGraph with md-relations", () => {
     // Should have agent edges
     const agentEdges = result.edges.filter((e) => e.relation === "fm:agent");
     expect(agentEdges.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── DDD doc freshness: AC 1 end-to-end ──────────────────────────────────
+  // Integration gap: no existing test exercises the full codebaseGraph tool
+  // with docs/, mcp-server/src/domains/, and CONTEXT.md fixtures. The unit
+  // tests in classifyMdNode verify the classification rules in isolation; this
+  // test verifies the wiring from CANON_SCAN_DIRS/CANON_SCAN_FILES through
+  // the full codebaseGraph call path to the observable node output.
+
+  it("codebaseGraph emits doc nodes for docs/, domain READMEs, and CONTEXT.md (AC 1)", async () => {
+    // docs/ — one DDD doc
+    await mkdir(join(tmpDir, "docs"), { recursive: true });
+    await writeFile(join(tmpDir, "docs", "bounded-context-map.md"), "# Bounded Context Map\n");
+
+    // docs/explore/ — must produce NO doc node (stale-by-design exclusion)
+    await mkdir(join(tmpDir, "docs", "explore"), { recursive: true });
+    await writeFile(join(tmpDir, "docs", "explore", "PROPOSAL-X.md"), "# Proposal X (stale)\n");
+
+    // mcp-server/src/domains/<name>/README.md — domain README
+    await mkdir(join(tmpDir, "mcp-server", "src", "domains", "flows"), { recursive: true });
+    await writeFile(
+      join(tmpDir, "mcp-server", "src", "domains", "flows", "README.md"),
+      "# Flows Domain\n",
+    );
+
+    // root CONTEXT.md — singleton via CANON_SCAN_FILES
+    await writeFile(join(tmpDir, "CONTEXT.md"), "# Context Glossary\n");
+
+    // Minimal required files so the scanner doesn't fail on empty dirs
+    await writeFile(join(tmpDir, "agents", "test.md"), "---\nname: test\n---\n");
+
+    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+
+    // docs/bounded-context-map.md must be a doc node
+    const bcmNode = result.nodes.find((n) => n.id === "docs/bounded-context-map.md");
+    expect(bcmNode, "docs/bounded-context-map.md must appear as a node").toBeDefined();
+    expect(bcmNode?.kind).toBe("doc");
+
+    // mcp-server/src/domains/flows/README.md must be a doc node
+    const domainReadmeNode = result.nodes.find(
+      (n) => n.id === "mcp-server/src/domains/flows/README.md",
+    );
+    expect(domainReadmeNode, "domain README.md must appear as a node").toBeDefined();
+    expect(domainReadmeNode?.kind).toBe("doc");
+
+    // root CONTEXT.md must be a doc node
+    const contextNode = result.nodes.find((n) => n.id === "CONTEXT.md");
+    expect(contextNode, "CONTEXT.md must appear as a node").toBeDefined();
+    expect(contextNode?.kind).toBe("doc");
+
+    // docs/explore/PROPOSAL-X.md must NOT be classified as a 'doc' node.
+    // EXCLUDED_DOC_PREFIXES prevents kind assignment — the file may still appear
+    // in the scan output (as a kind-less node) but must never carry kind='doc'.
+    // This matches the AC: "docs/explore/** produces NO doc node" (kind-level exclusion).
+    const exploreNode = result.nodes.find((n) => n.id?.includes("explore"));
+    expect(
+      exploreNode?.kind,
+      "docs/explore/ files must NOT be classified as kind='doc' (stale-by-design exclusion)",
+    ).toBeUndefined();
   });
 });

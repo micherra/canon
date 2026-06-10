@@ -7,7 +7,7 @@
  *   3. Boundary enforcement: npm run lint:deps exits 0 (dc-04)
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -108,10 +108,20 @@ describe("bounded context directories — README.md files (dc-06)", () => {
 
 describe("boundary enforcement — dependency-cruiser (dc-04)", () => {
   it("npm run lint:deps exits 0 (no boundary violations)", { timeout: 30000 }, () => {
+    // Invoke depcruise via the local binary rather than `npm run lint:deps` to ensure
+    // deterministic CWD and config resolution regardless of how the test runner is invoked.
+    // `npm run` can pick up a different CWD or spawn a sub-shell that resolves depcruise
+    // from a different PATH entry (e.g., a system install with a different version or
+    // different config lookup). Using the local binary ensures we always scan the same
+    // src/ tree with the same .dependency-cruiser.cjs that lives next to it.
+    const depcruiseBin = resolve(MCP_SERVER_ROOT, "node_modules", ".bin", "depcruise");
+    const configPath = resolve(MCP_SERVER_ROOT, ".dependency-cruiser.cjs");
+    const srcPath = resolve(MCP_SERVER_ROOT, "src");
+
     let exitCode = 0;
     let stderr = "";
     try {
-      execSync("npm run lint:deps", {
+      execFileSync(depcruiseBin, ["--validate", configPath, srcPath], {
         cwd: MCP_SERVER_ROOT,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],

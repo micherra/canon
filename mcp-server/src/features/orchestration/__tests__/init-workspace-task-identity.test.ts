@@ -63,7 +63,14 @@ afterEach(() => {
   tmpDirs = [];
 });
 
-describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", () => {
+// Timeout justification: each test calls initWorkspaceFlow which runs git-worktree-add
+// (real git subprocess, ~0.5–1s each). The third test calls initWorkspaceFlow twice
+// (2 git worktree creations). Combined with TypeScript import overhead (~2s cold start),
+// the suite can exceed vitest's default 5000ms on slower machines or CI.
+// Measured worst case: ~8s total for all 3 tests. 20s gives 2.5× headroom.
+describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
+  timeout: 20000,
+}, () => {
   it("resumes the same workspace when task matches", async () => {
     const projectDir = makeTmpProjectDir();
     const baseCommit = initGitRepo(projectDir);
