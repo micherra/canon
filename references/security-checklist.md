@@ -74,7 +74,7 @@ Route findings in these classes to `info` severity rather than reporting them ab
 
 1. **Denial of Service (DOS) / resource exhaustion** — DOS vulnerabilities and resource exhaustion attacks.
 2. **Secrets secured on disk** — Secrets or credentials stored on disk if they are otherwise secured.
-3. **Rate limiting** — Rate limiting concerns or service overload scenarios.
+3. **Rate limiting** — Generic/DOS-oriented rate limiting concerns (e.g., on read-only public endpoints) or service overload scenarios. **Exception**: missing rate limiting on authentication or credential endpoints (login, token issuance, password reset) remains an ACTIONABLE finding under the "Data handling" category above and is NOT downgraded by this exclusion.
 4. **Memory/CPU exhaustion** — Memory consumption or CPU exhaustion issues.
 5. **Non-security-critical input validation** — Lack of input validation on non-security-critical fields without proven security impact.
 6. **GitHub Action input sanitization** — Input sanitization concerns for GitHub Action workflows unless they are clearly triggerable via untrusted input.
