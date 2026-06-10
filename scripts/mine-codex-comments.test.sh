@@ -118,6 +118,91 @@ result=$(parse_comment_line "$no_match_body")
 assert_eq "no badge body -> empty result" "" "$result"
 
 echo ""
+echo "-- classify_gh_failure: 404 / not-found errors are acceptable skips --"
+
+assert_eq "exit=1, 'HTTP 404' -> skip" "skip" \
+  "$(classify_gh_failure 1 'gh: HTTP 404 (https://api.github.com/repos/...)')"
+
+assert_eq "exit=1, 'Not Found' -> skip" "skip" \
+  "$(classify_gh_failure 1 'gh: Not Found (HTTP 404)')"
+
+assert_eq "exit=1, 'not found' (lowercase) -> skip" "skip" \
+  "$(classify_gh_failure 1 'GraphQL: not found')"
+
+assert_eq "exit=1, 'No such' -> skip" "skip" \
+  "$(classify_gh_failure 1 'No such resource')"
+
+echo ""
+echo "-- classify_gh_failure: rate-limit / auth / 5xx / network are aborts --"
+
+assert_eq "exit=1, HTTP 429 rate-limit -> abort" "abort" \
+  "$(classify_gh_failure 1 'gh: HTTP 429 Too Many Requests (https://api.github.com/repos/...)')"
+
+assert_eq "exit=1, HTTP 401 auth -> abort" "abort" \
+  "$(classify_gh_failure 1 'gh: HTTP 401 Unauthorized (https://api.github.com/repos/...)')"
+
+assert_eq "exit=1, HTTP 403 scope -> abort" "abort" \
+  "$(classify_gh_failure 1 'gh: HTTP 403 Forbidden (https://api.github.com/repos/...)')"
+
+assert_eq "exit=1, HTTP 500 server error -> abort" "abort" \
+  "$(classify_gh_failure 1 'gh: HTTP 500 Internal Server Error')"
+
+assert_eq "exit=1, network error -> abort" "abort" \
+  "$(classify_gh_failure 1 'error: failed to connect to github.com')"
+
+assert_eq "exit=1, empty stderr -> abort" "abort" \
+  "$(classify_gh_failure 1 '')"
+
+echo ""
+echo "-- fetch_pr_comments integration: stub gh binary, verify fail-closed path --"
+# Stub gh via PATH prepend so fetch_pr_comments uses our controlled fake.
+# This exercises the real integration seam: gh_exit capture via || gh_exit=$?,
+# classify_gh_failure dispatch, and the correct return code from fetch_pr_comments.
+
+STUB_DIR=$(mktemp -d)
+
+# Stub: exits 1 with HTTP 429 stderr — must make fetch_pr_comments return 1 (abort)
+cat > "$STUB_DIR/gh" <<'STUB'
+#!/bin/bash
+printf 'gh: HTTP 429 Too Many Requests (https://api.github.com/repos/...)\n' >&2
+exit 1
+STUB
+chmod +x "$STUB_DIR/gh"
+
+result_exit=0
+output=$(PATH="$STUB_DIR:$PATH" fetch_pr_comments "99" 2>/dev/null) || result_exit=$?
+assert_eq "stub gh exits 1 + HTTP 429 stderr -> fetch_pr_comments returns 1" "1" "$result_exit"
+assert_eq "stub gh exits 1 + HTTP 429 stderr -> no stdout emitted" "" "$output"
+
+# Stub: exits 1 with HTTP 404 stderr — must make fetch_pr_comments return 0 (skip)
+cat > "$STUB_DIR/gh" <<'STUB'
+#!/bin/bash
+printf 'gh: HTTP 404 Not Found (https://api.github.com/repos/...)\n' >&2
+exit 1
+STUB
+chmod +x "$STUB_DIR/gh"
+
+result_exit=0
+output=$(PATH="$STUB_DIR:$PATH" fetch_pr_comments "42" 2>/dev/null) || result_exit=$?
+assert_eq "stub gh exits 1 + HTTP 404 stderr -> fetch_pr_comments returns 0 (skip)" "0" "$result_exit"
+assert_eq "stub gh exits 1 + HTTP 404 stderr -> no stdout emitted" "" "$output"
+
+# Stub: exits 0 with comment output — must pass stdout through and return 0
+cat > "$STUB_DIR/gh" <<'STUB'
+#!/bin/bash
+printf 'src/foo.ts\tsome comment body\n'
+exit 0
+STUB
+chmod +x "$STUB_DIR/gh"
+
+result_exit=0
+output=$(PATH="$STUB_DIR:$PATH" fetch_pr_comments "7") || result_exit=$?
+assert_eq "stub gh exits 0 -> fetch_pr_comments returns 0" "0" "$result_exit"
+assert_eq "stub gh exits 0 -> stdout passed through" "src/foo.ts	some comment body" "$output"
+
+rm -rf "$STUB_DIR"
+
+echo ""
 echo "-- Summary --"
 echo "  PASS: $PASS"
 echo "  FAIL: $FAIL"

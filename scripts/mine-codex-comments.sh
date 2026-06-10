@@ -167,19 +167,79 @@ unclassified_title() {
 }
 
 # ---------------------------------------------------------------------------
+# classify_gh_failure <exit_code> <stderr_text>
+#   Classifies a non-zero gh api exit as "skip" (404/not-found — acceptable)
+#   or "abort" (rate-limit, auth, 5xx, network — real failure).
+#   Prints "skip" or "abort". Exit code is always 0 (pure classifier).
+#
+#   Exported so the xargs wrapper can source it alongside fetch_pr_comments.
+# ---------------------------------------------------------------------------
+classify_gh_failure() {
+  local _exit_code="$1"  # reserved for future numeric checks; classification driven by stderr text
+  local stderr_text="$2"
+
+  # HTTP 404 / resource not found — PR or its comments were deleted.
+  # Acceptable: mine should keep running over remaining PRs.
+  if printf '%s' "$stderr_text" | grep -qiE 'HTTP 404|not found|No such'; then
+    printf 'skip'
+    return 0
+  fi
+
+  # Any other non-zero exit is a real failure: rate-limit (HTTP 429),
+  # auth/scope error (HTTP 401/403), server error (HTTP 5xx), network failure, etc.
+  printf 'abort'
+  return 0
+}
+export -f classify_gh_failure
+
+# ---------------------------------------------------------------------------
 # fetch_pr_comments <pr_number>
 #   Pulls Codex bot review comments for one PR and prints tab-separated
 #   "PATH\tBODY" rows. One row per comment.
 #   Called by xargs -P 8 worker (exported below).
+#
+#   Fail-closed: any non-404 gh api failure exits non-zero so the xargs
+#   worker signals failure, causing the main script to abort before writing
+#   the output artifact from a silently-partial corpus.
+#   Only HTTP 404 (deleted PR / comments) is skipped quietly.
+#   The xargs wrapper sources this script, so explicit export -f is not
+#   required — but classify_gh_failure is exported for clarity.
 # ---------------------------------------------------------------------------
 fetch_pr_comments() {
   local pr_num="$1"
+  local tmp_out tmp_err failure_class
+  local gh_exit=0
+  tmp_out=$(mktemp)
+  tmp_err=$(mktemp)
+
   # Filter is inline in jq to avoid --arg flag incompatibility with gh api --jq
+  # Initialize gh_exit=0 before; capture real exit in || clause so set -e does not
+  # fire here (we handle failure explicitly below).
   gh api "repos/:owner/:repo/pulls/${pr_num}/comments" \
     --paginate \
     --jq '.[] | select(.user.login=="chatgpt-codex-connector[bot]") | [.path, .body] | @tsv' \
-    2>/dev/null \
-    || true  # DOCUMENTED FAIL-OPEN -- non-zero gh exit (e.g. deleted PR) skipped; tally printed later
+    > "$tmp_out" 2> "$tmp_err" || gh_exit=$?
+
+  if [[ $gh_exit -eq 0 ]]; then
+    cat "$tmp_out"
+    rm -f "$tmp_out" "$tmp_err"
+    return 0
+  fi
+
+  # Non-zero exit: classify to decide whether to skip or abort.
+  failure_class=$(classify_gh_failure "$gh_exit" "$(cat "$tmp_err")")
+
+  if [[ "$failure_class" == "skip" ]]; then
+    # 404 / deleted PR — acceptable; skip this PR quietly.
+    rm -f "$tmp_out" "$tmp_err"
+    return 0
+  fi
+
+  # Real failure (rate-limit, auth, 5xx, network) — emit error and abort the worker.
+  >&2 printf 'ERROR: gh api failed (exit %d) for PR #%s\n' "$gh_exit" "$pr_num"
+  >&2 cat "$tmp_err"
+  rm -f "$tmp_out" "$tmp_err"
+  return 1  # non-zero exit propagates through xargs → aborts main before corpus write
 }
 
 # ---------------------------------------------------------------------------
