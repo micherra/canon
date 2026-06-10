@@ -217,6 +217,18 @@ Recommend one approach with clear rationale tied to Canon principles.
 
 **Surface your assumptions explicitly** (agent-surface-assumptions) — include an `ASSUMPTIONS:` block in the design document after the summary, before the approaches. If any assumption is uncertain enough to affect the recommended approach, list it as an explicit question for the user.
 
+**Durable ADR gate**: After recording each decision in `${WORKSPACE}/decisions/`, evaluate whether it also warrants a durable Architecture Decision Record. The gate is conjunctive — ALL THREE conditions must hold:
+
+- **(a) Hard-to-reverse** — undoing the decision requires significant rework or breaking changes.
+- **(b) Surprising-without-context** — a future contributor would not naturally understand why this approach was chosen.
+- **(c) Genuine trade-off** — at least two options were considered and the chosen option has real costs.
+
+**All three, or no ADR.** Fail any one condition → no ADR.
+
+**Negative scope**: This gate applies only to architect design-conversation decisions. It does NOT apply to scribe updates, engineer fix decisions, or any non-qualifying decision (those stay ephemeral-only in `.canon/decisions/`).
+
+When all three conditions hold, ALSO write the decision as `docs/adr/NNNN-slug.md` INTO THE BUILD WORKTREE (so it ships in the same PR), using the template at `docs/adr/TEMPLATE.md`. Assign `NNNN` = highest existing number under `docs/adr/` + 1, 4-digit zero-padded. **Creation is lazy** — do not create `docs/adr/` unless a qualifying decision exists for this build.
+
 ### Step 5: Produce design document
 
 Save to the path specified by the orchestrator (typically `.canon/plans/{task-slug}/DESIGN.md`) using the design-document template at `${CLAUDE_PLUGIN_ROOT}/templates/design-document.md`. For epic flows, include the North Star section with machine-readable done criteria in frontmatter.
@@ -363,7 +375,9 @@ This is the fallback for cases where the PM conversation was insufficient. Most 
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Read requirements from spawn prompt**: The PM's requirements summary is in your spawn prompt. If legacy research notes exist at `${WORKSPACE}/plans/${slug}/research-notes.md` (from older pipeline versions), read them as supplementary context.
-2. **Record decisions**: For each non-trivial design decision, save a decision doc to `${WORKSPACE}/decisions/` using the design-decision template at `${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md`. Read the template first and follow its structure exactly (see agent-template-required rule). Name files `{decision-id}.md`.
+2. **Record decisions (two-tier model)**: For each non-trivial design decision, save a decision doc to `${WORKSPACE}/decisions/` using the design-decision template at `${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md`. Read the template first and follow its structure exactly (see agent-template-required rule). Name files `{decision-id}.md`. This ephemeral record is consumed by engineers mid-build via the plan's `decisions:` frontmatter link — this path is unchanged.
+
+   **Additionally**, for decisions that pass the conjunctive 3-condition gate (hard-to-reverse AND surprising-without-context AND genuine-trade-off — all three, or none), ALSO write a durable `docs/adr/NNNN-slug.md` in the build worktree per the gate in Step 4. Qualifying decisions get BOTH an ephemeral `.canon/decisions/` record AND a durable `docs/adr/` entry. Non-qualifying decisions get ONLY the ephemeral record.
 3. **Initialize context.md**: Create `${WORKSPACE}/context.md` using the session-context template at `${CLAUDE_PLUGIN_ROOT}/templates/session-context.md`. Read the template first and follow its structure exactly (see agent-template-required rule).
 4. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
