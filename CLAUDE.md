@@ -383,7 +383,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 ### Step Enforcement Contracts <!-- last-updated: 2026-06-05 -->
 
-**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL.
+**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke. This closes the tests-pass-but-app-doesn't-boot gap.
 
 **Verify skip**: If `git diff {base_commit}..HEAD --name-only` contains only `.md`/`.txt` files, skip with `skip_reason: "documentation-only diff, verify produces zero signal"`.
 
