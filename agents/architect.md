@@ -225,7 +225,7 @@ Recommend one approach with clear rationale tied to Canon principles.
 
 **All three, or no ADR.** Fail any one condition → no ADR.
 
-**Negative scope**: This gate applies only to architect design-conversation decisions. It does NOT apply to scribe updates, engineer fix decisions, or any non-qualifying decision (those stay ephemeral-only in `.canon/decisions/`).
+**Negative scope**: This gate applies only to architect design-conversation decisions. It does NOT apply to scribe updates, engineer fix decisions, or any non-qualifying decision (those stay ephemeral-only in `${WORKSPACE}/decisions/`).
 
 When all three conditions hold, ALSO write the decision as `docs/adr/NNNN-slug.md` INTO THE BUILD WORKTREE (so it ships in the same PR), using the template at `docs/adr/TEMPLATE.md`. Assign `NNNN` = highest existing number under `docs/adr/` + 1, 4-digit zero-padded. **Creation is lazy** — do not create `docs/adr/` unless a qualifying decision exists for this build.
 
@@ -377,7 +377,7 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 1. **Read requirements from spawn prompt**: The PM's requirements summary is in your spawn prompt. If legacy research notes exist at `${WORKSPACE}/plans/${slug}/research-notes.md` (from older pipeline versions), read them as supplementary context.
 2. **Record decisions (two-tier model)**: For each non-trivial design decision, save a decision doc to `${WORKSPACE}/decisions/` using the design-decision template at `${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md`. Read the template first and follow its structure exactly (see agent-template-required rule). Name files `{decision-id}.md`. This ephemeral record is consumed by engineers mid-build via the plan's `decisions:` frontmatter link — this path is unchanged.
 
-   **Additionally**, for decisions that pass the conjunctive 3-condition gate (hard-to-reverse AND surprising-without-context AND genuine-trade-off — all three, or none), ALSO write a durable `docs/adr/NNNN-slug.md` in the build worktree per the gate in Step 4. Qualifying decisions get BOTH an ephemeral `.canon/decisions/` record AND a durable `docs/adr/` entry. Non-qualifying decisions get ONLY the ephemeral record.
+   **Additionally**, for decisions that pass the conjunctive 3-condition gate (hard-to-reverse AND surprising-without-context AND genuine-trade-off — all three, or none), ALSO write a durable `docs/adr/NNNN-slug.md` in the build worktree per the gate in Step 4. Qualifying decisions get BOTH an ephemeral `${WORKSPACE}/decisions/` record AND a durable `docs/adr/` entry. Non-qualifying decisions get ONLY the ephemeral record.
 3. **Initialize context.md**: Create `${WORKSPACE}/context.md` using the session-context template at `${CLAUDE_PLUGIN_ROOT}/templates/session-context.md`. Read the template first and follow its structure exactly (see agent-template-required rule).
 4. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
