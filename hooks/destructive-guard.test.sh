@@ -40,13 +40,6 @@ run_test "git worktree remove passes"                 0 "$(make_input 'git workt
 run_test "empty command passes"                       0 '{"command":""}'
 run_test "non-git command passes"                     0 "$(make_input 'npm test')"
 run_test "no command field passes"                    0 '{"tool":"Bash","other":"value"}'
-# Regression: verification grep for string-executing wrappers must not be self-blocking.
-# The quote-aware tokenizer collapses the single-quoted span 'bash -c' into one token,
-# which does NOT equal the bare "bash" command token — so the scan-forward walks past it.
-# This pins the behavior so a future guard change cannot silently regress it.
-# fixture: intentional guard-behavior pin for single-quoted verification grep
-run_test "grep 'bash -c' file.sh passes (single-quoted single-token, not self-blocking)" \
-  0 '{"command":"grep '"'"'bash -c'"'"' hooks/destructive-guard.sh"}'
 
 # -----------------------------------------------------------------------
 # Destructive commands: blocked (exit 2)
@@ -1340,6 +1333,14 @@ echo "-- scanner-avoids-its-own-pattern: verification grep shapes (see conventio
 # fixture: intentional guard-behavior pin for single-quoted verification grep
 run_test "grep 'bash -c' file.sh passes (single-quoted single-token, not self-blocking)" \
   0 '{"command":"grep '"'"'bash -c'"'"' hooks/destructive-guard.sh"}'
+
+# Indirect-variable "Good — preferred" form from the convention — must PASS (exit 0).
+# Pins the convention's shipped example so it cannot silently regress to a blocked form.
+# PAT='bash -c'; grep -n "$PAT" file.sh — full pattern in variable, no bare '|' remaining.
+# Empirically verified exit 0 (2026-06-10).
+# fixture: intentional guard-behavior pin for indirect-variable preferred example
+run_test "PAT='bash -c'; grep -n \"\$PAT\" file.sh passes (indirect-variable preferred form)" \
+  0 '{"command":"PAT='"'"'bash -c'"'"'; grep -n \"$PAT\" hooks/destructive-guard.sh"}'
 
 # Double-quoted backslash-alternation form — fail-closed (exit 2).
 # The \| inside the double-quoted span is a backslash artifact the tokenizer
