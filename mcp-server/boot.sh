@@ -210,9 +210,62 @@ fi
 # Step 11: Print resolution info for testing / debugging
 # (runs before the tsx-absent error so --print-resolution always produces
 # output even in environments without node_modules installed)
+#
+# Output format (stable; do NOT reorder existing lines):
+#   Line 1: SERVER_DIR NODE_PATH TSX_BIN  (legacy positional line — unchanged)
+#   Line 2: NODE_VERSION=<v-prefixed version string, or empty>
+#   Line 3: RESOLUTION_STATUS=<ok|tsx-missing|node-missing|node-too-old>
+#
+# RESOLUTION_STATUS derivation:
+#   tsx-missing  — TSX_BIN is empty
+#   node-missing — tsx is present but node -v produced no output
+#   node-too-old — node major < 24
+#   ok           — all checks pass
+#
+# NODE_VERSION and RESOLUTION_STATUS use the same major-extraction logic as
+# the Step 12.5 preflight so the threshold cannot drift between diagnostic
+# and enforcement paths (single source of truth via canon_node_major()).
+# --print-resolution always exits 0 — it is diagnostic only; Step 12.5 is
+# the enforcer on the real launch path.
 # ---------------------------------------------------------------------------
+
+# Helper: extract node major version number from a version string like "v24.1.0".
+# Usage: canon_node_major "v24.1.0"  → prints "24"
+# Returns empty string on malformed input.
+canon_node_major() {
+  local raw="${1:-}"
+  local stripped="${raw#v}"       # strip leading 'v'
+  local major="${stripped%%.*}"   # keep only the major component
+  if [[ "$major" =~ ^[0-9]+$ ]]; then
+    echo "$major"
+  fi
+}
+
 if [[ $PRINT_RESOLUTION -eq 1 ]]; then
+  # Line 1: legacy positional line — MUST remain first and unchanged.
   echo "$SERVER_DIR $NODE_PATH $TSX_BIN"
+
+  # Resolve node version in SERVER_DIR context (matches real-launch resolution).
+  DIAG_NODE_VERSION=""
+  DIAG_NODE_VERSION=$( ( cd "$SERVER_DIR" && node -v 2>/dev/null ) ) || true
+
+  # Line 2: NODE_VERSION (may be empty if node not found)
+  echo "NODE_VERSION=${DIAG_NODE_VERSION}"
+
+  # Line 3: RESOLUTION_STATUS
+  DIAG_STATUS="ok"
+  if [[ -z "${TSX_BIN}" ]]; then
+    DIAG_STATUS="tsx-missing"
+  elif [[ -z "$DIAG_NODE_VERSION" ]]; then
+    DIAG_STATUS="node-missing"
+  else
+    DIAG_NODE_MAJOR=$(canon_node_major "$DIAG_NODE_VERSION")
+    if [[ -n "$DIAG_NODE_MAJOR" ]] && (( DIAG_NODE_MAJOR < 24 )); then
+      DIAG_STATUS="node-too-old"
+    fi
+  fi
+  echo "RESOLUTION_STATUS=${DIAG_STATUS}"
+
   exit 0
 fi
 
@@ -229,6 +282,9 @@ fi
 # Resolve node from SERVER_DIR context so asdf resolution matches the real
 # launch. Require Node >=24; exit with a clear, actionable error if not met.
 # Skipped under --print-resolution (already exited above).
+# Uses canon_node_major() defined in Step 11 — single source of truth for
+# major-version extraction so the threshold cannot drift between diagnostic
+# (--print-resolution) and enforcement (real launch) paths.
 # ---------------------------------------------------------------------------
 NODE_VERSION_RAW=""
 NODE_VERSION_RAW=$( ( cd "$SERVER_DIR" && node -v 2>/dev/null ) ) || true
@@ -236,9 +292,8 @@ if [[ -z "$NODE_VERSION_RAW" ]]; then
   echo "CANON ERROR: 'node' not found on PATH. Canon's MCP server requires Node >=24." >&2
   exit 1
 fi
-NODE_MAJOR="${NODE_VERSION_RAW#v}"   # strip leading 'v'
-NODE_MAJOR="${NODE_MAJOR%%.*}"       # keep only major
-if [[ -n "$NODE_MAJOR" ]] && [[ "$NODE_MAJOR" =~ ^[0-9]+$ ]] && (( NODE_MAJOR < 24 )); then
+NODE_MAJOR=$(canon_node_major "$NODE_VERSION_RAW")
+if [[ -n "$NODE_MAJOR" ]] && (( NODE_MAJOR < 24 )); then
   echo "CANON ERROR: Canon's MCP server requires Node >=24, but found ${NODE_VERSION_RAW}. Install or select Node 24+ (via your Node version manager — nvm, fnm, asdf, volta — or from https://nodejs.org) and retry." >&2
   exit 1
 fi

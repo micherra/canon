@@ -35,8 +35,9 @@ fi
 #   boot.sh --print-resolution resolves via BASH_SOURCE; no npx.
 # ---------------------------------------------------------------------------
 OUTPUT=$(CLAUDE_PLUGIN_ROOT="" bash "$BOOT_SH" --print-resolution 2>/dev/null) || true
-SERVER_DIR=$(echo "$OUTPUT" | awk '{print $1}')
-TSX_BIN=$(echo "$OUTPUT" | awk '{print $3}')
+# Parse only the first line (legacy positional triple); diagnostic lines follow it.
+SERVER_DIR=$(echo "$OUTPUT" | head -1 | awk '{print $1}')
+TSX_BIN=$(echo "$OUTPUT" | head -1 | awk '{print $3}')
 
 if [[ "$SERVER_DIR" == "$SCRIPT_DIR" ]]; then
   pass "Repo-as-project: SERVER_DIR resolves to $SCRIPT_DIR via BASH_SOURCE"
@@ -88,9 +89,10 @@ fi
 # Run boot.sh --print-resolution with the fake plugin + data
 RESOLUTION=$(CLAUDE_PLUGIN_ROOT="$FAKE_PLUGIN" CLAUDE_PLUGIN_DATA="$FAKE_DATA" \
   bash "$FAKE_PLUGIN/mcp-server/boot.sh" --print-resolution 2>/dev/null) || true
-RESOLVED_SERVER=$(echo "$RESOLUTION" | awk '{print $1}')
-RESOLVED_NODE_PATH=$(echo "$RESOLUTION" | awk '{print $2}')
-RESOLVED_TSX=$(echo "$RESOLUTION" | awk '{print $3}')
+# Parse only the first line (legacy positional triple); diagnostic lines follow it.
+RESOLVED_SERVER=$(echo "$RESOLUTION" | head -1 | awk '{print $1}')
+RESOLVED_NODE_PATH=$(echo "$RESOLUTION" | head -1 | awk '{print $2}')
+RESOLVED_TSX=$(echo "$RESOLUTION" | head -1 | awk '{print $3}')
 
 if [[ "$RESOLVED_SERVER" == "$FAKE_PLUGIN/mcp-server" ]]; then
   pass "Fresh-cache: SERVER_DIR resolved to plugin mcp-server dir"

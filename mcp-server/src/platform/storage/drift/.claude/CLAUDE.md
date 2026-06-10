@@ -12,8 +12,8 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 
 | File | Responsibility |
 |------|---------------|
-| `drift-schema.ts` | `DRIFT_SCHEMA_VERSION = "10"`, idempotent `runMigrations(db)`; tables: `file_violation_history`, `path_effects` (v4), `error_fixes` (v6), `violation_outcomes` (v7), `area_observations` (v8), `craft_profiles` (v9 — `flow`/`run_id` nullable review-only; `source`, `subsystem_key`, `ratings` JSON, `rollup` REAL), `cliff_events` (v10 — UNIQUE(workspace_slug, step_id); 11 columns; index on `detected_at`) |
-| `drift-db.ts` | `DriftDb` class — lazy-accessor facade; `getSignals()`, `getOutcomes()`, `getAreaMemory()`, `getCraftProfiles()`, `getCliffEvents()` accessors |
+| `drift-schema.ts` | `DRIFT_SCHEMA_VERSION = "11"`, idempotent `runMigrations(db)`; tables: `file_violation_history`, `path_effects` (v4), `error_fixes` (v6), `violation_outcomes` (v7), `area_observations` (v8), `craft_profiles` (v9 — `flow`/`run_id` nullable review-only; `source`, `subsystem_key`, `ratings` JSON, `rollup` REAL), `cliff_events` (v10 — UNIQUE(workspace_slug, step_id); 11 columns; index on `detected_at`), violation lifecycle columns: `status`, `resolved_at`, `resolved_by_review_id`, `resolution_reason` + `idx_violations_open` partial index (v11) |
+| `drift-db.ts` | `DriftDb` class — lazy-accessor facade; `getSignals()`, `getOutcomes()`, `getAreaMemory()`, `getCraftProfiles()`, `getCliffEvents()`, `getClosures()` accessors |
 | `drift-db-cache.ts` | `getDriftDb(projectDir)` factory + `evictDriftDbForScope(projectDir)` lifecycle hook; import `getDriftDb` here directly (no barrel) |
 | `drift-db-rows.ts` | Private row types + deserializers; not exported from barrel |
 
@@ -26,6 +26,7 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 | `area-memory-dao.ts` | `AreaMemoryDao` | `area_observations` | `DriftDb.getAreaMemory()`; 7-day expiry; uses `deriveSubsystemKey` from `src/shared/lib/subsystem-key.ts` to produce stable keys like `features/orchestration` |
 | `craft-profile-dao.ts` | `CraftProfileDao` | `craft_profiles` | `DriftDb.getCraftProfiles()`; `source` discriminates `"review"` vs `"audit"` profiles |
 | `cliff-events-dao.ts` | `CliffEventsDao` | `cliff_events` | `DriftDb.getCliffEvents()` lazy accessor; upsert semantics (UNIQUE workspace_slug+step_id); exports `CLIFF_RECOVERY_OUTCOMES`, `CliffRecoveryOutcome`, `CliffEventRow`, `UpsertCliffEventInput` |
+| `violation-closure-dao.ts` | `ViolationClosureDao` | `violations` | `DriftDb.getClosures()` lazy accessor; `supersedeOpenViolations({ files, honored, recordedViolations, reviewId, timestamp })` sets `status='resolved'` for open violations where file ∈ review.files AND principle ∈ honored AND no new violation recorded in this review |
 | `store.ts` | `DriftStore` | `reviews.jsonl` | `ReviewEntry` unified type; `PrStore` deleted 2026-03-25; `getReviews(options?)` AND-filters by principleId/branch/prNumber |
 
 **Confidence / analytics:**
@@ -41,8 +42,9 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 <!-- last-updated: 2026-06-08 -->
 
 - `getDriftDb(projectDir)` — module-level cache keyed by resolved `projectDir`; returns existing `DriftDb` or creates + migrates; `evictDriftDbForScope(projectDir)` removes entry (lifecycle hook, currently unwired at HTTP transport layer)
-- `DriftDb` — lazy accessors: `.getSignals()` returns `DriftDbSignals`, `.getOutcomes()` returns `OutcomeStore`, `.getAreaMemory()` returns `AreaMemoryDao`, `.getCraftProfiles()` returns `CraftProfileDao`, `.getCliffEvents()` returns `CliffEventsDao`
+- `DriftDb` — lazy accessors: `.getSignals()` returns `DriftDbSignals`, `.getOutcomes()` returns `OutcomeStore`, `.getAreaMemory()` returns `AreaMemoryDao`, `.getCraftProfiles()` returns `CraftProfileDao`, `.getCliffEvents()` returns `CliffEventsDao`, `.getClosures()` returns `ViolationClosureDao`
 - `cliff_events` schema (v10): UNIQUE(workspace_slug, step_id); upsert with COALESCE for nullable enrichment columns; `recovery_outcome` CASE-guarded against downgrade; 11 columns including `agent_type`, `missing_count`, `partial_count`, `source`, `detected_at`, `recorded_at`
+- violations lifecycle schema (v11): `status TEXT NOT NULL DEFAULT 'open'`, `resolved_at TEXT`, `resolved_by_review_id TEXT`, `resolution_reason TEXT`; partial index `idx_violations_open` on `status='open'`; `DriftDb.appendReview()` calls `ViolationClosureDao.supersedeOpenViolations()` inside the review transaction
 - `craft_profiles` schema (v9): columns `subsystem_key`, `source` ("review"|"audit"), `flow` (nullable, review-only), `run_id` (nullable, review-only), `ratings` (JSON), `rollup` (REAL)
 - `area_observations` schema (v8): keyed by `subsystem_key`; 7-day TTL enforced by `AreaMemoryDao`
 - `ReviewEntry` (unified type) lives in `@shared/schema.ts` — import from there, not from this layer
