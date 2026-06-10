@@ -18,9 +18,10 @@
 #   6. Resolve the git subcommand via canon_git_subcommand (shape-validated).
 #      Empty → fail-closed.
 #   7. case "$sub": only "push" is inspected; all other subcommands return 0.
-#   8. For "push": push_updates_protected_branch analyzes refspec destination
-#      against resolve_protected_branch (origin/HEAD or "main" fallback).
-#      Fail-closed on ambiguous or unresolvable forms.
+#   8. For "push": push_updates_protected_branch uses an allowlist gate on each
+#      refspec — ALLOW only if the whole token is provably-literal (strict
+#      charset, no shell metacharacters) AND its destination != protected branch.
+#      Any non-provably-literal refspec fails-closed (BLOCK).
 #
 # Input: JSON on stdin with the tool call details
 # Output: Warning message on stderr (when blocking)
@@ -260,34 +261,45 @@ push_updates_protected_branch() {
     return 0   # ambiguous or on-main → BLOCK (fail-closed)
   fi
 
-  # Check each refspec destination
+  # ALLOWLIST posture: ALLOW only if EVERY refspec is provably-literal-safe.
+  # A refspec is provably-literal iff the WHOLE token (before any derivation)
+  # matches the strict safe charset below — no shell metacharacter whatsoever
+  # ($, `, {, }, (, ), *, ?, [, ], ~, !, whitespace, \) and at most one colon
+  # separating a source half from a destination half. Anything outside this
+  # set is NOT provably safe → fail-closed BLOCK (cannot prove non-main).
+  # This replaces the previous blocklist (which derived a substring first and
+  # then asked negative questions — the F2 defect class). Approach: one
+  # positive grep -qE gate on the whole token before any colon-split.
+  # (D6: posture ADR; DESIGN-v2: empirically validated 18/18 block, 12/12 allow)
+  local SAFE_REFSPEC_RE='^[+]?[A-Za-z0-9][A-Za-z0-9._/-]*(:[A-Za-z0-9][A-Za-z0-9._/-]*)?$'
+
   for refspec in "${refspecs[@]}"; do
-    # Strip leading + (force flag on the refspec)
-    local rs="${refspec#+}"
-    # Determine destination
+    # ALLOWLIST GATE (positive safety): the whole token must be provably literal.
+    # Any shell metacharacter ($, `, {, }, (, ), *, ?, etc.), parameter-operator
+    # (:-/:=/:+/:?), glob, brace-expansion, multi-colon, or empty token fails
+    # this gate → NOT provably safe → fail-closed BLOCK.
+    if ! printf '%s' "$refspec" | grep -qE "$SAFE_REFSPEC_RE"; then
+      echo "CANON: push refspec '$refspec' is not a provably-literal branch name (contains shell metacharacters or an unresolvable form) — blocking fail-closed." >&2
+      return 0   # not provably safe → BLOCK
+    fi
+
+    # Token is now known-literal. Derive destination via FIRST-colon split.
+    # (NOT ##*: — the last-colon strip is the F2 defect: ${BRANCH:-main} splits
+    # inside the braces because :- contains a colon, yielding dst=-main}.)
+    # On a charset-validated token there is at most one colon, so first vs last
+    # is moot for legitimate input — but first-colon is safe by construction.
+    local core="${refspec#+}"
     local dst
-    if [[ "$rs" == *:* ]]; then
-      dst="${rs##*:}"
-    else
-      dst="$rs"
-    fi
-    # Strip refs/heads/ prefix
+    if [[ "$core" == *:* ]]; then dst="${core#*:}"; else dst="$core"; fi
     dst="${dst#refs/heads/}"
-    # F1: Fail-CLOSED on shell metacharacters in the destination.
-    # An unexpanded $, backtick, {, or ( in a refspec destination means the
-    # true target is a runtime expansion we cannot evaluate statically.
-    # We cannot prove it is NOT main → block (dc-05 fail-closed-on-ambiguity).
-    if [[ "$dst" == *'$'* || "$dst" == *'`'* || "$dst" == *'{'* || "$dst" == *'('* ]]; then
-      echo "CANON: push refspec destination contains unexpanded shell metacharacters — blocking fail-closed." >&2
-      return 0   # ambiguous destination → BLOCK
-    fi
-    # Exact equality check (never substring/regex)
+
+    # Exact equality check against the protected branch (never substring/regex)
     if [[ "$dst" == "$protected" ]]; then
       return 0   # destination IS the protected branch → BLOCK
     fi
   done
 
-  return 1   # no refspec matched protected → allow
+  return 1   # every refspec provably-literal AND non-protected → allow
 }
 
 # ---------------------------------------------------------------------------

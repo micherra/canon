@@ -175,14 +175,80 @@ run_test "git push origin HEAD:refs/heads/feature (refs prefix, no metachar)" \
 
 echo ""
 # ---------------------------------------------------------------------------
-# F2: Custom default-branch derivation — origin/HEAD → master
+# ALLOWLIST posture — D6: new BLOCK-set rows (the obfuscation families)
+# Every refspec that is not provably-literal-safe must exit 2.
+# These cover F2 (${BRANCH:-main} operator-family), F1-retained, glob,
+# brace-expansion, backtick, multi-colon, and whole-token-variable forms.
+# NOTE: JSON encoding — metacharacters $, {, }, `, * reach the hook LITERALLY
+# (the make_input printf does NOT shell-expand them; they are inside single
+# quotes or escaped with \ so no shell expansion occurs before JSON encoding).
+# ---------------------------------------------------------------------------
+echo "-- ALLOWLIST: new BLOCK-set (obfuscation families, should block, exit 2) --"
+
+# F2 primary regression: ${BRANCH:-main} operator family
+run_test 'git push origin HEAD:${BRANCH:-main} (F2 operator — block)' \
+  2 "$(make_input 'git push origin HEAD:${BRANCH:-main}')"
+run_test 'git push origin HEAD:${BRANCH:=main} (F2 sibling := — block)' \
+  2 "$(make_input 'git push origin HEAD:${BRANCH:=main}')"
+run_test 'git push origin HEAD:${BRANCH:+main} (F2 sibling :+ — block)' \
+  2 "$(make_input 'git push origin HEAD:${BRANCH:+main}')"
+run_test 'git push origin ${BRANCH:-main} (F2 bare form — block)' \
+  2 "$(make_input 'git push origin ${BRANCH:-main}')"
+
+# No-operator variable in refspec (already blocked; lock it in)
+run_test 'git push origin HEAD:${BRANCH} (no-operator var — block)' \
+  2 "$(make_input 'git push origin HEAD:${BRANCH}')"
+
+# F1 retained — command substitution (already blocked by fix-security patch;
+# the allowlist gate now makes this structural rather than incidental)
+run_test 'git push origin HEAD:$(echo main) (cmd-sub — F1 retain, block)' \
+  2 "$(make_input 'git push origin HEAD:$(echo main)')"
+
+# Backtick form
+run_test 'git push origin HEAD:`echo main` (backtick — block)' \
+  2 "$(printf '{"command":"%s"}' 'git push origin HEAD:`echo main`')"
+
+# Glob in refspec destination
+run_test 'git push origin HEAD:ma*n (glob — block)' \
+  2 "$(make_input 'git push origin HEAD:ma*n')"
+
+# Brace-expansion in refspec destination
+run_test 'git push origin HEAD:m{a,a}in (brace-expansion — block)' \
+  2 "$(make_input 'git push origin HEAD:m{a,a}in')"
+
+# Whole-token variable (the entire refspec is a variable)
+run_test 'git push origin "$DEST" (whole-token variable — block)' \
+  2 "$(make_input 'git push origin $DEST')"
+
+# Multi-colon refspec (regex allows at most one colon → rejects → block)
+run_test 'git push origin HEAD:main:extra (multi-colon — block)' \
+  2 "$(make_input 'git push origin HEAD:main:extra')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# ALLOWLIST posture — new ALLOW-set rows (legitimate forms must NOT over-block)
+# Lookalike names, dots, tags, slashes — all must exit 0.
+# ---------------------------------------------------------------------------
+echo "-- ALLOWLIST: new ALLOW-set (legitimate forms, should allow, exit 0) --"
+run_test "git push origin release/1.2.3 (version branch — allow)" \
+  0 "$(make_input 'git push origin release/1.2.3')"
+run_test "git push origin v1.0.0 (tag-style — allow)" \
+  0 "$(make_input 'git push origin v1.0.0')"
+run_test "git push origin HEAD:feature.x (dot in name — allow)" \
+  0 "$(make_input 'git push origin HEAD:feature.x')"
+run_test "git push origin HEAD:canon/some-slug (slash — reaffirm allow)" \
+  0 "$(make_input 'git push origin HEAD:canon/some-slug')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# F3: Custom default-branch derivation — origin/HEAD → master
 # Sets up a repo whose origin/HEAD symbolic-ref resolves to 'master',
 # then asserts:
 #   - git push origin HEAD:master → BLOCKED (exit 2)  [master is the protected branch]
 #   - git push origin HEAD:main → ALLOWED (exit 0)   [main is NOT the protected branch]
 # This guards the D2 derivation path (resolve_protected_branch) against regression.
 # ---------------------------------------------------------------------------
-echo "-- F2: custom default-branch (origin/HEAD → master) regression tests --"
+echo "-- F3: custom default-branch (origin/HEAD → master) regression tests --"
 
 TMPDIR_MASTER=$(mktemp -d)
 setup_repo "$TMPDIR_MASTER"
