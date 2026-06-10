@@ -90,17 +90,29 @@ Read every `.md` file in `.canon/rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/rules/*.
 
 #### Check 7: MCP server
 
-Check if the MCP server can start:
+Check the MCP server boot health using the real runtime diagnostic:
 ```bash
-cd ${CLAUDE_PLUGIN_ROOT}/mcp-server && node -e "require('./dist/index.js')" 2>&1 || echo "FAIL"
+bash ${CLAUDE_PLUGIN_ROOT}/mcp-server/boot.sh --print-resolution 2>&1
 ```
 
-If that fails, check:
-- `node_modules/` exists? If not: "Run `npm install` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`"
-- `dist/` exists? If not: "Run `npm run build` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`"
+`boot.sh --print-resolution` prints a single space-separated line:
+`SERVER_DIR NODE_PATH TSX_BIN`
+and exits 0. It is side-effect-free (no server started).
 
-**ERROR** if server can't load: "MCP server failed to load: {error}"
-**WARN** if `node_modules/` missing: "MCP server dependencies not installed"
+Parse the output:
+- Extract the third field (`TSX_BIN`) — the resolved path to the `tsx` binary.
+- If the line contains `CANON ERROR:`, capture that text as the failure message.
+
+**Healthy** when:
+- Exit code is 0
+- `TSX_BIN` field is present and non-empty
+
+**ERROR** if boot fails or `TSX_BIN` is empty: "MCP server boot check failed: {error or empty TSX_BIN}"
+  - Empty `TSX_BIN` usually means dependencies are not installed. Remediation: "Run `npm install` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`"
+  - `CANON ERROR: cannot resolve MCP server dir` means the plugin directory is misconfigured or the symlink is dangling. Remediation: "Reinstall Canon or check `CLAUDE_PLUGIN_ROOT`"
+  - Node version below 24: "Upgrade Node.js to v24 or later (see `node --version`)"
+
+**WARN** if `node_modules/` is missing but boot.sh still exited 0 (unusual): "MCP server dependencies not installed — run `npm install` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`"
 
 #### Check 8: CLAUDE.md integration
 

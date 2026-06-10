@@ -101,6 +101,8 @@ jobs:
           restore-keys: |
             hf-models-${{ runner.os }}-all-MiniLM-L6-v2-
       - run: npm ci
+      - name: Audit production dependencies (high+ fails CI)
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm run lint:deps
       - run: npm run build
