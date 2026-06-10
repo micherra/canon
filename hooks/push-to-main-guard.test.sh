@@ -350,6 +350,101 @@ rm -rf "$TMPDIR_ALL" 2>/dev/null || true
 
 echo ""
 # ---------------------------------------------------------------------------
+# CRITICAL v3 fix: abbreviated push-everything flags (git-accepted abbreviations)
+# git accepts unambiguous option prefixes: --al/--all, --mi/--mir/--mirr/--mirror.
+# All must exit 2 — canonical-prefix expansion (is_push_everything_mode) must
+# block them exactly as it blocks the full spellings.
+# ---------------------------------------------------------------------------
+echo "-- CRITICAL v3: abbreviated push-everything flags (should block, exit 2) --"
+run_test "git push --al origin (--al = --all → block)"        2 "$(make_input 'git push --al origin')"
+run_test "git push --mi origin (--mi = --mirror → block)"     2 "$(make_input 'git push --mi origin')"
+run_test "git push --mir origin (--mir = --mirror → block)"   2 "$(make_input 'git push --mir origin')"
+run_test "git push --mirr origin (--mirr = --mirror → block)" 2 "$(make_input 'git push --mirr origin')"
+run_test "git push --mirro origin (--mirro = --mirror → block)" 2 "$(make_input 'git push --mirro origin')"
+
+# Abbreviated forms through string-executing wrappers (wrapper recursion must preserve the block)
+run_test "bash -c 'git push --al origin' (abbreviated --all, wrapper → block)"   2 "$(make_input 'bash -c \"git push --al origin\"')"
+run_test "bash -c 'git push --mir origin' (abbreviated --mirror, wrapper → block)" 2 "$(make_input 'bash -c \"git push --mir origin\"')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# CRITICAL v3 fix: ALLOW rows — flags starting with --a or --m that are NOT
+# push-everything modes must not be over-blocked.
+# --atomic: starts with --at (not matched by --a(l(l)?)? pattern)
+# --tags, --porcelain: different prefix families entirely
+# ---------------------------------------------------------------------------
+echo "-- CRITICAL v3: no over-block for --atomic/--tags/--porcelain (should allow, exit 0) --"
+TMPDIR_ATOMIC=$(mktemp -d)
+setup_repo "$TMPDIR_ATOMIC"
+git -C "$TMPDIR_ATOMIC" checkout -q -b canon/foo
+
+run_test "git push --atomic origin HEAD:canon/foo (--atomic is not push-everything → allow)" \
+  0 "$(make_input 'git push --atomic origin HEAD:canon/foo')" "$TMPDIR_ATOMIC"
+run_test "git push --porcelain origin HEAD:canon/foo (--porcelain is not push-everything → allow)" \
+  0 "$(make_input 'git push --porcelain origin HEAD:canon/foo')" "$TMPDIR_ATOMIC"
+
+rm -rf "$TMPDIR_ATOMIC"
+
+# --tags confirmed safe already above, but add an explicit row documenting v3 scope
+run_test "git push --tags origin (--tags is not push-everything — v3 reaffirm)" \
+  0 "$(make_input 'git push --tags origin')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# MEDIUM v3 fix: config-driven bare-push main-movers
+# remote.<remote>.push = refs/heads/* overrides push.default entirely.
+# remote.<remote>.mirror = true makes bare 'git push origin' mirror all refs.
+# Both must exit 2 (fail-closed) even from a feature branch.
+# ---------------------------------------------------------------------------
+echo "-- MEDIUM v3: config-driven bare-push main-movers (should block, exit 2) --"
+
+TMPDIR_CFGPUSH=$(mktemp -d)
+setup_repo "$TMPDIR_CFGPUSH"
+git -C "$TMPDIR_CFGPUSH" checkout -q -b canon/feature
+# Set a push refspec that would push all local branches (including main) on bare push
+git -C "$TMPDIR_CFGPUSH" config "remote.origin.push" "refs/heads/*:refs/heads/*"
+
+run_test "bare 'git push' with remote.origin.push=refs/heads/* (overrides push.default → block)" \
+  2 "$(make_input 'git push')" "$TMPDIR_CFGPUSH"
+run_test "bare 'git push origin' with remote.origin.push=refs/heads/* → block" \
+  2 "$(make_input 'git push origin')" "$TMPDIR_CFGPUSH"
+
+rm -rf "$TMPDIR_CFGPUSH"
+
+TMPDIR_MIRROR=$(mktemp -d)
+setup_repo "$TMPDIR_MIRROR"
+git -C "$TMPDIR_MIRROR" checkout -q -b canon/feature
+# Set mirror=true so bare 'git push origin' acts like --mirror
+git -C "$TMPDIR_MIRROR" config --bool "remote.origin.mirror" "true"
+
+run_test "bare 'git push origin' with remote.origin.mirror=true (mirror config → block)" \
+  2 "$(make_input 'git push origin')" "$TMPDIR_MIRROR"
+run_test "bare 'git push' with remote.origin.mirror=true → block" \
+  2 "$(make_input 'git push')" "$TMPDIR_MIRROR"
+
+rm -rf "$TMPDIR_MIRROR"
+
+echo ""
+# ---------------------------------------------------------------------------
+# MEDIUM v3: ALLOW rows — default config (no remote.*.push, no remote.*.mirror)
+# must continue to allow bare push from a non-protected feature branch.
+# This is a regression guard: the config checks must not break the safe path.
+# ---------------------------------------------------------------------------
+echo "-- MEDIUM v3: default config bare push from feature branch (should allow, exit 0) --"
+
+TMPDIR_DEFAULT=$(mktemp -d)
+setup_repo "$TMPDIR_DEFAULT"
+git -C "$TMPDIR_DEFAULT" checkout -q -b canon/foo
+
+run_test "bare 'git push' from canon/foo, no config overrides (default config → allow)" \
+  0 "$(make_input 'git push')" "$TMPDIR_DEFAULT"
+run_test "bare 'git push origin' from canon/foo, no config overrides → allow" \
+  0 "$(make_input 'git push origin')" "$TMPDIR_DEFAULT"
+
+rm -rf "$TMPDIR_DEFAULT"
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="

@@ -5,6 +5,16 @@
 # branch (derived from origin/HEAD, falling back to "main"), so direct pushes
 # bypass PR review and required build checks.
 #
+# SCOPE AND THREAT MODEL:
+# This guard provides robust defense-in-depth against ACCIDENTAL and common-form
+# direct pushes to the protected branch, including abbreviated flags, config-driven
+# bare pushes, and shell-obfuscated forms. It is NOT an airtight control against a
+# determined local actor who can disable or chmod -x this hook file. The
+# AUTHORITATIVE enforcement control is GitHub branch-protection / rulesets on the
+# remote. This hook catches mistakes before they reach the wire.
+# Any push form that cannot be statically proven to NOT touch the protected branch
+# is blocked fail-closed (dc-05: fail-closed-on-ambiguity).
+#
 # Detection pipeline (mirrors destructive-guard.sh):
 #   1. Extract command via canon_extract_command (jq with grep/sed fallback).
 #   2. Strip shell comments via canon_strip_comments.
@@ -19,12 +29,13 @@
 #      Empty → fail-closed.
 #   7. case "$sub": only "push" is inspected; all other subcommands return 0.
 #   8. For "push": push_updates_protected_branch first checks for "push everything"
-#      modes (--all, --mirror) and blocks them unconditionally — they ignore
-#      push.default and the current branch, so they can push the protected branch
-#      from any checkout (dc-05: fail-closed-on-ambiguity). Then uses an allowlist
-#      gate on each refspec — ALLOW only if the whole token is provably-literal
-#      (strict charset, no shell metacharacters) AND its destination != protected
-#      branch. Any non-provably-literal refspec fails-closed (BLOCK).
+#      modes (--all, --mirror, and their unambiguous git-accepted abbreviations)
+#      and blocks them unconditionally — they ignore push.default and the current
+#      branch, so they can push the protected branch from any checkout
+#      (dc-05: fail-closed-on-ambiguity). Then uses an allowlist gate on each
+#      refspec — ALLOW only if the whole token is provably-literal (strict charset,
+#      no shell metacharacters) AND its destination != protected branch. Any
+#      non-provably-literal refspec fails-closed (BLOCK).
 #
 # Input: JSON on stdin with the tool call details
 # Output: Warning message on stderr (when blocking)
@@ -128,20 +139,62 @@ resolve_protected_branch() {
 }
 
 # ---------------------------------------------------------------------------
-# bare_push_is_safe <raw_segment> <protected>
+# is_push_everything_mode <token>
+#
+# Returns 0 (true) when the token is an unambiguous prefix of --all or
+# --mirror that git would accept as those flags (canonical-prefix expansion).
+#
+# git's parse-options accepts any unambiguous abbreviation of a long option.
+# For --all:    accepted prefixes are --a, --al, --all
+# For --mirror: accepted prefixes are --m, --mi, --mir, --mirr, --mirro, --mirror
+#
+# The posture is CONSERVATIVE / fail-closed (dc-05): we block both the
+# unambiguous accepted forms AND the genuinely ambiguous short forms (--a, --m)
+# that git itself would reject. A blocked-but-git-rejected prefix is harmless
+# (git would have rejected the command anyway); an accepted-but-unblocked prefix
+# is the security defect we are closing.
+#
+# Flags that start with --a or --m but are definitively NOT push-everything:
+#   --atomic  → starts with --at, not matched by the pattern below
+#   --all=*   → the = sign prevents a pure-prefix match at the boundary
+# No other git-push long option starts with --a or --mi that could push main.
+#
+# Implementation: regex match on the full token.
+#   --all family:    ^--a(l(l)?)?$
+#   --mirror family: ^--m(i(r(r(o(r)?)?)?)?)?$
+# ---------------------------------------------------------------------------
+is_push_everything_mode() {
+  local token="$1"
+  if [[ "$token" =~ ^--a(l(l)?)?$ ]]; then
+    return 0
+  fi
+  if [[ "$token" =~ ^--m(i(r(r(o(r)?)?)?)?)?$ ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# bare_push_is_safe <raw_segment> <protected> <remote>
 #
 # Returns 0 (safe → allow) only when ALL of the following are true:
 #   - current branch resolves (not detached HEAD)
 #   - current branch ≠ protected branch
 #   - push.default is "" (unset), "simple", or "current" (pushes current
 #     branch under its own name → destination = current branch ≠ protected)
+#   - no configured remote.<remote>.push refspec that could push the protected
+#     branch (e.g. refs/heads/* matching-glob or refs/heads/main:refs/heads/main)
+#   - remote.<remote>.mirror is not true (mirror config makes bare push act
+#     like --mirror — pushes all refs including the protected branch)
 # Any failure to resolve → returns 1 (NOT safe → caller blocks).
 # ---------------------------------------------------------------------------
 bare_push_is_safe() {
   local raw_segment="$1"
   local protected="$2"
+  local remote="${3:-origin}"
   local git_dir_arg
-  # When CANON_GUARD_CWD is set, run git in that directory
+  # When CANON_GUARD_CWD is set, run git in that directory (same scoping as
+  # resolve_protected_branch — F3: single-source git-dir scoping)
   if [[ -n "${CANON_GUARD_CWD:-}" ]]; then
     git_dir_arg="-C $CANON_GUARD_CWD"
   else
@@ -159,9 +212,35 @@ bare_push_is_safe() {
   # shellcheck disable=SC2086
   pd=$(git $git_dir_arg config --get push.default 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset → default 'simple' → safe
   case "$pd" in
-    ""|simple|current) return 0 ;;   # pushes current branch to same-named ref → safe (cur != protected)
-    *) return 1 ;;                   # matching/upstream/nothing/unknown → cannot prove safe → block
+    ""|simple|current) ;;   # pushes current branch to same-named ref → safe so far (cur != protected)
+    *) return 1 ;;          # matching/upstream/nothing/unknown → cannot prove safe → block
   esac
+
+  # Config-driven bare-push main-movers (dc-05: fail-closed if cannot prove safe):
+  #
+  # (1) remote.<remote>.mirror = true makes bare 'git push <remote>' behave like
+  # --mirror — pushes ALL refs including the protected branch regardless of
+  # push.default or current branch. Block if any remote has mirror=true.
+  local mirror_val
+  # shellcheck disable=SC2086
+  mirror_val=$(git $git_dir_arg config --bool --get "remote.${remote}.mirror" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
+  if [[ "$mirror_val" == "true" ]]; then
+    return 1   # mirror config → bare push mirrors ALL refs including protected → block
+  fi
+
+  # (2) remote.<remote>.push = <refspec> overrides push.default entirely.
+  # With refs/heads/*:refs/heads/* or similar glob, bare 'git push' updates ALL
+  # branches including the protected branch. Block if any push refspec is set
+  # for the target remote — we cannot cheaply prove a glob doesn't match the
+  # protected branch, so fail-closed.
+  local configured_push_refspec
+  # shellcheck disable=SC2086
+  configured_push_refspec=$(git $git_dir_arg config --get-all "remote.${remote}.push" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
+  if [[ -n "$configured_push_refspec" ]]; then
+    return 1   # push refspec overrides push.default → cannot prove safe → block
+  fi
+
+  return 0   # all checks passed → safe → allow
 }
 
 # ---------------------------------------------------------------------------
@@ -190,9 +269,10 @@ push_updates_protected_branch() {
 
   local token
   local remote_seen=false
+  local remote_name="origin"  # default remote name; updated when first bare token seen
   local refspecs=()
   local skip_next=false
-  local tags_only_mode=false   # set when --tags seen (without --all/--mirror)
+  local tags_only_mode=false   # set when --tags seen (without push-everything mode)
 
   while IFS= read -r token; do
     [[ -z "$token" ]] && continue
@@ -204,16 +284,20 @@ push_updates_protected_branch() {
 
     # Handle option tokens
     if [[ "$token" == -* ]]; then
+      # "Push everything" modes: --all pushes every refs/heads/* branch;
+      # --mirror pushes ALL refs and makes the remote an exact copy.
+      # Neither honors push.default or the current branch — they can push
+      # the protected branch even from a feature-branch checkout.
+      # dc-05 fail-closed-on-ambiguity: cannot prove they will NOT touch the
+      # protected branch → block unconditionally.
+      # is_push_everything_mode detects BOTH the canonical spellings (--all,
+      # --mirror) AND all git-accepted unambiguous abbreviations (--al, --mi,
+      # --mir, --mirr, --mirro) using canonical-prefix expansion — closing the
+      # v3 CRITICAL where exact-literal matching missed abbreviated forms.
+      if is_push_everything_mode "$token"; then
+        return 0   # BLOCK — push-everything mode (or abbreviation) is ambiguous w.r.t. protected branch
+      fi
       case "$token" in
-        # "Push everything" modes: --all pushes every refs/heads/* branch;
-        # --mirror pushes ALL refs and makes the remote an exact copy.
-        # Neither honors push.default or the current branch — they can push
-        # the protected branch even from a feature-branch checkout.
-        # dc-05 fail-closed-on-ambiguity: cannot prove they will NOT touch the
-        # protected branch → block unconditionally.
-        --all|--mirror)
-          return 0   # BLOCK — push-everything mode is ambiguous w.r.t. protected branch
-          ;;
         # --tags: pushes only refs/tags/*, never branch refs. A tags-only push
         # without positional refspecs cannot reach the protected branch.
         --tags)
@@ -264,6 +348,7 @@ push_updates_protected_branch() {
     # Bare token: first is remote, rest are refspecs
     if [[ "$remote_seen" == "false" ]]; then
       remote_seen=true
+      remote_name="$token"  # capture the remote name for config-driven bare-push checks
     else
       refspecs+=("$token")
     fi
@@ -277,8 +362,9 @@ push_updates_protected_branch() {
       return 1   # tags-only → allow (cannot push branch main)
     fi
     # Narrow positive-safety allow: if current branch can be resolved and is
-    # demonstrably not the protected branch with a safe push.default → allow
-    if bare_push_is_safe "$raw_segment" "$protected"; then
+    # demonstrably not the protected branch with a safe push.default → allow.
+    # Also checks remote.*.mirror and remote.*.push config (v3 MEDIUM fix).
+    if bare_push_is_safe "$raw_segment" "$protected" "$remote_name"; then
       return 1   # safe → allow
     fi
     return 0   # ambiguous or on-main → BLOCK (fail-closed)
@@ -427,12 +513,19 @@ process_segment() {
   case "$sub" in
     push)
       if push_updates_protected_branch "$segment" "$raw_segment"; then
-        # Detect --all/--mirror to provide a more specific message
-        local _protected _block_reason
+        # Detect push-everything mode flags (including abbreviations) for a more specific message
+        local _protected _block_reason _push_everything_found=false
         _protected=$(resolve_protected_branch "$raw_segment")
         _block_reason="direct push to the protected branch '$_protected'"
-        if printf '%s' "$segment" | grep -qE '(^| )(--all|--mirror)( |$)'; then
-          _block_reason="'--all'/'--mirror' push (pushes every local branch including '$_protected' — cannot be proven safe)"
+        local _msg_token
+        for _msg_token in $segment; do
+          if [[ "$_msg_token" == -* ]] && is_push_everything_mode "$_msg_token"; then
+            _push_everything_found=true
+            break
+          fi
+        done
+        if [[ "$_push_everything_found" == "true" ]]; then
+          _block_reason="'--all'/'--mirror' push (or abbreviated form — pushes every local branch including '$_protected' — cannot be proven safe)"
         fi
         cat <<EOF >&2
 CANON: Blocked $_block_reason.
