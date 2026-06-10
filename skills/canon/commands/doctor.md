@@ -95,24 +95,36 @@ Check the MCP server boot health using the real runtime diagnostic:
 bash ${CLAUDE_PLUGIN_ROOT}/mcp-server/boot.sh --print-resolution 2>&1
 ```
 
-`boot.sh --print-resolution` prints a single space-separated line:
-`SERVER_DIR NODE_PATH TSX_BIN`
-and exits 0. It is side-effect-free (no server started).
+`boot.sh --print-resolution` is side-effect-free (no server started) and always exits 0.
+It prints three lines:
+```
+<SERVER_DIR> <NODE_PATH> <TSX_BIN>   ← legacy positional line (line 1)
+NODE_VERSION=<v-prefixed string or empty>
+RESOLUTION_STATUS=<ok|tsx-missing|node-missing|node-too-old>
+```
+
+**Important:** Line 1 contains raw filesystem paths that may include spaces (e.g. macOS
+`~/Library/Application Support/...`). Do NOT parse `TSX_BIN` from line 1 by positional field
+splitting — use `RESOLUTION_STATUS` (no spaces in value) as the authoritative signal instead.
 
 Parse the output:
-- Extract the third field (`TSX_BIN`) — the resolved path to the `tsx` binary.
-- If the line contains `CANON ERROR:`, capture that text as the failure message.
+- Grep for `^RESOLUTION_STATUS=` and split on `=` to extract the status value.
+- Grep for `^NODE_VERSION=` and split on `=` to extract the version string.
+- If stdout contains `CANON ERROR:` (emitted on stderr before Step 11 and exits 1), capture
+  that text as the failure message.
 
-**Healthy** when:
+**Healthy** only when:
 - Exit code is 0
-- `TSX_BIN` field is present and non-empty
+- `RESOLUTION_STATUS=ok`
 
-**ERROR** if boot fails or `TSX_BIN` is empty: "MCP server boot check failed: {error or empty TSX_BIN}"
-  - Empty `TSX_BIN` usually means dependencies are not installed. Remediation: "Run `npm install` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`"
-  - `CANON ERROR: cannot resolve MCP server dir` means the plugin directory is misconfigured or the symlink is dangling. Remediation: "Reinstall Canon or check `CLAUDE_PLUGIN_ROOT`"
-  - Node version below 24: "Upgrade Node.js to v24 or later (see `node --version`)"
+**ERROR** cases:
 
-**WARN** if `node_modules/` is missing but boot.sh still exited 0 (unusual): "MCP server dependencies not installed — run `npm install` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`"
+| RESOLUTION_STATUS | Message | Remediation |
+|---|---|---|
+| `tsx-missing` | "MCP server boot check failed: dependencies not installed" | "Run `npm install` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`" |
+| `node-missing` | "MCP server boot check failed: `node` not found on PATH" | "Install Node v24+" |
+| `node-too-old` | "MCP server boot check failed: Node {NODE_VERSION} is too old" | "Upgrade Node.js to v24+ (found {NODE_VERSION})" |
+| _(exit 1 / CANON ERROR)_ | "MCP server boot check failed: {CANON ERROR message}" | "Reinstall Canon or check `CLAUDE_PLUGIN_ROOT`" — e.g. `CANON ERROR: cannot resolve MCP server dir` means the plugin directory is misconfigured or the symlink is dangling |
 
 #### Check 8: CLAUDE.md integration
 
