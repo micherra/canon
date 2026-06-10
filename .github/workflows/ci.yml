@@ -39,6 +39,8 @@ jobs:
         run: bash mcp-server/boot.test.sh
       - name: Run mcp-server boot e2e tests
         run: bash mcp-server/boot.e2e.test.sh
+      - name: Run .mcp.json boot-resolver tests (var-absent regression guard)
+        run: bash mcp-server/mcp-json-resolver.test.sh
 
   # install-sim: Faithful install-simulation smoke test (backstop for novel leak classes).
   # Uses Node 24.x — deliberately DIFFERENT from the repo-pinned 25.8.0 — to exercise
