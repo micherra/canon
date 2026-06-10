@@ -142,6 +142,89 @@ rm -rf "$TMPDIR_REPO"
 
 echo ""
 # ---------------------------------------------------------------------------
+# F1: Shell-metacharacter refspec destinations — must block (fail-closed)
+# A refspec destination containing $, backtick, {, or ( cannot be evaluated
+# statically → block rather than risk a push to the protected branch.
+# ---------------------------------------------------------------------------
+echo "-- F1: shell-metacharacter refspec destinations (should block, exit 2) --"
+# Refspec with command substitution in destination
+run_test 'git push origin HEAD:$(echo main) (cmd-sub destination → block)' \
+  2 "$(make_input 'git push origin HEAD:$(echo main)')"
+# Variable expansion in destination
+run_test 'git push origin HEAD:${X} (variable expansion → block)' \
+  2 "$(make_input 'git push origin HEAD:${X}')"
+# Command substitution in destination (src:dst form)
+run_test 'git push origin main:$(echo main) (cmd-sub dst → block)' \
+  2 "$(make_input 'git push origin main:$(echo main)')"
+# Wrapper whose inner command is itself a shell expansion
+run_test 'bash -c "$(echo git push origin HEAD:main)" (cmd-sub inner → block)' \
+  2 "$(make_input 'bash -c "$(echo git push origin HEAD:main)"')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# F1: Legitimate forms that must NOT be over-blocked by metachar check
+# Plain branch names have no $, backtick, {, or ( → still allowed
+# ---------------------------------------------------------------------------
+echo "-- F1: legitimate non-main pushes must not be over-blocked (should allow, exit 0) --"
+run_test "git push origin feature (plain name, no metachar)" \
+  0 "$(make_input 'git push origin feature')"
+run_test "git push origin HEAD:canon/foo (slash, no metachar)" \
+  0 "$(make_input 'git push origin HEAD:canon/foo')"
+run_test "git push origin HEAD:refs/heads/feature (refs prefix, no metachar)" \
+  0 "$(make_input 'git push origin HEAD:refs/heads/feature')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# F2: Custom default-branch derivation — origin/HEAD → master
+# Sets up a repo whose origin/HEAD symbolic-ref resolves to 'master',
+# then asserts:
+#   - git push origin HEAD:master → BLOCKED (exit 2)  [master is the protected branch]
+#   - git push origin HEAD:main → ALLOWED (exit 0)   [main is NOT the protected branch]
+# This guards the D2 derivation path (resolve_protected_branch) against regression.
+# ---------------------------------------------------------------------------
+echo "-- F2: custom default-branch (origin/HEAD → master) regression tests --"
+
+TMPDIR_MASTER=$(mktemp -d)
+setup_repo "$TMPDIR_MASTER"
+
+# Create a fake origin (bare repo) whose HEAD points to master
+TMPDIR_ORIGIN=$(mktemp -d)
+git -C "$TMPDIR_ORIGIN" init -q --bare
+git -C "$TMPDIR_ORIGIN" symbolic-ref HEAD refs/heads/master
+
+# Add remote and set origin/HEAD on the test repo
+git -C "$TMPDIR_MASTER" remote add origin "$TMPDIR_ORIGIN"
+# Create origin/HEAD symbolic-ref directly so resolve_protected_branch finds it
+git -C "$TMPDIR_MASTER" remote set-head origin master 2>/dev/null || \
+  git -C "$TMPDIR_MASTER" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
+
+# With CANON_GUARD_CWD set to the master-default repo:
+#   - push to master → BLOCK (master is the derived protected branch)
+run_test "git push origin HEAD:master (master is protected → block)" \
+  2 "$(make_input 'git push origin HEAD:master')" "$TMPDIR_MASTER"
+
+#   - push to main → ALLOW (main is not the protected branch; master is)
+run_test "git push origin HEAD:main (main is not protected in master-repo → allow)" \
+  0 "$(make_input 'git push origin HEAD:main')" "$TMPDIR_MASTER"
+
+#   - push to feature branch → ALLOW
+run_test "git push origin HEAD:feature (non-protected → allow)" \
+  0 "$(make_input 'git push origin HEAD:feature')" "$TMPDIR_MASTER"
+
+#   - bare push from master branch → BLOCK (on the protected branch)
+git -C "$TMPDIR_MASTER" checkout -q -b master 2>/dev/null || true
+run_test "bare 'git push' from master (protected branch → block)" \
+  2 "$(make_input 'git push')" "$TMPDIR_MASTER"
+
+#   - bare push from a non-protected branch → ALLOW
+git -C "$TMPDIR_MASTER" checkout -q -b canon/bar 2>/dev/null || true
+run_test "bare 'git push' from canon/bar in master-repo → allow" \
+  0 "$(make_input 'git push')" "$TMPDIR_MASTER"
+
+rm -rf "$TMPDIR_MASTER" "$TMPDIR_ORIGIN"
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="

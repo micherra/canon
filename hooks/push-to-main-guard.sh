@@ -100,12 +100,19 @@ git_subcommand_args() {
 # Derives the repo's default protected branch name.
 # Uses git symbolic-ref refs/remotes/origin/HEAD (strips the
 # refs/remotes/origin/ prefix) or falls back to literal "main".
-# Scopes the git call via canon_git_dir_arg so -C flags are honored.
+# Scopes the git call via CANON_GUARD_CWD (when set) or canon_git_dir_arg
+# so -C flags are honored. (F3: single-source git-dir scoping — honors
+# CANON_GUARD_CWD consistently with bare_push_is_safe.)
 # ---------------------------------------------------------------------------
 resolve_protected_branch() {
   local raw_segment="$1"
   local git_dir_arg
-  git_dir_arg=$(canon_git_dir_arg "$raw_segment")
+  # When CANON_GUARD_CWD is set, run git in that directory (matches bare_push_is_safe)
+  if [[ -n "${CANON_GUARD_CWD:-}" ]]; then
+    git_dir_arg="-C $CANON_GUARD_CWD"
+  else
+    git_dir_arg=$(canon_git_dir_arg "$raw_segment")
+  fi
   local ref
   # shellcheck disable=SC2086
   ref=$(git $git_dir_arg symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset origin/HEAD falls back to main below
@@ -266,6 +273,14 @@ push_updates_protected_branch() {
     fi
     # Strip refs/heads/ prefix
     dst="${dst#refs/heads/}"
+    # F1: Fail-CLOSED on shell metacharacters in the destination.
+    # An unexpanded $, backtick, {, or ( in a refspec destination means the
+    # true target is a runtime expansion we cannot evaluate statically.
+    # We cannot prove it is NOT main → block (dc-05 fail-closed-on-ambiguity).
+    if [[ "$dst" == *'$'* || "$dst" == *'`'* || "$dst" == *'{'* || "$dst" == *'('* ]]; then
+      echo "CANON: push refspec destination contains unexpanded shell metacharacters — blocking fail-closed." >&2
+      return 0   # ambiguous destination → BLOCK
+    fi
     # Exact equality check (never substring/regex)
     if [[ "$dst" == "$protected" ]]; then
       return 0   # destination IS the protected branch → BLOCK
@@ -321,7 +336,23 @@ process_segment() {
         echo "CANON: ambiguous git-prefixed token detected — blocking fail-closed." >&2
         exit 2
       fi
+      # F1: Fail-CLOSED when the segment looks like a string-executing wrapper
+      # whose inner command contains shell metacharacters we cannot evaluate
+      # statically (command substitution via $( ) or backticks). We cannot
+      # prove the inner expansion does NOT push to the protected branch → block.
+      if [[ "$raw_segment" == *'$('* || "$raw_segment" == *'`'* ]]; then
+        echo "CANON: segment contains unexpanded command substitution — blocking fail-closed." >&2
+        exit 2
+      fi
       return 0
+    fi
+
+    # F1: If the extracted inner_cmd is itself a command substitution ($(...) or
+    # backtick form), we cannot evaluate it statically — block fail-closed.
+    # e.g. bash -c "$(echo git push origin HEAD:main)" → inner = $(echo ...)
+    if [[ "$inner_cmd" == '$('* || "$inner_cmd" == '`'* ]]; then
+      echo "CANON: string-executing wrapper inner command is a shell expansion — blocking fail-closed." >&2
+      exit 2
     fi
 
     # Depth guard: cap recursion to prevent pathological nesting.
