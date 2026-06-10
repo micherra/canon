@@ -45,7 +45,8 @@ describe("kg-wasm-parser — initParsers()", () => {
   });
 
   it("initParsers() is idempotent — calling twice does not throw or reset", async () => {
-    await expect(initParsers()).resolves.toBeUndefined();
+    // Second call returns [] (already initialized — no new overlays loaded)
+    await expect(initParsers()).resolves.toEqual([]);
     expect(isInitialized()).toBe(true);
   });
 });

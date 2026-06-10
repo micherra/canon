@@ -18,6 +18,7 @@ import type { Database } from "better-sqlite3";
 // biome-ignore lint/performance/noBarrelFile: intentional re-export — kg-pipeline is the single entry point for both bulk pipeline and incremental reindex; consumers should not need to know about the internal split
 export { readFileForReindex, reindexFile, reindexFileTransaction } from "./kg-pipeline-reindex.ts";
 
+import { registerOverlayAdapters } from "./kg-adapter-registry.ts";
 import { detectCommunities } from "./kg-community.ts";
 import { EmbeddingService } from "./kg-embedding.ts";
 import type { FileImportMap } from "./kg-pipeline-phases.ts";
@@ -27,7 +28,6 @@ import { initDatabase } from "./kg-schema.ts";
 import { KgStore } from "./kg-store.ts";
 import { propagateAllTags } from "./kg-tags.ts";
 import { KgVectorStore } from "./kg-vector-store.ts";
-import { registerOverlayAdapters } from "./kg-adapter-registry.ts";
 import { initParsers } from "./kg-wasm-parser.ts";
 import { scanSourceFiles } from "./scanner.ts";
 

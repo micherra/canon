@@ -17,7 +17,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Language, Parser } from "web-tree-sitter";
-import { mergeOverlayIntoConfigs, type LanguageConfig } from "./kg-language-configs.ts";
+import { type LanguageConfig, mergeOverlayIntoConfigs } from "./kg-language-configs.ts";
 import { loadOverlayConfigs, overlayGrammarPath } from "./kg-language-overlay.ts";
 
 // Supported built-in languages (fail-closed on load)
@@ -46,6 +46,80 @@ function grammarPath(language: SupportedLanguage): string {
   return join(grammarsDir, `tree-sitter-${language}.wasm`);
 }
 
+/** Initialize the web-tree-sitter WASM runtime. */
+async function initWasmRuntime(): Promise<void> {
+  await Parser.init({
+    locateFile(scriptName: string): string {
+      if (scriptName.endsWith(".wasm")) {
+        const thisFile = fileURLToPath(import.meta.url);
+        const nodeModulesDir = join(
+          dirname(thisFile),
+          "..",
+          "..",
+          "node_modules",
+          "web-tree-sitter",
+        );
+        return join(nodeModulesDir, scriptName);
+      }
+      return scriptName;
+    },
+  });
+}
+
+/**
+ * Load all built-in grammars (fail-closed: throws if any grammar is missing).
+ * Called once before overlay loading so built-ins are always available.
+ */
+async function loadBuiltinGrammars(): Promise<void> {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const wasmPath = grammarPath(lang);
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: fail-fast sequential load — each grammar must succeed before the next is attempted
+      const language = await Language.load(wasmPath);
+      const parser = new Parser();
+      parser.setLanguage(language);
+      parsers.set(lang, parser);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `kg-wasm-parser: failed to load grammar for '${lang}' from '${wasmPath}': ${message}`,
+      );
+    }
+  }
+}
+
+/**
+ * Load project-local overlay grammars (fail-open: skip + log on any error).
+ * Returns the configs whose grammars loaded successfully.
+ */
+async function loadOverlayGrammars(projectDir: string): Promise<LanguageConfig[]> {
+  const builtinIds = new Set(SUPPORTED_LANGUAGES as unknown as string[]);
+  const overlayConfigs = loadOverlayConfigs(projectDir, builtinIds);
+  if (overlayConfigs.length === 0) return [];
+
+  mergeOverlayIntoConfigs(overlayConfigs);
+  const loaded: LanguageConfig[] = [];
+
+  for (const config of overlayConfigs) {
+    const wasmPath = overlayGrammarPath(projectDir, config.grammarFile);
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: overlay grammars are few; sequential is fine here
+      const language = await Language.load(wasmPath);
+      const parser = new Parser();
+      parser.setLanguage(language);
+      parsers.set(config.id, parser);
+      loaded.push(config);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `kg-wasm-parser: failed to load overlay grammar for '${config.id}' from '${wasmPath}': ${message} — skipping`,
+      );
+    }
+  }
+
+  return loaded;
+}
+
 /**
  * Initialize the WASM runtime and load all grammar files.
  *
@@ -65,81 +139,9 @@ function grammarPath(language: SupportedLanguage): string {
  */
 export async function initParsers(projectDir?: string): Promise<LanguageConfig[]> {
   if (initialized) return [];
-
-  // Initialize the WASM module. The locateFile callback tells the module
-  // where to find the web-tree-sitter.wasm runtime file.
-  await Parser.init({
-    locateFile(scriptName: string): string {
-      // scriptName is 'web-tree-sitter.wasm' — resolve it from node_modules
-      if (scriptName.endsWith(".wasm")) {
-        const thisFile = fileURLToPath(import.meta.url);
-        const nodeModulesDir = join(
-          dirname(thisFile),
-          "..",
-          "..",
-          "node_modules",
-          "web-tree-sitter",
-        );
-        return join(nodeModulesDir, scriptName);
-      }
-      return scriptName;
-    },
-  });
-
-  // Load each built-in grammar and create a dedicated Parser instance per language.
-  // Fail-closed: if any built-in grammar file is missing, throw immediately.
-  for (const lang of SUPPORTED_LANGUAGES) {
-    const wasmPath = grammarPath(lang);
-    let language: Language;
-    try {
-      // biome-ignore lint/performance/noAwaitInLoops: fail-fast sequential load — each grammar must succeed before the next is attempted
-      language = await Language.load(wasmPath);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `kg-wasm-parser: failed to load grammar for '${lang}' from '${wasmPath}': ${message}`,
-      );
-    }
-
-    const parser = new Parser();
-    parser.setLanguage(language);
-    parsers.set(lang, parser);
-  }
-
-  // Load overlay grammars from project-local .canon/grammars/ (fail-open).
-  // A malformed or missing overlay wasm is logged and skipped — built-ins
-  // must already be fully initialized before this block runs (they are,
-  // since any built-in failure throws above).
-  const loadedOverlayConfigs: LanguageConfig[] = [];
-
-  if (projectDir) {
-    const builtinIds = new Set(SUPPORTED_LANGUAGES as unknown as string[]);
-    const overlayConfigs = loadOverlayConfigs(projectDir, builtinIds);
-
-    if (overlayConfigs.length > 0) {
-      // Merge into LANGUAGE_CONFIGS + rebuild EXT_TO_CONFIG
-      mergeOverlayIntoConfigs(overlayConfigs);
-
-      // Load overlay grammars — fail-open: skip on any error
-      for (const config of overlayConfigs) {
-        const wasmPath = overlayGrammarPath(projectDir, config.grammarFile);
-        try {
-          // biome-ignore lint/performance/noAwaitInLoops: overlay grammars are few; sequential is fine here
-          const language = await Language.load(wasmPath);
-          const parser = new Parser();
-          parser.setLanguage(language);
-          parsers.set(config.id, parser);
-          loadedOverlayConfigs.push(config);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          console.warn(
-            `kg-wasm-parser: failed to load overlay grammar for '${config.id}' from '${wasmPath}': ${message} — skipping`,
-          );
-        }
-      }
-    }
-  }
-
+  await initWasmRuntime();
+  await loadBuiltinGrammars();
+  const loadedOverlayConfigs = projectDir ? await loadOverlayGrammars(projectDir) : [];
   initialized = true;
   return loadedOverlayConfigs;
 }

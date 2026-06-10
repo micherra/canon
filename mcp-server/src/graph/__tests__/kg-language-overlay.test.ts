@@ -10,16 +10,18 @@
  * 6. Empty / absent overlay dir → []
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+// For KG-integrity tests we also test mergeOverlayIntoConfigs / getConfigForExtension
+import {
+  getConfigForExtension,
+  LANGUAGE_CONFIGS,
+  mergeOverlayIntoConfigs,
+} from "../kg-language-configs.ts";
 // We test loadOverlayConfigs in isolation — no WASM loading needed.
 import { loadOverlayConfigs } from "../kg-language-overlay.ts";
-
-// For KG-integrity tests we also test mergeOverlayIntoConfigs / getConfigForExtension
-import { LANGUAGE_CONFIGS, getConfigForExtension, mergeOverlayIntoConfigs } from "../kg-language-configs.ts";
 
 // ─── Test fixture helpers ─────────────────────────────────────────────────
 
@@ -37,7 +39,10 @@ const VALID_NODE_KINDS = {
 
 /** Create a temporary project directory with .canon subdirs */
 function makeTmpProject(): string {
-  const dir = join(tmpdir(), `kg-overlay-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const dir = join(
+    tmpdir(),
+    `kg-overlay-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
   mkdirSync(join(dir, ".canon", "kg-languages"), { recursive: true });
   mkdirSync(join(dir, ".canon", "grammars"), { recursive: true });
   return dir;
@@ -60,7 +65,9 @@ let tmpDir: string;
 
 beforeEach(() => {
   tmpDir = makeTmpProject();
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {
+    // suppress overlay warning output in tests
+  });
 });
 
 afterEach(() => {
@@ -139,12 +146,8 @@ describe("case 2: missing paired wasm", () => {
 
     loadOverlayConfigs(tmpDir, BUILTIN_IDS);
 
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining("tree-sitter-go.wasm"),
-    );
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining("skipping"),
-    );
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("tree-sitter-go.wasm"));
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("skipping"));
   });
 
   it("does not throw", () => {
@@ -234,9 +237,7 @@ describe("case 4: built-in id collision", () => {
 
     const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
     expect(result).toHaveLength(0);
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining("collides with a built-in"),
-    );
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("collides with a built-in"));
   });
 
   it("the built-in typescript config is unaffected after collision attempt", () => {

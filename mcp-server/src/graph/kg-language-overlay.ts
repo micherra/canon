@@ -68,9 +68,27 @@ type RawOverlayEntry = {
 };
 
 /**
+ * Validate the `extensions` field of a parsed overlay entry.
+ * Returns the string[] or null on violation.
+ */
+function validateExtensions(obj: Record<string, unknown>, id: string): string[] | null {
+  if (!Array.isArray(obj.extensions)) {
+    console.warn(`kg-language-overlay: [${id}] 'extensions' must be an array — skipping`);
+    return null;
+  }
+  if (!obj.extensions.every((e) => typeof e === "string")) {
+    console.warn(`kg-language-overlay: [${id}] 'extensions' must be string[] — skipping`);
+    return null;
+  }
+  return obj.extensions as string[];
+}
+
+/**
  * Validate the top-level shape of a parsed overlay JSON object.
  * Returns the coerced entry or null on any violation.
  * `hooks` are intentionally NOT expected in v1 (Decision lsp-recommender-07).
+ *
+ * Extracted into a helper (validateExtensions) to keep cognitive complexity ≤ 12.
  */
 function validateOverlayEntry(
   raw: unknown,
@@ -84,11 +102,11 @@ function validateOverlayEntry(
   const obj = raw as Record<string, unknown>;
 
   // id
-  if (typeof obj["id"] !== "string" || obj["id"].trim() === "") {
+  if (typeof obj.id !== "string" || obj.id.trim() === "") {
     console.warn(`kg-language-overlay: ${filePath} — missing or empty 'id' field — skipping`);
     return null;
   }
-  const id = obj["id"].trim();
+  const id = obj.id.trim();
 
   // Built-in collision: built-in wins, overlay entry dropped
   if (builtinIds.has(id)) {
@@ -99,25 +117,18 @@ function validateOverlayEntry(
   }
 
   // extensions
-  if (!Array.isArray(obj["extensions"])) {
-    console.warn(`kg-language-overlay: [${id}] 'extensions' must be an array — skipping`);
-    return null;
-  }
-  if (!obj["extensions"].every((e) => typeof e === "string")) {
-    console.warn(`kg-language-overlay: [${id}] 'extensions' must be string[] — skipping`);
-    return null;
-  }
-  const extensions = obj["extensions"] as string[];
+  const extensions = validateExtensions(obj, id);
+  if (!extensions) return null;
 
   // grammarFile
-  if (typeof obj["grammarFile"] !== "string" || obj["grammarFile"].trim() === "") {
+  if (typeof obj.grammarFile !== "string" || obj.grammarFile.trim() === "") {
     console.warn(`kg-language-overlay: [${id}] missing or empty 'grammarFile' field — skipping`);
     return null;
   }
-  const grammarFile = obj["grammarFile"].trim();
+  const grammarFile = obj.grammarFile.trim();
 
   // nodeKinds
-  const nodeKinds = validateNodeKindMap(obj["nodeKinds"], id);
+  const nodeKinds = validateNodeKindMap(obj.nodeKinds, id);
   if (!nodeKinds) return null;
 
   return { extensions, grammarFile, id, nodeKinds };
@@ -133,6 +144,45 @@ function validateOverlayEntry(
  */
 export function overlayGrammarPath(projectDir: string, grammarFile: string): string {
   return join(projectDir, ".canon", "grammars", grammarFile);
+}
+
+/**
+ * Attempt to load and validate one overlay JSON file.
+ * Returns a LanguageConfig on success, or null if the entry must be skipped.
+ * Never throws.
+ */
+function processOverlayFile(
+  filePath: string,
+  projectDir: string,
+  builtinIds: ReadonlySet<string>,
+): LanguageConfig | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(filePath, "utf-8"));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`kg-language-overlay: failed to parse '${filePath}': ${message} — skipping`);
+    return null;
+  }
+
+  const entry = validateOverlayEntry(raw, filePath, builtinIds);
+  if (!entry) return null;
+
+  const wasmPath = overlayGrammarPath(projectDir, entry.grammarFile);
+  if (!existsSync(wasmPath)) {
+    console.warn(
+      `kg-language-overlay: [${entry.id}] paired grammar wasm not found at '${wasmPath}' — skipping`,
+    );
+    return null;
+  }
+
+  // hooks intentionally omitted in v1 (Decision lsp-recommender-07)
+  return {
+    extensions: entry.extensions,
+    grammarFile: entry.grammarFile,
+    id: entry.id,
+    nodeKinds: entry.nodeKinds,
+  };
 }
 
 /**
@@ -155,11 +205,7 @@ export function loadOverlayConfigs(
   builtinIds: ReadonlySet<string>,
 ): LanguageConfig[] {
   const overlayDir = join(projectDir, ".canon", "kg-languages");
-
-  // If the directory doesn't exist, return [] (not an error)
-  if (!existsSync(overlayDir)) {
-    return [];
-  }
+  if (!existsSync(overlayDir)) return [];
 
   let files: string[];
   try {
@@ -171,43 +217,9 @@ export function loadOverlayConfigs(
   }
 
   const results: LanguageConfig[] = [];
-
   for (const file of files) {
-    const filePath = join(overlayDir, file);
-
-    // Parse JSON
-    let raw: unknown;
-    try {
-      const text = readFileSync(filePath, "utf-8");
-      raw = JSON.parse(text);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`kg-language-overlay: failed to parse '${filePath}': ${message} — skipping`);
-      continue;
-    }
-
-    // Validate shape + collision check
-    const entry = validateOverlayEntry(raw, filePath, builtinIds);
-    if (!entry) continue;
-
-    // Paired wasm existence check
-    const wasmPath = overlayGrammarPath(projectDir, entry.grammarFile);
-    if (!existsSync(wasmPath)) {
-      console.warn(
-        `kg-language-overlay: [${entry.id}] paired grammar wasm not found at '${wasmPath}' — skipping`,
-      );
-      continue;
-    }
-
-    // Entry passes all checks — activate it
-    results.push({
-      extensions: entry.extensions,
-      grammarFile: entry.grammarFile,
-      id: entry.id,
-      nodeKinds: entry.nodeKinds,
-      // hooks: intentionally omitted in v1 (Decision lsp-recommender-07)
-    });
+    const config = processOverlayFile(join(overlayDir, file), projectDir, builtinIds);
+    if (config) results.push(config);
   }
-
   return results;
 }
