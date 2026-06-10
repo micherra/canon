@@ -520,6 +520,8 @@ and session-watch/self-paced (Phase C) are separate later builds. Discovery: `li
 canon/
 ├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (21 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
+├── docs/
+│   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 │   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, comment stripping, quote-aware tokenizer, git-token detection, string-executing-wrapper unwrap/scan-forward, jq wrappers)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools

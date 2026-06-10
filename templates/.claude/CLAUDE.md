@@ -6,7 +6,7 @@
 Structured output templates that agents must follow for consistent, parseable artifacts. Enforced by the `agent-template-required` rule — agents must read the template before producing output.
 
 ## Architecture
-<!-- last-updated: 2026-06-06 (renderer-review.md: mandatory Step 9 structural self-check added; renderer-review.md and renderer-codebase-graph.md delegate force graph to shared force-graph.html snippet) -->
+<!-- last-updated: 2026-06-09 (docs/adr/TEMPLATE.md added — durable ADR promotion template, distinct from ephemeral design-decision.md; see ADR-0001) -->
 
 Each template is a markdown file with placeholder sections that agents fill in.
 
@@ -15,7 +15,9 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | Template | Used By | Purpose |
 |----------|---------|---------|
 | `claudemd-template.md` | scribe | CLAUDE.md structure |
-| `design-decision.md` | architect | Architecture decisions with tradeoffs |
+| `design-decision.md` | architect | Architecture decisions with tradeoffs — ephemeral record written to `${WORKSPACE}/decisions/` mid-build; consumed by engineer |
+
+**ADR template coexistence (ADR-0001):** `design-decision.md` and `docs/adr/TEMPLATE.md` serve different lifecycles. `design-decision.md` is ephemeral — the architect writes it to `${WORKSPACE}/decisions/` during a build and it is consumed mid-build. `docs/adr/TEMPLATE.md` is the durable tracked promotion template written only when the conjunctive 3-condition ADR gate passes (decision affects public contract, high reversal cost, and stakeholder alignment required). Durable ADRs land in `docs/adr/NNNN-slug.md` in the worktree and are committed to the repo.
 | `summary.md` | engineer | Task implementation summary — required `#### Criteria Coverage` table maps every task-plan acceptance criterion to a disposition (`covered`, `descoped`, `partial`); reviewer checks this in Stage 3 compliance cross-check |
 | `review.md` | reviewer | Code review output with violations |
 | `security-assessment.md` | security | Vulnerability findings and remediation |
