@@ -57,23 +57,6 @@ import {
   toDescriptors,
 } from "../services/index-inventory.ts";
 
-// ---- Helpers ----
-
-function _makeFileContent(cls: "rules", body: string): string {
-  return [
-    "# Rules Index",
-    "",
-    "Some editorial prose about rules.",
-    "",
-    INVENTORY_START(cls),
-    body,
-    INVENTORY_END,
-    "",
-    "## Conventions",
-    "Some trailing conventions text.",
-  ].join("\n");
-}
-
 // ---- toDescriptors ----
 
 describe("toDescriptors", () => {
