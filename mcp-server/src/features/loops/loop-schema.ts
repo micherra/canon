@@ -196,13 +196,116 @@ export type ParseLoopOptions = {
   idFromFilename?: string;
 };
 
+// ── Shell metacharacter reject set (Codex P1) ─────────────────────────────────
+// Any of these in a declared shell_command entry → immediate rejection.
+// Read-only observe commands need none of these. Rejecting `$` and `()` also kills `$(...)`
+// command substitution. Rejecting `;` and `&` kills chaining. Rejecting `|`, `<`, `>` kills
+// pipes and redirections. Backtick kills legacy command substitution.
+const SHELL_METACHARS = [";", "&", "|", "<", ">", "`", "$", "(", ")", "\n", "\r"] as const;
+
+// ── gh api mutating-flag tokens (Codex P1) ────────────────────────────────────
+// When a shell_command starts with 'gh api', these token forms flip it from GET to POST/PATCH/DELETE.
+// Token must appear as a whitespace-or-`=`-delimited word (not substring-in-a-word).
+const GH_API_WRITE_FLAGS = ["-f", "-F", "--field", "--raw-field", "--input"] as const;
+
+/**
+ * Returns true when the given token appears as a whole-word token in the command string.
+ * Whole-word means preceded and followed by whitespace, `=`, or string boundary.
+ */
+function containsToken(cmd: string, token: string): boolean {
+  // Build a regex: token is bounded by start/end or whitespace or `=`
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[\\s=])${escaped}(?:[\\s=]|$)`).test(cmd);
+}
+
+/**
+ * Checks whether a `gh api` entry uses a mutating method or write-field flag.
+ * Returns an error string if mutating, null if read-only (GET).
+ *
+ * Checks:
+ * 1. `-X <non-GET>` or `--method <non-GET>` → mutating
+ * 2. Write-field flags (-f, -F, --field, --raw-field, --input) → mutating
+ */
+function checkGhApiMutatingFlags(cmd: string): string | null {
+  // Check -X / --method with a non-GET value
+  const methodShortMatch = /(?:^|\s)-X\s+(\S+)/.exec(cmd);
+  if (methodShortMatch && methodShortMatch[1].toUpperCase() !== "GET") {
+    return (
+      `gh api shell_command '${cmd}' uses -X ${methodShortMatch[1]} which is a mutating method ` +
+      `(only GET is allowed under mutates_build:false)`
+    );
+  }
+  const methodLongMatch = /(?:^|\s)--method\s+(\S+)/.exec(cmd);
+  if (methodLongMatch && methodLongMatch[1].toUpperCase() !== "GET") {
+    return (
+      `gh api shell_command '${cmd}' uses --method ${methodLongMatch[1]} which is a mutating method ` +
+      `(only GET is allowed under mutates_build:false)`
+    );
+  }
+
+  // Check write-field flags
+  for (const flag of GH_API_WRITE_FLAGS) {
+    if (containsToken(cmd, flag)) {
+      return (
+        `gh api shell_command '${cmd}' contains write-field flag '${flag}' ` +
+        `which makes this a mutating gh api call (not allowed under mutates_build:false)`
+      );
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Validates a single shell_command entry for read-only safety (Codex P1 hardening).
+ *
+ * Checks in order:
+ * 1. Shell metacharacter rejection (;, &, |, <, >, `, $, (, ), \n, \r)
+ * 2. Prefix allowlist — must be on READ_ONLY_SHELL_COMMANDS
+ * 3. gh api mutating-flag rejection (only for 'gh api' entries)
+ *
+ * Returns an error string on violation, null when safe.
+ * Extracted from checkReadOnlyShell to keep both functions below complexity 12.
+ */
+function checkSingleShellCommand(cmd: string): string | null {
+  // Codex P1 check 1: reject shell metacharacters
+  const metaChar = SHELL_METACHARS.find((c) => cmd.includes(c));
+  if (metaChar !== undefined) {
+    const display = metaChar === "\n" ? "\\n" : metaChar === "\r" ? "\\r" : metaChar;
+    return (
+      `shell_command '${cmd}' contains shell metacharacter '${display}' ` +
+      `(metacharacters are not allowed in read-only observe commands under mutates_build:false)`
+    );
+  }
+
+  // Prefix allowlist check
+  const allowed = READ_ONLY_SHELL_COMMANDS.some(
+    (prefix) => cmd === prefix || cmd.startsWith(`${prefix} `),
+  );
+  if (!allowed) {
+    return (
+      `shell_command '${cmd}' is not on the read-only allowlist ` +
+      `(mutating or unknown command rejected under mutates_build:false)`
+    );
+  }
+
+  // Codex P1 check 2: gh api mutating-flag rejection
+  if (cmd === "gh api" || cmd.startsWith("gh api ")) {
+    return checkGhApiMutatingFlags(cmd);
+  }
+
+  return null;
+}
+
 /**
  * Guardrail 2 helper — checks whether Bash is safe to admit under the read-only carve-out.
  *
  * `Bash` is dual-use: `git log` reads, `git push` writes. This helper validates that every
- * declared shell_command matches a prefix in READ_ONLY_SHELL_COMMANDS, using a
- * `cmd === allowed || cmd.startsWith(allowed + " ")` match to prevent prefix over-admission
- * (e.g. `"git logfoo"` must NOT match `"git log"`).
+ * declared shell_command passes checkSingleShellCommand (Codex P1 hardening):
+ *
+ * 1. Metacharacter rejection — closes semicolon-chain and command-substitution exploits.
+ * 2. Prefix allowlist — entry must be on READ_ONLY_SHELL_COMMANDS.
+ * 3. gh api mutating-flag rejection — closes -f / -X POST exploits on gh api entries.
  *
  * Returns an error string when a violation is found, or null when admitted.
  * Extracted to keep checkObserveMutationGuardrail under the cognitive-complexity limit.
@@ -215,14 +318,9 @@ function checkReadOnlyShell(shellCommands: ReadonlyArray<string>): string | null
     );
   }
   for (const cmd of shellCommands) {
-    const allowed = READ_ONLY_SHELL_COMMANDS.some(
-      (prefix) => cmd === prefix || cmd.startsWith(`${prefix} `),
-    );
-    if (!allowed) {
-      return (
-        `shell_command '${cmd}' is not on the read-only allowlist ` +
-        `(mutating or unknown command rejected under mutates_build:false)`
-      );
+    const cmdError = checkSingleShellCommand(cmd);
+    if (cmdError !== null) {
+      return cmdError;
     }
   }
   return null;
