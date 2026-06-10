@@ -111,11 +111,54 @@ check_mcp_json_args_token() {
   return 0
 }
 
+# Check 3 — shellcheck the .mcp.json -c payload
+# The shell logic embedded in the -c arg is not linted by the hook shellcheck
+# loop above (which only covers hooks/**/*.sh). This check extracts the payload
+# by finding the arg that follows -c (same extraction the test suite uses) and
+# runs shellcheck on it directly, so future payload edits stay lint-clean.
+# Requires jq; if absent, prints a skip notice and does not hard-fail.
+check_mcp_json_payload_shellcheck() {
+  local mcp_json="$REPO_ROOT/.mcp.json"
+  if [[ ! -f "$mcp_json" ]]; then
+    return 0
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "NOTICE: hooks/lint.sh: jq not found — skipping .mcp.json payload shellcheck (Check 3). Install jq to enable this gate." >&2
+    return 0
+  fi
+  # Extract the shell payload following -c in mcpServers.canon.args (position-independent).
+  local payload
+  payload="$(jq -r '
+    .mcpServers.canon.args as $args |
+    ($args | to_entries | map(select(.value == "-c")) | .[0].key) as $idx |
+    $args[$idx + 1]
+  ' "$mcp_json" 2>/dev/null)"
+  if [[ -z "$payload" ]]; then
+    echo "NOTICE: hooks/lint.sh: could not extract -c payload from $mcp_json — skipping payload shellcheck (Check 3)." >&2
+    return 0
+  fi
+  # Write to a named temp file so shellcheck can report line numbers.
+  local tmpfile
+  tmpfile="$(mktemp /tmp/canon-mcp-payload-XXXXXX.sh)"
+  printf '%s\n' "$payload" > "$tmpfile"
+  local sc_ok=0
+  if ! shellcheck -s bash "$tmpfile"; then
+    echo "ERROR: .mcp.json -c payload failed shellcheck (see above). Fix the shell so it passes cleanly; do not add blanket suppressions." >&2
+    sc_ok=1
+  fi
+  rm -f "$tmpfile"
+  return "$sc_ok"
+}
+
 if ! check_toolchain_pins; then
   FAILED=$(( FAILED + 1 ))
 fi
 
 if ! check_mcp_json_args_token; then
+  FAILED=$(( FAILED + 1 ))
+fi
+
+if ! check_mcp_json_payload_shellcheck; then
   FAILED=$(( FAILED + 1 ))
 fi
 
