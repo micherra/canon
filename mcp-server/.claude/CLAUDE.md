@@ -25,7 +25,7 @@ src/
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
-│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader (Phase A)
+│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader + read-only-shell carve-out (Phase B current)
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
@@ -167,7 +167,7 @@ src/
 | `get_historical_artifacts` | Retrieve archived artifacts from a previous build |
 | `get_cross_run_analysis` | Cross-run meta-analysis for the learner; includes `craft_drift: CraftDrift` (`by_dimension[]`, `by_area[]`, `profile_count`) and `cliff_events: CliffEventsDimension`; runs fail-open `sweepCliffEvents(project_dir)` before analysis |
 
-**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-08 -->
+**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-09 -->
 
 | Tool | Purpose |
 |------|---------|
