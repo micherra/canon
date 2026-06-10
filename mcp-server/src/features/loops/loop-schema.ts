@@ -204,55 +204,88 @@ export type ParseLoopOptions = {
 const SHELL_METACHARS = [";", "&", "|", "<", ">", "`", "$", "(", ")", "\n", "\r"] as const;
 
 // ── gh api mutating-flag tokens (Codex P1) ────────────────────────────────────
-// When a shell_command starts with 'gh api', these token forms flip it from GET to POST/PATCH/DELETE.
-// Token must appear as a whitespace-or-`=`-delimited word (not substring-in-a-word).
-const GH_API_WRITE_FLAGS = ["-f", "-F", "--field", "--raw-field", "--input"] as const;
+// When a shell_command starts with 'gh api', these token PREFIXES flip it from GET to POST/PATCH/DELETE.
+// A token that starts with any of these prefixes is a write-field flag regardless of glued value.
+const GH_API_WRITE_FLAG_PREFIXES = ["-f", "-F", "--field", "--raw-field", "--input"] as const;
 
 /**
- * Returns true when the given token appears as a whole-word token in the command string.
- * Whole-word means preceded and followed by whitespace, `=`, or string boundary.
+ * Extracts the method value from a -X or --method token or its successor.
+ *
+ * Handles all pflag forms:
+ *   - Token `-XPOST` (glued): returns "POST"
+ *   - Token `-X=POST` (equals): returns "POST"
+ *   - Token `-X` with next token `POST` (space): returns "POST" via nextToken
+ *   - Token `--method=POST` (equals): returns "POST"
+ *   - Token `--method` with next token `POST` (space): returns "POST" via nextToken
+ *
+ * Returns null when the token is unrecognized or no value is available.
  */
-function containsToken(cmd: string, token: string): boolean {
-  // Build a regex: token is bounded by start/end or whitespace or `=`
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[\\s=])${escaped}(?:[\\s=]|$)`).test(cmd);
+function extractMethodValue(token: string, nextToken: string | undefined): string | null {
+  // Short form: -X
+  if (token.startsWith("-X")) {
+    const rest = token.slice(2); // everything after -X
+    if (rest.startsWith("=")) return rest.slice(1); // -X=POST
+    if (rest.length > 0) return rest; // -XPOST (glued)
+    return nextToken ?? null; // -X POST (space-separated)
+  }
+  // Long form: --method
+  if (token.startsWith("--method")) {
+    const rest = token.slice(8); // everything after --method
+    if (rest.startsWith("=")) return rest.slice(1); // --method=POST
+    if (rest.length === 0) return nextToken ?? null; // --method POST (space-separated)
+    return null; // --methodXXX — not a method flag (e.g. --methodical would fall here; safe to ignore)
+  }
+  return null;
+}
+
+/**
+ * Returns true when the given token is a gh api write-field flag.
+ * Covers both standalone (`-f`, `--field`) and glued forms (`-fbody=x`, `--field=k=v`).
+ *
+ * Write-field flag prefixes: -f, -F (single-dash single-letter) and --field, --raw-field, --input.
+ * A token matches when it IS the prefix or STARTS with the prefix (glued value appended).
+ * `--format` does NOT start with `--field`, so it is safe.
+ */
+function isWriteFieldToken(token: string): boolean {
+  return GH_API_WRITE_FLAG_PREFIXES.some((prefix) => token === prefix || token.startsWith(prefix));
 }
 
 /**
  * Checks whether a `gh api` entry uses a mutating method or write-field flag.
  * Returns an error string if mutating, null if read-only (GET).
  *
- * Checks:
- * 1. `-X <non-GET>` or `--method <non-GET>` → mutating
- * 2. Write-field flags (-f, -F, --field, --raw-field, --input) → mutating
+ * Tokenizes on whitespace so each token is examined individually; this catches
+ * both space-separated forms (`-X POST`, `--method POST`) and glued/equals
+ * forms (`-XPOST`, `-X=POST`, `--method=POST`, `-fbody=x`).
+ *
+ * Admitted: `-X GET`, `-XGET`, `--method GET`, `--method=GET` (all GET variants).
+ * Rejected: any non-GET method value; any write-field flag prefix.
  */
 function checkGhApiMutatingFlags(cmd: string): string | null {
-  // Check -X / --method with a non-GET value
-  const methodShortMatch = /(?:^|\s)-X\s+(\S+)/.exec(cmd);
-  if (methodShortMatch && methodShortMatch[1].toUpperCase() !== "GET") {
-    return (
-      `gh api shell_command '${cmd}' uses -X ${methodShortMatch[1]} which is a mutating method ` +
-      `(only GET is allowed under mutates_build:false)`
-    );
-  }
-  const methodLongMatch = /(?:^|\s)--method\s+(\S+)/.exec(cmd);
-  if (methodLongMatch && methodLongMatch[1].toUpperCase() !== "GET") {
-    return (
-      `gh api shell_command '${cmd}' uses --method ${methodLongMatch[1]} which is a mutating method ` +
-      `(only GET is allowed under mutates_build:false)`
-    );
-  }
-
-  // Check write-field flags
-  for (const flag of GH_API_WRITE_FLAGS) {
-    if (containsToken(cmd, flag)) {
+  const tokens = cmd.trim().split(/\s+/);
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    // ── Method flag check ────────────────────────────────────────────────────
+    if (token.startsWith("-X") || token.startsWith("--method")) {
+      const method = extractMethodValue(token, tokens[i + 1]);
+      if (method !== null && method.toUpperCase() !== "GET") {
+        return (
+          `gh api shell_command '${cmd}' uses method '${method}' which is a mutating method ` +
+          `(only GET is allowed under mutates_build:false)`
+        );
+      }
+      // method === null: incomplete flag at end of command — not a known bypass; skip
+      // method.toUpperCase() === "GET": read-only, continue scanning
+      continue;
+    }
+    // ── Write-field flag check ───────────────────────────────────────────────
+    if (isWriteFieldToken(token)) {
       return (
-        `gh api shell_command '${cmd}' contains write-field flag '${flag}' ` +
+        `gh api shell_command '${cmd}' contains write-field flag '${token}' ` +
         `which makes this a mutating gh api call (not allowed under mutates_build:false)`
       );
     }
   }
-
   return null;
 }
 

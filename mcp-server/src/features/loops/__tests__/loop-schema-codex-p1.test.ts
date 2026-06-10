@@ -218,4 +218,63 @@ describe("parseLoopDefinition — Codex P1 read-only shell hardening", () => {
     const result = parseLoopDefinition(withShellCommands(["git log --oneline -5"]), {});
     expect(result.ok).toBe(true);
   });
+
+  // ── Glued / equals pflag bypass cases (adversarial review findings) ───────────
+
+  it("NEG gh api glued -XPOST: 'gh api repos/x -XPOST' → rejected", () => {
+    // pflag glued form: -XPOST === -X POST; must be rejected (POST is mutating)
+    const result = parseLoopDefinition(withShellCommands(["gh api repos/x -XPOST"]), {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/gh api|field|method|mutating/i);
+    }
+  });
+
+  it("NEG gh api equals -X=POST: 'gh api repos/x -X=POST' → rejected", () => {
+    // equals form: -X=POST is another valid pflag syntax for non-GET method
+    const result = parseLoopDefinition(withShellCommands(["gh api repos/x -X=POST"]), {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/gh api|field|method|mutating/i);
+    }
+  });
+
+  it("NEG gh api --method=POST: 'gh api repos/x --method=POST' → rejected", () => {
+    // equals form for long flag: --method=POST bypasses the space-anchored regex
+    const result = parseLoopDefinition(withShellCommands(["gh api repos/x --method=POST"]), {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/gh api|field|method|mutating/i);
+    }
+  });
+
+  it("NEG gh api glued -fbody=x: 'gh api repos/x -fbody=x' → rejected", () => {
+    // pflag glued form: -fbody=x === -f body=x; must be rejected (write field)
+    const result = parseLoopDefinition(withShellCommands(["gh api repos/x -fbody=x"]), {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/gh api|field|method|mutating/i);
+    }
+  });
+
+  it("NEG gh api glued -Fbody=@f: 'gh api repos/x -Fbody=@f' → rejected", () => {
+    // pflag glued form: -Fbody=@f === -F body=@f; must be rejected (write field)
+    const result = parseLoopDefinition(withShellCommands(["gh api repos/x -Fbody=@f"]), {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/gh api|field|method|mutating/i);
+    }
+  });
+
+  it("POS gh api glued -XGET: 'gh api repos/x -XGET' → admitted (GET is read-only)", () => {
+    // Glued GET is still read-only — must remain admitted
+    const result = parseLoopDefinition(withShellCommands(["gh api repos/x -XGET"]), {});
+    expect(result.ok).toBe(true);
+  });
+
+  it("POS gh api --method=GET: 'gh api repos/x --method=GET' → admitted (GET is read-only)", () => {
+    // Equals-form GET is still read-only — must remain admitted
+    const result = parseLoopDefinition(withShellCommands(["gh api repos/x --method=GET"]), {});
+    expect(result.ok).toBe(true);
+  });
 });
