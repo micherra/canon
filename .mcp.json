@@ -2,8 +2,9 @@
   "mcpServers": {
     "canon": {
       "command": "bash",
-      "args": ["${CLAUDE_PLUGIN_ROOT:-.}/mcp-server/boot.sh"],
+      "args": ["-c", "exec bash \"${CLAUDE_PLUGIN_ROOT:-$CANON_PLUGIN_DIR}/mcp-server/boot.sh\""],
       "env": {
+        "CANON_PLUGIN_DIR": "${CLAUDE_PLUGIN_ROOT}",
         "CANON_PROJECT_DIR": "${CLAUDE_PROJECT_DIR:-.}"
       }
     }
