@@ -530,16 +530,23 @@ describe("assembleWikiLintOutput", () => {
       message: "Principle 'baz' declares invalid scope.layers: service.",
     };
 
+    const glossaryFinding = {
+      kind: "exact-duplicate" as const,
+      line_numbers: [3, 6],
+      term: "wave",
+    };
+
     const output = assembleWikiLintOutput({
-      contradictions: [contradiction],
-      orphans: [orphan],
-      staleRefs: [staleRef],
-      missingExamples: [missingExample],
       citedPaths: [citedPath],
+      contradictions: [contradiction],
+      filesScanned: 10,
+      glossaryConsistency: [glossaryFinding],
+      missingExamples: [missingExample],
+      orphans: [orphan],
+      principlesChecked: 20,
       scopeLayers: [scopeLayer],
       scopeTags: [],
-      filesScanned: 10,
-      principlesChecked: 20,
+      staleRefs: [staleRef],
     });
 
     expect(output.contradictions).toHaveLength(1);
@@ -548,7 +555,8 @@ describe("assembleWikiLintOutput", () => {
     expect(output.missing_examples).toHaveLength(1);
     expect(output.cited_paths).toHaveLength(1);
     expect(output.scope_layers).toHaveLength(1);
-    expect(output.summary.total_findings).toBe(6);
+    expect(output.glossary_consistency).toHaveLength(1);
+    expect(output.summary.total_findings).toBe(7);
     expect(output.summary.files_scanned).toBe(10);
     expect(output.summary.principles_checked).toBe(20);
   });
