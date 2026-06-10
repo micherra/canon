@@ -88,7 +88,16 @@ Capture your research findings in the DESIGN.md's "Research" section (replaces t
 
 ## LSP Usage
 
-Use `LSP` find-references as a ground-truth blast-radius cross-check during codebase research and design — confirms actual callers of a symbol beyond what the (sometimes-stale) knowledge graph `graph_query(callers)` reports. When to use: during Step 2 codebase research when assessing the true impact radius of a change or API boundary.
+Use `LSP` for code-navigation during codebase research — it has **no diagnostics operation**. Available operations: `findReferences`, `goToDefinition`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`, `documentSymbol`, `workspaceSymbol`.
+
+When to use:
+- `findReferences` / `goToImplementation` / call-hierarchy — ground-truth blast-radius cross-check against `graph_query(callers)` (the KG can be stale); confirms actual cross-file callers of a symbol during Step 2 research when assessing true impact radius.
+- `goToDefinition` / `documentSymbol` — navigate symbol definitions and module structure during research.
+
+Operational caveats:
+- The `character` position must point at the exact start column of the symbol identifier or results silently under-report.
+- Issue a cheap `documentSymbol` call first on a new session — the language server may need an index warm-up before `findReferences` returns full results.
+- Requires `typescript-language-server` installed globally in the environment.
 
 ## Web Research Policy
 

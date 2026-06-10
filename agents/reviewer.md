@@ -92,7 +92,16 @@ Do NOT:
 
 ## LSP Usage
 
-Use `LSP` find-references as a ground-truth blast-radius cross-check against `graph_query(callers)` (the KG can be stale), and pull structured per-file/per-line diagnostics instead of/alongside parsing `npm run build` stdout when assessing changed `.ts` files. When to use: during Stage-2 blast-radius assessment and during diagnostic confirmation on changed `.ts` files.
+Use `LSP` for code-navigation only — it has **no diagnostics operation**. Available operations: `findReferences`, `goToDefinition`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`. There is no `getDiagnostics`; compiler diagnostics remain the job of `npm run build` / `tsc`.
+
+When to use:
+- `findReferences` — ground-truth blast-radius cross-check against `graph_query(callers)` (the KG can be stale); returns real cross-file production call sites. Use during Stage-2 blast-radius assessment on changed `.ts` symbols.
+- `goToDefinition` / `documentSymbol` / `workspaceSymbol` — navigate changed code and confirm symbol scope during review.
+
+Operational caveats:
+- The `character` position must point at the exact start column of the symbol identifier or results silently under-report.
+- Issue a cheap `documentSymbol` call first on a new session — the language server may need an index warm-up before `findReferences` returns full results.
+- Requires `typescript-language-server` installed globally in the environment.
 
 ## Web Research Policy
 
