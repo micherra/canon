@@ -239,7 +239,7 @@ fi
 NODE_MAJOR="${NODE_VERSION_RAW#v}"   # strip leading 'v'
 NODE_MAJOR="${NODE_MAJOR%%.*}"       # keep only major
 if [[ -n "$NODE_MAJOR" ]] && [[ "$NODE_MAJOR" =~ ^[0-9]+$ ]] && (( NODE_MAJOR < 24 )); then
-  echo "CANON ERROR: Canon's MCP server requires Node >=24, but found ${NODE_VERSION_RAW}. Install/select Node 24+ (e.g. 'asdf install nodejs 24.x.x' or via your version manager) and retry." >&2
+  echo "CANON ERROR: Canon's MCP server requires Node >=24, but found ${NODE_VERSION_RAW}. Install or select Node 24+ (via your Node version manager — nvm, fnm, asdf, volta — or from https://nodejs.org) and retry." >&2
   exit 1
 fi
 
