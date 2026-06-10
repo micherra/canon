@@ -25,7 +25,7 @@ src/
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
-│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader (Phase A)
+│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader + read-only-shell carve-out (Phase B current)
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
@@ -164,7 +164,7 @@ src/
 | `get_historical_artifacts` | Retrieve archived artifacts from a previous build |
 | `get_cross_run_analysis` | Cross-run meta-analysis for the learner; includes `craft_drift: CraftDrift` (`by_dimension[]`, `by_area[]`, `profile_count`) and `cliff_events: CliffEventsDimension`; runs fail-open `sweepCliffEvents(project_dir)` before analysis |
 
-**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-08 -->
+**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-09 -->
 
 | Tool | Purpose |
 |------|---------|
@@ -237,4 +237,4 @@ npm start            # Run server via tsx (tsx is a runtime dependency; loaded b
 npm test             # Run vitest unit tests
 ```
 
-Node.js 24+ required.
+Node.js 24+ required. Enforced at runtime by `boot.sh` Step 12.5 (fail-closed, actionable error) and declared in `package.json` `engines.node`. No `.tool-versions` pin is shipped — `boot.sh` validates the floor against the user's ambient Node.
