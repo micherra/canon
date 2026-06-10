@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.10.0](https://github.com/micherra/canon/compare/v2.9.0...v2.10.0) (2026-06-10)
+
+
+### Features
+
+* **ci:** install-faithful guards — lint + install-sim smoke test + convention (prevent dev-file-leak boot breakage) ([#363](https://github.com/micherra/canon/issues/363)) ([5b98216](https://github.com/micherra/canon/commit/5b98216dce939baaff659fd61ce1f3ef8c66feec))
+* **ddd-freshness:** KG doc nodes, doc:references edges, wiki_lint DDD scan, scribe Step 5c ([#348](https://github.com/micherra/canon/issues/348)) ([90c3dac](https://github.com/micherra/canon/commit/90c3dac4f68c020b83754dd1c0526f243947447a))
+* **loops:** Phase B — ship-watch definition + read-only-shell guardrail (first real loop) ([#362](https://github.com/micherra/canon/issues/362)) ([8268b58](https://github.com/micherra/canon/commit/8268b5801ce927072f2fa8dfbfc6d65824f74a24))
+* **routines:** first-class managed artifact class — full management layer ([#352](https://github.com/micherra/canon/issues/352)) ([b929fbb](https://github.com/micherra/canon/commit/b929fbba855b4123e27b337cccbade5c1f29f61f))
+
+
+### Bug Fixes
+
+* **boot:** stop shipping exact Node pin + add Node&gt;=24 preflight (asdf boot trap, [#354](https://github.com/micherra/canon/issues/354)) ([#361](https://github.com/micherra/canon/issues/361)) ([1e8df23](https://github.com/micherra/canon/commit/1e8df23abfdc37014dc94993d1f317fc41de474a))
+* **mcp:** restore plugin-install boot — route CLAUDE_PLUGIN_ROOT via env, not args (closes [#354](https://github.com/micherra/canon/issues/354)) ([#356](https://github.com/micherra/canon/issues/356)) ([7da6d13](https://github.com/micherra/canon/commit/7da6d13fc3855bea80c78f6623f5d13bbcf2560a))
+* **tests:** harden 3 flaky integration tests — git-op timeout, depcruise CWD, embedding latency ([#357](https://github.com/micherra/canon/issues/357)) ([143d2f2](https://github.com/micherra/canon/commit/143d2f2a572f2a766851f7ba3d08ecd10d0f252d))
+
+## [2.9.0](https://github.com/micherra/canon/compare/v2.8.0...v2.9.0) (2026-06-08)
+
+
+### Features
+
+* **cliff:** cliff_detected learner dimension consumer (watch_BBBBB1) ([#347](https://github.com/micherra/canon/issues/347)) ([8aad924](https://github.com/micherra/canon/commit/8aad924159498bcfd75063cc0613f11b783a34e0))
+* **learner:** promote batch 6 — reviewer pre-fix regression check, grep-scope convention, scope_tags wiki-lint check ([#343](https://github.com/micherra/canon/issues/343)) ([1025610](https://github.com/micherra/canon/commit/10256104e90ab6158aad609631831dfae6248670))
+* **loops:** Loop-as-Artifact Framework — Phase A (schema, registry, runtime) ([#350](https://github.com/micherra/canon/issues/350)) ([5c3d2e6](https://github.com/micherra/canon/commit/5c3d2e6d88eb1467eb379baa0ce5eab99f347945))
+
+
+### Bug Fixes
+
+* **security:** lock down unauthenticated artifact sidecar (:3141) + share loopback-host guard ([#349](https://github.com/micherra/canon/issues/349)) ([c7dd950](https://github.com/micherra/canon/commit/c7dd950fc85ead5a32d6331a035e7bdb1afe76b9))
+
 ## [2.8.0](https://github.com/micherra/canon/compare/v2.7.0...v2.8.0) (2026-06-07)
 
 

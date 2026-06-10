@@ -166,7 +166,26 @@ fi
 rm -rf "$SYM_PLUGIN" "$SYM_DATA"
 
 # ---------------------------------------------------------------------------
-# Test 6: git status is clean after the above (no working-tree churn)
+# Test 6: .tool-versions not tracked — neither root nor mcp-server/.tool-versions
+# should appear in git ls-files after the asdf-pin fix.
+# ---------------------------------------------------------------------------
+TOOL_VERSIONS_TRACKED=$(git -C "$REPO_ROOT" ls-files | grep 'tool-versions' || true)
+if [[ -z "$TOOL_VERSIONS_TRACKED" ]]; then
+  pass ".tool-versions files are not tracked in git"
+else
+  fail ".tool-versions still tracked: $TOOL_VERSIONS_TRACKED"
+fi
+
+# Test 7 (was 6): .gitignore contains .tool-versions
+ROOT_GITIGNORE="$REPO_ROOT/.gitignore"
+if [[ -f "$ROOT_GITIGNORE" ]] && grep -q '\.tool-versions' "$ROOT_GITIGNORE"; then
+  pass ".gitignore contains .tool-versions"
+else
+  fail ".gitignore does not contain .tool-versions (file: $ROOT_GITIGNORE)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 8 (was 6): git status is clean after the above (no working-tree churn)
 # ---------------------------------------------------------------------------
 STATUS=$(git -C "$REPO_ROOT" status --short 2>/dev/null)
 # We only care about tracked files in the working tree

@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-06-07 -->
+<!-- last-updated: 2026-06-08 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -25,10 +25,12 @@ src/
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
+│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader + read-only-shell carve-out (Phase B current)
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
-│   └── prompt-pipeline/  # Prompt assembly, context enrichment, consultation pipeline
+│   ├── prompt-pipeline/  # Prompt assembly, context enrichment, consultation pipeline
+│   └── routines/         # list_routines, get_routine, sync_routines — managed routine artifact class (shared/routine.ts loader, services/, tools/, registered via register-routines.ts)
 ├── graph/                # Legacy graph scanner — import/export parsing (being migrated to features/knowledge-graph)
 ├── orchestration/        # Legacy orchestration — flow parser, execution store, schemas (being migrated to features/orchestration)
 ├── platform/             # Infrastructure: adapters (git, process), job manager, workers, storage
@@ -46,10 +48,11 @@ src/
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
 - **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
 - **History services** (`features/history/services/`) — cross-run analysis, craft drift, judge-weight, consolidate-policy. See `src/features/history/services/.claude/CLAUDE.md`.
+- **Loop tools** (`features/loops/`) — loop-definition schema, registry loader, list_loops/get_loop_definition. See `src/features/loops/.claude/CLAUDE.md`.
 - **PR review tools + PR Review Data service** → `src/features/pr-review/.claude/CLAUDE.md`.
 - **Shared kernel** (`shared/`) — constants, matcher, schema, lib/ utilities. See `src/shared/.claude/CLAUDE.md`.
 - **UI snippets** (`ui/snippets/`) — force-graph, file-detail-card, renderer helpers. See `src/ui/snippets/.claude/CLAUDE.md`.
-- **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports, computes in/out degree, detects cycles; lazy commit-granularity freshness via `ensureGraphFresh` (structural) and `ensureGitIntelFresh` (git signals); `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01)
+- **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports + doc references; computes in/out degree, detects cycles; lazy commit-granularity freshness via `ensureGraphFresh` (structural) and `ensureGitIntelFresh` (git signals); `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01); `doc` node kind added 2026-06-08 for `docs/**/*.md` (excl. `docs/explore/`), `mcp-server/src/domains/*/README.md`, and `CONTEXT.md`; `doc:references` edge type persisted via `resolveImports` (conservative backtick-path grammar + link URLs); metric queries (`in_degree`, `out_degree`, adjacency, hub/impact) pinned to `edge_type='imports'`; blast-radius and subgraph queries left inclusive; `CANON_SCAN_DIRS` extended with `"docs"` and `"mcp-server/src/domains"`, `CANON_SCAN_FILES` added for root-level singletons (`CONTEXT.md`)
 - **Community / tags** (`graph/kg-community.ts`, `graph/kg-tags.ts`) — Louvain `community_id` + 4-signal tag propagation to `file_tags` table; used by `get-principles` and `get-file-context`; `kg-tags.ts` exports `VALID_COMPUTED_TAGS` (deduped union of directory + import + graph-role tags, 15 values — static const, no I/O) for vocabulary validation in `wiki_lint`
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect
 
@@ -105,7 +108,7 @@ src/
 
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`.
 
-**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`; both `checkScopeLayers` and `checkScopeTags` guard scalar (non-array) input with a "must be a YAML list" finding; see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details.
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks: `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`; both `checkScopeLayers` and `checkScopeTags` guard scalar (non-array) input with a "must be a YAML list" finding; `stale_refs` and `cited_paths` now include the DDD doc set (`docs/**/*.md` excl. `docs/explore/`, `mcp-server/src/domains/*/README.md`, `CONTEXT.md`); see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details.
 
 **Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — `injectWorktreeSettings(worktreePath, tools)` atomically writes `.claude/settings.local.json`; returns `false` on failure (never throws); idempotent. Called in all three spawn paths before `{ action: "spawn" }` when `permission_mode === "auto"`.
 
@@ -151,7 +154,7 @@ src/
 | `store_summaries` | Persist file summaries to SQLite KG DB (DB-only since ADR-005 2026-04-01) |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews, doc freshness |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
-| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy in `references/**/*.md`, invalid `scope.layers` values, invalid `scope.tags` values; optional `checks` array selects subset (default: all 7); returns `WikiLintOutput` |
+| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy in `references/**/*.md` and DDD doc set, invalid `scope.layers` values, invalid `scope.tags` values; optional `checks` array selects subset (default: all 7); returns `WikiLintOutput` |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result; accepts optional `craft_profile` (persists one row per distinct subsystem area to `craft_profiles` with `source:"review"`) |
 | `get_context` | Batch context for multiple files — composes principles, file_context, drift, graph, signals in one call |
@@ -163,6 +166,21 @@ src/
 | `get_build_history` | List archived build runs with metadata |
 | `get_historical_artifacts` | Retrieve archived artifacts from a previous build |
 | `get_cross_run_analysis` | Cross-run meta-analysis for the learner; includes `craft_drift: CraftDrift` (`by_dimension[]`, `by_area[]`, `profile_count`) and `cliff_events: CliffEventsDimension`; runs fail-open `sweepCliffEvents(project_dir)` before analysis |
+
+**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-09 -->
+
+| Tool | Purpose |
+|------|---------|
+| `list_loops` | Load all loops from `loops/` registry; filters by `status:active`, `lifecycle_hook`, `tier`; always returns `invalid[]` alongside valid |
+| `get_loop_definition` | Return a single loop's `LoopDefinition` + markdown body by id; `INVALID_INPUT` when not found |
+
+**Routine tools** (`src/features/routines/`): <!-- last-updated: 2026-06-09 -->
+
+| Tool | Purpose |
+|------|---------|
+| `list_routines` | List all routines (project-local + plugin, project-local takes precedence); returns name, status, binding, trigger |
+| `get_routine` | Retrieve a single routine by name; returns frontmatter + body; `INVALID_INPUT` when not found |
+| `sync_routines` | Sync routine state to `.canon/routines/`; returns drift summary |
 
 ## Dependencies
 <!-- last-updated: 2026-05-16 -->
@@ -222,4 +240,4 @@ npm start            # Run server via tsx (tsx is a runtime dependency; loaded b
 npm test             # Run vitest unit tests
 ```
 
-Node.js 24+ required.
+Node.js 24+ required. Enforced at runtime by `boot.sh` Step 12.5 (fail-closed, actionable error) and declared in `package.json` `engines.node`. No `.tool-versions` pin is shipped — `boot.sh` validates the floor against the user's ambient Node.

@@ -85,6 +85,14 @@ The Canon MCP server exposes these tools. The orchestrator uses the harness tool
 | `store_summaries` | Persist file summaries to SQLite Knowledge Graph DB |
 | `store_pr_review` | Store a PR review result for drift tracking |
 
+**Routine tools:**
+
+| Tool | Purpose |
+|------|---------|
+| `list_routines` | List all Canon routines with their name, status, resolved binding, and trigger; returns project-local and plugin routines merged with project-local precedence |
+| `get_routine` | Retrieve a single routine by name; returns full frontmatter fields plus the body text; `INVALID_INPUT` when the name is not found |
+| `sync_routines` | Sync routine state (last-run timestamps, status) and return a summary of drift; updates `.canon/routines/` state files |
+
 **Orchestration harness tools:**
 
 | Tool | Purpose |
