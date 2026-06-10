@@ -27,6 +27,7 @@ import { initDatabase } from "./kg-schema.ts";
 import { KgStore } from "./kg-store.ts";
 import { propagateAllTags } from "./kg-tags.ts";
 import { KgVectorStore } from "./kg-vector-store.ts";
+import { registerOverlayAdapters } from "./kg-adapter-registry.ts";
 import { initParsers } from "./kg-wasm-parser.ts";
 import { scanSourceFiles } from "./scanner.ts";
 
@@ -280,7 +281,8 @@ export async function runPipeline(
   projectDir: string,
   options?: PipelineOptions,
 ): Promise<PipelineResult> {
-  await initParsers();
+  const loadedOverlayConfigs = await initParsers(projectDir);
+  registerOverlayAdapters(loadedOverlayConfigs);
   const startMs = Date.now();
   const incremental = options?.incremental ?? true;
   const dbPath = options?.dbPath ?? path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);

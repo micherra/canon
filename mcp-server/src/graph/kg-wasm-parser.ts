@@ -17,8 +17,10 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Language, Parser } from "web-tree-sitter";
+import { mergeOverlayIntoConfigs, type LanguageConfig } from "./kg-language-configs.ts";
+import { loadOverlayConfigs, overlayGrammarPath } from "./kg-language-overlay.ts";
 
-// Supported languages
+// Supported built-in languages (fail-closed on load)
 
 const SUPPORTED_LANGUAGES = ["typescript", "tsx", "python", "bash", "java"] as const;
 
@@ -50,10 +52,19 @@ function grammarPath(language: SupportedLanguage): string {
  * Must be awaited before calling getParser(). Idempotent — safe to call
  * multiple times; subsequent calls are no-ops.
  *
- * Throws immediately if any grammar file is missing (fail-closed behavior).
+ * Built-in grammar loading is fail-closed: a missing built-in grammar throws.
+ * Overlay grammar loading (when projectDir is provided) is fail-open: a
+ * missing or malformed overlay wasm is logged and skipped — the built-in
+ * set always initializes successfully.
+ *
+ * @param projectDir - Optional project root for loading overlay grammars from
+ *   `.canon/grammars/`. When omitted, only built-in grammars are loaded.
+ * @returns The overlay LanguageConfig entries whose grammars loaded successfully.
+ *   Callers should pass this to `registerOverlayAdapters()` in kg-adapter-registry.ts.
+ *   Returns [] when projectDir is omitted or no overlays are found.
  */
-export async function initParsers(): Promise<void> {
-  if (initialized) return;
+export async function initParsers(projectDir?: string): Promise<LanguageConfig[]> {
+  if (initialized) return [];
 
   // Initialize the WASM module. The locateFile callback tells the module
   // where to find the web-tree-sitter.wasm runtime file.
@@ -75,8 +86,8 @@ export async function initParsers(): Promise<void> {
     },
   });
 
-  // Load each grammar and create a dedicated Parser instance per language.
-  // Fail-fast: if any grammar file is missing, throw immediately.
+  // Load each built-in grammar and create a dedicated Parser instance per language.
+  // Fail-closed: if any built-in grammar file is missing, throw immediately.
   for (const lang of SUPPORTED_LANGUAGES) {
     const wasmPath = grammarPath(lang);
     let language: Language;
@@ -95,7 +106,42 @@ export async function initParsers(): Promise<void> {
     parsers.set(lang, parser);
   }
 
+  // Load overlay grammars from project-local .canon/grammars/ (fail-open).
+  // A malformed or missing overlay wasm is logged and skipped — built-ins
+  // must already be fully initialized before this block runs (they are,
+  // since any built-in failure throws above).
+  const loadedOverlayConfigs: LanguageConfig[] = [];
+
+  if (projectDir) {
+    const builtinIds = new Set(SUPPORTED_LANGUAGES as unknown as string[]);
+    const overlayConfigs = loadOverlayConfigs(projectDir, builtinIds);
+
+    if (overlayConfigs.length > 0) {
+      // Merge into LANGUAGE_CONFIGS + rebuild EXT_TO_CONFIG
+      mergeOverlayIntoConfigs(overlayConfigs);
+
+      // Load overlay grammars — fail-open: skip on any error
+      for (const config of overlayConfigs) {
+        const wasmPath = overlayGrammarPath(projectDir, config.grammarFile);
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: overlay grammars are few; sequential is fine here
+          const language = await Language.load(wasmPath);
+          const parser = new Parser();
+          parser.setLanguage(language);
+          parsers.set(config.id, parser);
+          loadedOverlayConfigs.push(config);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `kg-wasm-parser: failed to load overlay grammar for '${config.id}' from '${wasmPath}': ${message} — skipping`,
+          );
+        }
+      }
+    }
+  }
+
   initialized = true;
+  return loadedOverlayConfigs;
 }
 
 /**
@@ -110,9 +156,9 @@ export function getParser(language: string): Parser {
   }
   const parser = parsers.get(language);
   if (!parser) {
-    const supported = SUPPORTED_LANGUAGES.join(", ");
+    const allLoaded = [...parsers.keys()].join(", ");
     throw new Error(
-      `kg-wasm-parser: unknown language '${language}'. Supported languages: ${supported}`,
+      `kg-wasm-parser: unknown language '${language}'. Loaded languages: ${allLoaded}`,
     );
   }
   return parser;

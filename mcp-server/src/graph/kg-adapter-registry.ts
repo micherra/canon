@@ -54,9 +54,36 @@ export function getAdapter(extension: string): LanguageAdapter | undefined {
   return registry.get(extension);
 }
 
+// Overlay language name map — populated by registerOverlayAdapters()
+const overlayLangMap = new Map<string, string>();
+
+/**
+ * Register adapters for overlay LanguageConfig entries and populate the
+ * overlay language name map. Called from kg-wasm-parser.ts after overlay
+ * grammars load successfully.
+ *
+ * Only entries whose parser was successfully loaded (i.e., parsers.has(id))
+ * are registered — the adapter factory calls getParser(id) at parse time,
+ * which will throw for any language whose parser didn't load. This matches
+ * the fail-open pattern: a skipped overlay grammar means no adapter registered.
+ *
+ * @param overlayConfigs - Validated overlay configs (from LANGUAGE_CONFIGS after merge)
+ */
+export function registerOverlayAdapters(overlayConfigs: LanguageConfig[]): void {
+  for (const config of overlayConfigs) {
+    const adapter = makeAdapter(config);
+    for (const ext of config.extensions) {
+      registry.set(ext, adapter);
+      // Use the language id as the canonical name for overlay languages
+      overlayLangMap.set(ext, config.id);
+    }
+  }
+}
+
 /**
  * Returns a canonical language name for the given file extension.
  * Used when writing the `language` column in the `files` table.
+ * Falls back to overlay language id for provisioned extensions.
  * Returns 'unknown' for unrecognised extensions.
  */
 export function getLanguage(extension: string): string {
@@ -74,5 +101,5 @@ export function getLanguage(extension: string): string {
     ".yaml": "yaml",
     ".yml": "yaml",
   };
-  return langMap[extension] ?? "unknown";
+  return langMap[extension] ?? overlayLangMap.get(extension) ?? "unknown";
 }
