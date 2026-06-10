@@ -29,12 +29,16 @@ A tool — hook, script, grep command, or verification step — that is designed
 
 ## Why
 
-Pre-tool-use hooks operate on the raw command string before it executes. A hook that scans for `bash -c` (or `eval`, or `git reset --hard`, or any other intercepted token) does so by matching against the entire command — including the arguments to a `grep` command that is itself searching for that pattern. The hook cannot distinguish:
+Pre-tool-use hooks operate on the raw command string before it executes. The quote-aware tokenizer in `destructive-guard.sh` (`canon_tokenize` / `canon_unwrap_string_exec_arg` in `hooks/lib/canon-hook-lib.sh`) decides whether a command segment contains a string-executing wrapper by examining individual tokens.
 
-- `grep 'bash -c' some_file.sh` (benign: verification grep)
-- the two-token string appearing as an actual invocation
+This tokenizer behavior has a nuanced implication for verification greps:
 
-This is not a bug in the hook — fail-closed behavior on an unrecognizable command is correct (see `hooks-fail-closed`). It is a constraint on how verification and scanning commands must be written: they must avoid producing the literal form in any position the detection layer intercepts.
+- **Single-quoted single-token forms pass through**: `grep 'bash -c' file.sh` — the tokenizer collapses the quoted span `'bash -c'` into one token (`bash -c`), which does NOT equal the bare `bash` command token. The scan-forward walks past it. Exit 0.
+- **Backslash-bearing alternation inside double quotes blocks**: `grep -n "bash -c\|sh -c" file.sh` — the `\|` sequence inside the double-quoted span leaves a backslash artifact that the tokenizer cannot decode. This is the string-executing-wrapper detection path failing with "unparseable inner command" → fail-closed. Exit 2.
+
+The second form is the **recurring false-positive**: authors write it as a convenient two-pattern alternation grep, not realizing the backslash inside the double-quoted span makes the command string undecodable by the tokenizer. The fail-closed outcome is correct behavior per `hooks-fail-closed` — the hook cannot tell whether the argument is a verification grep or a genuine destructive wrapper call. The constraint falls on the author: avoid the backslash-alternation form inside double quotes.
+
+Preferred alternatives: the **indirect-variable form** assigns the pattern to a variable so the literal never appears in source text; the **character-class split** expresses the same match without any backslash inside a quoted span. Both exit 0.
 
 The same constraint applies when authoring mine scripts and code-analysis tools. A script designed to surface the `eval`/string-executing-wrapper defect class must not itself contain the defect it is designed to find, both for correctness and to avoid being blocked by the guard it is co-deployed with.
 
@@ -42,19 +46,38 @@ The same constraint applies when authoring mine scripts and code-analysis tools.
 
 ### Verification grep for string-executing wrappers
 
-**Bad — literal form in the grep pattern triggers the hook:**
+**Passes — single-quoted single-token form (the tokenizer collapses the quoted span to one token):**
 
 ```bash
-# This grep is designed to check that no file uses the blocked form.
-# But the grep command itself contains the literal form in its argument,
-# which causes destructive-guard.sh to block it.
-grep -rn 'bash -c' hooks/
+# grep 'bash -c' file.sh exits 0 — 'bash -c' is one token, not a bare bash command.
+# Safe for use in verification greps.
+grep 'bash -c' file.sh
 ```
 
-**Good — character-class split avoids the literal form:**
+**Bad — backslash-bearing alternation inside double quotes fails closed:**
 
 ```bash
-# Matches 'bash -c' and 'sh -c' without containing either literal form.
+# This grep is intended to check for both 'bash -c' and 'sh -c'.
+# But the \| inside the double-quoted span is a backslash artifact
+# the tokenizer cannot decode, so the hook fails closed (exit 2).
+grep -n "bash -c\|sh -c" file.sh
+```
+
+**Good — indirect variable (preferred): the literal form never appears in source text:**
+
+```bash
+# Assign the pattern to a variable; the literal 'bash -c' is never in source text.
+PAT='bash -c'
+grep -n "$PAT" file.sh
+# Or with alternation via -E:
+PAT='bash'; grep -E "$PAT -c|sh -c" file.sh
+```
+
+**Good — character-class split: matches the pattern without the backslash-alternation form:**
+
+```bash
+# Matches 'bash -c' and 'sh -c' without containing the literal form or
+# a backslash inside a double-quoted span.
 grep -rn '(ba)?sh[[:space:]]\+-c' hooks/
 ```
 
@@ -107,8 +130,8 @@ grep -rn "$PAT " src/
 | # | Build | Scanner | Self-blocking form | Resolution |
 |---|-------|---------|-------------------|------------|
 | 1a | PR #355 (engineer) | `destructive-guard.sh` | `bash -c "$wrapper"` in xargs fan-out in mine script | Temp wrapper using `source` instead of the string-executing form |
-| 1b | PR #355 (learner) | `destructive-guard.sh` | `grep ... 'bash -c'` as verification grep | Character-class split: `(ba)?sh[[:space:]]\+-c` |
-| 2 | PR #337 fix | `destructive-guard.sh` | Verification greps for `eval`/the two-token form in target files | Pattern split via `(ba)?sh\s+-c` and related character-class forms |
+| 1b | PR #355 (learner) | `destructive-guard.sh` | `grep -n "bash -c\|sh -c"` — backslash alternation in double-quoted span → fail-closed (exit 2) | Indirect variable: `PAT='bash'; grep -E "$PAT -c"` |
+| 2 | PR #337 fix | `destructive-guard.sh` | Verification greps for `eval`/the two-token form in target files using backslash alternation | Pattern split via `(ba)?sh\s+-c` and related character-class forms |
 
 ## Exceptions
 

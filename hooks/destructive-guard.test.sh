@@ -40,6 +40,13 @@ run_test "git worktree remove passes"                 0 "$(make_input 'git workt
 run_test "empty command passes"                       0 '{"command":""}'
 run_test "non-git command passes"                     0 "$(make_input 'npm test')"
 run_test "no command field passes"                    0 '{"tool":"Bash","other":"value"}'
+# Regression: verification grep for string-executing wrappers must not be self-blocking.
+# The quote-aware tokenizer collapses the single-quoted span 'bash -c' into one token,
+# which does NOT equal the bare "bash" command token — so the scan-forward walks past it.
+# This pins the behavior so a future guard change cannot silently regress it.
+# fixture: intentional guard-behavior pin for single-quoted verification grep
+run_test "grep 'bash -c' file.sh passes (single-quoted single-token, not self-blocking)" \
+  0 '{"command":"grep '"'"'bash -c'"'"' hooks/destructive-guard.sh"}'
 
 # -----------------------------------------------------------------------
 # Destructive commands: blocked (exit 2)
@@ -1315,6 +1322,32 @@ run_test "bash -c \"git status\" passes (safe inner, no over-block from parity f
 # bash -c "git log --oneline"  — safe inner command with a flag
 run_test "bash -c \"git log --oneline\" passes (safe inner with flag)" \
   0 "$(make_multiline_input 'bash -c "git log --oneline"')" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
+# scanner-avoids-its-own-pattern regression: the actual recurring trigger.
+#
+# The single-quoted form 'bash -c' collapses to one token in the tokenizer
+# and passes (exit 0).  The backslash-bearing alternation form inside a
+# double-quoted span leaves a backslash artifact the tokenizer cannot decode —
+# the guard fails closed (exit 2).  This is correct behavior per hooks-fail-
+# closed; authors must use the indirect-variable or character-class form.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- scanner-avoids-its-own-pattern: verification grep shapes (see convention) --"
+
+# Single-quoted single-token verification grep — must PASS (exit 0).
+# The tokenizer collapses 'bash -c' into one token ≠ bare "bash" command token.
+# fixture: intentional guard-behavior pin for single-quoted verification grep
+run_test "grep 'bash -c' file.sh passes (single-quoted single-token, not self-blocking)" \
+  0 '{"command":"grep '"'"'bash -c'"'"' hooks/destructive-guard.sh"}'
+
+# Double-quoted backslash-alternation form — fail-closed (exit 2).
+# The \| inside the double-quoted span is a backslash artifact the tokenizer
+# cannot decode → the guard fails closed (correct behavior per hooks-fail-closed).
+# fixture: intentional fail-closed pin for backslash-alternation in double-quoted span
+_GREP_ALT_CMD='grep -n "bash -c\|sh -c" hooks/destructive-guard.sh'
+run_test 'grep -n "bash -c\|sh -c" file.sh blocks (backslash-alternation, fail-closed)' \
+  2 "$(make_multiline_input "$_GREP_ALT_CMD")" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
 # Summary
