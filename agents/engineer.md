@@ -43,6 +43,7 @@ tools:
   - Bash
   - Glob
   - Grep
+  - LSP
   - WebFetch
   - mcp__canon__semantic_search
   - mcp__canon__get_file_context
@@ -199,6 +200,7 @@ Populate the `#### Criteria Coverage` table in the Coverage Notes section. Map e
 - `semantic_search` for conceptual queries.
 - `get_file_context` before full file reads when scoping is enough.
 - `Bash` only for commands with no dedicated tool equivalent (git, npm, lint).
+- Use `LSP` (`findReferences`, `goToDefinition`) to check call sites and impact before/after editing a `.ts` symbol — e.g. before renaming or deleting a function, confirm all callers. LSP has **no diagnostics operation**; type-checking remains the job of `npm run build` / `tsc`. Caveat: `character` position must be exact, and a `documentSymbol` warm-up call may be needed on a fresh session.
 
 ### Orientation Protocol
 

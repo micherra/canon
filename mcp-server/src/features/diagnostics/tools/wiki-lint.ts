@@ -29,17 +29,19 @@ import {
   checkStaleRefs,
   type WikiLintOutput,
 } from "../services/wiki-lint.ts";
+import { checkGlossaryConsistency } from "../services/wiki-lint-glossary.ts";
 
 // ---- Types ----
 
 type CheckName =
-  | "contradictions"
-  | "orphan_principles"
-  | "stale_refs"
-  | "missing_examples"
   | "cited_paths"
+  | "contradictions"
+  | "glossary_consistency"
+  | "missing_examples"
+  | "orphan_principles"
   | "scope_layers"
-  | "scope_tags";
+  | "scope_tags"
+  | "stale_refs";
 
 export type WikiLintInput = {
   checks?: CheckName[];
@@ -156,6 +158,45 @@ function loadFileRecords(paths: string[]): FileRecord[] {
     .filter((f): f is FileRecord => f !== null);
 }
 
+// ---- DDD doc set collector ----
+
+/**
+ * Collect the DDD doc set for citation linting:
+ *   docs/ (excluding docs/explore/), domains/<name>/README.md, root CONTEXT.md.
+ *
+ * docs/explore/ holds frozen point-in-time records (proposals, judge sheets) that are
+ * stale-by-design — linting them yields guaranteed false findings (decision ddd-doc-freshness-02).
+ * Live filesystem scan (not KG) so the check never silently degrades on a cold/stale graph
+ * store (observable-best-effort — this file has prior violations of that principle).
+ */
+function collectDddDocPaths(projectDir: string): string[] {
+  const paths: string[] = [];
+
+  // docs/**/*.md, excluding docs/explore/**
+  const docsDir = join(projectDir, "docs");
+  const docsMdPaths = findFiles(docsDir, (_fp, name) => name.endsWith(".md"));
+  for (const absPath of docsMdPaths) {
+    // Compute repo-relative path using same idiom as isExcludedDir
+    const relPath = absPath.slice(projectDir.length + 1);
+    if (!relPath.startsWith("docs/explore/")) {
+      paths.push(absPath);
+    }
+  }
+
+  // mcp-server/src/domains/*/README.md
+  const domainsDir = join(projectDir, "mcp-server", "src", "domains");
+  const domainReadmePaths = findFiles(domainsDir, (_fp, name) => name === "README.md");
+  paths.push(...domainReadmePaths);
+
+  // root CONTEXT.md (if present)
+  const contextMdPath = join(projectDir, "CONTEXT.md");
+  if (existsSync(contextMdPath)) {
+    paths.push(contextMdPath);
+  }
+
+  return paths;
+}
+
 // ---- Check helpers ----
 
 async function runOrphanCheck(
@@ -193,6 +234,7 @@ async function runOrphanCheck(
 function runStaleRefCheck(
   projectDir: string,
   claudeMdFiles: FileRecord[],
+  dddDocFiles: FileRecord[],
 ): ReturnType<typeof checkStaleRefs> {
   const workspacesDir = join(projectDir, ".canon", "workspaces");
   const planPaths = findFiles(
@@ -200,17 +242,28 @@ function runStaleRefCheck(
     (_fp, name) => name.endsWith("-PLAN.md") || name === "DESIGN.md",
   );
   const planFiles = loadFileRecords(planPaths);
-  const allFiles = [...claudeMdFiles, ...planFiles];
+  const allFiles = [...claudeMdFiles, ...planFiles, ...dddDocFiles];
   const existsOnDisk = (refPath: string): boolean => existsSync(join(projectDir, refPath));
   return checkStaleRefs(allFiles, existsOnDisk);
 }
 
-function runCitedPathCheck(projectDir: string): ReturnType<typeof checkCitedPaths> {
+function runCitedPathCheck(
+  projectDir: string,
+  dddDocFiles: FileRecord[],
+): ReturnType<typeof checkCitedPaths> {
   const referencesDir = join(projectDir, "references");
   const refPaths = findFiles(referencesDir, (_fp, name) => name.endsWith(".md"));
   const refFiles = loadFileRecords(refPaths);
   const existsOnDisk = (refPath: string): boolean => existsSync(join(projectDir, refPath));
-  return checkCitedPaths(refFiles, existsOnDisk);
+  return checkCitedPaths([...refFiles, ...dddDocFiles], existsOnDisk);
+}
+
+/** Read CONTEXT.md and run the glossary consistency check; returns [] when file is absent. */
+function runGlossaryCheck(projectDir: string): ReturnType<typeof checkGlossaryConsistency> {
+  const contextMdPath = join(projectDir, "CONTEXT.md");
+  const content = readFileSafe(contextMdPath);
+  if (content === null) return [];
+  return checkGlossaryConsistency({ content, path: contextMdPath });
 }
 
 // ---- Main tool function ----
@@ -228,13 +281,14 @@ export async function wikiLint(
   pluginDir: string,
 ): Promise<WikiLintOutput> {
   const ALL_CHECKS: CheckName[] = [
-    "contradictions",
-    "orphan_principles",
-    "stale_refs",
-    "missing_examples",
     "cited_paths",
+    "contradictions",
+    "glossary_consistency",
+    "missing_examples",
+    "orphan_principles",
     "scope_layers",
     "scope_tags",
+    "stale_refs",
   ];
   const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
 
@@ -245,13 +299,22 @@ export async function wikiLint(
   const agentsDir = join(pluginDir, "agents");
   const agentFiles = loadFileRecords(findFiles(agentsDir, (_fp, name) => name.endsWith(".md")));
 
+  // DDD doc set: docs/**/*.md (excl. docs/explore/), domains/*/README.md, CONTEXT.md.
+  // Collected once and threaded into both stale_refs and cited_paths runners.
+  const dddDocFiles =
+    enabled.has("stale_refs") || enabled.has("cited_paths")
+      ? loadFileRecords(collectDddDocPaths(projectDir))
+      : [];
+
   const contradictions = enabled.has("contradictions") ? checkContradictions(claudeMdFiles) : [];
   const orphans = enabled.has("orphan_principles")
     ? await runOrphanCheck(projectDir, principles, claudeMdFiles, agentFiles)
     : [];
-  const staleRefs = enabled.has("stale_refs") ? runStaleRefCheck(projectDir, claudeMdFiles) : [];
+  const staleRefs = enabled.has("stale_refs")
+    ? runStaleRefCheck(projectDir, claudeMdFiles, dddDocFiles)
+    : [];
   const missingExamples = enabled.has("missing_examples") ? checkMissingExamples(principles) : [];
-  const citedPaths = enabled.has("cited_paths") ? runCitedPathCheck(projectDir) : [];
+  const citedPaths = enabled.has("cited_paths") ? runCitedPathCheck(projectDir, dddDocFiles) : [];
   const validLayers = enabled.has("scope_layers")
     ? Object.keys(await loadLayerMappings(projectDir))
     : [];
@@ -259,11 +322,15 @@ export async function wikiLint(
   const scopeTags = enabled.has("scope_tags")
     ? checkScopeTags(principles, VALID_COMPUTED_TAGS)
     : [];
+  const glossaryConsistency = enabled.has("glossary_consistency")
+    ? runGlossaryCheck(projectDir)
+    : [];
 
   return assembleWikiLintOutput({
     citedPaths,
     contradictions,
-    filesScanned: claudeMdFiles.length + agentFiles.length,
+    filesScanned: claudeMdFiles.length + agentFiles.length + dddDocFiles.length,
+    glossaryConsistency,
     missingExamples,
     orphans,
     principlesChecked: principles.length,

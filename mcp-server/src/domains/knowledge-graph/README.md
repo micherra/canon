@@ -9,10 +9,12 @@ This directory is the **anti-corruption layer** between the Knowledge Graph boun
 The Knowledge Graph context owns **codebase intelligence**: the file entity graph, import/export edge relationships, structural metrics, and semantic search. Authoritative responsibilities:
 
 - File entity and edge storage (the `files`, `entities`, `edges`, `file_edges` SQLite tables in `knowledge-graph.db`)
-- Import/export parsing for JS/TS/Python source files
+- Import/export parsing for JS/TS/Python/Markdown source files (`mcp-server/src/graph/kg-adapter-*.ts`)
 - Structural metrics: in/out degree, hub detection, cycle detection, layer violations, blast radius
+- Community detection: Louvain `community_id` per file (`mcp-server/src/graph/kg-community.ts`)
+- Computed tag propagation: 4-signal tag inference to `file_tags` table (`mcp-server/src/graph/kg-tags.ts`)
+- Embedding generation and vector search over file and entity embeddings (`mcp-server/src/graph/kg-embedding.ts`, `mcp-server/src/graph/kg-vector-store.ts`)
 - File summaries (persisted to the `summaries` table — ADR-005; no JSON artifacts)
-- Semantic/vector search over file and entity embeddings
 - Knowledge graph freshness tracking (`last_indexed_at`)
 
 **This directory** owns the interface definitions (`IKgStore`, `IKgQuery`) that express the subset of those capabilities that cross-context callers are allowed to depend on.
@@ -45,7 +47,7 @@ export interface IKgStore {
 }
 ```
 
-Provides the read operations cross-context callers (e.g. `inject-context.ts` in the Orchestration context) need to retrieve a file record and its associated summary without holding a reference to the concrete `KgStore` class or the underlying `better-sqlite3` `Database`.
+Provides the read operations cross-context callers need to retrieve a file record and its associated summary without holding a reference to the concrete `KgStore` class or the underlying `better-sqlite3` `Database`.
 
 ### `IKgQuery` — metrics and freshness queries
 
@@ -112,14 +114,13 @@ npm run lint:deps
 ## Context Relationship (Boundary Map)
 
 ```
-Orchestration Context
-  inject-context.ts
+Orchestration Context (cross-context callers)
         │
-        │  import type { IKgStore, IKgQuery }
+        │  import type { IKgStore, IKgQuery }  ← planned; kg-store.interface.ts not yet written
         ▼
 ┌───────────────────────────────────────────┐
-│  domains/knowledge-graph/                 │  ← this directory (ACL)
-│  kg-store.interface.ts                    │
+│  domains/knowledge-graph/                 │  ← this directory (ACL boundary)
+│  kg-store.interface.ts  (planned)         │
 │    IKgStore · IKgQuery                    │
 └───────────────────────────────────────────┘
         │
@@ -128,6 +129,7 @@ Orchestration Context
 ┌───────────────────────────────────────────┐
 │  graph/                                   │  ← implementation (not importable cross-context)
 │  KgStore · KgQuery · kg-pipeline          │
+│  kg-community · kg-tags · kg-embedding    │
 │  SQLite knowledge-graph.db                │
 └───────────────────────────────────────────┘
 ```
@@ -138,5 +140,5 @@ Orchestration Context
 
 | File | Purpose |
 |------|---------|
-| `kg-store.interface.ts` | `IKgStore` and `IKgQuery` interface definitions |
+| `kg-store.interface.ts` | `IKgStore` and `IKgQuery` interface definitions (planned — not yet written) |
 | `README.md` | This document |

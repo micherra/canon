@@ -40,6 +40,7 @@ import {
   rowToReviewEntry,
 } from "./drift-db-rows.ts";
 import { DriftDbSignals } from "./drift-db-signals.ts";
+import { ViolationClosureDao } from "./violation-closure-dao.ts";
 
 // Re-export WeeklyTrendPoint so callers can import from drift-db
 export type { WeeklyTrendPoint } from "./drift-db-queries.ts";
@@ -77,16 +78,11 @@ export class DriftDb {
   private readonly stmtGetArchiveById: Database.Statement;
   private readonly stmtCountArchives: Database.Statement;
 
-  // ---- Signal DAO (lazy) ----
+  // ---- Lazy DAO accessors ----
   private _signals: DriftDbSignals | null = null;
-
-  // ---- Area Memory DAO (lazy) ----
   private _areaMemory: AreaMemoryDao | null = null;
-
-  // ---- Craft Profiles DAO (lazy) ----
   private _craftProfiles: CraftProfileDao | null = null;
-
-  // ---- Cliff Events DAO (lazy) ----
+  private _closures: ViolationClosureDao | null = null;
   private _cliffEvents: CliffEventsDao | null = null;
 
   constructor(db: Database.Database) {
@@ -125,7 +121,7 @@ export class DriftDb {
     `);
 
     this.stmtGetViolationsByReviewId = db.prepare(`
-      SELECT * FROM violations WHERE review_id = ?
+      SELECT * FROM violations WHERE review_id = ? AND status = 'open'
     `);
 
     // For principleId filtering: get review_ids that have a matching violation
@@ -210,11 +206,18 @@ export class DriftDb {
    * the violations table, all inside a single transaction.
    */
   appendReview(entry: ReviewEntry): void {
+    const closures = this.getClosures();
     const insertReviewAndViolations = this.db.transaction(() => {
       this.stmtInsertReview.run(buildReviewParams(entry));
       this.insertViolations(entry.review_id, entry.violations ?? []);
+      closures.supersedeOpenViolations({
+        files: entry.files,
+        honored: entry.honored ?? [],
+        recordedViolations: entry.violations ?? [],
+        reviewId: entry.review_id,
+        timestamp: entry.timestamp,
+      });
     });
-
     insertReviewAndViolations();
   }
 
@@ -343,16 +346,16 @@ export class DriftDb {
    * Compute weekly compliance trend for a principle.
    * Groups reviews by ISO week and computes pass rate per bucket.
    * Optionally limits results to the most recent N weeks.
+   *
+   * Uses only OPEN violations to build the violation set — consistent with
+   * getCompliance()'s open-only count. Resolved violations no longer depress
+   * the trend after a later review closes them (closure-02 / Codex P2 fix).
    */
   getComplianceTrend(
     principleId: string,
     weeks?: number,
   ): import("./drift-db-queries.ts").WeeklyTrendPoint[] {
-    const violationReviewIds = new Set(
-      (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>).map(
-        (r) => r.review_id,
-      ),
-    );
+    const violationReviewIds = this.getClosures().getOpenReviewIdsByPrinciple(principleId);
     const allRows = this.stmtGetAllReviews.all() as ReviewRow[];
     return computeComplianceTrend(allRows, violationReviewIds, principleId, weeks);
   }
@@ -542,9 +545,7 @@ export class DriftDb {
    * Returns the same instance on repeated calls (lazy singleton).
    */
   getSignals(): DriftDbSignals {
-    if (this._signals === null) {
-      this._signals = new DriftDbSignals(this.db);
-    }
+    this._signals ??= new DriftDbSignals(this.db);
     return this._signals;
   }
 
@@ -554,9 +555,7 @@ export class DriftDb {
    * Returns the same instance on repeated calls (lazy singleton).
    */
   getAreaMemory(): AreaMemoryDao {
-    if (this._areaMemory === null) {
-      this._areaMemory = new AreaMemoryDao(this.db);
-    }
+    this._areaMemory ??= new AreaMemoryDao(this.db);
     return this._areaMemory;
   }
 
@@ -566,10 +565,18 @@ export class DriftDb {
    * Returns the same instance on repeated calls (lazy singleton).
    */
   getCraftProfiles(): CraftProfileDao {
-    if (this._craftProfiles === null) {
-      this._craftProfiles = new CraftProfileDao(this.db);
-    }
+    this._craftProfiles ??= new CraftProfileDao(this.db);
     return this._craftProfiles;
+  }
+
+  /**
+   * Lazy accessor for violation closure DAO methods.
+   * The ViolationClosureDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getClosures(): ViolationClosureDao {
+    this._closures ??= new ViolationClosureDao(this.db);
+    return this._closures;
   }
 
   /**

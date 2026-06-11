@@ -28,6 +28,25 @@ export const BUILTIN_MUTATION_TOOLS: ReadonlyArray<string> = [
   "NotebookEdit",
 ] as const;
 
+// Read-only gh/git subcommand prefixes admitted under the Bash carve-out (decision loops-phase-b-01).
+// Extend by explicit diff only; every entry must be genuinely read-only.
+export const READ_ONLY_SHELL_COMMANDS: ReadonlyArray<string> = [
+  "gh pr view",
+  "gh pr list",
+  "gh pr checks",
+  "gh release list",
+  "gh release view",
+  "gh api",
+  "gh repo view",
+  "gh run list",
+  "gh run view",
+  "git log",
+  "git status",
+  "git rev-list",
+  "git show",
+  "git diff",
+] as const;
+
 // ── Sub-schemas ────────────────────────────────────────────────────────────────
 
 // Per-tier defaults: supervised → opt-in (safe default), autonomous/light-touch → disabled.
@@ -66,6 +85,7 @@ const StateSchema = z.object({
 
 const ObserveSchema = z.object({
   mcp: z.array(z.string()).default([]),
+  shell_commands: z.array(z.string()).default([]),
   tools: z.array(z.string()).default([]),
 });
 
@@ -131,7 +151,7 @@ const ModeSchema = z.discriminatedUnion("mode", [IntervalLoopSchema, SelfPacedLo
 const LoopDefinitionBaseSchema = z.object({
   guardrails: GuardrailsSchema,
   id: z.string(),
-  observe: ObserveSchema.optional().default({ mcp: [], tools: [] }),
+  observe: ObserveSchema.optional().default({ mcp: [], shell_commands: [], tools: [] }),
   state: StateSchema,
   status: z.enum(["active", "shadow", "disabled"]).default("active"),
   surface: SurfaceSchema,
@@ -176,8 +196,176 @@ export type ParseLoopOptions = {
   idFromFilename?: string;
 };
 
+// ── Shell metacharacter reject set (Codex P1) ─────────────────────────────────
+// Any of these in a declared shell_command entry → immediate rejection.
+// Read-only observe commands need none of these. Rejecting `$` and `()` also kills `$(...)`
+// command substitution. Rejecting `;` and `&` kills chaining. Rejecting `|`, `<`, `>` kills
+// pipes and redirections. Backtick kills legacy command substitution.
+const SHELL_METACHARS = [";", "&", "|", "<", ">", "`", "$", "(", ")", "\n", "\r"] as const;
+
+// ── gh api mutating-flag tokens (Codex P1) ────────────────────────────────────
+// When a shell_command starts with 'gh api', these token PREFIXES flip it from GET to POST/PATCH/DELETE.
+// A token that starts with any of these prefixes is a write-field flag regardless of glued value.
+const GH_API_WRITE_FLAG_PREFIXES = ["-f", "-F", "--field", "--raw-field", "--input"] as const;
+
+/**
+ * Extracts the method value from a -X or --method token or its successor.
+ *
+ * Handles all pflag forms:
+ *   - Token `-XPOST` (glued): returns "POST"
+ *   - Token `-X=POST` (equals): returns "POST"
+ *   - Token `-X` with next token `POST` (space): returns "POST" via nextToken
+ *   - Token `--method=POST` (equals): returns "POST"
+ *   - Token `--method` with next token `POST` (space): returns "POST" via nextToken
+ *
+ * Returns null when the token is unrecognized or no value is available.
+ */
+function extractMethodValue(token: string, nextToken: string | undefined): string | null {
+  // Short form: -X
+  if (token.startsWith("-X")) {
+    const rest = token.slice(2); // everything after -X
+    if (rest.startsWith("=")) return rest.slice(1); // -X=POST
+    if (rest.length > 0) return rest; // -XPOST (glued)
+    return nextToken ?? null; // -X POST (space-separated)
+  }
+  // Long form: --method
+  if (token.startsWith("--method")) {
+    const rest = token.slice(8); // everything after --method
+    if (rest.startsWith("=")) return rest.slice(1); // --method=POST
+    if (rest.length === 0) return nextToken ?? null; // --method POST (space-separated)
+    return null; // --methodXXX — not a method flag (e.g. --methodical would fall here; safe to ignore)
+  }
+  return null;
+}
+
+/**
+ * Returns true when the given token is a gh api write-field flag.
+ * Covers both standalone (`-f`, `--field`) and glued forms (`-fbody=x`, `--field=k=v`).
+ *
+ * Write-field flag prefixes: -f, -F (single-dash single-letter) and --field, --raw-field, --input.
+ * A token matches when it IS the prefix or STARTS with the prefix (glued value appended).
+ * `--format` does NOT start with `--field`, so it is safe.
+ */
+function isWriteFieldToken(token: string): boolean {
+  return GH_API_WRITE_FLAG_PREFIXES.some((prefix) => token === prefix || token.startsWith(prefix));
+}
+
+/**
+ * Checks whether a `gh api` entry uses a mutating method or write-field flag.
+ * Returns an error string if mutating, null if read-only (GET).
+ *
+ * Tokenizes on whitespace so each token is examined individually; this catches
+ * both space-separated forms (`-X POST`, `--method POST`) and glued/equals
+ * forms (`-XPOST`, `-X=POST`, `--method=POST`, `-fbody=x`).
+ *
+ * Admitted: `-X GET`, `-XGET`, `--method GET`, `--method=GET` (all GET variants).
+ * Rejected: any non-GET method value; any write-field flag prefix.
+ */
+function checkGhApiMutatingFlags(cmd: string): string | null {
+  const tokens = cmd.trim().split(/\s+/);
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    // ── Method flag check ────────────────────────────────────────────────────
+    if (token.startsWith("-X") || token.startsWith("--method")) {
+      const method = extractMethodValue(token, tokens[i + 1]);
+      if (method !== null && method.toUpperCase() !== "GET") {
+        return (
+          `gh api shell_command '${cmd}' uses method '${method}' which is a mutating method ` +
+          `(only GET is allowed under mutates_build:false)`
+        );
+      }
+      // method === null: incomplete flag at end of command — not a known bypass; skip
+      // method.toUpperCase() === "GET": read-only, continue scanning
+      continue;
+    }
+    // ── Write-field flag check ───────────────────────────────────────────────
+    if (isWriteFieldToken(token)) {
+      return (
+        `gh api shell_command '${cmd}' contains write-field flag '${token}' ` +
+        `which makes this a mutating gh api call (not allowed under mutates_build:false)`
+      );
+    }
+  }
+  return null;
+}
+
+/**
+ * Validates a single shell_command entry for read-only safety (Codex P1 hardening).
+ *
+ * Checks in order:
+ * 1. Shell metacharacter rejection (;, &, |, <, >, `, $, (, ), \n, \r)
+ * 2. Prefix allowlist — must be on READ_ONLY_SHELL_COMMANDS
+ * 3. gh api mutating-flag rejection (only for 'gh api' entries)
+ *
+ * Returns an error string on violation, null when safe.
+ * Extracted from checkReadOnlyShell to keep both functions below complexity 12.
+ */
+function checkSingleShellCommand(cmd: string): string | null {
+  // Codex P1 check 1: reject shell metacharacters
+  const metaChar = SHELL_METACHARS.find((c) => cmd.includes(c));
+  if (metaChar !== undefined) {
+    const display = metaChar === "\n" ? "\\n" : metaChar === "\r" ? "\\r" : metaChar;
+    return (
+      `shell_command '${cmd}' contains shell metacharacter '${display}' ` +
+      `(metacharacters are not allowed in read-only observe commands under mutates_build:false)`
+    );
+  }
+
+  // Prefix allowlist check
+  const allowed = READ_ONLY_SHELL_COMMANDS.some(
+    (prefix) => cmd === prefix || cmd.startsWith(`${prefix} `),
+  );
+  if (!allowed) {
+    return (
+      `shell_command '${cmd}' is not on the read-only allowlist ` +
+      `(mutating or unknown command rejected under mutates_build:false)`
+    );
+  }
+
+  // Codex P1 check 2: gh api mutating-flag rejection
+  if (cmd === "gh api" || cmd.startsWith("gh api ")) {
+    return checkGhApiMutatingFlags(cmd);
+  }
+
+  return null;
+}
+
+/**
+ * Guardrail 2 helper — checks whether Bash is safe to admit under the read-only carve-out.
+ *
+ * `Bash` is dual-use: `git log` reads, `git push` writes. This helper validates that every
+ * declared shell_command passes checkSingleShellCommand (Codex P1 hardening):
+ *
+ * 1. Metacharacter rejection — closes semicolon-chain and command-substitution exploits.
+ * 2. Prefix allowlist — entry must be on READ_ONLY_SHELL_COMMANDS.
+ * 3. gh api mutating-flag rejection — closes -f / -X POST exploits on gh api entries.
+ *
+ * Returns an error string when a violation is found, or null when admitted.
+ * Extracted to keep checkObserveMutationGuardrail under the cognitive-complexity limit.
+ */
+function checkReadOnlyShell(shellCommands: ReadonlyArray<string>): string | null {
+  if (shellCommands.length === 0) {
+    return (
+      "Bash declared in observe while mutates_build is false but observe.shell_commands is empty " +
+      "— declare the read-only commands this loop runs"
+    );
+  }
+  for (const cmd of shellCommands) {
+    const cmdError = checkSingleShellCommand(cmd);
+    if (cmdError !== null) {
+      return cmdError;
+    }
+  }
+  return null;
+}
+
 /**
  * Guardrail 2 helper — checks observe tools against built-in + author denylists.
+ *
+ * `Bash` receives a special read-only carve-out (decision loops-phase-b-01): when Bash is in
+ * observe.tools and mutates_build:false, it is admitted ONLY if shell_commands is non-empty and
+ * every entry matches READ_ONLY_SHELL_COMMANDS. Write/Edit/NotebookEdit remain unconditionally
+ * rejected — the carve-out is Bash-only.
  *
  * Returns an error string when a violation is found, or null when clean.
  * Extracted to keep parseLoopDefinition under the cognitive-complexity limit.
@@ -185,17 +373,29 @@ export type ParseLoopOptions = {
 function checkObserveMutationGuardrail(
   observeTools: ReadonlySet<string>,
   forbiddenTools: ReadonlyArray<string>,
+  shellCommands: ReadonlyArray<string>,
 ): string | null {
-  // (a) Built-in mutation denylist — always enforced when mutates_build:false.
-  const builtinOffenders = BUILTIN_MUTATION_TOOLS.filter((t) => observeTools.has(t));
-  if (builtinOffenders.length > 0) {
+  // (a) Built-in mutation denylist — always enforced when mutates_build:false,
+  //     EXCEPT Bash which is handled separately via the read-only carve-out.
+  const nonBashBuiltinOffenders = BUILTIN_MUTATION_TOOLS.filter(
+    (t) => t !== "Bash" && observeTools.has(t),
+  );
+  if (nonBashBuiltinOffenders.length > 0) {
     return (
       `mutation tool(s) declared in observe while mutates_build is false: ` +
-      `${builtinOffenders.join(", ")} (built-in mutation denylist: Write, Edit, Bash, NotebookEdit)`
+      `${nonBashBuiltinOffenders.join(", ")} (built-in mutation denylist: Write, Edit, Bash, NotebookEdit)`
     );
   }
 
-  // (b) Author-specified forbidden_tools — additive on top of built-in set.
+  // (b) Bash read-only carve-out — admitted only with a validated read-only shell_commands list.
+  if (observeTools.has("Bash")) {
+    const bashError = checkReadOnlyShell(shellCommands);
+    if (bashError !== null) {
+      return bashError;
+    }
+  }
+
+  // (c) Author-specified forbidden_tools — additive on top of built-in set.
   const authorOffenders = forbiddenTools.filter((t) => observeTools.has(t));
   if (authorOffenders.length > 0) {
     return (
@@ -216,7 +416,10 @@ function checkObserveMutationGuardrail(
  * Mechanical determinism guardrails (dc-05, loops-phase-a-05) enforced here:
  * 1. self-paced + mutates_build:true → rejected.
  * 2. mutates_build:false + mutation tool in observe → rejected (names the tool(s)).
- *    Built-in denylist (Write/Edit/Bash/NotebookEdit) always enforced; forbidden_tools additive.
+ *    Built-in denylist (Write/Edit/NotebookEdit) always enforced; forbidden_tools additive.
+ *    Bash carve-out (loops-phase-b-01): Bash admitted ONLY when observe.shell_commands is
+ *    non-empty and every entry matches READ_ONLY_SHELL_COMMANDS — empty list rejects, any
+ *    non-allowlisted entry (e.g. "git push") rejects, naming the offending command.
  * 3. Cross-field: on_transition.field not in state.snapshot → rejected (in superRefine above).
  * 4. id !== idFromFilename → rejected (when idFromFilename is provided).
  */
@@ -247,7 +450,11 @@ export function parseLoopDefinition(frontmatter: unknown, opts: ParseLoopOptions
   // ── Guardrail 2: mutates_build:false + mutation tool in observe ────────────
   if (def.guardrails.mutates_build === false) {
     const observeTools = new Set([...def.observe.tools, ...def.observe.mcp]);
-    const guardError = checkObserveMutationGuardrail(observeTools, def.guardrails.forbidden_tools);
+    const guardError = checkObserveMutationGuardrail(
+      observeTools,
+      def.guardrails.forbidden_tools,
+      def.observe.shell_commands,
+    );
     if (guardError !== null) {
       return { error: guardError, ok: false };
     }

@@ -289,17 +289,21 @@ describe("DriftStore (SQLite-backed)", () => {
   });
 
   it("getComplianceTrend buckets reviews by ISO week and computes pass rate", async () => {
-    // Two reviews in the same week — one violation, one honored
+    // Two reviews in the same week — one violation on file A, one honored for file B.
+    // Using different files so the honored review does NOT trigger auto-closure
+    // of the violation (closure-02: only resolves violations on files ∈ honored review's files).
     await store.appendReview(
       makeReview({
+        files: ["src/a.ts"],
         honored: [],
         review_id: "rev_w1_violation",
         timestamp: "2026-03-16T00:00:00Z", // W12 (Monday)
-        violations: [{ principle_id: "thin-handlers", severity: "rule" }],
+        violations: [{ file_path: "src/a.ts", principle_id: "thin-handlers", severity: "rule" }],
       }),
     );
     await store.appendReview(
       makeReview({
+        files: ["src/b.ts"], // different file — no auto-closure of the "src/a.ts" violation
         honored: ["thin-handlers"],
         review_id: "rev_w1_honored",
         timestamp: "2026-03-17T00:00:00Z", // W12 (Tuesday)
@@ -315,24 +319,32 @@ describe("DriftStore (SQLite-backed)", () => {
   });
 
   it("getComplianceTrend limits to most recent N weeks when weeks param provided", async () => {
-    // 3 reviews in 3 different weeks
+    // 3 reviews in 3 different weeks.
+    // The honored review covers a different file so it does NOT auto-close the violations
+    // (closure-02: only resolves violations on files ∈ the honored review's files).
     await store.appendReview(
       makeReview({
+        files: ["src/a.ts"],
         honored: [],
+        review_id: "rev_w10",
         timestamp: "2026-03-02T00:00:00Z", // W10
-        violations: [{ principle_id: "p1", severity: "rule" }],
+        violations: [{ file_path: "src/a.ts", principle_id: "p1", severity: "rule" }],
       }),
     );
     await store.appendReview(
       makeReview({
+        files: ["src/a.ts"],
         honored: [],
+        review_id: "rev_w11",
         timestamp: "2026-03-09T00:00:00Z", // W11
-        violations: [{ principle_id: "p1", severity: "rule" }],
+        violations: [{ file_path: "src/a.ts", principle_id: "p1", severity: "rule" }],
       }),
     );
     await store.appendReview(
       makeReview({
+        files: ["src/b.ts"], // different file — no auto-closure of the "src/a.ts" violations
         honored: ["p1"],
+        review_id: "rev_w12",
         timestamp: "2026-03-16T00:00:00Z", // W12
         violations: [],
       }),

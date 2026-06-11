@@ -5,12 +5,13 @@ import { registerKnowledgeTools } from "./register-knowledge.ts";
 import { registerLoopTools } from "./register-loops.ts";
 import { registerOrchestrationTools } from "./register-orchestration.ts";
 import { registerPrincipleTools } from "./register-principles.ts";
+import { registerRoutineTools } from "./register-routines.ts";
 
 /** Canonical server name — matches the MCP server name used in client configs. */
 export const CANON_SERVER_NAME = "canon";
 
 /** Server version — keep the release-please marker on this line so version bumps work. */
-export const CANON_SERVER_VERSION = "2.9.0"; // x-release-please-version
+export const CANON_SERVER_VERSION = "2.11.0"; // x-release-please-version
 
 /**
  * Factory that creates a fully-wired Canon McpServer instance.
@@ -29,12 +30,13 @@ export function createCanonServer(): McpServer {
   // Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
   installFuzzyValidation(server);
 
-  // Register all tool groups — 5 groups (added registerLoopTools for loop framework).
+  // Register all tool groups — 6 groups (loops + routines added).
   registerOrchestrationTools(server);
   registerKnowledgeTools(server);
   registerArtifactTools(server);
   registerPrincipleTools(server);
   registerLoopTools(server);
+  registerRoutineTools(server);
 
   return server;
 }

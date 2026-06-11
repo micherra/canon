@@ -101,7 +101,7 @@ JSONL files auto-rotate when they exceed 500 entries. Atomic writes (write-then-
 
 ## Development
 
-Node.js 24+ required.
+Node.js 24+ required. `boot.sh` enforces this at launch with a clear error if an older version is active — install or select Node 24+ via your Node version manager (nvm/fnm/asdf/volta) or from nodejs.org.
 
 ```bash
 # Install dependencies

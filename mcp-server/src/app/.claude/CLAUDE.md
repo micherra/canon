@@ -24,15 +24,15 @@ Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, 
 | `mcp-http/` | HTTP transport auth + session management subsystem (flag-dark). See `mcp-http/.claude/CLAUDE.md`. |
 
 ## Contracts
-<!-- last-updated: 2026-06-08 -->
+<!-- last-updated: 2026-06-10 -->
 
 **`createCanonServer()`** (`create-server.ts`) — per-session factory; creates and fully-wires a new `McpServer` instance (calls all 16 `register-*.ts` in order); uses `WeakMap<McpServer, Set<string>>` for per-server resource dedup in `registerToolWithUi`. `CANON_SERVER_NAME = "canon"` and `CANON_SERVER_VERSION` (x-release-please-version) exported here (moved from `server-state.ts`).
 
-**`boot.sh`** (`mcp-server/boot.sh`) — self-resolving launcher; never uses `npx`. Key steps: resolve `SERVER_DIR` via `CLAUDE_PLUGIN_ROOT` or `BASH_SOURCE`; poll `DATA_DIR/.bin/tsx` when `CLAUDE_PLUGIN_DATA` set (timeout `CANON_BOOT_DEPS_TIMEOUT`, default 60s); ESM co-location symlink (`ln -s DATA_DIR SERVER_DIR/node_modules`) — idempotent, `ln` failure degrades gracefully; dangling-symlink guard exits 1 (skipped under `--print-resolution`); `--print-resolution` prints `SERVER_DIR NODE_PATH TSX_BIN` and exits 0. **ESM/NODE_PATH pitfall**: `NODE_PATH` is CJS-only — ESM uses the co-located symlink; missing/dangling symlink → `ERR_MODULE_NOT_FOUND`. See `references/plugin-server-boot.md`.
+**`boot.sh`** (`mcp-server/boot.sh`) — self-resolving launcher; never uses `npx`. Key steps: resolve `SERVER_DIR` via `CLAUDE_PLUGIN_ROOT` or `BASH_SOURCE`; poll `DATA_DIR/.bin/tsx` when `CLAUDE_PLUGIN_DATA` set (timeout `CANON_BOOT_DEPS_TIMEOUT`, default 60s); ESM co-location symlink (`ln -s DATA_DIR SERVER_DIR/node_modules`) — idempotent, `ln` failure degrades gracefully; dangling-symlink guard exits 1 (skipped under `--print-resolution`); **Step 12.5 Node-version preflight**: resolves node via `(cd "$SERVER_DIR" && node -v)`, exits 1 with a clear actionable message if node is absent or major < 24 (fail-closed; skipped under `--print-resolution`); `--print-resolution` prints `SERVER_DIR NODE_PATH TSX_BIN` and exits 0. **ESM/NODE_PATH pitfall**: `NODE_PATH` is CJS-only — ESM uses the co-located symlink; missing/dangling symlink → `ERR_MODULE_NOT_FOUND`. See `references/plugin-server-boot.md`.
 
 **`resolveScope(extra)`** (`server-state.ts`) — sole accessor for project-dir scope. Lookup order: (1) per-session registry keyed by `extra.sessionId`; (2) `STDIO_SESSION_ID = "__stdio__"` sentinel. Fails closed (throws) for unregistered sessions. `registerConnectionScope` / `clearConnectionScope` manage the registry. Per-session ready gates: `createSessionReadyGate(sessionId)` / `resolveSessionReady(sessionId)` / `clearSessionReady(sessionId)` / `readyPromiseFor(extra)` (falls back to global gate when `sessionId` absent — preserves stdio path). `getScopeForSession(sessionId)` reads scope without removing. `hasOtherSessionsForDir(dir)` scans registry for refcount eviction. `resetForTesting()` clears all mutable state including the `sessionReady` map.
 
-**`findAnchorDir(startDir, markers[], existsFn?)`** (`server-state.ts`) — walks up from `startDir` until a directory containing every `markers[]` entry is found; injectable `existsFn` seam (default `existsSync`); throws with diagnostic message (names missing markers and `CANON_PLUGIN_DIR` escape hatch) when no ancestor qualifies. Boot seeds: `pluginDir = CANON_PLUGIN_DIR ?? findAnchorDir(thisDir, ["agents","principles"], isDir)` (repo/plugin root — dir-strict predicate); `mcpServerRoot = CANON_PLUGIN_DIR ? join(pluginDir, "mcp-server") : findAnchorDir(thisDir, ["boot.sh"])` — `boot.sh` marker walk (file; dir-strict NOT applied). `pluginDir` always declared before `mcpServerRoot`.
+**`resolvePluginDir(envValue, startDir, existsFn?)`** (`server-state.ts`) — validates a CANON_PLUGIN_DIR candidate before trusting it; accepts only if non-empty, token-free (no `${...}`), absolute, and the directory contains `agents/` + `principles/` marker dirs; any rejection falls through to `findAnchorDir(startDir, ["agents","principles"], existsFn)`; if both miss, `findAnchorDir` throws loud (names missing markers). Exported pure function; `existsFn` is injectable for unit tests (default `isDir`). Boot seeds: `pluginDir = resolvePluginDir(process.env.CANON_PLUGIN_DIR, thisDir)` (single validated chokepoint); `mcpServerRoot = join(pluginDir, "mcp-server")` (always derived from validated `pluginDir` — the independent `boot.sh` marker walk is gone). `pluginDir` always declared before `mcpServerRoot`.
 
 **`JobManager` per-project** (`src/platform/jobs/job-manager.ts`) — holds a `Map<string, JobManager>` keyed by `path.resolve(projectDir)`; `getOrCreateJobManager(projectDir, ...)` is the sole factory; `getJobManager(projectDir)` returns `undefined` for unknown scope; `cleanupAllJobManagers()` tears down all managers at shutdown; `evictJobManagerForScope(projectDir)` — cleanup + delete in try/finally for HTTP session teardown (isolation-finish-01).
 
@@ -43,12 +43,12 @@ Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, 
 **`get_context` tool** (`get-context-handler.ts`) — composite context tool; input: `file_paths[]` + optional `include` (5 sections: `principles`, `file_context`, `drift`, `graph`, `signals`); `file_context` errors fail-closed; graph/signals fail-open; re-exported from `register-knowledge.ts`.
 
 ## Invariants
-<!-- last-updated: 2026-06-08 -->
+<!-- last-updated: 2026-06-10 -->
 - Sidecar `:3141` (`http-server.ts`) rejects requests with missing or non-loopback Host headers with 403 before routing — fail-closed; `isLoopbackHostRequest` from `mcp-http/loopback-host.ts` is the sole guard implementation
 - Sidecar `:3141` does not set `Access-Control-Allow-Origin` — artifacts served via direct browser navigation, never cross-origin fetch; ACAO `*` would be a data-exfiltration risk
 - `resolveScope(extra)` is the sole accessor for per-session projectDir — never use `export let projectDir` global (deleted) or `process.cwd()` fallback
 - `createCanonServer()` is the sole factory for `McpServer` instances — module-level singleton export deleted; each HTTP session gets its own instance
-- `CANON_PLUGIN_DIR` env var is the first-priority short-circuit for `findAnchorDir`; when unset, marker-walk resolves it at boot
+- `CANON_PLUGIN_DIR` env var is validated (non-empty, token-free, absolute, marker-dirs present) before being accepted; rejects fall through to the env-free `findAnchorDir` marker-walk; all-miss throws loud
 - `pluginDir` must always be declared before `mcpServerRoot` in boot seed code
 - `resolvePidDir()` never throws — returns `null` when scope is unresolvable
 - ESM module resolution uses co-located symlink, not `NODE_PATH` (CJS-only)

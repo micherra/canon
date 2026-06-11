@@ -53,6 +53,8 @@ Execute the observe behavior described in the definition body. For each field in
 
 - Use only `definition.observe.tools` and `definition.observe.mcp` — no tools outside
   these lists (the guardrail is mechanical; the definition already passed schema validation).
+- If `Bash` is in `definition.observe.tools`, invoke only commands whose prefix appears in
+  `definition.observe.shell_commands` — the schema has already validated these are read-only.
 - For `_probe`: observe = read `tick_count` from state (or 0 if absent), increment by 1.
   No external calls required — _probe's observe is a trivial counter.
 
