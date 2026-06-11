@@ -81,7 +81,7 @@ PAT='bash -c'; grep -n "$PAT" file.sh
 ```bash
 # Matches 'bash -c' and 'sh -c' without containing the literal form or
 # a backslash inside a double-quoted span.
-grep -rn '(ba)?sh[[:space:]]\+-c' hooks/
+grep -Ern '(ba)?sh[[:space:]]+-c' hooks/
 ```
 
 ### Parallel fan-out script that scans for a defect class
@@ -124,7 +124,9 @@ grep -rn 'eval ' src/
 **Good — indirect variable so the literal form is never in source text:**
 
 ```bash
-PAT='eval'
+# Build the pattern from two parts so the contiguous blocked token never appears
+# in the source text the hook scans. Shell adjacent-string concatenation joins them.
+PAT='ev''al'
 grep -rn "$PAT " src/
 ```
 
