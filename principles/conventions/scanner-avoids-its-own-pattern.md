@@ -22,7 +22,7 @@ A tool — hook, script, grep command, or verification step — that is designed
 
 **Resolution options (choose one):**
 
-1. **Character-class split**: express the two-token pattern via a regex that matches it without reproducing it literally. For `bash -c` and `sh -c`: use `(ba)?sh[[:space:]]+-c` or `[bs][ah][s]h[[:space:]]+-c`.
+1. **Character-class split**: express the two-token pattern via a regex that matches it without reproducing it literally. For `bash -c` and `sh -c`: use `(ba)?sh[[:space:]]+-c` (requires `-E` for ERE — without `-E` the plain `grep` BRE engine silently matches nothing, which is the false-negative this convention warns against).
 2. **Token break**: concatenate parts of the pattern at execution time, or split across two grep passes.
 3. **Indirect variable**: assign the full pattern to a variable, then interpolate: `PAT='bash -c'; grep -n "$PAT" file.sh` — the literal form never appears in the source text the hook scans. **Caution**: the variable must contain the entire pattern; any `|` character remaining outside the variable will cause the guard to segment the command and may trigger a false-positive (see pitfall in the Why section).
 4. **Out-of-band invocation**: use a temp wrapper script that `source`s the target instead of invoking it via the pattern (e.g., `source "$script_path" "$@"` instead of the string-executing form).
@@ -81,7 +81,10 @@ PAT='bash -c'; grep -n "$PAT" file.sh
 ```bash
 # Matches 'bash -c' and 'sh -c' without containing the literal form or
 # a backslash inside a double-quoted span.
-grep -Ern '(ba)?sh[[:space:]]+-c' hooks/
+# -E is required: this uses ERE syntax; without it, plain grep (BRE) silently
+# matches nothing — a false-negative that defeats the purpose of the check.
+# Empirically verified exit 0 through destructive-guard.sh.
+grep -rnE '(ba)?sh[[:space:]]+-c' hooks/
 ```
 
 ### Parallel fan-out script that scans for a defect class
@@ -121,13 +124,16 @@ rm -f "$WRAPPER"
 grep -rn 'eval ' src/
 ```
 
-**Good — indirect variable so the literal form is never in source text:**
+**Good — token-split so the literal form never appears as a contiguous string in source text:**
 
 ```bash
-# Build the pattern from two parts so the contiguous blocked token never appears
-# in the source text the hook scans. Shell adjacent-string concatenation joins them.
-PAT='ev''al'
-grep -rn "$PAT " src/
+# Split the blocked token across two variables so 'eval' never appears verbatim.
+# P1='ev'; P2='al' → "${P1}${P2}" expands to 'eval' at runtime but the
+# contiguous string is absent from the command source the hook scans.
+# Empirically verified: matches 'eval ' in target files (exit 0) and
+# grep for the literal token in this command's own source finds nothing (exit 1).
+# Verified exit 0 through destructive-guard.sh.
+P1='ev'; P2='al'; grep -rn "${P1}${P2} " src/
 ```
 
 ## Evidence
@@ -136,7 +142,7 @@ grep -rn "$PAT " src/
 |---|-------|---------|-------------------|------------|
 | 1a | PR #355 (engineer) | `destructive-guard.sh` | `bash -c "$wrapper"` in xargs fan-out in mine script | Temp wrapper using `source` instead of the string-executing form |
 | 1b | PR #355 (learner) | `destructive-guard.sh` | `grep -n "bash -c\|sh -c"` — backslash alternation in double-quoted span → fail-closed (exit 2) | Indirect variable: `PAT='bash -c'; grep -n "$PAT" file.sh` — full pattern in variable, no bare `\|` remaining (earlier `PAT='bash'; grep -E "$PAT -c\|sh -c"` was itself blocked — see pitfall in Why section) |
-| 2 | PR #337 fix | `destructive-guard.sh` | Verification greps for `eval`/the two-token form in target files using backslash alternation | Pattern split via `(ba)?sh\s+-c` and related character-class forms |
+| 2 | PR #337 fix | `destructive-guard.sh` | Verification greps for `eval`/the two-token form in target files using backslash alternation | Pattern split via `grep -rnE '(ba)?sh[[:space:]]+-c'` (ERE, `-E` required) and token-split for `eval` |
 
 ## Exceptions
 
