@@ -34,8 +34,9 @@ What exists today, concretely:
   Sub-analysis A, lines 121–123), where the weight is `computeOutcomeWeight(OutcomeSignals)`
   summed across instances (`mcp-server/src/features/history/services/judge-weight.ts`).
 - Accepted proposals flow through `content-flow/learn-apply` → **writer** edits the artifact →
-  **reviewer** checks compliance → **HITL** approval → PR (`references/content-flow.md` lines 20,
-  94–100). Human merge is mandatory.
+  **reviewer** checks compliance → **HITL** approval (`references/content-flow.md` lines 20,
+  94–100). Content lands directly — the content flow omits the ship step (no PR; direct landing).
+  Human HITL approval is mandatory.
 - The watch→convention lifecycle decays/reinforces/archives stale proposals via the CONSOLIDATE
   pass (`references/learner-dimensions.md` Sub-analysis D, `consolidate-policy.ts`).
 
@@ -235,8 +236,8 @@ artifact wording in-context, agent reasoning)` — is the diagnosed cause, and i
 **Honesty on residual inference.** Provenance proves *presence in context* (the wording was there), not
 *causation* (the wording caused the failure). The transcript narrows causation but does not prove it;
 the **eval hard-gate (§7) is what converts a causal *hypothesis* into a *validated* change** — a
-mutation that doesn't improve the holdout is rejected no matter how confident the attribution. So
-attribution + transcript propose; the gate disposes. This is the safety chain that makes trace-led
+mutation must strictly improve the holdout to be accepted, no matter how confident the attribution.
+Attribution + transcript propose; the gate disposes. This is the safety chain that makes trace-led
 targeting tractable without perfect causal traces.
 
 ### 3.2 Fitness gate — the held-out benchmark
@@ -340,8 +341,9 @@ expensive (multiple `run-evals.sh` passes per candidate), so it belongs off the 
                    the diagnosed cause, each respecting a size budget (§5).
 5. SCORE           for each candidate: swap it into the evolve/<target> worktree,
                    run run-evals.sh → candidate score per split (via evaluate_candidate).
-6. HARD GATE       reject any candidate that regresses the holdout split vs baseline
-                   (§7). Among survivors, pick the best behavioral delta.
+6. HARD GATE       reject any candidate that does not strictly improve the holdout split
+                   vs baseline (§7): "unchanged" is a rejection, not a pass. Among
+                   survivors, pick the best behavioral delta.
 7. PROPOSE         emit the surviving candidate to .canon/proposed-learnings/, carrying
                    {diagnosed_cause, attribution, before/after per-split scores, size
                    delta} into the EXISTING watch→writer→reviewer→HITL pipeline (§6).
@@ -384,9 +386,9 @@ restriction.
    provenance-ready classes the resolver already sees: **rules, references, primers, templates** (§3.3
    rows 1–2). This is the load-bearing deliverable; everything downstream joins on it.
 2. **`evaluate_candidate` MCP tool** — candidate-injected `run-evals.sh` runner returning per-split
-   scores + regression flag.
+   scores + improvement flag (pass = strict improvement over baseline; fail = unchanged or worse).
 3. **Eval-harness baseline + splits** — `baseline.json` freeze; add `split: train|val|holdout` to
-   `eval-set.json`; encode the zero-holdout-regression policy.
+   `eval-set.json`; encode the strict-holdout-improvement policy (§7).
 4. **The offline Loop host** — `loops/evolve.md` (interval/self-paced, opt-in under supervised tier).
 5. **The hard-gate (§7)** wired into the learner before proposal-write.
 
@@ -448,15 +450,22 @@ learner (with evaluate_candidate hard-gate)  ← NEW gate runs HERE, pre-proposa
    → content-flow/learn-apply → writer applies edit (existing)
    → reviewer compliance check (existing)
    → HITL approval (existing, MANDATORY)
-   → PR → human merge (existing, MANDATORY)
+   → [NEW] PR → human merge (NEW gate this design adds for trace-led mutations)
 ```
+
+> **Note on the PR gate:** The existing `content-flow/learn-apply` chain omits the ship step — content
+> lands directly after HITL approval (`references/content-flow.md` ship-step row: "Omitted (no PR;
+> content lands directly)"). The `→ PR → human merge` step shown above is a **new addition this design
+> proposes** for the trace-led evolution path, on the grounds that self-generated mutations on
+> governing artifacts carry higher risk than human-authored proposals. Whether to add this gate is a
+> decision for the architect/greenlit build phase — it is not inherited from the existing chain.
 
 Key placement rule: **the eval hard-gate runs inside the learner, *before* the proposal is ever
 written** (step 6 of §4). By the time a candidate reaches `.canon/proposed-learnings/`, it has
-*already* passed the regression gate. A candidate that regresses the holdout is **never proposed**
-— it does not reach the watch lifecycle, the writer, the reviewer, or HITL. This is the
-"hard-gate-before-HITL" requirement: the gate is upstream of every human touchpoint, so humans
-only ever review non-regressive candidates.
+*already* passed the improvement gate. A candidate that fails to strictly improve the holdout is
+**never proposed** — it does not reach the watch lifecycle, the writer, the reviewer, or HITL.
+This is the "hard-gate-before-HITL" requirement: the gate is upstream of every human touchpoint,
+so humans only ever review candidates that demonstrably improve behavior on the holdout.
 
 The proposal file gains three fields the writer and reviewer surface at HITL:
 `diagnosed_cause`, `eval_delta` (before/after per split), `size_delta`. The reviewer's existing
@@ -472,11 +481,12 @@ No new flow, no new agent in the promotion path — the evolution loop *feeds* t
 
 State this as a Canon invariant, in the project's own regression-intolerant idiom:
 
-> **`evolution-hard-gate` (proposed invariant):** An evolved artifact that improves a behavioral
-> signal but regresses the eval suite is **rejected, never averaged.** The eval suite is a hard
-> gate, not a fitness term. A candidate that lowers any holdout-split pass count below baseline is
-> discarded regardless of how much it improves cross-run behavioral metrics. There is no blended
-> score in which a benchmark regression can be "bought" by a behavioral gain.
+> **`evolution-hard-gate` (proposed invariant):** An evolved artifact is accepted only if it
+> **strictly improves the holdout split** relative to baseline — a measurable increase in holdout
+> pass count (or average rubric score). The eval suite is a hard gate, not a fitness term. A
+> candidate that fails to improve the holdout is discarded regardless of how much it improves
+> cross-run behavioral metrics — "unchanged holdout" is a rejection, not a pass. There is no
+> blended score in which unchanged or regressing eval results can be "bought" by a behavioral gain.
 
 This is the direct expression of two existing Canon postures:
 
@@ -487,12 +497,16 @@ This is the direct expression of two existing Canon postures:
   away a passing eval for a behavioral win.
 - The reviewer's worst-case-verdict consolidation (CLAUDE.md: "Take worst-case verdict across all
   reviewers") — Canon already composes quality signals by *worst-case*, not by *average*. The
-  hard gate is the same operator applied to candidate selection: a regression is a BLOCKING
-  verdict on the candidate, and BLOCKING is terminal.
+  hard gate is the same operator applied to candidate selection: failure to strictly improve
+  the holdout is a BLOCKING verdict on the candidate, and BLOCKING is terminal.
 
-Tolerance: for all text-artifact targets, **zero holdout regression** (stricter than Hermes's ≤2%),
-because Canon's N is small enough that a 2% allowance is one case and the suite is the only frozen
-ground truth. Revisit the tolerance only if the holdout grows past ~30 cases.
+Tolerance: for all text-artifact targets, the gate requires a **strict holdout improvement** —
+at least one additional passing case (or a measurable rubric-score increase) vs baseline. This is
+stricter than Hermes's ≤2% regression allowance and also closes the wrong-target gap: a
+mis-targeted rewrite that leaves holdout performance unchanged is rejected (see §9 risk
+"provenance correctness"). Canon's N is small enough that a 2% regression allowance is one case
+and unchanged performance is indistinguishable from noise. Revisit the tolerance only if the
+holdout grows past ~30 cases.
 
 ---
 
@@ -533,9 +547,11 @@ deferred nicety** (see §9 for the new risk it introduces).
 ## 9. Risks & Non-Goals
 
 **Non-goals (explicit):**
-- **NOT auto-merging self-modification.** Human PR review stays mandatory. The loop ends at a
-  *proposal*; `content-flow/learn-apply` → writer → reviewer → HITL → human merge is unchanged
-  (§6). Nothing here writes to `principles/`, `rules/`, or `agents/` without a human.
+- **NOT auto-merging self-modification.** Human oversight stays mandatory. The loop ends at a
+  *proposal*. The existing `content-flow/learn-apply` chain (writer → reviewer → HITL) lands
+  content directly — no PR in the existing path. This design proposes adding a PR/human-merge
+  gate on top of that chain for trace-led mutations (see §6 note), but in either form nothing
+  writes to `principles/`, `rules/`, or `agents/` without a human.
 - **NOT a fitness-averaged optimizer.** The eval suite is a hard gate, never a weighted term (§7).
 - **NOT code-evolution first.** Implementation-code evolution (Phase 4) is deferred and out of scope
   for the trace-led prompt-context loop; Phases 1–3 are text artifacts assembled into spawn prompts.
@@ -555,9 +571,15 @@ deferred nicety** (see §9 for the new risk it introduces).
   attributes a failure to a section that was not actually in context. The blast radius of an
   attribution bug is therefore larger than in v1. Mitigations: (a) `content_hash` lets the learner
   *verify* the wording it's about to mutate is byte-identical to what was in-context, refusing to
-  mutate on mismatch; (b) the eval hard-gate still catches a mis-targeted mutation downstream (it won't
-  improve the holdout); (c) treat provenance instrumentation as the highest-test-coverage component of
-  the Phase-1 build.
+  mutate on mismatch; (b) the eval hard-gate catches a mis-targeted mutation downstream — but only
+  if the gate requires a **strict improvement on the targeted holdout slice**, not merely
+  non-regression. A wrong-target rewrite that leaves the holdout *unchanged* still passes a
+  non-regression gate; the gate must require the candidate to **raise the holdout pass count
+  above baseline** (or improve the average rubric score above baseline) to be accepted, not just
+  avoid lowering it. This makes "unchanged holdout" a rejection, which is the correct outcome for
+  a mis-targeted rewrite. The `evolution-hard-gate` invariant (§7) is strengthened accordingly:
+  acceptance requires a measurable holdout improvement, not merely absence of regression;
+  (c) treat provenance instrumentation as the highest-test-coverage component of the Phase-1 build.
 - **NEW — trace-led scope creep across artifact classes.** "Evolve whatever the failure points at"
   can spread thin: one batch run might surface candidate targets across rules, primers, and agent defs
   simultaneously. Without a cap, the loop generates many low-confidence proposals. Mitigation: keep the
@@ -572,9 +594,10 @@ deferred nicety** (see §9 for the new risk it introduces).
   stores; summarize into `RunSummary` rather than embedding raw events in the archive.
 - **NEW — attribution ≠ causation (residual, named in §3.1).** Provenance proves the wording was *in
   context*, not that it *caused* the failure. The transcript narrows but does not prove causation. The
-  eval hard-gate is the causation arbiter: a mutation that doesn't move the holdout is rejected. Do not
-  let the precision of a hash-level attribution create false confidence that the diagnosed cause is
-  correct — the gate, not the attribution, is the source of truth.
+  eval hard-gate is the causation arbiter: a mutation must strictly improve the holdout to be
+  accepted — "unchanged" is a rejection. Do not let the precision of a hash-level attribution
+  create false confidence that the diagnosed cause is correct — the gate, not the attribution, is
+  the source of truth.
 - **Overfitting to visible splits.** Without train/val/holdout separation, mutation overfits. Mitigated
   by the split (§3.2 item 4) and by gating on **holdout only**.
 - **Eval-suite cost.** Each candidate requires a `run-evals.sh` pass (15 `claude -p` calls + judge).
@@ -629,7 +652,7 @@ deliverables (§5).
   beyond 15 cases via mine-then-curate (Decision #2).
 - `skills/canon/evals/run-evals.sh` — *change*: accept `--split <name>`; emit a machine-readable
   per-split score artifact (`baseline.json`) alongside the human summary.
-- Encode the zero-holdout-regression policy (the §7 invariant) in the gate path.
+- Encode the strict-holdout-improvement policy (the §7 invariant) in the gate path.
 
 **4. Offline Loop host**
 - New `loops/evolve.md` — frontmatter modeled on `loops/ship-watch.md` (`status`, `trigger.lifecycle_hook`,
@@ -641,12 +664,13 @@ deliverables (§5).
   → mutate → call `evaluate_candidate` → hard-gate → write proposal). Add `evaluate_candidate` to the
   `tools:` allowlist.
 - `references/learner-dimensions.md` — *change*: add an "evolution" dimension spec (the loop + the
-  zero-holdout-regression gate placement before proposal-write).
+  strict-holdout-improvement gate placement before proposal-write).
 - `.canon/proposed-learnings/<id>.md` proposal format — *change*: add `diagnosed_cause`, `attribution`,
   `eval_delta`, `size_delta` fields the writer/reviewer surface at HITL (§6).
 
-**Promotion path (§6): no new components** — reuses `content-flow/learn-apply` → writer → reviewer →
-HITL → PR unchanged.
+**Promotion path (§6): one possible new component** — reuses `content-flow/learn-apply` → writer →
+reviewer → HITL (all existing). The optional PR/human-merge gate at the end is a new addition this
+design proposes; it is not part of the existing content flow (see §6 note on PR gate).
 
 **Sequencing note for the architect:** deliverable 1 (provenance) is the hard dependency for the
 trace-led loop and should be its own wave with the highest test coverage; deliverables 2–4 can proceed
