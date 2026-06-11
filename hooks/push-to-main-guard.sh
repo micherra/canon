@@ -141,12 +141,16 @@ resolve_protected_branch() {
 # ---------------------------------------------------------------------------
 # is_push_everything_mode <token>
 #
-# Returns 0 (true) when the token is an unambiguous prefix of --all or
-# --mirror that git would accept as those flags (canonical-prefix expansion).
+# Returns 0 (true) when the token is an unambiguous prefix of --all, --mirror,
+# or --branches that git would accept as those flags (canonical-prefix expansion).
+# --branches is an alias of --all (per git push -h) and likewise pushes every
+# local branch including the protected branch; it must be blocked unconditionally.
 #
 # git's parse-options accepts any unambiguous abbreviation of a long option.
-# For --all:    accepted prefixes are --a, --al, --all
-# For --mirror: accepted prefixes are --m, --mi, --mir, --mirr, --mirro, --mirror
+# For --all:      accepted prefixes are --a, --al, --all
+# For --mirror:   accepted prefixes are --m, --mi, --mir, --mirr, --mirro, --mirror
+# For --branches: accepted prefixes are --b, --br, --bra, --bran, --branc,
+#                 --branch, --branches
 #
 # The posture is CONSERVATIVE / fail-closed (dc-05): we block both the
 # unambiguous accepted forms AND the genuinely ambiguous short forms (--a, --m)
@@ -157,11 +161,14 @@ resolve_protected_branch() {
 # Flags that start with --a or --m but are definitively NOT push-everything:
 #   --atomic  → starts with --at, not matched by the pattern below
 #   --all=*   → the = sign prevents a pure-prefix match at the boundary
-# No other git-push long option starts with --a or --mi that could push main.
+# --no-branches cancels --branches; it is NOT a push-everything mode and must
+# NOT be blocked (the negation form never starts with --b(r...) without --no-).
+# No other git-push long option starts with --a, --mi, or --b that could push main.
 #
 # Implementation: regex match on the full token.
-#   --all family:    ^--a(l(l)?)?$
-#   --mirror family: ^--m(i(r(r(o(r)?)?)?)?)?$
+#   --all family:      ^--a(l(l)?)?$
+#   --mirror family:   ^--m(i(r(r(o(r)?)?)?)?)?$
+#   --branches family: ^--b(r(a(n(c(h(e(s)?)?)?)?)?)?)?$
 # ---------------------------------------------------------------------------
 is_push_everything_mode() {
   local token="$1"
@@ -169,6 +176,9 @@ is_push_everything_mode() {
     return 0
   fi
   if [[ "$token" =~ ^--m(i(r(r(o(r)?)?)?)?)?$ ]]; then
+    return 0
+  fi
+  if [[ "$token" =~ ^--b(r(a(n(c(h(e(s)?)?)?)?)?)?)?$ ]]; then
     return 0
   fi
   return 1
@@ -272,6 +282,7 @@ push_updates_protected_branch() {
   local remote_name="origin"  # default remote name; updated when first bare token seen
   local refspecs=()
   local skip_next=false
+  local _capture_repo_next=false  # set when --repo <value> (separate form) is seen
   local tags_only_mode=false   # set when --tags seen (without push-everything mode)
 
   while IFS= read -r token; do
@@ -282,18 +293,28 @@ push_updates_protected_branch() {
       continue
     fi
 
+    # --repo <value> (separate form): the previous token was --repo, so this
+    # token is the repository value. Mark remote as known and capture the name
+    # so subsequent bare tokens are parsed as refspecs (Finding 2 fix).
+    if [[ "$_capture_repo_next" == "true" ]]; then
+      _capture_repo_next=false
+      remote_seen=true
+      remote_name="$token"
+      continue
+    fi
+
     # Handle option tokens
     if [[ "$token" == -* ]]; then
-      # "Push everything" modes: --all pushes every refs/heads/* branch;
+      # "Push everything" modes: --all/--branches push every refs/heads/* branch;
       # --mirror pushes ALL refs and makes the remote an exact copy.
-      # Neither honors push.default or the current branch — they can push
+      # None honors push.default or the current branch — they can push
       # the protected branch even from a feature-branch checkout.
       # dc-05 fail-closed-on-ambiguity: cannot prove they will NOT touch the
       # protected branch → block unconditionally.
-      # is_push_everything_mode detects BOTH the canonical spellings (--all,
-      # --mirror) AND all git-accepted unambiguous abbreviations (--al, --mi,
-      # --mir, --mirr, --mirro) using canonical-prefix expansion — closing the
-      # v3 CRITICAL where exact-literal matching missed abbreviated forms.
+      # is_push_everything_mode detects the canonical spellings (--all, --branches,
+      # --mirror) AND all git-accepted unambiguous abbreviations (--al, --b, --br,
+      # --bra, ..., --mi, --mir, ...) using canonical-prefix expansion — closing the
+      # v3 CRITICAL (abbreviations) and the --branches alias finding.
       if is_push_everything_mode "$token"; then
         return 0   # BLOCK — push-everything mode (or abbreviation) is ambiguous w.r.t. protected branch
       fi
@@ -315,12 +336,22 @@ push_updates_protected_branch() {
         --force-with-lease=*|--force-if-includes=*|--signed=*)
           # self-contained, skip
           ;;
-        # --repo consumes next token (separate form) or is self-contained (= form)
+        # --repo supplies the target repository, replacing the positional <repository>
+        # argument. When --repo is present, subsequent bare tokens are REFSPECS,
+        # not the remote — so we must mark remote_seen=true and set remote_name so
+        # those tokens flow through the refspec-safety gate instead of being silently
+        # consumed as the "first bare = remote" slot (Finding 2 fix).
+        #
+        # Separate form: --repo <value> — set _capture_repo_next so the NEXT token
+        # is captured as remote_name (handled at the top of the loop).
+        # Equals form: --repo=<value> — extract the value inline.
         --repo)
-          skip_next=true
+          _capture_repo_next=true
           ;;
         --repo=*)
-          # self-contained, skip
+          # Self-contained: extract value after '=' and mark remote as known.
+          remote_seen=true
+          remote_name="${token#--repo=}"
           ;;
         # -o / --push-option consume a value token (separate form)
         -o|--push-option)
@@ -525,7 +556,7 @@ process_segment() {
           fi
         done
         if [[ "$_push_everything_found" == "true" ]]; then
-          _block_reason="'--all'/'--mirror' push (or abbreviated form — pushes every local branch including '$_protected' — cannot be proven safe)"
+          _block_reason="'--all'/'--branches'/'--mirror' push (or abbreviated form — pushes every local branch including '$_protected' — cannot be proven safe)"
         fi
         cat <<EOF >&2
 CANON: Blocked $_block_reason.

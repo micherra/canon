@@ -445,6 +445,88 @@ rm -rf "$TMPDIR_DEFAULT"
 
 echo ""
 # ---------------------------------------------------------------------------
+# Finding 1 (P1): --branches / --[no-]branches alias of --all
+# Per 'git push -h', --[no-]branches is an alias of --all: it pushes every
+# local branch including the protected branch. The affirmative form must be
+# blocked wherever --all is blocked. The negation --no-branches cancels the
+# option and is NOT a push-everything mode — it must NOT be over-blocked.
+# Abbreviated forms (--b, --br, ..., --branch) must also be blocked (canonical-
+# prefix expansion, matching the pattern already applied to --all/--mirror).
+# ---------------------------------------------------------------------------
+echo "-- Finding 1 (P1): --branches push-everything alias (should block, exit 2) --"
+run_test "git push --branches origin (--branches = --all → block)" \
+  2 "$(make_input 'git push --branches origin')"
+run_test "git push --branches (no remote specified → block)" \
+  2 "$(make_input 'git push --branches')"
+run_test "git push --branch origin (abbreviated --branches → block)" \
+  2 "$(make_input 'git push --branch origin')"
+run_test "git push --branc origin (abbreviated --branches → block)" \
+  2 "$(make_input 'git push --branc origin')"
+run_test "git push --bran origin (abbreviated --branches → block)" \
+  2 "$(make_input 'git push --bran origin')"
+run_test "git push --bra origin (abbreviated --branches → block)" \
+  2 "$(make_input 'git push --bra origin')"
+run_test "git push --br origin (abbreviated --branches → block)" \
+  2 "$(make_input 'git push --br origin')"
+run_test "git push --b origin (abbreviated --branches → block)" \
+  2 "$(make_input 'git push --b origin')"
+
+echo ""
+echo "-- Finding 1 (P1): --no-branches must NOT be over-blocked (should allow, exit 0) --"
+# --no-branches cancels the --branches/--all flag; it is NOT a push-everything mode.
+# A feature-branch push with --no-branches should still be allowed.
+TMPDIR_NOBRANCHES=$(mktemp -d)
+setup_repo "$TMPDIR_NOBRANCHES"
+git -C "$TMPDIR_NOBRANCHES" checkout -q -b canon/feature
+run_test "git push --no-branches origin HEAD:canon/feature (--no-branches cancels → allow)" \
+  0 "$(make_input 'git push --no-branches origin HEAD:canon/feature')" "$TMPDIR_NOBRANCHES"
+rm -rf "$TMPDIR_NOBRANCHES"
+
+echo ""
+# ---------------------------------------------------------------------------
+# Finding 2 (P1): --repo preserves refspecs
+# 'git push --repo origin main' — --repo supplies the repository; 'main' is
+# still a REFSPEC, not the remote. The parser must mark remote_seen=true when
+# --repo is consumed (both separate and equals forms) so that 'main' flows
+# through the refspec-safety gate rather than being silently swallowed as the
+# "first bare token = remote" slot, which would leave zero refspecs and allow
+# the push via the bare_push_is_safe path.
+# ---------------------------------------------------------------------------
+echo "-- Finding 2 (P1): --repo preserves refspecs (should block, exit 2) --"
+
+TMPDIR_REPO_SEP=$(mktemp -d)
+setup_repo "$TMPDIR_REPO_SEP"
+git -C "$TMPDIR_REPO_SEP" checkout -q -b canon/feature
+
+# Separate form: 'git push --repo origin main' — main is a refspec → block
+run_test "git push --repo origin main (separate form, main is refspec → block)" \
+  2 "$(make_input 'git push --repo origin main')" "$TMPDIR_REPO_SEP"
+
+# Equals form: 'git push --repo=origin main' — main is a refspec → block
+run_test "git push --repo=origin main (equals form, main is refspec → block)" \
+  2 "$(make_input 'git push --repo=origin main')" "$TMPDIR_REPO_SEP"
+
+rm -rf "$TMPDIR_REPO_SEP"
+
+echo ""
+echo "-- Finding 2 (P1): --repo with benign refspec must allow (should allow, exit 0) --"
+
+TMPDIR_REPO_ALLOW=$(mktemp -d)
+setup_repo "$TMPDIR_REPO_ALLOW"
+git -C "$TMPDIR_REPO_ALLOW" checkout -q -b canon/feature
+
+# 'git push --repo origin feature-x' — feature-x is a non-protected refspec → allow
+run_test "git push --repo origin feature-x (benign refspec → allow)" \
+  0 "$(make_input 'git push --repo origin feature-x')" "$TMPDIR_REPO_ALLOW"
+
+# 'git push --repo=origin HEAD:canon/feature' — non-protected destination → allow
+run_test "git push --repo=origin HEAD:canon/feature (equals form, benign → allow)" \
+  0 "$(make_input 'git push --repo=origin HEAD:canon/feature')" "$TMPDIR_REPO_ALLOW"
+
+rm -rf "$TMPDIR_REPO_ALLOW"
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
