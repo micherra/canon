@@ -12,6 +12,14 @@ scope:
     - "docs/adr/**"
     - "CLAUDE.md"
     - "references/**"
+    - "mcp-server/src/**"
+    - "**/mcp-server/src/**"
+    - "hooks/**"
+    - "**/hooks/**"
+    - ".github/**"
+    - "**/.github/**"
+    - "templates/**"
+    - "**/templates/**"
 tags: []
 ---
 
@@ -44,6 +52,51 @@ Four consecutive Canon builds (2026-05-20 to 2026-06-09) each shipped a first in
 | PR #364 | ADR mechanism | `docs/adr/0001-adr-template-placement.md` — "first real ADR, dogfooded" |
 
 No counter-instance was found where a mechanism shipped without a first instance.
+
+## Examples
+
+**Good — loops artifact class shipped with a probe instance in the same PR:**
+
+```
+PR #350 introduces the loops mechanism (schema, registry, list_loops MCP tool).
+The same PR commits loops/_probe.md — a minimal real loop that passes through
+schema validation, registry loading, and the list_loops response path.
+Result: the schema→registry→runtime path is proven before merge.
+```
+
+**Bad — routines registry introduced without any registered routine:**
+
+```
+PR ships:
+  routines/.claude/CLAUDE.md    ← index template
+  mcp-server/src/features/routines/tools/list-routines.ts  ← registry tool
+  mcp-server/src/features/routines/tools/sync-routines.ts  ← sync tool
+
+No file under routines/ passes through the schema or registry loader.
+Result: the sync path has no end-to-end validation; the next build that
+creates a routine hits unknown failure modes first.
+```
+
+**Good — ADR mechanism produces its own first ADR:**
+
+```
+PR #364 ships docs/adr/adr-template-placement.md to establish the ADR
+mechanism, then immediately commits docs/adr/0001-adr-template-placement.md
+as the first real decision record, proving the template format and storage
+path before any other build tries to author an ADR.
+```
+
+**Bad — workflow gate introduced with empty gate registry:**
+
+```
+PR ships:
+  mcp-server/src/features/orchestration/tools/register-gates.ts
+  references/gate-vocabulary.md
+
+The gate registry is empty; no gate definition file is committed.
+Result: any build that tries to fire a gate encounters the real schema
+requirements for the first time under delivery pressure.
+```
 
 ## Anti-Rationalization
 
