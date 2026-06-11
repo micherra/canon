@@ -2,7 +2,11 @@ import { validateAndPersistCraftProfile } from "@features/pr-review/tools/store-
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ReportInput, ReviewEntry } from "@shared/schema.ts";
-import { type SignalWriter, updateFileViolationHistory } from "./write-review.ts";
+import {
+  type SignalWriter,
+  stripNonPersistableViolations,
+  updateFileViolationHistory,
+} from "./write-review.ts";
 
 export type ReportOutput = {
   recorded: boolean;
@@ -33,7 +37,17 @@ async function recordReview(
   store: DriftStore,
   signals: SignalWriter | undefined,
 ): Promise<ReportOutput> {
-  const violatedIds = new Set(review.violations.map((v) => v.principle_id));
+  // Strip correctness-scan from analytics paths only — NOT from the store.
+  // The store retains the full violations list so present_review can show
+  // all findings to humans. Analytics (updateFileViolationHistory, analyzer)
+  // exclude correctness-scan at their own boundaries.
+  const analyticsViolations = stripNonPersistableViolations(review.violations);
+
+  // Derive verdict from analytics-only violations so correctness-scan
+  // does not inflate the verdict (a correctness-scan-only review is CLEAN).
+  const derivedVerdict = review.verdict ?? deriveVerdict(analyticsViolations);
+
+  const violatedIds = new Set(analyticsViolations.map((v) => v.principle_id));
   const cleanHonored = review.honored.filter((id) => !violatedIds.has(id));
   const id = generateId("rev");
 
@@ -43,15 +57,16 @@ async function recordReview(
     review_id: id,
     score: review.score,
     timestamp: new Date().toISOString(),
-    verdict: review.verdict ?? deriveVerdict(review.violations),
-    violations: review.violations,
+    verdict: derivedVerdict,
+    violations: review.violations, // store the full list for presentation
   };
 
   await store.appendReview(entry);
 
-  // Persist path effects to signal tables (non-blocking)
+  // Persist path effects to signal tables (non-blocking).
+  // Pass analyticsViolations — correctness-scan excluded from principle-keyed stores.
   if (signals) {
-    updateFileViolationHistory(signals, review.files, review.violations, entry.verdict);
+    updateFileViolationHistory(signals, review.files, analyticsViolations, entry.verdict);
   }
 
   // Persist craft profile rows via shared helper (validate-at-trust-boundaries + persist).

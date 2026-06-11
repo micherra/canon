@@ -13,7 +13,6 @@ This bounded context owns Canon's orchestration runtime and every MCP tool the o
 - Flow definition types (`ResolvedFlow`, `StateDefinition`, etc.) — owned by `@domains/flows`
 - Workspace file I/O primitives — owned by `@domains/workspaces`
 - Knowledge graph querying — owned by `features/knowledge-graph`
-- Prompt pipeline and tool-profile resolution — owned by `features/prompt-pipeline`
 - Principle loading and matching — owned by `features/principles`
 
 ## Public interface

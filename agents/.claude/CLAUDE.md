@@ -60,7 +60,7 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
   - `primers:` — bare names resolving to `primers/<name>.md` (domain context).
   - `templates:` — bare names resolving to `templates/<name>.md` (required output shapes).
 
-  The Canon MCP tool `resolve_agent_skills` reads all four fields and returns the concatenated content; the lead injects it into the spawn prompt before calling `Agent`. The native `skills:` field is reserved for real Claude Code native skills (per-directory `SKILL.md` wrappers) and is untouched by Canon's resolver.
+  The Canon MCP tool `resolve_agent_skills` reads all four fields and returns the concatenated content; the lead injects it into the spawn prompt before calling `Agent`. The native `skills:` field is reserved for real Claude Code native skills (per-directory `SKILL.md` wrappers) and is untouched by Canon's resolver. `architect`, `learner`, and `tester` have `Skill` in their `tools:` allowlist (enabling `/deep-research` and `/verify` stock skill invocation); `"Skill"` is also granted in `.claude/settings.json` `permissions.allow`.
 - Agents log activity per `workspace-logging.md` protocol.
 - `engineer` has direct access to `mcp__canon__write_implementation_summary` for implementation summaries.
 - `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.

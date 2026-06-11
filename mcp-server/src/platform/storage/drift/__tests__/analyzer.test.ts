@@ -1,3 +1,4 @@
+import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "@shared/constants.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import { describe, expect, it } from "vitest";
 import { analyzeDrift } from "../analyzer.ts";
@@ -191,6 +192,76 @@ describe("analyzeDrift", () => {
     const report = analyzeDrift(reviews, ["p1", "p2"]);
     expect(report.violation_directories.length).toBeGreaterThan(0);
     expect(report.violation_directories[0].directory).toBe("src/routes");
+  });
+});
+
+describe("correctness-scan exclusion from analytics", () => {
+  it("excludes correctness-scan from most_violated even when stored in review", () => {
+    // Simulate a stored review that contains a correctness-scan violation (new behavior).
+    // The analyzer must not count it in most_violated.
+    const reviews = [
+      makeReview({
+        violations: [{ principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      }),
+    ];
+    const report = analyzeDrift(reviews, []);
+    const cs = report.most_violated.find((s) => s.principle_id === CORRECTNESS_SCAN_PRINCIPLE_ID);
+    expect(cs).toBeUndefined();
+    expect(report.most_violated).toHaveLength(0);
+  });
+
+  it("excludes correctness-scan from violation_directories", () => {
+    const reviews = [
+      makeReview({
+        files: ["src/routes/users.ts"],
+        violations: [{ principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      }),
+    ];
+    const report = analyzeDrift(reviews, []);
+    // No directories recorded because the only violation is correctness-scan
+    expect(report.violation_directories).toHaveLength(0);
+  });
+
+  it("counts real violations in most_violated but not correctness-scan when both stored", () => {
+    // Mixed stored review — real principle + correctness-scan.
+    // Only real principle should appear in analytics.
+    const reviews = [
+      makeReview({
+        files: ["src/routes/users.ts"],
+        violations: [
+          {
+            principle_id: "thin-handlers",
+            severity: "strong-opinion",
+            file_path: "src/routes/users.ts",
+          },
+          { principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" },
+        ],
+      }),
+    ];
+    const report = analyzeDrift(reviews, []);
+    const ids = report.most_violated.map((s) => s.principle_id);
+    expect(ids).toContain("thin-handlers");
+    expect(ids).not.toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
+    // violation_directories only counts thin-handlers
+    expect(report.violation_directories.length).toBeGreaterThan(0);
+    const totalViolations = report.violation_directories.reduce(
+      (sum, d) => sum + d.total_violations,
+      0,
+    );
+    expect(totalViolations).toBe(1); // only thin-handlers
+  });
+
+  it("correctness-scan does not inflate most_violated when many are present", () => {
+    // 5 reviews each with one correctness-scan violation.
+    // most_violated should remain empty (no real principles).
+    const reviews = Array.from({ length: 5 }, (_, i) =>
+      makeReview({
+        review_id: `rev_${i}`,
+        violations: [{ principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      }),
+    );
+    const report = analyzeDrift(reviews, []);
+    expect(report.most_violated).toHaveLength(0);
   });
 });
 
