@@ -117,6 +117,33 @@ function detectNakedVsQualified(entries: HeadingEntry[]): GlossaryConsistencyFin
   ];
 }
 
+/**
+ * Compute the de-duplicated line list for a naked-vs-qualified finding.
+ *
+ * Contract: always returns at least one naked AND one qualified representative so the
+ * cross-form collision is visible — even when every line is already covered by an
+ * exact-duplicate finding (both-sides-duplicate scenario).
+ *
+ * Normal case: return non-duplicate lines as-is (they already convey the collision).
+ * Both-sides-duplicate: all lines appear in dupLines → emit one fallback per side.
+ */
+function deduplicateNvqLines(
+  nvqLines: number[],
+  groupEntries: HeadingEntry[],
+  dupLines: Set<number>,
+): number[] {
+  const nonDupLines = nvqLines.filter((ln) => !dupLines.has(ln));
+  if (nonDupLines.length > 0) return nonDupLines;
+
+  // Both-sides-duplicate: add one fallback per form so the collision stays visible.
+  const result: number[] = [];
+  const nakedFallback = groupEntries.find((e) => e.qualifier === undefined)?.lineNumber;
+  const qualifiedFallback = groupEntries.find((e) => e.qualifier !== undefined)?.lineNumber;
+  if (nakedFallback !== undefined) result.push(nakedFallback);
+  if (qualifiedFallback !== undefined) result.push(qualifiedFallback);
+  return result;
+}
+
 // ---- Public API ----
 
 /**
@@ -144,19 +171,16 @@ export function checkGlossaryConsistency(file: {
   const findings: GlossaryConsistencyFinding[] = [];
 
   for (const [, groupEntries] of groups) {
-    // exact-duplicate: detect once and emit
     const dupFindings = detectExactDuplicates(groupEntries);
     findings.push(...dupFindings);
 
-    // naked-vs-qualified: always evaluate independently of exact-duplicate presence.
-    // Avoid literal double-reporting: if a line is already in an exact-duplicate finding,
-    // remove it from the naked-vs-qualified line list. Emit the finding only if at least
-    // one line remains (the qualified heading(s) are never exact-duplicates, so they
-    // survive the filter and preserve the collision signal).
+    // naked-vs-qualified is always evaluated independently of exact-duplicate presence.
+    // Lines already reported as exact-duplicates are suppressed from the nvq line list
+    // to avoid redundant re-listing — but at least one naked + one qualified line is
+    // always kept so the cross-form collision is never silently dropped.
     const dupLines = new Set(dupFindings.flatMap((f) => f.line_numbers));
-    const nvqFindings = detectNakedVsQualified(groupEntries);
-    for (const nvq of nvqFindings) {
-      const dedupedLines = nvq.line_numbers.filter((ln) => !dupLines.has(ln));
+    for (const nvq of detectNakedVsQualified(groupEntries)) {
+      const dedupedLines = deduplicateNvqLines(nvq.line_numbers, groupEntries, dupLines);
       if (dedupedLines.length > 0) {
         findings.push({ ...nvq, line_numbers: dedupedLines });
       }
