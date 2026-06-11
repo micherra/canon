@@ -848,15 +848,102 @@ canon_extract_command() {
 }
 
 # ---------------------------------------------------------------------------
+# canon_git_C_path <raw_segment>
+# ---------------------------------------------------------------------------
+# Extracts the path value from a git -C <path> global option in a raw git
+# command segment. Uses canon_tokenize so quoted paths with spaces are treated
+# as a single token. Prints the path on stdout; prints nothing when -C is
+# absent or its value cannot be determined.
+#
+# Handles:
+#   "git -C /some/path push origin HEAD"   → "/some/path"
+#   "git -C 'my dir' push origin HEAD"     → "my dir"
+#   "git push origin main"                 → ""  (no -C)
+#
+# Only the FIRST -C option is returned (git uses the last, but for safety
+# we surface the first and let the [[ -d ]] gate in callers validate it).
+canon_git_C_path() {
+  local segment="$1"
+
+  # Use canon_tokenize to split into tokens; walk the token stream looking for
+  # a standalone "git" token, then apply the same value-consuming rule as
+  # canon_git_subcommand: -C (without '=') consumes the next token as its value.
+  local tokens
+  tokens=$(canon_tokenize "$segment")
+
+  local -a tok_arr
+  local tok_count=0
+  while IFS= read -r t; do
+    tok_arr[tok_count]="$t"
+    tok_count=$(( tok_count + 1 ))
+  done <<< "$tokens"
+
+  # Find the first standalone "git" token.
+  local git_idx=-1
+  local i
+  for (( i=0; i<tok_count; i++ )); do
+    if [[ "${tok_arr[$i]}" == "git" ]]; then
+      git_idx=$i
+      break
+    fi
+  done
+  if [[ $git_idx -lt 0 ]]; then return 0; fi
+
+  # Walk tokens after "git"; the same value-consuming global list as
+  # canon_git_subcommand applies. Stop at the subcommand (first bare token).
+  local expect_value=0
+  local expect_C_value=0
+  for (( i=git_idx+1; i<tok_count; i++ )); do
+    local tok="${tok_arr[$i]}"
+
+    if [[ "$expect_C_value" -eq 1 ]]; then
+      # This token is the -C path value; print and return.
+      printf '%s' "$tok"
+      return 0
+    fi
+
+    if [[ "$expect_value" -eq 1 ]]; then
+      # Value for some other consuming global; skip.
+      expect_value=0
+      continue
+    fi
+
+    if [[ "$tok" == -* ]]; then
+      if [[ "$tok" == *=* ]]; then
+        : # self-contained (e.g. --git-dir=/x), skip flag only
+      else
+        case "$tok" in
+          -C)
+            expect_C_value=1
+            ;;
+          -c|--git-dir|--work-tree|--namespace|--exec-path|--super-prefix)
+            expect_value=1
+            ;;
+          *)
+            : # unknown or self-contained global, skip flag only
+            ;;
+        esac
+      fi
+      continue
+    fi
+
+    # First bare non-'-' token is the subcommand — no -C before it.
+    break
+  done
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # canon_git_dir_arg <command>
 # ---------------------------------------------------------------------------
-# Detects a leading "cd <dir> &&" prefix in a shell command and, when the
-# extracted directory exists on disk, prints "-C <dir>" so git commands can
-# be scoped to that directory.
+# Detects a leading "cd <dir> &&" prefix OR a "git -C <dir> ..." inline form
+# in a shell command and, when the extracted directory exists on disk, prints
+# "-C <dir>" so git commands can be scoped to that directory.
 #
 # Handles:
 #   "cd /some/path && git commit -m msg"   → "-C /some/path"
 #   "  cd ./relative && git commit"        → "-C ./relative"  (if dir exists)
+#   "git -C /some/path push origin HEAD"   → "-C /some/path"  (if dir exists)
 #   "git commit -m msg"                    → ""
 #   "cd /nonexistent && git commit"        → ""
 #
@@ -884,6 +971,15 @@ canon_git_dir_arg() {
 
   if [[ -n "$cd_target" ]] && [[ -d "$cd_target" ]]; then
     printf '%s' "-C $cd_target"
+    return
+  fi
+
+  # Also check for a "git -C <path> ..." inline form (separate token, not =form).
+  # This handles "git -C /other/repo push origin HEAD" where there is no leading cd.
+  local c_path
+  c_path=$(canon_git_C_path "$command" || true) # DOCUMENTED FAIL-OPEN -- absent -C is the normal case
+  if [[ -n "$c_path" ]] && [[ -d "$c_path" ]]; then
+    printf '%s' "-C $c_path"
   fi
 }
 

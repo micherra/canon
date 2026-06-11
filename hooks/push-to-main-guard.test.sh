@@ -539,7 +539,10 @@ echo "-- Finding A (P1): HEAD refspec resolves to current branch --"
 # git push origin HEAD from main — HEAD resolves to main → BLOCK
 TMPDIR_HEAD_MAIN=$(mktemp -d)
 setup_repo "$TMPDIR_HEAD_MAIN"
-# main branch already checked out in setup_repo
+# Explicitly rename to 'main' — git-init may default to 'master' in CI when
+# init.defaultBranch is not configured. This makes the test deterministic
+# regardless of host git configuration.
+git -C "$TMPDIR_HEAD_MAIN" branch -m main
 run_test "git push origin HEAD from main (HEAD=main → block)" \
   2 "$(make_input 'git push origin HEAD')" "$TMPDIR_HEAD_MAIN"
 
@@ -570,7 +573,10 @@ echo "-- Finding B (P1): --recurse-submodules value-consuming option --"
 # Separate form from main: 'check' consumed as value, 'origin' is remote, bare push → BLOCK
 TMPDIR_RS_MAIN=$(mktemp -d)
 setup_repo "$TMPDIR_RS_MAIN"
-# main branch checked out by default in setup_repo
+# Explicitly rename to 'main' — git-init may default to 'master' in CI when
+# init.defaultBranch is not configured. This makes the test deterministic
+# regardless of host git configuration.
+git -C "$TMPDIR_RS_MAIN" branch -m main
 run_test "git push --recurse-submodules check origin from main (separate form → block)" \
   2 "$(make_input 'git push --recurse-submodules check origin')" "$TMPDIR_RS_MAIN"
 rm -rf "$TMPDIR_RS_MAIN"
@@ -578,6 +584,58 @@ rm -rf "$TMPDIR_RS_MAIN"
 # Equals form with non-main refspec: 'on-demand' is part of the option, 'feature-x' = refspec → ALLOW
 run_test "git push --recurse-submodules=on-demand origin feature-x (equals form, non-main → allow)" \
   0 "$(make_input 'git push --recurse-submodules=on-demand origin feature-x')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# Finding B (P1): git -C <path> HEAD resolution uses the correct repo
+# 'git -C <other-repo> push origin HEAD' must resolve HEAD in <other-repo>,
+# not in the hook's cwd. Without the fix, HEAD is resolved in the cwd
+# (CANON_GUARD_CWD), so a push to main from a different-directory main repo
+# could slip through if the cwd happens to be on a feature branch.
+# With the fix: canon_git_C_path extracts the -C path; HEAD resolves there.
+# ---------------------------------------------------------------------------
+echo "-- Finding B (P1, new): git -C <path> resolves HEAD in the correct repo --"
+
+# git -C <main-repo> push origin HEAD — HEAD in <main-repo> is main → BLOCK
+TMPDIR_C_MAIN=$(mktemp -d)
+setup_repo "$TMPDIR_C_MAIN"
+git -C "$TMPDIR_C_MAIN" branch -m main
+
+# Feature-branch repo that owns CANON_GUARD_CWD — hook cwd is on a feature branch.
+TMPDIR_C_FEATURE=$(mktemp -d)
+setup_repo "$TMPDIR_C_FEATURE"
+git -C "$TMPDIR_C_FEATURE" branch -m main
+git -C "$TMPDIR_C_FEATURE" checkout -q -b canon/feature
+
+# The command targets TMPDIR_C_MAIN (on main) via -C; CANON_GUARD_CWD is TMPDIR_C_FEATURE
+# (on canon/feature). The hook must look at the -C target, not the cwd.
+echo '{"command":"'"git -C $TMPDIR_C_MAIN push origin HEAD"'"}' \
+  | CANON_GUARD_CWD="$TMPDIR_C_FEATURE" bash "$HOOK" >/dev/null 2>&1 && _exit_C_main=0 || _exit_C_main=$?
+if [[ "$_exit_C_main" -eq 2 ]]; then
+  echo "  PASS: git -C <main-repo> push origin HEAD blocks (HEAD=main in target repo)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: git -C <main-repo> push origin HEAD should block, got exit=$_exit_C_main"
+  FAIL=$((FAIL + 1))
+fi
+
+# git -C <feature-repo> push origin HEAD — HEAD in <feature-repo> is canon/feature → ALLOW
+# CANON_GUARD_CWD is a main-branch repo (would block without -C support).
+TMPDIR_C_CWD_MAIN=$(mktemp -d)
+setup_repo "$TMPDIR_C_CWD_MAIN"
+git -C "$TMPDIR_C_CWD_MAIN" branch -m main
+
+echo '{"command":"'"git -C $TMPDIR_C_FEATURE push origin HEAD"'"}' \
+  | CANON_GUARD_CWD="$TMPDIR_C_CWD_MAIN" bash "$HOOK" >/dev/null 2>&1 && _exit_C_feat=0 || _exit_C_feat=$?
+if [[ "$_exit_C_feat" -eq 0 ]]; then
+  echo "  PASS: git -C <feature-repo> push origin HEAD allows (HEAD=canon/feature in target repo)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: git -C <feature-repo> push origin HEAD should allow, got exit=$_exit_C_feat"
+  FAIL=$((FAIL + 1))
+fi
+
+rm -rf "$TMPDIR_C_MAIN" "$TMPDIR_C_FEATURE" "$TMPDIR_C_CWD_MAIN"
 
 echo ""
 # ---------------------------------------------------------------------------

@@ -122,11 +122,12 @@ git_subcommand_args() {
 resolve_protected_branch() {
   local raw_segment="$1"
   local git_dir_arg
-  # When CANON_GUARD_CWD is set, run git in that directory (matches bare_push_is_safe)
-  if [[ -n "${CANON_GUARD_CWD:-}" ]]; then
+  # Resolution order (Finding B): (1) git -C <path> in the command — the command
+  # explicitly names the target repo; (2) CANON_GUARD_CWD (test/env override);
+  # (3) leading "cd <dir> &&" prefix; (4) empty (use hook's cwd).
+  git_dir_arg=$(canon_git_dir_arg "$raw_segment")
+  if [[ -z "$git_dir_arg" ]] && [[ -n "${CANON_GUARD_CWD:-}" ]]; then
     git_dir_arg="-C $CANON_GUARD_CWD"
-  else
-    git_dir_arg=$(canon_git_dir_arg "$raw_segment")
   fi
   local ref
   # shellcheck disable=SC2086
@@ -203,12 +204,11 @@ bare_push_is_safe() {
   local protected="$2"
   local remote="${3:-origin}"
   local git_dir_arg
-  # When CANON_GUARD_CWD is set, run git in that directory (same scoping as
-  # resolve_protected_branch — F3: single-source git-dir scoping)
-  if [[ -n "${CANON_GUARD_CWD:-}" ]]; then
+  # Resolution order (Finding B): (1) git -C <path> in the command; (2) CANON_GUARD_CWD;
+  # (3) leading "cd <dir> &&" prefix; (4) empty (use hook's cwd).
+  git_dir_arg=$(canon_git_dir_arg "$raw_segment")
+  if [[ -z "$git_dir_arg" ]] && [[ -n "${CANON_GUARD_CWD:-}" ]]; then
     git_dir_arg="-C $CANON_GUARD_CWD"
-  else
-    git_dir_arg=$(canon_git_dir_arg "$raw_segment")
   fi
   local cur pd
   # shellcheck disable=SC2086
@@ -454,10 +454,12 @@ push_updates_protected_branch() {
     if [[ "$dst" == "HEAD" ]]; then
       local _head_branch
       local _git_dir_arg
-      if [[ -n "${CANON_GUARD_CWD:-}" ]]; then
+      # Resolution order (Finding B): (1) git -C <path> in the command — the command
+      # explicitly targets that repo; (2) CANON_GUARD_CWD (test/env override);
+      # (3) leading "cd <dir> &&" prefix; (4) empty (hook's cwd).
+      _git_dir_arg=$(canon_git_dir_arg "$raw_segment")
+      if [[ -z "$_git_dir_arg" ]] && [[ -n "${CANON_GUARD_CWD:-}" ]]; then
         _git_dir_arg="-C $CANON_GUARD_CWD"
-      else
-        _git_dir_arg=$(canon_git_dir_arg "$raw_segment")
       fi
       # shellcheck disable=SC2086
       _head_branch=$(git $_git_dir_arg symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty on detached HEAD → fail-closed below
