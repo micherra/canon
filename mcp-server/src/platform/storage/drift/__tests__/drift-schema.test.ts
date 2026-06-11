@@ -1,14 +1,17 @@
 /**
  * drift-schema.ts migration runner tests
  *
- * Tests the v2 migration runner ported from execution-schema.ts pattern.
+ * Tests the migration runner ported from execution-schema.ts pattern.
  * Uses in-memory SQLite (:memory:) for speed and isolation.
  *
  * Test plan:
- * - Fresh DB has schema version 2 with decisions table and flow_runs.commits column
- * - Existing v1 DB (simulated) migrates to v2
+ * - Fresh DB has schema version 11 with decisions table and flow_runs.commits column
+ * - Existing v1 DB (simulated) migrates through v2
  * - Migration is idempotent — running twice does not error
  * - columnExists returns true/false correctly for existing/missing columns
+ *
+ * v10 (cliff_events) and v11 (violation lifecycle) migration tests are in
+ * drift-schema-migrations-v10-v11.test.ts to keep this file within the 600-line limit.
  */
 
 import Database from "better-sqlite3";
@@ -163,19 +166,19 @@ describe("columnExists", () => {
   });
 });
 
-// Fresh DB — schema version 2
+// Fresh DB — schema version 11
 
 describe("initDriftDb — fresh database", () => {
-  test("DRIFT_SCHEMA_VERSION is '9'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("10");
+  test("DRIFT_SCHEMA_VERSION is '11'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("11");
   });
 
-  test("meta table has schema_version = '9' after init", () => {
+  test("meta table has schema_version = '11' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 
@@ -257,13 +260,13 @@ describe("runDriftMigrations — v1 to v2 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v1 DB to current version: updates schema_version to '9'", () => {
+  test("migrates a v1 DB to current version: updates schema_version to '11'", () => {
     const db = createV1Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 
@@ -341,16 +344,16 @@ describe("runDriftMigrations — idempotency", () => {
 // v4 migration — file_violation_history and path_effects tables
 
 describe("initDriftDb — fresh database v4 tables", () => {
-  test("DRIFT_SCHEMA_VERSION is '9'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("10");
+  test("DRIFT_SCHEMA_VERSION is '11'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("11");
   });
 
-  test("fresh DB has schema_version = '9' after init", () => {
+  test("fresh DB has schema_version = '11' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 
@@ -433,13 +436,13 @@ describe("runDriftMigrations — v3 to v4 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v3 DB to current version: updates schema_version to '9'", () => {
+  test("migrates a v3 DB to current version: updates schema_version to '11'", () => {
     const db = createV3Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 });

@@ -1317,6 +1317,42 @@ run_test "bash -c \"git log --oneline\" passes (safe inner with flag)" \
   0 "$(make_multiline_input 'bash -c "git log --oneline"')" "$NON_WT_PWD"
 
 # -----------------------------------------------------------------------
+# scanner-avoids-its-own-pattern regression: the actual recurring trigger.
+#
+# The single-quoted form 'bash -c' collapses to one token in the tokenizer
+# and passes (exit 0).  The backslash-bearing alternation form inside a
+# double-quoted span leaves a backslash artifact the tokenizer cannot decode —
+# the guard fails closed (exit 2).  This is correct behavior per hooks-fail-
+# closed; authors must use the indirect-variable or character-class form.
+# -----------------------------------------------------------------------
+echo ""
+echo "-- scanner-avoids-its-own-pattern: verification grep shapes (see convention) --"
+
+# Single-quoted single-token verification grep — must PASS (exit 0).
+# The tokenizer collapses 'bash -c' into one token ≠ bare "bash" command token.
+# fixture: intentional guard-behavior pin for single-quoted verification grep
+run_test "grep 'bash -c' file.sh passes (single-quoted single-token, not self-blocking)" \
+  0 '{"command":"grep '"'"'bash -c'"'"' hooks/destructive-guard.sh"}'
+
+# Token-split "Good — compliant" form from the convention — must PASS (exit 0).
+# W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh — contiguous literal assembled at
+# runtime, absent from source text. This is the genuinely compliant form per the
+# scanner-avoids-its-own-pattern convention (assigning the FULL literal to a single
+# variable like PAT='bash -c' does NOT satisfy the rule).
+# Empirically verified exit 0 (2026-06-10).
+# fixture: intentional guard-behavior pin for token-split compliant example
+run_test "W1='ba'; W2='sh'; grep token-split form passes (contiguous literal absent from source)" \
+  0 '{"command":"W1='"'"'ba'"'"'; W2='"'"'sh'"'"'; grep -n \"${W1}${W2} -c\" hooks/destructive-guard.sh"}'
+
+# Double-quoted backslash-alternation form — fail-closed (exit 2).
+# The \| inside the double-quoted span is a backslash artifact the tokenizer
+# cannot decode → the guard fails closed (correct behavior per hooks-fail-closed).
+# fixture: intentional fail-closed pin for backslash-alternation in double-quoted span
+_GREP_ALT_CMD='grep -n "bash -c\|sh -c" hooks/destructive-guard.sh'
+run_test 'grep -n "bash -c\|sh -c" file.sh blocks (backslash-alternation, fail-closed)' \
+  2 "$(make_multiline_input "$_GREP_ALT_CMD")" "$NON_WT_PWD"
+
+# -----------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------
 echo ""

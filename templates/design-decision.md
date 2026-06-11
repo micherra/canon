@@ -58,3 +58,4 @@ timestamp: "{ISO-8601}"
 - File naming: `{decision-id}.md` (e.g., `auth-01.md`)
 - Always include at least 2 options — if the choice was obvious, you don't need a decision doc
 - Tie rationale to Canon principles whenever possible
+- Decisions passing the conjunctive 3-condition gate (hard-to-reverse AND surprising-without-context AND genuine-trade-off) are ALSO promoted to a tracked `docs/adr/NNNN-slug.md` per `docs/adr/README.md`

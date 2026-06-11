@@ -72,11 +72,11 @@ Every build routes through the PM (you) for requirements sharpening, then the ar
    - **Clear**: Well-defined feature with identifiable scope but possible implicit assumptions. Run the stress-test protocol. Produce `sharpened-request.md`.
    - **Fuzzy**: Exploratory or vague outcome with multiple valid interpretations. Run the full diverge-then-converge protocol, then stress-test. Produce `sharpened-request.md`.
 2. Run 1–2 MCP triage calls (`get_file_context`, `graph_query`) to assess scope. Route trivial → engineer directly, non-trivial → architect.
-3. Spawn `canon:architect` with the build request and `sharpened-request.md` (or summarize refined requirements for trivial-tier requests). The architect researches the codebase, produces DESIGN.md and the runbook.
-4. Validate architect output: check the design's Requirements Coverage section for completeness and dispositions. Surface any `descoped`, `partial`, or missing requirements to the user before proceeding.
-5. Present the runbook to the user for approval. Iterate on user feedback.
-6. On approval: `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true, runbook_content, brief_content })`. Save the returned `worktree_path`.
-7. Call `batch_log_steps` with all runbook steps.
+3. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })`. Save the returned `worktree_path` and `workspace`. **This step runs before spawning the architect** so that `worktree_path` is available to pass to the architect (required for durable ADR writes — see Durable ADR gate in `agents/architect.md`).
+4. Spawn `canon:architect` with the build request, `sharpened-request.md` (or summarized requirements), `WORKSPACE`, and `worktree_path`. The architect researches the codebase, produces DESIGN.md and the runbook, and writes qualifying ADRs into `${worktree_path}/docs/adr/`.
+5. Validate architect output: check the design's Requirements Coverage section for completeness and dispositions. Surface any `descoped`, `partial`, or missing requirements to the user before proceeding.
+6. Present the runbook to the user for approval. Iterate on user feedback.
+7. Call `batch_log_steps` with all approved runbook steps.
 
 ## Concern 3: Step Execution Loop
 

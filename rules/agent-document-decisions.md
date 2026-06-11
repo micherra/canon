@@ -1,69 +1,63 @@
 ---
 id: agent-document-decisions
-title: Promote Significant Workspace Decisions to Project ADRs
+title: Two-Tier Decision Record System
 severity: rule
 scope:
   layers: []
 tags:
   - agent-behavior
-  - scribe
+  - architect
 ---
 
-When the scribe finds design decisions in `${WORKSPACE}/decisions/` (written by the architect using the `design-decision` template), it evaluates each decision for significance and promotes qualifying decisions to project-level ADRs in `docs/decisions/`.
+When the architect records a design decision, it uses a two-tier model:
+
+1. **Ephemeral record** (`${WORKSPACE}/decisions/{id}.md`) — always written for every non-trivial decision. Used by engineers in-build via the plan's `decisions:` frontmatter link. Discarded after the build completes.
+
+2. **Durable ADR** (`docs/adr/NNNN-slug.md`) — written ONLY when ALL THREE conditions hold (conjunctive gate):
+   - **(a) Hard-to-reverse** — undoing the decision requires significant rework or breaking changes.
+   - **(b) Surprising-without-context** — a future contributor would not naturally understand why this approach was chosen.
+   - **(c) Genuine trade-off** — at least two options were considered and the chosen option has real costs.
+
+   **All three, or no ADR.** Failing any one condition → ephemeral record only, no ADR.
 
 ## Rationale
 
-Workspace decisions are ephemeral — they live inside a per-flow workspace directory and are invisible to future contributors. Decisions that affect public API contracts, architectural patterns, or cross-cutting concerns carry forward implications: future agents and engineers need to know what was decided and why. Leaving significant decisions buried in workspace artifacts causes the same problem they were meant to solve.
+Workspace decisions are ephemeral by design — they are scoped to a single build and consumed by engineers mid-build. But decisions that are hard-to-reverse, non-obvious, and genuinely costly need a permanent home that future contributors can find.
 
-Insignificant decisions — internal naming choices, local implementation details, test structure — do not need promotion. Persisting them would pollute the ADR record with noise and make it harder to find the decisions that actually matter.
+The three-condition gate is conjunctive to keep the ADR record signal-rich. An ADR for every decision would dilute the record with noise; an ADR only for "important" decisions (without specific criteria) leads to inconsistent promotion. The three conditions together identify decisions where future contributors need the "why" the most.
+
+The architect — not the scribe — is the right author for durable ADRs. The architect holds the full design context (research findings, alternatives considered, tradeoff reasoning) at decision time. The scribe runs post-build with only the diff and summaries; it cannot reliably reconstruct the "why" that makes an ADR valuable.
 
 ## Examples
 
-**Bad — scribe skips promotion because "the decision is already documented":**
+**Bad — architect skips the durable record for a hard-to-reverse decision:**
 
-The workspace `decisions/` directory contains `decision-001.md` recording that the public `OrderService` API was changed from throwing exceptions to returning `Result<T, E>` types. The scribe completes its CLAUDE.md updates and closes without promoting the decision.
+The architect decides to use a single shared SQLite database for all workspace state instead of per-workspace files. This is hard-to-reverse (all downstream tools depend on the schema), surprising (most projects use per-entity files), and genuinely costly (concurrency complexity). The architect writes only an ephemeral `${WORKSPACE}/decisions/db-choice.md`.
 
-Result: the next engineer working on a downstream service has no idea the API contract changed semantics and writes error-handling code that expects thrown exceptions.
+Result: a future engineer refactoring the storage layer doesn't understand why SQLite was chosen, makes a wrong assumption about per-entity files, and creates a breaking change.
 
-**Good — scribe evaluates significance and promotes:**
+**Good — architect evaluates the three conditions and writes both records:**
 
-The scribe reads `decisions/decision-001.md` and classifies it as significant (affects public API contract). It writes `docs/decisions/0042-order-service-result-types.md` with:
-- The original decision content copied verbatim
-- An added `Status: Accepted` field
-- An added `Flow: feature-order-service` provenance line
+Same decision. The architect evaluates: hard-to-reverse? Yes. Surprising-without-context? Yes. Genuine trade-off? Yes (file-per-entity was the alternative, with lower concurrency risk but higher query complexity). All three → architect writes BOTH the ephemeral `${WORKSPACE}/decisions/db-choice.md` AND `docs/adr/0007-shared-sqlite-workspace-state.md`.
 
-The scribe does not rewrite, editorialize, or summarize — it promotes verbatim with metadata.
+**Bad — architect writes an ADR for a routine choice:**
 
-## Significance Criteria
+The architect chooses to name a helper function `computeScore` instead of `calculateScore`. It writes this as an ADR.
 
-**Promote** (significant) — decisions affecting:
-- Public API contracts: function signatures, return types, error semantics
-- Architectural patterns: module boundaries, data flow, layer responsibilities
-- Cross-cutting concerns: authentication, error handling strategies, logging conventions, dependency choices
+Result: the ADR record is polluted with trivial decisions; contributors stop trusting the ADR record as a signal of consequential choices.
 
-**Do not promote** (insignificant) — decisions about:
-- Internal naming: variable names, private function names, local constants
-- Local implementation choices: algorithm selection for a single function, internal data structures
-- Test structure: test file organization, fixture naming, test helper design
+**Good — architect skips the ADR for a routine choice:**
 
-When in doubt, err toward promotion. A spurious ADR is less harmful than a missing one.
+Same naming decision. Hard-to-reverse? No (trivial rename). The architect records it in the ephemeral `${WORKSPACE}/decisions/` record only (if at all), and moves on.
 
-## Output Format
+## Negative Scope
 
-Promoted ADRs are written to `docs/decisions/NNNN-{slug}.md` where `NNNN` is auto-incremented from the highest existing number in `docs/decisions/`. The slug is derived from the workspace decision filename or title.
+This rule applies only to the architect. The scribe does NOT promote workspace decisions to durable ADRs — the scribe lacks the design context to evaluate the three conditions reliably, and the architect already writes qualifying ADRs during the design phase.
 
-The scribe adds three metadata lines at the top of the promoted file:
-
-```markdown
-Status: Accepted
-Flow: {flow-slug}
-Promoted-From: ${WORKSPACE}/decisions/{filename}
-```
-
-Everything else is the workspace decision content, copied verbatim. The scribe does NOT rewrite, summarize, or editorialize.
+Non-qualifying decisions (those failing any of the three conditions) stay ephemeral-only in `${WORKSPACE}/decisions/`. They are consumed by engineers during the build and are not promoted anywhere.
 
 ## Exceptions
 
-If `docs/decisions/` does not exist in the project, the scribe skips promotion and notes in the CONTEXT-SYNC.md report: "No docs/decisions/ directory found — workspace decisions not promoted. Create docs/decisions/ to enable ADR promotion."
+If `worktree_path` is absent from the architect's spawn context, skip the durable ADR write and note it in the design document's `ASSUMPTIONS:` block. Do NOT fall back to a relative path.
 
-If the workspace contains no `decisions/` directory or the directory is empty, skip this step silently.
+If no decision in the current build passes the three-condition gate, no ADR is written. `docs/adr/` is populated lazily — only when qualifying decisions exist.

@@ -375,8 +375,13 @@ import { bashConfig, javaConfig } from "./kg-language-configs-scripting.ts";
 // Config registry
 
 /**
- * All language configs keyed by language ID.
+ * All built-in language configs keyed by language ID.
  * Used by the generic walker to look up configs by language.
+ *
+ * NOTE: overlay configs are merged into this map at runtime by
+ * `mergeOverlayIntoConfigs()` (called from kg-wasm-parser.ts `initParsers`).
+ * Built-ins always win on id collision — an overlay entry with a built-in id
+ * is rejected before this point.
  */
 export const LANGUAGE_CONFIGS: Map<string, LanguageConfig> = new Map([
   ["typescript", typescriptConfig],
@@ -388,7 +393,7 @@ export const LANGUAGE_CONFIGS: Map<string, LanguageConfig> = new Map([
 
 /**
  * Extension-to-config lookup map, built from all registered language configs.
- * Resolves at module load time for O(1) lookups at parse time.
+ * Rebuilt by `mergeOverlayIntoConfigs` after overlay entries are added.
  */
 const EXT_TO_CONFIG: Map<string, LanguageConfig> = new Map();
 for (const config of LANGUAGE_CONFIGS.values()) {
@@ -405,4 +410,33 @@ for (const config of LANGUAGE_CONFIGS.values()) {
  */
 export function getConfigForExtension(ext: string): LanguageConfig | undefined {
   return EXT_TO_CONFIG.get(ext);
+}
+
+/**
+ * Merge overlay LanguageConfig entries into the shared LANGUAGE_CONFIGS map
+ * and rebuild EXT_TO_CONFIG to include overlay extensions.
+ *
+ * Built-in ids win on collision — this function is a no-op for any overlay
+ * entry whose id is already present (the overlay loader already rejects
+ * collisions, but this is a belt-and-suspenders guard).
+ *
+ * Called from `initParsers(projectDir)` in kg-wasm-parser.ts after overlay
+ * grammars are loaded successfully. Heavy logic stays in kg-language-overlay.ts.
+ *
+ * @param overlayConfigs - Validated overlay LanguageConfig entries to merge
+ */
+export function mergeOverlayIntoConfigs(overlayConfigs: LanguageConfig[]): void {
+  for (const config of overlayConfigs) {
+    // Belt-and-suspenders: built-in id wins (overlay loader already rejects these)
+    if (!LANGUAGE_CONFIGS.has(config.id)) {
+      LANGUAGE_CONFIGS.set(config.id, config);
+    }
+  }
+  // Rebuild EXT_TO_CONFIG to include overlay extensions
+  EXT_TO_CONFIG.clear();
+  for (const config of LANGUAGE_CONFIGS.values()) {
+    for (const ext of config.extensions) {
+      EXT_TO_CONFIG.set(ext, config);
+    }
+  }
 }

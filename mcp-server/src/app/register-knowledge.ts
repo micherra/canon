@@ -1,6 +1,7 @@
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
+import { type SyncIndexesInput, syncIndexes } from "@features/diagnostics/tools/sync-indexes.ts";
 import { wikiLint } from "@features/diagnostics/tools/wiki-lint.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
 import { ensureGraphFresh } from "@features/knowledge-graph/ensure-graph-fresh.ts";
@@ -150,28 +151,51 @@ function registerDiagnosticsTools(server: McpServer): void {
   );
 }
 
+function registerSyncIndexesTool(server: McpServer): void {
+  server.registerTool(
+    "sync_indexes",
+    {
+      description:
+        "Regenerate the sentinel-delimited inventory block of one or all sibling artifact-class indexes (rules, principles, agents, templates, references), preserving prose outside the markers.",
+      inputSchema: {
+        class: z
+          .enum(["rules", "principles", "agents", "templates", "references"])
+          .optional()
+          .describe(
+            "Artifact class to sync (default: all 5). Options: rules, principles, agents, templates, references",
+          ),
+      },
+    },
+    gatedWrapHandler(async (input: SyncIndexesInput, extra) =>
+      syncIndexes(input, resolveScope(extra)),
+    ),
+  );
+}
+
 function registerWikiLintTool(server: McpServer): void {
   server.registerTool(
     "wiki_lint",
     {
       description:
-        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, and invalid scope.tags values outside the KG computed-tag vocabulary.",
+        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, invalid scope.tags values outside the KG computed-tag vocabulary, glossary self-consistency (duplicate or ambiguous CONTEXT.md terms), and index_drift (inventory block mismatch or missing sentinel markers in sibling artifact-class indexes).",
       inputSchema: {
         checks: z
           .array(
             z.enum([
-              "contradictions",
-              "orphan_principles",
-              "stale_refs",
-              "missing_examples",
               "cited_paths",
+              "contradictions",
+              "glossary_consistency",
+              "missing_examples",
+              "orphan_principles",
               "scope_layers",
               "scope_tags",
+              "index_drift",
+              "stale_refs",
             ]),
           )
           .optional()
           .describe(
-            "Checks to run (default: all 7). Options: contradictions, orphan_principles, stale_refs, missing_examples, cited_paths, scope_layers, scope_tags",
+            "Checks to run (default: 8 checks excluding index_drift — pass ['index_drift'] explicitly to run it). Options: cited_paths, contradictions, glossary_consistency, index_drift, missing_examples, orphan_principles, scope_layers, scope_tags, stale_refs",
           ),
       },
     },
@@ -332,6 +356,7 @@ export function registerKnowledgeTools(server: McpServer): void {
   registerGraphUiTools(server);
   registerDiagnosticsTools(server);
   registerWikiLintTool(server);
+  registerSyncIndexesTool(server);
   registerGraphQueryTool(server);
   registerSemanticSearchTool(server);
   registerGraphJobTools(server);

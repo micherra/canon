@@ -58,20 +58,20 @@ function _createV5Db(): ReturnType<typeof initDriftDb> {
 // ---- DRIFT_SCHEMA_VERSION ----
 
 describe("DRIFT_SCHEMA_VERSION", () => {
-  test("is '9' after v9 migration added", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("10");
+  test("is '11' after v11 migration added", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("11");
   });
 });
 
 // ---- v6 migration — fresh database ----
 
 describe("initDriftDb — v6 fresh database", () => {
-  test("meta table has schema_version = '9' after init", () => {
+  test("meta table has schema_version = '10' after init", () => {
     const { db } = makeSignalsDb();
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 
@@ -171,7 +171,7 @@ describe("runDriftMigrations — v5 to v6 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v5 DB to v6: updates schema_version to '9'", () => {
+  test("migrates a v5 DB to current version: updates schema_version to '10'", () => {
     const db = initDriftDb(":memory:");
     db.exec(`DROP TABLE IF EXISTS error_fixes`);
     db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
@@ -181,7 +181,7 @@ describe("runDriftMigrations — v5 to v6 upgrade", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("10");
+    expect(row.value).toBe("11");
     db.close();
   });
 });

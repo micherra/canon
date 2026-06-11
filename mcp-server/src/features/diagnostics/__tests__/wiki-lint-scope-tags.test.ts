@@ -152,15 +152,17 @@ describe("assembleWikiLintOutput with scope_tags", () => {
         "Principle 'bad-tag' declares scope.tags outside the KG computed-tag vocabulary: design.",
     };
     const output = assembleWikiLintOutput({
-      contradictions: [],
-      orphans: [],
-      staleRefs: [],
-      missingExamples: [],
       citedPaths: [],
+      contradictions: [],
+      filesScanned: 1,
+      glossaryConsistency: [],
+      missingExamples: [],
+      orphans: [],
+      principlesChecked: 1,
       scopeLayers: [],
       scopeTags: [scopeTagFinding],
-      filesScanned: 1,
-      principlesChecked: 1,
+      indexDrift: [],
+      staleRefs: [],
     });
 
     expect(output).toHaveProperty("scope_tags");
@@ -171,15 +173,17 @@ describe("assembleWikiLintOutput with scope_tags", () => {
 
   it("assembleWikiLintOutput: zero scope_tags does not affect total_findings", () => {
     const output = assembleWikiLintOutput({
-      contradictions: [],
-      orphans: [],
-      staleRefs: [],
-      missingExamples: [],
       citedPaths: [],
+      contradictions: [],
+      filesScanned: 0,
+      glossaryConsistency: [],
+      missingExamples: [],
+      orphans: [],
+      principlesChecked: 0,
       scopeLayers: [],
       scopeTags: [],
-      filesScanned: 0,
-      principlesChecked: 0,
+      indexDrift: [],
+      staleRefs: [],
     });
 
     expect(output.scope_tags).toHaveLength(0);

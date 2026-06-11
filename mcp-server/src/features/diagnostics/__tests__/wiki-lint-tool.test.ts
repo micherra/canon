@@ -414,7 +414,7 @@ const x = 1;
     expect(result.scope_layers[0].invalid_layers).toEqual(["bogus"]);
   });
 
-  it("clean codebase: no findings when everything is valid", async () => {
+  it("clean codebase: default run (no checks filter) is CLEAN on a minimal project without managed indexes", async () => {
     const tmp = makeTmpDir("clean");
 
     // One principle with examples
@@ -434,12 +434,16 @@ const x = 1;
       "utf8",
     );
 
+    // Default run — index_drift is NOT in the default check set, so the absence of
+    // sentinel-delimited indexes does NOT produce MISSING_MARKERS findings.
+    // (Dedicated index_drift default/explicit tests live in wiki-lint-index-drift.test.ts.)
     const result = await wikiLint({}, tmp, tmp);
 
     expect(result.contradictions).toEqual([]);
     expect(result.orphan_principles).toEqual([]);
     expect(result.stale_refs).toEqual([]);
     expect(result.missing_examples).toEqual([]);
+    expect(result.index_drift).toEqual([]);
     expect(result.summary.total_findings).toBe(0);
   });
 });

@@ -25,9 +25,28 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 | `tester` | Writes integration tests; fills coverage gaps | sonnet |
 | `writer` | Creates and edits Canon principles and agent-rules | sonnet |
 
+## Artifact Inventory
+<!-- canon:inventory:start class=agents -->
+| artifact | summary |
+|---|---|
+| architect.md | Technical planning for non-trivial builds. Performs codebase research, designs technical approach, produces a runbook, and breaks the design into atomic task plans. Does NOT write code. |
+| engineer.md | Executes code-writing work. Operates in two modes: implementation (new code per a task plan) or fix (targeted bug or violation fixes). Mode is selected by spawn prompt context. Spawned by the lead orchestrator. |
+| evaluator.md | Lightweight quality gate agent that interprets structural signals (pattern findings, scope overlap, diff stats) against acceptance criteria and implementation summary. Returns a structured PASS/FAIL verdict. Runs on Haiku for cost and speed. |
+| janitor.md | Background housekeeping agent. Prunes stale git worktrees under .canon/worktrees/ and cleans up workspaces under .canon/workspaces/ — including orphaned workspaces whose worktree/ subdirectory is no longer registered with git, and workspaces for branches that have been merged to main. Spawned conditionally after invoke_janitor signals needs_prune: true. Never modifies source code or spawns sub-agents. |
+| learner.md | Analyzes codebase patterns, review history, build execution data, and conventions to suggest improvements to Canon principles. Produces a structured learning report. Spawned by the lead orchestrator. |
+| planner.md | DEPRECATED (2026-05-17). Responsibilities split between orchestrator (PM) and architect. Requirements conversation → orchestrator. Codebase research → architect. Runbook production → architect. Triviality assessment → architect. See agents/architect.md for the current technical pre-build agent. |
+| reviewer.md | Reviews code changes against Canon engineering principles. Six-stage evaluation: principle compliance, code quality, compliance cross-check, drift-from-plan, acceptance criteria verification, and cross-requirement consistency. Spawned by the build orchestrator, Canon intake, pr-review command, or other agents. |
+| scribe.md | Post-implementation context sync agent. Reads git diffs and engineer summaries to update CLAUDE.md, context.md, and CONVENTIONS.md when contract-level changes occur. Strictly a documenter — never proposes new principles. |
+| security.md | Reviews code for security vulnerabilities, unsafe patterns, and compliance issues. Produces a security assessment with findings ranked by severity. |
+| shipper.md | Post-build delivery agent. Synthesizes build artifacts (summaries, test reports, review verdicts, design docs) into a PR description and creates the PR. Spawned by the orchestrator after the review/fix loop completes. |
+| tester.md | Writes integration tests and fills coverage gaps for code produced by engineer agents. Handles cross-task integration, end-to-end flows, and missed coverage. Spawned by the build orchestrator after implementation. |
+| writer.md | Creates, edits, and forks Canon principles, conventions, and agent-rules. Focuses on behavioral constraints and uses the principle template as source of truth. Handles interview, examples, conflict detection, save, and validation. Spawned by Canon intake or via /canon:edit-principle. |
+<!-- canon:inventory:end -->
+
 ## Conventions
 <!-- last-updated: 2026-06-09 -->
 
+- **Harness tool grants (as of 2026-06-09):** `LSP` (navigation-only — `findReferences`/`goToDefinition`/etc., no `getDiagnostics`) granted to `reviewer`, `engineer`, `architect`. `WebSearch` granted to `security`, `architect`. `WebFetch` granted to `writer` (others already had it or intentionally omitted). `PushNotification` is an orchestrator-side call (NOT an agent grant) fired at plan-approval, review-verdict, and build-complete gates. Requires `typescript-language-server` installed globally for LSP to return results.
 - Each agent has a declarative `permissionMode` enforced by Claude Code:
   - **`plan`** — truly read-only. No `Write` / `Edit` / `Bash`-to-modify AND no MCP `write_*` / `update_*` tools. Currently unused (the legacy planner was the only agent on this mode).
   - **`acceptEdits`** — auto-approves file edits and common filesystem commands scoped to the working directory. For agents that produce artifacts via MCP write tools (`architect` → `write_plan_index`; `reviewer` → `write_review`; `tester` → `write_test_report`; `learner` → writes to `.canon/learning.jsonl` and `.canon/proposed-learnings/`; `shipper` → PR description; `writer` → principle files) or that write file artifacts directly (`engineer`, `scribe`, `security`).
@@ -47,4 +66,5 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 - `engineer` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes.
 - `engineer` (verify mode): before reporting any build or test failure as BLOCKING, must verify whether the failure exists on the base branch. Pre-existing failures are noted as PRE-EXISTING and do not block.
 - `reviewer` writes its review artifact to `${WORKSPACE}/reviews/REVIEW.md` (exact path). The orchestrator must inject `WORKSPACE={workspace_path}` (workspace root, not worktree path) into the reviewer's spawn prompt to ensure correct artifact placement.
+- `reviewer` preloads `references/codex-defect-checklist.md` (via `references:` frontmatter) — adds Stage 2 grep checks and Stage 6 judgment prompts for the top-7 Codex recurring defect classes; all grep checks are advisory→WARNING, never BLOCKING.
 - Agents with `memory: project` (engineer, architect, scribe, learner, tester) persist agent memory across sessions; others do not.

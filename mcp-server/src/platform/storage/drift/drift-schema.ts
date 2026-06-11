@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "10";
+export const DRIFT_SCHEMA_VERSION = "11";
 
 // DDL statements — v1 base tables
 //
@@ -365,6 +365,37 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '10' WHERE key = 'schema_version'`);
     },
     version: "10",
+  },
+  {
+    up: (db) => {
+      // Violation lifecycle columns — status + resolution provenance (closure-01)
+      //
+      // NOTE: SQLite ALTER TABLE ADD COLUMN cannot add a CHECK constraint to an existing
+      // table reliably across versions, so we add the column with DEFAULT 'open' only.
+      // The allowed-value set ('open' | 'resolved') is enforced in the DAO write layer —
+      // ViolationClosureDao only ever writes 'resolved' as the non-default value.
+      // A CHECK would also be incorrect here for existing databases (SQLite ignores CHECK
+      // on ADD COLUMN for pre-existing rows, so it provides no safety benefit in migrations).
+      if (!columnExists(db, "violations", "status")) {
+        db.exec(`ALTER TABLE violations ADD COLUMN status TEXT NOT NULL DEFAULT 'open'`);
+      }
+      if (!columnExists(db, "violations", "resolved_at")) {
+        db.exec(`ALTER TABLE violations ADD COLUMN resolved_at TEXT`);
+      }
+      if (!columnExists(db, "violations", "resolved_by_review_id")) {
+        db.exec(`ALTER TABLE violations ADD COLUMN resolved_by_review_id TEXT`);
+      }
+      if (!columnExists(db, "violations", "resolution_reason")) {
+        db.exec(`ALTER TABLE violations ADD COLUMN resolution_reason TEXT`);
+      }
+      // Partial index for fast open-count queries (used by SessionStart pulse and
+      // status-filtered reads in ViolationClosureDao)
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_violations_open ON violations(status) WHERE status='open'`,
+      );
+      db.exec(`UPDATE meta SET value = '11' WHERE key = 'schema_version'`);
+    },
+    version: "11",
   },
 ];
 
