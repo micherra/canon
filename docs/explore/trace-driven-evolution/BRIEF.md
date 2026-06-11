@@ -126,7 +126,8 @@ before moving up the ladder"; it is the **prerequisite that gates the entire tra
 
 ```
 ContextProvenanceRecord {
-  workspace, step_id, agent_type, agent_id,          // identity (joins to journal + transcript)
+  workspace, step_id, agent_type, agent_name,        // identity at emit time (agent_id not yet available)
+  agent_id?,                                         // back-filled by log_step after spawn (see timing note)
   spawned_at,
   assembled_artifacts: [                              // every artifact assembled into the spawn prompt
     { kind: "rule"|"ref"|"primer"|"template"|"agent-def"|"tool-desc",
@@ -166,7 +167,28 @@ This is a Phase 1 implementation constraint, not a schema change: the `ContextPr
 fields shown above already accommodate `char_span: null` and can carry `source` and `sidecar_path`
 as optional extensions per artifact entry.
 
-**Where it's captured — `resolveAgentSkills` is the natural hook, already 90% of the way there**
+**Where it's captured — a two-step protocol keyed by `step_id`.**
+
+`resolveAgentSkills` is called *before* the Agent tool is invoked, so `agent_id` — which the Agent
+tool returns after spawn — is not yet available. The design therefore splits the emit into two steps:
+
+1. **`resolveAgentSkills` emits a provisional `context_provenance` record** keyed by
+   `(workspace, step_id, agent_name)` but with `agent_id: null`. It receives `step_id` via the
+   existing optional `options` parameter (the same path already used for `workspace` and
+   `filePaths`). The provisional record carries the full `assembled_artifacts` array, hashes, and
+   spans — everything that is knowable before spawn. The `step_id` is the durable join key for
+   the back-fill step below.
+
+2. **`log_step` back-fills `agent_id`** when the orchestrator calls it post-spawn with
+   `status: "completed"` and `agent_id`. `log_step` already receives `agent_id` from the Agent
+   tool result (this is the existing journal protocol, CLAUDE.md §Journal Protocol). The back-fill
+   is a single UPDATE-by-`step_id` on the `context_provenance` event row — since events are keyed
+   on `(workspace, type, correlationId)` where `correlationId = step_id`, the back-fill can use
+   `appendEvent("context_provenance_agent_id", { step_id, agent_id })` or an explicit update path
+   on the execution store. The learner joins on `step_id` first; it never needs `agent_id` to
+   locate the provenance record, only to correlate with transcript data.
+
+`resolveAgentSkills` is otherwise already 90% of the way there
 (`mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts`). That function *already*:
 - resolves each `rules:`/`references:`/`primers:`/`templates:` frontmatter entry to a concrete
   `ResolvedSkill { id, kind, path, content }` (lines 61–68, `resolveSkills` L233–251);
@@ -178,6 +200,8 @@ The instrumentation is therefore *additive, not invasive*: compute `content_hash
 then — *after* `applyAgentSkillsDisclosure` returns — compute each section's `char_span` against the
 **final** `preload_prompt` and append one `context_provenance` event (see Progressive disclosure rule
 above: spans must target the text that actually enters the spawn prompt, not the pre-disclosure draft).
+The new input needed: `step_id` added to `ResolveAgentSkillsOptions` (the optional `options` struct
+that already carries `workspace` and `filePaths`); no change to the existing required inputs.
 
 The two enrichment classes the agent does NOT get from
 `resolveAgentSkills` — the **agent definition body** itself and **MCP tool descriptions** — are
@@ -195,8 +219,11 @@ record should also be summarized into the `RunSummary` (a new `context_provenanc
 `get_build_history` / `get_cross_run_analysis` can join provenance to violations across runs — that is
 the surface the offline-batch learner reads.
 
-**How reflection consumes it — the attribution join.** At batch time the learner joins three keys it
-now has on a common `(workspace, step_id, agent_id)`:
+**How reflection consumes it — the attribution join.** At batch time the learner joins on `step_id`
+as the primary durable key — it is present in the provisional provenance record at emit time and in the
+journal entry at completion time. After `log_step` back-fills `agent_id`, the full triple
+`(workspace, step_id, agent_id)` is available for the transcript join (transcripts are keyed by
+`agent_id` in the transcript store):
 `ReviewViolation (principle_id, file, message)` ⋈ `ContextProvenanceRecord (assembled_artifacts[])` ⋈
 `transcript (the agent's reasoning at the failure point)`. The join answers the question v1 could only
 infer: *"when this violation occurred, artifact X (hash H, section S) was in context — and the
@@ -297,7 +324,8 @@ expensive (multiple `run-evals.sh` passes per candidate), so it belongs off the 
 
 ```
 0. ATTRIBUTE       [Phase-1 step 0 — the new foundation] join ReviewViolation ⋈
-                   ContextProvenanceRecord ⋈ transcript on (workspace,step_id,agent_id)
+                   ContextProvenanceRecord ⋈ transcript on (workspace,step_id)
+                   primary; agent_id back-filled by log_step for transcript correlation
                    → the diagnosed cause names a SPECIFIC artifact + section + hash,
                    of WHATEVER class the failure points at (rule | primer | agent-def
                    | tool-desc | principle). No fixed target. (§3.1)
@@ -565,16 +593,27 @@ Concrete new/changed components, so this brief can become a build next. Grouped 
 deliverables (§5).
 
 **1. Provenance instrumentation (foundation)**
-- `mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts` — *change*: compute
-  `content_hash` per `ResolvedSkill`; after `applyAgentSkillsDisclosure` returns, compute `char_span`
-  per section against the final `preload_prompt` (not the pre-disclosure draft); append a
-  `context_provenance` event (mirror the existing `appendEvent` pattern, L142–156).
+- `mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts` — *change*: add `step_id?`
+  to `ResolveAgentSkillsOptions` (the existing optional struct that already carries `workspace` and
+  `filePaths`); compute `content_hash` per `ResolvedSkill`; after `applyAgentSkillsDisclosure` returns,
+  compute `char_span` per section against the final `preload_prompt` (not the pre-disclosure draft);
+  append a provisional `context_provenance` event with `agent_id: null`, keyed by `step_id`
+  (mirror the existing `appendEvent` pattern, L142–156). When `step_id` is absent, the event is
+  emitted without a join key — provenance is degraded, not blocked (fail-open, matching the existing
+  pitfall audit convention).
+- `mcp-server/src/features/orchestration/tools/orchestration-journal.ts` (`log_step`) — *change*:
+  when completing a step with `agent_id`, back-fill the matching `context_provenance` event row by
+  appending a `context_provenance_agent_id` event (or a dedicated store update) for the same `step_id`.
+  This is a single additive write; the back-fill uses the `step_id` already present in every
+  `log_step` call.
 - `mcp-server/src/domains/workspaces/execution-store.ts` — *reuse*: `appendEvent("context_provenance", …)`
   + `getEventsByType("context_provenance")` (already exist, L267–288). No schema change if stored as an
   event; optional new column only if indexed querying is needed.
 - `mcp-server/src/features/history/history-types.ts` — *change*: add `context_provenance` to `RunSummary`
   so cross-build joins survive archiving; extend the run-summary builder
-  (`features/history/services/run-summary-builder.ts`).
+  (`features/history/services/run-summary-builder.ts`). The `agent_id` field in summarized records
+  is populated from the back-filled event (present at archive time, since `log_step` completion
+  runs before finalize).
 - New shared type `ContextProvenanceRecord` (shape in §3.1) — likely `mcp-server/src/shared/lib/` or a
   new `features/orchestration/` type module.
 
