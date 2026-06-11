@@ -1,5 +1,5 @@
 ---
-description: Generic loop runner — execute one tick of a named loop definition. CronCreate-only; self-paced (ScheduleWakeup) is Phase C.
+description: Generic loop runner — execute one tick of a named loop definition. Supports both interval (CronCreate) and self-paced (ScheduleWakeup) modes.
 argument-hint: [loop-id]
 allowed-tools:
   - Read
@@ -62,13 +62,19 @@ Record the updated snapshot values.
 
 ## Step 5: Diff against last snapshot
 
+**First-tick guard (ADR-0002):** A field whose *prior* value is absent — because there is no
+state file yet (first tick) or the field is missing from the prior snapshot — is NOT a
+transition. Such a field never matches any `on_transition` rule (not even an any-change or
+`to:`-matching rule). On the first tick, ALL fields have an absent prior, so zero rules fire;
+the tick still writes the baseline snapshot (Step 7) and reports a non-surfacing baseline tick.
+
 Compare each field in the updated snapshot against the last-seen values from Step 3.
 
 For each changed field, check `definition.surface.on_transition` rules:
 - Match when: `rule.field` matches the field name, AND
   - `rule.from` is set → last value matched `rule.from`, OR
   - `rule.to` is set → new value equals `rule.to`, OR
-  - neither from nor to set → any change fires the rule.
+  - neither from nor to set → any change from a *present* prior fires the rule.
 
 Collect all fired rules. If a rule has `terminate: true`, mark the loop for termination.
 
@@ -79,6 +85,9 @@ For each fired transition rule (not already surfaced this run):
 - If `rule.append` is true, append to the surfacing log rather than replacing.
 
 Example output line: `[loop: _probe] Probe tick 3 reached — Loop Framework Phase A path proven.`
+
+**On a baseline (first) tick, surface nothing** — report:
+`[loop: <id>] Tick 1 baseline captured. Watching from next tick.`
 
 ## Step 7: Write the updated snapshot
 
@@ -120,6 +129,10 @@ Also terminate if any fired transition rule has `terminate: true`.
 
 - **No per-loop branching.** If you find yourself special-casing `_probe` or `ship-watch`
   in this runner, STOP — that logic belongs in the definition's body section.
-- **Phase boundary.** Phase A: interval-mode only. Phase C will add ScheduleWakeup.
+- **Phase boundary.** Phase A: interval-mode only (CronCreate). Phase C adds self-paced mode
+  (ScheduleWakeup). Both modes execute the same observe→diff→surface→write→evaluate pipeline.
 - **_probe is the runnable proof.** Invoking `/canon:loop-tick _probe` in the Phase A
   verify step demonstrates the full schema→registry→runtime path end-to-end.
+- **First-tick baseline (ADR-0002).** The first tick captures a baseline snapshot and surfaces
+  nothing — transition rules always compare against a known prior value (present from tick 2+).
+  This eliminates false-fires from conditions already true at arm time.
