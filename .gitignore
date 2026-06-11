@@ -34,3 +34,6 @@ mcp-server/.claude/agent-memory/
 .env
 
 # Ephemeral workspace artifacts (covered by .canon/** above)
+
+# Local Node version manager pins (asdf, nvm, etc.) — never ship a hard pin
+.tool-versions

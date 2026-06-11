@@ -135,4 +135,24 @@ describe("resolveProjectDir", () => {
     const result = await resolveProjectDir(undefined, listRoots, cwd);
     expect(result).toBe("/first/project");
   });
+
+  // ── Defense-in-depth: explicit ${...} token reject for CANON_PROJECT_DIR ────
+  it("ignores CANON_PROJECT_DIR when it is an unexpanded ${CLAUDE_PROJECT_DIR} token (falls through to roots)", async () => {
+    const listRoots = vi.fn().mockResolvedValue({ roots: [{ uri: "file:///from/roots" }] });
+    const result = await resolveProjectDir("${CLAUDE_PROJECT_DIR}", listRoots, cwd);
+    expect(result).toBe("/from/roots");
+  });
+
+  it("ignores CANON_PROJECT_DIR when it contains an unexpanded token mid-path (falls through to roots)", async () => {
+    const listRoots = vi.fn().mockResolvedValue({ roots: [{ uri: "file:///from/roots" }] });
+    const result = await resolveProjectDir("/some/${VAR}/path", listRoots, cwd);
+    expect(result).toBe("/from/roots");
+  });
+
+  it("still accepts CANON_PROJECT_DIR when it is a real absolute path (no token)", async () => {
+    const listRoots = vi.fn().mockResolvedValue({ roots: [] });
+    const result = await resolveProjectDir("/real/absolute/path", listRoots, cwd);
+    expect(result).toBe("/real/absolute/path");
+    expect(listRoots).not.toHaveBeenCalled();
+  });
 });

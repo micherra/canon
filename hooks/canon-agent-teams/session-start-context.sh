@@ -39,10 +39,11 @@ fi
 
 # 2. Drift status (if drift.db exists)
 if [[ -f "$DRIFT_DB" ]] && command -v sqlite3 &>/dev/null; then
-  VIOLATION_COUNT=$(sqlite3 "$DRIFT_DB" "SELECT COUNT(*) FROM violations;" 2>/dev/null || echo "0")
+  # DOCUMENTED FAIL-OPEN -- pre-v11 drift.db has no status column; advisory count degrades to 0
+  VIOLATION_COUNT=$(sqlite3 "$DRIFT_DB" "SELECT COUNT(*) FROM violations WHERE status='open';" 2>/dev/null || echo "0")
   if [[ "$VIOLATION_COUNT" != "0" ]]; then
     echo "  Open drift violations: ${VIOLATION_COUNT}"
-    TOP_PRINCIPLES=$(sqlite3 "$DRIFT_DB" "SELECT principle_id, COUNT(*) as c FROM violations GROUP BY principle_id ORDER BY c DESC LIMIT 3;" 2>/dev/null || true)
+    TOP_PRINCIPLES=$(sqlite3 "$DRIFT_DB" "SELECT principle_id, COUNT(*) as c FROM violations WHERE status='open' GROUP BY principle_id ORDER BY c DESC LIMIT 3;" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- pre-v11 drift.db has no status column; advisory top-principles omitted
     if [[ -n "$TOP_PRINCIPLES" ]]; then
       echo "  Top violated principles:"
       echo "$TOP_PRINCIPLES" | while IFS='|' read -r pid count; do

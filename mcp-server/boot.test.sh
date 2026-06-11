@@ -30,7 +30,8 @@ fi
 # own directory (which contains src/app/index.ts).
 # ---------------------------------------------------------------------------
 OUTPUT=$(CLAUDE_PLUGIN_ROOT="" bash "$BOOT_SH" --print-resolution 2>/dev/null) || true
-SERVER_DIR_RESOLVED=$(echo "$OUTPUT" | awk '{print $1}')
+# Parse only the first line (legacy positional triple); new diagnostic lines follow it.
+SERVER_DIR_RESOLVED=$(echo "$OUTPUT" | head -1 | awk '{print $1}')
 if [[ "$SERVER_DIR_RESOLVED" == "$SCRIPT_DIR" ]]; then
   pass "BASH_SOURCE self-resolution: SERVER_DIR = $SCRIPT_DIR"
 else
@@ -43,7 +44,8 @@ fi
 # ---------------------------------------------------------------------------
 FAKE_ROOT=$(mktemp -d)
 OUTPUT=$(CLAUDE_PLUGIN_ROOT="$FAKE_ROOT" bash "$BOOT_SH" --print-resolution 2>/dev/null) || true
-SERVER_DIR_RESOLVED=$(echo "$OUTPUT" | awk '{print $1}')
+# Parse only the first line (legacy positional triple).
+SERVER_DIR_RESOLVED=$(echo "$OUTPUT" | head -1 | awk '{print $1}')
 rm -rf "$FAKE_ROOT"
 if [[ "$SERVER_DIR_RESOLVED" == "$SCRIPT_DIR" ]]; then
   pass "Fallback to BASH_SOURCE when CLAUDE_PLUGIN_ROOT has no mcp-server/"
@@ -103,7 +105,8 @@ mkdir -p "$FAKE_PLUGIN/mcp-server/node_modules/.bin"
 printf '#!/usr/bin/env bash\necho "tsx-stub"\n' > "$FAKE_PLUGIN/mcp-server/node_modules/.bin/tsx"
 chmod +x "$FAKE_PLUGIN/mcp-server/node_modules/.bin/tsx"
 OUTPUT6=$(CLAUDE_PLUGIN_ROOT="$FAKE_PLUGIN" bash "$BOOT_SH" --print-resolution 2>/dev/null) || true
-SERVER_DIR6=$(echo "$OUTPUT6" | awk '{print $1}')
+# Parse only the first line (legacy positional triple).
+SERVER_DIR6=$(echo "$OUTPUT6" | head -1 | awk '{print $1}')
 rm -rf "$FAKE_PLUGIN"
 if [[ "$SERVER_DIR6" == "$FAKE_PLUGIN/mcp-server" ]]; then
   pass "CLAUDE_PLUGIN_ROOT used when set to valid plugin dir"
@@ -292,6 +295,217 @@ if echo "$W7_OUTPUT" | grep -q "CANON_HTTP_DAEMON=1"; then
   pass "W7: --daemon flag exports CANON_HTTP_DAEMON=1 to the environment"
 else
   fail "W7: --daemon flag did NOT export CANON_HTTP_DAEMON=1; got: $W7_OUTPUT"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 13: Node preflight — node major < 24 → boot exits non-zero with
+# "requires Node >=24" message; does NOT exec the server.
+# ---------------------------------------------------------------------------
+NODE_OLD_SERVER=$(mktemp -d)
+mkdir -p "$NODE_OLD_SERVER/src/app"
+touch "$NODE_OLD_SERVER/src/app/index.ts"
+# Add a tsx stub so we get past the tsx-absent check
+mkdir -p "$NODE_OLD_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\nexit 0\n' > "$NODE_OLD_SERVER/node_modules/.bin/tsx"
+chmod +x "$NODE_OLD_SERVER/node_modules/.bin/tsx"
+# Inject a fake node shim that reports v18.0.0 (major < 24)
+FAKE_NODE_DIR_OLD=$(mktemp -d)
+printf '#!/usr/bin/env bash\n[[ "${1:-}" == "-v" ]] && echo "v18.0.0" && exit 0\nexit 0\n' > "$FAKE_NODE_DIR_OLD/node"
+chmod +x "$FAKE_NODE_DIR_OLD/node"
+NODE_OLD_STDERR=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_DIR_OLD:$PATH" \
+  bash "$BOOT_SH" --force-dir "$NODE_OLD_SERVER" 2>&1 >/dev/null
+) || NODE_OLD_EXIT=$?
+rm -rf "$NODE_OLD_SERVER" "$FAKE_NODE_DIR_OLD"
+if [[ "${NODE_OLD_EXIT:-0}" -ne 0 ]] && echo "$NODE_OLD_STDERR" | grep -q "requires Node >=24"; then
+  pass "Node preflight (<24): exits non-zero with 'requires Node >=24' message"
+else
+  fail "Node preflight (<24): expected non-zero exit + 'requires Node >=24'; got exit=${NODE_OLD_EXIT:-0}, stderr=${NODE_OLD_STDERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 14: Node preflight — node major >= 24 → boot proceeds past preflight
+# (tsx stub runs normally, exits 0).
+# ---------------------------------------------------------------------------
+NODE_NEW_SERVER=$(mktemp -d)
+mkdir -p "$NODE_NEW_SERVER/src/app"
+touch "$NODE_NEW_SERVER/src/app/index.ts"
+mkdir -p "$NODE_NEW_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\nexit 0\n' > "$NODE_NEW_SERVER/node_modules/.bin/tsx"
+chmod +x "$NODE_NEW_SERVER/node_modules/.bin/tsx"
+# Inject a fake node shim that reports v24.0.0 (major >= 24)
+FAKE_NODE_DIR_NEW=$(mktemp -d)
+printf '#!/usr/bin/env bash\n[[ "${1:-}" == "-v" ]] && echo "v24.0.0" && exit 0\nexit 0\n' > "$FAKE_NODE_DIR_NEW/node"
+chmod +x "$FAKE_NODE_DIR_NEW/node"
+NODE_NEW_EXIT=0
+CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_DIR_NEW:$PATH" \
+  bash "$BOOT_SH" --force-dir "$NODE_NEW_SERVER" 2>/dev/null || NODE_NEW_EXIT=$?
+rm -rf "$NODE_NEW_SERVER" "$FAKE_NODE_DIR_NEW"
+if [[ "$NODE_NEW_EXIT" -eq 0 ]]; then
+  pass "Node preflight (>=24): proceeds past preflight, tsx stub runs (exit 0)"
+else
+  fail "Node preflight (>=24): boot exited $NODE_NEW_EXIT unexpectedly (should have passed preflight)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 15: Node preflight — node not found on PATH → exits non-zero with
+# "'node' not found" message.
+# The fake node shim immediately exits 127 to simulate "command not found".
+# ---------------------------------------------------------------------------
+NODE_ABSENT_SERVER=$(mktemp -d)
+mkdir -p "$NODE_ABSENT_SERVER/src/app"
+touch "$NODE_ABSENT_SERVER/src/app/index.ts"
+mkdir -p "$NODE_ABSENT_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\nexit 0\n' > "$NODE_ABSENT_SERVER/node_modules/.bin/tsx"
+chmod +x "$NODE_ABSENT_SERVER/node_modules/.bin/tsx"
+# Place a "node" shim that always exits 127 (simulates not found via subshell)
+FAKE_NODE_ABSENT_DIR=$(mktemp -d)
+printf '#!/usr/bin/env bash\nexit 127\n' > "$FAKE_NODE_ABSENT_DIR/node"
+chmod +x "$FAKE_NODE_ABSENT_DIR/node"
+NODE_ABSENT_STDERR=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_ABSENT_DIR:$PATH" \
+  bash "$BOOT_SH" --force-dir "$NODE_ABSENT_SERVER" 2>&1 >/dev/null
+) || NODE_ABSENT_EXIT=$?
+rm -rf "$NODE_ABSENT_SERVER" "$FAKE_NODE_ABSENT_DIR"
+if [[ "${NODE_ABSENT_EXIT:-0}" -ne 0 ]] && echo "$NODE_ABSENT_STDERR" | grep -q "node.*not found\|not found.*node\|'node'"; then
+  pass "Node preflight (absent): exits non-zero with 'node not found' message"
+else
+  fail "Node preflight (absent): expected non-zero exit + 'node not found'; got exit=${NODE_ABSENT_EXIT:-0}, stderr=${NODE_ABSENT_STDERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 16: --print-resolution with node <24 still prints resolution + exits 0
+# (preflight must NOT gate --print-resolution diagnostics).
+# ---------------------------------------------------------------------------
+PR_OLD_SERVER=$(mktemp -d)
+mkdir -p "$PR_OLD_SERVER/src/app"
+touch "$PR_OLD_SERVER/src/app/index.ts"
+FAKE_NODE_DIR_PR=$(mktemp -d)
+printf '#!/usr/bin/env bash\n[[ "${1:-}" == "-v" ]] && echo "v18.0.0" && exit 0\nexit 0\n' > "$FAKE_NODE_DIR_PR/node"
+chmod +x "$FAKE_NODE_DIR_PR/node"
+PR_OLD_EXIT=0
+PR_OLD_OUTPUT=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_DIR_PR:$PATH" \
+  bash "$BOOT_SH" --force-dir "$PR_OLD_SERVER" --print-resolution 2>/dev/null
+) || PR_OLD_EXIT=$?
+rm -rf "$PR_OLD_SERVER" "$FAKE_NODE_DIR_PR"
+# Should exit 0 and print the three-field line (SERVER_DIR is the first field).
+# Parse only the first line (legacy positional triple).
+if [[ "${PR_OLD_EXIT:-0}" -eq 0 ]] && [[ -n "$(echo "$PR_OLD_OUTPUT" | head -1 | awk '{print $1}')" ]]; then
+  pass "--print-resolution with node <24: still exits 0 and prints resolution (preflight skipped)"
+else
+  fail "--print-resolution with node <24: expected exit 0 + output; got exit=${PR_OLD_EXIT:-0}, output='${PR_OLD_OUTPUT}'"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 17: --print-resolution healthy env → output contains RESOLUTION_STATUS=ok
+# and a non-empty NODE_VERSION=.
+# Uses a fake server dir with a tsx stub + a node >=24 shim so the test is
+# self-contained (does not depend on the dev working tree having tsx installed).
+# ---------------------------------------------------------------------------
+PR17_SERVER=$(mktemp -d)
+mkdir -p "$PR17_SERVER/src/app"
+touch "$PR17_SERVER/src/app/index.ts"
+mkdir -p "$PR17_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\nexit 0\n' > "$PR17_SERVER/node_modules/.bin/tsx"
+chmod +x "$PR17_SERVER/node_modules/.bin/tsx"
+FAKE_NODE_DIR17=$(mktemp -d)
+printf '#!/usr/bin/env bash\n[[ "${1:-}" == "-v" ]] && echo "v24.0.0" && exit 0\nexit 0\n' > "$FAKE_NODE_DIR17/node"
+chmod +x "$FAKE_NODE_DIR17/node"
+PR_HEALTHY_EXIT=0
+PR_HEALTHY_OUT=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_DIR17:$PATH" \
+  bash "$BOOT_SH" --force-dir "$PR17_SERVER" --print-resolution 2>/dev/null
+) || PR_HEALTHY_EXIT=$?
+rm -rf "$PR17_SERVER" "$FAKE_NODE_DIR17"
+PR_STATUS17=$(echo "$PR_HEALTHY_OUT" | grep '^RESOLUTION_STATUS=' | cut -d= -f2)
+PR_NODEVER17=$(echo "$PR_HEALTHY_OUT" | grep '^NODE_VERSION=' | cut -d= -f2)
+if [[ "${PR_HEALTHY_EXIT:-0}" -eq 0 ]] \
+   && [[ "$PR_STATUS17" == "ok" ]] \
+   && [[ -n "$PR_NODEVER17" ]]; then
+  pass "print-resolution healthy: RESOLUTION_STATUS=ok and NODE_VERSION non-empty"
+else
+  fail "print-resolution healthy: expected RESOLUTION_STATUS=ok + NODE_VERSION; got status='${PR_STATUS17}' ver='${PR_NODEVER17}' exit=${PR_HEALTHY_EXIT:-0}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 18: --print-resolution with node <24 shim → RESOLUTION_STATUS=node-too-old
+# AND --print-resolution still exits 0 (diagnostic only, never enforces).
+# Uses a tsx stub so the tsx-missing path is not taken.
+# ---------------------------------------------------------------------------
+PR_OLD_SERVER18=$(mktemp -d)
+mkdir -p "$PR_OLD_SERVER18/src/app"
+touch "$PR_OLD_SERVER18/src/app/index.ts"
+mkdir -p "$PR_OLD_SERVER18/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\nexit 0\n' > "$PR_OLD_SERVER18/node_modules/.bin/tsx"
+chmod +x "$PR_OLD_SERVER18/node_modules/.bin/tsx"
+FAKE_NODE_DIR18=$(mktemp -d)
+printf '#!/usr/bin/env bash\n[[ "${1:-}" == "-v" ]] && echo "v20.0.0" && exit 0\nexit 0\n' > "$FAKE_NODE_DIR18/node"
+chmod +x "$FAKE_NODE_DIR18/node"
+PR18_EXIT=0
+PR18_OUT=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  PATH="$FAKE_NODE_DIR18:$PATH" \
+  bash "$BOOT_SH" --force-dir "$PR_OLD_SERVER18" --print-resolution 2>/dev/null
+) || PR18_EXIT=$?
+rm -rf "$PR_OLD_SERVER18" "$FAKE_NODE_DIR18"
+PR18_STATUS=$(echo "$PR18_OUT" | grep '^RESOLUTION_STATUS=' | cut -d= -f2)
+if [[ "${PR18_EXIT:-0}" -eq 0 ]] && [[ "$PR18_STATUS" == "node-too-old" ]]; then
+  pass "print-resolution node<24: RESOLUTION_STATUS=node-too-old, exit 0"
+else
+  fail "print-resolution node<24: expected RESOLUTION_STATUS=node-too-old + exit 0; got status='${PR18_STATUS}' exit=${PR18_EXIT:-0}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 19: --print-resolution tsx absent → RESOLUTION_STATUS=tsx-missing
+# AND --print-resolution still exits 0.
+# ---------------------------------------------------------------------------
+PR_NOTSX_SERVER=$(mktemp -d)
+mkdir -p "$PR_NOTSX_SERVER/src/app"
+touch "$PR_NOTSX_SERVER/src/app/index.ts"
+# no node_modules/.bin/tsx created
+PR19_EXIT=0
+PR19_OUT=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  bash "$BOOT_SH" --force-dir "$PR_NOTSX_SERVER" --print-resolution 2>/dev/null
+) || PR19_EXIT=$?
+rm -rf "$PR_NOTSX_SERVER"
+PR19_STATUS=$(echo "$PR19_OUT" | grep '^RESOLUTION_STATUS=' | cut -d= -f2)
+if [[ "${PR19_EXIT:-0}" -eq 0 ]] && [[ "$PR19_STATUS" == "tsx-missing" ]]; then
+  pass "print-resolution tsx-absent: RESOLUTION_STATUS=tsx-missing, exit 0"
+else
+  fail "print-resolution tsx-absent: expected RESOLUTION_STATUS=tsx-missing + exit 0; got status='${PR19_STATUS}' exit=${PR19_EXIT:-0}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 20: Original 3-field first line still present (backward compat).
+# --print-resolution must still emit "SERVER_DIR NODE_PATH TSX_BIN" as the
+# FIRST line (existing consumers depend on positional awk parsing of line 1).
+# ---------------------------------------------------------------------------
+PR20_SERVER=$(mktemp -d)
+mkdir -p "$PR20_SERVER/src/app"
+touch "$PR20_SERVER/src/app/index.ts"
+mkdir -p "$PR20_SERVER/node_modules/.bin"
+printf '#!/usr/bin/env bash\necho "tsx-stub"\nexit 0\n' > "$PR20_SERVER/node_modules/.bin/tsx"
+chmod +x "$PR20_SERVER/node_modules/.bin/tsx"
+PR20_OUT=$(
+  CLAUDE_PLUGIN_ROOT="" \
+  bash "$BOOT_SH" --force-dir "$PR20_SERVER" --print-resolution 2>/dev/null
+) || true
+rm -rf "$PR20_SERVER"
+# First line must be the space-separated triple; it must NOT start with "NODE_VERSION=" or "RESOLUTION_STATUS="
+PR20_FIRST=$(echo "$PR20_OUT" | head -1)
+if [[ -n "$PR20_FIRST" ]] \
+   && [[ "$PR20_FIRST" != NODE_VERSION=* ]] \
+   && [[ "$PR20_FIRST" != RESOLUTION_STATUS=* ]]; then
+  pass "print-resolution backward compat: first line is still the 3-field SERVER_DIR NODE_PATH TSX_BIN"
+else
+  fail "print-resolution backward compat: first line changed; got '${PR20_FIRST}'"
 fi
 
 # ---------------------------------------------------------------------------

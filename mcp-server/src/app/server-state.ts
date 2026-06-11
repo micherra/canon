@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   RESOURCE_MIME_TYPE,
@@ -218,17 +218,48 @@ const isDir = (p: string): boolean => existsSync(p) && statSync(p).isDirectory()
 
 const thisDir = dirname(fileURLToPath(import.meta.url));
 
-// pluginDir resolved first — mcpServerRoot may derive from it when the env override is set.
-export const pluginDir = process.env.CANON_PLUGIN_DIR
-  ? resolve(process.env.CANON_PLUGIN_DIR)
-  : findAnchorDir(thisDir, ["agents", "principles"], isDir);
+/** Regex that detects an unexpanded shell variable token such as ${CLAUDE_PLUGIN_ROOT}. */
+const UNEXPANDED_TOKEN = /\$\{[^}]*\}/;
 
-// mcpServerRoot is always the mcp-server/ subdirectory of pluginDir.
-// When CANON_PLUGIN_DIR is set, derive directly from the already-resolved pluginDir so both
-// roots honour the same env override without an independent boot.sh marker walk.
-const mcpServerRoot = process.env.CANON_PLUGIN_DIR
-  ? join(pluginDir, "mcp-server")
-  : findAnchorDir(thisDir, ["boot.sh"]);
+/**
+ * Resolve the plugin dir from a CANDIDATE env value, falling back to the
+ * env-free marker-walk. The env value is validated, never trusted: it is used
+ * only if it is non-empty, contains no unexpanded ${...} token, is absolute,
+ * and the directory actually contains Canon's marker dirs (agents/, principles/).
+ * Otherwise we fall through to findAnchorDir. If both miss, findAnchorDir throws loud.
+ *
+ * Pure: existsFn is injectable for unit tests (default isDir).
+ */
+export function resolvePluginDir(
+  envValue: string | undefined,
+  startDir: string,
+  existsFn: (p: string) => boolean = isDir,
+): string {
+  const markers = ["agents", "principles"] as const;
+  const candidate = envValue?.trim();
+  if (candidate) {
+    const rejectReason = UNEXPANDED_TOKEN.test(candidate)
+      ? `contains an unexpanded token (${candidate})`
+      : !isAbsolute(candidate)
+        ? `is not an absolute path (${candidate})`
+        : !markers.every((m) => existsFn(join(candidate, m)))
+          ? `does not contain Canon marker dirs [${markers.join(", ")}] (${candidate})`
+          : null;
+    if (rejectReason === null) return resolve(candidate);
+    console.error(
+      `[canon] CANON_PLUGIN_DIR rejected — ${rejectReason}; falling back to marker-walk from ${startDir}`,
+    );
+  }
+  return findAnchorDir(startDir, markers, existsFn);
+}
+
+// pluginDir resolved through the validated-candidate resolver at the single chokepoint.
+// All sibling consumers import this export — the fix is here, not in each consumer (DC5).
+export const pluginDir = resolvePluginDir(process.env.CANON_PLUGIN_DIR, thisDir);
+
+// mcpServerRoot is always the mcp-server/ subdirectory of the validated pluginDir (A3).
+// Deriving it from pluginDir in all branches removes the now-dead independent boot.sh walk.
+const mcpServerRoot = join(pluginDir, "mcp-server");
 
 // ── Standard JSON response helper (inline — keeps gatedWrapHandler self-contained) ──
 

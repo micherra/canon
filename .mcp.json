@@ -2,8 +2,9 @@
   "mcpServers": {
     "canon": {
       "command": "bash",
-      "args": ["${CLAUDE_PLUGIN_ROOT:-.}/mcp-server/boot.sh"],
+      "args": ["-c", "for root in \"$CLAUDE_PLUGIN_ROOT\" \"$CANON_PLUGIN_DIR\" \"$CLAUDE_PROJECT_DIR\" \"$PWD\"; do [ -n \"$root\" ] && [ -f \"$root/mcp-server/boot.sh\" ] && exec bash \"$root/mcp-server/boot.sh\"; done; while IFS= read -r cand; do [ -f \"$cand\" ] && bash -n \"$cand\" 2>/dev/null && exec bash \"$cand\"; done < <(find \"$HOME/.claude/plugins/cache\" -type f -name \"boot.sh\" -path \"*/canon/[0-9]*/mcp-server/boot.sh\" 2>/dev/null | sort -rV); echo \"CANON FATAL: cannot locate mcp-server/boot.sh (CLAUDE_PLUGIN_ROOT, CANON_PLUGIN_DIR, CLAUDE_PROJECT_DIR, PWD all miss; no plugin-cache fallback found)\" >&2; exit 1"],
       "env": {
+        "CANON_PLUGIN_DIR": "${CLAUDE_PLUGIN_ROOT}",
         "CANON_PROJECT_DIR": "${CLAUDE_PROJECT_DIR:-.}"
       }
     }
