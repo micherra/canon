@@ -204,7 +204,7 @@ src/
 - JSONL files auto-rotate when exceeding size limits
 - Atomic file writes prevent corruption on concurrent access
 - `CANON_PROJECT_DIR` env var sets project root; when unset, cwd fallback resolves to git repo root (`resolveGitRoot`) — ensures `.canon/` lands at repo root even when server starts from a subdirectory
-- `CANON_PLUGIN_DIR` env var overrides plugin directory (first-priority short-circuit); when unset, `findAnchorDir` marker-walk resolves it at boot (see `src/app/.claude/CLAUDE.md`)
+- `CANON_PLUGIN_DIR` env var is validated before use (non-empty, token-free, absolute, marker-dirs present); invalid values fall through to `findAnchorDir` marker-walk; all-miss throws loud (see `src/app/.claude/CLAUDE.md`)
 - Workspace subdirectories created by `initWorkspace`: `artifacts/`, `plans/`, `reviews/`, `transcripts/` — `notes/` removed 2026-03-24; `decisions/`, `handoffs/`, `research/` removed 2026-05-25 (never populated by any tool)
 - `progress.md` seeded at workspace creation; no tool appends to it server-side; agents treat it as read-only
 - Gate runner is **fail-closed**: unresolved gate → `{ passed: false }` — never silently passes (changed from fail-open 2026-03-26)
