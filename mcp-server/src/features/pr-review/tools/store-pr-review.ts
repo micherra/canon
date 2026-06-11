@@ -2,7 +2,7 @@ import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
-import { type CraftProfile, CraftProfileSchema, type ReviewViolation } from "@shared/schema.ts";
+import { type CraftProfile, CraftProfileSchema } from "@shared/schema.ts";
 
 export type StorePrReviewInput = {
   pr_number?: number;
@@ -101,6 +101,10 @@ export async function storePrReview(
   const review_id = generateId("rev");
   const timestamp = new Date().toISOString();
 
+  // Store the FULL violations list (including correctness-scan) so that
+  // present_review can show all findings to humans.
+  // correctness-scan is excluded from analytics at aggregation time (analyzer.ts)
+  // and at signal-write time (updateFileViolationHistory, extractAndStoreAreaObservations).
   await store.appendReview({
     review_id,
     timestamp,
@@ -113,7 +117,7 @@ export async function storePrReview(
     honored: input.honored,
     score: input.score,
     verdict: input.verdict,
-    violations: input.violations as ReviewViolation[],
+    violations: input.violations,
     ...(input.file_priorities !== undefined ? { file_priorities: input.file_priorities } : {}),
     ...(input.recommendations !== undefined ? { recommendations: input.recommendations } : {}),
   });

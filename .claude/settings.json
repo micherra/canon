@@ -6,6 +6,7 @@
       "Glob",
       "WebFetch",
       "WebSearch",
+      "Skill",
       "Edit(.canon/)",
       "Write(.canon/)",
       "Edit(**/CLAUDE.md)",

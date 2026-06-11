@@ -13,8 +13,7 @@ features/
 ├── knowledge-graph/    # Codebase graph — scanning, KG queries, git intelligence
 ├── orchestration/      # Orchestration runtime — journal, workspace lifecycle, and all harness tools
 ├── pr-review/          # PR review — change analysis, violations, review persistence
-├── principles/         # Principles — loading, matching, compliance queries
-└── prompt-pipeline/    # Prompt assembly — worktree settings, spawn enrichment
+└── principles/         # Principles — loading, matching, compliance queries
 ```
 
 ## Feature subdirectories
@@ -42,10 +41,6 @@ PR review pipeline. Owns `show_pr_impact` and `store_pr_review`. Analyzes git di
 ### `principles/`
 
 Principle loading and querying. Owns `get_principles`, `list_principles`, and `review_code`. Loads principles from both the plugin directory and the project's `.canon/principles/` directory. Delegates matching logic to `@shared/matcher.ts`.
-
-### `prompt-pipeline/`
-
-Prompt assembly and agent spawn enrichment. Owns worktree settings injection (`services/worktree-settings.ts`) and the model resolution pipeline. Determines which tools and permission modes to use when spawning agents.
 
 ## Adding a new feature
 

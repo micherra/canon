@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "@shared/constants.ts";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -101,12 +102,13 @@ function groupViolationsBySubsystem(
 function extractAndStoreAreaObservations(
   input: WriteReviewInput,
   mappedVerdict: string,
-  areaMemoryWriter?: AreaMemoryWriter,
+  areaMemoryWriter: AreaMemoryWriter | undefined,
+  persistableViolations: WriteReviewInput["violations"],
 ): void {
   if (!areaMemoryWriter) return;
   if (mappedVerdict !== "BLOCKING" && mappedVerdict !== "WARNING") return;
 
-  for (const [subsystemKey, violations] of groupViolationsBySubsystem(input.violations)) {
+  for (const [subsystemKey, violations] of groupViolationsBySubsystem(persistableViolations)) {
     try {
       areaMemoryWriter.insertObservation({
         content: formatSubsystemContent(violations),
@@ -372,10 +374,41 @@ function persistPathEffects(
 }
 
 /**
+ * Re-exported from @shared/constants.ts for backward compatibility.
+ * The reserved principle_id used by Stage 1.5 correctness-scan findings.
+ * These are advisory human-facing annotations, not Canon principle violations.
+ * They must NEVER be counted in principle-keyed analytics stores.
+ */
+export { CORRECTNESS_SCAN_PRINCIPLE_ID };
+
+/**
+ * Filter helper: strips correctness-scan pseudo-violations before any
+ * ANALYTICS write (file_violation_history, path_effects, area_observations,
+ * most_violated/violation_directories in analyzer).
+ *
+ * correctness-scan findings ARE stored in the reviews table (for human
+ * presentation via present_review) but must NEVER pollute principle-keyed
+ * analytics stores. Use this at analytics boundaries, NOT at the store-write
+ * boundary. See CORRECTNESS_SCAN_PRINCIPLE_ID in @shared/constants.ts.
+ *
+ * @param violations - Array of violations, possibly including correctness-scan entries
+ * @returns A new array with all correctness-scan violations removed
+ */
+export function stripNonPersistableViolations<T extends { principle_id: string }>(
+  violations: T[],
+): T[] {
+  return violations.filter((v) => v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID);
+}
+
+/**
  * Update file_violation_history and path_effects tables after a review.
  *
  * Non-blocking: catches all errors internally. Signal persistence
  * failures must never prevent a review from being written.
+ *
+ * correctness-scan violations are intentionally excluded — they use a
+ * reserved pseudo-principle_id and must not pollute principle-keyed
+ * analytics or drift signals.
  *
  * @param signals - SignalWriter instance provided by the caller (app layer)
  * @param files - files that were reviewed
@@ -391,7 +424,14 @@ export function updateFileViolationHistory(
   try {
     const now = new Date().toISOString();
 
-    const violationMap = groupViolations(violations);
+    // Filter out correctness-scan pseudo-violations before persisting to
+    // principle-keyed history. They appear in the human-readable review
+    // output but must not skew drift signals or file-violation analytics.
+    const principleViolations = violations.filter(
+      (v) => v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID,
+    );
+
+    const violationMap = groupViolations(principleViolations);
     persistViolationHistory(signals, violationMap, now);
 
     // Compute per-file violation count by summing counts from violationMap
@@ -461,12 +501,19 @@ export async function writeReview(
   };
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
 
+  // Exclude correctness-scan from analytics/signal paths only.
+  // The human-facing REVIEW output (markdown + meta JSON) keeps the full list.
+  // drift/area-memory persistence must only see real principle violations.
+  const analyticsViolations = input.violations.filter(
+    (v) => v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID,
+  );
+
   if (signals) {
-    updateFileViolationHistory(signals, input.files, input.violations, mappedVerdict);
+    updateFileViolationHistory(signals, input.files, analyticsViolations, mappedVerdict);
   }
 
   try {
-    extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter);
+    extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter, analyticsViolations);
   } catch (err) {
     console.warn(
       "[write-review] area observation extraction failed:",

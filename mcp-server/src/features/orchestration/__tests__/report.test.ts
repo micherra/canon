@@ -6,6 +6,7 @@ import { DriftStore } from "@platform/storage/drift/store.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { report } from "../tools/report.ts";
+import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "../tools/write-review.ts";
 
 // --- Schema validation ---
 
@@ -231,5 +232,89 @@ describe("report()", () => {
     const dao = getDriftDb(tmpDir).getCraftProfiles();
     const rows = dao.getRecentProfiles(10);
     expect(rows).toHaveLength(0);
+  });
+
+  // ---- correctness-scan: stored for presentation, excluded from analytics ----
+
+  it("stores correctness-scan violations in the review record (for human presentation)", async () => {
+    // correctness-scan findings must be stored so present_review can show them to humans.
+    // Analytics exclusion happens at aggregation time in analyzer.ts.
+    await report(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 1 },
+        },
+        type: "review",
+        violations: [{ principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
+    expect(entries).toHaveLength(1);
+    const stored = entries[0];
+    // correctness-scan IS stored — present_review reads from this record
+    expect(stored.violations.map((v) => v.principle_id)).toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
+    expect(stored.violations).toHaveLength(1);
+  });
+
+  it("stores both real violations and correctness-scan in the same review record", async () => {
+    // Mixed review: real violation + correctness-scan finding.
+    // Both stored for presentation; analytics layer filters at aggregation time.
+    await report(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 2 },
+        },
+        type: "review",
+        violations: [
+          { principle_id: "errors-are-values", severity: "rule" },
+          { principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" },
+        ],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
+    expect(entries).toHaveLength(1);
+    const stored = entries[0];
+    // Both violations stored
+    expect(stored.violations).toHaveLength(2);
+    const ids = stored.violations.map((v) => v.principle_id);
+    expect(ids).toContain("errors-are-values");
+    expect(ids).toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
+  });
+
+  it("derives verdict from analytics violations only (correctness-scan excluded from verdict)", async () => {
+    // Input has only a correctness-scan violation (would be BLOCKING if counted).
+    // Without it in the analytics path, verdict should be CLEAN.
+    await report(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 1, total: 1 },
+        },
+        type: "review",
+        violations: [{ principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
+    expect(entries[0].verdict).toBe("CLEAN");
   });
 });

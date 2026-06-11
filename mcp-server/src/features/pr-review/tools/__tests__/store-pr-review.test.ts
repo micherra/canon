@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "@features/orchestration/tools/write-review.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import type { CraftProfile } from "@shared/schema.ts";
@@ -438,5 +439,65 @@ describe("storePrReview", () => {
     const rows = db.getCraftProfiles().getRecentProfiles(10);
     expect(rows).toHaveLength(1); // same subsystem → one row
     expect(rows[0].subsystem_key).toBe("features/orchestration");
+  });
+
+  // ---- correctness-scan: stored for presentation, excluded from analytics ----
+
+  it("stores correctness-scan violations in the review record (for human presentation)", async () => {
+    // correctness-scan findings must be stored so present_review can show them to humans.
+    await storePrReview(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 1 },
+        },
+        verdict: "BLOCKING",
+        violations: [{ principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const reviews = await store.getReviews();
+    expect(reviews).toHaveLength(1);
+    const stored = reviews[0];
+    // correctness-scan IS stored — present_review reads from this record
+    expect(stored.violations.map((v) => v.principle_id)).toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
+    expect(stored.violations).toHaveLength(1);
+  });
+
+  it("stores both real violations and correctness-scan in the same review record", async () => {
+    // Mixed input: both a real violation and a correctness-scan finding.
+    // Both must be stored for presentation. Analytics exclusion happens at aggregation time.
+    await storePrReview(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 2 },
+        },
+        verdict: "BLOCKING",
+        violations: [
+          { principle_id: "thin-handlers", severity: "strong-opinion" },
+          { principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" },
+        ],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const reviews = await store.getReviews();
+    expect(reviews).toHaveLength(1);
+    const stored = reviews[0];
+    // Both violations stored — analytics layer filters at read time
+    expect(stored.violations).toHaveLength(2);
+    const ids = stored.violations.map((v) => v.principle_id);
+    expect(ids).toContain("thin-handlers");
+    expect(ids).toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
   });
 });

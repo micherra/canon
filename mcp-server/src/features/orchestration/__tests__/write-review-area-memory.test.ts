@@ -11,7 +11,11 @@ import { join } from "node:path";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AreaMemoryWriter } from "../tools/write-review.ts";
-import { type WriteReviewInput, writeReview } from "../tools/write-review.ts";
+import {
+  CORRECTNESS_SCAN_PRINCIPLE_ID,
+  type WriteReviewInput,
+  writeReview,
+} from "../tools/write-review.ts";
 
 let tmpDir: string;
 
@@ -229,5 +233,58 @@ describe("writeReview — area observation extraction", () => {
     const result = await writeReview(input, undefined, undefined, undefined);
     assertOk(result);
     expect(result.verdict).toBe("BLOCKING");
+  });
+
+  it("does NOT insert area observation for correctness-scan violations", async () => {
+    // correctness-scan is a pseudo-principle; it must not leak into area_observations
+    const { calls, writer } = makeMockWriter();
+    const input = makeInput({
+      verdict: "blocked",
+      violations: [
+        {
+          file_path: "mcp-server/src/features/orchestration/tools/write-review.ts",
+          principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID,
+          severity: "rule",
+        },
+      ],
+    });
+
+    const result = await writeReview(input, undefined, undefined, writer);
+    assertOk(result);
+    expect(result.verdict).toBe("BLOCKING");
+    // insertObservation must NOT be called — no real principle violated
+    expect(calls).toHaveLength(0);
+  });
+
+  it("inserts area observation for real principle but not for co-located correctness-scan violation", async () => {
+    // Mixed review: one real violation + one correctness-scan violation in same subsystem.
+    // Only the real violation should produce an area observation.
+    const { calls, writer } = makeMockWriter();
+    const input = makeInput({
+      verdict: "blocked",
+      violations: [
+        {
+          description: "Missing error handling",
+          file_path: "mcp-server/src/features/orchestration/tools/write-review.ts",
+          principle_id: "errors-are-values",
+          severity: "rule",
+        },
+        {
+          file_path: "mcp-server/src/features/orchestration/tools/write-review.ts",
+          principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID,
+          severity: "rule",
+        },
+      ],
+    });
+
+    const result = await writeReview(input, undefined, undefined, writer);
+    assertOk(result);
+    expect(result.verdict).toBe("BLOCKING");
+    // One observation for features/orchestration — driven by errors-are-values only
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0].subsystem_key).toBe("features/orchestration");
+    // Content must mention the real principle, must NOT mention correctness-scan
+    expect(calls[0][0].content).toContain("errors-are-values");
+    expect(calls[0][0].content).not.toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
   });
 });

@@ -1,4 +1,5 @@
 import { dirname } from "node:path";
+import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "@shared/constants.ts";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import { computeComplianceConfidence } from "./drift-confidence-adapter.ts";
@@ -75,11 +76,20 @@ function initStats(id: string): PrincipleStats {
   };
 }
 
+/**
+ * Returns true for violations that should be excluded from principle-keyed analytics.
+ * correctness-scan is a human-presentation annotation stored for present_review
+ * but must never appear in most_violated, compliance_rate, or violation_directories.
+ */
+function isAnalyticsViolation(v: { principle_id: string }): boolean {
+  return v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID;
+}
+
 function computePrincipleStats(reviews: ReviewEntry[]): Map<string, PrincipleStats> {
   const principleMap = new Map<string, PrincipleStats>();
 
   for (const review of reviews) {
-    for (const v of review.violations) {
+    for (const v of review.violations.filter(isAnalyticsViolation)) {
       const stats = principleMap.get(v.principle_id) || initStats(v.principle_id);
       stats.total_violations++;
       stats.unintentional_violations++;
@@ -104,13 +114,16 @@ function computeViolationDirectories(reviews: ReviewEntry[]): DirectoryStats[] {
   const dirMap = new Map<string, DirectoryStats>();
 
   for (const review of reviews) {
-    if (review.violations.length === 0) continue;
+    // Filter correctness-scan from directory analytics — only real principle violations count.
+    const analyticsViolations = review.violations.filter(isAnalyticsViolation);
+    if (analyticsViolations.length === 0) continue;
 
-    const hasPerFileViolations = review.violations.some((v) => v.file_path);
+    const analyticsReview = { ...review, violations: analyticsViolations };
+    const hasPerFileViolations = analyticsViolations.some((v) => v.file_path);
     if (hasPerFileViolations) {
-      accumulatePerFileViolations(review, dirMap);
+      accumulatePerFileViolations(analyticsReview, dirMap);
     } else {
-      accumulateLegacyViolations(review, dirMap);
+      accumulateLegacyViolations(analyticsReview, dirMap);
     }
   }
 
