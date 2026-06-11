@@ -12,13 +12,18 @@
 
 import path from "node:path";
 import { getCurrentHead } from "@features/knowledge-graph/git-intel/git-intel-pipeline.ts";
-import { CANON_DIR, CANON_FILES, GRAPH_HEAD_COMMIT_KEY } from "@shared/constants.ts";
+import {
+  CANON_DIR,
+  CANON_FILES,
+  GRAPH_HEAD_COMMIT_KEY,
+  SCANNABLE_EXTENSIONS,
+} from "@shared/constants.ts";
 import type { Database } from "better-sqlite3";
 
 // biome-ignore lint/performance/noBarrelFile: intentional re-export — kg-pipeline is the single entry point for both bulk pipeline and incremental reindex; consumers should not need to know about the internal split
 export { readFileForReindex, reindexFile, reindexFileTransaction } from "./kg-pipeline-reindex.ts";
 
-import { registerOverlayAdapters } from "./kg-adapter-registry.ts";
+import { getOverlayExtensions, registerOverlayAdapters } from "./kg-adapter-registry.ts";
 import { detectCommunities } from "./kg-community.ts";
 import { EmbeddingService } from "./kg-embedding.ts";
 import type { FileImportMap } from "./kg-pipeline-phases.ts";
@@ -67,10 +72,28 @@ export type ReindexResult = {
   entitiesAfter: number;
 };
 
+/**
+ * Compute the union of built-in scannable extensions plus any extensions
+ * registered by the current project's overlay adapters. This ensures that
+ * overlay-only extensions (e.g. `.rb`) are discovered during the scan phase
+ * even though `SCANNABLE_EXTENSIONS` does not include them.
+ */
+function buildIncludeExtensions(): string[] {
+  const overlayExts = getOverlayExtensions();
+  if (overlayExts.size === 0) return [...SCANNABLE_EXTENSIONS];
+  const union = new Set(SCANNABLE_EXTENSIONS);
+  for (const ext of overlayExts) {
+    union.add(ext);
+  }
+  return [...union];
+}
+
 /** Scan source files, handling sourceDirs if provided. */
 async function scanPhase(projectDir: string, sourceDirs?: string[]): Promise<string[]> {
+  const includeExtensions = buildIncludeExtensions();
+
   if (!sourceDirs || sourceDirs.length === 0) {
-    return scanSourceFiles(projectDir);
+    return scanSourceFiles(projectDir, { includeExtensions });
   }
 
   const allFiles: string[] = [];
@@ -79,7 +102,7 @@ async function scanPhase(projectDir: string, sourceDirs?: string[]): Promise<str
     if (!absDir.startsWith(projectDir + path.sep) && absDir !== projectDir) continue;
     try {
       // biome-ignore lint/performance/noAwaitInLoops: sequential scan with per-directory error handling; each directory is isolated
-      const files = await scanSourceFiles(absDir);
+      const files = await scanSourceFiles(absDir, { includeExtensions });
       for (const f of files) {
         allFiles.push(path.posix.join(dir.replace(/\\/g, "/"), f.replace(/\\/g, "/")));
       }

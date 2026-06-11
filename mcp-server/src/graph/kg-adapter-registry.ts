@@ -61,10 +61,19 @@ export function getAdapter(extension: string): LanguageAdapter | undefined {
 // Overlay language name map — populated by registerOverlayAdapters()
 const overlayLangMap = new Map<string, string>();
 
+// Track which extensions were added by overlay registration so they can be
+// cleared on the next registerOverlayAdapters call (per-project scoping).
+const overlayExtensions = new Set<string>();
+
 /**
  * Register adapters for overlay LanguageConfig entries and populate the
  * overlay language name map. Called from kg-wasm-parser.ts after overlay
  * grammars load successfully.
+ *
+ * Clears all previously-registered overlay adapters before registering the
+ * new set, so that project A's overlays do not persist into project B's
+ * pipeline run when project B has no overlays (or different ones).
+ * Built-in adapters are never removed.
  *
  * Only entries whose parser was successfully loaded (i.e., parsers.has(id))
  * are registered — the adapter factory calls getParser(id) at parse time,
@@ -77,6 +86,14 @@ const overlayLangMap = new Map<string, string>();
  * @param overlayConfigs - Validated overlay configs (from LANGUAGE_CONFIGS after merge)
  */
 export function registerOverlayAdapters(overlayConfigs: LanguageConfig[]): void {
+  // Clear previously-registered overlay adapters (project-scope isolation).
+  // Never remove built-ins — BUILTIN_EXTENSIONS is the guard.
+  for (const ext of overlayExtensions) {
+    registry.delete(ext);
+    overlayLangMap.delete(ext);
+  }
+  overlayExtensions.clear();
+
   for (const config of overlayConfigs) {
     const adapter = makeAdapter(config);
     for (const ext of config.extensions) {
@@ -87,10 +104,18 @@ export function registerOverlayAdapters(overlayConfigs: LanguageConfig[]): void 
         continue;
       }
       registry.set(ext, adapter);
-      // Use the language id as the canonical name for overlay languages
       overlayLangMap.set(ext, config.id);
+      overlayExtensions.add(ext);
     }
   }
+}
+
+/**
+ * Returns the set of extensions currently registered via overlays.
+ * Used by the pipeline to include overlay-only extensions in the file scan.
+ */
+export function getOverlayExtensions(): ReadonlySet<string> {
+  return overlayExtensions;
 }
 
 /**

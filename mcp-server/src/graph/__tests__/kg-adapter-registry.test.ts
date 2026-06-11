@@ -9,10 +9,19 @@
  *
  * Fix 2 (non-built-in extensions): overlay extensions that do NOT collide with
  *   built-ins are registered normally.
+ *
+ * Fix B (per-project scope): registerOverlayAdapters clears previously-registered
+ *   overlay adapters on each call so project A's overlays do not bleed into
+ *   project B's pipeline run. Built-in adapters are never removed.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getAdapter, getLanguage, registerOverlayAdapters } from "../kg-adapter-registry.ts";
+import {
+  getAdapter,
+  getLanguage,
+  getOverlayExtensions,
+  registerOverlayAdapters,
+} from "../kg-adapter-registry.ts";
 import type { LanguageConfig } from "../kg-language-configs.ts";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -150,5 +159,74 @@ describe("registerOverlayAdapters — non-colliding extension", () => {
     // but the adapter object itself is registered)
     expect(getAdapter(".rb")).toBeDefined();
     expect(getLanguage(".rb")).toBe("ruby-test");
+  });
+});
+
+// ─── Fix B: per-project overlay scope ────────────────────────────────────────
+//
+// registerOverlayAdapters must clear prior overlays on each call so that
+// project A's overlay extensions do not persist into project B's pipeline run.
+
+describe("registerOverlayAdapters — per-project scope (Finding B)", () => {
+  afterEach(() => {
+    // Always reset to empty overlays after each test so we don't pollute others.
+    registerOverlayAdapters([]);
+  });
+
+  it("removes a previously-registered overlay extension when called with an empty list", () => {
+    // Project A registers .go
+    const goConfig = makeGoConfig([".go"]);
+    registerOverlayAdapters([goConfig]);
+
+    // Confirm .go is registered
+    expect(getAdapter(".go")).toBeDefined();
+    expect(getOverlayExtensions().has(".go")).toBe(true);
+
+    // Project B has no overlays
+    registerOverlayAdapters([]);
+
+    // .go must be gone
+    expect(getAdapter(".go")).toBeUndefined();
+    expect(getOverlayExtensions().has(".go")).toBe(false);
+  });
+
+  it("getOverlayExtensions reflects the current overlay set after each call", () => {
+    const goConfig = makeGoConfig([".go"]);
+    registerOverlayAdapters([goConfig]);
+    expect(getOverlayExtensions().has(".go")).toBe(true);
+
+    // Replace with a ruby overlay
+    const rubyConfig: LanguageConfig = {
+      extensions: [".rb"],
+      grammarFile: "tree-sitter-ruby.wasm",
+      id: "ruby-scope",
+      nodeKinds: VALID_NODE_KINDS,
+    };
+    registerOverlayAdapters([rubyConfig]);
+
+    expect(getOverlayExtensions().has(".go")).toBe(false);
+    expect(getOverlayExtensions().has(".rb")).toBe(true);
+  });
+
+  it("built-in adapters are never removed when overlays are cleared", () => {
+    const builtinTs = getAdapter(".ts");
+    const builtinPy = getAdapter(".py");
+
+    // Register an overlay then clear it
+    registerOverlayAdapters([makeGoConfig([".go"])]);
+    registerOverlayAdapters([]);
+
+    // Built-ins still intact
+    expect(getAdapter(".ts")).toBe(builtinTs);
+    expect(getAdapter(".py")).toBe(builtinPy);
+  });
+
+  it("getLanguage returns 'unknown' for a cleared overlay extension", () => {
+    const goConfig = makeGoConfig([".go"]);
+    registerOverlayAdapters([goConfig]);
+    // Project B: no overlays
+    registerOverlayAdapters([]);
+
+    expect(getLanguage(".go")).toBe("unknown");
   });
 });
