@@ -124,10 +124,10 @@ resolve_protected_branch() {
   # Resolution order: (1) git -C <path> in the command — the command explicitly
   # names the target repo; (2) CANON_GUARD_CWD (test/env override);
   # (3) leading "cd <dir> &&" prefix; (4) empty (use hook's cwd).
-  # canon_git_dir_arg returns only the path; use an array to avoid word-splitting
-  # on paths containing spaces (P1 Finding B fix).
+  # canon_git_dir_path returns only the path; use an array to avoid word-splitting
+  # on paths containing spaces. Covers cd-prefix AND -C (multiple -C composed).
   local _gda_path
-  _gda_path=$(canon_git_dir_arg "$raw_segment")
+  _gda_path=$(canon_git_dir_path "$raw_segment")
   local -a git_dir_args=()
   if [[ -n "$_gda_path" ]]; then
     git_dir_args=(-C "$_gda_path")
@@ -209,10 +209,10 @@ bare_push_is_safe() {
   local remote="${3:-origin}"
   # Resolution order: (1) git -C <path> in the command; (2) CANON_GUARD_CWD;
   # (3) leading "cd <dir> &&" prefix; (4) empty (use hook's cwd).
-  # canon_git_dir_arg returns only the path; use an array to avoid word-splitting
-  # on paths containing spaces (P1 Finding B fix).
+  # canon_git_dir_path returns only the path; use an array to avoid word-splitting
+  # on paths containing spaces. Covers cd-prefix AND -C (multiple -C composed).
   local _gda_path
-  _gda_path=$(canon_git_dir_arg "$raw_segment")
+  _gda_path=$(canon_git_dir_path "$raw_segment")
   local -a git_dir_args=()
   if [[ -n "$_gda_path" ]]; then
     git_dir_args=(-C "$_gda_path")
@@ -461,10 +461,10 @@ push_updates_protected_branch() {
       # Resolution order: (1) git -C <path> in the command — the command
       # explicitly targets that repo; (2) CANON_GUARD_CWD (test/env override);
       # (3) leading "cd <dir> &&" prefix; (4) empty (hook's cwd).
-      # canon_git_dir_arg returns only the path; use an array to avoid
-      # word-splitting on paths containing spaces (P1 Finding B fix).
+      # canon_git_dir_path returns only the path; use an array to avoid
+      # word-splitting on paths containing spaces. Covers cd-prefix AND -C.
       local _gda_path_head
-      _gda_path_head=$(canon_git_dir_arg "$raw_segment")
+      _gda_path_head=$(canon_git_dir_path "$raw_segment")
       local -a _gda_head=()
       if [[ -n "$_gda_path_head" ]]; then
         _gda_head=(-C "$_gda_path_head")

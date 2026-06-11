@@ -24,9 +24,17 @@
 #
 #   canon_git_dir_arg "$COMMAND"
 #     Inspects a compound command (e.g. "cd /path && git commit ...") for a leading
-#     `cd <dir>` segment and, if that directory exists, prints "-C <dir>" on stdout.
+#     `cd <dir>` segment OR a "git -C <dir> ..." inline form and, if that directory
+#     exists, prints "-C <dir>" on stdout for use as: git $GIT_DIR_ARG ...
 #     Prints nothing when no cd target is found or the directory does not exist.
 #     Uses POSIX [[:space:]] for macOS BSD grep compatibility (no \s).
+#
+#   canon_git_dir_path "$COMMAND"
+#     Like canon_git_dir_arg but prints only the DIRECTORY PATH (no leading "-C ").
+#     Covers both "cd <dir> &&" prefixes and "git -C <dir> ..." inline forms,
+#     including multiple -C options (effective dir). For space-safe array callers:
+#       local -a gda=(); p=$(canon_git_dir_path "$cmd")
+#       [[ -n "$p" ]] && gda=(-C "$p"); git "${gda[@]}" ...
 #
 #   canon_is_git_cmd "$COMMAND" "$SUBCMD"
 #     Returns 0 (true) when COMMAND invokes git with the exact subcommand SUBCMD,
@@ -963,24 +971,18 @@ canon_git_C_path() {
 # ---------------------------------------------------------------------------
 # Detects a leading "cd <dir> &&" prefix OR a "git -C <dir> ..." inline form
 # in a shell command and, when the extracted directory exists on disk, prints
-# just the DIRECTORY PATH so callers can pass it safely as: git -C "$path" ...
-#
-# Returning only the path (not "-C <path>") lets callers quote it correctly,
-# preventing word-splitting on paths containing spaces (P1 Finding B fix).
+# "-C <dir>" so git commands can be scoped to that directory.
 #
 # Handles:
-#   "cd /some/path && git commit -m msg"       → "/some/path"
-#   "  cd ./relative && git commit"            → "./relative"  (if dir exists)
-#   "git -C /some/path push origin HEAD"       → "/some/path"  (if dir exists)
-#   "git -C /tmp/a -C /tmp/b push origin HEAD" → "/tmp/b"  (effective dir, if exists)
+#   "cd /some/path && git commit -m msg"       → "-C /some/path"
+#   "  cd ./relative && git commit"            → "-C ./relative"  (if dir exists)
+#   "git -C /some/path push origin HEAD"       → "-C /some/path"  (if dir exists)
 #   "git commit -m msg"                        → ""
 #   "cd /nonexistent && git commit"            → ""
 #
-# Callers MUST use the array form to avoid word-splitting on spaces:
-#   local -a gda=()
-#   local _p; _p=$(canon_git_dir_arg "$cmd")
-#   [[ -n "$_p" ]] && gda=(-C "$_p")
-#   git "${gda[@]}" <subcmd> ...
+# NOTE: The returned string "-C <path>" is intended for use with unquoted
+# $GIT_DIR_ARG expansion (git $GIT_DIR_ARG ...) and will word-split on paths
+# with spaces.  For space-safe callers, use canon_git_dir_path instead.
 #
 # Uses POSIX [[:space:]] throughout — macOS BSD grep does not support \s.
 canon_git_dir_arg() {
@@ -1005,13 +1007,61 @@ canon_git_dir_arg() {
   esac
 
   if [[ -n "$cd_target" ]] && [[ -d "$cd_target" ]]; then
-    printf '%s' "$cd_target"
+    printf '%s' "-C $cd_target"
     return
   fi
 
   # Also check for a "git -C <path> ..." inline form (separate token, not =form).
   # This handles "git -C /other/repo push origin HEAD" where there is no leading cd.
-  # canon_git_C_path now returns the EFFECTIVE path after composing all -C options.
+  # canon_git_C_path returns the EFFECTIVE path after composing all -C options.
+  local c_path
+  c_path=$(canon_git_C_path "$command" || true) # DOCUMENTED FAIL-OPEN -- absent -C is the normal case
+  if [[ -n "$c_path" ]] && [[ -d "$c_path" ]]; then
+    printf '%s' "-C $c_path"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# canon_git_dir_path <command>
+# ---------------------------------------------------------------------------
+# Like canon_git_dir_arg but prints only the DIRECTORY PATH (no leading "-C ").
+# Covers both "cd <dir> &&" prefixes and "git -C <dir> ..." inline forms,
+# including multiple -C options (effective directory via canon_git_C_path).
+#
+# Callers MUST use the bash array form to avoid word-splitting on spaces:
+#   local -a gda=()
+#   local _p; _p=$(canon_git_dir_path "$cmd")
+#   [[ -n "$_p" ]] && gda=(-C "$_p")
+#   git "${gda[@]}" <subcmd> ...
+#
+# Handles:
+#   "cd /some/path && git commit -m msg"       → "/some/path"
+#   "git -C /some/path push origin HEAD"       → "/some/path"
+#   "git -C /tmp/a -C /tmp/b push origin HEAD" → "/tmp/b"  (effective dir)
+#   "git commit -m msg"                        → ""
+#   "cd /nonexistent && git commit"            → ""
+canon_git_dir_path() {
+  local command="$1"
+  local cd_target
+
+  # Check for a leading "cd <dir> &&" prefix first.
+  cd_target=$(printf '%s' "$command" \
+    | grep -oE '^[[:space:]]*cd[[:space:]]+[^;&|]+' \
+    | sed 's/^[[:space:]]*cd[[:space:]]*//' \
+    | sed 's/[[:space:]]*$//' \
+    || true) # DOCUMENTED FAIL-OPEN -- no cd prefix in command is the normal case
+
+  case $cd_target in
+    \"*\") cd_target=${cd_target#\"}; cd_target=${cd_target%\"} ;;
+    \'*\') cd_target=${cd_target#\'}; cd_target=${cd_target%\'} ;;
+  esac
+
+  if [[ -n "$cd_target" ]] && [[ -d "$cd_target" ]]; then
+    printf '%s' "$cd_target"
+    return
+  fi
+
+  # Fall back to the effective directory from "git -C <path> ..." inline form.
   local c_path
   c_path=$(canon_git_C_path "$command" || true) # DOCUMENTED FAIL-OPEN -- absent -C is the normal case
   if [[ -n "$c_path" ]] && [[ -d "$c_path" ]]; then
