@@ -45,8 +45,16 @@ export async function resolveProjectDir(
   listRootsFn: () => Promise<{ roots: Array<{ uri: string; name?: string }> }>,
   cwdFallback: string,
 ): Promise<string> {
-  // Priority 1: explicit absolute path override.
-  if (canonProjectDir && isAbsolute(canonProjectDir)) {
+  // Priority 1: explicit absolute path override — validate before trusting.
+  // Explicit token reject: ${...} tokens indicate the harness did not expand the variable.
+  // isAbsolute() already rejects the bare ${VAR} form (non-absolute), but an absolute path
+  // containing a token mid-segment (e.g. "/some/${VAR}/path") would slip through without this
+  // check. Reject both forms for defense-in-depth and log clearly so the cause is obvious.
+  if (canonProjectDir && /\$\{[^}]*\}/.test(canonProjectDir)) {
+    console.warn(
+      `[canon] CANON_PROJECT_DIR ignored — contains an unexpanded token: ${canonProjectDir}`,
+    );
+  } else if (canonProjectDir && isAbsolute(canonProjectDir)) {
     console.error(`[canon] project dir from CANON_PROJECT_DIR: ${canonProjectDir}`);
     return canonProjectDir;
   }

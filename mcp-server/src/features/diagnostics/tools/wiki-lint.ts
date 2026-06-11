@@ -29,17 +29,19 @@ import {
   checkStaleRefs,
   type WikiLintOutput,
 } from "../services/wiki-lint.ts";
+import { checkGlossaryConsistency } from "../services/wiki-lint-glossary.ts";
 
 // ---- Types ----
 
 type CheckName =
-  | "contradictions"
-  | "orphan_principles"
-  | "stale_refs"
-  | "missing_examples"
   | "cited_paths"
+  | "contradictions"
+  | "glossary_consistency"
+  | "missing_examples"
+  | "orphan_principles"
   | "scope_layers"
-  | "scope_tags";
+  | "scope_tags"
+  | "stale_refs";
 
 export type WikiLintInput = {
   checks?: CheckName[];
@@ -256,6 +258,14 @@ function runCitedPathCheck(
   return checkCitedPaths([...refFiles, ...dddDocFiles], existsOnDisk);
 }
 
+/** Read CONTEXT.md and run the glossary consistency check; returns [] when file is absent. */
+function runGlossaryCheck(projectDir: string): ReturnType<typeof checkGlossaryConsistency> {
+  const contextMdPath = join(projectDir, "CONTEXT.md");
+  const content = readFileSafe(contextMdPath);
+  if (content === null) return [];
+  return checkGlossaryConsistency({ content, path: contextMdPath });
+}
+
 // ---- Main tool function ----
 
 /**
@@ -271,13 +281,14 @@ export async function wikiLint(
   pluginDir: string,
 ): Promise<WikiLintOutput> {
   const ALL_CHECKS: CheckName[] = [
-    "contradictions",
-    "orphan_principles",
-    "stale_refs",
-    "missing_examples",
     "cited_paths",
+    "contradictions",
+    "glossary_consistency",
+    "missing_examples",
+    "orphan_principles",
     "scope_layers",
     "scope_tags",
+    "stale_refs",
   ];
   const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
 
@@ -311,11 +322,15 @@ export async function wikiLint(
   const scopeTags = enabled.has("scope_tags")
     ? checkScopeTags(principles, VALID_COMPUTED_TAGS)
     : [];
+  const glossaryConsistency = enabled.has("glossary_consistency")
+    ? runGlossaryCheck(projectDir)
+    : [];
 
   return assembleWikiLintOutput({
     citedPaths,
     contradictions,
     filesScanned: claudeMdFiles.length + agentFiles.length + dddDocFiles.length,
+    glossaryConsistency,
     missingExamples,
     orphans,
     principlesChecked: principles.length,

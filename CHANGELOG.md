@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.11.0](https://github.com/micherra/canon/compare/v2.10.0...v2.11.0) (2026-06-10)
+
+
+### Features
+
+* **drift:** violation lifecycle + auto-closure on superseding CLEAN review (watch_RRRRRR1) ([#351](https://github.com/micherra/canon/issues/351)) ([1ba1848](https://github.com/micherra/canon/commit/1ba18481b51c0f86dfda4cb8b5b37e3bdeae9310))
+
+
+### Bug Fixes
+
+* **mcp-boot:** remove the var-absent class — probe-resolve boot.sh AND validate pluginDir (durable) ([#370](https://github.com/micherra/canon/issues/370)) ([f8f98e6](https://github.com/micherra/canon/commit/f8f98e6f96c60a6d7bab02236b62229e2efc8867))
+* **prod-readiness:** repair /canon:doctor boot check, add npm-audit CI gate + clear 6 vulns, vitest timeout/maxWorkers policy ([#368](https://github.com/micherra/canon/issues/368)) ([027aa37](https://github.com/micherra/canon/commit/027aa377418cbbcad82d1bfb5fee3f8f1b710955))
+
 ## [2.10.0](https://github.com/micherra/canon/compare/v2.9.0...v2.10.0) (2026-06-10)
 
 

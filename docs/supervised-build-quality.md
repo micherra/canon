@@ -117,7 +117,7 @@ Context gathering burns the most agent turns. Reduce wasted work.
 | **Skill effectiveness tracking** | Medium | Medium | Learner analyzes journal outcomes to recommend: primers that help, `maxTurns` adjustments, skills that need updating. Requires extending `FlowRunEntry` with domain skill counts. |
 | **Effort budgets** | Medium | Medium | Maximum tool calls per state, wall-clock duration limits, max agent spawns per flow. "Focus and wrap up" note injected when approaching limit; pause for approval when hit. |
 | **`evaluate-step` augmented with LSP** | Medium | Medium | L2. The regex `PATTERN_CATALOG` gets a precision boost from real compiler signal. Keep regex for style patterns; LSP for correctness. |
-| **Architect LSP blast-radius cross-check** | Small | Medium | L3. Cross-check KG `graph_query(callers)` against ground-truth LSP references; catches the stale-KG problem hit live. |
+| ~~**Architect LSP blast-radius cross-check**~~ | ~~Small~~ | ~~Medium~~ | Shipped (harness-round1). LSP added to `architect.md` tools: with `## LSP Usage` section scoped to `findReferences`/`goToDefinition` for blast-radius cross-check. Navigation-only; no diagnostics op. |
 | **Skill progressive activation** | Medium | Medium | X2. Split monolithic CLAUDE.md into activated skills so the orchestrator loads only the relevant protocol. Attacks the TTL/context-bloat the user already fights. Complements the existing "Skill effectiveness tracking" entry. |
 | **Deferred-load cold Canon tools** | Medium | Medium | T1. Smaller orchestrator base context → more room before TTL/compaction. Needs hot/cold usage telemetry first. |
 
@@ -264,7 +264,7 @@ The shipper "creates the PR and returns" — it can't watch CI. Turn "PR opened"
 | Feature | Effort | Leverage | Source / Note |
 |---------|--------|----------|---------------|
 | **Shipper waits on CI via Monitor** | Medium | High | M1. Background `gh pr checks --watch`, re-invoke on completion. Build flow reports true done. Needs a timeout + handoff for unbounded CI. |
-| **Notify-on-build-complete / on-HITL-needed** | Small | Medium | N1. User walks away during a long build; pinged via opt-in OS push when a gate needs them or the PR is green. Opt-in keeps it inside the "invisible" posture — you only hear from it when you walked away. Establishes the push side of the resolved channel; Thread 6's digest (C3) and learner surfacing (C4) use the terminal/log side. |
+| ~~**Notify-on-build-complete / on-HITL-needed**~~ | ~~Small~~ | ~~Medium~~ | Shipped (harness-round1). `PushNotification` wired at plan-approval gate, review-verdict gate (both mandatory regardless of tier), and build-complete in Completion Checklist. Terminal digests (C3/C4 surfacing) remain terminal per channel split. |
 | **Auto-fix-on-CI-failure loop** | Medium | Medium | M2. Monitor detects red CI → re-spawn engineer in fix mode. Self-healing for transient/lint failures (the `tester_must_lint` pain). Cap iterations; distinguish transient vs real. |
 
 ---
