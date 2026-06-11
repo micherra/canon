@@ -144,13 +144,22 @@ export function checkGlossaryConsistency(file: {
   const findings: GlossaryConsistencyFinding[] = [];
 
   for (const [, groupEntries] of groups) {
-    // exact-duplicate: must be checked first; each key-group emits its own finding
-    findings.push(...detectExactDuplicates(groupEntries));
-    // naked-vs-qualified: only add when there are no exact-duplicates for this base
-    // (avoid double-reporting the same lines with two different kinds)
-    const hasDup = detectExactDuplicates(groupEntries).length > 0;
-    if (!hasDup) {
-      findings.push(...detectNakedVsQualified(groupEntries));
+    // exact-duplicate: detect once and emit
+    const dupFindings = detectExactDuplicates(groupEntries);
+    findings.push(...dupFindings);
+
+    // naked-vs-qualified: always evaluate independently of exact-duplicate presence.
+    // Avoid literal double-reporting: if a line is already in an exact-duplicate finding,
+    // remove it from the naked-vs-qualified line list. Emit the finding only if at least
+    // one line remains (the qualified heading(s) are never exact-duplicates, so they
+    // survive the filter and preserve the collision signal).
+    const dupLines = new Set(dupFindings.flatMap((f) => f.line_numbers));
+    const nvqFindings = detectNakedVsQualified(groupEntries);
+    for (const nvq of nvqFindings) {
+      const dedupedLines = nvq.line_numbers.filter((ln) => !dupLines.has(ln));
+      if (dedupedLines.length > 0) {
+        findings.push({ ...nvq, line_numbers: dedupedLines });
+      }
     }
   }
 

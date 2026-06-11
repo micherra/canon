@@ -83,6 +83,41 @@ describe("checkGlossaryConsistency", () => {
     expect(findings).toEqual([]);
   });
 
+  it("duplicate naked + qualified → BOTH exact-duplicate AND naked-vs-qualified findings in one pass", () => {
+    // Scenario: ## Tier (line 3), ## Tier (line 6), ## Tier (Build Tier) (line 9)
+    // Expected: exact-duplicate for lines [3,6], AND naked-vs-qualified for line [9]
+    const content = [
+      "# Context", // line 1
+      "", // line 2
+      "## Tier", // line 3
+      "First naked definition.", // line 4
+      "", // line 5
+      "## Tier", // line 6
+      "Second naked definition (duplicate).", // line 7
+      "", // line 8
+      "## Tier (Build Tier)", // line 9
+      "Qualified tier definition.", // line 10
+    ].join("\n");
+    const findings = checkGlossaryConsistency({ content, path: "CONTEXT.md" });
+    expect(findings).toHaveLength(2);
+
+    const dupFinding = findings.find((f) => f.kind === "exact-duplicate");
+    const nvqFinding = findings.find((f) => f.kind === "naked-vs-qualified");
+
+    expect(dupFinding).toBeDefined();
+    expect(dupFinding?.term).toBe("tier");
+    expect(dupFinding?.line_numbers).toEqual(expect.arrayContaining([3, 6]));
+    expect(dupFinding?.line_numbers).toHaveLength(2);
+
+    expect(nvqFinding).toBeDefined();
+    expect(nvqFinding?.term).toBe("tier");
+    // Lines 3 and 6 are already in the exact-duplicate finding; only line 9 remains
+    expect(nvqFinding?.line_numbers).toContain(9);
+    // Must NOT double-report lines already in the exact-duplicate finding
+    expect(nvqFinding?.line_numbers).not.toContain(3);
+    expect(nvqFinding?.line_numbers).not.toContain(6);
+  });
+
   it("finding shape: term, kind, and 1-based line_numbers are all present and correct", () => {
     const content = [
       "# Context", // line 1
