@@ -48,12 +48,14 @@ The same constraint applies when authoring mine scripts and code-analysis tools.
 
 ### Verification grep for string-executing wrappers
 
-**Passes — single-quoted single-token form (the tokenizer collapses the quoted span to one token):**
+**Bad — single-quoted single-token form (tokenizer passes it, but the contiguous literal is still present in source text):**
 
 ```bash
-# grep 'bash -c' file.sh exits 0 — 'bash -c' is one token, not a bare bash command.
-# Safe for use in verification greps.
-grep 'bash -c' file.sh
+# Although 'bash -c' collapses to one token and the guard exits 0,
+# the contiguous literal is still present in source text.
+# A raw string scanner (e.g. a future stricter check) would fire on this.
+# Do NOT use in good/preferred examples — use token-split or character-class split instead.
+# grep 'bash -c' file.sh
 ```
 
 **Bad — backslash-bearing alternation inside double quotes fails closed:**

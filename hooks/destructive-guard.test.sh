@@ -1334,13 +1334,15 @@ echo "-- scanner-avoids-its-own-pattern: verification grep shapes (see conventio
 run_test "grep 'bash -c' file.sh passes (single-quoted single-token, not self-blocking)" \
   0 '{"command":"grep '"'"'bash -c'"'"' hooks/destructive-guard.sh"}'
 
-# Indirect-variable "Good — preferred" form from the convention — must PASS (exit 0).
-# Pins the convention's shipped example so it cannot silently regress to a blocked form.
-# PAT='bash -c'; grep -n "$PAT" file.sh — full pattern in variable, no bare '|' remaining.
+# Token-split "Good — compliant" form from the convention — must PASS (exit 0).
+# W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh — contiguous literal assembled at
+# runtime, absent from source text. This is the genuinely compliant form per the
+# scanner-avoids-its-own-pattern convention (assigning the FULL literal to a single
+# variable like PAT='bash -c' does NOT satisfy the rule).
 # Empirically verified exit 0 (2026-06-10).
-# fixture: intentional guard-behavior pin for indirect-variable preferred example
-run_test "PAT='bash -c'; grep -n \"\$PAT\" file.sh passes (indirect-variable preferred form)" \
-  0 '{"command":"PAT='"'"'bash -c'"'"'; grep -n \"$PAT\" hooks/destructive-guard.sh"}'
+# fixture: intentional guard-behavior pin for token-split compliant example
+run_test "W1='ba'; W2='sh'; grep token-split form passes (contiguous literal absent from source)" \
+  0 '{"command":"W1='"'"'ba'"'"'; W2='"'"'sh'"'"'; grep -n \"${W1}${W2} -c\" hooks/destructive-guard.sh"}'
 
 # Double-quoted backslash-alternation form — fail-closed (exit 2).
 # The \| inside the double-quoted span is a backslash artifact the tokenizer
