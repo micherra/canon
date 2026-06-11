@@ -102,8 +102,26 @@ async function loadOverlayGrammars(projectDir: string): Promise<LanguageConfig[]
   if (overlayConfigs.length === 0) return [];
 
   const loaded: LanguageConfig[] = [];
+  // Track overlay ids seen so far to reject duplicates (first-wins policy).
+  // Without this guard, a second config with the same id would overwrite the
+  // first's parser in `parsers`, while both configs would land in `loaded` and
+  // register adapters — the first adapter's getParser() call would then resolve
+  // the second config's parser, producing a language id / parser mismatch.
+  const seenOverlayIds = new Set<string>();
 
   for (const config of overlayConfigs) {
+    // Duplicate overlay id: first-wins, skip later duplicates with a warning.
+    if (seenOverlayIds.has(config.id)) {
+      console.warn(
+        `kg-wasm-parser: duplicate overlay id '${config.id}' — first-wins, skipping later entry`,
+      );
+      continue;
+    }
+
+    // Mark this id as seen BEFORE attempting Language.load() so that a later
+    // duplicate is rejected even when the first entry's load fails.
+    seenOverlayIds.add(config.id);
+
     const wasmPath = overlayGrammarPath(projectDir, config.grammarFile);
     try {
       // biome-ignore lint/performance/noAwaitInLoops: overlay grammars are few; sequential is fine here

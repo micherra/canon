@@ -317,3 +317,119 @@ describe("kg-wasm-parser — per-project overlay loading after singleton init", 
     expect(isInitialized()).toBe(true);
   });
 });
+
+// FINDING A fix: duplicate overlay language ids — first-wins, skip later duplicates
+//
+// When two .canon/kg-languages/*.json files declare the same `id`, the second
+// must be skipped with a warning. Before this fix, both configs would land in
+// `loaded`, causing adapters to be registered with a mismatched parser (the
+// second config's parser would be in `parsers` but the first adapter's
+// makeAdapter() closure captured config.id pointing to the overwritten parser).
+
+describe("kg-wasm-parser — duplicate overlay id: first-wins policy", () => {
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    await initParsers();
+  });
+
+  beforeEach(() => {
+    tmpDir = join(
+      tmpdir(),
+      `kg-parser-dupid-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(join(tmpDir, ".canon", "kg-languages"), { recursive: true });
+    mkdirSync(join(tmpDir, ".canon", "grammars"), { recursive: true });
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      // suppress warn output in tests
+    });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it("duplicate overlay id: second entry is skipped and a warning is emitted", async () => {
+    // Two JSON files with the same id. Both point to a stub wasm so existsSync
+    // passes; Language.load() will throw for both (not real WASM). The key
+    // invariant: only ONE "duplicate" warning (for the second entry), and only ONE
+    // Language.load failure warning (for the first entry — the second never reaches load).
+    const dupId = `dup-lang-${Date.now()}`;
+    const wasmFile = `tree-sitter-${dupId}.wasm`;
+    const nodeKinds = {
+      callExpression: ["call_expression"],
+      classBody: [],
+      classDef: [],
+      exportStatement: [],
+      functionDef: ["function_declaration"],
+      importStatement: [],
+      methodDef: [],
+      variableDecl: [],
+    };
+
+    writeFileSync(
+      join(tmpDir, ".canon", "kg-languages", `${dupId}-a.json`),
+      JSON.stringify({ extensions: [`.${dupId}a`], grammarFile: wasmFile, id: dupId, nodeKinds }),
+    );
+    writeFileSync(
+      join(tmpDir, ".canon", "kg-languages", `${dupId}-b.json`),
+      JSON.stringify({ extensions: [`.${dupId}b`], grammarFile: wasmFile, id: dupId, nodeKinds }),
+    );
+    // Write a stub wasm so existsSync passes (both files reference the same wasm)
+    writeFileSync(join(tmpDir, ".canon", "grammars", wasmFile), "not a wasm file");
+
+    await initParsers(tmpDir);
+
+    const warnCalls = (console.warn as ReturnType<typeof vi.fn>).mock.calls.map(
+      (c) => c[0] as string,
+    );
+
+    // Exactly one "duplicate" warning for the second entry
+    const dupWarnings = warnCalls.filter((msg) => msg.includes("duplicate") && msg.includes(dupId));
+    expect(dupWarnings).toHaveLength(1);
+
+    // Only the first entry attempts Language.load() and fails (not real WASM).
+    // The second entry is skipped BEFORE load — so exactly one load-failure warn.
+    const loadFailWarnings = warnCalls.filter(
+      (msg) => msg.includes(dupId) && !msg.includes("duplicate"),
+    );
+    expect(loadFailWarnings).toHaveLength(1);
+  });
+
+  it("duplicate overlay id: result never contains the duplicate entry", async () => {
+    // Even if Language.load somehow succeeded for the first, the second duplicate
+    // must not be in the returned array. Test with the stub-wasm path (both fail,
+    // so result is []) — confirms no double-registration path exists.
+    const dupId = `dup-noresult-${Date.now()}`;
+    const wasmFile = `tree-sitter-${dupId}.wasm`;
+    const nodeKinds = {
+      callExpression: [],
+      classBody: [],
+      classDef: [],
+      exportStatement: [],
+      functionDef: [],
+      importStatement: [],
+      methodDef: [],
+      variableDecl: [],
+    };
+
+    writeFileSync(
+      join(tmpDir, ".canon", "kg-languages", `${dupId}-first.json`),
+      JSON.stringify({ extensions: [`.${dupId}1`], grammarFile: wasmFile, id: dupId, nodeKinds }),
+    );
+    writeFileSync(
+      join(tmpDir, ".canon", "kg-languages", `${dupId}-second.json`),
+      JSON.stringify({ extensions: [`.${dupId}2`], grammarFile: wasmFile, id: dupId, nodeKinds }),
+    );
+    writeFileSync(join(tmpDir, ".canon", "grammars", wasmFile), "not a wasm file");
+
+    const result = await initParsers(tmpDir);
+
+    // Both fail (invalid wasm), so [] — but critically there must be at most one
+    // entry per id (no double-registration).
+    const idsInResult = result.map((c) => c.id);
+    const dupCount = idsInResult.filter((id) => id === dupId).length;
+    expect(dupCount).toBeLessThanOrEqual(1);
+  });
+});

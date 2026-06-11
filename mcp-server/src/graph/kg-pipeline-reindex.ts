@@ -7,6 +7,7 @@
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { Database } from "better-sqlite3";
+import { registerOverlayAdapters } from "./kg-adapter-registry.ts";
 import type { ReindexResult } from "./kg-pipeline.ts";
 import type { FileImportMap, ParseFileParams } from "./kg-pipeline-phases.ts";
 import { parseAndStoreFile, resolveImports } from "./kg-pipeline-phases.ts";
@@ -68,7 +69,12 @@ export async function reindexFile(
   projectDir: string,
   filePath: string,
 ): Promise<ReindexResult> {
-  await initParsers();
+  // Pass projectDir so overlay grammars are loaded and registered for this
+  // project. Without this, a fresh server process reindexing an overlay-language
+  // file would find no adapter and fall back to "unsupported" — the adapter
+  // registration that the full runPipeline() path performs was missing here.
+  const loadedOverlayConfigs = await initParsers(projectDir);
+  registerOverlayAdapters(loadedOverlayConfigs);
   const store = new KgStore(db);
   const absPath = path.isAbsolute(filePath) ? filePath : path.join(projectDir, filePath);
   const relPath = path.isAbsolute(filePath) ? path.relative(projectDir, filePath) : filePath;
