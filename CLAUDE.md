@@ -494,28 +494,32 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework <!-- last-updated: 2026-06-09 -->
+## Loop Framework <!-- last-updated: 2026-06-11 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
-and dispatched by the orchestrator via `CronCreate`.
+and dispatched by the orchestrator via `CronCreate` (interval loops) or `ScheduleWakeup`
+(self-paced loops).
 
 **Lifecycle-hook vocabulary:** `post-ship` | `on-long-dispatch` | `session-start`.
 At such a moment, the orchestrator calls:
 ```
 list_loops({ lifecycle_hook, tier })
-# → for each loop with firing_posture[tier] === "auto": CronCreate(...)
-# → for each loop with firing_posture[tier] === "opt-in": ask user, then CronCreate(...)
+# → for each interval loop with firing_posture[tier] === "auto":
 CronCreate({ schedule: "<interval>", command: "/canon:loop-tick <id>", max: <max_ticks> })
+# → for each self-paced loop with firing_posture[tier] === "auto":
+ScheduleWakeup({ delaySeconds: <initial_delay>, reason: "Starting <id>", prompt: "/canon:loop-tick <id>" })
+# → for each loop with firing_posture[tier] === "opt-in": ask user, then dispatch
 ```
 
 **The non-declarative constraint (dc-06):** Nothing auto-starts. Only the orchestrator
-initiates the `CronCreate` call at a named lifecycle moment. No manifest, hook, or command
-frontmatter starts a loop — the capability ground truth is that a plugin cannot do this.
+initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named lifecycle moment.
+No manifest, hook, or command frontmatter starts a loop — the capability ground truth is that
+a plugin cannot do this.
 
 **Phase history:** Phase A shipped the framework spine — schema, registry, MCP tools, `_probe`
 demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
-dispatched via the post-ship tap. Phase C (session-watch, self-paced mode) is a future build.
+dispatched via the post-ship tap. Phase C ships session-watch + self-paced mode.
 Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
@@ -526,9 +530,21 @@ Discovery: `list_loops`.
 
 `ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
 
-**Non-declarative invariant (dc-06):** Only the orchestrator initiates `CronCreate`. Authoring
-`loops/ship-watch.md` only registers the definition — it does NOT start the loop. No manifest
-field, hook script, or command frontmatter can trigger scheduling automatically.
+**Session-start tap (Phase C+):** At session start, the orchestrator calls
+`list_loops({ lifecycle_hook: "session-start", tier })`. For each returned loop:
+- `firing_posture[tier] === "auto"` → start it now via `ScheduleWakeup` (self-paced mode):
+  ```
+  ScheduleWakeup({ delaySeconds: <initial_active_delay>, reason: "Starting <id> at session-start", prompt: "/canon:loop-tick <id>" })
+  ```
+- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `ScheduleWakeup` only on confirmation.
+- `firing_posture[tier] === "disabled"` → skip silently.
+
+`session-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
+
+**Non-declarative invariant (dc-06):** Only the orchestrator initiates `CronCreate` or
+`ScheduleWakeup`. Authoring `loops/session-watch.md` only registers the definition — it does
+NOT start the loop. No manifest field, hook script, or command frontmatter can trigger
+scheduling automatically.
 
 ## Project Structure <!-- last-updated: 2026-06-10 -->
 

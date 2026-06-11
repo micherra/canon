@@ -17,9 +17,11 @@ behavior is encoded in the loop's definition file (`loops/<id>.md`). The definit
 everything: what to observe, when to surface, when to terminate.
 
 **Non-declarative constraint (dc-06, decision loops-phase-a-04):** This runner is the
-per-tick body. The orchestrator made the initial `CronCreate` call at a named lifecycle
-moment (`post-ship`, `on-long-dispatch`, or `session-start`). This runner NEVER calls
-`CronCreate` to start a loop — it only executes one tick of an already-scheduled loop.
+per-tick body. The orchestrator made the initial scheduling call (`CronCreate` for interval
+loops, `ScheduleWakeup` for self-paced loops) at a named lifecycle moment (`post-ship`,
+`on-long-dispatch`, or `session-start`). This runner re-arms the NEXT wakeup of an
+already-started self-paced loop — it NEVER starts a loop (the orchestrator's session-start
+tap does that).
 
 ## Step 1: Parse argument and load the definition
 
@@ -29,13 +31,30 @@ Call `mcp__canon__get_loop_definition({ id })`.
 
 If not found (INVALID_INPUT error): report "Loop '<id>' not found in loops/ registry." and STOP.
 
-## Step 2: Mode guard (decision loops-phase-a-03)
+## Step 2: Mode branch
 
-If `definition.mode === "self-paced"`:
-> STOP with: "self-paced loops are deferred to Phase C; this runtime supports CronCreate
-> (interval) only. To run a self-paced loop, use ScheduleWakeup (Phase C)."
+Both modes execute the same core observe → diff → surface → write → evaluate pipeline
+(Steps 3–8). The mode controls Step 8 rescheduling only.
 
-Continue only for `mode: "interval"`.
+- If `definition.mode === "interval"`: proceed with Steps 3–8. Rescheduling is handled
+  by the orchestrator's `CronCreate` cadence (nothing to do in Step 8 "If NOT terminal").
+- If `definition.mode === "self-paced"`: proceed with Steps 3–8. In Step 8 "If NOT terminal",
+  re-arm the next wakeup via `ScheduleWakeup` per the probe result. Choose `delaySeconds`
+  from `definition.schedule.cadence_hint`:
+  - `active` cadence when this tick surfaced something or work is in flight (parse the string
+    to seconds, clamp to the runtime window [60, 3600]).
+  - `idle` cadence otherwise (prefer idle ≥ 1200s to commit to a real backoff once paying
+    the cache miss; prefer active ≤ 270s to keep the Anthropic prompt cache warm).
+  
+  Honor `definition.schedule.max_wall` as a hard wall-clock cap if set:
+  - Track elapsed time (first-tick timestamp stored in snapshot or state) + tick count.
+  - When `max_wall` is exceeded: terminate with reason `max_wall_reached`. Do NOT re-arm.
+  
+  Self-paced `terminate.when` vocabulary honored at Step 8:
+  - `at_hitl_gate`: terminate when a HITL gate is open
+  - `at_finalize`: terminate when the workspace is being finalized
+  - `on_cliff_surfaced`: terminate after surfacing a cliff (self-terminates; resume/post_subagent own rest)
+  - `max_wall_reached`: terminate when `max_wall` elapsed time is exceeded (body-enforced)
 
 ## Step 3: Read the current state snapshot
 
@@ -115,13 +134,23 @@ Also terminate if any fired transition rule has `terminate: true`.
 
 **If terminal condition is met:**
 - Report: `[loop: <id>] Loop terminated after tick <N>. Reason: <condition>.`
-- Do NOT reschedule. The loop lifecycle ends here — the orchestrator's CronCreate schedule
-  is exhausted or the loop exits early by its own rules. Done.
+- Do NOT reschedule. For interval loops, the CronCreate schedule is exhausted or the loop
+  exits early by its own rules. For self-paced loops, simply OMIT the ScheduleWakeup call
+  to terminate — no auto-re-fire occurs. Done.
 
 **If NOT terminal:**
-- Report: `[loop: <id>] Tick <N> complete. Next tick at <interval>.`
-- The CronCreate schedule set by the orchestrator will fire this runner again at the
-  next interval. Nothing to do here — the schedule is already running.
+- **interval mode**: Report `[loop: <id>] Tick <N> complete. Next tick at <interval>.`
+  The CronCreate schedule set by the orchestrator will fire this runner again at the next
+  interval. Nothing to do here — the schedule is already running.
+- **self-paced mode**: Re-arm the next wakeup by calling `ScheduleWakeup` with:
+  ```
+  ScheduleWakeup({
+    delaySeconds: <cadence_hint.active | cadence_hint.idle, parsed to seconds, clamped [60,3600]>,
+    reason: "[loop: <id>] Tick <N> complete. Re-arming at <active|idle> cadence.",
+    prompt: "/canon:loop-tick <id>"
+  })
+  ```
+  Report: `[loop: <id>] Tick <N> complete. Re-armed at <cadence> cadence (<delaySeconds>s).`
 
 ---
 
