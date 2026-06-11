@@ -367,6 +367,18 @@ push_updates_protected_branch() {
         --receive-pack=*|--exec=*)
           # self-contained, skip
           ;;
+        # --recurse-submodules consumes a value token (check|on-demand|only|no).
+        # Separate form: --recurse-submodules <value> — consume the next token.
+        # Equals form:   --recurse-submodules=<value> — self-contained.
+        # Without this, 'git push --recurse-submodules check origin' would treat
+        # 'check' as the remote and 'origin' as a refspec, mis-parsing a bare
+        # push to origin as a safe refspec push (Finding B fix).
+        --recurse-submodules)
+          skip_next=true
+          ;;
+        --recurse-submodules=*)
+          # self-contained, skip
+          ;;
         # Any other -* token: treat as self-contained (fail-closed posture:
         # this only makes us treat more following tokens as positionals → safer)
         *)
@@ -432,6 +444,29 @@ push_updates_protected_branch() {
     local dst
     if [[ "$core" == *:* ]]; then dst="${core#*:}"; else dst="$core"; fi
     dst="${dst#refs/heads/}"
+
+    # Finding A fix: when the destination is the symbolic ref HEAD (e.g.
+    # 'git push origin HEAD' or 'git push origin src:HEAD'), git resolves it
+    # to the current branch. We must do the same — a push to HEAD while on the
+    # protected branch is a direct push to the protected branch.
+    # Fail-closed: if the current branch cannot be resolved (detached HEAD or
+    # git unavailable), HEAD's target is unknown → block (dc-05).
+    if [[ "$dst" == "HEAD" ]]; then
+      local _head_branch
+      local _git_dir_arg
+      if [[ -n "${CANON_GUARD_CWD:-}" ]]; then
+        _git_dir_arg="-C $CANON_GUARD_CWD"
+      else
+        _git_dir_arg=$(canon_git_dir_arg "$raw_segment")
+      fi
+      # shellcheck disable=SC2086
+      _head_branch=$(git $_git_dir_arg symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty on detached HEAD → fail-closed below
+      if [[ -z "$_head_branch" ]]; then
+        echo "CANON: push refspec destination is HEAD but current branch cannot be resolved — blocking fail-closed." >&2
+        return 0   # unknown HEAD target → BLOCK (dc-05: fail-closed-on-ambiguity)
+      fi
+      dst="$_head_branch"
+    fi
 
     # Exact equality check against the protected branch (never substring/regex)
     if [[ "$dst" == "$protected" ]]; then

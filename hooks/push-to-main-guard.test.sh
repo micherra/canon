@@ -527,6 +527,60 @@ rm -rf "$TMPDIR_REPO_ALLOW"
 
 echo ""
 # ---------------------------------------------------------------------------
+# Finding A (P1): HEAD refspec destination resolves to current branch
+# 'git push origin HEAD' from main updates refs/heads/main — must be BLOCKED.
+# 'git push origin HEAD' from a feature branch pushes that branch — must ALLOW.
+# 'git push origin HEAD:main' is already blocked (dst=main), but HEAD without a
+# dst colon is the new gap: dst=HEAD must resolve to current branch.
+# Fail-closed: if current branch cannot be resolved, HEAD target unknown → BLOCK.
+# ---------------------------------------------------------------------------
+echo "-- Finding A (P1): HEAD refspec resolves to current branch --"
+
+# git push origin HEAD from main — HEAD resolves to main → BLOCK
+TMPDIR_HEAD_MAIN=$(mktemp -d)
+setup_repo "$TMPDIR_HEAD_MAIN"
+# main branch already checked out in setup_repo
+run_test "git push origin HEAD from main (HEAD=main → block)" \
+  2 "$(make_input 'git push origin HEAD')" "$TMPDIR_HEAD_MAIN"
+
+# git push origin HEAD from a feature branch — HEAD resolves to canon/feature → ALLOW
+git -C "$TMPDIR_HEAD_MAIN" checkout -q -b canon/feature
+run_test "git push origin HEAD from feature branch (HEAD=canon/feature → allow)" \
+  0 "$(make_input 'git push origin HEAD')" "$TMPDIR_HEAD_MAIN"
+
+rm -rf "$TMPDIR_HEAD_MAIN"
+
+# git push origin HEAD:main — dst is explicit 'main', not HEAD; already blocked by existing logic
+run_test "git push origin HEAD:main (explicit dst=main → block, pre-existing coverage)" \
+  2 "$(make_input 'git push origin HEAD:main')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# Finding B (P1): --recurse-submodules consumes its value token
+# 'git push --recurse-submodules check origin' — git consumes 'check' as the
+# option value, not a positional. Without the fix, 'check' becomes the remote
+# and 'origin' becomes a refspec (allowing an accidental bare push to origin).
+# With the fix: skip_next=true consumes 'check'; 'origin' is the remote; no
+# refspecs → bare_push_is_safe path → BLOCK when on main.
+# 'git push --recurse-submodules=on-demand origin feature-x' — equals form is
+# self-contained; 'origin' = remote, 'feature-x' = refspec → ALLOW (non-main).
+# ---------------------------------------------------------------------------
+echo "-- Finding B (P1): --recurse-submodules value-consuming option --"
+
+# Separate form from main: 'check' consumed as value, 'origin' is remote, bare push → BLOCK
+TMPDIR_RS_MAIN=$(mktemp -d)
+setup_repo "$TMPDIR_RS_MAIN"
+# main branch checked out by default in setup_repo
+run_test "git push --recurse-submodules check origin from main (separate form → block)" \
+  2 "$(make_input 'git push --recurse-submodules check origin')" "$TMPDIR_RS_MAIN"
+rm -rf "$TMPDIR_RS_MAIN"
+
+# Equals form with non-main refspec: 'on-demand' is part of the option, 'feature-x' = refspec → ALLOW
+run_test "git push --recurse-submodules=on-demand origin feature-x (equals form, non-main → allow)" \
+  0 "$(make_input 'git push --recurse-submodules=on-demand origin feature-x')"
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
