@@ -47,3 +47,4 @@ Use `docs/adr/TEMPLATE.md` as the starting point for every new ADR. Copy it, fil
 | # | Title | Status | Date | Build |
 |---|-------|--------|------|-------|
 | [0001](0001-adr-template-placement.md) | ADR template lives at docs/adr/TEMPLATE.md and coexists with templates/design-decision.md | accepted | 2026-06-09 | close-the-adr-gap-the-architect-currently-writes-rich-design-decision |
+| [0002](0002-daemon-identity-proof-on-eaddrinuse-probe.md) | Daemon proves token possession via challenge-response on the EADDRINUSE probe, not a public version match | accepted | 2026-06-11 | harden-http-daemon-f1-same-user-token-read-f4-probe-identity-security |
