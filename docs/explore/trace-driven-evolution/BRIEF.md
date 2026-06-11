@@ -139,6 +139,33 @@ ContextProvenanceRecord {
 }
 ```
 
+**Progressive disclosure and span validity.** `resolveAgentSkills` passes its result through
+`applyAgentSkillsDisclosure` (`resolve-agent-skills-disclosure.ts`, lines 37–73) before returning.
+When `preload_prompt` exceeds the 12k-char threshold, disclosure fires: skill `content` fields are
+blanked, and `preload_prompt` is replaced with a slim summary plus a file-pointer line such as
+`"Full preload content at: .canon/artifacts/agent-skills-<hash>.json"`. In that scenario `char_span`
+values computed during `formatPreloadPrompt` composition point into text that is **not** in the
+actual spawn prompt — the exact wording lives only in the sidecar file the agent reads later.
+
+The design must therefore enforce two rules:
+
+1. **Record spans post-disclosure.** The `context_provenance` event must be appended *after*
+   `applyAgentSkillsDisclosure` returns, not during composition. The `char_span` for each artifact
+   is computed against the **final `preload_prompt`** string that is actually placed in the spawn
+   prompt. For artifacts whose `content` was blanked by disclosure, `char_span` should be `null`
+   (the text is absent from the spawn prompt).
+
+2. **Model sidecar provenance explicitly.** When `full_data_path` is set on the returned result,
+   each `assembled_artifacts` entry that was blanked must carry `source: "sidecar"` and
+   `sidecar_path: full_data_path` rather than a `char_span`. At attribution time the learner treats
+   a sidecar-sourced artifact as "present but deferred" — it was available to the agent as a
+   readable file, not as inline text, and the transcript join must account for this: the agent's
+   Read-tool calls (if any) of the sidecar path are the evidence of engagement, not a text span.
+
+This is a Phase 1 implementation constraint, not a schema change: the `ContextProvenanceRecord`
+fields shown above already accommodate `char_span: null` and can carry `source` and `sidecar_path`
+as optional extensions per artifact entry.
+
 **Where it's captured — `resolveAgentSkills` is the natural hook, already 90% of the way there**
 (`mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts`). That function *already*:
 - resolves each `rules:`/`references:`/`primers:`/`templates:` frontmatter entry to a concrete
