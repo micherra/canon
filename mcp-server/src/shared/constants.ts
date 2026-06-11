@@ -63,6 +63,14 @@ export const EMBEDDING_MODEL_ID = "all-MiniLM-L6-v2"; // short ID for meta table
 /** Default timeout for background jobs (5 minutes). */
 export const JOB_TIMEOUT_MS = 300_000;
 
+/**
+ * Reserved pseudo-principle_id used by Stage 1.5 correctness-scan findings.
+ * These are advisory human-facing annotations, not Canon principle violations.
+ * They must NEVER be counted in principle-keyed analytics (drift, area memory,
+ * most_violated, violation_directories) but ARE stored and shown to humans.
+ */
+export const CORRECTNESS_SCAN_PRINCIPLE_ID = "correctness-scan";
+
 /** Extract the first paragraph from a principle body as its summary. */
 export function extractSummary(body: string): string {
   return body.split(/\n\n/)[0]?.trim() || body;

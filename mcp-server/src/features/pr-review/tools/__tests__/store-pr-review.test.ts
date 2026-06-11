@@ -441,10 +441,10 @@ describe("storePrReview", () => {
     expect(rows[0].subsystem_key).toBe("features/orchestration");
   });
 
-  // ---- correctness-scan persistence filter ----
+  // ---- correctness-scan: stored for presentation, excluded from analytics ----
 
-  it("does NOT persist correctness-scan violations to the review store", async () => {
-    // correctness-scan is a pseudo-principle; it must never appear in stored reviews
+  it("stores correctness-scan violations in the review record (for human presentation)", async () => {
+    // correctness-scan findings must be stored so present_review can show them to humans.
     await storePrReview(
       {
         files: ["src/a.ts"],
@@ -464,16 +464,14 @@ describe("storePrReview", () => {
     const reviews = await store.getReviews();
     expect(reviews).toHaveLength(1);
     const stored = reviews[0];
-    // No correctness-scan violation persisted
-    expect(stored.violations.map((v) => v.principle_id)).not.toContain(
-      CORRECTNESS_SCAN_PRINCIPLE_ID,
-    );
-    expect(stored.violations).toHaveLength(0);
+    // correctness-scan IS stored — present_review reads from this record
+    expect(stored.violations.map((v) => v.principle_id)).toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
+    expect(stored.violations).toHaveLength(1);
   });
 
-  it("stores real violations while stripping correctness-scan from the same review", async () => {
-    // Mixed input: one real violation + one correctness-scan.
-    // Only the real violation should appear in the store.
+  it("stores both real violations and correctness-scan in the same review record", async () => {
+    // Mixed input: both a real violation and a correctness-scan finding.
+    // Both must be stored for presentation. Analytics exclusion happens at aggregation time.
     await storePrReview(
       {
         files: ["src/a.ts"],
@@ -496,11 +494,10 @@ describe("storePrReview", () => {
     const reviews = await store.getReviews();
     expect(reviews).toHaveLength(1);
     const stored = reviews[0];
-    // Only thin-handlers persisted, not correctness-scan
-    expect(stored.violations).toHaveLength(1);
-    expect(stored.violations[0].principle_id).toBe("thin-handlers");
-    expect(stored.violations.map((v) => v.principle_id)).not.toContain(
-      CORRECTNESS_SCAN_PRINCIPLE_ID,
-    );
+    // Both violations stored — analytics layer filters at read time
+    expect(stored.violations).toHaveLength(2);
+    const ids = stored.violations.map((v) => v.principle_id);
+    expect(ids).toContain("thin-handlers");
+    expect(ids).toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
   });
 });

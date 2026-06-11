@@ -37,12 +37,17 @@ async function recordReview(
   store: DriftStore,
   signals: SignalWriter | undefined,
 ): Promise<ReportOutput> {
-  // Filter correctness-scan pseudo-violations before ANY persistence.
-  // The human-facing output keeps the full list; the store only sees
-  // real principle violations (principle-keyed analytics invariant).
-  const persistableViolations = stripNonPersistableViolations(review.violations);
+  // Strip correctness-scan from analytics paths only — NOT from the store.
+  // The store retains the full violations list so present_review can show
+  // all findings to humans. Analytics (updateFileViolationHistory, analyzer)
+  // exclude correctness-scan at their own boundaries.
+  const analyticsViolations = stripNonPersistableViolations(review.violations);
 
-  const violatedIds = new Set(persistableViolations.map((v) => v.principle_id));
+  // Derive verdict from analytics-only violations so correctness-scan
+  // does not inflate the verdict (a correctness-scan-only review is CLEAN).
+  const derivedVerdict = review.verdict ?? deriveVerdict(analyticsViolations);
+
+  const violatedIds = new Set(analyticsViolations.map((v) => v.principle_id));
   const cleanHonored = review.honored.filter((id) => !violatedIds.has(id));
   const id = generateId("rev");
 
@@ -52,16 +57,16 @@ async function recordReview(
     review_id: id,
     score: review.score,
     timestamp: new Date().toISOString(),
-    verdict: review.verdict ?? deriveVerdict(persistableViolations),
-    violations: persistableViolations,
+    verdict: derivedVerdict,
+    violations: review.violations, // store the full list for presentation
   };
 
   await store.appendReview(entry);
 
   // Persist path effects to signal tables (non-blocking).
-  // Pass pre-filtered persistableViolations — correctness-scan already stripped.
+  // Pass analyticsViolations — correctness-scan excluded from principle-keyed stores.
   if (signals) {
-    updateFileViolationHistory(signals, review.files, persistableViolations, entry.verdict);
+    updateFileViolationHistory(signals, review.files, analyticsViolations, entry.verdict);
   }
 
   // Persist craft profile rows via shared helper (validate-at-trust-boundaries + persist).

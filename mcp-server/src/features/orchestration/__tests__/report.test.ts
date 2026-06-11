@@ -234,10 +234,11 @@ describe("report()", () => {
     expect(rows).toHaveLength(0);
   });
 
-  // ---- correctness-scan persistence filter ----
+  // ---- correctness-scan: stored for presentation, excluded from analytics ----
 
-  it("does NOT persist correctness-scan violations to the review store", async () => {
-    // correctness-scan is a pseudo-principle; it must never appear in stored reviews
+  it("stores correctness-scan violations in the review record (for human presentation)", async () => {
+    // correctness-scan findings must be stored so present_review can show them to humans.
+    // Analytics exclusion happens at aggregation time in analyzer.ts.
     await report(
       {
         files: ["src/a.ts"],
@@ -256,17 +257,15 @@ describe("report()", () => {
     const store = new DriftStore(tmpDir);
     const entries = await store.getReviews();
     expect(entries).toHaveLength(1);
-    // No correctness-scan violation in the stored entry
     const stored = entries[0];
-    expect(stored.violations.map((v) => v.principle_id)).not.toContain(
-      CORRECTNESS_SCAN_PRINCIPLE_ID,
-    );
-    expect(stored.violations).toHaveLength(0);
+    // correctness-scan IS stored — present_review reads from this record
+    expect(stored.violations.map((v) => v.principle_id)).toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
+    expect(stored.violations).toHaveLength(1);
   });
 
-  it("stores real violations while stripping correctness-scan from the same review", async () => {
-    // Mixed review: one real violation + one correctness-scan violation.
-    // Store should only contain the real violation.
+  it("stores both real violations and correctness-scan in the same review record", async () => {
+    // Mixed review: real violation + correctness-scan finding.
+    // Both stored for presentation; analytics layer filters at aggregation time.
     await report(
       {
         files: ["src/a.ts"],
@@ -289,17 +288,16 @@ describe("report()", () => {
     const entries = await store.getReviews();
     expect(entries).toHaveLength(1);
     const stored = entries[0];
-    // Only the real principle is persisted
-    expect(stored.violations).toHaveLength(1);
-    expect(stored.violations[0].principle_id).toBe("errors-are-values");
-    expect(stored.violations.map((v) => v.principle_id)).not.toContain(
-      CORRECTNESS_SCAN_PRINCIPLE_ID,
-    );
+    // Both violations stored
+    expect(stored.violations).toHaveLength(2);
+    const ids = stored.violations.map((v) => v.principle_id);
+    expect(ids).toContain("errors-are-values");
+    expect(ids).toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
   });
 
-  it("derives verdict from persistable violations only (correctness-scan excluded)", async () => {
+  it("derives verdict from analytics violations only (correctness-scan excluded from verdict)", async () => {
     // Input has only a correctness-scan violation (would be BLOCKING if counted).
-    // Without it, verdict should be CLEAN.
+    // Without it in the analytics path, verdict should be CLEAN.
     await report(
       {
         files: ["src/a.ts"],

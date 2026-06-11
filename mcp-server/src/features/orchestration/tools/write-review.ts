@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "@shared/constants.ts";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -373,25 +374,22 @@ function persistPathEffects(
 }
 
 /**
+ * Re-exported from @shared/constants.ts for backward compatibility.
  * The reserved principle_id used by Stage 1.5 correctness-scan findings.
  * These are advisory human-facing annotations, not Canon principle violations.
- * They must NEVER be persisted to file_violation_history or path_effects,
- * which are principle-keyed analytics stores.
+ * They must NEVER be counted in principle-keyed analytics stores.
  */
-export const CORRECTNESS_SCAN_PRINCIPLE_ID = "correctness-scan";
+export { CORRECTNESS_SCAN_PRINCIPLE_ID };
 
 /**
- * Single chokepoint for filtering non-persistable violations before any
- * DriftStore / review-violation write.
+ * Filter helper: strips correctness-scan pseudo-violations before any
+ * ANALYTICS write (file_violation_history, path_effects, area_observations,
+ * most_violated/violation_directories in analyzer).
  *
- * correctness-scan findings are advisory human-facing annotations that use a
- * reserved pseudo-principle_id. They must never be written to any persistent
- * store (reviews table, violations table, file_violation_history, path_effects,
- * area_observations) because those stores are principle-keyed analytics layers.
- *
- * Call this at EVERY write boundary before passing violations to a store.
- * The human-facing output (REVIEW.md, tool return values shown to the user)
- * KEEPS the full violations list — only persistence is filtered.
+ * correctness-scan findings ARE stored in the reviews table (for human
+ * presentation via present_review) but must NEVER pollute principle-keyed
+ * analytics stores. Use this at analytics boundaries, NOT at the store-write
+ * boundary. See CORRECTNESS_SCAN_PRINCIPLE_ID in @shared/constants.ts.
  *
  * @param violations - Array of violations, possibly including correctness-scan entries
  * @returns A new array with all correctness-scan violations removed
@@ -503,20 +501,19 @@ export async function writeReview(
   };
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
 
-  // Filter out correctness-scan pseudo-violations before any persistence.
-  // The human-facing REVIEW output (markdown + meta JSON) retains the full
-  // violations list; only the drift/area-memory persistence paths use this
-  // filtered list so the pseudo-principle never pollutes signals or context.
-  const persistableViolations = input.violations.filter(
+  // Exclude correctness-scan from analytics/signal paths only.
+  // The human-facing REVIEW output (markdown + meta JSON) keeps the full list.
+  // drift/area-memory persistence must only see real principle violations.
+  const analyticsViolations = input.violations.filter(
     (v) => v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID,
   );
 
   if (signals) {
-    updateFileViolationHistory(signals, input.files, persistableViolations, mappedVerdict);
+    updateFileViolationHistory(signals, input.files, analyticsViolations, mappedVerdict);
   }
 
   try {
-    extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter, persistableViolations);
+    extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter, analyticsViolations);
   } catch (err) {
     console.warn(
       "[write-review] area observation extraction failed:",
