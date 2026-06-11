@@ -24,7 +24,7 @@ A tool — hook, script, grep command, or verification step — that is designed
 
 1. **Character-class split**: express the two-token pattern via a regex that matches it without reproducing it literally. For `bash -c` and `sh -c`: use `(ba)?sh[[:space:]]+-c` (requires `-E` for ERE — without `-E` the plain `grep` BRE engine silently matches nothing, which is the false-negative this convention warns against).
 2. **Token break**: concatenate parts of the pattern at execution time, or split across two grep passes.
-3. **Indirect variable**: assign the full pattern to a variable, then interpolate: `PAT='bash -c'; grep -n "$PAT" file.sh` — the literal form never appears in the source text the hook scans. **Caution**: the variable must contain the entire pattern; any `|` character remaining outside the variable will cause the guard to segment the command and may trigger a false-positive (see pitfall in the Why section).
+3. **Token break / indirect variable**: split the pattern across multiple variables assembled at runtime: `W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh` — the contiguous literal never appears in the source text the hook scans. **Caution**: assigning the full literal to a single variable (e.g., `PAT='bash -c'`) does NOT help — the contiguous literal is still present in source text. Split the blocked token itself across variables. Also ensure no `|` character remains outside the variable expansion, or the guard will segment the command and may trigger a false-positive (see pitfall in the Why section).
 4. **Out-of-band invocation**: use a temp wrapper script that `source`s the target instead of invoking it via the pattern (e.g., `source "$script_path" "$@"` instead of the string-executing form).
 
 ## Why
@@ -38,9 +38,9 @@ This tokenizer behavior has a nuanced implication for verification greps:
 
 The second form is the **recurring false-positive**: authors write it as a convenient two-pattern alternation grep, not realizing the backslash inside the double-quoted span makes the command string undecodable by the tokenizer. The fail-closed outcome is correct behavior per `hooks-fail-closed` — the hook cannot tell whether the argument is a verification grep or a genuine destructive wrapper call. The constraint falls on the author: avoid the backslash-alternation form inside double quotes.
 
-Preferred alternatives: the **indirect-variable form** assigns the full pattern (including the space and flags) to a variable so the literal never appears in source text; the **character-class split** expresses the same match without any backslash inside a quoted span. Both exit 0.
+Preferred alternatives: the **token-split form** assembles the pattern from parts across multiple variables so the contiguous literal never appears in source text; the **character-class split** expresses the same match without any backslash inside a quoted span. Both exit 0. Note that assigning the full literal to a variable (e.g., `PAT='bash -c'`) does NOT satisfy this constraint — the contiguous literal is still present in source text even if it is never executed as a command token.
 
-**Pitfall — indirect variable with `|` in the grep alternation**: assigning only the token (`PAT='bash'`) and then writing `grep -E "$PAT -c|sh -c" file.sh` does NOT work. The `|` character is outside the quoted variable expansion; when the guard segments on `|`, it splits the command string into `grep -E "$PAT -c"` and `sh -c file.sh` — and `sh -c file.sh` is a string-executing wrapper → fail-closed (exit 2). The indirect variable must contain the whole pattern, or no `|` must appear after expansion. Use `PAT='bash -c'; grep -n "$PAT" file.sh` (single pattern, no alternation) or the character-class split for multi-pattern matching.
+**Pitfall — indirect variable with `|` in the grep alternation**: assigning only the token (`PAT='bash'`) and then writing `grep -E "$PAT -c|sh -c" file.sh` does NOT work. The `|` character is outside the quoted variable expansion; when the guard segments on `|`, it splits the command string into `grep -E "$PAT -c"` and `sh -c file.sh` — and `sh -c file.sh` is a string-executing wrapper → fail-closed (exit 2). Use the token-split form (e.g., `W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh`, single pattern, no alternation) or the character-class split for multi-pattern matching. Note: assigning the full literal to a variable (`PAT='bash -c'`) also does not help — the contiguous literal is still present in source text where a raw-string scanner can find it.
 
 The same constraint applies when authoring mine scripts and code-analysis tools. A script designed to surface the `eval`/string-executing-wrapper defect class must not itself contain the defect it is designed to find, both for correctness and to avoid being blocked by the guard it is co-deployed with.
 
@@ -65,16 +65,20 @@ grep 'bash -c' file.sh
 grep -n "bash -c\|sh -c" file.sh
 ```
 
-**Good — indirect variable (preferred): the literal form never appears in source text:**
+**Good — token-split (preferred): the contiguous literal is assembled from parts at runtime, absent from source text:**
 
 ```bash
-# Assign the full pattern (including space and flag) to a variable.
-# The literal 'bash -c' is never in source text, and no '|' follows the expansion.
+# Split 'bash' across two variables so the contiguous literal 'bash -c' never
+# appears verbatim in the command text the hook scans.
+# W1='ba'; W2='sh' → "${W1}${W2} -c" expands to 'bash -c' at runtime but the
+# contiguous string is absent from source. No bare '|' follows the expansion.
 # Empirically verified exit 0 through destructive-guard.sh.
-PAT='bash -c'; grep -n "$PAT" file.sh
+W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh
 ```
 
-> **Why not** `PAT='bash'; grep -E "$PAT -c|sh -c" file.sh`? The `|` outside the variable is still present in the command string. The guard segments on `|` and sees `sh -c file.sh` as a string-executing wrapper → fail-closed (exit 2). The indirect variable only helps if the full pattern is captured and no bare `|` remains.
+> **Why not** `PAT='bash -c'; grep -n "$PAT" file.sh`? Assigning the full literal `bash -c` to a variable still embeds the contiguous pattern in source text. A scanner doing raw string matching on the command text sees `bash -c` verbatim inside `PAT='bash -c'` and may self-trigger. Token-split is safer: neither `bash` nor `bash -c` appears contiguously in source.
+
+> **Why not** `PAT='bash'; grep -E "$PAT -c|sh -c" file.sh`? The `|` outside the variable is still present in the command string. The guard segments on `|` and sees `sh -c file.sh` as a string-executing wrapper → fail-closed (exit 2). The token-split form has no bare `|`.
 
 **Good — character-class split: matches the pattern without the backslash-alternation form:**
 
@@ -141,7 +145,7 @@ P1='ev'; P2='al'; grep -rn "${P1}${P2} " src/
 | # | Build | Scanner | Self-blocking form | Resolution |
 |---|-------|---------|-------------------|------------|
 | 1a | PR #355 (engineer) | `destructive-guard.sh` | `bash -c "$wrapper"` in xargs fan-out in mine script | Temp wrapper using `source` instead of the string-executing form |
-| 1b | PR #355 (learner) | `destructive-guard.sh` | `grep -n "bash -c\|sh -c"` — backslash alternation in double-quoted span → fail-closed (exit 2) | Indirect variable: `PAT='bash -c'; grep -n "$PAT" file.sh` — full pattern in variable, no bare `\|` remaining (earlier `PAT='bash'; grep -E "$PAT -c\|sh -c"` was itself blocked — see pitfall in Why section) |
+| 1b | PR #355 (learner) | `destructive-guard.sh` | `grep -n "bash -c\|sh -c"` — backslash alternation in double-quoted span → fail-closed (exit 2) | Token-split: `W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh` — contiguous literal assembled at runtime, absent from source text; no bare `\|` remaining (earlier forms `PAT='bash -c'` and `PAT='bash'; grep -E "$PAT -c\|sh -c"` both embed the literal or leave a bare `\|` — see pitfall in Why section) |
 | 2 | PR #337 fix | `destructive-guard.sh` | Verification greps for `eval`/the two-token form in target files using backslash alternation | Pattern split via `grep -rnE '(ba)?sh[[:space:]]+-c'` (ERE, `-E` required) and token-split for `eval` |
 
 ## Exceptions
