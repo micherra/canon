@@ -49,7 +49,7 @@ Four consecutive Canon builds (2026-05-20 to 2026-06-09) each shipped a first in
 | PR #224 | Two-layer principle authoring | `.canon/principle-overrides.yaml`, `skills/canon/skills/write-principle/SKILL.md` |
 | PR #350 | Loops artifact class | `loops/_probe.md` — "proves schema→registry→runtime path" |
 | PR #352 | Routines artifact class | `routines/canon-maintenance.md` + 2 others |
-| PR #364 | ADR mechanism | `docs/adr/0001-adr-template-placement.md` — "first real ADR, dogfooded" |
+| PR #362 | Loops Phase B (ship-watch) | `loops/ship-watch.md` — "first production loop, dispatched via post-ship tap" |
 
 No counter-instance was found where a mechanism shipped without a first instance.
 
@@ -77,13 +77,16 @@ Result: the sync path has no end-to-end validation; the next build that
 creates a routine hits unknown failure modes first.
 ```
 
-**Good — ADR mechanism produces its own first ADR:**
+**Good — routines artifact class shipped with three registered routines:**
 
 ```
-PR #364 ships docs/adr/adr-template-placement.md to establish the ADR
-mechanism, then immediately commits docs/adr/0001-adr-template-placement.md
-as the first real decision record, proving the template format and storage
-path before any other build tries to author an ADR.
+PR #352 introduces the routines mechanism (schema, registry, list_routines,
+sync_routines MCP tools, generated index at routines/.claude/CLAUDE.md).
+The same PR commits routines/canon-maintenance.md, routines/pr-review.md,
+and routines/release-ahead.md — three real routines that pass through schema
+validation, the registry loader, and the sync path.
+Result: the schema→registry→sync pipeline is proven with real content before
+any follow-on build tries to author a routine.
 ```
 
 **Bad — workflow gate introduced with empty gate registry:**
