@@ -229,6 +229,12 @@ Recommend one approach with clear rationale tied to Canon principles.
 
 When all three conditions hold, ALSO write the decision as `${worktree_path}/docs/adr/NNNN-slug.md` (so it ships in the same PR), using the template at `docs/adr/TEMPLATE.md`. Assign `NNNN` = highest existing number under `${worktree_path}/docs/adr/` + 1, 4-digit zero-padded. **Creation is lazy** — do not create `docs/adr/` unless a qualifying decision exists for this build.
 
+**Index update (mandatory)**: After writing the ADR file, append a row to the `## Index` table in `${worktree_path}/docs/adr/README.md`:
+```
+| [NNNN](NNNN-slug.md) | {title} | accepted | {YYYY-MM-DD} | {build-slug} |
+```
+Do not create the index entry until after the ADR file itself is written. If the README does not yet contain an index table, add one with the header `| # | Title | Status | Date | Build |` before the row.
+
 **`worktree_path` is required for ADR writes.** The orchestrator passes it in the spawn prompt. If `worktree_path` is absent from your spawn context, do NOT fall back to writing relative to your working directory — report the missing path in the design document (`ASSUMPTIONS:` block) and skip the ADR write. Do not silently omit it.
 
 ### Step 5: Produce design document
