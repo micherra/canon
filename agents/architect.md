@@ -22,6 +22,7 @@ rules:
   - agent-batch-tools
   - agent-context-budget-dispatch
   - agent-budget-checkpoint
+  - agent-document-decisions
 references:
   - status-protocol
 templates:

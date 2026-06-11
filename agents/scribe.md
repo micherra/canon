@@ -15,7 +15,6 @@ rules:
   - agent-missing-artifact
   - agent-template-required
   - agent-context-check
-  - agent-document-decisions
   - agent-artifact-write-before-return
   - agent-worktree-orientation
   - agent-working-environment
