@@ -324,7 +324,7 @@ async function runEnabledChecks(
 /**
  * Run wiki lint checks against Canon's own meta-layer artifacts.
  *
- * @param input - Which checks to run (default: all 8)
+ * @param input - Which checks to run (default: 8 checks, excluding index_drift; pass checks:["index_drift"] to run it)
  * @param projectDir - Project root (for CLAUDE.md scanning, stale ref resolution, drift store)
  * @param pluginDir - Plugin directory (for principles loading, agent definitions)
  */
@@ -333,7 +333,11 @@ export async function wikiLint(
   projectDir: string,
   pluginDir: string,
 ): Promise<WikiLintOutput> {
-  const ALL_CHECKS: CheckName[] = [
+  // DEFAULT_CHECKS excludes index_drift: that check emits MISSING_MARKERS for any project
+  // that lacks the five Canon-managed sentinel-delimited indexes (rules/, principles/, agents/,
+  // templates/, references/). Including it by default makes the lint noisy for valid non-Canon /
+  // minimal projects. Callers that want it must request it explicitly via checks: ["index_drift"].
+  const DEFAULT_CHECKS: CheckName[] = [
     "cited_paths",
     "contradictions",
     "glossary_consistency",
@@ -341,10 +345,9 @@ export async function wikiLint(
     "orphan_principles",
     "scope_layers",
     "scope_tags",
-    "index_drift",
     "stale_refs",
   ];
-  const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
+  const enabled = new Set<CheckName>(input.checks ?? DEFAULT_CHECKS);
 
   const principles = await loadAllPrinciples(projectDir, pluginDir);
   const claudeMdPaths = findFiles(projectDir, (_fp, name) => name === "CLAUDE.md");

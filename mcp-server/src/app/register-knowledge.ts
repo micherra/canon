@@ -195,7 +195,7 @@ function registerWikiLintTool(server: McpServer): void {
           )
           .optional()
           .describe(
-            "Checks to run (default: all 8). Options: cited_paths, contradictions, glossary_consistency, index_drift, missing_examples, orphan_principles, scope_layers, scope_tags, stale_refs",
+            "Checks to run (default: 8 checks excluding index_drift — pass ['index_drift'] explicitly to run it). Options: cited_paths, contradictions, glossary_consistency, index_drift, missing_examples, orphan_principles, scope_layers, scope_tags, stale_refs",
           ),
       },
     },
