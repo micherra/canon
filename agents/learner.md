@@ -28,6 +28,7 @@ tools:
   - Grep
   - Write
   - Skill
+  - WebSearch
   - mcp__canon__semantic_search
   - mcp__canon__get_file_context
   - mcp__canon__graph_query

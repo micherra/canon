@@ -18,6 +18,7 @@ import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  CORRECTNESS_SCAN_PRINCIPLE_ID,
   type SignalWriter,
   updateFileViolationHistory,
   type WriteReviewInput,
@@ -310,6 +311,67 @@ describe("updateFileViolationHistory — violation count propagation", () => {
 
     const rows = db.getSignals().getPathEffects(["src/foo.ts"]);
     expect(rows[0].total_violations).toBe(3);
+    db.close();
+  });
+});
+
+// ---- updateFileViolationHistory — correctness-scan filter ----
+
+describe("updateFileViolationHistory — correctness-scan exclusion", () => {
+  it("does not persist correctness-scan violations to file_violation_history", async () => {
+    const { signals, db } = await openSignalsFromDir(tmpDir);
+
+    updateFileViolationHistory(
+      signals,
+      ["src/foo.ts"],
+      [{ file_path: "src/foo.ts", principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      "BLOCKING",
+    );
+
+    const rows = db.getSignals().getFileViolationHistory(["src/foo.ts"]);
+    // correctness-scan must NOT create any file_violation_history rows
+    expect(rows).toHaveLength(0);
+    db.close();
+  });
+
+  it("does not count correctness-scan violations in path_effects total_violations", async () => {
+    const { signals, db } = await openSignalsFromDir(tmpDir);
+
+    updateFileViolationHistory(
+      signals,
+      ["src/foo.ts"],
+      [{ file_path: "src/foo.ts", principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      "BLOCKING",
+    );
+
+    const rows = db.getSignals().getPathEffects(["src/foo.ts"]);
+    // path_effects should still be created (file was reviewed), but total_violations = 0
+    expect(rows).toHaveLength(1);
+    expect(rows[0].total_violations).toBe(0);
+    db.close();
+  });
+
+  it("persists normal violations while filtering out correctness-scan violations in same review", async () => {
+    const { signals, db } = await openSignalsFromDir(tmpDir);
+
+    updateFileViolationHistory(
+      signals,
+      ["src/foo.ts"],
+      [
+        { file_path: "src/foo.ts", principle_id: "simplicity-first", severity: "strong-opinion" },
+        { file_path: "src/foo.ts", principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" },
+      ],
+      "BLOCKING",
+    );
+
+    // file_violation_history must only contain the real principle, not correctness-scan
+    const histRows = db.getSignals().getFileViolationHistory(["src/foo.ts"]);
+    expect(histRows).toHaveLength(1);
+    expect(histRows[0].principle_id).toBe("simplicity-first");
+
+    // path_effects total_violations counts only the real principle violation (1, not 2)
+    const effectRows = db.getSignals().getPathEffects(["src/foo.ts"]);
+    expect(effectRows[0].total_violations).toBe(1);
     db.close();
   });
 });

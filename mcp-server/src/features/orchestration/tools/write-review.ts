@@ -372,10 +372,22 @@ function persistPathEffects(
 }
 
 /**
+ * The reserved principle_id used by Stage 1.5 correctness-scan findings.
+ * These are advisory human-facing annotations, not Canon principle violations.
+ * They must NEVER be persisted to file_violation_history or path_effects,
+ * which are principle-keyed analytics stores.
+ */
+export const CORRECTNESS_SCAN_PRINCIPLE_ID = "correctness-scan";
+
+/**
  * Update file_violation_history and path_effects tables after a review.
  *
  * Non-blocking: catches all errors internally. Signal persistence
  * failures must never prevent a review from being written.
+ *
+ * correctness-scan violations are intentionally excluded — they use a
+ * reserved pseudo-principle_id and must not pollute principle-keyed
+ * analytics or drift signals.
  *
  * @param signals - SignalWriter instance provided by the caller (app layer)
  * @param files - files that were reviewed
@@ -391,7 +403,14 @@ export function updateFileViolationHistory(
   try {
     const now = new Date().toISOString();
 
-    const violationMap = groupViolations(violations);
+    // Filter out correctness-scan pseudo-violations before persisting to
+    // principle-keyed history. They appear in the human-readable review
+    // output but must not skew drift signals or file-violation analytics.
+    const principleViolations = violations.filter(
+      (v) => v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID,
+    );
+
+    const violationMap = groupViolations(principleViolations);
     persistViolationHistory(signals, violationMap, now);
 
     // Compute per-file violation count by summing counts from violationMap
