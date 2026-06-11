@@ -444,4 +444,115 @@ describe("parseLoopDefinition", () => {
     const result = parseLoopDefinition(good, {});
     expect(result.ok).toBe(true);
   });
+
+  // ── Phase C additions (loops-phase-c-01) ────────────────────────────────────
+
+  it("[C-01] self-paced def with max_wall: '2h' parses ok", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      mode: "self-paced",
+      schedule: {
+        cadence_hint: { active: "5m", idle: "30m" },
+        max_wall: "2h",
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.definition.mode).toBe("self-paced");
+    }
+  });
+
+  it("[C-01] self-paced def WITHOUT max_wall parses ok (optional field)", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      mode: "self-paced",
+      schedule: {
+        cadence_hint: { active: "5m", idle: "30m" },
+        // max_wall intentionally absent
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // max_wall should be undefined (absent)
+      const schedule = result.definition.schedule as { cadence_hint: unknown; max_wall?: string };
+      expect(schedule.max_wall).toBeUndefined();
+    }
+  });
+
+  it("[C-01] self-paced def with get_next_escalation_strategy in observe.mcp → rejected, error names the tool", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      mode: "self-paced",
+      schedule: {
+        cadence_hint: { active: "5m", idle: "30m" },
+      },
+      observe: {
+        tools: [],
+        mcp: ["get_next_escalation_strategy"], // forbidden MCP tool (DR-005)
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/get_next_escalation_strategy/);
+    }
+  });
+
+  it("[C-01] self-paced def with mutates_build: true → rejected (regression guard)", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      mode: "self-paced",
+      schedule: {
+        cadence_hint: { active: "5m", idle: "30m" },
+      },
+      guardrails: {
+        mutates_build: true, // VIOLATION
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/self-paced.*mutates_build|mutates_build.*false/i);
+    }
+  });
+
+  it("[C-01] self-paced terminate.when with Phase C vocabulary parses ok (documentation-as-test)", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      mode: "self-paced",
+      schedule: {
+        cadence_hint: { active: "5m", idle: "30m" },
+      },
+      terminate: {
+        when: ["at_hitl_gate", "at_finalize", "on_cliff_surfaced", "max_wall_reached"],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.definition.terminate.when).toContain("at_hitl_gate");
+      expect(result.definition.terminate.when).toContain("at_finalize");
+      expect(result.definition.terminate.when).toContain("on_cliff_surfaced");
+      expect(result.definition.terminate.when).toContain("max_wall_reached");
+    }
+  });
 });

@@ -28,6 +28,13 @@ export const BUILTIN_MUTATION_TOOLS: ReadonlyArray<string> = [
   "NotebookEdit",
 ] as const;
 
+// ── Built-in forbidden MCP denylist (DR-005 / Phase C) ────────────────────────
+// MCP tools that can mutate build flow; forbidden in observe when mutates_build:false.
+// `get_next_escalation_strategy` can trigger architectural build-flow changes.
+export const BUILTIN_FORBIDDEN_MCP: ReadonlyArray<string> = [
+  "get_next_escalation_strategy",
+] as const;
+
 // Read-only gh/git subcommand prefixes admitted under the Bash carve-out (decision loops-phase-b-01).
 // Extend by explicit diff only; every entry must be genuinely read-only.
 export const READ_ONLY_SHELL_COMMANDS: ReadonlyArray<string> = [
@@ -131,6 +138,7 @@ const SelfPacedScheduleSchema = z.object({
     active: z.string(),
     idle: z.string(),
   }),
+  max_wall: z.string().optional(), // e.g. "2h"; "0" or absent = bounded by terminate conditions only
 });
 
 const IntervalLoopSchema = z.object({
@@ -395,7 +403,17 @@ function checkObserveMutationGuardrail(
     }
   }
 
-  // (c) Author-specified forbidden_tools — additive on top of built-in set.
+  // (c) Built-in forbidden MCP denylist — tools that can mutate build flow (DR-005 / Phase C).
+  //     Checked against the full observeTools set (which includes both tools and mcp).
+  const forbiddenMcpOffenders = BUILTIN_FORBIDDEN_MCP.filter((t) => observeTools.has(t));
+  if (forbiddenMcpOffenders.length > 0) {
+    return (
+      `forbidden MCP tool(s) declared in observe while mutates_build is false: ` +
+      `${forbiddenMcpOffenders.join(", ")} (built-in forbidden MCP denylist: get_next_escalation_strategy)`
+    );
+  }
+
+  // (d) Author-specified forbidden_tools — additive on top of built-in set.
   const authorOffenders = forbiddenTools.filter((t) => observeTools.has(t));
   if (authorOffenders.length > 0) {
     return (
