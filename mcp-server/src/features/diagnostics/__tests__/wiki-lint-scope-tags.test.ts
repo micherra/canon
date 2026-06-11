@@ -161,6 +161,7 @@ describe("assembleWikiLintOutput with scope_tags", () => {
       principlesChecked: 1,
       scopeLayers: [],
       scopeTags: [scopeTagFinding],
+      indexDrift: [],
       staleRefs: [],
     });
 
@@ -181,6 +182,7 @@ describe("assembleWikiLintOutput with scope_tags", () => {
       principlesChecked: 0,
       scopeLayers: [],
       scopeTags: [],
+      indexDrift: [],
       staleRefs: [],
     });
 

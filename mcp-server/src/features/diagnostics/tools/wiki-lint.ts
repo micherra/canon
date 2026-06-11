@@ -18,6 +18,7 @@ import { DriftStore } from "@platform/storage/drift/store.ts";
 import { loadLayerMappings } from "@shared/lib/config.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
 import type { Principle } from "@shared/parser.ts";
+import { checkIndexDrift } from "../services/index-inventory.ts";
 import {
   assembleWikiLintOutput,
   checkCitedPaths,
@@ -41,6 +42,7 @@ type CheckName =
   | "orphan_principles"
   | "scope_layers"
   | "scope_tags"
+  | "index_drift"
   | "stale_refs";
 
 export type WikiLintInput = {
@@ -268,43 +270,20 @@ function runGlossaryCheck(projectDir: string): ReturnType<typeof checkGlossaryCo
 
 // ---- Main tool function ----
 
-/**
- * Run wiki lint checks against Canon's own meta-layer artifacts.
- *
- * @param input - Which checks to run (default: all 7)
- * @param projectDir - Project root (for CLAUDE.md scanning, stale ref resolution, drift store)
- * @param pluginDir - Plugin directory (for principles loading, agent definitions)
- */
-export async function wikiLint(
-  input: WikiLintInput,
-  projectDir: string,
-  pluginDir: string,
-): Promise<WikiLintOutput> {
-  const ALL_CHECKS: CheckName[] = [
-    "cited_paths",
-    "contradictions",
-    "glossary_consistency",
-    "missing_examples",
-    "orphan_principles",
-    "scope_layers",
-    "scope_tags",
-    "stale_refs",
-  ];
-  const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
+type CheckContext = {
+  agentFiles: FileRecord[];
+  claudeMdFiles: FileRecord[];
+  dddDocFiles: FileRecord[];
+  enabled: Set<CheckName>;
+  principles: Principle[];
+  projectDir: string;
+};
 
-  const principles = await loadAllPrinciples(projectDir, pluginDir);
-  const claudeMdPaths = findFiles(projectDir, (_fp, name) => name === "CLAUDE.md");
-  const claudeMdFiles = loadFileRecords(claudeMdPaths);
-
-  const agentsDir = join(pluginDir, "agents");
-  const agentFiles = loadFileRecords(findFiles(agentsDir, (_fp, name) => name.endsWith(".md")));
-
-  // DDD doc set: docs/**/*.md (excl. docs/explore/), domains/*/README.md, CONTEXT.md.
-  // Collected once and threaded into both stale_refs and cited_paths runners.
-  const dddDocFiles =
-    enabled.has("stale_refs") || enabled.has("cited_paths")
-      ? loadFileRecords(collectDddDocPaths(projectDir))
-      : [];
+/** Run all enabled checks and return the assembled input for assembleWikiLintOutput. */
+async function runEnabledChecks(
+  ctx: CheckContext,
+): Promise<Parameters<typeof assembleWikiLintOutput>[0]> {
+  const { agentFiles, claudeMdFiles, dddDocFiles, enabled, principles, projectDir } = ctx;
 
   const contradictions = enabled.has("contradictions") ? checkContradictions(claudeMdFiles) : [];
   const orphans = enabled.has("orphan_principles")
@@ -322,20 +301,75 @@ export async function wikiLint(
   const scopeTags = enabled.has("scope_tags")
     ? checkScopeTags(principles, VALID_COMPUTED_TAGS)
     : [];
+  const indexDrift = enabled.has("index_drift") ? await checkIndexDrift(projectDir) : [];
   const glossaryConsistency = enabled.has("glossary_consistency")
     ? runGlossaryCheck(projectDir)
     : [];
 
-  return assembleWikiLintOutput({
+  return {
     citedPaths,
     contradictions,
     filesScanned: claudeMdFiles.length + agentFiles.length + dddDocFiles.length,
     glossaryConsistency,
+    indexDrift,
     missingExamples,
     orphans,
     principlesChecked: principles.length,
     scopeLayers,
     scopeTags,
     staleRefs,
+  };
+}
+
+/**
+ * Run wiki lint checks against Canon's own meta-layer artifacts.
+ *
+ * @param input - Which checks to run (default: 8 checks, excluding index_drift; pass checks:["index_drift"] to run it)
+ * @param projectDir - Project root (for CLAUDE.md scanning, stale ref resolution, drift store)
+ * @param pluginDir - Plugin directory (for principles loading, agent definitions)
+ */
+export async function wikiLint(
+  input: WikiLintInput,
+  projectDir: string,
+  pluginDir: string,
+): Promise<WikiLintOutput> {
+  // DEFAULT_CHECKS excludes index_drift: that check emits MISSING_MARKERS for any project
+  // that lacks the five Canon-managed sentinel-delimited indexes (rules/, principles/, agents/,
+  // templates/, references/). Including it by default makes the lint noisy for valid non-Canon /
+  // minimal projects. Callers that want it must request it explicitly via checks: ["index_drift"].
+  const DEFAULT_CHECKS: CheckName[] = [
+    "cited_paths",
+    "contradictions",
+    "glossary_consistency",
+    "missing_examples",
+    "orphan_principles",
+    "scope_layers",
+    "scope_tags",
+    "stale_refs",
+  ];
+  const enabled = new Set<CheckName>(input.checks ?? DEFAULT_CHECKS);
+
+  const principles = await loadAllPrinciples(projectDir, pluginDir);
+  const claudeMdPaths = findFiles(projectDir, (_fp, name) => name === "CLAUDE.md");
+  const claudeMdFiles = loadFileRecords(claudeMdPaths);
+
+  const agentsDir = join(pluginDir, "agents");
+  const agentFiles = loadFileRecords(findFiles(agentsDir, (_fp, name) => name.endsWith(".md")));
+
+  // DDD doc set: docs/**/*.md (excl. docs/explore/), domains/*/README.md, CONTEXT.md.
+  // Collected once and threaded into both stale_refs and cited_paths runners.
+  const dddDocFiles =
+    enabled.has("stale_refs") || enabled.has("cited_paths")
+      ? loadFileRecords(collectDddDocPaths(projectDir))
+      : [];
+
+  const assembleInput = await runEnabledChecks({
+    agentFiles,
+    claudeMdFiles,
+    dddDocFiles,
+    enabled,
+    principles,
+    projectDir,
   });
+  return assembleWikiLintOutput(assembleInput);
 }

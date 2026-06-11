@@ -25,6 +25,24 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 | `tester` | Writes integration tests; fills coverage gaps | sonnet |
 | `writer` | Creates and edits Canon principles and agent-rules | sonnet |
 
+## Artifact Inventory
+<!-- canon:inventory:start class=agents -->
+| artifact | summary |
+|---|---|
+| architect.md | Technical planning for non-trivial builds. Performs codebase research, designs technical approach, produces a runbook, and breaks the design into atomic task plans. Does NOT write code. |
+| engineer.md | Executes code-writing work. Operates in two modes: implementation (new code per a task plan) or fix (targeted bug or violation fixes). Mode is selected by spawn prompt context. Spawned by the lead orchestrator. |
+| evaluator.md | Lightweight quality gate agent that interprets structural signals (pattern findings, scope overlap, diff stats) against acceptance criteria and implementation summary. Returns a structured PASS/FAIL verdict. Runs on Haiku for cost and speed. |
+| janitor.md | Background housekeeping agent. Prunes stale git worktrees under .canon/worktrees/ and cleans up workspaces under .canon/workspaces/ — including orphaned workspaces whose worktree/ subdirectory is no longer registered with git, and workspaces for branches that have been merged to main. Spawned conditionally after invoke_janitor signals needs_prune: true. Never modifies source code or spawns sub-agents. |
+| learner.md | Analyzes codebase patterns, review history, build execution data, and conventions to suggest improvements to Canon principles. Produces a structured learning report. Spawned by the lead orchestrator. |
+| planner.md | DEPRECATED (2026-05-17). Responsibilities split between orchestrator (PM) and architect. Requirements conversation → orchestrator. Codebase research → architect. Runbook production → architect. Triviality assessment → architect. See agents/architect.md for the current technical pre-build agent. |
+| reviewer.md | Reviews code changes against Canon engineering principles. Six-stage evaluation: principle compliance, code quality, compliance cross-check, drift-from-plan, acceptance criteria verification, and cross-requirement consistency. Spawned by the build orchestrator, Canon intake, pr-review command, or other agents. |
+| scribe.md | Post-implementation context sync agent. Reads git diffs and engineer summaries to update CLAUDE.md, context.md, and CONVENTIONS.md when contract-level changes occur. Strictly a documenter — never proposes new principles. |
+| security.md | Reviews code for security vulnerabilities, unsafe patterns, and compliance issues. Produces a security assessment with findings ranked by severity. |
+| shipper.md | Post-build delivery agent. Synthesizes build artifacts (summaries, test reports, review verdicts, design docs) into a PR description and creates the PR. Spawned by the orchestrator after the review/fix loop completes. |
+| tester.md | Writes integration tests and fills coverage gaps for code produced by engineer agents. Handles cross-task integration, end-to-end flows, and missed coverage. Spawned by the build orchestrator after implementation. |
+| writer.md | Creates, edits, and forks Canon principles, conventions, and agent-rules. Focuses on behavioral constraints and uses the principle template as source of truth. Handles interview, examples, conflict detection, save, and validation. Spawned by Canon intake or via /canon:edit-principle. |
+<!-- canon:inventory:end -->
+
 ## Conventions
 <!-- last-updated: 2026-06-09 -->
 

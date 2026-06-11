@@ -23,6 +23,47 @@ Rules are organized into behavioral categories:
 - **Efficiency rules** — govern resource and tool usage (`agent-batch-tools`, `agent-metrics-before-return`)
 - **Review rules** — govern review behavior (`agent-cold-review`, `agent-assume-hostile-input`)
 
+## Artifact Inventory
+<!-- canon:inventory:start class=rules -->
+| artifact | summary |
+|---|---|
+| agent-artifact-write-before-return.md | Write All Declared Artifacts Before Returning |
+| agent-artifacts-only.md | Synthesize From Artifacts, Never Fabricate |
+| agent-assume-hostile-input.md | Assume Hostile Input |
+| agent-batch-tools.md |  |
+| agent-budget-checkpoint.md | Budget-Aware Checkpointing |
+| agent-cold-review.md | Cold Review, Two Stages |
+| agent-compound-task-decomposition.md | Decompose Compound Rebase+Fix Tasks |
+| agent-conflict-detection.md | Detect Principle Conflicts Before Saving |
+| agent-context-budget-dispatch.md | Architect Must Estimate Input Complexity for Dispatch Decisions |
+| agent-context-check.md |  |
+| agent-context-sync.md | Diff-Driven, Contract-Scoped Updates |
+| agent-convergence-discipline.md | Flow Convergence Discipline |
+| agent-design-before-code.md | Design Before Code |
+| agent-discovery-execution-pairing.md | Discovery and Execution Are Paired Obligations |
+| agent-dispatch-before-analysis.md | Dispatch Before Analysis — No Self-Produced Substantive Output |
+| agent-document-decisions.md | Promote Significant Workspace Decisions to Project ADRs |
+| agent-document-public-apis.md | Document Public APIs with JSDoc/TSDoc |
+| agent-evidence-over-intuition.md | Suggestions Require Quantified Evidence |
+| agent-fresh-context.md | Fresh Context, Atomic Commits |
+| agent-informed-questions.md | Questions Must Cite Codebase Evidence |
+| agent-integration-boundary-check.md | Verify Integration Boundaries End-to-End |
+| agent-metrics-before-return.md | Record Agent Metrics Before Returning |
+| agent-minimal-fix.md | Minimal Blast-Radius Fixes |
+| agent-missing-artifact.md | Missing Artifact Protocol |
+| agent-plans-are-prompts.md | Plans Are Prompts, Not Documents |
+| agent-simplify-before-extending.md | Simplify Before Extending |
+| agent-structured-triage.md | Structured Triage Before Fixing |
+| agent-surface-assumptions.md | Surface Assumptions Explicitly |
+| agent-tdd-required.md | Test-Driven Development Required |
+| agent-template-required.md | Template Usage Is Mandatory |
+| agent-test-sad-paths.md | Test Failure Modes Before Happy Paths |
+| agent-test-the-contract.md | Test the Contract, Not the Implementation |
+| agent-working-environment.md | Derive Working Environment from Spawn Prompt |
+| agent-workspace-scoping.md | Workspace Scoping |
+| agent-worktree-orientation.md | Verify Worktree and Branch at Spawn Start |
+<!-- canon:inventory:end -->
+
 ## Conventions
 <!-- last-updated: 2026-04-30 -->
 

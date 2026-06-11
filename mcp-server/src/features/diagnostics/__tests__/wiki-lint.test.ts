@@ -546,6 +546,7 @@ describe("assembleWikiLintOutput", () => {
       principlesChecked: 20,
       scopeLayers: [scopeLayer],
       scopeTags: [],
+      indexDrift: [],
       staleRefs: [staleRef],
     });
 

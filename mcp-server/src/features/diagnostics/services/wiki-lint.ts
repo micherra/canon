@@ -18,6 +18,7 @@
  */
 
 import type { Principle } from "@shared/parser.ts";
+import type { IndexDriftFinding } from "./index-inventory.ts";
 import type { GlossaryConsistencyFinding } from "./wiki-lint-glossary.ts";
 
 // Re-export the type so callers can use it without depending on the sub-module directly.
@@ -72,6 +73,8 @@ export type ScopeTagFinding = {
   message: string;
 };
 
+export type { IndexDriftFinding };
+
 export type WikiLintOutput = {
   cited_paths: CitedPathFinding[];
   contradictions: ContradictionFinding[];
@@ -80,6 +83,7 @@ export type WikiLintOutput = {
   orphan_principles: OrphanPrincipleFinding[];
   scope_layers: ScopeLayerFinding[];
   scope_tags: ScopeTagFinding[];
+  index_drift: IndexDriftFinding[];
   stale_refs: StaleRefFinding[];
   summary: {
     files_scanned: number;
@@ -98,6 +102,7 @@ export type AssembleWikiLintInput = {
   principlesChecked: number;
   scopeLayers: ScopeLayerFinding[];
   scopeTags: ScopeTagFinding[];
+  indexDrift: IndexDriftFinding[];
   staleRefs: StaleRefFinding[];
 };
 
@@ -572,12 +577,14 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     principlesChecked,
     scopeLayers,
     scopeTags,
+    indexDrift,
     staleRefs,
   } = input;
   return {
     cited_paths: citedPaths,
     contradictions,
     glossary_consistency: glossaryConsistency,
+    index_drift: indexDrift,
     missing_examples: missingExamples,
     orphan_principles: orphans,
     scope_layers: scopeLayers,
@@ -594,6 +601,7 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
         citedPaths.length +
         scopeLayers.length +
         scopeTags.length +
+        indexDrift.length +
         glossaryConsistency.length,
     },
   };

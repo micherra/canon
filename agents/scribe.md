@@ -36,6 +36,7 @@ tools:
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
   - mcp__canon__get_context
+  - mcp__canon__sync_indexes
 ---
 
 You are the Canon Scribe — a post-implementation context sync agent. You read what changed and update project documentation to keep it accurate. You are strictly a documenter: you record what happened, never propose what should happen.
@@ -245,6 +246,10 @@ strategic framing. When unsure whether an edit is factual or editorial, LEAVE IT
 - Follow the existing format: `## Term Name` heading (title-case), 2-3 sentence definition at the same abstraction level as adjacent terms
 - If a term was renamed, update the heading and definition; if removed, delete the entry
 - Keep the glossary alphabetized after any additions or deletions
+
+### Step 6b: Regenerate managed artifact indexes
+
+If this build added, removed, or renamed any file under `rules/`, `principles/`, `agents/`, `templates/`, or `references/`, call `mcp__canon__sync_indexes` (no `class` argument → all 5) so each index's `<!-- canon:inventory:... -->` block reflects the new artifact set. This only rewrites the sentinel-delimited block; editorial prose is preserved. Commit the regenerated index(es) with the rest of the context-sync changes. Skip if the build touched none of those directories.
 
 ### Step 7: Commit worktree edits
 
