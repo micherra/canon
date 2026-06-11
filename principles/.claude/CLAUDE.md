@@ -64,6 +64,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | immutable-infrastructure.md | Infrastructure Components Are Immutable After Deployment |
 | information-hiding.md | Each Module Hides a Design Decision |
 | infrastructure-tested-like-code.md | Validate Infrastructure Definitions Before Deployment |
+| install-faithful-dev-repo.md | Plugin-Shipped Runtime Files Must Be Faithful to an Installed Layout |
 | isolate-frontend-runtime-state.md | Isolate Runtime State Between Frontend Modules |
 | law-of-demeter.md | Talk to Neighbors, Not Strangers |
 | lazy-freshness-gate.md | Lazy Freshness Gate for Commit-Granularity Caches |
