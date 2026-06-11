@@ -150,6 +150,98 @@ describe("kg-wasm-parser — parsing trivial source strings", () => {
   });
 });
 
+// Atomicity: failed Language.load() must NOT leave half-registered state
+//
+// Fix for P2 (third-round) bug: before this fix, mergeOverlayIntoConfigs was
+// called for ALL overlay configs before Language.load() ran for each one. If
+// Language.load() rejected (corrupt file, wrong ABI), the config was already
+// in LANGUAGE_CONFIGS/EXT_TO_CONFIG while no parser/adapter existed — a
+// half-registered state that could crash later callers.
+//
+// After the fix, mergeOverlayIntoConfigs is called only after Language.load()
+// succeeds, and only for the successfully-loaded subset.
+
+describe("kg-wasm-parser — overlay atomicity: failed Language.load() must not pollute config maps", () => {
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    // Ensure the singleton is initialized before these tests run
+    await initParsers();
+  });
+
+  beforeEach(() => {
+    tmpDir = join(
+      tmpdir(),
+      `kg-parser-atomic-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(join(tmpDir, ".canon", "kg-languages"), { recursive: true });
+    mkdirSync(join(tmpDir, ".canon", "grammars"), { recursive: true });
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      // suppress warn output in tests
+    });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it("overlay whose Language.load() throws does NOT appear in LANGUAGE_CONFIGS or EXT_TO_CONFIG", async () => {
+    // Write a valid JSON overlay config for a unique language id
+    const overlayId = `test-lang-atomic-${Date.now()}`;
+    const ext = `.${overlayId}`;
+    const wasmFile = `tree-sitter-${overlayId}.wasm`;
+
+    writeFileSync(
+      join(tmpDir, ".canon", "kg-languages", `${overlayId}.json`),
+      JSON.stringify({
+        extensions: [ext],
+        grammarFile: wasmFile,
+        id: overlayId,
+        nodeKinds: {
+          callExpression: ["call_expression"],
+          classBody: [],
+          classDef: [],
+          exportStatement: [],
+          functionDef: ["function_declaration"],
+          importStatement: [],
+          methodDef: [],
+          variableDecl: [],
+        },
+      }),
+    );
+
+    // Write a file at the wasm path so existsSync passes — but it is NOT a valid
+    // WASM file, so Language.load() will reject it.
+    writeFileSync(join(tmpDir, ".canon", "grammars", wasmFile), "not a wasm file");
+
+    // Import the config map to assert post-condition
+    const { LANGUAGE_CONFIGS, getConfigForExtension } = await import(
+      "@graph/kg-language-configs.ts"
+    );
+
+    // Confirm the overlay id is NOT in the maps before we call initParsers
+    expect(LANGUAGE_CONFIGS.has(overlayId)).toBe(false);
+    expect(getConfigForExtension(ext)).toBeUndefined();
+
+    // Run initParsers — Language.load() will throw on the corrupt wasm
+    const result = await initParsers(tmpDir);
+
+    // The failed overlay must NOT have been registered
+    expect(result).toEqual([]);
+    expect(LANGUAGE_CONFIGS.has(overlayId)).toBe(false);
+    expect(getConfigForExtension(ext)).toBeUndefined();
+
+    // Built-ins must remain intact
+    expect(LANGUAGE_CONFIGS.has("typescript")).toBe(true);
+    expect(LANGUAGE_CONFIGS.has("tsx")).toBe(true);
+    expect(LANGUAGE_CONFIGS.has("python")).toBe(true);
+
+    // The failure warn was emitted (Language.load failed)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(overlayId));
+  });
+});
+
 // Per-project overlay loading after singleton is already initialized
 //
 // Fix for P2 bug: when the WASM parser singleton is already initialized,

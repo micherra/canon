@@ -91,13 +91,16 @@ async function loadBuiltinGrammars(): Promise<void> {
 /**
  * Load project-local overlay grammars (fail-open: skip + log on any error).
  * Returns the configs whose grammars loaded successfully.
+ *
+ * Registration is ATOMIC per language: a config is merged into LANGUAGE_CONFIGS/
+ * EXT_TO_CONFIG only after Language.load() succeeds. A failed load leaves no
+ * partial state in the config maps — the extension will simply be unsupported.
  */
 async function loadOverlayGrammars(projectDir: string): Promise<LanguageConfig[]> {
   const builtinIds = new Set(SUPPORTED_LANGUAGES as unknown as string[]);
   const overlayConfigs = loadOverlayConfigs(projectDir, builtinIds);
   if (overlayConfigs.length === 0) return [];
 
-  mergeOverlayIntoConfigs(overlayConfigs);
   const loaded: LanguageConfig[] = [];
 
   for (const config of overlayConfigs) {
@@ -115,6 +118,13 @@ async function loadOverlayGrammars(projectDir: string): Promise<LanguageConfig[]
         `kg-wasm-parser: failed to load overlay grammar for '${config.id}' from '${wasmPath}': ${message} — skipping`,
       );
     }
+  }
+
+  // Merge only successfully-loaded configs into the shared maps.
+  // This ensures LANGUAGE_CONFIGS and EXT_TO_CONFIG never contain an entry
+  // whose parser/adapter does not exist (no half-registered state).
+  if (loaded.length > 0) {
+    mergeOverlayIntoConfigs(loaded);
   }
 
   return loaded;
