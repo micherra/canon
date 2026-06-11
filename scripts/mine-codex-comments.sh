@@ -272,6 +272,17 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   _page=1
   _per_page=100
   while true; do
+    # Fetch raw page: capture ALL closed PR numbers (merged + unmerged) so we can
+    # determine the true raw page size for last-page detection, then filter to
+    # merged-only for the corpus. Without the raw count, a page of 100 closed PRs
+    # with 99 merged looks like 99 results (<100), causing premature loop exit and
+    # silently dropping all older merged PRs.
+    _raw_page=$(gh api \
+      "repos/:owner/:repo/pulls?state=closed&per_page=${_per_page}&page=${_page}" \
+      --jq '[.[] | .number] | .[]')
+    # Count raw items on this page BEFORE any merged-filter to detect last page.
+    _raw_count=$(printf '%s\n' "$_raw_page" | grep -c '[0-9]' || true)
+    # Filter to merged PRs only for the corpus.
     _batch=$(gh api \
       "repos/:owner/:repo/pulls?state=closed&per_page=${_per_page}&page=${_page}" \
       --jq '[.[] | select(.merged_at != null) | .number] | .[]')
@@ -281,13 +292,11 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     if [[ -n "$_batch_in_window" ]]; then
       PR_LIST="${PR_LIST}${_batch_in_window}"$'\n'
     fi
-    # Count raw results in this page to detect last page
-    _batch_count=$(printf '%s\n' "$_batch" | grep -c '[0-9]' || true)
-    # Early stop: if the smallest number in this batch is below the window minimum,
+    # Early stop: if the smallest number in this raw page is below the window minimum,
     # all subsequent pages (older PRs) will also be below — no need to continue.
-    _batch_min=$(printf '%s\n' "$_batch" | grep '[0-9]' | sort -n | head -1)
-    if [[ $_batch_count -lt $_per_page ]]; then
-      # Last page — no more results
+    _batch_min=$(printf '%s\n' "$_raw_page" | grep '[0-9]' | sort -n | head -1)
+    if [[ $_raw_count -lt $_per_page ]]; then
+      # Last page (raw item count < per_page) — no more results
       break
     fi
     if [[ -n "$_batch_min" && "$_batch_min" -lt "$CODEX_WINDOW_MIN" ]]; then
@@ -303,17 +312,30 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   >&2 echo "    PRs in window (#${CODEX_WINDOW_MIN}+): $PR_COUNT"
 
   # ---- Pull comments in parallel via xargs -P 8 ----
-  # Write a minimal wrapper script so xargs can invoke the exported function
-  # without bash -c over any interpolated content.
+  # Each worker writes its output to a dedicated temp file (keyed by PR number)
+  # rather than streaming to shared stdout. With -P 8, concurrent cat "$tmp_out"
+  # calls interleave on the parent's stdin, producing malformed TSV rows where
+  # path and body columns from different PRs can be spliced together. Serializing
+  # via per-worker files and concatenating in order after xargs completes
+  # eliminates the race entirely.
   TMPDIR_MINE=$(mktemp -d)
   WRAPPER="$TMPDIR_MINE/fetch-one-pr.sh"
-  printf '#!/bin/bash\nset -euo pipefail\nsource %s\nfetch_pr_comments "$1"\n' \
-    "$SCRIPT_DIR/mine-codex-comments.sh" > "$WRAPPER"
+  # Worker writes to TMPDIR_MINE/<pr_number>.tsv so outputs are never interleaved.
+  printf '#!/bin/bash\nset -euo pipefail\nsource %s\nfetch_pr_comments "$1" > %s/"$1".tsv\n' \
+    "$SCRIPT_DIR/mine-codex-comments.sh" "$TMPDIR_MINE" > "$WRAPPER"
   chmod +x "$WRAPPER"
 
   >&2 echo "    Pulling Codex comments (parallel -P 8)..."
-  RAW_COMMENTS=$(printf '%s\n' "$PR_LIST" \
-    | xargs -P 8 -n 1 "$WRAPPER")
+  printf '%s\n' "$PR_LIST" | xargs -P 8 -n 1 "$WRAPPER"
+
+  # Concatenate per-worker files in PR-number order for a deterministic, well-formed TSV.
+  RAW_COMMENTS=""
+  while IFS= read -r _pr_num; do
+    _worker_file="$TMPDIR_MINE/${_pr_num}.tsv"
+    if [[ -f "$_worker_file" ]]; then
+      RAW_COMMENTS="${RAW_COMMENTS}$(cat "$_worker_file")"$'\n'
+    fi
+  done < <(printf '%s\n' "$PR_LIST" | grep '[0-9]')
 
   rm -rf "$TMPDIR_MINE"
 
