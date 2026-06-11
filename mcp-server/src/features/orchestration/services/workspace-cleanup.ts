@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
 import { unlink } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { archiveWorkspace } from "@features/history/services/archive-service.ts";
 import { gitDiff, gitExec } from "@platform/adapters/git-adapter.ts";
@@ -282,7 +282,8 @@ export async function tryRemoveCliffLedger(workspace: string): Promise<void> {
     await unlink(join(workspace, ".cliff-surfaced.json"));
   } catch (err: unknown) {
     // ENOENT is expected (no cliffs surfaced this session); all other errors are warn-only
-    const code = err instanceof Error && "code" in err ? (err as NodeJS.ErrnoException).code : undefined;
+    const code =
+      err instanceof Error && "code" in err ? (err as NodeJS.ErrnoException).code : undefined;
     if (code !== "ENOENT") {
       console.warn(
         "[canon] finalizeWorkspace: failed to remove cliff ledger:",

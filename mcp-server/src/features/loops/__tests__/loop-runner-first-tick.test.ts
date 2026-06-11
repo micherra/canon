@@ -18,7 +18,6 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { LoopDefinition } from "../loop-schema.ts";
 import { parseLoopDefinition } from "../loop-schema.ts";
 
 // ── Pure diff algorithm (models loop-tick.md Step 5) ─────────────────────────
@@ -143,9 +142,7 @@ describe("first-tick guard (ADR-0002) — pure diff algorithm", () => {
     // prior has tick_count but not a new field added later
     const prior: SnapshotValues = { tick_count: 1 };
     const current: SnapshotValues = { tick_count: 1, new_field: "something" };
-    const newFieldRule: TransitionRule[] = [
-      { field: "new_field", message: "New field appeared." },
-    ];
+    const newFieldRule: TransitionRule[] = [{ field: "new_field", message: "New field appeared." }];
     const fired = diffSnapshot(prior, current, newFieldRule);
     expect(fired).toHaveLength(0); // new_field absent in prior → not a transition
   });

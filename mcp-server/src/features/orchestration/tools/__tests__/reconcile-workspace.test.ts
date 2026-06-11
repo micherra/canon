@@ -65,7 +65,7 @@ function writeJournalClean(workspacePath: string): void {
 }
 
 describe("reconcileWorkspace — source enum (loops-phase-c-02)", () => {
-  it('WORKSPACE_NOT_FOUND when no journal exists (baseline)', async () => {
+  it("WORKSPACE_NOT_FOUND when no journal exists (baseline)", async () => {
     const result = await reconcileWorkspace({ workspace, source: "loop" });
     expect(result.ok).toBe(false);
     if (!result.ok) {

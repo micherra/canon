@@ -10,6 +10,7 @@
  * - corrupt/unparseable JSON → empty set (fail-open)
  */
 
+import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,7 +21,6 @@ import {
   filterUnsurfaced,
   readLedger,
 } from "../services/cliff-ledger.ts";
-import { writeFileSync } from "node:fs";
 
 let workspace: string;
 
@@ -69,14 +69,26 @@ describe("cliffSignature", () => {
   });
 
   it("different step_id produces different signature", () => {
-    const s1 = cliffSignature({ step_id: "implement", missing_artifacts: [], partial_artifacts: [] });
+    const s1 = cliffSignature({
+      step_id: "implement",
+      missing_artifacts: [],
+      partial_artifacts: [],
+    });
     const s2 = cliffSignature({ step_id: "review", missing_artifacts: [], partial_artifacts: [] });
     expect(s1).not.toBe(s2);
   });
 
   it("different missing_artifacts produces different signature", () => {
-    const s1 = cliffSignature({ step_id: "implement", missing_artifacts: ["a.md"], partial_artifacts: [] });
-    const s2 = cliffSignature({ step_id: "implement", missing_artifacts: ["b.md"], partial_artifacts: [] });
+    const s1 = cliffSignature({
+      step_id: "implement",
+      missing_artifacts: ["a.md"],
+      partial_artifacts: [],
+    });
+    const s2 = cliffSignature({
+      step_id: "implement",
+      missing_artifacts: ["b.md"],
+      partial_artifacts: [],
+    });
     expect(s1).not.toBe(s2);
   });
 });
@@ -118,9 +130,7 @@ describe("filterUnsurfaced", () => {
   });
 
   it("returns empty toSurface after appendLedger with same steps (surface-once — AC#4)", async () => {
-    const steps = [
-      { step_id: "implement", missing_artifacts: ["a.md"], partial_artifacts: [] },
-    ];
+    const steps = [{ step_id: "implement", missing_artifacts: ["a.md"], partial_artifacts: [] }];
     // First pass: surface all
     const { signatures } = await filterUnsurfaced(workspace, steps);
     await appendLedger(workspace, signatures);
@@ -138,7 +148,11 @@ describe("filterUnsurfaced", () => {
     await appendLedger(workspace, signatures);
 
     // Step gains a new missing artifact → new signature
-    const step2 = { step_id: "implement", missing_artifacts: ["a.md", "b.md"], partial_artifacts: [] };
+    const step2 = {
+      step_id: "implement",
+      missing_artifacts: ["a.md", "b.md"],
+      partial_artifacts: [],
+    };
     const { toSurface } = await filterUnsurfaced(workspace, [step2]);
     expect(toSurface).toHaveLength(1);
     expect(toSurface[0].step_id).toBe("implement");
