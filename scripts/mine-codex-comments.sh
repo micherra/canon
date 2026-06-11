@@ -263,12 +263,43 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   >&2 echo "    Artifact: $OUTPUT_FILE"
 
   # ---- Enumerate merged PRs in the Codex window ----
-  >&2 echo "    Fetching merged PR list..."
-  PR_LIST=$(gh pr list --state merged --limit 400 --json number \
-    --jq '.[].number' \
-    | awk -v min="$CODEX_WINDOW_MIN" '$1 >= min')
+  # Use paginated REST API instead of --limit to ensure the full corpus is fetched
+  # as the repo grows beyond any fixed cap. Pages of 100 are fetched until a page
+  # returns fewer than 100 results (last page) or all numbers fall below the window
+  # minimum (early stop — REST API returns newest first).
+  >&2 echo "    Fetching merged PR list (paginated)..."
+  PR_LIST=""
+  _page=1
+  _per_page=100
+  while true; do
+    _batch=$(gh api \
+      "repos/:owner/:repo/pulls?state=closed&per_page=${_per_page}&page=${_page}" \
+      --jq '[.[] | select(.merged_at != null) | .number] | .[]')
+    # Apply window filter to this batch
+    _batch_in_window=$(printf '%s\n' "$_batch" \
+      | awk -v min="$CODEX_WINDOW_MIN" '$1 >= min')
+    if [[ -n "$_batch_in_window" ]]; then
+      PR_LIST="${PR_LIST}${_batch_in_window}"$'\n'
+    fi
+    # Count raw results in this page to detect last page
+    _batch_count=$(printf '%s\n' "$_batch" | grep -c '[0-9]' || true)
+    # Early stop: if the smallest number in this batch is below the window minimum,
+    # all subsequent pages (older PRs) will also be below — no need to continue.
+    _batch_min=$(printf '%s\n' "$_batch" | grep '[0-9]' | sort -n | head -1)
+    if [[ $_batch_count -lt $_per_page ]]; then
+      # Last page — no more results
+      break
+    fi
+    if [[ -n "$_batch_min" && "$_batch_min" -lt "$CODEX_WINDOW_MIN" ]]; then
+      # Passed the window boundary — all remaining pages are older
+      break
+    fi
+    _page=$((_page + 1))
+  done
+  # Trim trailing blank lines and deduplicate (pages shouldn't overlap, but be safe)
+  PR_LIST=$(printf '%s\n' "$PR_LIST" | grep '[0-9]' | sort -rn | uniq)
 
-  PR_COUNT=$(printf '%s\n' "$PR_LIST" | grep -c '[0-9]')
+  PR_COUNT=$(printf '%s\n' "$PR_LIST" | grep -c '[0-9]' || true)
   >&2 echo "    PRs in window (#${CODEX_WINDOW_MIN}+): $PR_COUNT"
 
   # ---- Pull comments in parallel via xargs -P 8 ----
@@ -305,10 +336,17 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
   >&2 echo "    Parsed badge comments: $PARSE_COUNT"
 
-  # Warn if zero parses (format drift)
+  # Fail-closed: if we have raw comments but parsed zero badges, Codex's badge
+  # format has drifted. Overwriting the artifact with zeroed counts would silently
+  # erase the mined evidence. Exit non-zero before any write (scripts/.claude/CLAUDE.md:
+  # "never write a partial or empty artifact — if any step fails, exit before writing output").
   if [[ "$COMMENT_COUNT" -gt 0 && "$PARSE_COUNT" -eq 0 ]]; then
-    >&2 echo "WARNING: Found $COMMENT_COUNT raw comment rows but 0 parsed badges."
-    >&2 echo "         Codex comment format may have changed. Output will be empty."
+    >&2 echo "ERROR: Found $COMMENT_COUNT raw comment rows but 0 parsed badges."
+    >&2 echo "       Codex comment badge format may have changed. Refusing to overwrite"
+    >&2 echo "       $OUTPUT_FILE with empty results."
+    >&2 echo "       Inspect parse_comment_line() and update the badge regex to match"
+    >&2 echo "       the current format before re-running."
+    exit 1
   fi
 
   # ---- Cluster, rank, and accumulate in one awk pass ----
