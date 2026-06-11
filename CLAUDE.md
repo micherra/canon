@@ -327,7 +327,7 @@ is missing → re-spawn → second-failure HITL) is unchanged.
 
 > Authoritative artifact path and naming rules: `references/canon-artifact-locations.md`.
 
-### HITL Patterns <!-- last-updated: 2026-06-04 -->
+### HITL Patterns <!-- last-updated: 2026-06-09 -->
 
 Full catalog in `references/hitl-patterns.md`. Covers every mandatory and advisory
 gate: plan approval, review verdict, adversarial re-review, WARNING close-out,
@@ -402,9 +402,12 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
    - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
-4. Verify file claims released.
-5. Run `.canon/learn.sh` if it exists.
-6. Record final flow metrics.
+4. **Fire `PushNotification` at build-complete** (after ship / PR created): call `PushNotification({ title: "Canon: Build Complete", message: "Build '{slug}' is done — PR created and ready for review." })`. This is the OS-push channel for HITL gates and build-complete signals (per channel split in `docs/supervised-build-quality.md:250`). Terminal digests (nightly digest, learner surfacing) remain terminal — do NOT convert them to push.
+   - **One-time user setup**: Desktop push works by default in the Claude.ai/API runtime — no setup needed. Phone push requires connecting **Remote Control** (optional one-time step). Not available on Bedrock/Vertex/Foundry — Canon runs on the Claude.ai/API path, so this is informational only.
+   - **LSP prerequisite**: The `LSP` tool (granted to reviewer, engineer, architect) requires `typescript-language-server` installed globally: `npm install -g typescript-language-server typescript`. Without it the tool will fail to return results.
+5. Verify file claims released.
+6. Run `.canon/learn.sh` if it exists.
+7. Record final flow metrics.
 
 ### Commit Provenance
 
