@@ -123,8 +123,11 @@ async function loadOverlayGrammars(projectDir: string): Promise<LanguageConfig[]
 /**
  * Initialize the WASM runtime and load all grammar files.
  *
- * Must be awaited before calling getParser(). Idempotent — safe to call
- * multiple times; subsequent calls are no-ops.
+ * Must be awaited before calling getParser(). The WASM runtime and built-in
+ * grammars are initialized only once (idempotent). Overlay grammars are
+ * resolved per call when `projectDir` is provided — subsequent calls with a
+ * new `projectDir` will register that project's overlays even though the
+ * parser singleton was already initialized.
  *
  * Built-in grammar loading is fail-closed: a missing built-in grammar throws.
  * Overlay grammar loading (when projectDir is provided) is fail-open: a
@@ -138,11 +141,16 @@ async function loadOverlayGrammars(projectDir: string): Promise<LanguageConfig[]
  *   Returns [] when projectDir is omitted or no overlays are found.
  */
 export async function initParsers(projectDir?: string): Promise<LanguageConfig[]> {
-  if (initialized) return [];
-  await initWasmRuntime();
-  await loadBuiltinGrammars();
+  if (!initialized) {
+    await initWasmRuntime();
+    await loadBuiltinGrammars();
+    initialized = true;
+  }
+  // Overlay resolution is per-projectDir: even when the singleton is already
+  // initialized, a second project with .canon/kg-languages must get its own
+  // overlays registered. Without this, a second project's overlays are silently
+  // dropped because the early-return above skips loadOverlayGrammars entirely.
   const loadedOverlayConfigs = projectDir ? await loadOverlayGrammars(projectDir) : [];
-  initialized = true;
   return loadedOverlayConfigs;
 }
 

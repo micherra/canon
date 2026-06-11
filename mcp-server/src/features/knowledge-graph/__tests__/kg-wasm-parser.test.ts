@@ -3,8 +3,11 @@
  * Strict TDD: these tests are written first; implementation makes them pass.
  */
 
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getParser, initParsers, isInitialized } from "@graph/kg-wasm-parser.ts";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Initialization state tests (before init)
 
@@ -144,5 +147,81 @@ describe("kg-wasm-parser — parsing trivial source strings", () => {
     expect(tree).toBeDefined();
     expect(tree!.rootNode).toBeDefined();
     expect(tree!.rootNode.type).toBe("program");
+  });
+});
+
+// Per-project overlay loading after singleton is already initialized
+//
+// Fix for P2 bug: when the WASM parser singleton is already initialized,
+// initParsers(projectDir) must still resolve and register overlays for
+// the given projectDir — not return early with [].
+
+describe("kg-wasm-parser — per-project overlay loading after singleton init", () => {
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    // Ensure the singleton is initialized before these tests run
+    await initParsers();
+  });
+
+  beforeEach(() => {
+    tmpDir = join(
+      tmpdir(),
+      `kg-parser-overlay-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(join(tmpDir, ".canon", "kg-languages"), { recursive: true });
+    mkdirSync(join(tmpDir, ".canon", "grammars"), { recursive: true });
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      // suppress warn output in tests
+    });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it("returns [] when projectDir has no overlay configs (already initialized)", async () => {
+    // Singleton is already initialized — the overlay dir is empty
+    const result = await initParsers(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it("still processes overlay dir for a second projectDir after singleton init", async () => {
+    // Write a valid-shape overlay JSON but point at a nonexistent wasm.
+    // The fail-open loader will skip the entry and return [] — but the key
+    // behavior we're testing is that initParsers DID call loadOverlayGrammars
+    // (rather than returning early before even looking at the dir).
+    writeFileSync(
+      join(tmpDir, ".canon", "kg-languages", "go.json"),
+      JSON.stringify({
+        extensions: [".go"],
+        grammarFile: "tree-sitter-go.wasm", // wasm absent → skip
+        id: "go",
+        nodeKinds: {
+          callExpression: ["call_expression"],
+          classBody: [],
+          classDef: [],
+          exportStatement: [],
+          functionDef: ["function_declaration"],
+          importStatement: [],
+          methodDef: [],
+          variableDecl: [],
+        },
+      }),
+    );
+    // No matching wasm → loadOverlayGrammars returns [] (fail-open), but it
+    // must have been called. If the early-return bug were present, the warn
+    // below would NOT be emitted because loadOverlayConfigs wouldn't run.
+    const result = await initParsers(tmpDir);
+    expect(result).toEqual([]);
+    // The missing-wasm warning confirms loadOverlayGrammars was actually invoked
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("tree-sitter-go.wasm"));
+  });
+
+  it("is idempotent when called with no projectDir after singleton init", async () => {
+    // No projectDir — still returns []
+    await expect(initParsers()).resolves.toEqual([]);
+    expect(isInitialized()).toBe(true);
   });
 });

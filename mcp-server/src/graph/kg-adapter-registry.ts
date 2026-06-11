@@ -46,6 +46,10 @@ for (const adapter of [markdownAdapter, yamlAdapter]) {
   }
 }
 
+// Snapshot of all built-in extensions at module init time.
+// Used by registerOverlayAdapters to reject shadowing attempts.
+const BUILTIN_EXTENSIONS: ReadonlySet<string> = new Set(registry.keys());
+
 /**
  * Returns the adapter for a given file extension, or undefined if none
  * is registered. Extension must include the leading dot (e.g. '.ts').
@@ -67,12 +71,21 @@ const overlayLangMap = new Map<string, string>();
  * which will throw for any language whose parser didn't load. This matches
  * the fail-open pattern: a skipped overlay grammar means no adapter registered.
  *
+ * Extensions that collide with a built-in extension are rejected (skip + warn)
+ * so that a bad project-local overlay can never shadow a built-in adapter.
+ *
  * @param overlayConfigs - Validated overlay configs (from LANGUAGE_CONFIGS after merge)
  */
 export function registerOverlayAdapters(overlayConfigs: LanguageConfig[]): void {
   for (const config of overlayConfigs) {
     const adapter = makeAdapter(config);
     for (const ext of config.extensions) {
+      if (BUILTIN_EXTENSIONS.has(ext)) {
+        console.warn(
+          `kg-adapter-registry: overlay '${config.id}' lists extension '${ext}' which is already claimed by a built-in adapter — built-in wins, extension skipped`,
+        );
+        continue;
+      }
       registry.set(ext, adapter);
       // Use the language id as the canonical name for overlay languages
       overlayLangMap.set(ext, config.id);
