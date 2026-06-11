@@ -29,7 +29,7 @@ These checks are diff-deterministic: a match in the flagged pattern is a strong 
 ```bash
 # Flag string-executing wrappers over interpolated vars (avoids triggering Canon's own guard)
 grep -n 'eval ' <changed-file>
-grep -nP '(ba)?sh\s+-c\s+["'"'"'][^"'"'"']*\$' <changed-file>
+grep -nE '(ba)?sh[[:space:]]+-c[[:space:]]+["'"'"'][^"'"'"']*\$' <changed-file>
 
 # Flag unquoted expansions in destructive git operations
 grep -n 'git reset --hard \$\|git checkout \$\|git clean.*\$' <changed-file>
@@ -38,7 +38,7 @@ grep -n 'git reset --hard \$\|git checkout \$\|git clean.*\$' <changed-file>
 grep -n '^[[:space:]]*cd [^(]' <changed-file>
 ```
 
-**Counterexample-probe note (watch_QQQQQQ1)**: The `bash -c` pattern would false-positive on a comment line like `# do NOT use bash -c "$var"` — a line that documents the anti-pattern rather than exhibiting it. Observed behavior: `grep -nP '(ba)?sh\s+-c\s+["'"'"'][^"'"'"']*\$'` matches any line (including comments) containing the pattern. Mitigation: the reviewer treats matches as candidates, not confirmed violations — inspect context before flagging. Also, lines with only single-quoted strings (no `$`) are not matched by the `\$` requirement, avoiding false-positives on safe static invocations like `bash -c 'echo hello'`.
+**Counterexample-probe note (watch_QQQQQQ1)**: The `bash -c` pattern would false-positive on a comment line like `# do NOT use bash -c "$var"` — a line that documents the anti-pattern rather than exhibiting it. Observed behavior: `grep -nE '(ba)?sh[[:space:]]+-c[[:space:]]+["'"'"'][^"'"'"']*\$'` matches any line (including comments) containing the pattern. Mitigation: the reviewer treats matches as candidates, not confirmed violations — inspect context before flagging. Also, lines with only single-quoted strings (no `$`) are not matched by the `\$` requirement, avoiding false-positives on safe static invocations like `bash -c 'echo hello'`.
 
 ---
 
