@@ -18,6 +18,10 @@
  */
 
 import type { Principle } from "@shared/parser.ts";
+import type { GlossaryConsistencyFinding } from "./wiki-lint-glossary.ts";
+
+// Re-export the type so callers can use it without depending on the sub-module directly.
+export type { GlossaryConsistencyFinding };
 
 // ---- Types ----
 
@@ -69,30 +73,32 @@ export type ScopeTagFinding = {
 };
 
 export type WikiLintOutput = {
-  contradictions: ContradictionFinding[];
-  orphan_principles: OrphanPrincipleFinding[];
-  stale_refs: StaleRefFinding[];
-  missing_examples: MissingExampleFinding[];
   cited_paths: CitedPathFinding[];
+  contradictions: ContradictionFinding[];
+  glossary_consistency: import("./wiki-lint-glossary.ts").GlossaryConsistencyFinding[];
+  missing_examples: MissingExampleFinding[];
+  orphan_principles: OrphanPrincipleFinding[];
   scope_layers: ScopeLayerFinding[];
   scope_tags: ScopeTagFinding[];
+  stale_refs: StaleRefFinding[];
   summary: {
-    total_findings: number;
     files_scanned: number;
     principles_checked: number;
+    total_findings: number;
   };
 };
 
 export type AssembleWikiLintInput = {
-  contradictions: ContradictionFinding[];
-  orphans: OrphanPrincipleFinding[];
-  staleRefs: StaleRefFinding[];
-  missingExamples: MissingExampleFinding[];
   citedPaths: CitedPathFinding[];
+  contradictions: ContradictionFinding[];
+  filesScanned: number;
+  glossaryConsistency: import("./wiki-lint-glossary.ts").GlossaryConsistencyFinding[];
+  missingExamples: MissingExampleFinding[];
+  orphans: OrphanPrincipleFinding[];
+  principlesChecked: number;
   scopeLayers: ScopeLayerFinding[];
   scopeTags: ScopeTagFinding[];
-  filesScanned: number;
-  principlesChecked: number;
+  staleRefs: StaleRefFinding[];
 };
 
 // ---- Imperative statement patterns ----
@@ -557,19 +563,21 @@ export function checkScopeTags(
  */
 export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOutput {
   const {
-    contradictions,
-    orphans,
-    staleRefs,
-    missingExamples,
     citedPaths,
+    contradictions,
+    filesScanned,
+    glossaryConsistency,
+    missingExamples,
+    orphans,
+    principlesChecked,
     scopeLayers,
     scopeTags,
-    filesScanned,
-    principlesChecked,
+    staleRefs,
   } = input;
   return {
     cited_paths: citedPaths,
     contradictions,
+    glossary_consistency: glossaryConsistency,
     missing_examples: missingExamples,
     orphan_principles: orphans,
     scope_layers: scopeLayers,
@@ -585,7 +593,8 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
         missingExamples.length +
         citedPaths.length +
         scopeLayers.length +
-        scopeTags.length,
+        scopeTags.length +
+        glossaryConsistency.length,
     },
   };
 }
