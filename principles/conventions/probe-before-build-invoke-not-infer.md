@@ -7,6 +7,8 @@ scope:
   file_patterns:
     - "**/plans/**/DESIGN.md"
     - "**/plans/**/PROBE-FINDINGS.md"
+    - "plans/**/DESIGN.md"
+    - "plans/**/PROBE-FINDINGS.md"
 tags: []
 ---
 
