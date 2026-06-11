@@ -46,6 +46,10 @@ for (const adapter of [markdownAdapter, yamlAdapter]) {
   }
 }
 
+// Snapshot of all built-in extensions at module init time.
+// Used by registerOverlayAdapters to reject shadowing attempts.
+const BUILTIN_EXTENSIONS: ReadonlySet<string> = new Set(registry.keys());
+
 /**
  * Returns the adapter for a given file extension, or undefined if none
  * is registered. Extension must include the leading dot (e.g. '.ts').
@@ -54,9 +58,70 @@ export function getAdapter(extension: string): LanguageAdapter | undefined {
   return registry.get(extension);
 }
 
+// Overlay language name map — populated by registerOverlayAdapters()
+const overlayLangMap = new Map<string, string>();
+
+// Track which extensions were added by overlay registration so they can be
+// cleared on the next registerOverlayAdapters call (per-project scoping).
+const overlayExtensions = new Set<string>();
+
+/**
+ * Register adapters for overlay LanguageConfig entries and populate the
+ * overlay language name map. Called from kg-wasm-parser.ts after overlay
+ * grammars load successfully.
+ *
+ * Clears all previously-registered overlay adapters before registering the
+ * new set, so that project A's overlays do not persist into project B's
+ * pipeline run when project B has no overlays (or different ones).
+ * Built-in adapters are never removed.
+ *
+ * Only entries whose parser was successfully loaded (i.e., parsers.has(id))
+ * are registered — the adapter factory calls getParser(id) at parse time,
+ * which will throw for any language whose parser didn't load. This matches
+ * the fail-open pattern: a skipped overlay grammar means no adapter registered.
+ *
+ * Extensions that collide with a built-in extension are rejected (skip + warn)
+ * so that a bad project-local overlay can never shadow a built-in adapter.
+ *
+ * @param overlayConfigs - Validated overlay configs (from LANGUAGE_CONFIGS after merge)
+ */
+export function registerOverlayAdapters(overlayConfigs: LanguageConfig[]): void {
+  // Clear previously-registered overlay adapters (project-scope isolation).
+  // Never remove built-ins — BUILTIN_EXTENSIONS is the guard.
+  for (const ext of overlayExtensions) {
+    registry.delete(ext);
+    overlayLangMap.delete(ext);
+  }
+  overlayExtensions.clear();
+
+  for (const config of overlayConfigs) {
+    const adapter = makeAdapter(config);
+    for (const ext of config.extensions) {
+      if (BUILTIN_EXTENSIONS.has(ext)) {
+        console.warn(
+          `kg-adapter-registry: overlay '${config.id}' lists extension '${ext}' which is already claimed by a built-in adapter — built-in wins, extension skipped`,
+        );
+        continue;
+      }
+      registry.set(ext, adapter);
+      overlayLangMap.set(ext, config.id);
+      overlayExtensions.add(ext);
+    }
+  }
+}
+
+/**
+ * Returns the set of extensions currently registered via overlays.
+ * Used by the pipeline to include overlay-only extensions in the file scan.
+ */
+export function getOverlayExtensions(): ReadonlySet<string> {
+  return overlayExtensions;
+}
+
 /**
  * Returns a canonical language name for the given file extension.
  * Used when writing the `language` column in the `files` table.
+ * Falls back to overlay language id for provisioned extensions.
  * Returns 'unknown' for unrecognised extensions.
  */
 export function getLanguage(extension: string): string {
@@ -74,5 +139,5 @@ export function getLanguage(extension: string): string {
     ".yaml": "yaml",
     ".yml": "yaml",
   };
-  return langMap[extension] ?? "unknown";
+  return langMap[extension] ?? overlayLangMap.get(extension) ?? "unknown";
 }

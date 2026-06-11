@@ -156,7 +156,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` → save `worktree_path`, `workspace`.
 2. **Write PRD**: Fill `templates/prd.md` → write to `${WORKSPACE}/plans/${SLUG}/prd.md`. Verify it exists before Step 3.
-3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`.
+3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`, `worktree_path`. The architect needs `worktree_path` to write qualifying ADRs into the build branch (see Durable ADR gate in `agents/architect.md`). **Pre-design probe obligation**: if the architect's DESIGN.md ASSUMPTIONS section contains any `confidence: medium` or `confidence: unknown` claim about external SDK behavior, protocol timing/ordering/availability, or existing hook/script behavior, a throwaway empirical probe must run before design freeze — committed to `${WORKSPACE}/plans/${SLUG}/PROBE-FINDINGS.md` and cited in DESIGN.md Research. Probes must invoke the capability; environment-inspection inferences do not count. If the probing agent lacks the required tool or spawn capability, the orchestrator takes over the probe. See `principles/conventions/probe-before-build-invoke-not-infer.md`.
 4. **Validate architect output**: Check Requirements Coverage section. Surface any `descoped`/`partial`/missing requirements to user before proceeding. If the section is absent or has no rows, treat all requirements as `descoped` and surface to user. For `covered` rows, verify each names an owning runbook step — rows without an owner are treated as `partial`. Proceed silently if all requirements are `covered` with owners.
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
 6. `batch_log_steps` with all approved runbook steps.
@@ -530,12 +530,14 @@ Discovery: `list_loops`.
 `loops/ship-watch.md` only registers the definition — it does NOT start the loop. No manifest
 field, hook script, or command frontmatter can trigger scheduling automatically.
 
-## Project Structure <!-- last-updated: 2026-06-09 -->
+## Project Structure <!-- last-updated: 2026-06-10 -->
 
 ```
 canon/
 ├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (22 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
+├── docs/
+│   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 │   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, comment stripping, quote-aware tokenizer, git-token detection, string-executing-wrapper unwrap/scan-forward, jq wrappers)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
@@ -549,25 +551,28 @@ canon/
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase B current)
-│       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint
+│       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase B: _probe + ship-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (79 total: 7 rules, 35 strong-opinions, 37 conventions)
+├── principles/           # Built-in principles (80 total: 7 rules, 35 strong-opinions, 38 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
 ├── rules/                # Agent-behavior rules loaded per agent at runtime
 ├── primers/              # Domain primers — domain reasoning context loaded by agents
 ├── references/           # Orchestrator + agent protocol fragments (canon-orchestrator.md, etc.)
+├── scripts/              # Standalone re-runnable bash tools (mine-codex-comments.sh mines Codex bot PR history → docs/reference/codex-defect-classes.md)
 ├── skills/canon/         # Claude Code skill definition — entry point for Canon activation
 │   ├── commands/         # Slash command definitions (/canon:init, /canon:check, /canon:diagnose, /canon:routine, /canon:routines, etc.)
 │   └── evals/            # Eval suite for intent classification
 ├── templates/            # Artifact templates agents must follow (includes prd.md, renderer-*.md, sharpened-request.md, worker-prompt.md, routine.md)
 └── .canon/               # Runtime data (workspaces, principles, config, JSONL drift store, SQLite DBs)
+    ├── kg-languages/     # Overlay LanguageConfig JSON files (provisioned by /canon:init Step 5b; read by kg-language-overlay.ts)
+    ├── grammars/         # Overlay tree-sitter .wasm grammar files (provisioned by /canon:init Step 5b)
     ├── routines/         # Per-routine state overrides and last-run timestamps (project-local precedence over plugin)
     └── workspaces/       # Per-branch/task build state
 ```

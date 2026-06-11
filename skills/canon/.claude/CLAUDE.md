@@ -35,9 +35,10 @@ SKILL.md intent routing (authoritative; aligned to root CLAUDE.md as of 2026-05-
 **Removed agents (no longer referenced in SKILL.md):** `canon:chat`, `canon:guide`, `canon:fixer`, `canon:planner`. **Removed escape hatch:** "Inline Mode" (Principle Loading outside a pipeline) was deleted.
 
 ## Conventions
-<!-- last-updated: 2026-04-09 -->
+<!-- last-updated: 2026-06-09 -->
 
 - `SKILL.md` is read by Claude Code on activation and must remain the authoritative entry point
 - Slash commands in `commands/` are user-facing; keep descriptions concise and action-oriented
 - Reference fragments in `references/` are loaded by agents on demand — they are not injected wholesale; agents load only what their role requires
 - Evals in `evals/` are run via `run-evals.sh` to validate orchestrator behavior after changes to flow definitions or agent instructions
+- `/canon:init` Step 5b provisions LSP server (Target A) + KG tree-sitter grammar/config (Target B) — both WebSearch-resolved, user-vetted via `AskUserQuestion`, project-local `.canon/` overlay only; `WebSearch` and `AskUserQuestion` added to its `allowed-tools`

@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-06-08 -->
+<!-- last-updated: 2026-06-10 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -52,12 +52,12 @@ src/
 - **PR review tools + PR Review Data service** → `src/features/pr-review/.claude/CLAUDE.md`.
 - **Shared kernel** (`shared/`) — constants, matcher, schema, lib/ utilities. See `src/shared/.claude/CLAUDE.md`.
 - **UI snippets** (`ui/snippets/`) — force-graph, file-detail-card, renderer helpers. See `src/ui/snippets/.claude/CLAUDE.md`.
-- **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports + doc references; computes in/out degree, detects cycles; lazy commit-granularity freshness via `ensureGraphFresh` (structural) and `ensureGitIntelFresh` (git signals); `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01); `doc` node kind added 2026-06-08 for `docs/**/*.md` (excl. `docs/explore/`), `mcp-server/src/domains/*/README.md`, and `CONTEXT.md`; `doc:references` edge type persisted via `resolveImports` (conservative backtick-path grammar + link URLs); metric queries (`in_degree`, `out_degree`, adjacency, hub/impact) pinned to `edge_type='imports'`; blast-radius and subgraph queries left inclusive; `CANON_SCAN_DIRS` extended with `"docs"` and `"mcp-server/src/domains"`, `CANON_SCAN_FILES` added for root-level singletons (`CONTEXT.md`)
+- **Dependency graph** (`graph/`, `features/knowledge-graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports + doc references; computes in/out degree, detects cycles; lazy commit-granularity freshness via `ensureGraphFresh` (structural) and `ensureGitIntelFresh` (git signals); `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01); `doc` node kind added 2026-06-08 for `docs/**/*.md` (excl. `docs/explore/`), `mcp-server/src/domains/*/README.md`, and `CONTEXT.md`; `doc:references` edge type persisted via `resolveImports` (conservative backtick-path grammar + link URLs); metric queries (`in_degree`, `out_degree`, adjacency, hub/impact) pinned to `edge_type='imports'`; blast-radius and subgraph queries left inclusive; `CANON_SCAN_DIRS` extended with `"docs"` and `"mcp-server/src/domains"`, `CANON_SCAN_FILES` added for root-level singletons (`CONTEXT.md`); **project-local language overlay** (`graph/kg-language-overlay.ts`) — fail-open loader reads `.canon/kg-languages/*.json` + validates paired `.canon/grammars/<wasm>`; `loadOverlayConfigs(projectDir, builtinIds)` returns `LanguageConfig[]`, skips+warns on any error; built-in ids win on collision; `mergeOverlayIntoConfigs(configs)` merges into `LANGUAGE_CONFIGS`/`EXT_TO_CONFIG`; `registerOverlayAdapters(configs)` wires adapters in `kg-adapter-registry.ts`; `initParsers(projectDir?)` now returns `LanguageConfig[]` (changed from `void`) and accepts optional `projectDir` for overlay loading — callers must pass result to `registerOverlayAdapters`; `getLanguage(ext)` falls back to overlay language id before `"unknown"`
 - **Community / tags** (`graph/kg-community.ts`, `graph/kg-tags.ts`) — Louvain `community_id` + 4-signal tag propagation to `file_tags` table; used by `get-principles` and `get-file-context`; `kg-tags.ts` exports `VALID_COMPUTED_TAGS` (deduped union of directory + import + graph-role tags, 15 values — static const, no I/O) for vocabulary validation in `wiki_lint`
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect
 
 ## Contracts
-<!-- last-updated: 2026-06-08 -->
+<!-- last-updated: 2026-06-09 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -108,7 +108,7 @@ src/
 
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`.
 
-**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks plus `checkGlossaryConsistency` in sibling `wiki-lint-glossary.ts` (8 total): `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`; both `checkScopeLayers` and `checkScopeTags` guard scalar (non-array) input with a "must be a YAML list" finding; `stale_refs` and `cited_paths` now include the DDD doc set (`docs/**/*.md` excl. `docs/explore/`, `mcp-server/src/domains/*/README.md`, `CONTEXT.md`); `checkGlossaryConsistency` parses CONTEXT.md H2 headings, flags exact-duplicate and naked-vs-qualified collisions; see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details.
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks plus `checkGlossaryConsistency` in sibling `wiki-lint-glossary.ts` and `checkIndexDrift` in `index-inventory.ts` (8 total checks in service layer + index_drift as 9th, though wiki_lint registers 8 via CheckName): `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `checkGlossaryConsistency`, `checkIndexDrift`; both `checkScopeLayers` and `checkScopeTags` guard scalar (non-array) input with a "must be a YAML list" finding; `stale_refs` and `cited_paths` now include the DDD doc set (`docs/**/*.md` excl. `docs/explore/`, `mcp-server/src/domains/*/README.md`, `CONTEXT.md`); `checkGlossaryConsistency` parses CONTEXT.md H2 headings, flags exact-duplicate and naked-vs-qualified collisions; see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details.
 
 **Worktree settings injection** (`src/features/prompt-pipeline/services/worktree-settings.ts`) — `injectWorktreeSettings(worktreePath, tools)` atomically writes `.claude/settings.local.json`; returns `false` on failure (never throws); idempotent. Called in all three spawn paths before `{ action: "spawn" }` when `permission_mode === "auto"`.
 
@@ -154,7 +154,8 @@ src/
 | `store_summaries` | Persist file summaries to SQLite KG DB (DB-only since ADR-005 2026-04-01) |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews, doc freshness |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
-| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy in `references/**/*.md` and DDD doc set, invalid `scope.layers` values, invalid `scope.tags` values, CONTEXT.md glossary self-consistency; optional `checks` array selects subset (default: all 8); returns `WikiLintOutput` |
+| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy in `references/**/*.md` and DDD doc set, invalid `scope.layers` values, invalid `scope.tags` values, CONTEXT.md glossary self-consistency, index inventory drift; optional `checks` array selects subset (default: 8 checks, `index_drift` excluded — pass explicitly to run it); returns `WikiLintOutput` |
+| `sync_indexes` | Regenerate sentinel-delimited `## Artifact Inventory` blocks in the 5 sibling artifact-class indexes (`rules/`, `principles/`, `agents/`, `templates/`, `references/`); skips indexes without sentinels; returns `{ synced[], skipped[] }` |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result; accepts optional `craft_profile` (persists one row per distinct subsystem area to `craft_profiles` with `source:"review"`) |
 | `get_context` | Batch context for multiple files — composes principles, file_context, drift, graph, signals in one call |
