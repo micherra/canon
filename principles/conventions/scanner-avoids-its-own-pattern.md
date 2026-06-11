@@ -24,7 +24,7 @@ A tool — hook, script, grep command, or verification step — that is designed
 
 1. **Character-class split**: express the two-token pattern via a regex that matches it without reproducing it literally. For `bash -c` and `sh -c`: use `(ba)?sh[[:space:]]+-c` (requires `-E` for ERE — without `-E` the plain `grep` BRE engine silently matches nothing, which is the false-negative this convention warns against).
 2. **Token break**: concatenate parts of the pattern at execution time, or split across two grep passes.
-3. **Token break / indirect variable**: split the pattern across multiple variables assembled at runtime: `W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh` — the contiguous literal never appears in the source text the hook scans. **Caution**: assigning the full literal to a single variable (e.g., `PAT='bash -c'`) does NOT help — the contiguous literal is still present in source text. Split the blocked token itself across variables. Also ensure no `|` character remains outside the variable expansion, or the guard will segment the command and may trigger a false-positive (see pitfall in the Why section).
+3. **Token break / indirect variable**: split the pattern across multiple variables assembled at runtime — e.g. `S='sh'; C=' -c'; grep -nE "(ba)?${S}${C}" file.sh` — the contiguous literals `bash -c` and `sh -c` never appear in the source text the hook scans, while the assembled ERE `(ba)?sh -c` matches both wrappers. **Caution**: assigning the full literal to a single variable (e.g., `PAT='bash -c'`) does NOT help — the contiguous literal is still present in source text. Split the blocked token itself across variables. Also ensure no `|` character remains outside the variable expansion, or the guard will segment the command and may trigger a false-positive (see pitfall in the Why section).
 4. **Out-of-band invocation**: use a temp wrapper script that `source`s the target instead of invoking it via the pattern (e.g., `source "$script_path" "$@"` instead of the string-executing form).
 
 ## Why
@@ -40,7 +40,7 @@ The second form is the **recurring false-positive**: authors write it as a conve
 
 Preferred alternatives: the **token-split form** assembles the pattern from parts across multiple variables so the contiguous literal never appears in source text; the **character-class split** expresses the same match without any backslash inside a quoted span. Both exit 0. Note that assigning the full literal to a variable (e.g., `PAT='bash -c'`) does NOT satisfy this constraint — the contiguous literal is still present in source text even if it is never executed as a command token.
 
-**Pitfall — indirect variable with `|` in the grep alternation**: assigning only the token (`PAT='bash'`) and then writing `grep -E "$PAT -c|sh -c" file.sh` does NOT work. The `|` character is outside the quoted variable expansion; when the guard segments on `|`, it splits the command string into `grep -E "$PAT -c"` and `sh -c file.sh` — and `sh -c file.sh` is a string-executing wrapper → fail-closed (exit 2). Use the token-split form (e.g., `W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh`, single pattern, no alternation) or the character-class split for multi-pattern matching. Note: assigning the full literal to a variable (`PAT='bash -c'`) also does not help — the contiguous literal is still present in source text where a raw-string scanner can find it.
+**Pitfall — indirect variable with `|` in the grep alternation**: assigning only the token (`PAT='bash'`) and then writing `grep -E "$PAT -c|sh -c" file.sh` does NOT work. The `|` character is outside the quoted variable expansion; when the guard segments on `|`, it splits the command string into `grep -E "$PAT -c"` and `sh -c file.sh` — and `sh -c file.sh` is a string-executing wrapper → fail-closed (exit 2). Use the token-split form (e.g., `S='sh'; C=' -c'; grep -nE "(ba)?${S}${C}" file.sh`, single pattern covering both wrappers, no alternation) or the character-class split for multi-pattern matching. Note: assigning the full literal to a variable (`PAT='bash -c'`) also does not help — the contiguous literal is still present in source text where a raw-string scanner can find it.
 
 The same constraint applies when authoring mine scripts and code-analysis tools. A script designed to surface the `eval`/string-executing-wrapper defect class must not itself contain the defect it is designed to find, both for correctness and to avoid being blocked by the guard it is co-deployed with.
 
@@ -67,18 +67,23 @@ The same constraint applies when authoring mine scripts and code-analysis tools.
 grep -n "bash -c\|sh -c" file.sh
 ```
 
-**Good — token-split (preferred): the contiguous literal is assembled from parts at runtime, absent from source text:**
+**Good — token-split (preferred): the contiguous literals are assembled from parts at runtime, absent from source text; covers BOTH `bash -c` and `sh -c`:**
 
 ```bash
-# Split 'bash' across two variables so the contiguous literal 'bash -c' never
+# Split the blocked token across variables so neither 'bash -c' nor 'sh -c'
 # appears verbatim in the command text the hook scans.
-# W1='ba'; W2='sh' → "${W1}${W2} -c" expands to 'bash -c' at runtime but the
-# contiguous string is absent from source. No bare '|' follows the expansion.
+# S='sh'; C=' -c' → "(ba)?${S}${C}" expands to the ERE "(ba)?sh -c" at runtime,
+# matching both 'bash -c' and 'sh -c'.
+# 'sh' alone is not a contiguous blocked literal (the guard looks for 'sh -c'
+# as a unit); ' -c' alone is harmless. Neither blocked form is present in source.
+# No bare '|' follows the expansion.
 # Empirically verified exit 0 through destructive-guard.sh.
-W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh
+S='sh'; C=' -c'; grep -nE "(ba)?${S}${C}" file.sh
 ```
 
-> **Why not** `PAT='bash -c'; grep -n "$PAT" file.sh`? Assigning the full literal `bash -c` to a variable still embeds the contiguous pattern in source text. A scanner doing raw string matching on the command text sees `bash -c` verbatim inside `PAT='bash -c'` and may self-trigger. Token-split is safer: neither `bash` nor `bash -c` appears contiguously in source.
+> **Why not** `W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh`? This covers only `bash -c`. It misses plain `sh -c` (e.g. `xargs -I{} sh -c '...'`). Use the two-variable form above (`S='sh'; C=' -c'`) so both wrappers are matched.
+
+> **Why not** `PAT='bash -c'; grep -n "$PAT" file.sh`? Assigning the full literal `bash -c` to a variable still embeds the contiguous pattern in source text. A scanner doing raw string matching on the command text sees `bash -c` verbatim inside `PAT='bash -c'` and may self-trigger. Token-split is safer: neither `bash -c` nor `sh -c` appears contiguously in source.
 
 > **Why not** `PAT='bash'; grep -E "$PAT -c|sh -c" file.sh`? The `|` outside the variable is still present in the command string. The guard segments on `|` and sees `sh -c file.sh` as a string-executing wrapper → fail-closed (exit 2). The token-split form has no bare `|`.
 
@@ -147,7 +152,7 @@ P1='ev'; P2='al'; grep -rn "${P1}${P2} " src/
 | # | Build | Scanner | Self-blocking form | Resolution |
 |---|-------|---------|-------------------|------------|
 | 1a | PR #355 (engineer) | `destructive-guard.sh` | `bash -c "$wrapper"` in xargs fan-out in mine script | Temp wrapper using `source` instead of the string-executing form |
-| 1b | PR #355 (learner) | `destructive-guard.sh` | `grep -n "bash -c\|sh -c"` — backslash alternation in double-quoted span → fail-closed (exit 2) | Token-split: `W1='ba'; W2='sh'; grep -n "${W1}${W2} -c" file.sh` — contiguous literal assembled at runtime, absent from source text; no bare `\|` remaining (earlier forms `PAT='bash -c'` and `PAT='bash'; grep -E "$PAT -c\|sh -c"` both embed the literal or leave a bare `\|` — see pitfall in Why section) |
+| 1b | PR #355 (learner) | `destructive-guard.sh` | `grep -n "bash -c\|sh -c"` — backslash alternation in double-quoted span → fail-closed (exit 2) | Token-split: `S='sh'; C=' -c'; grep -nE "(ba)?${S}${C}" file.sh` — neither `bash -c` nor `sh -c` appears contiguously in source; assembled ERE matches both wrappers; no bare `\|` remaining (earlier forms `PAT='bash -c'`, `PAT='bash'; grep -E "$PAT -c\|sh -c"`, and `W1='ba'; W2='sh'; grep -n "${W1}${W2} -c"` all either embed a contiguous literal, leave a bare `\|`, or miss `sh -c` — see pitfall in Why section) |
 | 2 | PR #337 fix | `destructive-guard.sh` | Verification greps for `eval`/the two-token form in target files using backslash alternation | Pattern split via `grep -rnE '(ba)?sh[[:space:]]+-c'` (ERE, `-E` required) and token-split for `eval` |
 
 ## Exceptions
