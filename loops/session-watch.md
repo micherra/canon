@@ -12,7 +12,7 @@ trigger:
 mode: self-paced
 schedule:
   cadence_hint:
-    active: 5m    # tighten when a long/backgrounded step is in flight (≤270s keeps prompt cache warm)
+    active: 4m    # tighten when a long/backgrounded step is in flight (240s ≤ 270s keeps prompt cache warm)
     idle: 30m     # back off when the session is quiet (≥1200s commits to real backoff)
   max_wall: "0"   # bounded by terminate conditions, not wall-clock
 state:
@@ -146,12 +146,12 @@ OMIT the `ScheduleWakeup` call — omitting it terminates the self-paced loop.
 Re-arm the next wakeup:
 ```
 ScheduleWakeup({
-  delaySeconds: <cadence>,   # active (300s) if cliff in flight; idle (1800s) otherwise
+  delaySeconds: <cadence>,   # active (240s) if cliff in flight; idle (1800s) otherwise
   reason: "[loop: session-watch] Tick <N> complete. Re-arming at <active|idle> cadence.",
   prompt: "/canon:loop-tick session-watch"
 })
 ```
 
-Choose `active` (5m / 300s) when a long/backgrounded step is currently in flight (cliff
+Choose `active` (4m / 240s) when a long/backgrounded step is currently in flight (cliff
 concern active); choose `idle` (30m / 1800s) when the session is quiet (staleness-only cadence).
 Both values are within the harness clamp [60, 3600].
