@@ -6,6 +6,8 @@
  *
  * Embed phase tests use a vi.mock to replace EmbeddingService with a fast
  * mock that returns random 384-dim vectors (no model download needed).
+ *
+ * Overlay extension scan tests (Finding A fix) live in kg-overlay-scan.test.ts.
  */
 
 import { execFileSync } from "node:child_process";
