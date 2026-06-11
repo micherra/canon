@@ -135,6 +135,31 @@ describe("matchPrinciples", () => {
     expect(result).toHaveLength(0);
   });
 
+  it("matches root-relative plans paths with plans/**/<file> pattern", () => {
+    // Regression: **/plans/**/DESIGN.md compiles to (^|/).*\/plans\/.*\/DESIGN.md$
+    // which requires a slash BEFORE 'plans', so it misses root-relative paths like
+    // plans/my-slug/DESIGN.md. The plans/**/<file> sibling pattern fixes this.
+    const principle = makePrinciple({
+      id: "probe-before-build",
+      scope: { file_patterns: ["**/plans/**/DESIGN.md", "plans/**/DESIGN.md"], layers: [] },
+    });
+    // Root-relative path (no leading directory component before 'plans')
+    const result = matchPrinciples([principle], { file_path: "plans/my-slug/DESIGN.md" });
+    expect(result.map((p) => p.id)).toContain("probe-before-build");
+  });
+
+  it("also matches nested plans paths via the **-prefixed pattern", () => {
+    // The **/plans/**/DESIGN.md pattern still matches paths nested under a workspace dir.
+    const principle = makePrinciple({
+      id: "probe-before-build",
+      scope: { file_patterns: ["**/plans/**/DESIGN.md", "plans/**/DESIGN.md"], layers: [] },
+    });
+    const result = matchPrinciples([principle], {
+      file_path: ".canon/workspaces/some-slug/plans/task/DESIGN.md",
+    });
+    expect(result.map((p) => p.id)).toContain("probe-before-build");
+  });
+
   it("filters by severity", () => {
     const principles = [
       makePrinciple({ id: "r", severity: "rule" }),

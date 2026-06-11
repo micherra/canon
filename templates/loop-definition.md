@@ -50,6 +50,7 @@ state:
 observe:
   tools: []                # Bash/Read/Write etc. — empty for read-only loops
   mcp: []                  # MCP tool names — empty for read-only loops
+  shell_commands: []        # read-only gh/git subcommand prefixes; REQUIRED if Bash is in tools and mutates_build:false
 
 surface:
   on_transition:           # [REQUIRED] at least one rule
@@ -115,4 +116,5 @@ Otherwise: the loop continues under its CronCreate cadence.
 - [ ] `guardrails.forbidden_tools` lists any build-mutating tools NOT in `observe.tools`
 - [ ] `mutates_build: false` unless the loop explicitly needs to write (rare; requires explicit justification)
 - [ ] Body describes the observe → diff → surface → terminate algorithm with zero runner-specific logic
+- [ ] If `observe.tools` includes `Bash`, `observe.shell_commands` lists only read-only gh/git subcommands (e.g. `"gh pr view"`, `"git log"`)
 - [ ] `status: shadow` during development; promote to `active` after verification

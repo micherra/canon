@@ -1,13 +1,73 @@
 # Advisor Strategy in Canon — Exploration Brief
 
-## Status: Complete
+## Status: Complete (revised 2026-06-09 — see Re-test section)
 
 **Mode:** Exploration (no code, read-only). **Date:** 2026-06-09.
 **Question:** How can we leverage the Advisor Strategy in Canon?
 
+> **REVISION NOTICE (2026-06-09):** New information surfaced after the original brief — `/advisor` exists as an installed **Claude Code skill** (description: "Let Claude consult a stronger model at key moments"), distinct from the `advisor_20260301` Messages-API builtin the original brief analyzed. This reopens the feasibility question. See **"Re-test: /advisor as an installed skill"** immediately below. The original analysis (TL;DR points 1–4, Approaches, Recommendation) is **preserved but conditionally superseded** — superseded items are marked inline with **[SUPERSEDED-IF-SKILL-INVOCABLE]**.
+
+---
+
+## Re-test: /advisor as an installed skill (revises prior conclusion)
+
+### What changed
+
+The original brief's load-bearing finding was: *the Anthropic builtin `advisor_20260301` is a Messages-API-only beta tool, unreachable from Canon's `Agent`-spawn path.* **That finding about the API builtin remains true and is unaffected.** What it missed: `/advisor` ALSO exists as an **installed Claude Code skill** — a different mechanism entirely. It appears in slash-command autocomplete alongside `/deep-research`, ships inside the Claude Code app bundle (not as a `SKILL.md` under `~/.claude`), and is invoked via the native **`Skill` tool**. Skills are a runtime-invocable capability; the API builtin is a request-construction-time tool. They are NOT the same mechanism, and the new one may be reachable where the old one is not.
+
+### The load-bearing question is now: can a Canon-spawned subagent invoke the `Skill` tool?
+
+This is a **tool-allowlist question**, and Canon's architecture gives a clear, grounded answer for the mechanism — the empirical confirmation is being probed in parallel.
+
+**Mechanism analysis (grounded in repo):**
+
+1. **Canon agents have an explicit, closed `tools:` allowlist.** Every agent definition (`agents/*.md`) declares a `tools:` block — the exhaustive set of tools that spawned subagent may call. The engineer lists 12 tools (`agents/engineer.md` frontmatter: Read, Write, Edit, Bash, Glob, Grep, WebFetch, + 5 `mcp__canon__*`). **`Skill` is not among them.** No Canon agent lists `Skill` in `tools:` (`grep '  - Skill' agents/` → zero matches). Therefore, **as the repo stands today, no Canon subagent can invoke `/advisor`-the-skill** — not because the harness forbids it, but because Canon's own least-privilege allowlist never grants it. *Verified in repo.*
+
+2. **The `skills:` frontmatter field is a RED HERRING — it is not the `Skill` tool.** Four agents (`architect`, `learner`, `writer`, `planner`) declare a `skills:` field (e.g. `canon:synthesize`). This is **Canon's own bundled-skill preloader, not the native `Skill` tool.** The authoritative explanation is in `resolve-agent-skills.ts:28-35`: Canon deliberately keeps its rules/references/primers/templates OUT of the native `skills:` mechanism and resolves them itself as flat `.md` files injected as preload TEXT. The `canon:synthesize` etc. references resolve to `skills/canon/skills/<name>/` and are loaded by `resolve_agent_skills` into the spawn prompt — they are never invoked via a `Skill` tool call at runtime. **Conclusion: declaring `skills:` in an agent grants zero `Skill`-tool access.** Granting `/advisor` would require adding `Skill` to the agent's `tools:` block, exactly as `WebSearch`/`LSP` were granted in the prior harness-capabilities build. *Verified in repo (`resolve-agent-skills.ts:16-41`; `agents/*.md` frontmatter).*
+
+3. **Is `Skill` even grantable to a subagent, or is it subagent-excluded like `EnterPlanMode`?** This is the decisive sub-question, and the repo carries a directly-relevant precedent. The prior `harness-capabilities-round1` build (`.canon/workspaces/canon--harness-capabilities-round1/.../DESIGN.md:73`) documents a **subagent tool-exclusion list** — tools that depend on main-conversation UI/session state and are *inert even if listed* in `tools:`: **`Agent`, `AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode`, `ScheduleWakeup`, `WaitForMcpServers`.** **`Skill` is NOT on that documented exclusion list.** That same build successfully granted `WebSearch`/`LSP` to subagents by adding them to `tools:`, proving the allowlist-grant path works for non-excluded tools. **So the mechanism analysis says: `Skill` is *probably* grantable to a subagent via `tools:`, the same way `LSP` was** — but with one caveat below. *The exclusion list itself was the prior architect's knowledge-grounding, not a harness-source extraction → treat as high-confidence-but-not-verified. This is precisely what the parallel live probe resolves.*
+
+**What must be true for branch (a) [skill-invocable] to hold:**
+- `Skill` is not in the harness's subagent-exclusion set (probe confirms).
+- The `/advisor` skill is discoverable/invocable by name from a subagent context (it ships in the app bundle, not `~/.claude` — so it is not a user-registered SKILL.md; whether bundle-shipped skills are exposed to subagents is the empirical unknown). **Assumption, not verified.**
+- The harness `.claude/settings.json` permission layer allows `Skill` (current allow-list does NOT list `Skill`; `agents/*.md tools:` is the per-agent grant, but the harness-level `permissions.allow` may also gate it — `Skill` is absent there too, `.claude/settings.json`). **This is a second gate the original instruction underweighted: a `tools:` grant may be necessary but not sufficient if the harness permission layer also screens `Skill`.** *Verified absent in repo; effect unverified.*
+
+### What `/advisor`-the-skill actually does (knowable vs assumption)
+
+- **Knowable from its description** ("Let Claude consult a stronger model at key moments"): it is a guidance-consultation affordance — same INTENT as the API builtin and the same intent as the original brief's `consult_advisor` shim.
+- **NOT knowable from the repo:** its *mechanism*. Two possibilities, materially different for cost/observability:
+  - **(i) Server-side handoff** — the skill internally triggers the same `advisor_20260301` builtin within the current request. If so, context is shared natively, billing is native, but it is invisible to Canon's execution store (no `advisor_consulted` event unless Canon wraps the call).
+  - **(ii) Skill orchestrates a separate `claude -p`-style call** — the skill spawns/queries a stronger model out-of-band. If so, it is closer to the original brief's shim, with the same self-accounting gap.
+- **My lean (assumption, flagged):** given it is packaged as a *skill* (an instruction/orchestration artifact) rather than exposed as a tool-type, it most likely **drives a model consultation via skill instructions** (closer to ii or a hybrid) rather than being a thin wrapper over the API builtin — but **this is inference, not verified.** The cost-accounting and context-sharing answer hinges entirely on this, and the repo cannot resolve it. *Assumption — requires the live probe or Claude Code skill-source inspection.*
+
+### Revised feasibility verdict — both branches explicit
+
+**Branch (a) — `/advisor`-as-skill IS subagent-invocable (probe confirms `Skill` grantable + bundle skill reachable):**
+- The `consult_advisor` MCP shim from the original brief becomes **largely unnecessary.** Adoption collapses to **instruction-only + one allowlist line**:
+  1. Add `Skill` to the relevant agent's `tools:` block (e.g. `agents/engineer.md`) — one line, exactly like the `LSP`/`WebSearch` grants in `harness-capabilities-round1`.
+  2. Add a short protocol paragraph to the agent body (`engineer.md`) at its decision points: *"At `NEEDS_CONTEXT` (ambiguous plan / design-flaw) or a borderline Canon-exception judgment (`:129`), before bouncing to HITL or guessing, invoke `/advisor` with the specific decision and ≤700-token context. Treat the returned guidance as advisory; do not let it expand scope."*
+  3. **Zero new MCP code, zero new subprocess seam, zero ADR-002 surface.**
+  - **What the `engineer.md` edit looks like:** +1 line in `tools:` (`  - Skill`) and a ~6-line "Advisor consultation" subsection in the body near `:248`. That's the entire change for the engineer.
+  - **How `max_uses` / observability work WITHOUT a shim — this is the branch's real weakness:** the original brief's clean story (per-step `advisor_calls` counter via `StateMetricsSchema.orientation_calls` precedent; `advisor_consulted` event via `appendEvent`) **does not apply** to a native-`Skill` invocation, because the skill call happens *inside the agent's turn loop, invisible to Canon's MCP layer.* Canon would have **no automatic event, no call counter, no cost capture** for a native `/advisor` invocation. Options: (i) accept loss of observability (advisor calls become as invisible as any other in-agent tool use, surfaced only via transcript capture — `capture_transcript` already harvests the agent JSONL, so a post-hoc grep for `/advisor` invocations in the transcript is the cheapest observability path); (ii) keep a thin `consult_advisor` MCP wrapper ANYWAY purely as the *instrumented* path and instruct the agent to call the wrapper instead of the raw skill — which re-introduces most of the shim and erases the "zero code" advantage. **Net: branch (a) trades the shim's code cost for an observability/`max_uses` gap.** Whether that trade is worth it depends on whether the user wants per-call advisor cost accounting (original Open Question 1).
+
+**Branch (b) — NOT subagent-invocable (probe shows `Skill` is subagent-excluded OR bundle skills aren't exposed to subagents OR harness `permissions.allow` screens it):**
+- **Fall back to the original brief's `consult_advisor` MCP shim, unchanged.** The `claude -p --model opus` shim via `runShell` (Approach 1, `process-adapter.ts:39`) remains the only Canon-native path, and the whole original Recommendation (Phase 0 shadow-measure → Phase 1 cascade-wiring) stands as written. In this branch the original brief is **not superseded at all** — the skill re-test simply confirms there was no shortcut.
+
+**Which branch each Canon agent lands in** (independent of (a)/(b), this is about WHICH agents would adopt advisor at all — unchanged from the original Finding A):
+- **engineer (sonnet)** → primary adopter in BOTH branches (decision points `engineer.md:248` NEEDS_CONTEXT, `:129` Canon-exception). In branch (a): gets `Skill` in `tools:` + protocol text. In branch (b): gets the `consult_advisor` shim affordance.
+- **tester (sonnet)** → secondary adopter, Phase 2, BOTH branches (flaky-vs-real judgment).
+- **scribe (sonnet)** → **NOT an adopter in either branch.** Mechanical doc-sync; no hard decision point warrants a stronger-model consult. (Original Finding A: LOW fit.)
+- **reviewer / architect / security (opus)** → already top-tier; advisor is redundant for them (they ARE the advisor tier). Unchanged.
+
+### Bottom line of the re-test
+
+The new information **does not invalidate the original brief's API-builtin finding** (still true: builtin unreachable). It **adds a possible shortcut** (skill-invocation) that, IF the probe confirms subagent-invocability AND the user accepts the observability gap, **reduces the engineer adoption to ~7 lines of agent-markdown edits and zero MCP code** — superseding the shim-build recommendation for branch (a). If the probe disconfirms, **nothing changes** and the original shim recommendation stands. The decision is gated on the parallel live probe (`Skill`-tool subagent-invocability) and Open Question 1 (is per-call advisor cost-accounting a hard requirement — if yes, even branch (a) wants an instrumented wrapper, narrowing the gap between the branches).
+
 ---
 
 ## TL;DR (opinionated)
+<!-- [SUPERSEDED-IF-SKILL-INVOCABLE]: Points 2–4 below assume the consult_advisor MCP shim is the only path. If the parallel probe confirms /advisor-the-skill is subagent-invocable, see branch (a) in the Re-test section — the shim becomes optional and adoption is instruction-only. Point 1 (API builtin unreachable) is UNAFFECTED and remains true. -->
+
 
 1. **The Anthropic builtin (`advisor_20260301`) is NOT reachable from Canon's spawn path.** It is a server-side Messages API beta tool (`anthropic-beta: advisor-tool-2026-03-01`); the model handoff happens *inside one `/v1/messages` request*. Canon spawns agents via Claude Code's `Agent` tool, not via raw Messages API calls — Canon never sees the `tools=[...]` array of the underlying request. So Canon cannot pass `advisor_20260301` to its agents. **This is the load-bearing feasibility finding.** ([blog](https://claude.com/blog/the-advisor-strategy), confirmed: "available exclusively through the Claude Platform's Messages API"; no subagent/Agent integration documented.)
 2. **The Canon-native equivalent is a `consult_advisor` MCP tool** that does a one-shot `claude -p --model opus` subprocess call with shared context, returns guidance-only text, and logs an `advisor_consulted` event. This is **already proven feasible** — `.spike/spike-eval-iter3.ts:12,20` runs `claude -p` via `execSync` ("no API key needed — uses Claude Code auth"), and the production subprocess seam (`runShell`, `mcp-server/src/platform/adapters/process-adapter.ts:39`) already exists under the ADR-002 adapter boundary.
@@ -126,6 +186,24 @@ The blog's biggest win (Haiku+Opus-advisor = 85% cost savings vs Sonnet-solo) is
 - **Dead reference:** `recordConsultationResult` cited in `mcp-server/src/domains/board/README.md:37` has no implementation in board source — candidate doc-drift / dead-wire finding (matches Canon's known dead-wire defect class).
 - **Stale CLAUDE.md ref:** mcp-server CLAUDE.md `features/` table lists a `prompt-pipeline/` directory ("Prompt assembly, context enrichment, consultation pipeline") that **does not exist on disk** (`ls` returned no such directory). Doc-freshness finding.
 
+## Broader skill-leverage survey
+
+Beyond `/advisor`, which OTHER installed Claude Code skills could Canon leverage, and where? **The same subagent-invocability dependency applies to EVERY row** — none of these is reachable from a Canon subagent unless `Skill` is (a) not subagent-excluded and (b) added to that agent's `tools:` allowlist (and possibly cleared at the harness `permissions.allow` layer). One line per skill: real leverage vs redundant-with-existing-Canon.
+
+| Skill | Candidate Canon home | Verdict | Notes |
+|-------|---------------------|---------|-------|
+| **`/advisor`** | engineer / tester (sonnet) at decision points | **Real leverage** | The whole subject of this brief — fills the "ask a stronger model one question" gap between guess and whole-agent `escalate_model`. Subagent-invocability gated on the probe. |
+| **`/deep-research`** | architect (research arm) / learner (pattern mining) | **Partial leverage, mostly redundant** | The architect ALREADY owns codebase research via `semantic_search` + `get_file_context` + `graph_query` + `WebFetch`/`WebSearch` (granted in `harness-capabilities-round1`). `/deep-research` would only add value for *external/web-heavy* research the architect can't satisfy with WebFetch — a narrow slice. Learner is data-mining its own stores, not external research → no fit. **Low priority.** |
+| **`/verify`** | tester (functional-verification gap) | **Real leverage — highest-value non-advisor candidate** | Canon has a known, repeatedly-flagged gap: the tester must functionally verify new features, not just run the suite (user feedback: `feedback_test_features_before_merge`, `feedback_reviewer_must_build`). If `/verify` drives independent functional verification, it directly addresses that gap. **Worth a dedicated probe.** Same subagent-invocability dependency. |
+| **`/claude-md-improver`** | scribe (context-sync) | **Redundant with existing Canon** | The scribe ALREADY owns CLAUDE.md/CONVENTIONS.md sync and has a hardened scope-guard against over-trimming (`feedback_always_both_docs`, post-scribe scope guard in CLAUDE.md). An external CLAUDE.md improver would *conflict* with Canon's surgical-sync discipline and the scribe's scope guard. **Skip — Canon's version is more constrained and safer.** |
+| **`/frontend-design`** | renderer agents (design/review HTML) | **Marginal — possible leverage, low priority** | Renderers fill `templates/renderer-*.md` against `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` (the authoritative design system). `/frontend-design` could help generate NEW snippet recipes but would risk drifting from the existing locked design system (user feedback: `feedback_renderer_match_existing_ui` — review HTML MUST match existing UI patterns). **Skip for production rendering; possibly useful as a one-off design-exploration aid outside the build loop.** |
+| **`/code-review`** | reviewer (comparison baseline) | **Redundant with existing Canon, but useful as a baseline probe** | Canon's reviewer is a heavily-specialized opus agent (5-stage protocol, principle-grounded, craft-profile scoring, MCP-tool functional verification). `/code-review` would be a *weaker generic* substitute — NOT a replacement. **Only leverage: run it once as a baseline to measure how much Canon's specialized reviewer beats a generic one** (craft-metric validation). Not a production path. |
+| **`/simplify`** | reviewer / engineer (simplicity-first enforcement) | **Redundant with existing Canon** | Canon already enforces `simplicity-first` / `no-dead-abstractions` via the reviewer and the engineer's `agent-simplify-before-extending` rule. `/simplify` overlaps existing principle enforcement. **Skip — no incremental leverage.** |
+
+**Survey conclusion:** Only **`/advisor`** (this brief) and **`/verify`** (tester functional-verification gap) represent genuine net-new leverage. Both are gated on the identical subagent-invocability question. Everything else is either redundant with a more-constrained Canon equivalent (`claude-md-improver`, `simplify`, `code-review`) or a narrow/risky marginal add (`deep-research`, `frontend-design`). **Recommendation: if the live probe confirms `Skill` is subagent-invocable, prioritize a `/verify`-for-tester probe immediately after `/advisor`-for-engineer — it addresses a documented, recurring Canon quality gap.**
+
+---
+
 ## Sources
 - Advisor Strategy blog: https://claude.com/blog/the-advisor-strategy — builtin tool `advisor_20260301`, `max_uses`, billing, SWE-bench numbers, **API-beta-only availability** (`anthropic-beta: advisor-tool-2026-03-01`; no subagent/Agent integration).
 - Feasibility proof: `.spike/spike-eval-iter3.ts:12,20` (`claude -p` via Claude Code auth).
@@ -133,3 +211,10 @@ The blog's biggest win (Haiku+Opus-advisor = 85% cost savings vs Sonnet-solo) is
 - Cascade insertion point: `mcp-server/src/features/orchestration/services/escalation-cascade.ts:22,59,71,93`; tool wrapper `.../tools/get-next-escalation-strategy.ts:74`.
 - Logging substrate: `execution-store.ts:267` (`appendEvent`); `board-state-schemas.ts:60-69` (`StateMetricsSchema`, `orientation_calls`).
 - Agent tiers + decision points: `agents/engineer.md:129,248`; `agents/reviewer.md:604,736`; `agents/*.md` model frontmatter.
+
+### Sources added for the re-test (skill mechanism)
+- **`skills:` field ≠ `Skill` tool:** `mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts:16-41` (authoritative comment — Canon resolves its `rules/references/primers/templates`/bundled-`skills:` itself as preload TEXT, deliberately kept OUT of the native `skills:` mechanism; never a runtime `Skill` tool call). Canon's bundled skills live in `skills/canon/skills/{synthesize,refine,analyze-patterns,write-principle}/`.
+- **No agent grants `Skill`:** `agents/*.md` `tools:` frontmatter (`grep '  - Skill' agents/` → zero matches); engineer allowlist is 12 tools, none is `Skill`.
+- **Subagent tool-exclusion list (precedent):** `.canon/workspaces/canon--harness-capabilities-round1/expose-three-claude-code-harness-capabilities-to-canon/plans/.../DESIGN.md:73` — documents `Agent, AskUserQuestion, EnterPlanMode, ExitPlanMode, ScheduleWakeup, WaitForMcpServers` as subagent-inert-even-if-listed; **`Skill` is NOT on that list** (architect knowledge-grounding, not harness-source-verified → the parallel probe resolves it). Same build proved `WebSearch`/`LSP` are grantable to subagents via `tools:` (`DESIGN.md:95,97`).
+- **Harness permission layer:** `.claude/settings.json` `permissions.allow` — does NOT list `Skill` (a possible second gate beyond per-agent `tools:`; effect unverified).
+- **`/advisor`-the-skill mechanism (i vs ii):** unknowable from repo — requires live probe or Claude Code skill-source inspection. Flagged as assumption.

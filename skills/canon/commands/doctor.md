@@ -90,17 +90,41 @@ Read every `.md` file in `.canon/rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/rules/*.
 
 #### Check 7: MCP server
 
-Check if the MCP server can start:
+Check the MCP server boot health using the real runtime diagnostic:
 ```bash
-cd ${CLAUDE_PLUGIN_ROOT}/mcp-server && node -e "require('./dist/index.js')" 2>&1 || echo "FAIL"
+bash ${CLAUDE_PLUGIN_ROOT}/mcp-server/boot.sh --print-resolution 2>&1
 ```
 
-If that fails, check:
-- `node_modules/` exists? If not: "Run `npm install` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`"
-- `dist/` exists? If not: "Run `npm run build` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`"
+`boot.sh --print-resolution` is side-effect-free (no server started) and always exits 0.
+It prints three lines:
+```
+<SERVER_DIR> <NODE_PATH> <TSX_BIN>   ← legacy positional line (line 1)
+NODE_VERSION=<v-prefixed string or empty>
+RESOLUTION_STATUS=<ok|tsx-missing|node-missing|node-too-old>
+```
 
-**ERROR** if server can't load: "MCP server failed to load: {error}"
-**WARN** if `node_modules/` missing: "MCP server dependencies not installed"
+**Important:** Line 1 contains raw filesystem paths that may include spaces (e.g. macOS
+`~/Library/Application Support/...`). Do NOT parse `TSX_BIN` from line 1 by positional field
+splitting — use `RESOLUTION_STATUS` (no spaces in value) as the authoritative signal instead.
+
+Parse the output:
+- Grep for `^RESOLUTION_STATUS=` and split on `=` to extract the status value.
+- Grep for `^NODE_VERSION=` and split on `=` to extract the version string.
+- If stdout contains `CANON ERROR:` (emitted on stderr before Step 11 and exits 1), capture
+  that text as the failure message.
+
+**Healthy** only when:
+- Exit code is 0
+- `RESOLUTION_STATUS=ok`
+
+**ERROR** cases:
+
+| RESOLUTION_STATUS | Message | Remediation |
+|---|---|---|
+| `tsx-missing` | "MCP server boot check failed: dependencies not installed" | "Run `npm install` in `${CLAUDE_PLUGIN_ROOT}/mcp-server/`" |
+| `node-missing` | "MCP server boot check failed: `node` not found on PATH" | "Install Node v24+" |
+| `node-too-old` | "MCP server boot check failed: Node {NODE_VERSION} is too old" | "Upgrade Node.js to v24+ (found {NODE_VERSION})" |
+| _(exit 1 / CANON ERROR)_ | "MCP server boot check failed: {CANON ERROR message}" | "Reinstall Canon or check `CLAUDE_PLUGIN_ROOT`" — e.g. `CANON ERROR: cannot resolve MCP server dir` means the plugin directory is misconfigured or the symlink is dangling |
 
 #### Check 8: CLAUDE.md integration
 
