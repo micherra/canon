@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.12.0](https://github.com/micherra/canon/compare/v2.11.0...v2.12.0) (2026-06-11)
+
+
+### Features
+
+* **adr:** add docs/adr/ with conjunctive gate wired into architect ([#364](https://github.com/micherra/canon/issues/364)) ([ac0150b](https://github.com/micherra/canon/commit/ac0150b5b07fc72b993e2bb90581bdae16c9a57e))
+* **agents:** adopt stock-skill lessons — correctness scan, FP suppression, live smoke ([#369](https://github.com/micherra/canon/issues/369)) ([3c8b4ae](https://github.com/micherra/canon/commit/3c8b4aebeb6c657da25149be893750fd704b2b3c))
+* **conventions:** promote mechanism-ships-first-instance convention (sug_AAAAAAAA1) ([#374](https://github.com/micherra/canon/issues/374)) ([fe33d8e](https://github.com/micherra/canon/commit/fe33d8e61652e09c0334add4dbe86141fbf0be48))
+* **conventions:** promote sug_NNNNN1 to probe-before-build-invoke-not-infer convention ([#367](https://github.com/micherra/canon/issues/367)) ([f15d817](https://github.com/micherra/canon/commit/f15d817b26451d8d7f6470c8cffd7435261805ef))
+* **harness:** expose LSP, WebSearch/WebFetch, PushNotification to Canon ([#366](https://github.com/micherra/canon/issues/366)) ([9f7edc3](https://github.com/micherra/canon/commit/9f7edc37bd247465ce1582dd63485ae3ccf4a75c))
+* **hooks:** fail-closed PreToolUse Bash hook blocking direct pushes to main ([#376](https://github.com/micherra/canon/issues/376)) ([213d68b](https://github.com/micherra/canon/commit/213d68b571054b34b59c7186f6e08e460b35d1a1))
+* **indexes:** retrofit sibling artifact indexes to marker-block-hybrid generators ([#365](https://github.com/micherra/canon/issues/365)) ([49eb0c8](https://github.com/micherra/canon/commit/49eb0c83767c9e07272a09040445c1275c6efc2c))
+* **lsp-recommender:** init-time language-tooling provisioning — LSP + KG overlay ([#375](https://github.com/micherra/canon/issues/375)) ([05b4475](https://github.com/micherra/canon/commit/05b44751bab7df7ddddf75d7cbdd72adbafd2ba7))
+* **principle:** promote scanner-avoids-its-own-pattern convention ([#358](https://github.com/micherra/canon/issues/358)) ([c906bfe](https://github.com/micherra/canon/commit/c906bfee33c110a3ece458b4a023f4893a66f96f))
+* **reviewer:** mine Codex PR corpus and pre-empt top-7 defect classes ([#355](https://github.com/micherra/canon/issues/355)) ([6b324dc](https://github.com/micherra/canon/commit/6b324dca3339bb4bcf403098238eb4af544259f6))
+* **wiki-lint:** add glossary_consistency check — 8th wiki_lint check ([#371](https://github.com/micherra/canon/issues/371)) ([94dbdfc](https://github.com/micherra/canon/commit/94dbdfcf1ef66fa7b8f9557cf9f8d26f58fb18a0))
+
+
+### Bug Fixes
+
+* **lsp:** add repo-root tsconfig.json to resolve TypeScript LSP diagnostics ([#377](https://github.com/micherra/canon/issues/377)) ([a3d2297](https://github.com/micherra/canon/commit/a3d22973ba20cd33f4facb02699a0fe9a979f42b))
+* **mcp-json:** remove dead CANON_PLUGIN_DIR env line that triggers missing-var warning ([#379](https://github.com/micherra/canon/issues/379)) ([8662172](https://github.com/micherra/canon/commit/8662172422b8d2352c7ef3bf2c9648ec4986f106))
+
 ## [2.11.0](https://github.com/micherra/canon/compare/v2.10.0...v2.11.0) (2026-06-10)
 
 
