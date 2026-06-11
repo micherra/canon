@@ -156,7 +156,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` → save `worktree_path`, `workspace`.
 2. **Write PRD**: Fill `templates/prd.md` → write to `${WORKSPACE}/plans/${SLUG}/prd.md`. Verify it exists before Step 3.
-3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`. **Pre-design probe obligation**: if the architect's DESIGN.md ASSUMPTIONS section contains any `confidence: medium` or `confidence: unknown` claim about external SDK behavior, protocol timing/ordering/availability, or existing hook/script behavior, a throwaway empirical probe must run before design freeze — committed to `${WORKSPACE}/plans/${SLUG}/PROBE-FINDINGS.md` and cited in DESIGN.md Research. Probes must invoke the capability; environment-inspection inferences do not count. If the probing agent lacks the required tool or spawn capability, the orchestrator takes over the probe. See `principles/conventions/probe-before-build-invoke-not-infer.md`.
+3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`, `worktree_path`. The architect needs `worktree_path` to write qualifying ADRs into the build branch (see Durable ADR gate in `agents/architect.md`). **Pre-design probe obligation**: if the architect's DESIGN.md ASSUMPTIONS section contains any `confidence: medium` or `confidence: unknown` claim about external SDK behavior, protocol timing/ordering/availability, or existing hook/script behavior, a throwaway empirical probe must run before design freeze — committed to `${WORKSPACE}/plans/${SLUG}/PROBE-FINDINGS.md` and cited in DESIGN.md Research. Probes must invoke the capability; environment-inspection inferences do not count. If the probing agent lacks the required tool or spawn capability, the orchestrator takes over the probe. See `principles/conventions/probe-before-build-invoke-not-infer.md`.
 4. **Validate architect output**: Check Requirements Coverage section. Surface any `descoped`/`partial`/missing requirements to user before proceeding. If the section is absent or has no rows, treat all requirements as `descoped` and surface to user. For `covered` rows, verify each names an owning runbook step — rows without an owner are treated as `partial`. Proceed silently if all requirements are `covered` with owners.
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
 6. `batch_log_steps` with all approved runbook steps.
@@ -536,6 +536,8 @@ field, hook script, or command frontmatter can trigger scheduling automatically.
 canon/
 ├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (22 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
+├── docs/
+│   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 │   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, comment stripping, quote-aware tokenizer, git-token detection, string-executing-wrapper unwrap/scan-forward, jq wrappers)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
