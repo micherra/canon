@@ -43,11 +43,12 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 - Principles should be specific and actionable — not aspirational
 - Rules (7): `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `no-llm-calls-in-mcp-tools` (added 2026-05-02 — MCP tools must not make LLM API calls), `refactoring-integrity`, `hooks-fail-closed` (added 2026-05-29 — safety/guard hooks must fail closed on extraction failure or missing tooling; scoped to `hooks/**`)
 - Strong opinions cover architecture, testing, error handling, data flow
-- Conventions cover naming, file organization, test structure (38 total as of 2026-06-09)
+- Conventions cover naming, file organization, test structure (39 total as of 2026-06-11)
 - `accumulator-test-coverage` (added 2026-05-16) — accumulator functions in `mcp-server/**` require at least one test case with N>1 input and exact numeric assertion; capped accumulators require below-cap, at-cap, and above-cap cases
 - `source-shared-hook-helpers` (added 2026-05-29) — hooks that parse Claude Code `tool_input` JSON must source `hooks/lib/canon-hook-lib.sh` and use `canon_extract_command`; no inlined extraction expressions; scoped to `hooks/**`
 - `hooks-observable-failures` (added 2026-05-29) — bare silent swallows (`|| true`, `2>/dev/null`) in `hooks/**` must carry a justifying comment, emit `CANON WARNING:` to stderr, or exit non-zero; the `hooks/**`-scoped sibling of `observable-best-effort` at convention severity (see decision quality-coverage-01); scoped to `hooks/**`
 - `verification-grep-minimum-scope` (added 2026-06-07) — grep/awk patterns in mechanical verification commands must be minimum-sufficient: tool-name greps must be `$`-anchored to prevent prefix-family false positives; awk `tools:` block extractor must use `/^[^ \t]/` terminator to prevent leaking post-`tools:` blocks
+- `probe-before-build-invoke-not-infer` (added 2026-06-10) — when a design ASSUMPTIONS entry carries `confidence: medium` or `confidence: unknown` about external SDK behavior, protocol timing, or hook/script behavior, an empirical probe must run before design freeze; probe must invoke the capability (not infer from environment); if the probing agent cannot run the probe, the orchestrator takes over
 - `mechanism-ships-first-instance` (added 2026-06-09) — a build that introduces a new artifact class, registry, tracked template system, or workflow gate MUST ship at least one real, minimal, tracked instance in the same PR; no-instance mechanisms are considered incomplete
 
 ## Anti-Rationalization
